@@ -73,3 +73,8 @@ naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CORE_ENABLE.CONTROL.BITS_4_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C00"]
+naming = "opaque"

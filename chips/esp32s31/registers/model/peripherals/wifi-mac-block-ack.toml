@@ -16,11 +16,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -31,10 +26,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -111,11 +106,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -140,11 +130,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -155,10 +140,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -235,11 +220,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -264,11 +244,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -279,10 +254,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -359,11 +334,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -388,11 +358,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -403,10 +368,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -483,11 +448,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -512,11 +472,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -527,10 +482,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -607,11 +562,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -636,11 +586,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -651,10 +596,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -731,11 +676,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -760,11 +700,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -775,10 +710,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -855,11 +790,6 @@ name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -884,11 +814,6 @@ size = 32
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_12_OPAQUE"
-bitOffset = 0
-bitWidth = 13
-
-[[peripherals.registers.register.fields]]
 name = "TRIGGER_BASED_PACKET_COUNT"
 bitOffset = 13
 bitWidth = 7
@@ -899,10 +824,10 @@ bitOffset = 20
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
-bitOffset = 21
-bitWidth = 11
-
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -978,11 +903,6 @@ bitWidth = 1
 name = "BLOCK_ACK_RECEIVED"
 bitOffset = 21
 bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BITS_22_31_OPAQUE"
-bitOffset = 22
-bitWidth = 10
 
 [[peripherals.registers]]
 
@@ -1262,6 +1182,12 @@ description = "Complete extra-SoftAP diagnostics, reset and delete set this bit 
 bitOffset = 9
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 22
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1275,12 +1201,6 @@ access = "read-write"
 name = "ENABLE"
 bitOffset = 0
 bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BITS_1_4_OPAQUE"
-description = "Bits cleared by every reviewed zero-based extra-SoftAP control publication."
-bitOffset = 1
-bitWidth = 4
 
 [[peripherals.registers.register.fields]]
 name = "INDEX"
@@ -1322,6 +1242,12 @@ name = "VALID"
 bitOffset = 31
 bitWidth = 1
 
+[[peripherals.registers.register.fields]]
+name = "BITS_1_4_OPAQUE"
+description = "The pinned full-word diagnostic output consumes these lanes; individual hardware meanings remain unknown."
+bitOffset = 1
+bitWidth = 4
+
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1360,7 +1286,7 @@ maximum = 0x7F
 
 [[peripherals.registers.register.fields]]
 name = "BITS_25_31_OPAQUE"
-description = "Bits cleared by every reviewed zero-based extra-SoftAP policy publication."
+description = "The pinned full-word diagnostic output consumes these lanes; individual hardware meanings remain unknown."
 bitOffset = 25
 bitWidth = 7
 
@@ -1434,37 +1360,11 @@ bitWidth = 32
 [[peripheral-review]]
 entity = "WIFI_MAC_BLOCK_ACK"
 opaque-entities = [
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q7.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q7.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q7.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q6.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q6.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q6.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q5.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q5.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q5.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q4.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q4.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q4.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q3.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q3.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q3.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q2.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q2.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q2.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q1.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q1.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q1.BITS_22_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q0.BITS_0_12_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q0.BITS_21_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.TX_BLOCK_ACK_TRANSMITTER_ADDRESS_HIGH_Q0.BITS_22_31_OPAQUE",
     "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_ENTRY%s_CONTROL.BITS_1_11_OPAQUE",
     "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_ENTRY%s_CONTROL.BITS_16_29_OPAQUE",
     "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY.BITS_25_31_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_1_4_OPAQUE",
     "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_10_11_OPAQUE",
     "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_16_29_OPAQUE",
-    "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.BITS_25_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -1965,3 +1865,112 @@ sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_AGREEMENT_UPDATE.BITS_10_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104298", "S31_MMIO_DECLARED_20104298"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q7.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_201051C0", "S31_MMIO_DECLARED_201051C0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q6.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_2010523C", "S31_MMIO_DECLARED_2010523C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q5.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_201052B8", "S31_MMIO_DECLARED_201052B8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q4.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_20105334", "S31_MMIO_DECLARED_20105334"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q3.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_201053B0", "S31_MMIO_DECLARED_201053B0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q2.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_2010542C", "S31_MMIO_DECLARED_2010542C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q1.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_201054A8", "S31_MMIO_DECLARED_201054A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.TX_QUEUE_INFORMATION_Q0.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_20105524", "S31_MMIO_DECLARED_20105524"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_1_4_OPAQUE"
+sources = ["S31_MMIO_EXTRA_SOFTAP_DIAGNOSTIC_USE"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_EXTRA_SOFTAP_DIAGNOSTIC_USE"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_ENTRY%s_CONTROL.BITS_1_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104178"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_ENTRY%s_CONTROL.BITS_16_29_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104178"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010417C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_10_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104EA4"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_BLOCK_ACK.EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL.BITS_16_29_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104EA4"]
+naming = "opaque"

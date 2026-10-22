@@ -2,6 +2,7 @@ schema = 3
 chip = "esp32c5"
 address-space = "cpu"
 fragments = [
+    "peripherals/observed-mmio-words.toml",
     "peripherals/ieee802154-mac.toml",
     "peripherals/ieee802154-interrupt-route.toml",
     "peripherals/modem-etm.toml",

@@ -142,3 +142,12 @@ sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F400"]
+naming = "opaque"
+[[review]]
+entity = "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F404"]
+naming = "opaque"

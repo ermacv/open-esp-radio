@@ -19,9 +19,6 @@ const ENVIRONMENT_LAST_OFFSET: u32 = 0x4d;
 /// `+0x10` over the rodata default 90; CCA, which would override it, is off.
 const NORMAL_PROFILE_PRIVATE_TIMING_SOURCE_BYTE: u8 = 91;
 const NORMAL_PROFILE_SET_BRANCH_CONTROL_0470_BIT_18: bool = false;
-/// Controller configuration `+0x40`: the rodata default of
-/// `sym_controller_jqcSm1kAtUzAMoyGlaKq`, which nothing later writes.
-const NORMAL_PROFILE_CONFIGURATION_WORD_40: u32 = 0x7d0;
 /// Low byte of the complete `0x20101b74` image `0x1ba`.
 const RUNTIME_CONFIGURATION_LOW_BYTE: u8 = 0xba;
 
@@ -111,7 +108,6 @@ pub struct BluetoothPhyRegisterInitInputs {
     environment: DmaRef<BlePhyEnvironment>,
     resolving_list: DmaRef<BleResolvingList>,
     set_branch_control_0470_bit_18: bool,
-    configuration_word_40: u32,
 }
 
 impl BluetoothPhyRegisterInitInputs {
@@ -132,7 +128,6 @@ impl BluetoothPhyRegisterInitInputs {
             environment,
             resolving_list,
             set_branch_control_0470_bit_18: NORMAL_PROFILE_SET_BRANCH_CONTROL_0470_BIT_18,
-            configuration_word_40: NORMAL_PROFILE_CONFIGURATION_WORD_40,
         }
     }
 }
@@ -320,10 +315,7 @@ impl BluetoothTaskRegisters {
 
         crate::svd::fixed_register_image::publish_ble_phy_init_control_0400(btmac);
         crate::generated::enable_ble_phy_init_control_0400(btmac);
-        crate::svd::register_image_write::publish_ble_phy_init_configuration_word(
-            btmac,
-            inputs.configuration_word_40,
-        );
+        crate::svd::fixed_register_image::publish_ble_phy_init_configuration_word(btmac);
 
         // Each byte replacement is a distinct fresh-read RMW in vendor order.
         crate::generated::publish_ble_phy_init_0550_byte_0(btmac);

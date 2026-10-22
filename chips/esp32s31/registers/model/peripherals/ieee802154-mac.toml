@@ -2015,7 +2015,8 @@ bitWidth = 4
 
 [[peripheral-review]]
 entity = "IEEE802154_MAC"
-opaque-entities = []
+opaque-entities = [
+]
 
 [peripheral-review.peripheral]
 sources = ["S31_REG_BASE", "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG", "esp-idf-7b9cc1ac-ieee802154-common-ll", "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"]

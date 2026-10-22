@@ -113,6 +113,13 @@ Source provenance catalogs retain their exact source IDs, revisions and hashes.
 Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states)
 and the [Register bits decision](../../../docs/decisions.md#code).
 
+A cited exact whole-register initialization image remains one closed image
+operation when reset is unknown. The image alone gives its lanes no bit
+accessors and supplies no reset value. Sparse MMIO use facts in
+`evidence/mmio-use.toml` retain their source masks and conservative indexed
+qualifications; their unexposed PAC partition grants no production operation
+or read-safe snapshot.
+
 A register or field whose meaning is not established is named by its
 position alone (`WORD_<offset>_OPAQUE`,
 `BIT_<n>_OPAQUE`, `BITS_<low>_<high>_OPAQUE`) and reviewed with

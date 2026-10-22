@@ -26,6 +26,18 @@ description = "FFT scale complete phy_fft_scale_force publishes from its second 
 bitOffset = 20
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 19
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -35,6 +47,12 @@ addressOffset = 0xC
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -44,6 +62,12 @@ addressOffset = 0x30
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -53,6 +77,12 @@ addressOffset = 0x98
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_9_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 10
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -76,6 +106,12 @@ addressOffset = 0x104
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripheral-review]]
 entity = "PHY_NRX_RECOVERED_GAPS"
 opaque-entities = [
@@ -118,3 +154,60 @@ sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
 [[review]]
 entity = "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE.BITS_29_31_OPAQUE"
 naming = "opaque"
+sources = ["S31_MMIO_DECLARED_201078B8"]
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0104_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107904", "S31_MMIO_DECLARED_20107904"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_000C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010780C", "S31_MMIO_DECLARED_2010780C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0030_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107830", "S31_MMIO_DECLARED_20107830"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.BITS_0_18_OPAQUE"
+sources = ["S31_MMIO_USE_20107800", "S31_MMIO_DECLARED_20107800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107800", "S31_MMIO_DECLARED_20107800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0098_OPAQUE.BITS_0_9_OPAQUE"
+sources = ["S31_MMIO_USE_20107898", "S31_MMIO_DECLARED_20107898"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.FFT_SCALE_FORCE"
+sources = ["S31_MMIO_DECLARED_20107800"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.FFT_SCALE"
+sources = ["S31_MMIO_DECLARED_20107800"]
+naming = "descriptive"

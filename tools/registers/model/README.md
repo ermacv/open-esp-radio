@@ -90,6 +90,13 @@ is still required. Encoded pointer fields can copy their pointer from another
 word image with `with_<field>_from`, preserving all other bits without naming
 unassigned lanes.
 
+A whole-register initialization image written by the vendor as an exact
+constant remains one cited image operation even where reset is unknown.
+The image alone grants no bit accessor and establishes no reset value or
+absence of hardware use. Independent masked uses or behaviour-dependent
+reads still qualify their own fields. Keep the unresolved lanes in the
+unknown-reset report; callers cannot supply an arbitrary replacement image.
+
 A native schema-2 fragment adds one optional property on a register:
 
 ```toml

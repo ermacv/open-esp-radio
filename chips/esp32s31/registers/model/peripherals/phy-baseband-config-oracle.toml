@@ -86,11 +86,7 @@ description = "Pinned libphy.a[phy_reg.o] phy_start_tx_tone_step_new writes the 
 addressOffset = 0x414
 size = 32
 access = "write-only"
-
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 
@@ -129,6 +125,18 @@ bitOffset = 29
 bitWidth = 1
 access = "read-only"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 20
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -360,6 +368,12 @@ bitWidth = 2
 minimum = 0x0
 maximum = 0x3
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 17
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -405,6 +419,12 @@ description = "Complete phy_fe_reg_init sets bit 31 after the repeated ADC-contr
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -443,6 +463,12 @@ name = "BIT_1_OPAQUE"
 bitOffset = 1
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 30
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -525,6 +551,12 @@ bitOffset = 14
 bitWidth = 3
 access = "read-only"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -551,11 +583,6 @@ bitWidth = 8
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0x0
 maximum = 0xFF
-
-[[peripherals.registers.register.fields]]
-name = "BITS_8_23_OPAQUE"
-bitOffset = 8
-bitWidth = 16
 
 [[peripherals.registers]]
 
@@ -739,6 +766,18 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 8
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -758,6 +797,18 @@ name = "BIT_26_OPAQUE"
 bitOffset = 26
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 25
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -803,6 +854,12 @@ description = "Complete phy_fe_reg_init sets bit 15 after the shared correction-
 bitOffset = 15
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -867,6 +924,24 @@ name = "BIT_28_OPAQUE"
 bitOffset = 28
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 23
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 3
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -885,6 +960,18 @@ bitWidth = 2
 minimum = 0x0
 maximum = 0x3
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 13
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 17
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -955,6 +1042,18 @@ name = "FILTER_INPUT_1"
 bitOffset = 6
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 7
+bitWidth = 25
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1137,6 +1236,18 @@ name = "ENABLED"
 description = "Enable HCCFR processing."
 value = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 22
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 9
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1156,6 +1267,12 @@ bitWidth = 12
 minimum = 0x0
 maximum = 0xFFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 20
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1348,6 +1465,24 @@ name = "LLTF_MASK_INPUT_0"
 bitOffset = 13
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_10_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 18
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1405,6 +1540,30 @@ description = "Complete phy_chan_dump_cfg replaces bit 30 with the low bit of it
 bitOffset = 30
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_8_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 9
+
+[[peripherals.registers.register.fields]]
+name = "BIT_10_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_29_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 9
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1470,6 +1629,18 @@ name = "BIT_30_OPAQUE"
 bitOffset = 30
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_29_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 14
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1494,6 +1665,12 @@ name = "WATCHDOG_ENABLE"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 29
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1616,7 +1793,6 @@ opaque-entities = [
     "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_8_15_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_16_23_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_24_31_OPAQUE",
-    "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION_AUX.BITS_0_31_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_8_9_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_22_23_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_8_9_OPAQUE",
@@ -1635,7 +1811,6 @@ opaque-entities = [
     "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1.BITS_0_7_OPAQUE",
-    "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1.BITS_8_23_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0.BITS_0_7_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0.BITS_8_15_OPAQUE",
     "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1.BITS_16_31_OPAQUE",
@@ -1721,7 +1896,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_AND_TONE_STOP_CONTROL.BITS_0_1_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_START_STOP_TX_TONE"]
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "S31_MMIO_DECLARED_2010040C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1765,7 +1940,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_19_21_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "S31_MMIO_DECLARED_2010041C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -1781,11 +1956,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_28_31_OPAQUE"
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_START_STOP_TX_TONE",
-    "ROM_REV0_PHY_TXIQ_GET_MIS_PWR",
-    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
-]
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "ROM_REV0_PHY_TXIQ_GET_MIS_PWR", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "S31_MMIO_DECLARED_2010041C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1804,10 +1975,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_28_31_OPAQUE"
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_START_STOP_TX_TONE",
-    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
-]
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE", "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW", "S31_MMIO_DECLARED_20100420"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1869,7 +2037,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.BIT_31_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+sources = ["ROM_REV0_PHY_FE_REG_INIT", "S31_MMIO_DECLARED_20100438"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2073,7 +2241,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.BIT_15_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+sources = ["ROM_REV0_PHY_FE_REG_INIT", "S31_MMIO_DECLARED_20100C0C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2272,7 +2440,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BITS_4_7_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG"]
+sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG", "S31_MMIO_DECLARED_2010790C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2307,7 +2475,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BIT_30_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG"]
+sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG", "S31_MMIO_DECLARED_20107C00"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2373,3 +2541,560 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BITS_0_22_OPAQUE"
+sources = ["S31_MMIO_USE_20107018", "S31_MMIO_DECLARED_20107018"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_USE_20107018", "S31_MMIO_DECLARED_20107018"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107018", "S31_MMIO_DECLARED_20107018"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7400_OPAQUE.BITS_0_12_OPAQUE"
+sources = ["S31_MMIO_USE_20107400", "S31_MMIO_DECLARED_20107400"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7400_OPAQUE.BITS_15_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107400", "S31_MMIO_DECLARED_20107400"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_USE_20100438", "S31_MMIO_DECLARED_20100438"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_ENABLE.BITS_0_28_OPAQUE"
+sources = ["S31_MMIO_USE_20107C40", "S31_MMIO_DECLARED_20107C40"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_SELECTOR_CONTROL.BITS_15_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100428", "S31_MMIO_DECLARED_20100428"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BITS_8_10_OPAQUE"
+sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BITS_14_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010790C", "S31_MMIO_DECLARED_2010790C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL.BITS_16_29_OPAQUE"
+sources = ["S31_MMIO_USE_20107C3C", "S31_MMIO_DECLARED_20107C3C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107C3C", "S31_MMIO_DECLARED_20107C3C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_24_30_OPAQUE"
+sources = ["S31_MMIO_USE_2010080C", "S31_MMIO_DECLARED_2010080C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100C0C", "S31_MMIO_DECLARED_20100C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL.BITS_2_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100448", "S31_MMIO_DECLARED_20100448"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE.BITS_0_24_OPAQUE"
+sources = ["S31_MMIO_USE_20100C08", "S31_MMIO_DECLARED_20100C08"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100C08", "S31_MMIO_DECLARED_20100C08"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BITS_0_8_OPAQUE"
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BIT_10_OPAQUE"
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BITS_21_29_OPAQUE"
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107C00", "S31_MMIO_DECLARED_20107C00"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.BITS_2_21_OPAQUE"
+sources = ["S31_MMIO_USE_20100418", "S31_MMIO_DECLARED_20100418"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.BITS_23_27_OPAQUE"
+sources = ["S31_MMIO_USE_20100418", "S31_MMIO_DECLARED_20100418"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_USE_20100C04", "S31_MMIO_DECLARED_20100C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100C04", "S31_MMIO_DECLARED_20100C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_USE_20107440", "S31_MMIO_DECLARED_20107440"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL.BITS_7_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107440", "S31_MMIO_DECLARED_20107440"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_CONTROL.BITS_0_21_OPAQUE"
+sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_CONTROL.BITS_23_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107468", "S31_MMIO_DECLARED_20107468"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_VALUE.BITS_12_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010746C", "S31_MMIO_DECLARED_2010746C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_AND_TONE_STOP_CONTROL.BIT_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010040C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100410"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100410"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100410"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100410"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_8_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010041C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_22_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010041C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_8_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100420"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_19_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100420"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.RX_GAIN_DC_CONTROL.BITS_5_6_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100424"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_CLEAR_CONTROL.BIT_8_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100444"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_CLEAR_CONTROL.BIT_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100444"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100448"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL.BIT_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100448"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_16_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010080C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010080C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100814"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010086C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010086C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100870"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100C04"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100C04"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE.BIT_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100C08"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE.BIT_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100C08"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C20_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100C20"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.I2C_TX_RATE_CONTROL.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010448C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.I2C_TX_RATE_CONTROL.BITS_18_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010448C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BIT_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107018"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BIT_28_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107018"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7400_OPAQUE.BITS_13_14_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107400"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7428_OPAQUE.BITS_8_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107428"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7428_OPAQUE.BIT_14_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107428"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE.BITS_6_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010743C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE.BIT_8_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010743C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0.BITS_1_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107454"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0.BITS_5_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107454"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107458"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BIT_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107458"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BITS_7_14_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107458"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BITS_15_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107458"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BITS_23_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107458"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010745C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010745C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010745C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010745C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_3.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107460"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_3.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107460"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7808_OPAQUE.BITS_7_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE.HE_RU26_GOOD_RESPONSE_ENABLE"
+sources = ["S31_MMIO_DECLARED_20107890"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE.HE_RU26_GOOD_RESPONSE_DISABLE"
+sources = ["S31_MMIO_DECLARED_20107890"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_78DC_OPAQUE.BITS_7_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201078DC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_78E4_OPAQUE.BIT_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201078E4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BIT_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010790C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.LLTF_MASK_INPUT_1"
+sources = ["S31_MMIO_DECLARED_2010790C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.LLTF_MASK_INPUT_0"
+sources = ["S31_MMIO_DECLARED_2010790C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7980_OPAQUE.BIT_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107980"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7A28_OPAQUE.BIT_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107A28"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BIT_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C00"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BITS_11_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C00"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_TIMING.BITS_0_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C30"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_TIMING.BITS_12_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C30"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C3C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL.BIT_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C3C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_0.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C44"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_1.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107C50"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CA8_OPAQUE.BIT_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CA8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BITS_16_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CD0"]
+naming = "opaque"

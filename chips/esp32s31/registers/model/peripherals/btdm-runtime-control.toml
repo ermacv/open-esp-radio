@@ -39,10 +39,7 @@ description = "Complete runtime functions write the finite image 1."
 addressOffset = 0x4
 size = 32
 access = "write-only"
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -51,10 +48,7 @@ description = "Complete initialization writes the finite image 1."
 addressOffset = 0x8
 size = 32
 access = "write-only"
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -64,10 +58,15 @@ addressOffset = 0x10
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
-
+name = "BIT_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 1
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BIT_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0014_OPAQUE"
@@ -76,10 +75,15 @@ addressOffset = 0x14
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_17_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
+bitWidth = 18
+[[peripherals.registers.register.fields]]
+name = "BITS_19_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 19
+bitWidth = 13
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_001C_OPAQUE"
@@ -88,10 +92,10 @@ addressOffset = 0x1C
 size = 32
 access = "read-write"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0020_OPAQUE"
@@ -100,10 +104,10 @@ addressOffset = 0x20
 size = 32
 access = "read-write"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0024_OPAQUE"
@@ -115,12 +119,6 @@ access = "read-write"
 name = "LOW_BYTE"
 bitOffset = 0
 bitWidth = 8
-[[peripherals.registers.register.fields]]
-name = "BITS_8_31_OPAQUE"
-description = "Upper bits covered by complete-register evidence but not assigned a semantic role."
-bitOffset = 8
-bitWidth = 24
-
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_002C_OPAQUE"
@@ -132,12 +130,6 @@ access = "read-write"
 name = "LOW_BYTE"
 bitOffset = 0
 bitWidth = 8
-[[peripherals.registers.register.fields]]
-name = "BITS_8_31_OPAQUE"
-description = "Upper bits covered by complete-register evidence but not assigned a semantic role."
-bitOffset = 8
-bitWidth = 24
-
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0034_OPAQUE"
@@ -145,10 +137,7 @@ description = "Complete initialization writes the finite image 0xFFFFFFFF."
 addressOffset = 0x34
 size = 32
 access = "write-only"
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -170,10 +159,15 @@ addressOffset = 0x40
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_16_17_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0044_OPAQUE"
@@ -182,10 +176,15 @@ addressOffset = 0x44
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_16_17_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0048_OPAQUE"
@@ -205,10 +204,7 @@ description = "Complete initialization writes the finite zero image."
 addressOffset = 0x4C
 size = 32
 access = "write-only"
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -235,6 +231,18 @@ name = "CONTROL_4"
 bitOffset = 4
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_5_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 5
+bitWidth = 27
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0064_OPAQUE"
@@ -243,6 +251,12 @@ addressOffset = 0x64
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 24
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0068_OPAQUE"
@@ -251,7 +265,7 @@ addressOffset = 0x68
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "VALUE_LOW_24"
+name = "BITS_0_23_OPAQUE"
 bitOffset = 0
 bitWidth = 24
 
@@ -282,42 +296,42 @@ name = "CONTROL_25"
 bitOffset = 25
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 24
+
+[[peripherals.registers.register.fields]]
+name = "BIT_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 1
 [[peripheral-review]]
 entity = "BTDM_RUNTIME_CONTROL"
 opaque-entities = [
     "BTDM_RUNTIME_CONTROL.WORD_0004_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0004_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0008_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0008_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE.BITS_8_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE.BITS_8_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0034_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0034_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_004C_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_004C_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0068_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE",
-    "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE.BITS_0_31_OPAQUE",
     "BTDM_RUNTIME_CONTROL.WORD_0064_OPAQUE",
 ]
 
@@ -372,7 +386,7 @@ completeness = "partial"
 [[review]]
 entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_2"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"]
+sources = ["BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ", "S31_MMIO_DECLARED_2010D058"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -398,7 +412,7 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 [[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE.BITS_0_31_OPAQUE"
+entity = "BTDM_RUNTIME_CONTROL.WORD_0064_OPAQUE"
 naming = "opaque"
 sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
 provenance = "observed"
@@ -406,9 +420,166 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTDM_RUNTIME_CONTROL.WORD_0064_OPAQUE"
+entity = "BTDM_RUNTIME_CONTROL.WORD_0064_OPAQUE.BITS_0_23_OPAQUE"
+sources = ["S31_MMIO_USE_2010D064", "S31_MMIO_DECLARED_2010D064"]
 naming = "opaque"
-sources = ["BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"]
 provenance = "observed"
 accuracy = "exact"
-completeness = "complete"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.BIT_3_OPAQUE"
+sources = ["S31_MMIO_USE_2010D058", "S31_MMIO_DECLARED_2010D058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.BITS_5_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D058", "S31_MMIO_DECLARED_2010D058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE.BITS_0_23_OPAQUE"
+sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE.BIT_26_OPAQUE"
+sources = ["S31_MMIO_USE_2010D078", "S31_MMIO_DECLARED_2010D078"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE.BIT_1_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D010"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0010_OPAQUE.BIT_18_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D010"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE.BITS_0_17_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D014"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0014_OPAQUE.BITS_19_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D014"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_001C_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_AUDIT_2010D01C", "S31_MMIO_DECLARED_2010D01C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0020_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_AUDIT_2010D020", "S31_MMIO_DECLARED_2010D020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE.BIT_0_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D040"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0040_OPAQUE.BITS_16_17_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D040"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE.BIT_0_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D044"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0044_OPAQUE.BITS_16_17_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D044"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0068_OPAQUE.BITS_0_23_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D068"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0024_OPAQUE.LOW_BYTE"
+sources = ["S31_MMIO_DECLARED_2010D024"]
+naming = "descriptive"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_002C_OPAQUE.LOW_BYTE"
+sources = ["S31_MMIO_DECLARED_2010D02C"]
+naming = "descriptive"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0038_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D038"]
+naming = "opaque"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0048_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D048"]
+naming = "opaque"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_0"
+sources = ["S31_MMIO_DECLARED_2010D058"]
+naming = "descriptive"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_1"
+sources = ["S31_MMIO_DECLARED_2010D058"]
+naming = "descriptive"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0058_OPAQUE.CONTROL_4"
+sources = ["S31_MMIO_DECLARED_2010D058"]
+naming = "descriptive"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_006C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D06C"]
+naming = "opaque"
+[[review]]
+entity = "BTDM_RUNTIME_CONTROL.WORD_0078_OPAQUE.CONTROL_25"
+sources = ["S31_MMIO_DECLARED_2010D078"]
+naming = "descriptive"

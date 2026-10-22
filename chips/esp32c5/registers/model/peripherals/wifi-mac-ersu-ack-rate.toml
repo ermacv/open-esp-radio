@@ -60,3 +60,20 @@ naming = "descriptive"
 
 [peripheral-review.opaque]
 naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_8_15_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_16_23_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_24_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"

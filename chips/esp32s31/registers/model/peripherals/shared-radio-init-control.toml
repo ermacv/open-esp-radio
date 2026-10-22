@@ -60,7 +60,12 @@ completeness = "complete"
 [[review]]
 entity = "SHARED_RADIO_INIT_CONTROL.CONTROL.BIT_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20104C24"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "SHARED_RADIO_INIT_CONTROL.CONTROL.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C24"]
+naming = "opaque"

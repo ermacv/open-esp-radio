@@ -179,3 +179,24 @@ naming = "descriptive"
 
 [peripheral-review.opaque]
 naming = "opaque"
+
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_16_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_20_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.CONTROL.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F4A0"]
+naming = "opaque"

@@ -149,13 +149,13 @@ impl RadioPhyRegisters {
             crate::generated::PhyFrequencyRegisterMode::Default
         };
         crate::generated::configure_phy_frequency_register_mode(frequency, mode);
-        crate::generated::frequency_parameter_0(
-            frequency,
-            crate::generated::FrequencyParameter0Image::new(0x1980_0249),
-        );
-        crate::svd::zero_based_field_write::frequency_parameter_1_initialization(
-            frequency, 0, 0x16, 0x12c127,
-        );
+        // Retain the complete vendor initialization image as one operation.
+        // Its unknown-reset lanes have no independent field capabilities;
+        // callers cannot supply a different word.
+        crate::svd::fixed_register_image::frequency_parameter_0(frequency);
+        // The second whole-word image has the same closed contract.
+        // Individual fields do not grant access to its initialization padding.
+        crate::svd::fixed_register_image::frequency_parameter_1_initialization(frequency);
     }
 
     /// Apply complete rev0 ROM `phy_freq_i2c_mem_write`.

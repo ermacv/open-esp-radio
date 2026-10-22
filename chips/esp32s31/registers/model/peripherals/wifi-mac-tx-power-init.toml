@@ -46,6 +46,24 @@ bitWidth = 2
 minimum = 0x0
 maximum = 0x3
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 8
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -112,6 +130,18 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 24
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -169,6 +199,12 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
 [[peripheral-review]]
 entity = "WIFI_MAC_TX_POWER_INIT"
 opaque-entities = [
@@ -209,3 +245,56 @@ sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER_TAIL.BITS_0_23_OPAQUE"
+sources = ["S31_MMIO_USE_2010443C", "S31_MMIO_DECLARED_2010443C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER_TAIL.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010443C", "S31_MMIO_DECLARED_2010443C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.TB_RU_POWER%s.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104440", "S31_MMIO_USE_20104444", "S31_MMIO_USE_20104448", "S31_MMIO_DECLARED_20104440"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_USE_20104408", "S31_MMIO_DECLARED_20104408"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.BITS_14_15_OPAQUE"
+sources = ["S31_MMIO_USE_20104408", "S31_MMIO_DECLARED_20104408"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104408", "S31_MMIO_DECLARED_20104408"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_POWER_INIT.IMMEDIATE_RESPONSE%s.BITS_22_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104408"]
+naming = "opaque"

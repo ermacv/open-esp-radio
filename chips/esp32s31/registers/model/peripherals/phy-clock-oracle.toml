@@ -17,25 +17,15 @@ size = 32
 access = "write-only"
 
 [[peripherals.registers.register.fields]]
-name = "STATE"
-description = "Complete observed front-end clock-gate images; constituent gate meanings remain unknown."
+name = "BITS_0_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
-[peripherals.registers.register.fields.writeConstraint]
-useEnumeratedValues = true
-
-[[peripherals.registers.register.fields.enumeratedValues]]
-usage = "write"
-
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "CLOSED"
-value = 0
-
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "OPEN"
-value = 487
-
+bitWidth = 3
+[[peripherals.registers.register.fields]]
+name = "BITS_5_8_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 5
+bitWidth = 4
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -129,6 +119,12 @@ description = "The phy_bb_init parent sets bit 2 before calibration; the individ
 bitOffset = 2
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_3_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 29
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -196,17 +192,6 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE.STATE"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
-]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
 entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_POWER_INDEX"
 naming = "descriptive"
 sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX"]
@@ -237,18 +222,44 @@ completeness = "complete"
 [[review]]
 entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BIT_2_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_BB_INIT"]
+sources = ["BLOB_LIBPHY_PHY_BB_INIT", "S31_MMIO_DECLARED_20100800"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "PHY_CLOCK_ORACLE.WORD_7C80_OPAQUE.STATE"
-naming = "descriptive"
-sources = [
-    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
-    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
-]
+entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BITS_3_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100800", "S31_MMIO_DECLARED_20100800"]
+naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
-completeness = "unknown"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100400"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE.BITS_5_8_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100400"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_7C80_OPAQUE.STATE"
+sources = ["S31_MMIO_MANUAL_20107C80"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100800"]
+naming = "opaque"

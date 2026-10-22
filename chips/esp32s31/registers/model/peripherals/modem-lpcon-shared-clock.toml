@@ -89,6 +89,12 @@ bitWidth = 12
 minimum = 0
 maximum = 4095
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WIFI_LP_CLK_CONF"
@@ -203,6 +209,36 @@ description = "Bit two of the low-power APB clock state map, set by the reviewed
 bitOffset = 30
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 17
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 19
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripheral-review]]
 entity = "MODEM_LPCON_SHARED_CLOCK"
 
@@ -270,3 +306,51 @@ naming = "descriptive"
 [[review]]
 entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_LP_APB_ST_MAP_BIT_TWO"
 naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010F008", "S31_MMIO_DECLARED_2010F008"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BITS_0_16_OPAQUE"
+sources = ["S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BITS_19_20_OPAQUE"
+sources = ["S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BITS_23_24_OPAQUE"
+sources = ["S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BITS_27_28_OPAQUE"
+sources = ["S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010F020", "S31_MMIO_DECLARED_2010F020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

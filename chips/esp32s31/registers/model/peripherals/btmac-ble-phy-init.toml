@@ -45,6 +45,24 @@ description = "BLE PHY initialization preserves source 17 while disabling every 
 bitOffset = 17
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_13_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 14
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 14
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -61,6 +79,18 @@ description = "A one acknowledges stale scheduler-run source 14 before that sour
 bitOffset = 14
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_13_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 14
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 17
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -96,6 +126,18 @@ description = "BLE PHY initialization receives the same configuration-byte-minus
 bitOffset = 16
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 8
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -145,6 +187,12 @@ name = "INIT_ENABLE_31"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -194,6 +242,12 @@ description = "The complete BLE PHY initialization body's selected branch sets t
 bitOffset = 18
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 19
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -215,17 +269,17 @@ maximum = 0xFFFFF
 [[peripherals.registers]]
 
 [peripherals.registers.register]
-name = "WORD_04A0_OPAQUE"
+name = "PHY_ENVIRONMENT_MEMBER_POINTER"
 description = "BLE PHY initialization writes a runtime-derived complete image formed from a linked global address. The destination's hardware meaning remains unknown."
 addressOffset = 0x4A0
 size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "ADDRESS"
+description = "CPU address published for the BLE PHY environment member at +0x2c."
 bitOffset = 0
 bitWidth = 32
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -236,22 +290,22 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_0"
+name = "BITS_0_7_OPAQUE"
 bitOffset = 0
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_1"
+name = "BITS_8_15_OPAQUE"
 bitOffset = 8
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_2"
+name = "BITS_16_23_OPAQUE"
 bitOffset = 16
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_3"
+name = "BITS_24_31_OPAQUE"
 bitOffset = 24
 bitWidth = 8
 
@@ -265,22 +319,22 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_0"
+name = "BITS_0_7_OPAQUE"
 bitOffset = 0
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_1"
+name = "BITS_8_15_OPAQUE"
 bitOffset = 8
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_2"
+name = "BITS_16_23_OPAQUE"
 bitOffset = 16
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "INIT_BYTE_3"
+name = "BITS_24_31_OPAQUE"
 bitOffset = 24
 bitWidth = 8
 
@@ -312,11 +366,7 @@ description = "BLE PHY register initialization writes the complete controller-co
 addressOffset = 0x540
 size = 32
 access = "read-write"
-
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 
@@ -456,12 +506,9 @@ opaque-entities = [
     "BTMAC_BLE_PHY_INIT.WORD_0458_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE.BITS_0_31_OPAQUE",
-    "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE",
-    "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE.BITS_0_31_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE",
-    "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE.BITS_0_31_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_054C_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE",
     "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE",
@@ -531,7 +578,7 @@ completeness = "complete"
 [[review]]
 entity = "BTMAC_BLE_PHY_INIT.DEVICE_TABLE_CONTROL.BIT_18_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101870"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -539,7 +586,7 @@ completeness = "complete"
 [[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_0074_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_20101474"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -561,14 +608,6 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0138_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BTMAC_BLE_PHY_INIT.LC_TX_ON_DELAY_CONFIG"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
@@ -579,15 +618,7 @@ completeness = "partial"
 [[review]]
 entity = "BTMAC_BLE_PHY_INIT.WORD_045C_OPAQUE.BITS_0_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "S31_MMIO_DECLARED_2010185C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -620,9 +651,238 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BTMAC_BLE_PHY_INIT.WORD_0540_OPAQUE.BITS_0_31_OPAQUE"
+entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_CLEAR.BITS_0_13_OPAQUE"
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8"]
 naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
-completeness = "complete"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_CLEAR.BITS_15_31_OPAQUE"
+sources = ["S31_MMIO_USE_201014B8", "S31_MMIO_DECLARED_201014B8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_ENABLE.BITS_0_13_OPAQUE"
+sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_ENABLE.BITS_15_16_OPAQUE"
+sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.INTERRUPT_ENABLE.BITS_18_31_OPAQUE"
+sources = ["S31_MMIO_USE_201014B4", "S31_MMIO_DECLARED_201014B4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.LC_TX_ON_DELAY_CONFIG.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_USE_20101650", "S31_MMIO_DECLARED_20101650"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.LC_TX_ON_DELAY_CONFIG.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101650", "S31_MMIO_DECLARED_20101650"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE.BIT_21_OPAQUE"
+sources = ["S31_MMIO_USE_20101800", "S31_MMIO_DECLARED_20101800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.DEVICE_TABLE_CONTROL.BITS_19_20_OPAQUE"
+sources = ["S31_MMIO_USE_20101870", "S31_MMIO_DECLARED_20101870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0138_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101538"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A4_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_04A8_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201018A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_0"
+sources = ["S31_MMIO_DECLARED_20101654"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_1"
+sources = ["S31_MMIO_DECLARED_20101654"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_2_LOW_7"
+sources = ["S31_MMIO_DECLARED_20101654"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0254_OPAQUE.INIT_BYTE_2_HIGH"
+sources = ["S31_MMIO_DECLARED_20101654"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE.INIT_ENABLE_22"
+sources = ["S31_MMIO_DECLARED_20101800"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0400_OPAQUE.INIT_ENABLE_31"
+sources = ["S31_MMIO_DECLARED_20101800"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0458_OPAQUE.INIT_HIGH_HALF"
+sources = ["S31_MMIO_DECLARED_20101858"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_054C_OPAQUE.INIT_LOW_5"
+sources = ["S31_MMIO_DECLARED_2010194C"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE.INIT_BYTE_0"
+sources = ["S31_MMIO_DECLARED_20101950"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE.INIT_BYTE_1"
+sources = ["S31_MMIO_DECLARED_20101950"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0550_OPAQUE.INIT_BYTE_2"
+sources = ["S31_MMIO_DECLARED_20101950"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_0"
+sources = ["S31_MMIO_DECLARED_20101954"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_1"
+sources = ["S31_MMIO_DECLARED_20101954"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_2"
+sources = ["S31_MMIO_DECLARED_20101954"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0554_OPAQUE.INIT_BYTE_3"
+sources = ["S31_MMIO_DECLARED_20101954"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_0"
+sources = ["S31_MMIO_DECLARED_20101958"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_1"
+sources = ["S31_MMIO_DECLARED_20101958"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_2"
+sources = ["S31_MMIO_DECLARED_20101958"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_0558_OPAQUE.INIT_BYTE_3"
+sources = ["S31_MMIO_DECLARED_20101958"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_0"
+sources = ["S31_MMIO_DECLARED_2010195C"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_1"
+sources = ["S31_MMIO_DECLARED_2010195C"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_2"
+sources = ["S31_MMIO_DECLARED_2010195C"]
+naming = "descriptive"
+[[review]]
+entity = "BTMAC_BLE_PHY_INIT.WORD_055C_OPAQUE.INIT_BYTE_3"
+sources = ["S31_MMIO_DECLARED_2010195C"]
+naming = "descriptive"

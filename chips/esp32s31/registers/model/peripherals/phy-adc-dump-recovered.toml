@@ -138,6 +138,18 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -247,7 +259,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE.BITS_19_22_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
+sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE", "S31_MMIO_DECLARED_201008CC"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -269,9 +281,50 @@ accuracy = "exact"
 completeness = "unknown"
 
 [[review]]
-entity = "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE.BITS_0_2_OPAQUE"
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BIT_16_OPAQUE"
+sources = ["S31_MMIO_USE_20109008", "S31_MMIO_DECLARED_20109008"]
 naming = "opaque"
-sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
 provenance = "observed"
 accuracy = "exact"
-completeness = "complete"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_USE_20109008", "S31_MMIO_DECLARED_20109008"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_MANUAL_201070B8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020B4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BIT_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109004"]
+naming = "opaque"
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BITS_20_21_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109004"]
+naming = "opaque"
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109008"]
+naming = "opaque"
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_21_24_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109008"]
+naming = "opaque"
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.BIT_24_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109018"]
+naming = "opaque"

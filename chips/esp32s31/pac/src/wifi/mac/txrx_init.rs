@@ -127,8 +127,8 @@ impl WifiRadioRegisters {
 
         crate::svd::zero_based_field_write::mac_ack_rate_table(callbacks, 0x0b, 0x0a, 0x09, 0);
         crate::svd::zero_based_field_write::mac_cts_rate_table(callbacks, 0x0b, 0x0a, 0x09, 0);
-        crate::svd::zero_based_field_write::mac_ack_cck_rate_table(callbacks, 0, 1, 5, 0);
-        crate::svd::zero_based_field_write::mac_cts_cck_rate_table(callbacks, 0, 1, 5, 0);
+        crate::svd::fixed_register_image::mac_ack_cck_rate_table(callbacks);
+        crate::svd::fixed_register_image::mac_cts_cck_rate_table(callbacks);
         callbacks
             .bb_rx_hang_control()
             .modify(|_, w| w.bits_0_11_opaque().set(0x00f));

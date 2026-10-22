@@ -125,16 +125,6 @@ minimum = 0x0
 maximum = 0x1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_28_29_OPAQUE"
-description = "Bits the recovered CCMP transaction writes zero."
-bitOffset = 28
-bitWidth = 2
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0x3
-
-[[peripherals.registers.register.fields]]
 name = "LOGICAL_KEY_INDEX"
 description = "Logical key slot: zero for a pairwise key, the key identifier for a group key."
 bitOffset = 30
@@ -326,7 +316,6 @@ opaque-entities = [
     "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_16_17_OPAQUE",
     "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_20_OPAQUE",
     "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_26_OPAQUE",
-    "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_28_29_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -379,3 +368,20 @@ sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_26_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20105804"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BITS_16_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20105804"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL%s.BIT_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20105804"]
+naming = "opaque"

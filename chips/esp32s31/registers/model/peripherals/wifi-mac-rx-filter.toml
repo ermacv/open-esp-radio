@@ -142,6 +142,18 @@ name = "ERROR"
 bitOffset = 16
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "BITS_17_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 17
+bitWidth = 15
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -168,6 +180,18 @@ bitOffset = 16
 bitWidth = 1
 access = "read-only"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_17_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 17
+bitWidth = 15
 [[peripheral-review]]
 entity = "WIFI_MAC_RX_FILTER"
 opaque-entities = [
@@ -271,3 +295,44 @@ sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.BASEBAND_ERROR_STATUS%s.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_USE_201040E8", "S31_MMIO_USE_201040EC", "S31_MMIO_USE_201040F0", "S31_MMIO_DECLARED_201040E8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.BASEBAND_ERROR_STATUS%s.BITS_17_31_OPAQUE"
+sources = ["S31_MMIO_USE_201040E8", "S31_MMIO_USE_201040EC", "S31_MMIO_USE_201040F0", "S31_MMIO_DECLARED_201040E8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.MISC_PACKET_POLICY.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_USE_201040F4", "S31_MMIO_DECLARED_201040F4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.MISC_PACKET_POLICY.BITS_17_31_OPAQUE"
+sources = ["S31_MMIO_USE_201040F4", "S31_MMIO_DECLARED_201040F4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.BIT_5_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040D8"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040D8"]
+naming = "opaque"

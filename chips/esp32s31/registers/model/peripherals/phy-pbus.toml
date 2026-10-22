@@ -77,6 +77,18 @@ name = "WORK_MODE_ENABLE"
 bitOffset = 26
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_4_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -157,6 +169,24 @@ name = "BUSY"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_13_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 13
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -184,6 +214,18 @@ description = "First complete phy_fe_reg_init RMW sets bit 20."
 bitOffset = 20
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 11
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -198,6 +240,12 @@ name = "BITS_0_8_OPAQUE"
 bitOffset = 0
 bitWidth = 9
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 9
+bitWidth = 23
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -222,6 +270,12 @@ name = "BITS_18_26_OPAQUE"
 bitOffset = 18
 bitWidth = 9
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -246,6 +300,12 @@ name = "BITS_18_26_OPAQUE"
 bitOffset = 18
 bitWidth = 9
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -270,6 +330,12 @@ name = "BITS_18_26_OPAQUE"
 bitOffset = 18
 bitWidth = 9
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripheral-review]]
 entity = "PHY_PBUS"
 opaque-entities = [
@@ -365,7 +431,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BITS_8_11_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_CLOCK_FORCE"]
+sources = ["ROM_REV0_PHY_CLOCK_FORCE", "S31_MMIO_DECLARED_20100890"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -373,10 +439,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BIT_14_OPAQUE"
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_CLOCK_FORCE",
-    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
-]
+sources = ["ROM_REV0_PHY_CLOCK_FORCE", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT", "S31_MMIO_DECLARED_20100890"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -384,10 +447,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BIT_15_OPAQUE"
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_CLOCK_FORCE",
-    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
-]
+sources = ["ROM_REV0_PHY_CLOCK_FORCE", "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT", "S31_MMIO_DECLARED_20100890"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -414,7 +474,140 @@ completeness = "partial"
 [[review]]
 entity = "PHY_PBUS.READ_RESULT_0.BIT_20_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+sources = ["ROM_REV0_PHY_FE_REG_INIT", "S31_MMIO_DECLARED_20100894"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_USE_20100890", "S31_MMIO_DECLARED_20100890"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BITS_12_13_OPAQUE"
+sources = ["S31_MMIO_USE_20100890", "S31_MMIO_DECLARED_20100890"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.STATUS_CLOCK_FORCE.BITS_18_30_OPAQUE"
+sources = ["S31_MMIO_USE_20100890", "S31_MMIO_DECLARED_20100890"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_0.BITS_18_19_OPAQUE"
+sources = ["S31_MMIO_USE_20100894", "S31_MMIO_DECLARED_20100894"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_0.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100894", "S31_MMIO_DECLARED_20100894"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.MODE.BIT_2_OPAQUE"
+sources = ["S31_MMIO_USE_2010088C", "S31_MMIO_DECLARED_2010088C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.MODE.BIT_4_OPAQUE"
+sources = ["S31_MMIO_USE_2010088C", "S31_MMIO_DECLARED_2010088C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_1.BITS_9_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100898", "S31_MMIO_DECLARED_20100898"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_2.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010089C", "S31_MMIO_DECLARED_2010089C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_3.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_USE_201008A0", "S31_MMIO_DECLARED_201008A0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_4.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_USE_201008A4", "S31_MMIO_DECLARED_201008A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_0.BITS_9_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100894"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_1.BITS_0_8_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100898"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_2.BITS_0_8_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010089C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_2.BITS_9_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010089C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_2.BITS_18_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010089C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_3.BITS_0_8_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008A0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_3.BITS_9_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008A0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_3.BITS_18_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008A0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_4.BITS_0_8_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008A4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_4.BITS_9_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008A4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_PBUS.READ_RESULT_4.BITS_18_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008A4"]
+naming = "opaque"

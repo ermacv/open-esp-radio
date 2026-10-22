@@ -98,7 +98,7 @@ completeness = "partial"
 
 [[review]]
 entity = "PCR_RADIO.WORD_014C_OPAQUE.BITS_0_7_OPAQUE"
-sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS", "C5_BLOB_LIBPHY_RF_INIT_LEAVES_4"]
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS", "C5_BLOB_LIBPHY_RF_INIT_LEAVES_4", "C5_MMIO_DECLARED_6009614C"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"

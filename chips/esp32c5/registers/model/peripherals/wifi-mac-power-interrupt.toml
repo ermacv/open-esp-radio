@@ -368,9 +368,7 @@ completeness = "partial"
 [[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.BITS_8_31_OPAQUE"
 naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-]
+sources = ["C5_BLOB_LIBPP_HAL_TSF_TIMER", "C5_MMIO_DECLARED_600AD8B0"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -418,9 +416,7 @@ completeness = "partial"
 [[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.RAW.BITS_8_31_OPAQUE"
 naming = "opaque"
-sources = [
-    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
-]
+sources = ["C5_BLOB_LIBPP_HAL_TSF_TIMER", "C5_MMIO_DECLARED_600AD8B4"]
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
@@ -508,3 +504,12 @@ sources = [
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.BITS_8_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600AD8B8"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.BITS_8_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600AD8BC"]
+naming = "opaque"

@@ -82,7 +82,10 @@ bounds) live in the code that applies them.
   reserved mask and source. A use is a write of a non-reset value, an explicit
   masked set, or a read whose value changes behaviour. Code preserves reserved
   and absent bits or writes their reset value; vendor comparison rejects a
-  use of either and reports which.
+  use of either and reports which. An initialization image the vendor writes
+  to a whole register as an exact constant is kept as one cited image
+  operation even where reset is unknown; its lanes without established
+  meaning get no field.
 - **`unsafe`** stays in the PAC, the placement constructor and the protocol
   core of the HAL; crates above the HAL forbid it.
 - **Probe hooks** compile under `cfg(oer_probe)`, which only `cargo fw probe`

@@ -71,6 +71,18 @@ name = "DCM"
 bitOffset = 13
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_8_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 7
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripheral-review]]
 entity = "WIFI_MAC_CSI_DUMP"
 
@@ -97,3 +109,19 @@ sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.BITS_7_8_OPAQUE"
+sources = ["S31_MMIO_USE_2010411C", "S31_MMIO_DECLARED_2010411C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010411C", "S31_MMIO_DECLARED_2010411C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

@@ -8,12 +8,19 @@ and its schema-2 peripheral fragments. It follows the layout of the
 Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states)
 and the [Register bits decision](../../../docs/decisions.md#code).
 
+A cited exact whole-register initialization image remains one closed image
+operation when reset is unknown. The image alone gives its lanes no bit
+accessors and supplies no reset value. Sparse MMIO use facts in
+`evidence/mmio-use.toml` retain their source masks and conservative indexed
+qualifications; their unexposed PAC partition grants no production operation
+or read-safe snapshot.
+
 | Path | Owner and purpose |
 | --- | --- |
 | `model/device.toml`, `model/peripherals/` | Reviewed hardware register geometry and semantics |
 | `model/memory.toml` | MMIO regions |
 | `model/reviewed.toml` | Typed reviewed assertions with their applicability and evidence |
-| `policy/api.toml` | PAC ownership partitions and typed transactions, for the PAC crates that are not yet in this repository (not selected by the publication) |
+| `policy/api.toml` | Closed-PAC ownership partitions and typed transactions selected by the publication |
 | `policy/ownership.toml` | Shared publication scope of named MMIO ranges |
 | `policy/lints.toml` | Reviewed register-model lint policy |
 | `evidence/` | Source identities of the reviewed facts |

@@ -72,3 +72,8 @@ naming = "descriptive"
 
 [peripheral-review.opaque]
 naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_MU_EDCA_TIMER.TIMER%s.BITS_23_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104DBC"]
+naming = "opaque"

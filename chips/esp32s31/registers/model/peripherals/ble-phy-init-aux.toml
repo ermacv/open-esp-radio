@@ -20,11 +20,15 @@ addressOffset = 0x0
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-description = "Complete positional image; only the ordered zero-then-one publications are proven."
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 1
 [[peripherals]]
 name = "BLE_HW_POSITIONAL_WORD_891C"
 description = """
@@ -45,15 +49,13 @@ addressOffset = 0x0
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-description = "Complete positional image; only the ordered 0x20-then-0x40 publications are proven."
-bitOffset = 0
-bitWidth = 32
-
+name = "BITS_5_6_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 5
+bitWidth = 2
 [[peripheral-review]]
 entity = "BLE_HW_POSITIONAL_WORD_1FF0"
 opaque-entities = [
-    "BLE_HW_POSITIONAL_WORD_1FF0.VALUE.BITS_0_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -79,7 +81,6 @@ completeness = "complete"
 [[peripheral-review]]
 entity = "BLE_HW_POSITIONAL_WORD_891C"
 opaque-entities = [
-    "BLE_HW_POSITIONAL_WORD_891C.VALUE.BITS_0_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -101,3 +102,27 @@ naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_POSITIONAL_WORD_1FF0.VALUE.BIT_0_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101FF0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_POSITIONAL_WORD_1FF0.VALUE.BIT_3_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101FF0", "S31_MMIO_DECLARED_20101FF0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_POSITIONAL_WORD_891C.VALUE.BITS_5_6_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010891C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

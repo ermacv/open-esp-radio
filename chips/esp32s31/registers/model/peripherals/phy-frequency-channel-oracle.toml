@@ -82,6 +82,12 @@ description = "Complete phy_dis_hw_set_freq sets bit 31 before its two-microseco
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -107,14 +113,10 @@ size = 32
 access = "write-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0xFFFFFFFF
-
+bitWidth = 3
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -135,16 +137,6 @@ minimum = 0x0
 maximum = 0x3
 
 [[peripherals.registers.register.fields]]
-name = "BITS_2_7_OPAQUE"
-description = "Bits 7:2 of the complete initialization image."
-bitOffset = 2
-bitWidth = 6
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0x3F
-
-[[peripherals.registers.register.fields]]
 name = "FREQUENCY_READY"
 description = "The complete channel parent samples bit 8 after the frequency-switch delay and branches on its asserted edge."
 bitOffset = 8
@@ -152,15 +144,15 @@ bitWidth = 1
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_9_31_OPAQUE"
-description = "Bits 31:9 of the complete initialization image."
+name = "BITS_9_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 9
-bitWidth = 23
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0x7FFFFF
-
+bitWidth = 12
+[[peripherals.registers.register.fields]]
+name = "BITS_23_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 9
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -416,6 +408,18 @@ description = "The complete HE init parent sets bit 17 through a separate fresh-
 bitOffset = 17
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 7
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 14
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -502,6 +506,12 @@ name = "VHT_SUPPORT"
 bitOffset = 5
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 26
 [[peripheral-review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE"
 opaque-entities = [
@@ -511,11 +521,8 @@ opaque-entities = [
     "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_30_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE",
-    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_2_7_OPAQUE",
-    "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_9_31_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_30_31_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.BIT_17_OPAQUE",
-    "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE.BITS_0_31_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_13_17_OPAQUE",
     "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_0_4_OPAQUE",
@@ -576,7 +583,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_8_17_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -584,7 +591,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_18_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -592,7 +599,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_22_29_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -600,7 +607,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_30_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "S31_MMIO_DECLARED_2010001C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -646,18 +653,10 @@ completeness = "partial"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_BB_INIT"]
+sources = ["BLOB_LIBPHY_PHY_BB_INIT", "S31_MMIO_DECLARED_20100028"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_2_7_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.FREQUENCY_READY"
@@ -666,22 +665,6 @@ sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_9_31_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
-
-[[review]]
-entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_30_31_OPAQUE"
-naming = "opaque"
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "unknown"
 
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_RESULT"
@@ -713,7 +696,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.BIT_17_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "S31_MMIO_DECLARED_20104400"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -765,3 +748,184 @@ naming = "descriptive"
 [[review]]
 entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.VHT_SUPPORT"
 naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_21_OPAQUE"
+sources = ["S31_MMIO_USE_2010001C", "S31_MMIO_DECLARED_2010001C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.BITS_10_16_OPAQUE"
+sources = ["S31_MMIO_USE_20104400", "S31_MMIO_DECLARED_20104400"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.BITS_18_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104400", "S31_MMIO_DECLARED_20104400"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_6_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107CE4", "S31_MMIO_DECLARED_20107CE4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_AUDIT_20100024", "S31_MMIO_DECLARED_20100024"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_9_20_OPAQUE"
+sources = ["S31_MMIO_AUDIT_20100028", "S31_MMIO_DECLARED_20100028"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_23_31_OPAQUE"
+sources = ["S31_MMIO_AUDIT_20100028", "S31_MMIO_DECLARED_20100028"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_5_9_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_10_14_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_15_19_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_20_24_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_25_29_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100034"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_20_21_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100874"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20107CE0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100030"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_13_17_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100030"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_16_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100874"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_17_18_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100874"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100874"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100874"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_23_24_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100874"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100874"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107848"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107848"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107848"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CE4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_2_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107CE4"]
+naming = "opaque"

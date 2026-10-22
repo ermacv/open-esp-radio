@@ -66,3 +66,12 @@ completeness = "unknown"
 
 [peripheral-review.opaque]
 naming = "opaque"
+
+[[review]]
+entity = "PHY_FECOEX_RECOVERED.BT_COEX_PTI_CONFIG.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100010"]
+naming = "opaque"
+[[review]]
+entity = "PHY_FECOEX_RECOVERED.BT_COEX_PTI_CONFIG.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100010"]
+naming = "opaque"

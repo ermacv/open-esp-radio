@@ -79,7 +79,7 @@ addressOffset = 0x88
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "VALUE_LOW_5"
+name = "BITS_0_4_OPAQUE"
 bitOffset = 0
 bitWidth = 5
 
@@ -91,22 +91,13 @@ addressOffset = 0x90
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "VALUE_0"
+name = "BITS_0_4_OPAQUE"
 bitOffset = 0
 bitWidth = 5
 [[peripherals.registers.register.fields]]
-name = "CONFIG_5"
-bitOffset = 5
-bitWidth = 1
-[[peripherals.registers.register.fields]]
-name = "VALUE_1"
+name = "BITS_8_12_OPAQUE"
 bitOffset = 8
 bitWidth = 5
-[[peripherals.registers.register.fields]]
-name = "CONFIG_13"
-bitOffset = 13
-bitWidth = 1
-
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0094_OPAQUE"
@@ -115,7 +106,7 @@ addressOffset = 0x94
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "VALUE_LOW_8"
+name = "BITS_0_7_OPAQUE"
 bitOffset = 0
 bitWidth = 8
 
@@ -207,3 +198,35 @@ sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0088_OPAQUE.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101B88"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101B90"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.BITS_8_12_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101B90"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0094_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101B94"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

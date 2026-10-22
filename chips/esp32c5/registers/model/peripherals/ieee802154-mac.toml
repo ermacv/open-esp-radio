@@ -1738,7 +1738,8 @@ bitWidth = 4
 
 [[peripheral-review]]
 entity = "IEEE802154_MAC"
-opaque-entities = []
+opaque-entities = [
+]
 
 [peripheral-review.peripheral]
 sources = ["C5_REG_BASE", "ESP_IDF_4D59230D_C5_IEEE802154_STRUCT", "ESP_IDF_4D59230D_C5_IEEE802154_REG", "esp-idf-4d59230d-ieee802154-common-ll"]

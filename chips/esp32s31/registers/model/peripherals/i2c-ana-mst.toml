@@ -107,6 +107,12 @@ name = "START_OR_RESET"
 bitOffset = 26
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "ANA_CONF0"
@@ -203,6 +209,18 @@ bitWidth = 14
 name = "REVIEWED_RADIO_MAP"
 value = 0x3FA0
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 14
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "I2C0_CTRL1"
@@ -289,6 +307,12 @@ name = "ARBITER_DISABLE"
 bitOffset = 11
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 20
 [[peripheral-review]]
 entity = "I2C_ANA_MST"
 
@@ -369,3 +393,35 @@ naming = "descriptive"
 [[review]]
 entity = "I2C_ANA_MST.HW_I2C_CTRL.ARBITER_DISABLE"
 naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010F804", "S31_MMIO_DECLARED_2010F804"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.BITS_18_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010F820", "S31_MMIO_DECLARED_2010F820"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.BITS_12_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010F82C", "S31_MMIO_DECLARED_2010F82C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

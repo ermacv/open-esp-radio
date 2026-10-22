@@ -34,6 +34,12 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 24
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -161,6 +167,12 @@ bitWidth = 10
 minimum = 0x0
 maximum = 0x3FF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 10
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -274,3 +286,24 @@ sources = ["BLOB_LIBPP_HAL_INIT_COEX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_COEX_INIT.BEAMFORMING.BITS_22_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104DD8", "S31_MMIO_DECLARED_20104DD8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_INIT.RX_PTI.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_USE_201042FC", "S31_MMIO_DECLARED_201042FC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_INIT.DEFAULT_CONTROL.BIT_5_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104DDC"]
+naming = "opaque"

@@ -138,6 +138,12 @@ maximum = 0xF
 name = "TIMER_ARM"
 bitOffset = 31
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_3_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 21
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "BTLC_TIMER_VALUE_0"
@@ -239,6 +245,12 @@ access = "read-write"
 name = "COMPRESSED_SRAM_POINTER"
 bitOffset = 0
 bitWidth = 20
+
+[[peripherals.registers.register.fields]]
+name = "BIT_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "CURRENT_RX_LINK_POINTER"
@@ -250,6 +262,12 @@ access = "read-write"
 name = "COMPRESSED_SRAM_POINTER"
 bitOffset = 0
 bitWidth = 20
+
+[[peripherals.registers.register.fields]]
+name = "BIT_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "CONTROLLER_TRANSACTION_1"
@@ -303,6 +321,18 @@ bitWidth = 2
 name = "START"
 bitOffset = 31
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WDT_CONFIG_0"
@@ -314,6 +344,12 @@ access = "read-write"
 name = "ENABLE"
 bitOffset = 31
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 26
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WDT_CONFIG_1"
@@ -351,25 +387,9 @@ addressOffset = 0x1C0
 size = 32
 access = "read-write"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_5_OPAQUE"
-description = "The initial complete HAL write clears these unassigned positions."
-bitOffset = 0
-bitWidth = 6
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0
-maximum = 0x3F
-[[peripherals.registers.register.fields]]
 name = "CONFIG_6"
 bitOffset = 6
 bitWidth = 1
-[[peripherals.registers.register.fields]]
-name = "BITS_7_30_OPAQUE"
-description = "The initial complete HAL write clears these unassigned positions."
-bitOffset = 7
-bitWidth = 24
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0
-maximum = 0xFF_FFFF
 [[peripherals.registers.register.fields]]
 name = "ENABLE_31"
 bitOffset = 31
@@ -388,14 +408,6 @@ bitWidth = 20
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
 maximum = 0xF_FFFF
-[[peripherals.registers.register.fields]]
-name = "BITS_20_31_OPAQUE"
-description = "The complete HAL write clears the unassigned high positions."
-bitOffset = 20
-bitWidth = 12
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0
-maximum = 0xFFF
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GPIO_DIAG_ARGUMENT_1"
@@ -456,6 +468,12 @@ access = "read-write"
 name = "ENABLE_0"
 bitOffset = 0
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 1
+bitWidth = 31
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "ISO_COEX_STATE_0"
@@ -508,6 +526,12 @@ bitWidth = 20
 name = "ENABLE"
 bitOffset = 31
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 11
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0244_OPAQUE"
@@ -515,10 +539,7 @@ description = "Complete BLE PHY initialization writes the finite whole-word zero
 addressOffset = 0x244
 size = 32
 access = "write-only"
-[[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
-bitOffset = 0
-bitWidth = 32
+fields = []
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -534,16 +555,16 @@ bitWidth = 32
 
 [[peripherals.registers]]
 [peripherals.registers.register]
-name = "WORD_024C_OPAQUE"
+name = "PHY_ENVIRONMENT_TAIL_POINTER"
 description = "Complete BLE PHY initialization writes a runtime-derived complete image formed from a linked global address plus 0x40. The destination's inner hardware meaning remains unknown."
 addressOffset = 0x24C
 size = 32
 access = "write-only"
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "ADDRESS"
+description = "CPU address published for the BLE PHY environment member at +0x4d."
 bitOffset = 0
 bitWidth = 32
-
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "HAL_INIT_SCHEDULER_CONTROL"
@@ -692,6 +713,12 @@ bitWidth = 16
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
 maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GLOBAL_RXLINK_1_CURRENT"
@@ -710,6 +737,12 @@ maximum = 0xFFFFF
 name = "RX_VALID"
 bitOffset = 20
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 11
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GLOBAL_RXLINK_1_NEXT"
@@ -724,6 +757,12 @@ bitWidth = 20
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
 maximum = 0xFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GLOBAL_RXLINK_2_CURRENT"
@@ -742,6 +781,12 @@ maximum = 0xFFFFF
 name = "RX_VALID"
 bitOffset = 20
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 11
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GLOBAL_RXLINK_2_NEXT"
@@ -756,6 +801,12 @@ bitWidth = 20
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
 maximum = 0xFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GLOBAL_RXLINK_3_CURRENT"
@@ -774,6 +825,12 @@ maximum = 0xFFFFF
 name = "RX_VALID"
 bitOffset = 20
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 11
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "GLOBAL_RXLINK_3_NEXT"
@@ -788,6 +845,12 @@ bitWidth = 20
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
 maximum = 0xFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "SCAN_HW_SNAPSHOT"
@@ -1053,18 +1116,12 @@ maximum = 0x0F
 entity = "BLUETOOTH_CONTROLLER_CORE"
 opaque-entities = [
     "BLUETOOTH_CONTROLLER_CORE.WORD_0244_OPAQUE",
-    "BLUETOOTH_CONTROLLER_CORE.WORD_0244_OPAQUE.BITS_0_31_OPAQUE",
-    "BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE",
-    "BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE.BITS_0_31_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SRAM_POINTER_PREFIX.BITS_0_21_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BIT_25_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_0.BIT_25_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_0.BIT_30_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_1.BIT_16_OPAQUE",
-    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.BITS_0_5_OPAQUE",
-    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LATCH.BITS_7_30_OPAQUE",
-    "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_20.BITS_20_31_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_3_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_7_OPAQUE",
     "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_11_OPAQUE",
@@ -1129,14 +1186,6 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WORD_0244_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
-[[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.GPIO_DIAG_CONTROL"
 naming = "descriptive"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"]
@@ -1152,20 +1201,12 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE"
-naming = "opaque"
+entity = "BLUETOOTH_CONTROLLER_CORE.PHY_ENVIRONMENT_TAIL_POINTER"
+naming = "descriptive"
 sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE.BITS_0_31_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_CONTROL"
 naming = "descriptive"
@@ -1231,7 +1272,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BIT_25_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1247,7 +1288,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BITS_27_30_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"]
+sources = ["BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS", "S31_MMIO_DECLARED_20101090"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1519,7 +1560,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_0.BIT_25_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_REGISTERS", "S31_MMIO_DECLARED_20101254"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -1543,7 +1584,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_0.BIT_30_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "S31_MMIO_DECLARED_20101254"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
@@ -1571,14 +1612,6 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[[review]]
-entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_1.BIT_16_OPAQUE"
-naming = "opaque"
-sources = ["BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS", "BLOB_LIBBTDM_SCHEDULER_LIST_DELETION", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_DELETION_ROLE"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "partial"
 
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_1.STATUS_17"
@@ -1908,7 +1941,7 @@ completeness = "partial"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WORD_0204_OPAQUE.CONTROL_0"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101204"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1923,7 +1956,7 @@ completeness = "partial"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WORD_0208_OPAQUE.STATUS_0"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101208"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1974,7 +2007,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WORD_0324_OPAQUE.STATUS_0"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_20101324"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1990,7 +2023,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WORD_036C_OPAQUE.LOCK_MODIFY_HARDWARE_LIST_INDEX"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX", "S31_MMIO_DECLARED_2010136C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1998,7 +2031,7 @@ completeness = "complete"
 [[review]]
 entity = "BLUETOOTH_CONTROLLER_CORE.WORD_036C_OPAQUE.CANCELLATION_HARDWARE_LIST_INDEX"
 naming = "descriptive"
-sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+sources = ["BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES", "S31_MMIO_DECLARED_2010136C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2119,3 +2152,168 @@ sources = ["BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.BTLC_TIMER_CONTROL.BITS_3_23_OPAQUE"
+sources = ["S31_MMIO_USE_20101090", "S31_MMIO_DECLARED_20101090"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.GLOBAL_RXLINK_1_CURRENT.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101280", "S31_MMIO_DECLARED_20101280"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.GLOBAL_RXLINK_2_CURRENT.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101288", "S31_MMIO_DECLARED_20101288"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.GLOBAL_RXLINK_3_CURRENT.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101290", "S31_MMIO_DECLARED_20101290"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.WDT_CONFIG_0.BITS_0_25_OPAQUE"
+sources = ["S31_MMIO_USE_201010DC", "S31_MMIO_DECLARED_201010DC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.GLOBAL_RXLINK_1_NEXT.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101284", "S31_MMIO_DECLARED_20101284"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.GLOBAL_RXLINK_2_NEXT.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010128C", "S31_MMIO_DECLARED_2010128C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.GLOBAL_RXLINK_3_NEXT.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101294", "S31_MMIO_DECLARED_20101294"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SKIP_REQUEST.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_USE_201010EC", "S31_MMIO_DECLARED_201010EC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SKIP_REQUEST.BIT_30_OPAQUE"
+sources = ["S31_MMIO_USE_201010EC", "S31_MMIO_DECLARED_201010EC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.CURRENT_TX_LINK_POINTER.BIT_20_OPAQUE"
+sources = ["S31_MMIO_USE_201010C8", "S31_MMIO_DECLARED_201010C8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.CURRENT_RX_LINK_POINTER.BIT_20_OPAQUE"
+sources = ["S31_MMIO_USE_201010CC", "S31_MMIO_DECLARED_201010CC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_CONTROL_1.BITS_1_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101200", "S31_MMIO_DECLARED_20101200"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.ISO_COEX_TIMING_1.BITS_20_30_OPAQUE"
+sources = ["S31_MMIO_USE_20101234", "S31_MMIO_DECLARED_20101234"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_LOW_HALF.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010127C_RUN", "S31_MMIO_DECLARED_2010127C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_COMMAND_1.BIT_16_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101258"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.SCHEDULER_SRAM_POINTER_PREFIX.BITS_0_21_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20101074"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_CONTROLLER_CORE.HAL_INIT_SLOT_MAP%s.BIT_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010134C"]
+naming = "opaque"

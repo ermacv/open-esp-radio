@@ -15,11 +15,6 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_27_OPAQUE"
-bitOffset = 0
-bitWidth = 28
-
-[[peripherals.registers.register.fields]]
 name = "PHY_AUX_FORCE"
 description = "Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero in their second fresh-read edge."
 bitOffset = 28
@@ -129,10 +124,10 @@ bitOffset = 3
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_4_15_OPAQUE"
+name = "BITS_4_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 4
-bitWidth = 12
-
+bitWidth = 4
 [[peripherals.registers.register.fields]]
 name = "TIMEOUT_QUEUE_0"
 bitOffset = 16
@@ -253,13 +248,17 @@ name = "QUEUE_3"
 bitOffset = 3
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 4
 [[peripheral-review]]
 entity = "WIFI_MAC_TX_COMMON"
 opaque-entities = [
-    "WIFI_MAC_TX_COMMON.CCA_CONTROL.BITS_0_27_OPAQUE",
     "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_4_15_OPAQUE",
     "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_20_31_OPAQUE",
-    "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_4_15_OPAQUE",
     "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_20_23_OPAQUE",
     "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_28_31_OPAQUE",
     "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.BITS_4_31_OPAQUE",
@@ -326,3 +325,48 @@ sources = [
 provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.COMPLETE_STATE.BITS_4_7_OPAQUE"
+sources = ["C5_MMIO_USE_600A4CB8", "C5_MMIO_DECLARED_600A4CB8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_4_15_OPAQUE"
+sources = ["C5_MMIO_MANUAL_600A4CAC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE_CLEAR.BITS_20_31_OPAQUE"
+sources = ["C5_MMIO_MANUAL_600A4CAC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_4_7_OPAQUE"
+sources = ["C5_MMIO_AUDIT_600A4CB0", "C5_MMIO_DECLARED_600A4CB0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_20_23_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4CB0"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.QUEUE_STATE.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4CB0"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TX_COMMON.COMPLETE_CLEAR.BITS_4_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4CB4"]
+naming = "opaque"

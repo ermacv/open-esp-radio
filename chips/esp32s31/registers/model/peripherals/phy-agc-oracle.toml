@@ -40,6 +40,18 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -85,6 +97,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 8
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -116,6 +134,24 @@ description = "Instruction-exact AGC disable/enable gate."
 bitOffset = 29
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_10_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 11
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -130,6 +166,18 @@ name = "FORCE_LLTF"
 bitOffset = 15
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_14_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 15
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -180,6 +228,18 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 10
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -288,6 +348,18 @@ bitWidth = 7
 minimum = 0x0
 maximum = 0x7F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 9
+bitWidth = 23
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -392,6 +464,12 @@ description = "Complete phy_ant_init independently clears bit 12."
 bitOffset = 12
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 13
+bitWidth = 19
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -450,6 +528,18 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_9_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -488,6 +578,12 @@ bitWidth = 7
 minimum = 0x0
 maximum = 0x7F
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -735,7 +831,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.AGC_SHARED_CONTROL.BITS_0_7_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"]
+sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "S31_MMIO_DECLARED_2010702C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -775,7 +871,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_AGC_ORACLE.AGC_ANTENNA_CONTROL.BITS_11_17_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_ANT_INIT"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107030"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -799,7 +895,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.DC_MEMORY_CONTROL.BIT_20_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_DC_MEM_CLR"]
+sources = ["BLOB_LIBPHY_PHY_DC_MEM_CLR", "S31_MMIO_DECLARED_2010703C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -818,7 +914,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL.BIT_26_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_2010705C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -850,7 +946,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.RX_COMPENSATION_HIGH_CONTROL.BITS_24_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"]
+sources = ["BLOB_LIBPHY_PHY_SET_RX_COMP_NEW", "S31_MMIO_DECLARED_201070A0"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -869,10 +965,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.RX_11B_WINDOW_CONTROL.BITS_0_8_OPAQUE"
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_AGC",
-    "BLOB_LIBPHY_PHY_REG_UPDATE_NEW",
-]
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_20107104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -899,7 +992,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.ANTENNA_CONTROL_0.BITS_0_10_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_ANT_INIT"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_2010711C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -907,7 +1000,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.ANTENNA_CONTROL_0.BIT_11_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_ANT_DFT_CFG"]
+sources = ["ROM_REV0_PHY_ANT_DFT_CFG", "S31_MMIO_DECLARED_2010711C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -915,7 +1008,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_AGC_ORACLE.ANTENNA_CONTROL_0.BIT_12_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_ANT_INIT"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_2010711C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -931,7 +1024,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.ANTENNA_CONTROL_2.BITS_8_15_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_ANT_INIT"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107120"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -939,7 +1032,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.ANTENNA_CONTROL_2.BITS_24_31_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_PHY_ANT_INIT"]
+sources = ["ROM_REV0_PHY_ANT_INIT", "S31_MMIO_DECLARED_20107120"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -989,7 +1082,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.POST_INIT_RX_CONTROL.BITS_0_6_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_201078C8"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -997,7 +1090,7 @@ completeness = "unknown"
 [[review]]
 entity = "PHY_AGC_ORACLE.POST_INIT_RX_CONTROL.BITS_7_13_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW"]
+sources = ["BLOB_LIBPHY_PHY_REG_UPDATE_NEW", "S31_MMIO_DECLARED_201078C8"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -1039,3 +1132,200 @@ sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_SHARED_CONTROL.BITS_15_22_OPAQUE"
+sources = ["S31_MMIO_USE_2010702C", "S31_MMIO_DECLARED_2010702C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_ANTENNA_CONTROL.BITS_6_10_OPAQUE"
+sources = ["S31_MMIO_USE_20107030", "S31_MMIO_DECLARED_20107030"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_ANTENNA_CONTROL.BITS_18_28_OPAQUE"
+sources = ["S31_MMIO_USE_20107030", "S31_MMIO_DECLARED_20107030"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_ANTENNA_CONTROL.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107030", "S31_MMIO_DECLARED_20107030"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0.BITS_14_15_OPAQUE"
+sources = ["S31_MMIO_USE_20107044", "S31_MMIO_DECLARED_20107044"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0.BITS_22_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107044", "S31_MMIO_DECLARED_20107044"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.ANTENNA_CONTROL_0.BITS_13_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010711C", "S31_MMIO_DECLARED_2010711C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_1.BITS_4_9_OPAQUE"
+sources = ["S31_MMIO_USE_20107124", "S31_MMIO_DECLARED_20107124"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_1.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107124", "S31_MMIO_DECLARED_20107124"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_GAIN_LIMIT_CONTROL.BIT_25_OPAQUE"
+sources = ["S31_MMIO_USE_2010713C", "S31_MMIO_DECLARED_2010713C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_GAIN_LIMIT_LOW.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_USE_20107094", "S31_MMIO_DECLARED_20107094"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_GAIN_LIMIT_LOW.BITS_9_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107094", "S31_MMIO_DECLARED_20107094"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_PARAMETER_CONTROL.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_USE_201008BC", "S31_MMIO_DECLARED_201008BC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_PARAMETER_CONTROL.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_201008BC", "S31_MMIO_DECLARED_201008BC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.CSI_DUMP_FORCE_CONTROL.BITS_0_14_OPAQUE"
+sources = ["S31_MMIO_USE_201070A4", "S31_MMIO_DECLARED_201070A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.CSI_DUMP_FORCE_CONTROL.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_201070A4", "S31_MMIO_DECLARED_201070A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_MODE_CONTROL.BITS_12_15_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20108004"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_PARAMETER_CONTROL.BITS_4_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008BC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_PARAMETER_CONTROL.BITS_12_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201008BC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_ANTENNA_CONTROL.BIT_29_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107030"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0.BITS_8_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107044"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0.BITS_16_21_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107044"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL.BITS_0_18_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010705C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL.BIT_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010705C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL.BIT_24_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010705C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL.BIT_28_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010705C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_SATURATION_CONTROL.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010705C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_1.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107124"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_1.BITS_10_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107124"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_INIT_HIGH_CONTROL.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20107128"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.RX_11B_MODE_CONTROL.BIT_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20108004"]
+naming = "opaque"
+[[review]]
+entity = "PHY_AGC_ORACLE.AGC_UPDATE_8078_CONTROL.BITS_20_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20108078"]
+naming = "opaque"

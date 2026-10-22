@@ -425,7 +425,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.BITS_8_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8BC"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -465,7 +465,16 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.BITS_8_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER"]
+sources = ["BLOB_LIBPP_HAL_PWR_INTERRUPT", "BLOB_LIBPP_HAL_TSF_TIMER", "S31_MMIO_DECLARED_2010D8C0"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D8B4"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D8B8"]
+naming = "opaque"

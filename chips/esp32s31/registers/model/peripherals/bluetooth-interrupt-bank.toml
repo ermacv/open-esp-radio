@@ -82,6 +82,42 @@ bitWidth = 1
 name = "SOURCES_27_28"
 bitOffset = 27
 bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 9
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BIT_14_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_17_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 17
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 3
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "IRQ_CLEAR_0"
@@ -201,6 +237,30 @@ bitWidth = 1
 name = "SOURCE_13"
 bitOffset = 13
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 18
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "IRQ_CLEAR_1"
@@ -488,3 +548,188 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.BITS_2_7_OPAQUE"
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.BITS_9_12_OPAQUE"
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.BIT_14_OPAQUE"
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.BITS_17_20_OPAQUE"
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.BITS_22_26_OPAQUE"
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101054", "S31_MMIO_DECLARED_20101054"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.BIT_7_OPAQUE"
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.BITS_10_11_OPAQUE"
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.BITS_14_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101060", "S31_MMIO_DECLARED_20101060"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_0_6_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_8_14_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_16_20_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_22_26_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101058"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101064"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_4_7_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101064"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_10_11_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101064"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_13_31_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20101064"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_0_14_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010105C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_16_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010105C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_22_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010105C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010105C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20101068"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_4_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20101068"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_10_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20101068"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_13_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20101068"]
+naming = "opaque"

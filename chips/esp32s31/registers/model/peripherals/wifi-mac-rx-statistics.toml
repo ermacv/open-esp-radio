@@ -63,6 +63,12 @@ name = "COUNT"
 bitOffset = 0
 bitWidth = 10
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 22
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -447,6 +453,12 @@ name = "COUNT"
 bitOffset = 0
 bitWidth = 16
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -504,3 +516,19 @@ sources = ["BLOB_LIBPP_PP_DEBUG_HW_STATISTICS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_STATISTICS.FREQUENCY_HOP_ERROR.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104394", "S31_MMIO_DECLARED_20104394"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_STATISTICS.NRX_ERROR.BITS_10_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104318", "S31_MMIO_DECLARED_20104318"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

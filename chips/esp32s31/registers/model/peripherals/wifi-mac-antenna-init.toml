@@ -26,6 +26,12 @@ description = "Set by the final RMW of the complete leaf."
 bitOffset = 5
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -62,6 +68,18 @@ description = "Set in the middle RMW of each word in the second reverse traversa
 bitOffset = 5
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 26
 [[peripheral-review]]
 entity = "WIFI_MAC_ANTENNA_INIT"
 opaque-entities = [
@@ -92,3 +110,52 @@ naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_USE_201051AC", "S31_MMIO_USE_20105228", "S31_MMIO_USE_201052A4", "S31_MMIO_USE_20105320", "S31_MMIO_DECLARED_201051AC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BITS_6_31_OPAQUE"
+sources = ["S31_MMIO_USE_201051AC", "S31_MMIO_USE_20105228", "S31_MMIO_USE_201052A4", "S31_MMIO_USE_20105320", "S31_MMIO_DECLARED_201051AC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_USE_201042B0", "S31_MMIO_DECLARED_201042B0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BIT_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201042B0"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.COMMON_CONTROL.BIT_5_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201042B0"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201051AC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201051AC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201051AC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ANTENNA_INIT.BANK_CONTROL%s.BIT_5_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201051AC"]
+naming = "opaque"

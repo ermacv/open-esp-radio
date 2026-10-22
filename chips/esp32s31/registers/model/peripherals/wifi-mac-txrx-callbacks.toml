@@ -87,14 +87,15 @@ minimum = 0x0
 maximum = 0xFF
 
 [[peripherals.registers.register.fields]]
-name = "BITS_24_31_OPAQUE"
+name = "BITS_24_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 24
-bitWidth = 8
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0xFF
-
+bitWidth = 4
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -205,15 +206,6 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
-[[peripherals.registers.register.fields]]
-name = "BITS_24_31_OPAQUE"
-bitOffset = 24
-bitWidth = 8
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0xFF
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -298,6 +290,12 @@ bitWidth = 10
 minimum = 0x0
 maximum = 0x3FF
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -334,13 +332,17 @@ bitWidth = 10
 minimum = 0x0
 maximum = 0x3FF
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripheral-review]]
 entity = "WIFI_MAC_TXRX_CALLBACKS"
 opaque-entities = [
     "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.BITS_24_31_OPAQUE",
-    "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.BITS_24_31_OPAQUE",
     "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.BITS_24_31_OPAQUE",
-    "WIFI_MAC_TXRX_CALLBACKS.CTS_CCK_RATE_TABLE.BITS_24_31_OPAQUE",
     "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BITS_0_11_OPAQUE",
     "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_30_OPAQUE",
     "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_31_OPAQUE",
@@ -455,3 +457,60 @@ sources = ["BLOB_LIBPP_HAL_HE_SET_MAC_DELAY"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.DELAY_PRIMARY.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104C58", "S31_MMIO_DECLARED_20104C58"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.DELAY_SECONDARY.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104C54", "S31_MMIO_DECLARED_20104C54"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20104450"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_CCK_RATE_TABLE.BIT_30_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20104450"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20104C1C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.ACK_RATE_TABLE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010444C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.CTS_RATE_TABLE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104458"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C1C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_CALLBACKS.BB_RX_HANG_CONTROL.BIT_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C1C"]
+naming = "opaque"

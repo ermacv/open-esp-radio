@@ -314,7 +314,7 @@ pub(crate) const fn bluetooth_phy_resolving_list_pointer_image(
     }
 }
 
-/// Encode the layout reference for `BTMAC_BLE_PHY_INIT.WORD_04A0_OPAQUE.BITS_0_31_OPAQUE` without publishing it.
+/// Encode the layout reference for `BTMAC_BLE_PHY_INIT.PHY_ENVIRONMENT_MEMBER_POINTER.ADDRESS` without publishing it.
 /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
 pub(crate) const fn bluetooth_phy_environment_member_pointer_image(
     value: Option<crate::layouts::DmaRef<crate::layouts::BlePhyEnvironment>>,
@@ -331,7 +331,7 @@ pub(crate) const fn bluetooth_phy_environment_member_pointer_image(
     }
 }
 
-/// Encode the layout reference for `BLUETOOTH_CONTROLLER_CORE.WORD_024C_OPAQUE.BITS_0_31_OPAQUE` without publishing it.
+/// Encode the layout reference for `BLUETOOTH_CONTROLLER_CORE.PHY_ENVIRONMENT_TAIL_POINTER.ADDRESS` without publishing it.
 /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
 pub(crate) const fn bluetooth_phy_environment_tail_pointer_image(
     value: Option<crate::layouts::DmaRef<crate::layouts::BlePhyEnvironment>>,
@@ -2753,22 +2753,6 @@ impl PhyMemoryData2 {
     }
 }
 
-/// Register-specific recovered image for frequency parameter register 0.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct FrequencyParameter0Image(u32);
-
-impl FrequencyParameter0Image {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 /// Register-specific low AGC saturation-gain image.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct AgcSaturationGainLow(u32);
@@ -2838,22 +2822,6 @@ impl BluetoothModemLpTimerCompareImage {
 pub struct BluetoothPhyInitEnvironmentMemberImage(u32);
 
 impl BluetoothPhyInitEnvironmentMemberImage {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
-/// Complete controller-configuration word the BLE PHY initialization publishes at 0x20101940.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct BluetoothPhyInitConfigurationWordImage(u32);
-
-impl BluetoothPhyInitConfigurationWordImage {
     /// Wrap one register-specific opaque value.
     pub const fn new(value: u32) -> Self {
         Self(value)
@@ -3434,15 +3402,6 @@ pub(crate) fn phy_memory_data_1(registers: &crate::svd::PhyMemory, value: PhyMem
 #[inline]
 pub(crate) fn phy_memory_data_2(registers: &crate::svd::PhyMemory, value: PhyMemoryData2) {
     crate::svd::full_register_write::phy_memory_data_2(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `frequency_parameter_0` complete-register transaction.
-#[inline]
-pub(crate) fn frequency_parameter_0(
-    registers: &crate::svd::PhyFrequencyChannelOracle,
-    value: FrequencyParameter0Image,
-) {
-    crate::svd::full_register_write::frequency_parameter_0(registers, value.get());
 }
 
 /// Typed bridge for the reviewed `agc_saturation_gain_low` complete-register transaction.

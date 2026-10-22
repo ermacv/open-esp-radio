@@ -74,6 +74,24 @@ description = "Enable the Bluetooth low-power timer clock."
 bitOffset = 30
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 12
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 13
+bitWidth = 9
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "CLK_CONF_POWER_ST"
@@ -137,6 +155,48 @@ description = "Bit two of the modem-APB domain state map, set by the reviewed mo
 bitOffset = 30
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_9_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 10
+
+[[peripherals.registers.register.fields]]
+name = "BITS_11_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_17_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 19
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 31
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "MODEM_RST_CONF"
@@ -302,6 +362,18 @@ name = "CLK_FE_DAC_EN"
 bitOffset = 21
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_11_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 10
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WIFI_BB_CFG"
@@ -359,6 +431,24 @@ name = "BIT_28_OPAQUE"
 bitOffset = 28
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_10_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 7
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 14
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 3
 [[peripheral-review]]
 entity = "MODEM_SYSCON_RADIO"
 opaque-entities = [
@@ -448,4 +538,137 @@ sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
 [[review]]
 entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_3_OPAQUE"
 naming = "opaque"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "S31_MMIO_DECLARED_20109C18"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_4_10_OPAQUE"
+sources = ["S31_MMIO_USE_20109C18", "S31_MMIO_DECLARED_20109C18"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_14_27_OPAQUE"
+sources = ["S31_MMIO_USE_20109C18", "S31_MMIO_DECLARED_20109C18"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_USE_20109C18", "S31_MMIO_DECLARED_20109C18"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BITS_13_21_OPAQUE"
+sources = ["S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_20109C04", "S31_MMIO_DECLARED_20109C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.BITS_11_12_OPAQUE"
+sources = ["S31_MMIO_USE_20109C14", "S31_MMIO_DECLARED_20109C14"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.BITS_22_31_OPAQUE"
+sources = ["S31_MMIO_USE_20109C14", "S31_MMIO_DECLARED_20109C14"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BITS_0_9_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BITS_11_12_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BITS_15_17_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BITS_19_20_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BITS_23_25_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BITS_27_28_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.BIT_31_OPAQUE"
+sources = ["S31_MMIO_USE_20109C0C", "S31_MMIO_DECLARED_20109C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109C18"]
+naming = "opaque"
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_11_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109C18"]
+naming = "opaque"
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_28_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20109C18"]
+naming = "opaque"

@@ -40,6 +40,18 @@ name = "COLLISION_THRESHOLD"
 bitOffset = 9
 bitWidth = 4
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 13
+bitWidth = 19
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -154,6 +166,12 @@ name = "QAM16_ERSU"
 bitOffset = 26
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -247,6 +265,18 @@ name = "BSS_COLOR"
 bitOffset = 12
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -320,6 +350,18 @@ name = "BIT_25_OPAQUE"
 bitOffset = 25
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -357,6 +399,18 @@ name = "CLEAR_15"
 bitOffset = 15
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_13_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 14
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripheral-review]]
 entity = "WIFI_MAC_HE_INIT_PREFIX"
 opaque-entities = [
@@ -504,3 +558,100 @@ sources = [
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_24_OPAQUE"
+sources = ["S31_MMIO_USE_20104C78", "S31_MMIO_DECLARED_20104C78"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BITS_26_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104C78", "S31_MMIO_DECLARED_20104C78"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.BIT_2_OPAQUE"
+sources = ["S31_MMIO_USE_20104048", "S31_MMIO_DECLARED_20104048"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.BITS_13_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104048", "S31_MMIO_DECLARED_20104048"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104464", "S31_MMIO_DECLARED_20104464"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_CLEAR.BIT_3_OPAQUE"
+sources = ["S31_MMIO_USE_20104C38", "S31_MMIO_DECLARED_20104C38"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_CLEAR.BITS_6_11_OPAQUE"
+sources = ["S31_MMIO_USE_20104C38", "S31_MMIO_DECLARED_20104C38"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL.BITS_0_13_OPAQUE"
+sources = ["S31_MMIO_USE_20104E04", "S31_MMIO_DECLARED_20104E04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104E04", "S31_MMIO_DECLARED_20104E04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_VECTOR_CONTROL.BITS_12_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010447C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_ENABLE.BIT_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104480"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.PARENT_ENABLE.BIT_12_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C2C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C78"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C78"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_HIGH_IMAGE.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104DE4"]
+naming = "opaque"

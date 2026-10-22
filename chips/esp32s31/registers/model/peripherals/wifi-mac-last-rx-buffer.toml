@@ -34,6 +34,12 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -89,14 +95,10 @@ size = 32
 access = "write-only"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
-bitWidth = 32
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0xFFFFFFFF
-
+bitWidth = 12
 [[peripheral-review]]
 entity = "WIFI_MAC_LAST_RX_BUFFER"
 opaque-entities = [
@@ -104,7 +106,6 @@ opaque-entities = [
     "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_8_13_OPAQUE",
     "WIFI_MAC_LAST_RX_BUFFER.ENTRY_CONTROL%s.BITS_0_31_OPAQUE",
     "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_A%s.BITS_0_31_OPAQUE",
-    "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_B%s.BITS_0_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -146,11 +147,32 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_CONTROL%s.BITS_0_31_OPAQUE"
 naming = "opaque"
-
+sources = ["S31_MMIO_DECLARED_20104124"]
 [[review]]
 entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_A%s.BITS_0_31_OPAQUE"
 naming = "opaque"
+sources = ["S31_MMIO_DECLARED_20104140"]
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104120", "S31_MMIO_DECLARED_20104120"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
 [[review]]
-entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_B%s.BITS_0_31_OPAQUE"
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_B%s.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_AUDIT_2010415C", "S31_MMIO_DECLARED_2010415C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_1_6_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104120"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_8_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104120"]
 naming = "opaque"

@@ -70,6 +70,18 @@ description = "Forced power control; modeled for exact geometry but not written 
 bitOffset = 23
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "CLK_CONF"
@@ -142,7 +154,7 @@ completeness = "complete"
 
 [[review]]
 entity = "LP_TSENS.CLK_CONF.BIT_9_OPAQUE"
-sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
@@ -150,7 +162,7 @@ completeness = "complete"
 
 [[review]]
 entity = "LP_TSENS.CLK_CONF.BIT_23_OPAQUE"
-sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+sources = ["ESP_IDF_4D59230D_S31_TSENS_STRUCT", "BLOB_LIBPHY_PHY_TSENS_READ_INIT", "S31_MMIO_DECLARED_20818018"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
@@ -179,3 +191,19 @@ sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.BIT_11_OPAQUE"
+sources = ["S31_MMIO_USE_20818000", "S31_MMIO_DECLARED_20818000"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_TSENS.CTRL.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_USE_20818000", "S31_MMIO_DECLARED_20818000"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

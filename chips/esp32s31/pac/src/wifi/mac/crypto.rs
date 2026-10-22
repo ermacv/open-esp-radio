@@ -114,13 +114,13 @@ impl WifiRadioRegisters {
     pub fn initialize_mac_crypto_bypass(&mut self) {
         let control = &self.peripherals.wifi_mac.wifi_mac_crypto_control;
         crate::svd::zero_based_field_write::mac_crypto_interface_control(
-            control, 0, 0, false, 0xc0, 0,
+            control, 0, 0, false, false, 3, false, 0,
         );
         crate::svd::zero_based_field_write::mac_crypto_interface_control(
-            control, 1, 0, false, 0xc0, 0,
+            control, 1, 0, false, false, 3, false, 0,
         );
         crate::svd::zero_based_field_write::mac_crypto_interface_control(
-            control, 2, 0, false, 0, 0,
+            control, 2, 0, false, false, 0, false, 0,
         );
         crate::svd::zero_register_write::clear_mac_crypto_init_aux(control);
         crate::svd::zero_register_write::clear_mac_crypto_policy(control);
@@ -209,7 +209,6 @@ impl WifiRadioRegisters {
             interface.bits() as u8,
             false,
             logical_key_index != LOGICAL_INDEX_WITHOUT_FLAG,
-            0,
             logical_key_index,
         );
         let [k0, k1, k2, k3] = temporal_key.as_chunks::<4>().0 else {
@@ -258,7 +257,7 @@ impl WifiRadioRegisters {
         let at = index as usize;
         svd::zero_based_field_write::mac_key_entry_peer_low(table, at, 0);
         svd::zero_based_field_write::mac_key_entry_peer_control(
-            table, at, 0, 0, 0, false, 0, 0, false, false, 0, 0,
+            table, at, 0, 0, 0, false, 0, 0, false, false, 0,
         );
         svd::zero_based_field_write::mac_key_entry_key_word_0(table, at, 0);
         svd::zero_based_field_write::mac_key_entry_key_word_1(table, at, 0);
@@ -277,9 +276,11 @@ fn enable_ccmp(control: &svd::WifiMacCryptoControl, interface_index: usize, spp:
     crate::svd::zero_based_field_write::mac_crypto_interface_control(
         control,
         interface_index,
-        0x103,
+        3,
+        true,
         spp,
-        0xc0,
+        3,
+        false,
         0,
     );
     control

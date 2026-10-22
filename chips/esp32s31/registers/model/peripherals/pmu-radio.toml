@@ -176,6 +176,12 @@ description = "Analog peripheral I2C active-low reset release."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_29_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 30
 [[peripheral-review]]
 entity = "PMU_RADIO"
 opaque-entities = [
@@ -219,7 +225,7 @@ completeness = "partial"
 
 [[review]]
 entity = "PMU_RADIO.HP_ACTIVE_HP_CK_POWER.BITS_0_3_OPAQUE"
-sources = ["S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK"]
+sources = ["S31_PMU_HEADERS", "ROM_REV0_PHY_OPEN_FE_BB_CLK", "S31_MMIO_DECLARED_2070401C"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
@@ -312,3 +318,11 @@ sources = ["S31_ESP_PACS_SVD", "S31_PMU_HEADERS", "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "PMU_RADIO.ANA_PERI_PWR_CTRL.BITS_0_29_OPAQUE"
+sources = ["S31_MMIO_USE_20704208", "S31_MMIO_DECLARED_20704208"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

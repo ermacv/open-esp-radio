@@ -249,6 +249,8 @@ impl RadioPartitions {
             ieee802154,
             modem_etm,
             mac_local_time,
+            // Inventory-only word views have no safe runtime owner.
+            unexposed: _,
         } = svd::peripheral_ownership::partition(peripherals);
         let mac_local_time = MacLocalTime::mint(mac_local_time);
         let (ieee802154_etm, bluetooth_phy_etm, bluetooth_etm) =

@@ -48,7 +48,7 @@ impl RadioPhyRegisters {
     /// operations in the complete ROM body. Its fourth PMU operation belongs
     /// to the official platform PAC and is sequenced by the HAL.
     pub fn open_frontend_baseband_internal_clocks(&mut self) {
-        crate::svd::fixed_register_write::open_frontend_clock_gates(
+        crate::svd::fixed_register_image::open_frontend_clock_gates(
             &self.peripherals.phy_clock_oracle,
         );
 
@@ -65,7 +65,7 @@ impl RadioPhyRegisters {
     /// three-operation blob leaf. It intentionally leaves PMU power policy to
     /// the surrounding lifecycle owner, matching the source.
     pub fn close_frontend_baseband_clocks(&mut self) {
-        crate::svd::fixed_register_write::close_frontend_clock_gates(
+        crate::svd::fixed_register_image::close_frontend_clock_gates(
             &self.peripherals.phy_clock_oracle,
         );
 

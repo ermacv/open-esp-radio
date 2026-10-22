@@ -20,6 +20,12 @@ description = "Six-bit target replaced with crystal_frequency_mhz minus one by c
 bitOffset = 0
 bitWidth = 6
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 26
 [[peripheral-review]]
 entity = "MODEM_LPCON_PHY_TICK"
 
@@ -42,3 +48,11 @@ naming = "vendor"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "MODEM_LPCON_PHY_TICK.TICK_CONF.BITS_6_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010F028", "S31_MMIO_DECLARED_2010F028"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

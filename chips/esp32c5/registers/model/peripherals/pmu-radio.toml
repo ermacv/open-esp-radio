@@ -86,6 +86,12 @@ description = "Power the analog I2C of the PLL."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 23
 [[peripheral-review]]
 entity = "PMU_RADIO"
 
@@ -98,3 +104,11 @@ naming = "vendor"
 [peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_PMU"]
 naming = "vendor"
+
+[[review]]
+entity = "PMU_RADIO.RF_PWC.BITS_0_22_OPAQUE"
+sources = ["C5_MMIO_USE_600B0158", "C5_MMIO_DECLARED_600B0158"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

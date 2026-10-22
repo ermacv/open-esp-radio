@@ -39,11 +39,6 @@ bitOffset = 13
 bitWidth = 8
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_22_OPAQUE"
-bitOffset = 21
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "RX_PHY_SIGNAL_DELAY"
 bitOffset = 23
 bitWidth = 5
@@ -73,7 +68,6 @@ bitWidth = 1
 [[peripheral-review]]
 entity = "WIFI_MAC_RX_POWER_SAVE"
 opaque-entities = [
-    "WIFI_MAC_RX_POWER_SAVE.CONTROL.BITS_21_22_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

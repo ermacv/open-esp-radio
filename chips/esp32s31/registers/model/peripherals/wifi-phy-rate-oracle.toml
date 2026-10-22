@@ -55,6 +55,18 @@ description = "Second independently updated low-rate enable bit."
 bitOffset = 11
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_9_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 10
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 20
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -70,6 +82,18 @@ description = "Set by complete phy_enable_low_rate and cleared by complete phy_d
 bitOffset = 11
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_10_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 11
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 20
 [[peripheral-review]]
 entity = "WIFI_PHY_RATE_ORACLE"
 opaque-entities = [
@@ -125,3 +149,40 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_PRIMARY_CONTROL.BITS_0_9_OPAQUE"
+sources = ["S31_MMIO_USE_20108060", "S31_MMIO_DECLARED_20108060"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_PRIMARY_CONTROL.BITS_12_31_OPAQUE"
+sources = ["S31_MMIO_USE_20108060", "S31_MMIO_DECLARED_20108060"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_SECONDARY_CONTROL.BITS_0_10_OPAQUE"
+sources = ["S31_MMIO_USE_2010807C", "S31_MMIO_DECLARED_2010807C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_PHY_RATE_ORACLE.LOW_RATE_SECONDARY_CONTROL.BITS_12_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010807C", "S31_MMIO_DECLARED_2010807C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_PHY_RATE_ORACLE.NOISE_FLOOR_MEASUREMENT.BITS_12_18_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010708C"]
+naming = "opaque"

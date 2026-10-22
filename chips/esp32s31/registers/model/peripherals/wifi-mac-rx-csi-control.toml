@@ -58,6 +58,12 @@ description = "hal_mac_set_csi sets or clears bit 23 of the RX/CSI control word.
 bitOffset = 23
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 1
 [[peripheral-review]]
 entity = "WIFI_MAC_RX_CSI_CONTROL"
 opaque-entities = [
@@ -96,7 +102,24 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BIT_27_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "S31_MMIO_DECLARED_20104098"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BIT_16_OPAQUE"
+sources = ["S31_MMIO_USE_20104098_RUN", "S31_MMIO_DECLARED_20104098"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104098"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104098"]
+naming = "opaque"

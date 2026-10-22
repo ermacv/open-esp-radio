@@ -19,6 +19,12 @@ name = "TSF_BITS_35_10"
 bitOffset = 0
 bitWidth = 26
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripheral-review]]
 entity = "WIFI_MAC_STA_TBTT_TARGET"
 
@@ -37,3 +43,11 @@ completeness = "unknown"
 
 [peripheral-review.field]
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_STA_TBTT_TARGET.TARGET.BITS_26_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D82C", "S31_MMIO_DECLARED_2010D82C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

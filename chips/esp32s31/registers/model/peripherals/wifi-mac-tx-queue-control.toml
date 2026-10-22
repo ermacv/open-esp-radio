@@ -289,7 +289,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_22_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "S31_MMIO_DECLARED_20104D40"]
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
@@ -311,3 +311,16 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_20_21_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104D40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104D40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_27_29_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104D40"]
+naming = "opaque"

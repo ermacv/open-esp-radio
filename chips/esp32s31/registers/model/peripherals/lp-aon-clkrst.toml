@@ -20,6 +20,18 @@ description = "RTC slow-clock source: zero is the RC slow oscillator and one the
 bitOffset = 23
 bitWidth = 3
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 23
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "RTC_SAR2_PWDET_CCT"
@@ -73,3 +85,19 @@ sources = ["ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE", "S31_ESP_PACS_SVD"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "LP_AON_CLKRST.ROOT_CLK_CONF.BITS_0_22_OPAQUE"
+sources = ["S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_AON_CLKRST.ROOT_CLK_CONF.BITS_26_31_OPAQUE"
+sources = ["S31_MMIO_USE_20701000", "S31_MMIO_DECLARED_20701000"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

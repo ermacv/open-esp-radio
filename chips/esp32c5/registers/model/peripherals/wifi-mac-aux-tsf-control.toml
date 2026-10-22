@@ -24,6 +24,30 @@ name = "TSF_ENABLE"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_29_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 25
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -48,6 +72,42 @@ name = "TSF_ENABLE_HIGH"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_29_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 19
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BIT_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -72,6 +132,42 @@ name = "TSF_ENABLE_HIGH"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_29_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 19
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BIT_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 1
 [[peripheral-review]]
 entity = "WIFI_MAC_AUX_TSF_CONTROL"
 opaque-entities = [
@@ -95,4 +191,137 @@ completeness = "partial"
 naming = "descriptive"
 
 [peripheral-review.opaque]
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.BIT_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD868", "C5_MMIO_DECLARED_600AD868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.BITS_28_29_OPAQUE"
+sources = ["C5_MMIO_USE_600AD868", "C5_MMIO_DECLARED_600AD868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BIT_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD860", "C5_MMIO_DECLARED_600AD860"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BITS_28_29_OPAQUE"
+sources = ["C5_MMIO_USE_600AD860", "C5_MMIO_DECLARED_600AD860"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.BIT_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD870", "C5_MMIO_DECLARED_600AD870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.BITS_28_29_OPAQUE"
+sources = ["C5_MMIO_USE_600AD870", "C5_MMIO_DECLARED_600AD870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.BITS_0_18_OPAQUE"
+sources = ["C5_MMIO_USE_600AD868_RUN", "C5_MMIO_DECLARED_600AD868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.BITS_23_24_OPAQUE"
+sources = ["C5_MMIO_USE_600AD868_RUN", "C5_MMIO_DECLARED_600AD868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.BIT_26_OPAQUE"
+sources = ["C5_MMIO_USE_600AD868_RUN", "C5_MMIO_DECLARED_600AD868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.NAN_CONTROL.BIT_30_OPAQUE"
+sources = ["C5_MMIO_USE_600AD868_RUN", "C5_MMIO_DECLARED_600AD868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BITS_0_24_OPAQUE"
+sources = ["C5_MMIO_USE_600AD860_RUN", "C5_MMIO_DECLARED_600AD860"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BITS_26_27_OPAQUE"
+sources = ["C5_MMIO_USE_600AD860_RUN", "C5_MMIO_DECLARED_600AD860"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.BITS_0_18_OPAQUE"
+sources = ["C5_MMIO_USE_600AD870_RUN", "C5_MMIO_DECLARED_600AD870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.BITS_23_24_OPAQUE"
+sources = ["C5_MMIO_USE_600AD870_RUN", "C5_MMIO_DECLARED_600AD870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.BIT_26_OPAQUE"
+sources = ["C5_MMIO_USE_600AD870_RUN", "C5_MMIO_DECLARED_600AD870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.BTWT_CONTROL.BIT_30_OPAQUE"
+sources = ["C5_MMIO_USE_600AD870_RUN", "C5_MMIO_DECLARED_600AD870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_AUX_TSF_CONTROL.SOFTAP_CONTROL.BIT_30_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600AD860"]
 naming = "opaque"

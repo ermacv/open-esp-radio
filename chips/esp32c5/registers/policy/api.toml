@@ -5,6 +5,13 @@ schema = 5
 device-access = true
 allow-clippy-empty-docs = true
 
+
+[[ownership-partitions]]
+name = "UnexposedPeripherals"
+member = "unexposed"
+description = "Source-qualified MMIO views retained for bit-use coverage. No production transaction or read-safe snapshot exposes these tokens."
+peripherals = ["MODEM_IEEE802154_OBSERVED", "MODEM_WIFI_MAC_OBSERVED", "MODEM_WIFI_MAC_POWER_OBSERVED"]
+
 [[ownership-partitions]]
 name = "Ieee802154Peripherals"
 member = "ieee802154"
