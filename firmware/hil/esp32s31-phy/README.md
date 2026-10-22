@@ -96,16 +96,26 @@ tracking ticks per boot while channel 15 IEEE 802.15.4 RX or channel 1 Wi-Fi
 remains active. Wi-Fi marks the retained temperature band stale before each
 tick; the ordinary T3 child then performs both masked writes and commits the
 actual band. Engine reports use family 3 for this child, alongside T1 and T7.
-`StartTrackingHold` saves the registered debug policy and selects `(3, 0)`;
+`StartTrackingHold` with `policy = Forced` saves the registered debug policy and selects `(3, 0)`;
 the unchanged production scheduler period and concurrent tracking path run the
 RFPLL, common and transmit branches. The image timestamps only Tracking,
 grant-protect RFPLL/common/transmit and Wi-Fi baseband-off edges. It retains
 bounded raw intervals, including repeated baseband-off intervals, and committed
-branch bits. Data is serialized between ticks; no inner-loop clock reads or
-per-edge console output are added. A started PHY future is driven to completion.
+branch bits. A root-future wrapper also counts polls and directly measures Pending-to-resume
+gaps against the same clock; these include observer overhead and interrupts.
+Callbacks buffer engine, gain and RFPLL-command diagnostics. All formatting and
+UART, including failure reports, follow root return; the same observer is used
+in both policy modes. A started PHY future is driven to completion.
 
 Stop retires the hold id and restores the saved policy; StopCapture then closes
 RF. Overflow, reversed time, failed/missing/duplicate edges, incomplete branches,
 cancellation or missing cleanup invalidate evidence. Parent and child intervals
 are nested and cannot be summed. Grant-request duration is not proof of RF
 exclusion. Associated Wi-Fi traffic is a separate workload.
+
+`phy-tracking-hold-wifi-ordinary` selects `policy = Natural`: it preserves the
+registered debug bytes and retained power/I2C state, checks actual committed
+branches, and records 20 bounded batches of 16 ticks under one registration.
+Each batch checks unchanged policy at stop; the final stop closes RF. This is
+unassociated idle Wi-Fi, with no generated packet traffic. Per-batch engine
+counters remain bounded independently of the number of batches.

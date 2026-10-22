@@ -120,18 +120,25 @@ impl Radio {
                     .hold_id
                     .checked_add(1)
                     .ok_or(RejectReason::InvalidState)?;
-                self.domain
-                    .attachment_mut()
-                    .set_temperature_tracking_debug(3, 0)
-                    .map_err(|_| RejectReason::InvalidState)?;
+                if config.policy == HoldPolicy::Forced {
+                    self.domain
+                        .attachment_mut()
+                        .set_temperature_tracking_debug(3, 0)
+                        .map_err(|_| RejectReason::InvalidState)?;
+                }
                 self.hold_id = id;
                 let started = HoldStarted {
                     id,
                     epoch: current.epoch,
                     ticks: config.ticks,
+                    policy: config.policy,
                     channel: current.channel,
                     radio: current.radio,
-                    force: [3, 0],
+                    force: if config.policy == HoldPolicy::Forced {
+                        [3, 0]
+                    } else {
+                        [saved.first, saved.second]
+                    },
                     period_micros: oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
                 };
                 self.hold = Some(crate::hold::Hold::new(started, [saved.first, saved.second]));
@@ -148,11 +155,17 @@ impl Radio {
                 }
                 let mut hold = self.hold.take().ok_or(RejectReason::InvalidState)?;
                 hold.running = false;
-                let restored = self
-                    .domain
-                    .attachment_mut()
-                    .set_temperature_tracking_debug(hold.saved_debug[0], hold.saved_debug[1])
-                    .is_ok();
+                let restored = if hold.started.policy == HoldPolicy::Forced {
+                    self.domain
+                        .attachment_mut()
+                        .set_temperature_tracking_debug(hold.saved_debug[0], hold.saved_debug[1])
+                        .is_ok()
+                } else {
+                    self.domain.attachment().phy_state().is_ok_and(|state| {
+                        let policy = state.temperature_tracking_debug();
+                        [policy.first, policy.second] == hold.saved_debug
+                    })
+                };
                 Ok(Answer::HoldStopped(HoldStopped {
                     id: config.id,
                     samples: hold.samples.len() as u8,
@@ -366,7 +379,8 @@ impl Radio {
             .saturating_add(oer_time::Duration::from_micros(
                 oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS,
             ));
-        if hold.started.radio == CaptureRadio::Wifi
+        if hold.started.policy == HoldPolicy::Forced
+            && hold.started.radio == CaptureRadio::Wifi
             && self
                 .domain
                 .attachment_mut()
@@ -377,29 +391,38 @@ impl Radio {
             hold.running = false;
             return;
         }
-        if self
-            .domain
-            .attachment_mut()
-            .force_power_tracking_debug(hold.started.radio == CaptureRadio::Wifi)
-            .is_err()
+        if hold.started.policy == HoldPolicy::Forced
+            && self
+                .domain
+                .attachment_mut()
+                .force_power_tracking_debug(hold.started.radio == CaptureRadio::Wifi)
+                .is_err()
         {
             hold.invalid = true;
             hold.running = false;
             return;
         }
         let mut trace = oer_esp32s31_phy::tracking::observation::ReadinessTrace::default();
+        let metrics = core::cell::RefCell::new(crate::hold::metrics::Metrics::default());
+        let mut uart = crate::hold::Uart;
         let mut observer = crate::hold::Observer::new(
             hold.samples.len() as u8 + 1,
             &mut hold.engine,
             Some(&mut trace),
-        );
-        let tracked = track_concurrent_phy::<_, (), RomShortDelay, _>(
-            &mut self.domain,
-            &mut (),
             &EmbassyClock,
-            &mut observer,
-        )
-        .await;
+            &mut uart,
+        );
+        observer.metrics = Some(&metrics);
+        let tracked = {
+            let mut port = ();
+            let mut future = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, _>(
+                &mut self.domain,
+                &mut port,
+                &EmbassyClock,
+                &mut observer,
+            ));
+            crate::hold::metrics::observe(future.as_mut(), &EmbassyClock, &metrics).await
+        };
         let (committed, failed) = match tracked {
             Ok(ConcurrentTrackingTick::NotDue) => return,
             Ok(ConcurrentTrackingTick::Tracked(outcome)) => {
@@ -412,7 +435,7 @@ impl Radio {
                         || outcome.clients.wifi() != (hold.started.radio == CaptureRadio::Wifi)
                         || outcome.clients.bluetooth_ieee802154()
                             != (hold.started.radio != CaptureRadio::Wifi)
-                        || committed != 7,
+                        || (hold.started.policy == HoldPolicy::Forced && committed != 7),
                 )
             }
             failure => {
@@ -426,13 +449,9 @@ impl Radio {
             }
         };
         observer.report();
-        // Print only after tracking returns, outside all measured intervals.
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL sar_tail tick={} {:?}\n",
-            hold.samples.len() + 1,
-            observer.1,
-        ));
-        let recorder = observer.0;
+        let recorder = observer.recorder;
+        crate::hold::metrics::report(hold.samples.len() as u8 + 1, &metrics.borrow(), &mut uart)
+            .expect("diagnostic UART output");
         crate::hold::report_preparation(&trace, &hold.engine);
         crate::hold::finish_sample(hold, recorder, committed, failed);
     }

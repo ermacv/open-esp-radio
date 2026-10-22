@@ -26,9 +26,17 @@ pub struct Window {
 pub enum PhyScenario<C: Comparison> {
     TrackingHold {
         ticks: u8,
+        #[serde(default)]
+        policy: oer_hil_protocol::phy::HoldPolicy,
+        #[serde(default = "one_batch")]
+        batches: u8,
     },
     TrackingHoldWifi {
         ticks: u8,
+        #[serde(default)]
+        policy: oer_hil_protocol::phy::HoldPolicy,
+        #[serde(default = "one_batch")]
+        batches: u8,
     },
     RecordedCalibration {
         lifecycle: Lifecycle,
@@ -47,6 +55,10 @@ pub enum PhyScenario<C: Comparison> {
         comparison: PhantomData<C>,
     },
 }
+fn one_batch() -> u8 {
+    1
+}
+
 impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
     fn validate(&self) -> Result<()> {
         let (lifecycle, boots, vendor_windows, vendor_transmit) = match self {
@@ -57,11 +69,14 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                     Err("recorded calibration requires Wi-Fi cold and 1..=255 boots".into())
                 };
             }
-            Self::TrackingHold { ticks } | Self::TrackingHoldWifi { ticks } => {
-                return if (1..=oer_hil_protocol::phy::HOLD_TICKS as u8).contains(ticks) {
+            Self::TrackingHold { ticks, batches, .. }
+            | Self::TrackingHoldWifi { ticks, batches, .. } => {
+                return if (1..=oer_hil_protocol::phy::HOLD_TICKS as u8).contains(ticks)
+                    && (1..=20).contains(batches)
+                {
                     Ok(())
                 } else {
-                    Err("hold ticks must be in 1..=16".into())
+                    Err("hold ticks must be in 1..=16 and batches in 1..=20".into())
                 };
             }
             Self::VendorCalibration {
@@ -122,11 +137,33 @@ impl<C: Comparison> Workload for PhyScenario<C> {
                     *lifecycle, *boots, output, context,
                 );
             }
-            Self::TrackingHold { ticks } => {
-                return crate::workload::hold::run(*ticks, Lifecycle::Ieee802154, output, context);
+            Self::TrackingHold {
+                ticks,
+                policy,
+                batches,
+            } => {
+                return crate::workload::hold::run(
+                    *ticks,
+                    *policy,
+                    *batches,
+                    Lifecycle::Ieee802154,
+                    output,
+                    context,
+                );
             }
-            Self::TrackingHoldWifi { ticks } => {
-                return crate::workload::hold::run(*ticks, Lifecycle::Cold, output, context);
+            Self::TrackingHoldWifi {
+                ticks,
+                policy,
+                batches,
+            } => {
+                return crate::workload::hold::run(
+                    *ticks,
+                    *policy,
+                    *batches,
+                    Lifecycle::Cold,
+                    output,
+                    context,
+                );
             }
             Self::VendorCalibration {
                 lifecycle,
@@ -218,6 +255,41 @@ mod tests {
         let wifi = parse("kind='tracking-hold-wifi'\nticks=5").unwrap();
         assert!(matches!(legacy, PhyScenario::TrackingHold { .. }));
         assert!(matches!(wifi, PhyScenario::TrackingHoldWifi { .. }));
+    }
+    #[test]
+    fn natural_policy_and_batches_are_explicit_and_bounded() {
+        use oer_hil_protocol::phy::HoldPolicy;
+        let natural =
+            parse("kind='tracking-hold-wifi'\nticks=16\npolicy='natural'\nbatches=20").unwrap();
+        natural.validate().unwrap();
+        assert!(matches!(
+            natural,
+            PhyScenario::TrackingHoldWifi {
+                policy: HoldPolicy::Natural,
+                batches: 20,
+                ..
+            }
+        ));
+        let forced = parse("kind='tracking-hold'\nticks=5").unwrap();
+        assert!(matches!(
+            forced,
+            PhyScenario::TrackingHold {
+                policy: HoldPolicy::Forced,
+                batches: 1,
+                ..
+            }
+        ));
+        for batches in [0, 21, 255] {
+            assert!(
+                parse(&format!(
+                    "kind='tracking-hold-wifi'\nticks=16\npolicy='natural'\nbatches={batches}"
+                ))
+                .unwrap()
+                .validate()
+                .is_err()
+            );
+        }
+        assert!(parse("kind='tracking-hold-wifi'\nticks=16\npolicy='unknown'").is_err());
     }
     #[test]
     fn investigations_use_the_diagnostic_image_and_validate_counts() {
