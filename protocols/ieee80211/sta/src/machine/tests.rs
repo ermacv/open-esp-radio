@@ -26,6 +26,7 @@ type TestPools = (
 type TestGatePath<'id> = oer_radio_port::Child<Root<oer_radio_port::LocalId<'id>>, 0>;
 type TestConfigurationPath<'id> = oer_radio_port::Child<Root<oer_radio_port::LocalId<'id>>, 1>;
 
+mod block_ack;
 mod repeated_message3;
 mod restart;
 mod sae;
