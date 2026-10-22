@@ -19,6 +19,9 @@ oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 vcell = "0.1.3"
 
+[dev-dependencies]
+oer-espressif-analog = { path = "../../espressif/analog" }
+
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 # Anonymous host memory lets the actual generated fixed-address MMIO operations run in tests.
 libc = "=0.2.189"

@@ -908,6 +908,30 @@ mod tests {
     use super::{PhyI2cAddress, analog_registers};
 
     #[test]
+    fn generated_normal_routes_match_the_existing_transport_and_do_not_add_other_blocks() {
+        use crate::analog_i2c::{self, Host, Profile};
+        for code in 0x61..=0x6d {
+            let previous = super::PhyI2cBlock::recovered(code);
+            let route = analog_i2c::route(Profile::LibphyNormal, code).unwrap();
+            let host = match previous.host() {
+                super::PhyI2cHost::Host0 => Host::Host0,
+                super::PhyI2cHost::Host1 => Host::Host1,
+            };
+            assert_eq!(route.host, host);
+            assert_eq!(route.command_code, code);
+            assert_eq!(
+                route.complemented_read_select(),
+                previous.read_mask_complement_low()
+            );
+        }
+        for code in [0x0a, 0x0b, 0x0c, 0x10, 0x11, 0x60, 0x6e] {
+            assert_eq!(analog_i2c::route(Profile::LibphyNormal, code), None);
+        }
+        assert!(analog_i2c::READ_SAFE.is_empty());
+        assert!(analog_i2c::REGISTERS.iter().all(|r| r.reset.is_none()));
+    }
+
+    #[test]
     fn the_analog_image_reads_each_reviewed_register_once() {
         let image: [PhyI2cAddress; PhyI2cAddress::IMAGE_LEN] =
             core::array::from_fn(|index| PhyI2cAddress::image(index).unwrap());

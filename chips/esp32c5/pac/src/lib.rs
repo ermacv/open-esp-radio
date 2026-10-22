@@ -70,3 +70,7 @@ pub use phy::i2c::{
     PhyI2cInitializationInputs, PhyI2cParallelWrite, PhyI2cRcCalibration, PhyI2cSar2Code,
 };
 pub use phy::radio::PhyRadioRegisters;
+
+// Stage2 validates the native model API before stage3 migrates every bus caller.
+#[cfg(test)]
+include!("analog_generated.rs");

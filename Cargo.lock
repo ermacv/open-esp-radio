@@ -2710,6 +2710,7 @@ name = "oer-esp32c5-pac"
 version = "0.1.0"
 dependencies = [
  "oer-esp32c5-pac-raw",
+ "oer-espressif-analog",
  "oer-espressif-ieee802154-mac-values",
 ]
 
@@ -2846,6 +2847,7 @@ dependencies = [
  "bytemuck",
  "libc",
  "oer-esp32s31-pac-raw",
+ "oer-espressif-analog",
  "oer-espressif-ieee80211-pac",
  "oer-espressif-ieee802154-mac-values",
  "oer-memory",

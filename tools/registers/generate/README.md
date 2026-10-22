@@ -338,6 +338,13 @@ and required recovered tables remain with `registers/`.
 
 ## Register checks
 
+Native analog-I2C model documents are validated with the same publication
+and written to the explicit `[outputs].analog` path as the PAC's `analog_i2c`
+data/value module. Stage2 compiles it in the PAC host tests; stage3 activates
+it while migrating all callers. CPU SVD and CPU
+bindings omit them. `cargo registers inspect-analog --manifest <publication>`
+prints their complete native inventory; see the [model format](../model/README.md#analog-i2c-space).
+
 `oer_registers_generate::checks` holds the register rules, so no caller keeps its
 own copy:
 

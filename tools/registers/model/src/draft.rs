@@ -118,6 +118,7 @@ impl ModelDraft {
             shared_peripherals: BTreeMap::new(),
             layouts: vec![],
             reserved: BTreeMap::new(),
+            analog_spaces: vec![],
         };
         model.register_identities()?;
         Ok(Self {
@@ -130,6 +131,7 @@ impl ModelDraft {
                 fragments: vec!["peripherals.toml".into()],
                 shared_fragments: vec![],
                 layouts: vec![],
+                indirect_spaces: vec![],
             })?,
             fragment: toml_edit::ser::to_string_pretty(&RegisterModelFragment {
                 schema: 2,

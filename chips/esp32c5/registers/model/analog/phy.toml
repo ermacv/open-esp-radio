@@ -1,0 +1,881 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+# Editable native analog-I2C model; sourced header facts, not CPU MMIO.
+# No reset/read-safety or reserved bits are inferred from header omissions.
+schema = 1
+kind = "analog-i2c"
+
+[[blocks]]
+name = "ULP_BOD"
+code = 0x61
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT", "ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS"]
+
+[blocks.review]
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT", "ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x61
+host = 0
+read-select = 0x0100
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.registers]]
+name = "I2C_ULP_IR_RESETB"
+index = 0x00
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:21
+[[blocks.registers.fields]]
+name = "I2C_ULP_IR_RESETB"
+bitOffset = 0
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:25
+[[blocks.registers.fields]]
+name = "I2C_ULP_IR_FORCE_XPD_CK"
+bitOffset = 2
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:29
+[[blocks.registers.fields]]
+name = "I2C_ULP_IR_FORCE_XPD_IPH"
+bitOffset = 4
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:33
+[[blocks.registers.fields]]
+name = "I2C_ULP_IR_DISABLE_WATCHDOG_CK"
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_ULP_O_DONE_FLAG"
+index = 0x03
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:37
+[[blocks.registers.fields]]
+name = "I2C_ULP_O_DONE_FLAG"
+bitOffset = 0
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:41
+[[blocks.registers.fields]]
+name = "I2C_ULP_BG_O_DONE_FLAG"
+bitOffset = 3
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_ULP_OCODE"
+index = 0x04
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:45
+[[blocks.registers.fields]]
+name = "I2C_ULP_OCODE"
+bitOffset = 0
+bitWidth = 8
+
+[[blocks.registers]]
+name = "I2C_BOD_THRESHOLD"
+index = 0x05
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_brownout.h:20
+[[blocks.registers.fields]]
+name = "I2C_BOD_THRESHOLD"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:49
+[[blocks.registers.fields]]
+name = "I2C_ULP_IR_FORCE_CODE"
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_ULP_EXT_CODE"
+index = 0x06
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_lp_bias.h:53
+[[blocks.registers.fields]]
+name = "I2C_ULP_EXT_CODE"
+bitOffset = 0
+bitWidth = 8
+
+[[blocks]]
+name = "SDM"
+code = 0x63
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x63
+host = 1
+read-select = 0x0010
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "BLOCK_64"
+code = 0x64
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x64
+host = 0
+read-select = 0x0000
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "CKGEN6G"
+code = 0x65
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x62
+host = 0
+read-select = 0x0000
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x65
+host = 1
+read-select = 0x1000
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "BBPLL"
+code = 0x66
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_BBPLL"]
+
+[blocks.review]
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_BBPLL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x66
+host = 1
+read-select = 0x0080
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.registers]]
+name = "I2C_BBPLL_IR_CAL_DELAY"
+index = 0x00
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:21
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_DELAY"
+bitOffset = 0
+bitWidth = 4
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:25
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_CK_DIV"
+bitOffset = 4
+bitWidth = 4
+
+[[blocks.registers]]
+name = "I2C_BBPLL_IR_CAL_EXT_CAP"
+index = 0x01
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:29
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_EXT_CAP"
+bitOffset = 0
+bitWidth = 4
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:33
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_ENX_CAP"
+bitOffset = 4
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:37
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_RSTB"
+bitOffset = 5
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:41
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_START"
+bitOffset = 6
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:45
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_IR_CAL_UNSTOP"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_BBPLL_OC_REF_DIV"
+index = 0x02
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:49
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_REF_DIV"
+bitOffset = 0
+bitWidth = 4
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:53
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DCHGP"
+bitOffset = 4
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:57
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_ENB_FCAL"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_BBPLL_OC_DIV_7_0"
+index = 0x03
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:61
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DIV_7_0"
+bitOffset = 0
+bitWidth = 8
+
+[[blocks.registers]]
+name = "I2C_BBPLL_RSTB_DIV_ADC"
+index = 0x04
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:65
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_RSTB_DIV_ADC"
+bitOffset = 0
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:69
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_MODE_HF"
+bitOffset = 1
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:73
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_DIV_ADC"
+bitOffset = 2
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:77
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_DIV_DAC"
+bitOffset = 4
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:81
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_DIV_CPU"
+bitOffset = 5
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:85
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_ENB_VCON"
+bitOffset = 6
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:89
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_TSCHGP"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_BBPLL_OC_DR1"
+index = 0x05
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:93
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DR1"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:97
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DR3"
+bitOffset = 4
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:101
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_EN_USB"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_BBPLL_OC_DCUR"
+index = 0x06
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:105
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DCUR"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:109
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_INC_CUR"
+bitOffset = 3
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:113
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DHREF_SEL"
+bitOffset = 4
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:117
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_DLREF_SEL"
+bitOffset = 6
+bitWidth = 2
+
+[[blocks.registers]]
+name = "I2C_BBPLL_OR_CAL_CAP"
+index = 0x08
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:121
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OR_CAL_CAP"
+bitOffset = 0
+bitWidth = 4
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:125
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OR_CAL_UDF"
+bitOffset = 4
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:129
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OR_CAL_OVF"
+bitOffset = 5
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:133
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OR_CAL_END"
+bitOffset = 6
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:137
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OR_LOCK"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_BBPLL_OC_VCO_DBIAS"
+index = 0x09
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:141
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_OC_VCO_DBIAS"
+bitOffset = 0
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:145
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_BBADC_DELAY2"
+bitOffset = 2
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:149
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_BBADC_DVDD"
+bitOffset = 4
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:153
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_BBADC_DREF"
+bitOffset = 6
+bitWidth = 2
+
+[[blocks.registers]]
+name = "I2C_BBPLL_BBADC_DCUR"
+index = 0x0a
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:157
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_BBADC_DCUR"
+bitOffset = 0
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:161
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_BBADC_INPUT_SHORT"
+bitOffset = 2
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:165
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_ENT_PLL"
+bitOffset = 3
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:169
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_DTEST"
+bitOffset = 4
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_bbpll.h:173
+[[blocks.registers.fields]]
+name = "I2C_BBPLL_ENT_ADC"
+bitOffset = 6
+bitWidth = 2
+
+[[blocks]]
+name = "BBTOP"
+code = 0x67
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x67
+host = 0
+read-select = 0x0004
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "CKGEN"
+code = 0x68
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x68
+host = 1
+read-select = 0x0020
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "SARADC"
+code = 0x69
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_SARADC"]
+
+[blocks.review]
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_SARADC"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x69
+host = 0
+read-select = 0x0200
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.registers]]
+name = "ADC_SAR1_INITIAL_CODE_LOW_ADDR"
+index = 0x00
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:21
+[[blocks.registers.fields]]
+name = "ADC_SAR1_INITIAL_CODE_LOW_ADDR"
+bitOffset = 0
+bitWidth = 8
+
+[[blocks.registers]]
+name = "ADC_SAR1_INITIAL_CODE_HIGH_ADDR"
+index = 0x01
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:25
+[[blocks.registers.fields]]
+name = "ADC_SAR1_INITIAL_CODE_HIGH_ADDR"
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers]]
+name = "ADC_SAR1_SAMPLE_CYCLE_ADDR"
+index = 0x02
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:29
+[[blocks.registers.fields]]
+name = "ADC_SAR1_SAMPLE_CYCLE_ADDR"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:33
+[[blocks.registers.fields]]
+name = "ADC_SAR1_DREF_ADDR"
+bitOffset = 4
+bitWidth = 3
+
+[[blocks.registers]]
+name = "ADC_SAR2_INITIAL_CODE_LOW_ADDR"
+index = 0x03
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:37
+[[blocks.registers.fields]]
+name = "ADC_SAR2_INITIAL_CODE_LOW_ADDR"
+bitOffset = 0
+bitWidth = 8
+
+[[blocks.registers]]
+name = "ADC_SAR2_INITIAL_CODE_HIGH_ADDR"
+index = 0x04
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:41
+[[blocks.registers.fields]]
+name = "ADC_SAR2_INITIAL_CODE_HIGH_ADDR"
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers]]
+name = "ADC_SAR2_SAMPLE_CYCLE_ADDR"
+index = 0x05
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:45
+[[blocks.registers.fields]]
+name = "ADC_SAR2_SAMPLE_CYCLE_ADDR"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:49
+[[blocks.registers.fields]]
+name = "ADC_SAR2_DREF_ADDR"
+bitOffset = 4
+bitWidth = 3
+
+[[blocks.registers]]
+name = "I2C_SARADC_TSENS_DAC"
+index = 0x06
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:53
+[[blocks.registers.fields]]
+name = "I2C_SARADC_TSENS_DAC"
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers]]
+name = "ADC_SARADC_DTEST_RTC_ADDR"
+index = 0x07
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:57
+[[blocks.registers.fields]]
+name = "ADC_SARADC_DTEST_RTC_ADDR"
+bitOffset = 0
+bitWidth = 2
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:61
+[[blocks.registers.fields]]
+name = "ADC_SARADC_ENT_TSENS_ADDR"
+bitOffset = 2
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:65
+[[blocks.registers.fields]]
+name = "ADC_SARADC1_EN_TOUT_SAR1_BUS_ADDR"
+bitOffset = 4
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:69
+[[blocks.registers.fields]]
+name = "ADC_SARADC2_EN_TOUT_SAR2_BUS_ADDR"
+bitOffset = 5
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:73
+[[blocks.registers.fields]]
+name = "ADC_SARADC_ENT_PERIF_ADDR"
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers]]
+name = "ADC_SARADC1_EN_TOUT_ADDR"
+index = 0x08
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:77
+[[blocks.registers.fields]]
+name = "ADC_SARADC1_EN_TOUT_ADDR"
+bitOffset = 0
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:81
+[[blocks.registers.fields]]
+name = "ADC_SARADC2_EN_TOUT_ADDR"
+bitOffset = 2
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:85
+[[blocks.registers.fields]]
+name = "ADC_SAR1_ENCAL_GND_ADDR"
+bitOffset = 1
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:89
+[[blocks.registers.fields]]
+name = "ADC_SAR2_ENCAL_GND_ADDR"
+bitOffset = 3
+bitWidth = 1
+
+[[blocks.registers]]
+name = "POWER_GLITCH_XPD_VDET_PERIF"
+index = 0x0a
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:93
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_PERIF"
+bitOffset = 0
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:97
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_VDDPST"
+bitOffset = 1
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:101
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_XTAL"
+bitOffset = 2
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:105
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_XPD_VDET_PLL"
+bitOffset = 3
+bitWidth = 1
+
+[[blocks.registers]]
+name = "POWER_GLITCH_DREF_VDET_PERIF"
+index = 0x0b
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:109
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_PERIF"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:113
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_VDDPST"
+bitOffset = 4
+bitWidth = 3
+
+[[blocks.registers]]
+name = "POWER_GLITCH_DREF_VDET_XTAL"
+index = 0x0c
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:117
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_XTAL"
+bitOffset = 0
+bitWidth = 3
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_saradc.h:121
+[[blocks.registers.fields]]
+name = "POWER_GLITCH_DREF_VDET_PLL"
+bitOffset = 4
+bitWidth = 3
+
+[[blocks]]
+name = "BIAS"
+code = 0x6a
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x6a
+host = 1
+read-select = 0x0040
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "TXRF"
+code = 0x6b
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x6b
+host = 1
+read-select = 0x0008
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "BLOCK_6C"
+code = 0x6c
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x6c
+host = 0
+read-select = 0x2000
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "DIG_REG"
+code = 0x6d
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_DIG_REG"]
+
+[blocks.review]
+sources = ["ESP_IDF_4D59230D_C5_REGI2C_DIG_REG"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "vendor"
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x6d
+host = 0
+read-select = 0x0400
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_EXT_RTC_DREG"
+index = 0x04
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:18
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_EXT_RTC_DREG"
+bitOffset = 0
+bitWidth = 5
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:22
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_ENX_RTC_DREG"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_EXT_RTC_DREG_SLEEP"
+index = 0x05
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:26
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_EXT_RTC_DREG_SLEEP"
+bitOffset = 0
+bitWidth = 5
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:30
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_ENIF_RTC_DREG"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_EXT_DIG_DREG"
+index = 0x06
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:34
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_EXT_DIG_DREG"
+bitOffset = 0
+bitWidth = 5
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:38
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_ENX_DIG_DREG"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_EXT_DIG_DREG_SLEEP"
+index = 0x07
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:42
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_EXT_DIG_DREG_SLEEP"
+bitOffset = 0
+bitWidth = 5
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:46
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_ENIF_DIG_DREG"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_OR_EN_CONT_CAL"
+index = 0x09
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:50
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_OR_EN_CONT_CAL"
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_XPD_RTC_REG"
+index = 0x0d
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:54
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_XPD_RTC_REG"
+bitOffset = 2
+bitWidth = 1
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:58
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_XPD_DIG_REG"
+bitOffset = 3
+bitWidth = 1
+
+[[blocks.registers]]
+name = "I2C_DIG_REG_SCK_DCAP"
+index = 0x0e
+
+# SOURCE: components/soc/esp32c5/include/soc/regi2c_dig_reg.h:62
+[[blocks.registers.fields]]
+name = "I2C_DIG_REG_SCK_DCAP"
+bitOffset = 0
+bitWidth = 8
+
+[[blocks]]
+name = "TXTOP"
+code = 0x6e
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x6e
+host = 1
+read-select = 0x0800
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks]]
+name = "BLOCK_6F"
+code = 0x6f
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[blocks.routes]]
+profile = "libphy-normal"
+request-code = 0x6f
+host = 0
+read-select = 0x4000
+read-mask-bits = 32
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]

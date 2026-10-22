@@ -3,13 +3,13 @@
 use std::collections::BTreeMap;
 
 use oer_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, ReviewAnnotation};
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub(crate) struct ReviewMetadata {
+pub struct ReviewMetadata {
     #[serde(default)]
     pub sources: Vec<String>,
     #[serde(default)]

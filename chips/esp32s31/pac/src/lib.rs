@@ -286,3 +286,7 @@ pub(crate) mod modem;
 #[doc(hidden)]
 pub mod validation;
 pub(crate) mod wifi;
+
+// Stage2 validates the native model API before stage3 migrates every bus caller.
+#[cfg(test)]
+include!("analog_generated.rs");

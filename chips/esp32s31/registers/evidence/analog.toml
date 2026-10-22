@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+# Analog-I2C header geometry facts; no source code copied.
+schema = 1
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_APLL"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_apll.h, sha256 1100812879eb3141e518ee4787b9425609802ef1396bcacfafcce028a6e21aae, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_BBPLL"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_bbpll.h, sha256 5534db29aed79ddb81b71fafb61bf23c6d64bf217c0aae257438d2bbe01dfd1c, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_BIAS"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_bias.h, sha256 03be5b1c7582a2287ad3656e9867a983cfc89b3e71ed32f131e1d39a5b1d03f9, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_brownout.h, sha256 16899306abc81b1d3bc51d55579556b600d1b6f43103d83a827bb0053376bdd5, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_DIG_REG"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_dig_reg.h, sha256 02bcd403417a325906696c9ae958f5dcb8f8ddf0e16e4e28bf26bf016b6e5f07, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_MPLL"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_mpll.h, sha256 84d0f82032f6e6c8a1fa0b2d2c35c1149daa1ee7cb3309351566ded5af7c94b0, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_REGI2C_SARADC"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/soc/regi2c_saradc.h, sha256 71c35701df3f371d72b0e10c7bc045e1ba2e04d4ac0bf55f14165b6aaf009053, SPDX Apache-2.0 OR MIT. Named block/index/field geometry only. Headers establish no reset image, reserved gaps or read safety."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_ANALOG_SLAVE_SELECTION"
+description = "ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/include/modem/i2c_ana_mst_reg.h, sha256 5e280fafac6ac82f241d7f2a22f04f06ae539e245d11fe6f9db9620c6ee99808. Also components/esp_hal_regi2c/esp32s31/regi2c_impl.c, sha256 d464d70912329429bfacdc6b354c609d55e959f4b50eb03d711a07371c5394a0, lines20..25 and59..75: the implementation names CPLL 0x0a, MPLL 0x0b, APLL 0x0c, SAR master 0x10 and SAR slave 0x11. Geometry knowledge only; no libphy-normal production routes to these codes."

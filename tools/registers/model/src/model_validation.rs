@@ -55,7 +55,7 @@ fn validate_children(
     Ok(())
 }
 
-fn validate_register(
+pub(crate) fn validate_register(
     parent: &str,
     register: &RegisterInfo,
     properties: RegisterProperties,
