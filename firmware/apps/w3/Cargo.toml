@@ -1,0 +1,12 @@
+[package]
+name = "oer-firmware-apps-w3"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "W3: open station association, DHCP and bidirectional ICMP acceptance"
+
+[lints]
+workspace = true

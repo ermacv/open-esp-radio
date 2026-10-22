@@ -3162,6 +3162,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-apps-w3"
+version = "0.1.0"
+
+[[package]]
 name = "oer-firmware-bootstrap-esp32c5"
 version = "0.1.0"
 dependencies = [
@@ -4290,6 +4294,7 @@ dependencies = [
  "hex",
  "jiff",
  "oer-chip-profile",
+ "oer-firmware-apps-w3",
  "oer-hil-lab",
  "oer-ieee80211-port",
  "oer-ieee80211-upper-mac",
