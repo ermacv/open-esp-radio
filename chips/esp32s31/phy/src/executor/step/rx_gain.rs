@@ -85,6 +85,7 @@ pub(crate) struct Scratch {
     pub(super) binding: Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
     pub(super) completion: Option<PhyRxGainInitCompletion>,
     seen_actions: u64,
+    lowering: Option<PhyRxGainInitAction>,
 }
 
 impl Scratch {
@@ -135,13 +136,15 @@ impl Run<'_> {
         } else {
             Instant::EPOCH
         };
-        let action = self.transition.action();
+        self.scratch.lowering = Some(self.transition.action());
         let mut tag = 0;
         if self.measured {
-            tag = self
-                .scratch
-                .observe_action(crate::tracking::observation::calibration::rx(&action));
+            let action = crate::tracking::observation::calibration::rx(
+                self.scratch.lowering.as_ref().ok_or(Failure::Binding)?,
+            );
+            tag = self.scratch.observe_action(action);
         }
+        let action = self.scratch.lowering.as_ref().ok_or(Failure::Binding)?;
         if matches!(
             action,
             PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
@@ -159,9 +162,9 @@ impl Run<'_> {
             #[cfg(not(target_arch = "riscv32"))]
             return Err(Failure::Binding);
         }
-        self.observe(action);
+        Self::observe(self.execution, action);
         self.scratch.binding = Some(
-            crate::rx::gain::PhyRxGainInitExternalBinding::lower(action)
+            crate::rx::gain::PhyRxGainInitExternalBinding::lower(*action)
                 .map_err(|_| Failure::Binding)?,
         );
         let lowered = if self.measured {
@@ -200,23 +203,10 @@ impl Run<'_> {
             .advance(completion)
             .map_err(|_| Failure::Binding)?;
         if self.measured {
-            for (index, (from, to)) in [
-                (started, lowered),
-                (lowered, completed),
-                (completed, stamp.now()),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let elapsed = to
-                    .checked_duration_since(from)
-                    .and_then(|d| u32::try_from(d.as_micros()).ok())
-                    .unwrap_or(u32::MAX);
-                if elapsed > self.execution.maximum_parts_micros[index] {
-                    self.execution.maximum_parts_micros[index] = elapsed;
-                    self.execution.maximum_parts_actions[index] = tag;
-                }
-            }
+            let finished = stamp.now();
+            Self::record_part(self.execution, 0, tag, started, lowered);
+            Self::record_part(self.execution, 1, tag, lowered, completed);
+            Self::record_part(self.execution, 2, tag, completed, finished);
         }
         if waiting {
             Ok(Step::WaitAt(
@@ -228,21 +218,37 @@ impl Run<'_> {
         }
     }
 
-    fn observe(&mut self, action: PhyRxGainInitAction) {
+    #[inline(always)]
+    fn record_part(
+        execution: &mut RxGainExecution,
+        index: usize,
+        tag: u8,
+        from: Instant,
+        to: Instant,
+    ) {
+        let elapsed = to
+            .checked_duration_since(from)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
+            .unwrap_or(u32::MAX);
+        if elapsed > execution.maximum_parts_micros[index] {
+            execution.maximum_parts_micros[index] = elapsed;
+            execution.maximum_parts_actions[index] = tag;
+        }
+    }
+
+    fn observe(execution: &mut RxGainExecution, action: &PhyRxGainInitAction) {
         if let PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(action)) = action {
             match action {
-                PhyRxDcCalibrationAction::PrepareControlRestore => {
-                    self.execution.outer_operations += 1
-                }
+                PhyRxDcCalibrationAction::PrepareControlRestore => execution.outer_operations += 1,
                 PhyRxDcCalibrationAction::DelayMicros { micros: 10, .. } => {
-                    self.execution.settle_10us += 1
+                    execution.settle_10us += 1
                 }
                 PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(action)) => {
                     if let PhyDcIqAction::Configure(request) = action {
-                        self.execution.minimum_operations += 4;
-                        self.execution.settle_1us += 1;
+                        execution.minimum_operations += 4;
+                        execution.settle_1us += 1;
                         if request.iteration == 0 {
-                            self.execution.minimum_searches += 1;
+                            execution.minimum_searches += 1;
                         }
                     }
                 }
