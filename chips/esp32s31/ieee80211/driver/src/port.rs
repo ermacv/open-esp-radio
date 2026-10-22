@@ -205,6 +205,12 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     }
 }
 impl<const B: usize> PortSharedStorage<B> {
+    // Keep the waker's typed scope at the indirect call, independently of
+    // the large terminal dispatchers that notify the P1 body.
+    #[inline(never)]
+    fn wake_body(&self) {
+        self.body.wake();
+    }
     /// Vacant cross-context backing, placed separately from the P2-only device.
     pub const fn new() -> Self {
         Self {
@@ -219,7 +225,7 @@ impl<const B: usize> PortSharedStorage<B> {
     fn poison(&self, cause: Fault) {
         let _ = self.poisoned.set(cause);
         self.driver.wake();
-        self.body.wake();
+        self.wake_body();
     }
     fn check(&self) -> Result<(), radio::Poisoned<Fault>> {
         self.poisoned
@@ -427,7 +433,21 @@ impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ack {
-    pub snr_db: Option<i8>,
+    pub snr_db: i8,
+}
+
+impl Ack {
+    fn from_sample(sample: Option<i8>) -> Result<Self, Fault> {
+        sample.map(|snr_db| Self { snr_db }).ok_or(Fault::Capacity)
+    }
+}
+
+// Successful ordinary completions always supply the signed vendor sample;
+// group/no-ACK transmissions carry SingleResponse::Unsolicited instead.
+impl AckSnr for Ack {
+    fn snr_db(&self) -> i8 {
+        self.snr_db
+    }
 }
 
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacBackend<Id>
@@ -438,4 +458,17 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacBackend<Id>
         core::num::NonZeroU8::new(8).expect("eight admission tickets");
     const PUBLICATION_BOUND: Duration = PUBLICATION_BOUND;
     const GROUP_COMMAND_BOUND: Duration = COMMAND_BOUND;
+}
+
+#[cfg(test)]
+mod ack_tests {
+    use super::*;
+    #[test]
+    fn rate_control_receives_the_real_ack_sample_and_missing_evidence_is_refused() {
+        for sample in [i8::MIN, -7, 0, i8::MAX] {
+            let ack = Ack::from_sample(Some(sample)).expect("measured ACK");
+            assert_eq!(ack.snr_db(), sample);
+        }
+        assert_eq!(Ack::from_sample(None), Err(Fault::Capacity));
+    }
 }

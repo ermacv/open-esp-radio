@@ -152,6 +152,7 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
         )?,
     );
     command.env_remove("OPEN_RADIO_IRQ_STACK_BYTES");
+    command.env_remove("OPEN_RADIO_CPU0_TASK_STACK_BYTES");
     for (variable, value) in &compiler.runtime_environment {
         command.env(variable, value);
     }

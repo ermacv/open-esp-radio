@@ -125,13 +125,18 @@ use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_radio_port::Slot;
 use oer_radio_port::{
     Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner, PoisonedOwner,
+    PortBackend,
 };
 use oer_time::{Instant, Timer};
 
-/// A backend the station's service drives: its phase, settings and events
-/// as the lower-MAC contract's, and the two buffer classes the service
-/// splits between the station and data.
-pub trait StationPort: LowerMacBackend<Self::SlotId> {
+/// The composition's mapping from its concrete backend to station resources.
+/// This is a mapping rather than a backend supertrait because orphan rules and
+/// BodyLoan's unreplaceable backend identity prevent an image-owned backend impl.
+pub trait StationPort: Sized {
+    /// The concrete lower-MAC backend; its lifecycle owns every hardware resource.
+    type Backend: LowerMacBackend<Self::SlotId, Caps = Self::Caps>;
+    /// Capability family shared by the backend and portable machines.
+    type Caps: Ieee80211Capabilities;
     /// Nominal identity of this backend's registered slot.
     type SlotId: oer_radio_port::SlotIdentity;
     /// Public phase/resource family under each separate body loan.
@@ -141,7 +146,7 @@ pub trait StationPort: LowerMacBackend<Self::SlotId> {
                 'id,
                 <Self::Types<'id> as PhaseTypes<'id>>::EpochPath,
             >,
-            Fault = Self::Fault,
+            Fault = <Self::Backend as PortBackend<Self::SlotId>>::Fault,
             TxBody = core::convert::Infallible,
             Context = TxContext<
                 'id,
@@ -155,6 +160,7 @@ pub trait StationPort: LowerMacBackend<Self::SlotId> {
         + TxBufferPool<'id, Self::Large>
     where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id;
     /// Fixed terminal custody from the backend's capacity layout.
     type TerminalStorage<T>: TerminalStorage<T>;
@@ -165,33 +171,46 @@ pub trait StationPort: LowerMacBackend<Self::SlotId> {
 
     /// Lend only the public phase, retaining the body's loan and slot identity.
     fn lend_phase<'a, 'id, 'r>(
-        phase: &'r mut Self::Phase<'a, 'id>,
+        phase: &'r mut <Self::Backend as PortBackend<Self::SlotId>>::Phase<'a, 'id>,
     ) -> &'r mut impl LowerMacPhase<'a, 'id, Caps = Self::Caps, Types = Self::Types<'id>>
     where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id,
         'id: 'a;
     /// Preserve the complete public terminal family at the disable boundary.
-    fn terminal<'id>(terminal: Self::Terminal<'id>) -> LowerMacTerminal<'id, Self::Types<'id>>
+    fn terminal<'id>(
+        terminal: <Self::Backend as PortBackend<Self::SlotId>>::Terminal<'id>,
+    ) -> LowerMacTerminal<'id, Self::Types<'id>>
     where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id;
     /// Return the same rejected public terminal to the backend's custody.
-    fn port_terminal<'id>(terminal: LowerMacTerminal<'id, Self::Types<'id>>) -> Self::Terminal<'id>
+    fn port_terminal<'id>(
+        terminal: LowerMacTerminal<'id, Self::Types<'id>>,
+    ) -> <Self::Backend as PortBackend<Self::SlotId>>::Terminal<'id>
     where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id;
 
     /// Tune disabled settings under their existing body loan.
-    fn tune<'a, 'id>(setup: &mut Self::Setup<'a, 'id>, channel: SupportedChannel<Self::Caps>)
-    where
+    fn tune<'a, 'id>(
+        setup: &mut <Self::Backend as PortBackend<Self::SlotId>>::Setup<'a, 'id>,
+        channel: SupportedChannel<Self::Caps>,
+    ) where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id,
         'id: 'a;
     /// Preserve the complete public event family.
-    fn event<'id>(event: Self::Event<'id>) -> LowerMacEvent<'id, Self::Types<'id>>
+    fn event<'id>(
+        event: LowerMacEvent<'id, Self::Types<'id>>,
+    ) -> LowerMacEvent<'id, Self::Types<'id>>
     where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id;
     /// Recover either complete resource class, without an unknown-class branch.
     fn tx_buffer<'id>(
@@ -199,12 +218,13 @@ pub trait StationPort: LowerMacBackend<Self::SlotId> {
     ) -> StationTxBuffer<'id, Self>
     where
         Self: 'id,
+        Self::Backend: 'id,
         Self::SlotId: 'id;
 }
 
 /// The only TX memory a station service's port returns. This describes
 /// resources, not operation identity: only `TxContext` selects the operation.
-pub enum StationTxBuffer<'id, B: StationPort<SlotId: 'id> + 'id> {
+pub enum StationTxBuffer<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     /// The station's fresh allocation or its published MPDU.
     Small(PoolMpdu<'id, B::Types<'id>, B::Small>),
     /// Data's fresh allocation or its published MPDU.
@@ -423,20 +443,20 @@ pub type PortAck<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::
 pub type PortStation<'id, B, const GROUPS: usize = 2> = Station<
     'id,
     PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
-    <B as LowerMacBackend<<B as StationPort>::SlotId>>::Caps,
+    <B as StationPort>::Caps,
 >;
 
 /// The data machine of the service on the port `B`.
 pub type PortData<'id, B> = StaData<
     'id,
     PortDataTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Large>,
-    <B as LowerMacBackend<<B as StationPort>::SlotId>>::Caps,
+    <B as StationPort>::Caps,
 >;
 
 /// The arbiter of the service on the port `B`.
 pub type PortArbiter<'id, B> = Arbiter<
     'id,
-    <B as LowerMacBackend<<B as StationPort>::SlotId>>::Caps,
+    <B as StationPort>::Caps,
     oer_ieee80211_arbiter::NoReservation,
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::GatePath,
 >;
@@ -573,12 +593,12 @@ pub enum BackendContractViolation {
 /// The original failure that ended this service. A poisoned disabled owner
 /// additionally retains the backend's disable failure through `cause()`.
 pub enum ServiceFault<B: StationPort> {
-    EnableRefused(B::Refusal),
-    Backend(B::Fault),
-    Submission(B::Fault),
+    EnableRefused(<B::Backend as PortBackend<B::SlotId>>::Refusal),
+    Backend(<B::Backend as PortBackend<B::SlotId>>::Fault),
+    Submission(<B::Backend as PortBackend<B::SlotId>>::Fault),
     Contract(BackendContractViolation),
     DrainedWithOutstanding {
-        cause: B::Fault,
+        cause: <B::Backend as PortBackend<B::SlotId>>::Fault,
         missing: PendingTerminal,
     },
 }
@@ -641,9 +661,9 @@ pub struct ServiceIo<
 }
 
 /// How the service ended.
-pub enum ServiceEnd<'p, 'id, B: StationPort<SlotId: 'id> + 'id> {
+pub enum ServiceEnd<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     /// Stopped on the application's command: the port is disabled.
-    Stopped(Owner<'p, 'id, B::SlotId, B, Disabled>),
+    Stopped(Owner<'p, 'id, B::SlotId, B::Backend, Disabled>),
     /// The port failed (it refused to come back to a channel, or a phase
     /// reported it poisoned and its disable still ended): it is disabled,
     /// and the arbiter stopped the station.
@@ -655,13 +675,13 @@ pub enum ServiceEnd<'p, 'id, B: StationPort<SlotId: 'id> + 'id> {
     /// Stream quarantine or a false drained claim ends admission without
     /// another disable. The request is completed by the lifecycle supervisor.
     Quarantined {
-        request: FailStopRequested<B::SlotId, B>,
+        request: FailStopRequested<B::SlotId, B::Backend>,
         fault: ServiceFault<B>,
         custody: TerminalCustody<'id, B>,
     },
     /// The original failure and the poisoned backend's disable outcome.
     Poisoned {
-        owner: PoisonedOwner<'p, 'id, B::SlotId, B>,
+        owner: PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
         fault: ServiceFault<B>,
         custody: TerminalCustody<'id, B>,
     },
@@ -670,36 +690,56 @@ pub enum ServiceEnd<'p, 'id, B: StationPort<SlotId: 'id> + 'id> {
 /// A service failure with a stopped backend. Its only continuation is normal
 /// uninstall; starting another service requires a new installation. This is
 /// not a poisoned owner and does not require an otherwise unnecessary reset.
-pub struct FailedInstallation<'p, 'id, B: StationPort<SlotId: 'id> + 'id> {
-    owner: Owner<'p, 'id, B::SlotId, B, Disabled>,
+pub struct FailedInstallation<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
+    owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
 }
 
-impl<'id, B: StationPort<SlotId: 'id> + 'id> FailedInstallation<'_, 'id, B> {
+impl<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> FailedInstallation<'_, 'id, B> {
     /// Retire the old installation normally, preserving Disabled's stop proof.
-    pub fn uninstall<Out>(self, control: B::Uninstall, output: Out) -> Ended<B::SlotId, B, Out> {
+    pub fn uninstall<Out>(
+        self,
+        control: <B::Backend as PortBackend<B::SlotId>>::Uninstall,
+        output: Out,
+    ) -> Ended<B::SlotId, B::Backend, Out> {
         Ended::uninstall(self.owner, control, output)
     }
 }
 
 /// A completed run and all resource banks it owned. Neither machine in the
 /// returned banks has a run/admission interface.
-pub struct ServiceCompleted<'p, 'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2>
-{
+pub struct ServiceCompleted<
+    'p,
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
     pub end: ServiceEnd<'p, 'id, B>,
     pub retired: RetiredService<'id, B, S, GROUPS>,
 }
 
 /// Only a normal Stop grants this continuation on the existing installation.
-pub struct StoppedService<'p, 'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2> {
-    owner: Owner<'p, 'id, B::SlotId, B, Disabled>,
+pub struct StoppedService<
+    'p,
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
+    owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
     retired: RetiredService<'id, B, S, GROUPS>,
 }
 
 /// The same port owner and resources, ready for a new service run. Deferred
 /// EAPOL owners belong to the old association and return separately.
-pub struct RestartedService<'p, 'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2>
-{
-    pub owner: Owner<'p, 'id, B::SlotId, B, Disabled>,
+pub struct RestartedService<
+    'p,
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
+    pub owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
     pub service: StationService<'id, B, S, GROUPS>,
     pub deferred_eapol: oer_ieee80211_sta::machine::DeferredEapol,
     pub notice: Option<oer_ieee80211_sta::machine::StaNotice>,
@@ -715,13 +755,19 @@ pub enum RestartFailure {
 
 /// An incomplete stop cannot mint replacement resources or enable a new run.
 /// Normal uninstall remains possible, with every original owner retained.
-pub struct RestartFailed<'p, 'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2> {
+pub struct RestartFailed<
+    'p,
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
     pub reason: RestartFailure,
     pub owner: FailedInstallation<'p, 'id, B>,
     pub retired: RetiredService<'id, B, S, GROUPS>,
 }
 
-impl<'p, 'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize>
+impl<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, S, const GROUPS: usize>
     ServiceCompleted<'p, 'id, B, S, GROUPS>
 {
     /// Extract the reusable continuation only from the ordinary Stop outcome.
@@ -746,7 +792,7 @@ impl<'p, 'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize>
 impl<
     'p,
     'id,
-    B: StationPort<SlotId: 'id> + 'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
 > StoppedService<'p, 'id, B, S, GROUPS>
@@ -839,16 +885,24 @@ impl<
     /// Retire the disabled installation and retain its resource bank.
     pub fn uninstall<Out>(
         self,
-        control: B::Uninstall,
+        control: <B::Backend as PortBackend<B::SlotId>>::Uninstall,
         output: Out,
-    ) -> (Ended<B::SlotId, B, Out>, RetiredService<'id, B, S, GROUPS>) {
+    ) -> (
+        Ended<B::SlotId, B::Backend, Out>,
+        RetiredService<'id, B, S, GROUPS>,
+    ) {
         (Ended::uninstall(self.owner, control, output), self.retired)
     }
 }
 
 /// The completed service's owners and diagnostics. Only `StoppedService`
 /// combines this bank with the matching reusable disabled port owner.
-pub struct RetiredService<'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2> {
+pub struct RetiredService<
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
     pub station: oer_ieee80211_sta::machine::RetiredStation<
         'id,
         PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
@@ -877,12 +931,22 @@ pub struct RetiredService<'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUP
 
 /// The station's service: its machines and the rate selection of its frames.
 /// Disable returns only command terminals; the backend recycles unsolicited RX.
-pub struct StationService<'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2> {
+pub struct StationService<
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
     arbiter: PortArbiter<'id, B>,
     state: ServiceState<'id, B, S, GROUPS>,
 }
 
-struct ServiceState<'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usize = 2> {
+struct ServiceState<
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    S,
+    const GROUPS: usize = 2,
+> {
     /// The station.
     station: PortStation<'id, B, GROUPS>,
     /// Its data machine.
@@ -899,7 +963,7 @@ struct ServiceState<'id, B: StationPort<SlotId: 'id> + 'id, S, const GROUPS: usi
     pending: PendingActions<'id, B>,
 }
 
-struct PendingActions<'id, B: StationPort<SlotId: 'id> + 'id> {
+struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     admissions: Admissions,
     /// A retune whose disable/enable failed remains owned until retirement.
     retune: Option<
@@ -912,7 +976,7 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id> + 'id> {
     group: Option<PendingGroup<'id, B>>,
 }
 
-struct PendingGroup<'id, B: StationPort<SlotId: 'id> + 'id> {
+struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     slot: <<B::Types<'id> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
     action: PendingGroupAction<'id, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
 }
@@ -925,7 +989,7 @@ enum PendingGroupAction<'id, Path: oer_radio_port::PoolPath> {
 }
 
 /// What a step left the loop to do.
-enum Next<'id, B: StationPort<SlotId: 'id> + 'id> {
+enum Next<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     /// Wait for the next input.
     Wait,
     /// Move the port to the channel.
@@ -942,7 +1006,7 @@ enum Next<'id, B: StationPort<SlotId: 'id> + 'id> {
 
 impl<
     'id,
-    B: StationPort<SlotId: 'id> + 'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
 > StationService<'id, B, S, GROUPS>
@@ -1000,7 +1064,7 @@ impl<
         const COMMAND_DEPTH: usize,
     >(
         self,
-        owner: Owner<'p, 'id, B::SlotId, B, Disabled>,
+        owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
             'id,
@@ -1071,7 +1135,7 @@ impl<
 
 impl<
     'id,
-    B: StationPort<SlotId: 'id> + 'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
 > ServiceState<'id, B, S, GROUPS>
@@ -1084,7 +1148,7 @@ impl<
     >(
         &mut self,
         arbiter: PortArbiter<'id, B>,
-        owner: Owner<'p, 'id, B::SlotId, B, Disabled>,
+        owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
             'id,
@@ -1235,7 +1299,7 @@ impl<
     >(
         &mut self,
         mut arbiter: PortArbiter<'id, B>,
-        mut owner: Owner<'p, 'id, B::SlotId, B, Disabled>,
+        mut owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         mut pending: Option<
             oer_ieee80211_arbiter::PendingRetune<
                 'id,
@@ -1254,7 +1318,10 @@ impl<
         >,
         timer: &impl Timer,
     ) -> Result<
-        (PortArbiter<'id, B>, Owner<'p, 'id, B::SlotId, B, Enabled>),
+        (
+            PortArbiter<'id, B>,
+            Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
+        ),
         (
             ServiceEnd<'p, 'id, B>,
             RetiredArbiter<
@@ -1336,11 +1403,14 @@ impl<
     async fn disable<'p>(
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
-        owner: Owner<'p, 'id, B::SlotId, B, Enabled>,
+        owner: Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
         timer: &impl Timer,
         mut custody: TerminalCustody<'id, B>,
     ) -> (
-        Result<Owner<'p, 'id, B::SlotId, B, Disabled>, PoisonedOwner<'p, 'id, B::SlotId, B>>,
+        Result<
+            Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
+            PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+        >,
         TerminalCustody<'id, B>,
     ) {
         let mut sink = |terminal| {
@@ -1442,7 +1512,7 @@ impl<
             };
             let now = timer.now();
             match event {
-                Some(Ok(Ok(event))) => match self.event(arbiter, now, event, io) {
+                Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), io) {
                     Ok(Some(buffer)) => phase.recycle(buffer),
                     Ok(None) => {}
                     Err(fault) => return Served::Failed(fault.into()),
@@ -1503,7 +1573,7 @@ impl<
     {
         loop {
             for _ in 0..MAX_INPUT_STEPS_PER_BATCH {
-                match phase.next_event().await {
+                match phase.next_event().await.map(|event| event.map(B::event)) {
                     Ok(Ok(LowerMacEvent::Terminal(terminal))) => {
                         if let Err(violation) = self.terminal(arbiter, timer.now(), terminal) {
                             return Served::Failed(violation.into());
@@ -2160,7 +2230,7 @@ impl<
 }
 
 /// What follows a station's action.
-enum Follow<'id, B: StationPort<SlotId: 'id> + 'id, const GROUPS: usize> {
+enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: usize> {
     Nothing,
     /// An arbiter's answer or a key, back to the station.
     Input(StaInput<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>),
@@ -2182,7 +2252,7 @@ type StationPreparation<'k, 'p, 'id, B> = Result<
         'k,
         'p,
         oer_ieee80211_port::Station,
-        <B as LowerMacBackend<<B as StationPort>::SlotId>>::Caps,
+        <B as StationPort>::Caps,
     >,
     (
         TxRefusal,
@@ -2191,7 +2261,13 @@ type StationPreparation<'k, 'p, 'id, B> = Result<
 >;
 
 /// Prepare within the class pool; a refusal retains the original owners.
-fn prepare_source<'k, 'p, 'id: 'p + 'k, B: StationPort<SlotId: 'id> + 'id, C: TxBufferClass>(
+fn prepare_source<
+    'k,
+    'p,
+    'id: 'p + 'k,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: TxBufferClass,
+>(
     source: PoolSource<'k, 'p, 'id, B::Types<'id>, C, B::Caps, oer_ieee80211_port::Station>,
 ) -> StationPreparation<'k, 'p, 'id, B>
 where
@@ -2228,7 +2304,7 @@ fn submit_station<'p, 'id: 'p, B, P, S, const GROUPS: usize>(
     transmit: StaTransmit<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
 where
-    B: StationPort<SlotId: 'id> + 'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
 {
@@ -2357,7 +2433,7 @@ fn station_action<
     action: StaAction<'_, 'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
 where
-    B: StationPort<SlotId: 'id> + 'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
 {
@@ -2543,7 +2619,7 @@ where
 }
 
 /// What serving a phase ended with.
-enum Served<'id, B: StationPort<SlotId: 'id> + 'id> {
+enum Served<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     Stop,
     Retune(
         oer_ieee80211_arbiter::PendingRetune<
@@ -2554,7 +2630,7 @@ enum Served<'id, B: StationPort<SlotId: 'id> + 'id> {
     ),
     Failed(StepFailure<'id, B>),
     StreamEnd {
-        end: EventEnd<B::Fault>,
+        end: EventEnd<<B::Backend as PortBackend<B::SlotId>>::Fault>,
         fault: ServiceFault<B>,
         custody: TerminalCustody<'id, B>,
     },
@@ -2564,8 +2640,11 @@ enum Served<'id, B: StationPort<SlotId: 'id> + 'id> {
 mod tests;
 
 /// Preserve the first contract violation even when the disable also fails.
-fn end_disabled<'p, 'id, B: StationPort<SlotId: 'id> + 'id>(
-    owner: Result<Owner<'p, 'id, B::SlotId, B, Disabled>, PoisonedOwner<'p, 'id, B::SlotId, B>>,
+fn end_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
+    owner: Result<
+        Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
+        PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+    >,
     custody: TerminalCustody<'id, B>,
 ) -> ServiceEnd<'p, 'id, B> {
     match (owner, custody) {

@@ -182,7 +182,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B
             #[cfg(all(oer_trace, oer_debug_control))]
             oer_trace::emit(&trace::TerminalPosted);
         }
-        self.storage.shared.body.wake();
+        self.storage.shared.wake_body();
     }
 }
 

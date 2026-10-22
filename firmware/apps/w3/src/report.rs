@@ -14,6 +14,7 @@ pub struct Lease {
 
 /// Stores masked identities only. The report cannot retain an SSID or full
 /// address, even when it is formatted on an error path.
+#[derive(Clone, Copy)]
 pub struct Report {
     pub channel: u8,
     pub target: [u8; 2],
@@ -21,6 +22,9 @@ pub struct Report {
     pub authenticated: bool,
     pub associated: bool,
     pub lease: Option<Lease>,
+    pub malformed_ip: u32,
+    pub queue_drops: u32,
+    pub cadence_ok: bool,
     pub sent: u32,
     pub received: u32,
     pub peer_requests: u32,
@@ -40,6 +44,9 @@ impl Report {
             authenticated: false,
             associated: false,
             lease: None,
+            malformed_ip: 0,
+            queue_drops: 0,
+            cadence_ok: true,
             sent: 0,
             received: 0,
             peer_requests: 0,
@@ -56,7 +63,7 @@ impl Report {
         [
             self.authenticated && self.associated,
             self.lease.is_some(),
-            self.sent == count && self.received == count,
+            self.sent == count && self.received == count && self.cadence_ok,
             self.peer_requests == count && self.peer_replies == count,
             self.tx_timeout == 0 && self.queue_collision == 0 && self.deauth_sent,
         ]
@@ -64,6 +71,13 @@ impl Report {
 
     /// All twelve body rows are emitted on success and on failure.
     pub fn print(&self, out: &mut impl Write) -> fmt::Result {
+        if self.malformed_ip != 0 || self.queue_drops != 0 {
+            writeln!(
+                out,
+                "w3.diag malformed_ip={} queue_drops={}\r",
+                self.malformed_ip, self.queue_drops
+            )?;
+        }
         let gates = self.gates();
         let lease = self.lease.unwrap_or(Lease {
             address: Ipv4Addr::UNSPECIFIED,

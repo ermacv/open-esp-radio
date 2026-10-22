@@ -1,5 +1,29 @@
 # w3 report contract
 
+The image composes the S31 lower-MAC backend, channel arbiter, open
+`StationService` and Espressif rate selection with the owned Embassy network
+adapter. P2 owns the device and port registration; the station and IP stack run
+on P1 in PSRAM. `stack.toml` allocates this image's P1 stack, with the platform's
+unchanged interrupt-stack allocation. The image stores the large station future
+in static PSRAM using the same pinned compiler support as the HIL images.
+
+Outgoing ICMP uses the pinned fork's raw IPv4 socket and checked wire codecs;
+incoming requests use native `icmp-ping-reply`. The image validates observations
+before reading echo identities, counts malformed packets and queue drops, and
+checks each adjacent outgoing request against the 750–1250 ms cadence window.
+It uses no power save, hardware AID or fixed PHY rate. A software beacon-loss
+deadline disconnects after six seconds without a matching BSS beacon.
+
+```sh
+cargo fw run w3 --board s31-a
+```
+
+The command obtains exclusive board, router and air ownership, applies the
+generated W3 profile, builds and flashes its configured image, and recomputes
+gates from the console and independent router evidence. Decoded reports,
+observations and the masked console are saved in `target/fw/w3-runs/<run-id>/`.
+The separate final lower-MAC conformance run supplies gate e.
+
 W3 joins the laboratory router's open 2.4 GHz HT20 BSS, obtains an IPv4
 lease by DHCP, and exchanges 100 ICMP echo requests in each direction at
 one-second intervals. Every echo must receive a reply. The router profile

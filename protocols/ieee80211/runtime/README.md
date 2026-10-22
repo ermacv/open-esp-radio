@@ -7,6 +7,12 @@ Host tests use the allocating in-memory backend from `oer-ieee80211-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
 `oer-ieee80211-port`; runtime tests cover its station service over that model.
 
+`StationPort` is an image-owned composition mapping with a concrete `Backend`,
+`SlotId` and `Caps`. `StationService` owns that backend's lifecycle directly.
+This permits a composition to select station buffers and resource types without
+implementing a foreign trait for a foreign backend or replacing its body-loan
+identity. The radio and lower-MAC port contracts remain the common boundary.
+
 ## Known defects
 
 - **`station_service.rs::serve` steps once per loop**, then handles the

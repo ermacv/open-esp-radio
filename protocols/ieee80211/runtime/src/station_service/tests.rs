@@ -79,10 +79,14 @@ impl oer_ieee80211_model::ModelContext for ServiceContexts {
     type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
 }
 
-impl<Id: SlotIdentity> StationPort for ModelBackend<Id, ModelCaps24, ServiceContexts> {
+struct ServicePort<Id: SlotIdentity>(PhantomData<Id>);
+
+impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
+    type Backend = ModelBackend<Id, ModelCaps24, ServiceContexts>;
+    type Caps = ModelCaps24;
     type SlotId = Id;
     type Types<'p>
-        = ModelTypes<Self>
+        = ModelTypes<Self::Backend>
     where
         Self: 'p,
         Id: 'p;
@@ -91,8 +95,8 @@ impl<Id: SlotIdentity> StationPort for ModelBackend<Id, ModelCaps24, ServiceCont
     type Large = ModelLarge;
 
     fn lend_phase<'a, 'p, 'r>(
-        phase: &'r mut ModelPhase<'a, 'p, ModelCaps24, Self>,
-    ) -> &'r mut impl LowerMacPhase<'a, 'p, Caps = ModelCaps24, Types = ModelTypes<Self>>
+        phase: &'r mut ModelPhase<'a, 'p, ModelCaps24, Self::Backend>,
+    ) -> &'r mut impl LowerMacPhase<'a, 'p, Caps = ModelCaps24, Types = ModelTypes<Self::Backend>>
     where
         Self: 'p,
         Id: 'p,
@@ -101,8 +105,8 @@ impl<Id: SlotIdentity> StationPort for ModelBackend<Id, ModelCaps24, ServiceCont
         phase
     }
     fn terminal<'p>(
-        terminal: LowerMacTerminal<'p, ModelTypes<Self>>,
-    ) -> LowerMacTerminal<'p, ModelTypes<Self>>
+        terminal: LowerMacTerminal<'p, ModelTypes<Self::Backend>>,
+    ) -> LowerMacTerminal<'p, ModelTypes<Self::Backend>>
     where
         Self: 'p,
         Id: 'p,
@@ -110,8 +114,8 @@ impl<Id: SlotIdentity> StationPort for ModelBackend<Id, ModelCaps24, ServiceCont
         terminal
     }
     fn port_terminal<'p>(
-        terminal: LowerMacTerminal<'p, ModelTypes<Self>>,
-    ) -> LowerMacTerminal<'p, ModelTypes<Self>>
+        terminal: LowerMacTerminal<'p, ModelTypes<Self::Backend>>,
+    ) -> LowerMacTerminal<'p, ModelTypes<Self::Backend>>
     where
         Self: 'p,
         Id: 'p,
@@ -126,14 +130,16 @@ impl<Id: SlotIdentity> StationPort for ModelBackend<Id, ModelCaps24, ServiceCont
     {
         setup.set_channel(channel);
     }
-    fn event<'p>(event: LowerMacEvent<'p, ModelTypes<Self>>) -> LowerMacEvent<'p, ModelTypes<Self>>
+    fn event<'p>(
+        event: LowerMacEvent<'p, ModelTypes<Self::Backend>>,
+    ) -> LowerMacEvent<'p, ModelTypes<Self::Backend>>
     where
         Self: 'p,
         Id: 'p,
     {
         event
     }
-    fn tx_buffer<'p>(buffer: ModelAnyBuffer<'p, Self>) -> StationTxBuffer<'p, Self>
+    fn tx_buffer<'p>(buffer: ModelAnyBuffer<'p, Self::Backend>) -> StationTxBuffer<'p, Self>
     where
         Self: 'p,
         Id: 'p,
@@ -837,7 +843,7 @@ where
             )
             .unwrap();
             let (arbiter, place, absence) =
-                PortArbiter::<ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts>>::new(
+                PortArbiter::<ServicePort<LocalId<'scope>>>::new(
                     ArbiterPolicy::DEFAULT.checked(
                         <ModelBackend<LocalId<'scope>, ModelCaps24, ServiceContexts> as LowerMacBackend<LocalId<'scope>>>::PUBLICATION_BOUND
                     ).unwrap(),
@@ -878,7 +884,7 @@ where
                     .unwrap();
                 self.world.air.refuse_enable();
             }
-            let service = StationService::<_, _, GROUPS>::new(
+            let service = StationService::<ServicePort<LocalId<'scope>>, _, GROUPS>::new(
                 station,
                 StaData::new(data_tickets, large, MODEL_TX_QUEUE_DEPTH),
                 arbiter,

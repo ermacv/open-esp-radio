@@ -237,6 +237,10 @@ fn stand_router(
 }
 
 pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
+    #[cfg(target_os = "linux")]
+    if image == crate::w3::IMAGE {
+        return crate::w3::firmware::run(root, selector, timeout);
+    }
     let (stand, board) = board(selector)?;
     // Acquire the laptop/air lease before the router lock to keep HIL's lock order.
     let capture = if image == w2::IMAGE {

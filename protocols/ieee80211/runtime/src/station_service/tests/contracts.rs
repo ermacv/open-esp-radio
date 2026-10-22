@@ -42,7 +42,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             arbiter_authority,
             ..
         } = resources;
-        let (arbiter, place, absence) = PortArbiter::<ModelBackend<Id, ModelCaps24, ServiceContexts>>::new(
+        let (arbiter, place, absence) = PortArbiter::<ServicePort<Id>>::new(
             ArbiterPolicy::DEFAULT.checked(<ModelBackend<Id, ModelCaps24, ServiceContexts> as LowerMacBackend<Id>>::PUBLICATION_BOUND).unwrap(),
             SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap(), arbiter_authority, gate,
         );
@@ -68,18 +68,17 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 group_permission: station_group_permission,
             },
         );
-        let mut service =
-            StationService::<ModelBackend<Id, ModelCaps24, ServiceContexts>, _, 1>::new(
-                station,
-                StaData::new(
-                    data_tickets,
-                    <[_; 4]>::try_from(large).ok().unwrap(),
-                    MODEL_TX_QUEUE_DEPTH,
-                ),
-                arbiter,
-                EspressifRateSelection::<ModelCaps24>::new(),
-                terminal_access,
-            );
+        let mut service = StationService::<ServicePort<Id>, _, 1>::new(
+            station,
+            StaData::new(
+                data_tickets,
+                <[_; 4]>::try_from(large).ok().unwrap(),
+                MODEL_TX_QUEUE_DEPTH,
+            ),
+            arbiter,
+            EspressifRateSelection::<ModelCaps24>::new(),
+            terminal_access,
+        );
         let access_point_association =
             <ModelTypes<ModelBackend<Id, ModelCaps24, ServiceContexts>> as PhaseTypes>::AccessPointKeys::begin_association(
                 access_point_association,

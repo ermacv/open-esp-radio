@@ -219,6 +219,14 @@ bounds) live in the code that applies them.
   A type-level mechanism must name the bug it prevents. The Bluetooth LE port
   takes the same form as the Wi-Fi lower-MAC port. No radio-system token
   crosses the lower-MAC port; PHY membership stays inside the backend.
+- **Station composition.** `StationPort` maps an image-owned composition to
+  its concrete `Backend`, `SlotId` and `Caps`. The service retains the backend's
+  lifecycle and body-loan identity; the mapping does not wrap or replace it.
+- **W3 ICMP.** The pinned Embassy/Xarxa stack uses a raw IPv4 socket and its
+  wire codecs for outgoing echoes, and native `icmp-ping-reply` for incoming
+  echoes. Both directions count distinct identifier/sequence pairs at the
+  Ethernet boundary. Malformed lengths, types and checksums are dropped and
+  counted without panicking.
 - **Reference models.** Every port has a reference model that keeps its
   contract; doubles that break the contract stay out of the conformance
   suite. A port's reference model is its own host crate,

@@ -67,6 +67,9 @@ pub struct TaskStack {
     /// Bytes the deepest call chain must leave unused; the runtime's stack
     /// painting holds every exercised workload to the same reserve.
     pub minimum_free_bytes: u32,
+    /// This image's CPU0 PSRAM stack allocation. Absent uses the chip layout.
+    #[serde(default)]
+    pub allocation_bytes: Option<u32>,
 }
 
 /// Where a stack's capacity comes from.
@@ -104,6 +107,15 @@ impl TaskStack {
         }
         if self.minimum_free_bytes == 0 {
             return Err(format!("`{name}` needs positive `minimum_free_bytes`").into());
+        }
+        if self
+            .allocation_bytes
+            .is_some_and(|bytes| bytes % 16 != 0 || bytes <= self.minimum_free_bytes)
+        {
+            return Err(format!(
+                "`{name}` allocation must be aligned to 16 bytes and exceed its reserve"
+            )
+            .into());
         }
         Ok(())
     }
@@ -227,6 +239,11 @@ impl StackPolicy {
         stacks.cpu0_task_stack.validate("cpu0_task_stack")?;
         if let Some(bootstrap) = stacks.bootstrap_stack {
             bootstrap.validate("bootstrap_stack")?;
+            if bootstrap.allocation_bytes.is_some() {
+                return Err(
+                    "bootstrap stack allocation cannot be overridden by a runtime policy".into(),
+                );
+            }
         }
         Ok(())
     }
@@ -266,6 +283,9 @@ impl StackPolicy {
                 "OPEN_RADIO_CPU0_STACK_MINIMUM_FREE_BYTES",
                 cpu0.minimum_free_bytes.to_string(),
             ));
+            if let Some(bytes) = cpu0.allocation_bytes {
+                variables.push(("OPEN_RADIO_CPU0_TASK_STACK_BYTES", bytes.to_string()));
+            }
         }
         if let Some(interrupts) = &self.interrupt_stacks {
             variables.push((
@@ -285,6 +305,37 @@ impl StackPolicy {
     pub fn runtime_profile(&self, base: &crate::Profile) -> Result<crate::Profile> {
         self.validate()?;
         let mut profile = base.clone();
+        if let Some(bytes) = self
+            .cpu0_task_stack
+            .as_ref()
+            .and_then(|stack| stack.allocation_bytes)
+        {
+            let memory = profile
+                .memory
+                .as_ref()
+                .ok_or("a task stack allocation requires the chip memory map")?;
+            if bytes
+                >= memory
+                    .psram
+                    .ok_or("a task stack allocation requires PSRAM")?
+                    .length
+            {
+                return Err("task stack allocation does not fit PSRAM".into());
+            }
+            let placement = profile
+                .placement
+                .as_mut()
+                .ok_or("a task stack allocation requires exact placement rules")?;
+            let rule = placement
+                .range
+                .iter_mut()
+                .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+                .ok_or("the chip has no staged CPU0 task stack placement rule")?;
+            if rule.region != "psram" || rule.bytes.is_none() {
+                return Err("the CPU0 task stack requires an exact PSRAM placement rule".into());
+            }
+            rule.bytes = Some(u64::from(bytes));
+        }
         let Some(bytes) = self
             .interrupt_stacks
             .as_ref()
@@ -383,6 +434,36 @@ mod tests {
         ))
         .unwrap()
     }
+    #[test]
+    fn a_task_allocation_binds_the_link_environment_and_exact_psram_range() {
+        let base = profile();
+        let mut policy = policy(None);
+        policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(1 << 20);
+        let adjusted = policy.runtime_profile(&base).unwrap();
+        let rule = |profile: &crate::Profile| {
+            profile
+                .placement
+                .as_ref()
+                .unwrap()
+                .range
+                .iter()
+                .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+                .unwrap()
+                .bytes
+        };
+        assert_eq!(rule(&base), Some(0x30000));
+        assert_eq!(rule(&adjusted), Some(1 << 20));
+        assert_eq!(adjusted.interrupts, base.interrupts);
+        assert!(
+            policy
+                .runtime_environment()
+                .contains(&("OPEN_RADIO_CPU0_TASK_STACK_BYTES", "1048576".into()))
+        );
+        for bytes in [0, 4096, 1048577, 1 << 24] {
+            policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(bytes);
+            assert!(policy.runtime_profile(&base).is_err(), "{bytes}");
+        }
+    }
     fn policy(bytes: Option<u32>) -> StackPolicy {
         StackPolicy {
             schema: SCHEMA,
@@ -394,6 +475,7 @@ mod tests {
                 bottom_symbol: None,
                 top_symbol: None,
                 minimum_free_bytes: 4096,
+                allocation_bytes: None,
             }),
             interrupt_stacks: Some(InterruptStacks {
                 minimum_free_bytes: 4096,
