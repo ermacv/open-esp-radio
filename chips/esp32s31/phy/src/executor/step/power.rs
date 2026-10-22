@@ -83,93 +83,101 @@ impl Default for Cursor {
     }
 }
 
+/// Clock-free lowering, including progress and the final-record decision.
+/// Its value is consumed in this poll, before any Runnable checkpoint.
+enum Work {
+    Complete,
+    Control(crate::tracking::power::ControlBinding),
+    Lower(u8),
+    Skipped,
+    Record(oer_esp32s31_hal::types::PhyGainMemoryEntry, bool),
+}
+#[inline(never)]
+fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, Failure> {
+    use crate::tracking::parameters::PhyCalibrationTrackClass as Class;
+    let (class, channel, gain_base, count, bank) = match action {
+        Action::Complete(_) => return Ok(Work::Complete),
+        Action::RegenerateWifiGain { channel, gain_base } => {
+            (Class::Wifi, channel, gain_base, 32, 0)
+        }
+        Action::RegenerateBluetoothIeee802154Gain { gain_base } => {
+            (Class::BluetoothIeee802154, 0, gain_base, 16, 32)
+        }
+        action => {
+            return crate::tracking::power::ControlBinding::lower(action)
+                .map(Work::Control)
+                .map_err(|_| Failure::Binding);
+        }
+    };
+    if gain.entry == u8::MAX {
+        if let Some(generator) = state.tracking_gain_generator(class, channel, gain_base) {
+            gain.generator = generator;
+            Ok(Work::Lower(bank))
+        } else {
+            Ok(Work::Skipped)
+        }
+    } else {
+        let record = gain_record(state, class, gain)?;
+        Ok(Work::Record(record, gain.entry + 1 == count))
+    }
+}
+
 /// One complete gain record, BBPLL edge or full force/settle pair per poll.
+/// Dispatch and acknowledgement are shared, independent of the clock type.
 #[inline(never)]
 pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
     io: &mut Io<'_, '_>,
     child: &mut PhyParamTrackingTxPowerTransition<'_>,
     gain: &mut Cursor,
+    action: Action,
     clock: &C,
-    measured: bool,
+    observed_gain: bool,
 ) -> Result<Step, Failure> {
     let (transition, state) = child.parts();
-    let action = transition.action();
-    if matches!(action, Action::Complete(_)) {
-        return Ok(Step::Complete);
-    }
-    if matches!(
-        action,
-        Action::RegenerateWifiGain { .. } | Action::RegenerateBluetoothIeee802154Gain { .. }
-    ) {
-        let request = transition.request();
-        let gain_base = match action {
-            Action::RegenerateWifiGain { gain_base, .. }
-            | Action::RegenerateBluetoothIeee802154Gain { gain_base } => gain_base,
-            _ => return Err(Failure::Binding),
-        };
-        let started = measured.then(|| clock.now());
-        let done = if gain.entry == u8::MAX {
-            let done = if let Some(generator) =
-                state.tracking_gain_generator(request.class, request.wifi_channel, gain_base)
-            {
-                gain.generator = generator;
-                gain.memory_base = io.gain_base(action)?.wrapping_add(
-                    if request.class == crate::tracking::parameters::PhyCalibrationTrackClass::Wifi
-                    {
-                        0
-                    } else {
-                        32
-                    },
-                );
-                gain.entry = 0;
-                false
-            } else {
-                true
-            };
+    let started = observed_gain.then(|| clock.now());
+    match prepare(action, state, gain)? {
+        Work::Complete => return Ok(Step::Complete),
+        Work::Control(binding) => {
+            execute::<D>(io, transition, binding)?;
+            let next = transition.action();
+            if matches!(
+                next,
+                Action::ForceTxRx(PhyForceTxRxAction::DelayMicros { .. })
+            ) {
+                let binding = crate::tracking::power::ControlBinding::lower(next)
+                    .map_err(|_| Failure::Binding)?;
+                execute::<D>(io, transition, binding)?;
+            }
+        }
+        Work::Lower(bank) => {
+            gain.memory_base = io.gain_base(action)?.wrapping_add(bank);
+            gain.entry = 0;
             elapsed(clock, started, &mut gain.timing.lower_micros);
-            done
-        } else {
-            let entry = gain_record(state, request.class, gain)?;
+        }
+        Work::Skipped => {
+            elapsed(clock, started, &mut gain.timing.lower_micros);
+            acknowledge(transition)?;
+        }
+        Work::Record(record, last) => {
             elapsed(clock, started, &mut gain.timing.arithmetic_micros);
-            let published = measured.then(|| clock.now());
-            io.gain_entry(entry)?;
+            let published = observed_gain.then(|| clock.now());
+            io.gain_entry(record)?;
             elapsed(clock, published, &mut gain.timing.publication_micros);
             gain.entry += 1;
-            gain.entry
-                == if request.class == crate::tracking::parameters::PhyCalibrationTrackClass::Wifi {
-                    32
-                } else {
-                    16
-                }
-        };
-        if done {
-            use crate::tracking::power::PhyTxPowerTrackingCompletion as Completion;
-            transition
-                .advance(match action {
-                    Action::RegenerateWifiGain { channel, gain_base } => {
-                        Completion::WifiGainRegenerated { channel, gain_base }
-                    }
-                    Action::RegenerateBluetoothIeee802154Gain { gain_base } => {
-                        Completion::BluetoothIeee802154GainRegenerated { gain_base }
-                    }
-                    _ => return Err(Failure::Binding),
-                })
-                .map_err(|_| Failure::Binding)?;
+            if last {
+                acknowledge(transition)?;
+            }
         }
-        return Ok(Step::Runnable);
-    }
-    execute::<D>(io, transition)?;
-    // Configure and its mandatory 1-us minimum remain one indivisible atom.
-    // The next configure phase and the gain publisher each get a fresh poll.
-    if matches!(
-        transition.action(),
-        Action::ForceTxRx(PhyForceTxRxAction::DelayMicros { .. })
-    ) {
-        execute::<D>(io, transition)?;
     }
     Ok(Step::Runnable)
 }
 
+#[inline(never)]
+fn acknowledge(transition: &mut PhyTxPowerTrackingTransition) -> Result<(), Failure> {
+    transition.gain_published().map_err(|_| Failure::Binding)
+}
+
+#[inline(never)]
 fn elapsed<C: oer_time::Clock>(clock: &C, started: Option<oer_time::Instant>, maximum: &mut u16) {
     if let Some(started) = started {
         let micros = clock.now().saturating_duration_since(started).as_micros();
@@ -191,36 +199,27 @@ fn gain_record(
             crate::calibration::bluetooth::next_bluetooth_tx_gain(&mut gain.generator, gain.entry)
         }
     };
-    let (seed, config) = state.tracking_gain_seed(class);
-    // Both recovered profiles select only 0/0x80/0x100 baseband gains. Their
-    // quartet is inside seed[0..12], so the unchanged seed/output32 view does
-    // not read output32. Whole-image publishers retain the general view;
-    // tests verify the profile invariant and compare every encoded record.
-    let index = crate::hardware::tx_baseband_gain_index(value.gain_64) * 4;
-    if index + 4 > seed.len() * 2 {
-        return Err(Failure::Binding);
-    }
+    // Exactly the quartet from the general seed/output32 view. Both pinned
+    // profiles select its seed-only rows; unsupported extra rows fail closed.
+    let (seed, config) = state
+        .tracking_gain_seed(class, value.gain_64)
+        .ok_or(Failure::Binding)?;
     Ok(oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
         gain.memory_base.wrapping_add(gain.entry),
         value.gain_72,
         value.gain_64,
         value.gain_32,
-        [
-            crate::hardware::packed_halfword(&seed, index),
-            crate::hardware::packed_halfword(&seed, index + 1),
-            crate::hardware::packed_halfword(&seed, index + 2),
-            crate::hardware::packed_halfword(&seed, index + 3),
-        ],
+        seed,
         config,
     ))
 }
 
+#[inline(never)]
 fn execute<D: crate::executor::wait::PhyShortDelay>(
     io: &mut Io<'_, '_>,
     transition: &mut PhyTxPowerTrackingTransition,
+    binding: crate::tracking::power::ControlBinding,
 ) -> Result<(), Failure> {
-    let binding = crate::tracking::power::ControlBinding::lower(transition.action())
-        .map_err(|_| Failure::Binding)?;
     if let Some(micros) = binding.delay_micros()
         && !D::settle_micros(micros)
     {

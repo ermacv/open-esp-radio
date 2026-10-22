@@ -73,8 +73,9 @@ only arithmetic state and the next index, never a whole image. Both pinned
 profiles select seed quartets within the seed portion of the unchanged
 seed/output32 concatenation. The whole-image builders share the same arithmetic;
 stream tests compare every encoded entry with the canonical packed image.
-Only after all32 Wi-Fi or16 shared records does the gain child acknowledge
-publication. The terminal poll commits the semantic result after BBPLL-off.
+Clock-free preparation and acknowledgement stay outside the clock/accounting
+shell. The shared driver decodes the action once per poll. Only after all32
+Wi-Fi or16 shared records does the gain child acknowledge publication. The terminal poll commits the semantic result after BBPLL-off.
 In power-family engine observations, `ready_edges` and `maximum_ready_micros`
 count and time gain setup and individual records; `maximum_micros` covers
 the whole driver poll. Separate maxima cover lower/setup, one record's

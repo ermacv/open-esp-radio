@@ -242,6 +242,18 @@ impl PhyTxPowerTrackingTransition {
         }
     }
 
+    /// Internal acknowledgement after the cursor consumed every complete record
+    /// (or the unchanged skip branch). The same live child owns the request.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn gain_published(&mut self) -> Result<(), PhyTxPowerTrackingTransitionError> {
+        if !matches!(self.step, PhyTxPowerTrackingStep::RegenerateGain) {
+            return Err(PhyTxPowerTrackingTransitionError::WrongCompletion);
+        }
+        self.step = self.after_gain();
+        Ok(())
+    }
+
+    #[inline(always)]
     pub fn advance(
         &mut self,
         completion: PhyTxPowerTrackingCompletion,

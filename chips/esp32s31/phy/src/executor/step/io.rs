@@ -17,6 +17,7 @@ pub(crate) trait Registers {
         &mut self,
         _child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         _gain: &mut super::power::Cursor,
+        _action: crate::tracking::power::PhyTxPowerTrackingAction,
         _clock: &C,
         _measured: bool,
     ) -> Step {
@@ -62,10 +63,11 @@ impl Registers
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
+        action: crate::tracking::power::PhyTxPowerTrackingAction,
         clock: &C,
         measured: bool,
     ) -> Step {
-        super::power::advance::<D, _>(&mut Io::Shared(self), child, gain, clock, measured)
+        super::power::advance::<D, _>(&mut Io::Shared(self), child, gain, action, clock, measured)
             .unwrap_or_else(Step::Failure)
     }
     fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
@@ -93,11 +95,19 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
+        action: crate::tracking::power::PhyTxPowerTrackingAction,
         clock: &C,
         measured: bool,
     ) -> Step {
-        super::power::advance::<D, _>(&mut Io::Validation(self), child, gain, clock, measured)
-            .unwrap_or_else(Step::Failure)
+        super::power::advance::<D, _>(
+            &mut Io::Validation(self),
+            child,
+            gain,
+            action,
+            clock,
+            measured,
+        )
+        .unwrap_or_else(Step::Failure)
     }
     fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
         &mut self,

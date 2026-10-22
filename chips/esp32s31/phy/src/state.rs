@@ -919,14 +919,23 @@ impl PhyState {
     pub(crate) const fn tracking_gain_seed(
         &self,
         class: crate::tracking::parameters::PhyCalibrationTrackClass,
-    ) -> ([u32; 6], u16) {
+        gain_64: u16,
+    ) -> Option<([u16; 4], u16)> {
+        // These are the same quartet indices as the full concatenated view.
+        // 0x20/0xa0 would read output32; neither recovered profile selects them.
+        let row = match gain_64 {
+            0x80 => 1,
+            0x100 => 2,
+            0x20 | 0xa0 => return None,
+            _ => 0,
+        };
         let seed = match class {
-            crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => self.wifi_seed(),
+            crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => self.wifi.tx_dco[row],
             crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                Self::packed_seed(&self.bluetooth.tx_dco)
+                self.bluetooth.tx_dco[row]
             }
         };
-        (seed, self.wifi.tx_iq_config)
+        Some((seed, self.wifi.tx_iq_config))
     }
 
     /// Regenerate the shared calibration gain bank from a just-completed

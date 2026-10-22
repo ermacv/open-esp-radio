@@ -261,6 +261,7 @@ impl Registers for Io {
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
+        action: crate::tracking::power::PhyTxPowerTrackingAction,
         clock: &C,
         measured: bool,
     ) -> Step {
@@ -268,6 +269,7 @@ impl Registers for Io {
             &mut super::io::Io::Test(self, core::marker::PhantomData),
             child,
             gain,
+            action,
             clock,
             measured,
         )

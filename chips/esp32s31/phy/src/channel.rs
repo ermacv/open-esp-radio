@@ -188,7 +188,7 @@ pub(crate) const fn begin_wifi_tx_gain(
     }
 }
 
-#[inline(never)]
+#[inline(always)]
 pub(crate) const fn next_wifi_tx_gain(
     generator: &mut crate::tx::gain::Generator,
 ) -> crate::tx::gain::Value {

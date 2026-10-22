@@ -602,12 +602,13 @@ impl<
                     RouteProj::Power { child, measured, gain: cursor, .. } => {
                         let Some(child) = child.as_mut() else { break Poll::Ready(Err(Failure::Binding)); };
                         use crate::tracking::power::PhyTxPowerTrackingAction as Action;
-                        let gain = **measured && matches!(child.action(),
+                        let action = child.action();
+                        let gain = **measured && matches!(action,
                             Action::RegenerateWifiGain { .. } | Action::RegenerateBluetoothIeee802154Gain { .. });
                         let at = gain.then(|| clock.now());
                         // This owning route calls stepped control/gain atoms directly;
                         // no monolithic gain-image lowering is reachable here.
-                        let step = this.registers.advance_power::<D, _>(child, cursor, clock, **measured);
+                        let step = this.registers.advance_power::<D, _>(child, cursor, action, clock, gain);
                         if let Some(at) = at { ready_elapsed = Some(clock.now().saturating_duration_since(at)); }
                         (step, Instant::EPOCH)
                     }

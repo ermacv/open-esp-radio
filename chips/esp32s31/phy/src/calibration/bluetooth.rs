@@ -141,7 +141,7 @@ pub(crate) const fn begin_bluetooth_tx_gain(
     }
 }
 
-#[inline(never)]
+#[inline(always)]
 pub(crate) const fn next_bluetooth_tx_gain(
     generator: &mut crate::tx::gain::Generator,
     entry: u8,
