@@ -402,31 +402,6 @@ impl RxProgram {
             Pc::Complete | Pc::Failed => 0,
         }
     }
-    /// Conservative admission before ReadyPeers: the existing short-poll
-    /// budget still applies, with long setup atoms admitted only at entry.
-    pub(crate) fn short_next(&self) -> bool {
-        matches!(
-            self.cursor.pc,
-            Pc::CalI
-                | Pc::CalQ
-                | Pc::CalLevel
-                | Pc::CalCleanupI
-                | Pc::CalCleanupQ
-                | Pc::Entry
-                | Pc::RadioI
-                | Pc::RadioQ
-                | Pc::BasebandI
-                | Pc::BasebandQ
-                | Pc::Gain
-                | Pc::SharedMixer
-                | Pc::FineCode
-                | Pc::RxOn
-                | Pc::RxOff
-                | Pc::PublishRxOn
-                | Pc::PublishRestoreRxOn
-        )
-    }
-
     pub(crate) fn abandon(&mut self) {
         if !matches!(self.cursor.pc, Pc::Complete | Pc::Failed) {
             self.fault.get_or_insert(RxError::Hardware);

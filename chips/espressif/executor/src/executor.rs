@@ -23,7 +23,7 @@ const UNASSIGNED_CORE: usize = usize::MAX;
 /// No executor's context runs on the core.
 pub(crate) const NO_EXECUTOR: u8 = u8::MAX;
 
-/// One wake flag per software interrupt; zero is "no work pending".
+/// One packed ready-token count and wake flag per software interrupt.
 #[repr(transparent)]
 struct WorkPending([crate::ready::ReadyState; SOFTWARE_INTERRUPT_COUNT]);
 
@@ -42,6 +42,8 @@ oer_memory::zeroed_static! {
         zeroed in ".critical.bss.embassy_executor";
 }
 
+/// The registered core in the low two bits, plus the current task poll
+/// timestamp in the remaining bits. The unassigned sentinel has core bits 3.
 #[used]
 #[allow(
     unsafe_code,
@@ -100,10 +102,56 @@ pub fn ready_peers() -> bool {
         .ready()
 }
 
-pub(crate) fn ready_state(executor_id: u32) -> &'static crate::ready::ReadyState {
-    let swi =
-        executor_of(executor_id as usize).expect("trace event requires a registered executor");
-    &EMBASSY_WORK_PENDING.0[swi as usize]
+fn trace_executor(executor_id: u32) -> usize {
+    usize::from(
+        executor_of(executor_id as usize).expect("trace event requires a registered executor"),
+    )
+}
+
+pub(crate) fn task_ready_begin(executor_id: u32) {
+    EMBASSY_WORK_PENDING.0[trace_executor(executor_id)].ready_begin();
+}
+pub(crate) fn task_exec_begin(executor_id: u32) {
+    let swi = trace_executor(executor_id);
+    EMBASSY_WORK_PENDING.0[swi].exec_begin();
+    let state = &EMBASSY_EXECUTOR_CORE[swi];
+    let now = esp_hal::time::Instant::now()
+        .duration_since_epoch()
+        .as_micros();
+    state.store(
+        crate::ready::poll_stamp(state.load(Ordering::Relaxed), now),
+        Ordering::Release,
+    );
+}
+
+pub(crate) fn should_yield() -> bool {
+    let swi = usize::from(running());
+    let state = EMBASSY_EXECUTOR_CORE
+        .get(swi)
+        .expect("cooperative admission requires a running executor");
+    ready_peers()
+        || esp_hal::interrupt::InterruptStatus::is_pending(software_interrupt_source(swi as u8))
+        || esp_hal::interrupt::InterruptStatus::is_pending(Interrupt::FROM_CPU_INTR3)
+        || signal_pending(swi)
+        || {
+            let now = esp_hal::time::Instant::now()
+                .duration_since_epoch()
+                .as_micros();
+            crate::ready::poll_elapsed(state.load(Ordering::Acquire), now)
+                >= crate::ready::POLL_ADMISSION_MICROS
+        }
+}
+fn signal_pending(swi: usize) -> bool {
+    if !EMBASSY_EXECUTORS_MODE[swi].load(Ordering::Acquire) {
+        return false;
+    }
+    match swi {
+        0 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
+        1 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
+        2 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
+        _ => oer_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
+    }
+    .expect("signals are queried from their owning executor")
 }
 
 /// Run `poll` as executor `swi`'s context and restore the preempted one.
@@ -596,8 +644,9 @@ pub(crate) fn pend(swi: u8) {
         return;
     }
     mark_work(swi);
-    let target_core = EMBASSY_EXECUTOR_CORE[swi as usize].load(Ordering::Acquire);
-    if target_core != UNASSIGNED_CORE && target_core != Cpu::current() as usize {
+    let target_core =
+        crate::ready::assigned_core(EMBASSY_EXECUTOR_CORE[swi as usize].load(Ordering::Acquire));
+    if target_core.is_some_and(|core| core != Cpu::current() as usize) {
         raise_interrupt(swi);
     }
 }
@@ -621,7 +670,7 @@ fn wait_for_work<const SWI: u8>() {
 #[cfg(oer_profile)]
 pub(crate) fn executor_core(executor: usize) -> Option<usize> {
     let core = EMBASSY_EXECUTOR_CORE[executor].load(Ordering::Acquire);
-    (core != UNASSIGNED_CORE).then_some(core)
+    crate::ready::assigned_core(core)
 }
 
 /// Raise the software interrupt of the running executor `executor`, waking

@@ -34,4 +34,6 @@ pub use run::{PhyCalibrationTrackingRunError, PhyParamTrackingRunError, PhyRegis
 #[cfg(test)]
 mod observation_tests;
 #[cfg(test)]
+pub(crate) mod test_clock;
+#[cfg(test)]
 mod tests;

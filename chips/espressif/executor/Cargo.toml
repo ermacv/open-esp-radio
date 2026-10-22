@@ -40,6 +40,8 @@ chip = [
 
 [dependencies]
 static_cell = "2.1.1"
+oer-cooperate = { path = "../../../portable/cooperate" }
+oer-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-memory = { path = "../../../portable/memory" }
 oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
@@ -62,7 +64,6 @@ esp32c5-pac = { package = "esp32c5", git = "https://github.com/ermacv/esp-pacs",
 [dev-dependencies]
 embassy-executor = { version = "0.10.0", default-features = false }
 embassy-time-queue-utils = "0.3"
-oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [lints]

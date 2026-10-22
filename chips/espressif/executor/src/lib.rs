@@ -30,6 +30,8 @@
 //!   lock is taken on any of these paths; the module documentation of
 //!   `time_driver` has the details.
 
+#[cfg(feature = "chip")]
+mod cooperative;
 #[cfg(any(feature = "chip", test))]
 mod deadline_cell;
 #[cfg(feature = "chip")]
@@ -42,6 +44,8 @@ mod level;
 pub mod port_slot;
 #[cfg(any(feature = "chip", test))]
 mod ready;
+#[cfg(feature = "chip")]
+pub use cooperative::Cooperative;
 #[cfg(feature = "chip")]
 #[allow(
     clippy::disallowed_methods,

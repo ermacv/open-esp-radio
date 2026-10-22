@@ -275,3 +275,79 @@ fn due_timer_wake_is_counted_through_the_real_integrated_queue() {
         assert!(!fixture.states[0].ready());
     });
 }
+
+std::thread_local! {
+    static BEFORE_EXEC: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+}
+pub(crate) fn with_exec_state(id: u32, f: impl FnOnce(&ReadyState)) {
+    let before = BEFORE_EXEC.with_borrow_mut(Option::take);
+    if let Some(before) = before {
+        before();
+    }
+    with_state(id, f);
+}
+
+#[test]
+fn wake_between_raw_dequeue_and_exec_hook_keeps_the_extra_token() {
+    let (executors, fixture) = fixture();
+    installed(fixture.clone(), || {
+        let saved = Arc::new(Mutex::new(None::<Waker>));
+        let saved_task = saved.clone();
+        let seen = Arc::new(Mutex::new(std::vec::Vec::new()));
+        let task_seen = seen.clone();
+        let observed = fixture.clone();
+        spawn(
+            executors[0],
+            core::future::poll_fn(move |cx| {
+                *saved_task.lock().expect("waker lock") = Some(cx.waker().clone());
+                task_seen
+                    .lock()
+                    .expect("observations lock")
+                    .push(observed.states[0].ready());
+                Poll::Pending
+            }),
+        );
+        poll(executors[0]);
+        let waker = saved
+            .lock()
+            .expect("waker lock")
+            .clone()
+            .expect("first poll waker");
+        waker.wake_by_ref();
+        BEFORE_EXEC.with_borrow_mut(|before| {
+            *before = Some(Box::new(move || {
+                waker.wake_by_ref();
+                waker.wake_by_ref();
+            }))
+        });
+        poll(executors[0]);
+        assert!(fixture.states[0].ready());
+        poll(executors[0]);
+        assert!(!fixture.states[0].ready());
+        assert_eq!(
+            *seen.lock().expect("observations lock"),
+            [false, true, false]
+        );
+    });
+}
+
+#[test]
+fn spawning_a_peer_while_polling_publishes_its_ready_token() {
+    let (executors, fixture) = fixture();
+    installed(fixture.clone(), || {
+        let observed = fixture.clone();
+        spawn(
+            executors[0],
+            core::future::poll_fn(move |_| {
+                assert!(!observed.states[0].ready());
+                spawn(executors[0], core::future::ready(()));
+                assert!(observed.states[0].ready());
+                Poll::Ready(())
+            }),
+        );
+        poll(executors[0]);
+        assert!(fixture.states[0].ready());
+        poll(executors[0]);
+        assert!(!fixture.states[0].ready());
+    });
+}

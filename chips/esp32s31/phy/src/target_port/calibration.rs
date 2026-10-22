@@ -90,7 +90,7 @@ impl<F: core::future::Future<Output = Result<Option<bool>, PhyTargetPortError>>>
 /// Run the borrowed D-code cursor through its terminal edge. The caller keeps
 /// the affine child and commits it only after this future has completed.
 /// Hardware ownership and cancellation obligations remain with that caller.
-pub fn dcode<'a, D: PhyShortDelay + 'a, P, T: oer_time::Timer>(
+pub fn dcode<'a, D: PhyShortDelay + 'a, P, T: oer_cooperate::CooperativeTimer>(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
     _platform: &mut P,
@@ -118,7 +118,7 @@ fn dcode_poll<
     'a,
     D: PhyShortDelay + 'a,
     R: crate::executor::step::Registers,
-    T: oer_time::Timer,
+    T: oer_cooperate::CooperativeTimer,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
@@ -147,7 +147,7 @@ fn dcode_poll<
 }
 
 /// Advance the retained coefficient owner; only its caller publishes the result.
-pub async fn rx_gain_init<D: PhyShortDelay, T: oer_time::Timer>(
+pub async fn rx_gain_init<D: PhyShortDelay, T: oer_cooperate::CooperativeTimer>(
     clock: &T,
     child: &mut crate::rx::gain::RxProgram,
     registers: &mut impl SharedPhyContext,
@@ -197,7 +197,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     registers: &mut impl SharedPhyContext,
     observer: &core::cell::RefCell<&mut O>,
-    clock: &impl oer_time::Timer,
+    clock: &impl oer_cooperate::CooperativeTimer,
 ) -> Result<(), PhyTargetPortError> {
     child
         .execute_target_direct(
@@ -263,7 +263,13 @@ impl<F: core::future::Future<Output = Result<(), PhyTargetPortError>>> core::fut
     }
 }
 
-pub fn channel<'a, D: PhyShortDelay + 'a, P: 'a, O: PhyTargetObserver + 'a, T: oer_time::Timer>(
+pub fn channel<
+    'a,
+    D: PhyShortDelay + 'a,
+    P: 'a,
+    O: PhyTargetObserver + 'a,
+    T: oer_cooperate::CooperativeTimer,
+>(
     clock: &'a T,
     child: &'a mut PhyCalibrationChannelTransition,
     _platform: &'a mut P,

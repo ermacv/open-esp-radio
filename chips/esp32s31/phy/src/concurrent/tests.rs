@@ -1,9 +1,9 @@
+use crate::executor::test_clock::VirtualClock;
 use oer_esp32s31_hal::{
     domain::{RadioClient, RadioDomain},
     owner::PhyInitializationAccess,
     root::RadioHardware,
 };
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{

@@ -10,6 +10,7 @@ description = "PHY HIL workloads: the vendor-versus-production calibration cross
 readme = "README.md"
 
 [dependencies]
+oer-cooperate = { path = "../../../portable/cooperate" }
 heapless = { version = "0.9.3", features = ["serde"] }
 oer-hil-model = { path = "../../hil/model" }
 oer-hil-link = { path = "../../hil/link" }

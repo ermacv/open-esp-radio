@@ -9,7 +9,7 @@ use crate::{
         power::{PhyTxPowerTrackingAction as Action, PhyTxPowerTrackingTransition},
     },
 };
-use oer_time::Timer;
+use oer_cooperate::CooperativeTimer as Timer;
 
 pin_project_lite::pin_project! {
     struct Power<F> { #[pin] inner: F }

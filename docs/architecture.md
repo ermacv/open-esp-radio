@@ -25,7 +25,13 @@ never await, so they run under any executor and in host tests with virtual
 time (`oer-time-virtual`). The protocol's runtime adds `async`/`await` over
 the port without binding an executor: time comes from `oer-time`, and the
 firmware composition spawns its futures. Drivers own hardware and wait;
-adapters bind executors and `embassy-time`.
+adapters bind executors and `embassy-time`. The PHY takes cooperative admission
+from `oer-cooperate::CooperativeTimer` alongside its timer. The Espressif
+executor's `Cooperative<T>` binding counts ready run tokens through public
+Embassy trace hooks and also observes pending interrupt/signal facts and the
+current task poll's elapsed time. It adds no retained timer state. Calibration
+checks this port between complete hardware atoms; no private queue layout is
+part of the driver interface.
 
 ## Execution contexts
 

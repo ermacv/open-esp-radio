@@ -75,7 +75,11 @@ static ACTOR: StaticCell<Actor> = StaticCell::new();
 type Actor = RadioSystem<
     oer_esp32s31_radio_client::wifi::Wifi,
     RcSlow,
-    Esp32s31Radio<EspHalClocks, EmbassyClock, NoopPhyTargetObserver>,
+    Esp32s31Radio<
+        EspHalClocks,
+        oer_espressif_executor::Cooperative<EmbassyClock>,
+        NoopPhyTargetObserver,
+    >,
     EmbassyClock,
 >;
 
@@ -156,7 +160,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         domain,
         wifi_coex,
         clocks,
-        EmbassyClock,
+        oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );

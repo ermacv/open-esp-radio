@@ -35,8 +35,8 @@ fn cold_and_runtime_keep_channel_capture_order_and_complete_transaction_batches(
                 let before = atoms.get();
                 let result = future.as_mut().poll(&mut cx);
                 assert!(
-                    atoms.get() - before <= usize::from(BATCH_COMMANDS) * 4,
-                    "a bounded batch of complete RMW transactions per poll"
+                    atoms.get() - before <= 4,
+                    "a ready peer permits only one bounded byte atom per poll"
                 );
                 if let Poll::Ready(result) = result {
                     result.expect("D-code completed");

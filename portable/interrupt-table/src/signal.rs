@@ -390,6 +390,23 @@ impl SignalList {
         head.replace(signal)
     }
 
+    fn has_pending(&self, token: &ContextToken) -> bool {
+        #[allow(
+            unsafe_code,
+            reason = "only the signal list's owning context reads its links"
+        )]
+        // SAFETY: the private token proves the owning executor context, which
+        // serializes list access and all task-owned delivered facts.
+        let mut next = unsafe { *self.head.get() };
+        while let Some(signal) = next {
+            if signal.has_pending(token) {
+                return true;
+            }
+            next = signal.owned(token, |owned| owned.next);
+        }
+        false
+    }
+
     fn service(&self, token: &ContextToken) {
         #[allow(unsafe_code, reason = "the list is its executor context's")]
         // SAFETY: the token proves the caller runs in the list's executor
@@ -405,6 +422,13 @@ impl Default for SignalList {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Whether a linked signal has pending or delivered facts, without consuming
+/// them. This is supplementary to ready-task accounting; a signal not polled
+/// yet is not linked, and its interrupt pend remains the admission boundary.
+pub fn has_pending<E: SignalExecutor>() -> Result<bool, ForeignContext> {
+    Ok(E::list().has_pending(&context::<E>()?))
 }
 
 /// Service every signal of `E` before polling its tasks. Outside `E`'s

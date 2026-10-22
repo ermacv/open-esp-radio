@@ -135,7 +135,7 @@ pub enum ConcurrentPhyTrackingError {
     reason = "fail-stop error retains the allocation-free PHY transition"
 )]
 pub fn register_concurrent_phy<'a, B: PlatformClockBackend, P, D, O>(
-    timer: &'a impl oer_time::Timer,
+    timer: &'a impl oer_cooperate::CooperativeTimer,
     radio: &'a mut RadioDomain<B, ConcurrentPhy>,
     platform: &'a mut P,
     clocks: &'a impl PlatformClockProvider<Backend = B>,
@@ -230,7 +230,7 @@ fn finish_concurrent_registration<B: PlatformClockBackend>(
 /// the domain unregistered in software while RF may be partially closed; the
 /// radio then requires reset.
 pub async fn close_concurrent_rf<B: PlatformClockBackend, P, D>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
 ) -> Result<(), ConcurrentRfError>
@@ -303,7 +303,7 @@ where
 /// Once polled, drive this future to a terminal result. After the first wake
 /// edge every failure is fail-stop and requires reset.
 pub async fn wake_concurrent_rf<B: PlatformClockBackend, D>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocks: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<(), ConcurrentRfError>
@@ -359,7 +359,7 @@ where
 /// admission leaves the domain pending in software while hardware may be
 /// partially updated; the radio then requires reset.
 pub async fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
@@ -454,7 +454,7 @@ pub enum ConcurrentTrackingTick {
 pub async fn track_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     observer: O,
 ) -> Result<ConcurrentTrackingTick, ConcurrentPhyTrackingError>
 where
@@ -527,7 +527,7 @@ fn wifi_channel_state<'domain>(
 ///
 /// Once polled, drive this future to a terminal result.
 pub async fn select_concurrent_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     phy: &mut ConcurrentPhy,
     channel_or_frequency: u16,
     cbw: u8,
@@ -558,7 +558,7 @@ pub async fn select_concurrent_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObs
 ///
 /// Once polled, drive this future to a terminal result.
 pub async fn switch_concurrent_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     phy: &mut ConcurrentPhy,
     channel_or_frequency: u16,
     cbw: u8,
