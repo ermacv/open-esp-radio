@@ -72,45 +72,79 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
     Err(PhyTargetPortError::RfOperationLimit)
 }
 
-/// Run the complete D-code child, retaining its nested PLL and I2C waits.
-/// The caller retains the same maintenance and cancellation obligations as PBus clearing.
-pub async fn dcode<D: PhyShortDelay, P, T: oer_time::Timer>(
-    clock: &T,
-    mut child: PhyCalibrationDcodeTransition,
-    _platform: &mut P,
-    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-    mut observe: impl FnMut(bool),
-    mut timing: Option<&mut crate::tracking::observation::EngineTiming>,
-) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
-    use crate::executor::step::{Job, drive};
-    for _ in 0..RF_OPERATION_LIMIT {
-        if matches!(
-            child.action(),
-            crate::analog::dcode::PhyDcodeAction::Complete(_)
-                | crate::analog::dcode::PhyDcodeAction::Failed(_)
-        ) {
-            return child
-                .commit()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding);
-        }
-        let mut lock = None;
-        let mut job = Job::dcode(child.transition_mut(), &mut lock, clock.now())
-            .map_err(super::step::port_error)?;
-        drive::<D, _, _>(
-            &mut job,
-            registers,
-            clock,
-            timing.as_deref_mut(),
-            None,
-            None,
-        )
-        .await
-        .map_err(super::step::port_error)?;
-        if let Some(locked) = lock {
-            observe(locked);
-        }
+pin_project_lite::pin_project! {
+    struct Dcode<F> { #[pin] inner: F }
+}
+impl<F: core::future::Future<Output = Result<Option<bool>, PhyTargetPortError>>>
+    core::future::Future for Dcode<F>
+{
+    type Output = Result<Option<bool>, PhyTargetPortError>;
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().inner.poll(cx)
     }
-    Err(PhyTargetPortError::RfOperationLimit)
+}
+
+/// Run the borrowed D-code cursor through its terminal edge. The caller keeps
+/// the affine child and commits it only after this future has completed.
+/// Hardware ownership and cancellation obligations remain with that caller.
+pub fn dcode<'a, D: PhyShortDelay + 'a, P, T: oer_time::Timer>(
+    clock: &'a T,
+    child: &'a mut PhyCalibrationDcodeTransition,
+    _platform: &mut P,
+    registers: &'a mut (impl SharedPhyAccess + crate::executor::step::Registers),
+    mut observe: impl FnMut(bool) + 'a,
+    mut timing: Option<&'a mut crate::tracking::observation::EngineTiming>,
+) -> impl core::future::Future<Output = Result<(), PhyTargetPortError>> + 'a {
+    async move {
+        for _ in 0..RF_OPERATION_LIMIT {
+            if let Some(locked) =
+                dcode_poll::<D, _, _>(clock, child, registers, timing.as_deref_mut()).await?
+            {
+                observe(locked);
+            } else {
+                return Ok(());
+            }
+        }
+        Err(PhyTargetPortError::RfOperationLimit)
+    }
+}
+
+// The poll boundary has no observer or platform type parameter. Diagnostic
+// callbacks stay in the thin outer adapter; the retained job is shared.
+fn dcode_poll<
+    'a,
+    D: PhyShortDelay + 'a,
+    R: crate::executor::step::Registers,
+    T: oer_time::Timer,
+>(
+    clock: &'a T,
+    child: &'a mut PhyCalibrationDcodeTransition,
+    registers: &'a mut R,
+    timing: Option<&'a mut crate::tracking::observation::EngineTiming>,
+) -> impl core::future::Future<Output = Result<Option<bool>, PhyTargetPortError>> + 'a {
+    Dcode {
+        inner: async move {
+            use crate::executor::step::{Job, drive};
+            if matches!(
+                child.action(),
+                crate::analog::dcode::PhyDcodeAction::Complete(_)
+                    | crate::analog::dcode::PhyDcodeAction::Failed(_)
+            ) {
+                return Ok(None);
+            }
+            let mut lock = None;
+            let mut job = Job::dcode(child.transition_mut(), &mut lock, clock.now())
+                .map_err(super::step::port_error)?;
+            drive::<D, _, _>(&mut job, registers, clock, timing, None, None)
+                .await
+                .map_err(super::step::port_error)?;
+            Ok(lock)
+        },
+    }
 }
 
 /// Run RX-DC calibration and publish both gain banks using the same admitted owner.

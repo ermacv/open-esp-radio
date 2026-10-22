@@ -10,6 +10,29 @@ fn channel_visits_update_nrx_once_before_each_measured_pair() {
     let mut frequencies = Vec::new();
     let mut values = 0;
     for _ in 0..100 {
+        let action = transition.action();
+        if !matches!(
+            action,
+            PhyDcodeAction::Complete(_) | PhyDcodeAction::Failed(_)
+        ) {
+            let wrong = if matches!(action, PhyDcodeAction::Rfpll(_)) {
+                PhyDcodeCompletion::Rfpll(RfpllFrequencyCompletion::MaskedRead {
+                    field: analog_registers::RFPLL_LOCK_STATUS,
+                    value: 0,
+                })
+            } else {
+                PhyDcodeCompletion::Rfpll(RfpllFrequencyCompletion::ChannelSwitchCleared)
+            };
+            let before = transition;
+            assert_eq!(
+                transition.advance(wrong),
+                Err(PhyDcodeTransitionError::WrongCompletion)
+            );
+            assert_eq!(
+                transition, before,
+                "rejection must preserve the live cursor"
+            );
+        }
         let completion = match transition.action() {
             PhyDcodeAction::Rfpll(action) => PhyDcodeCompletion::Rfpll(match action {
                 RfpllFrequencyAction::StartChannelSwitch {

@@ -3,11 +3,15 @@
 Tracking issue: <https://github.com/ermacv/open-esp-radio/issues/328>.
 Baseline: `1234079785886c41a23cbe4d84f74c1737d11837` (`origin/main`).
 
-This work moves the common calibration bracket onto the existing P1 step
-engine: DCODE, RX gain DC and publication, DC/IQ acquisition, and channel
-restoration. Cold registration and compiled probes must share the affected
-measurement implementation. RF and bus ownership remain held across every
-checkpoint; parent state commits only after the accepted child completion.
+P4 moves the common calibration bracket onto the existing P1 step engine.
+The owner approved [splitting the work](https://github.com/ermacv/open-esp-radio/issues/328#issuecomment-6336004510):
+PR #329 covers C13/DCODE; C19/RX gain DC and publication, E4/DC-IQ, C20/channel
+restoration and the affected cold RX lowering follow in a separate PR under
+the same issue. The budgets below apply cumulatively to both PRs.
+
+RF and bus ownership remain held across every checkpoint; parent state commits
+only after the accepted child completion. Cold and runtime retain the shared
+measurement arithmetic, and affected compiled probes follow the production path.
 
 The acceptance limits relative to the baseline are:
 
