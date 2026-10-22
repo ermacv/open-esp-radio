@@ -85,6 +85,7 @@ enum Work<'a> {
         transition: &'a mut crate::analog::dcode::PhyDcodeTransition,
         lock: &'a mut Option<bool>,
         remaining: u32,
+        i2c: Option<crate::analog::dcode::PhyDcodeI2cBinding>,
     },
     Rfpll(rfpll::Run<'a>),
     CountedI2c(i2c::Counted<'a>),
@@ -160,6 +161,7 @@ impl<'a> Job<'a> {
                 transition,
                 lock,
                 remaining: 100_000,
+                i2c: None,
             },
             now,
             false,
@@ -301,6 +303,7 @@ impl<'a> Job<'a> {
                 transition,
                 lock,
                 remaining,
+                i2c,
             } => {
                 use crate::analog::dcode::{
                     PhyDcodeAction as Action, PhyDcodeCompletion as Completion,
@@ -320,16 +323,44 @@ impl<'a> Job<'a> {
                     return Err(Failure::Binding);
                 }
                 *remaining -= 1;
-                let binding = Binding::lower(transition.action()).map_err(|_| Failure::Binding)?;
                 self.ready_started = Some(clock.now());
-                let completion = match binding {
-                    Binding::Rfpll(binding) => {
-                        Completion::Rfpll(io.frequency::<D, _>(clock, binding)?)
+                let next = if i2c.is_none() {
+                    Some(Binding::lower(transition.action()).map_err(|_| Failure::Binding)?)
+                } else {
+                    None
+                };
+                let completion = match next {
+                    Some(Binding::Rfpll(binding)) => {
+                        Some(Completion::Rfpll(io.frequency::<D, _>(clock, binding)?))
                     }
-                    Binding::I2c(mut binding) => {
-                        rfpll::direct_i2c(&mut io, clock, binding.transaction_mut(), None, false)?;
-                        binding.into_completion().map_err(|_| Failure::Binding)?
+                    Some(Binding::I2c(binding)) => {
+                        // Retain both RMW bytes before publishing the first.
+                        *i2c = Some(binding);
+                        None
                     }
+                    None => None,
+                };
+                let completion = if let Some(completion) = completion {
+                    completion
+                } else {
+                    let binding = i2c.as_mut().ok_or(Failure::Binding)?;
+                    // A byte command retains its original twenty-us settle;
+                    // previous bytes and executor suspension use none of it.
+                    rfpll::direct_i2c(
+                        &mut io,
+                        clock,
+                        binding.transaction_mut(),
+                        None,
+                        false,
+                        rfpll::I2cBoundary::Command,
+                    )?;
+                    if !matches!(binding.action(), PhyColdI2cAction::Complete(_)) {
+                        return Ok(Step::Runnable);
+                    }
+                    i2c.take()
+                        .ok_or(Failure::Binding)?
+                        .into_completion()
+                        .map_err(|_| Failure::Binding)?
                 };
                 if let Completion::Rfpll(
                     crate::analog::rfpll::RfpllFrequencyCompletion::MaskedRead {

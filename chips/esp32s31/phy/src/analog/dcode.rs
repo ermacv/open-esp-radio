@@ -11,9 +11,11 @@
 //! eight output bytes are Rust-owned values; no ROM RAM or callback table is
 //! required.
 //!
-//! Runtime DCODE advances through the P1 step engine one complete hardware
-//! transaction per poll. RF and bus ownership remain held across checkpoints,
-//! and the parent commits only after accepting the terminal child completion.
+//! Runtime DCODE advances through the P1 engine at complete byte commands.
+//! A masked RMW retains its binding between the read and write; each byte
+//! keeps the direct observation settle independently of executor suspension.
+//! RF and bus ownership remain held across checkpoints, and the parent
+//! commits only after accepting the terminal child completion.
 
 use crate::analog::{
     i2c::{Field, fields},
