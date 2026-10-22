@@ -59,11 +59,14 @@ impl EchoSeries {
 }
 
 fn contains(bits: &[u64; 2], offset: u16) -> bool {
-    bits[usize::from(offset / 64)] & (1 << (offset % 64)) != 0
+    bits.get(usize::from(offset / 64))
+        .is_some_and(|word| word & (1 << (offset % 64)) != 0)
 }
 
 fn mark(bits: &mut [u64; 2], offset: u16) -> bool {
-    let word = &mut bits[usize::from(offset / 64)];
+    let Some(word) = bits.get_mut(usize::from(offset / 64)) else {
+        return false;
+    };
     let mask = 1 << (offset % 64);
     let fresh = *word & mask == 0;
     *word |= mask;
