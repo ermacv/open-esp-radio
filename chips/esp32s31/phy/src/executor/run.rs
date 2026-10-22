@@ -157,50 +157,67 @@ pub async fn run_phy_register<P: PhyRegisterPort>(
     }
 }
 
+pin_project_lite::pin_project! {
+    struct CalibrationParent<F> { #[pin] inner: F }
+}
+impl<F: Future> Future for CalibrationParent<F> {
+    type Output = F::Output;
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().inner.poll(cx)
+    }
+}
 /// Drive one complete periodic calibration parent through identity-bound
 /// children without exposing its live [`crate::PhyState`] owner.
 ///
 /// Terminal success leaves `transition` ready for its consuming `commit`.
 /// Every error leaves the exact transition and state borrow with the caller;
 /// the surrounding PHY-client owner must then enter its fail-stop state.
-pub async fn run_phy_calibration_tracking<P: PhyCalibrationTrackingPort>(
-    transition: &mut crate::tracking::parameters::PhyParamTrackingCalibrationTransition<'_>,
-    port: &mut P,
-) -> Result<(), PhyCalibrationTrackingRunError<P::Error>> {
-    for _ in 0..CALIBRATION_TRACKING_ACTION_LIMIT {
-        match transition.action() {
-            crate::tracking::calibration::PhyCalibrationTrackingAction::Complete(_) => {
-                return Ok(());
-            }
-            crate::tracking::calibration::PhyCalibrationTrackingAction::Failed(failure) => {
-                return Err(PhyCalibrationTrackingRunError::Radio(failure));
-            }
-            action => {
-                let operation = Operation::calibration(action);
-                if let Some(operation) = operation {
-                    port.observe(operation, Event::Started);
+pub fn run_phy_calibration_tracking<'a, P: PhyCalibrationTrackingPort>(
+    transition: &'a mut crate::tracking::parameters::PhyParamTrackingCalibrationTransition<'_>,
+    port: &'a mut P,
+) -> impl Future<Output = Result<(), PhyCalibrationTrackingRunError<P::Error>>> + 'a {
+    CalibrationParent {
+        inner: async move {
+            for _ in 0..CALIBRATION_TRACKING_ACTION_LIMIT {
+                match transition.action() {
+                    crate::tracking::calibration::PhyCalibrationTrackingAction::Complete(_) => {
+                        return Ok(());
+                    }
+                    crate::tracking::calibration::PhyCalibrationTrackingAction::Failed(failure) => {
+                        return Err(PhyCalibrationTrackingRunError::Radio(failure));
+                    }
+                    action => {
+                        let operation = Operation::calibration(action);
+                        if let Some(operation) = operation {
+                            port.observe(operation, Event::Started);
+                        }
+                        let result = match port.complete(transition).await {
+                            Ok(completion) => transition
+                                .advance(completion)
+                                .map_err(PhyCalibrationTrackingRunError::Transition),
+                            Err(error) => Err(PhyCalibrationTrackingRunError::Port(error)),
+                        };
+                        if let Some(operation) = operation {
+                            port.observe(
+                                operation,
+                                if result.is_ok() {
+                                    Event::Completed
+                                } else {
+                                    Event::Failed
+                                },
+                            );
+                        }
+                        result?;
+                    }
                 }
-                let result = match port.complete(transition).await {
-                    Ok(completion) => transition
-                        .advance(completion)
-                        .map_err(PhyCalibrationTrackingRunError::Transition),
-                    Err(error) => Err(PhyCalibrationTrackingRunError::Port(error)),
-                };
-                if let Some(operation) = operation {
-                    port.observe(
-                        operation,
-                        if result.is_ok() {
-                            Event::Completed
-                        } else {
-                            Event::Failed
-                        },
-                    );
-                }
-                result?;
             }
-        }
+            Err(PhyCalibrationTrackingRunError::ParentEdgeLimit)
+        },
     }
-    Err(PhyCalibrationTrackingRunError::ParentEdgeLimit)
 }
 
 /// Drive every selected child of one unique pending PHY-client request.

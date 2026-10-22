@@ -674,6 +674,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         self.child.advance(completion)
     }
 
+    #[inline(always)]
     pub fn begin_force_txrx(
         &self,
     ) -> Result<
@@ -683,6 +684,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         self.child.begin_force_txrx()
     }
 
+    #[inline(always)]
     pub fn begin_pbus_clear(
         &self,
     ) -> Result<
@@ -692,6 +694,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         self.child.begin_pbus_clear()
     }
 
+    #[inline(always)]
     pub fn begin_dcode(
         &self,
     ) -> Result<
@@ -701,6 +704,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         self.child.begin_dcode()
     }
 
+    #[inline(always)]
     pub fn begin_rx_gain_recalibration(
         &self,
     ) -> Result<
@@ -711,6 +715,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
             .begin_rx_gain_recalibration(self.state.rx_gain_init_parameters())
     }
 
+    #[inline(always)]
     pub fn begin_channel_restore(
         &self,
     ) -> Result<
@@ -721,6 +726,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
             .begin_channel_restore(self.state.channel_parameters())
     }
 
+    #[inline(always)]
     pub fn begin_tx_dc_pwdet(
         &self,
     ) -> Result<

@@ -93,6 +93,10 @@ pub enum PhyRxGainPublishAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRxGainPublishCompletion {
+    /// Work mode and its conditional pulse/settles completed as one atom.
+    PbusWorkModeRestored {
+        bank: PhyRxGainBank,
+    },
     PbusDebugModeConfigured {
         bank: PhyRxGainBank,
     },
@@ -278,6 +282,12 @@ impl PhyRxGainPublishTransition {
         completion: PhyRxGainPublishCompletion,
     ) -> Result<(), PhyRxGainPublishTransitionError> {
         self.step = match (self.step, completion) {
+            (
+                Step::WorkMode { bank, failure },
+                PhyRxGainPublishCompletion::PbusWorkModeRestored {
+                    bank: completed_bank,
+                },
+            ) if bank == completed_bank => after_work_mode(bank, failure),
             (
                 Step::Debug(expected),
                 PhyRxGainPublishCompletion::PbusDebugModeConfigured { bank },
@@ -486,6 +496,11 @@ pub struct PhyRxGainPublishMmioBinding {
 }
 
 impl PhyRxGainPublishMmioBinding {
+    #[cfg(test)]
+    pub(crate) const fn action(&self) -> PhyRxGainPublishAction {
+        self.action
+    }
+
     pub fn new(action: PhyRxGainPublishAction) -> Result<Self, PhyRxGainPublishBindingError> {
         match action {
             PhyRxGainPublishAction::ConfigurePbusDebugMode { .. }
@@ -780,129 +795,6 @@ pub(crate) enum Phase {
 }
 
 impl PhyRxGainInitTransition {
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn direct_dc_parameters(&self) -> Option<PhyRxGainDcParameters> {
-        matches!(self.step, InitStep::PrepareDcControlRestore)
-            .then(|| self.parameters.map(|parameters| parameters.dc))
-            .flatten()
-    }
-
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn commit_direct_dc(
-        &mut self,
-        result: Result<PhyRxGainDcOutcome, PhyRxGainDcFailure>,
-    ) -> Result<(), PhyRxGainInitTransitionError> {
-        if !matches!(self.step, InitStep::PrepareDcControlRestore) {
-            return Err(PhyRxGainInitTransitionError::WrongCompletion);
-        }
-        match result {
-            Ok(outcome) => {
-                let Some(memory) = self.memory_with_dc(outcome) else {
-                    return Err(PhyRxGainInitTransitionError::WrongCompletion);
-                };
-                self.dc_outcome = Some(outcome);
-                self.step = InitStep::Publish(PhyRxGainPublishTransition::new(memory));
-            }
-            Err(failure) => {
-                self.step = InitStep::Failed(PhyRxGainInitFailure::Dc(failure));
-            }
-        }
-        Ok(())
-    }
-
-    /// Publish both complete RX gain-memory banks and the root tail as one
-    /// blocking production transaction. Host verification keeps the granular
-    /// publisher transition, but firmware does not route every table entry
-    /// through the action/binding ABI.
-    #[cfg(target_arch = "riscv32")]
-    #[inline(never)]
-    pub(crate) fn execute_publish_target_direct<
-        D: crate::executor::wait::PhyShortDelay,
-        C: oer_time::Clock + ?Sized,
-    >(
-        &mut self,
-        clock: &C,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
-    ) -> Result<bool, crate::target_executor::PhyTargetPortError> {
-        let parameters = match &self.step {
-            InitStep::Publish(transition) => transition.parameters,
-            _ => return Ok(false),
-        };
-        let mut failure = None;
-        for bank in [PhyRxGainBank::Wifi, PhyRxGainBank::Shared] {
-            oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
-            for index in 0..PBUS_RX_ON_COUNT {
-                let transaction = pbus_rx_on(index, parameters.parameter_002);
-                if !crate::target_executor::force_pbus_direct(clock, registers, transaction) {
-                    failure = Some(PhyRxGainPublishFailure::PbusTimedOut { bank, transaction });
-                    break;
-                }
-            }
-            if failure.is_none() {
-                oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, true);
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, true);
-                let table = generated_table(bank);
-                for index in 0..=table.last_index {
-                    let entry = phy_generated_rx_gain_memory_entry(&parameters, bank, table, index);
-                    oer_esp32s31_hal::phy::memory::program_gain_memory_entry(registers, entry);
-                }
-                oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, false);
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, false);
-                for index in 0..PBUS_RX_ON_COUNT {
-                    let transaction = pbus_rx_on(index, parameters.parameter_002);
-                    if !crate::target_executor::force_pbus_direct(clock, registers, transaction) {
-                        failure = Some(PhyRxGainPublishFailure::PbusTimedOut { bank, transaction });
-                        break;
-                    }
-                }
-            }
-            if oer_esp32s31_hal::phy::pbus::configure_work_mode(registers) {
-                if !D::settle_micros(1) {
-                    return Err(
-                        crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
-                    );
-                }
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
-                if !D::settle_micros(2) {
-                    return Err(
-                        crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
-                    );
-                }
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
-            }
-            if failure.is_some() {
-                break;
-            }
-        }
-
-        if let Some(failure) = failure {
-            self.step = InitStep::Failed(PhyRxGainInitFailure::Publish(failure));
-            return Ok(true);
-        }
-        self.wifi_last_index = generated_table(PhyRxGainBank::Wifi).last_index;
-        self.shared_last_index = generated_table(PhyRxGainBank::Shared).last_index;
-        oer_esp32s31_hal::phy::agc::configure_rx_gain_limits(registers, self.wifi_last_index);
-        oer_esp32s31_hal::phy::baseband::enable_iq_correction(registers);
-        self.step = InitStep::Complete;
-        Ok(true)
-    }
-
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn execute_tail_target_direct(
-        &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    ) -> bool {
-        if !matches!(self.step, InitStep::Limits) {
-            return false;
-        }
-        oer_esp32s31_hal::phy::agc::configure_rx_gain_limits(registers, self.wifi_last_index);
-        oer_esp32s31_hal::phy::baseband::enable_iq_correction(registers);
-        self.step = InitStep::Complete;
-        true
-    }
-
-    /// Inspect terminal state without placing the retained coefficient product
-    /// in every hot-path action value.
     pub fn terminal(&self) -> Option<Result<PhyRxGainInitOutcome, PhyRxGainInitFailure>> {
         match self.step {
             InitStep::Complete => Some(Ok(PhyRxGainInitOutcome {

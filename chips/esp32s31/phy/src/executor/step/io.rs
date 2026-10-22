@@ -122,6 +122,94 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
 }
 
 impl Io<'_, '_> {
+    /// Keep channel's large command/completion values out of the shared dispatcher.
+    #[inline(never)]
+    pub(super) fn channel<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &mut Option<crate::channel::PhyChipChannelCompletion>,
+        gain: &mut super::channel_gain::Cursor,
+    ) -> Result<bool, Failure> {
+        if let Some(crate::channel::PhyChipChannelExternalBinding::Mmio(command)) = binding.as_ref()
+            && let Some(image) = command.tx_gain_image()
+        {
+            if gain.advance(self, image)? {
+                *binding = None;
+                *completion = Some(crate::channel::PhyChipChannelCompletion::TxGainPublished);
+            }
+            return Ok(false);
+        }
+        self.channel_direct::<D, _>(clock, binding, completion)
+    }
+
+    /// The original channel command/completion body keeps its own poll frame.
+    #[inline(never)]
+    fn channel_direct<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &mut Option<crate::channel::PhyChipChannelCompletion>,
+    ) -> Result<bool, Failure> {
+        let binding = binding.take().ok_or(Failure::Binding)?;
+        #[cfg(target_arch = "riscv32")]
+        fn apply<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+            clock: &C,
+            registers: &mut (impl oer_esp32s31_hal::owner::SharedPhyAccess + Registers),
+            binding: crate::channel::PhyChipChannelExternalBinding,
+        ) -> Result<crate::channel::PhyChipChannelCompletion, Failure> {
+            crate::target_port::calibration::complete_channel_direct::<D, _, _, _>(
+                clock,
+                binding,
+                &mut (),
+                registers,
+                &mut crate::target_port::NoopPhyTargetObserver,
+            )
+            .map_err(Failure::Target)
+        }
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = (clock, binding);
+        let result = match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => apply::<D, _>(clock, *registers, binding),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => apply::<D, _>(clock, *registers, binding),
+            #[cfg(test)]
+            Self::Test(..) => Err(Failure::Binding),
+        }?;
+        let waiting = matches!(
+            result,
+            crate::channel::PhyChipChannelCompletion::FrequencyReadyObserved { ready: false }
+        );
+        *completion = Some(result);
+        Ok(waiting)
+    }
+    #[inline(never)]
+    pub(super) fn rx_gain<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: &mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+        completion: &mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
+    ) -> Result<bool, Failure> {
+        let binding = binding.take().ok_or(Failure::Binding)?;
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = clock;
+        let result = match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => {
+                super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
+            }
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => {
+                super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
+            }
+            #[cfg(test)]
+            Self::Test(io, _) => io.rx_gain::<D>(binding),
+        }?;
+        let waiting = super::rx_gain::waiting(result);
+        *completion = Some(result);
+        Ok(waiting)
+    }
     pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         clock: &C,
@@ -160,6 +248,21 @@ impl Io<'_, '_> {
             ),
             #[cfg(test)]
             Self::Test(io, _) => io.power_gain_base(action),
+        }
+    }
+
+    pub(super) fn channel_gain_base(&mut self) -> Result<u8, Failure> {
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => Ok(
+                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
+            ),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => Ok(
+                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
+            ),
+            #[cfg(test)]
+            Self::Test(io, _) => io.channel_gain_base(),
         }
     }
 

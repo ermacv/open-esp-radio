@@ -6,6 +6,7 @@
 //! An abandoned future leaves a started operation without a terminal event.
 
 use crate::executor::wait;
+pub mod calibration;
 
 /// One not-ready status observation, timed from its command publication.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -506,6 +507,17 @@ pub struct Timing {
 /// RX-gain root actions.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxGainExecution {
+    /// Per-atom maximum: lowering, hardware transaction, model commit (microseconds).
+    pub maximum_parts_micros: [u32; 3],
+    /// Same action/first-entry tags as the engine maxima, correlated per part.
+    pub maximum_parts_actions: [u8; 3],
+    pub maximum_engine_micros: [u32; 2],
+    pub maximum_engine_actions: [u8; 2],
+    /// Poll maxima by I2C stage (pure preparation, complete helper+commit),
+    /// then first/repeated action within the same retained RX phase.
+    pub i2c_poll_micros: [[u32; 2]; 2],
+    /// Completed helper polls, first/repeated within the RX phase.
+    pub i2c_samples: [u32; 2],
     /// Complete RX DC product quality; absent when that child did not complete.
     pub quality: Option<crate::rx::gain_calibration::PhyRxGainDcQuality>,
     pub minimum_searches: u32,
@@ -514,6 +526,49 @@ pub struct RxGainExecution {
     pub settle_1us: u32,
     pub settle_2us: u32,
     pub settle_10us: u32,
+}
+
+impl RxGainExecution {
+    /// Associate an engine maximum with its retained action after the poll stamp.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn observe_engine(&mut self, timing: &EngineTiming, action: u8) {
+        for (index, elapsed) in [timing.maximum_micros, timing.maximum_ready_micros]
+            .into_iter()
+            .enumerate()
+        {
+            if elapsed > self.maximum_engine_micros[index] {
+                self.maximum_engine_micros[index] = elapsed;
+                self.maximum_engine_actions[index] = action;
+            }
+        }
+    }
+}
+
+impl EngineTiming {
+    /// Merge completed action records outside the measured driver.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn merge(&mut self, other: &Self) {
+        self.invalid |= other.invalid;
+        macro_rules! add {
+            ($($field:ident),*) => { $(
+                if let Some(sum) = self.$field.checked_add(other.$field) { self.$field = sum; }
+                else { self.invalid = true; }
+            )* };
+        }
+        add!(
+            polls,
+            pending,
+            total_micros,
+            resumes,
+            lateness_micros,
+            ready_edges
+        );
+        self.maximum_micros = self.maximum_micros.max(other.maximum_micros);
+        self.maximum_lateness_micros = self
+            .maximum_lateness_micros
+            .max(other.maximum_lateness_micros);
+        self.maximum_ready_micros = self.maximum_ready_micros.max(other.maximum_ready_micros);
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

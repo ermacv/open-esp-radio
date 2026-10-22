@@ -908,6 +908,8 @@ pub enum PhyRxGainDcAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRxGainDcCompletion {
+    /// Includes the conditional work-mode pulse and both minimum settles.
+    PbusWorkModeRestored,
     RegistersConfigured {
         enabled: bool,
     },
@@ -1915,6 +1917,9 @@ impl PhyRxGainDcTransition {
                     DcTerminal::Complete => DcStep::Complete,
                     DcTerminal::Failed(failure) => DcStep::Failed(failure),
                 };
+            }
+            (DcStep::WorkMode(terminal), PhyRxGainDcCompletion::PbusWorkModeRestored) => {
+                self.step = Self::after_work_mode(terminal);
             }
             (DcStep::Complete, _) | (DcStep::Failed(_), _) => {
                 return Err(PhyRxGainDcTransitionError::AlreadyComplete);
