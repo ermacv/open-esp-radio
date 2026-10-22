@@ -96,3 +96,70 @@ fn due_registration_wakes_without_an_alarm_and_preserves_other_tasks() {
     poll(executor);
     assert_eq!(counts(), [2, 3, 2]); // No stale wake at the replaced deadlines.
 }
+
+#[test]
+fn self_wakes_keep_future_alarms_armed_and_fired_alarms_reconcile_the_queue() {
+    use oer_time::{Clock, Duration};
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let now = || clock.now().as_micros();
+    let start = now();
+    let executor = Box::leak(Box::new(Executor::new(core::ptr::null_mut())));
+    let probes: [Arc<Probe>; 2] = core::array::from_fn(|_| Arc::default());
+    for probe in &probes {
+        let storage = Box::leak(Box::new(TaskStorage::<Task>::new()));
+        executor
+            .spawner()
+            .spawn(storage.spawn(|| Task(probe.clone())).unwrap());
+    }
+    poll(executor);
+    let wakers = probes
+        .each_ref()
+        .map(|probe| probe.waker.lock().unwrap().clone().unwrap());
+    let mut queue = WakeQueue::new();
+    assert_eq!(
+        queue.alarm_deadline(false),
+        None,
+        "empty self-wake needs no write"
+    );
+    queue.schedule_wake(start + 20, &wakers[0], now);
+    assert_eq!(queue.alarm_deadline(false), Some(start + 20));
+    queue.schedule_wake(start + 50, &wakers[1], now);
+    queue.dispatch_expired(now());
+    assert_eq!(
+        queue.alarm_deadline(false),
+        None,
+        "later timer and self-wake retain the alarm"
+    );
+    assert_eq!(
+        queue.alarm_deadline(true),
+        Some(start + 20),
+        "an acknowledged alarm must be rearmed even if the deadline is unchanged"
+    );
+    clock.advance(Duration::from_micros(20)).unwrap();
+    queue.dispatch_expired(now());
+    assert_eq!(queue.alarm_deadline(true), Some(start + 50));
+    poll(executor);
+    assert_eq!(
+        probes.each_ref().map(|p| p.polls.load(Ordering::Relaxed)),
+        [2, 1]
+    );
+    clock.advance(Duration::from_micros(30)).unwrap();
+    queue.dispatch_expired(now());
+    assert_eq!(queue.alarm_deadline(true), Some(u64::MAX));
+    poll(executor);
+    assert_eq!(
+        probes.each_ref().map(|p| p.polls.load(Ordering::Relaxed)),
+        [2, 2]
+    );
+    assert_eq!(
+        queue.alarm_deadline(false),
+        None,
+        "drained timers do not cause repeated writes"
+    );
+    queue.schedule_wake(start + 80, &wakers[0], now);
+    assert_eq!(
+        queue.alarm_deadline(false),
+        Some(start + 80),
+        "a later registration rearms normally"
+    );
+}
