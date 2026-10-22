@@ -237,9 +237,7 @@ pub(super) fn analyze<'a>(
                 gap("object payload unavailable", c)?;
             }
             if !elf.as_ref().is_some_and(|e| {
-                e.bits == 32
-                    && e.little_endian
-                    && e.machine == 243
+                elf::is_riscv32_little_endian(e.bits, e.little_endian, e.machine)
                     && matches!(
                         elf::object_kind(e.object_type),
                         elf::ObjectKind::Relocatable | elf::ObjectKind::Executable

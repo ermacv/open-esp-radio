@@ -6,7 +6,8 @@ use crate::in_process::Executable;
 use oer_analysis_blobray_domain::{
     ArtifactInventory, ElfInventory, LibraryFunction, SectionRecord,
 };
-use oer_analysis_elf::classify::{self, ObjectKind, SectionFlags, SectionKind, SymbolKind};
+use oer_analysis_elf::classify::{self, ObjectKind, SectionFlags};
+use oer_analysis_elf::{SectionKind, SymbolKind};
 use oer_analysis_riscv_model::{FunctionRecord, ObjectId, Result, RunControl, WorkingMemory};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -74,9 +75,9 @@ pub fn rows(
             .as_deref()
             .map(|name| String::from_utf8_lossy(name).into_owned());
         for symbol in &elf.symbols {
-            let kind = match classify::symbol_kind(symbol.symbol_type) {
-                SymbolKind::Function => "function",
-                SymbolKind::Object => "object",
+            let kind = match SymbolKind::of_type(symbol.symbol_type) {
+                SymbolKind::Text => "function",
+                SymbolKind::Data => "object",
                 _ => continue,
             };
             let Some(name) = symbol.name.as_deref().filter(|name| !name.is_empty()) else {
@@ -119,7 +120,7 @@ pub fn rows(
 /// The sections of `elf` that hold read-only, allocated, non-executable data.
 pub fn read_only_data(elf: &ElfInventory) -> impl Iterator<Item = &SectionRecord> {
     elf.sections.iter().filter(|section| {
-        classify::section_kind(section.section_type) == SectionKind::Progbits
+        SectionKind::of(section.section_type) == SectionKind::Program
             && SectionFlags(section.flags).allocated()
             && !SectionFlags(section.flags).writable()
             && !SectionFlags(section.flags).executable()
@@ -322,7 +323,7 @@ pub fn image_symbols(
     Ok(Some(
         elf.symbols
             .iter()
-            .filter(|symbol| classify::symbol_kind(symbol.symbol_type) == SymbolKind::Function)
+            .filter(|symbol| SymbolKind::of_type(symbol.symbol_type) == SymbolKind::Text)
             .filter_map(|symbol| {
                 let name = symbol.name.as_deref()?;
                 Some((

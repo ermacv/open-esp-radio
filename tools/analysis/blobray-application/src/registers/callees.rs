@@ -2,7 +2,7 @@
 use super::*;
 use crate::captured::visit_members;
 use crate::in_process::Executable;
-use oer_analysis_elf::classify as elf;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 
 struct Definition {
     input: u64,
@@ -55,9 +55,7 @@ impl<'m> Callees<'m> {
                 };
                 let (_, elf) = inspect_source(bytes, &member.id, memory, c, &mut symbols)?;
                 if !elf.as_ref().is_some_and(|elf| {
-                    elf.bits == 32
-                        && elf.little_endian
-                        && elf.machine == 243
+                    elf::is_riscv32_little_endian(elf.bits, elf.little_endian, elf.machine)
                         && matches!(
                             elf::object_kind(elf.object_type),
                             elf::ObjectKind::Relocatable | elf::ObjectKind::Executable
@@ -354,7 +352,7 @@ impl ElfSink for Symbols<'_, '_> {
     fn symbol(&mut self, r: &SymbolRecord, c: &mut dyn RunControl) -> Result<()> {
         c.checkpoint(1)?;
         let section = elf::symbol_section(r.raw_section, r.extended_section).index();
-        let function = elf::symbol_kind(r.symbol_type) == elf::SymbolKind::Function
+        let function = SymbolKind::of_type(r.symbol_type) == SymbolKind::Text
             && section.is_some_and(|s| self.executable.contains(&s));
         let absolute =
             elf::symbol_section(r.raw_section, r.extended_section) == elf::SymbolSection::Absolute;

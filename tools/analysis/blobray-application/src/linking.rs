@@ -345,9 +345,7 @@ fn collect(
                 block(&mut blockers, message)?;
             }
             let elf = header.is_some_and(|e| {
-                e.bits == 32
-                    && e.little_endian
-                    && e.machine == 243
+                elf::is_riscv32_little_endian(e.bits, e.little_endian, e.machine)
                     && elf::object_kind(e.object_type) == elf::ObjectKind::Relocatable
             });
             if !elf || payload.is_none() {

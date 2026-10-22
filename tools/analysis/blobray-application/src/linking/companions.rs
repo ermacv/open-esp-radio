@@ -1,7 +1,7 @@
 //! Explicit companion definitions are captured occurrences, never fabricated
 //! implementations.
 use super::*;
-use oer_analysis_elf::classify as elf;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 
 /// The companion records of one static executable, matched by symbol.
 struct Scan<'a> {
@@ -74,19 +74,17 @@ fn records(
         let (_, header) = inspect_source(&bytes, &companion.object, memory, c, &mut scan)?;
         let executable = header.is_some_and(|e| {
             elf::object_kind(e.object_type) == elf::ObjectKind::Executable
-                && e.bits == 32
-                && e.machine == 243
-                && e.little_endian
+                && elf::is_riscv32_little_endian(e.bits, e.little_endian, e.machine)
         });
         for (slot, record) in records.iter_mut().zip(scan.matches) {
             let Some(record) = record else {
                 continue;
             };
-            // STT_OBJECT (1) or STT_FUNC (2); the carrier validates the extent.
+            // A data or text symbol; the carrier validates the extent.
             if !executable
                 || !matches!(
-                    elf::symbol_kind(record.symbol_type),
-                    elf::SymbolKind::Object | elf::SymbolKind::Function
+                    SymbolKind::of_type(record.symbol_type),
+                    SymbolKind::Data | SymbolKind::Text
                 )
                 || !elf::symbol_section(record.raw_section, record.extended_section).is_defined()
             {

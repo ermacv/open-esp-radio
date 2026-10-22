@@ -7,11 +7,15 @@ through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
 - `Elf::parse` (any ELF), `Elf::executable` (a static little-endian RV32
   image), `objects(bytes)` (each ELF member of an archive, or the one file)
   and `is_binary`.
-- `classify` classifies raw symbol types and section indices (including
-  `SHN_XINDEX` with its extended index), section types and flags, and object
-  types. Its header-only `is_executable_image` recognizes little-endian
-  executables without another inventory pass. Consumers of captured ELF
-  facts share these classifications without depending on `object`.
+- `SymbolKind::of_type` and `SectionKind::of` classify raw symbol and section
+  types into the same types the parsed views use. Symbol classification
+  matches `object`, including common data and GNU indirect functions.
+- `classify` owns section indices (`SHN_XINDEX` uses its extended index),
+  section flags including TLS, object types and the shared
+  `is_riscv32_little_endian` header profile. Its header-only
+  `is_executable_image` recognizes little-endian executables without another
+  inventory pass. Consumers of captured ELF facts share these classifications
+  without depending on `object`.
 - Symbols: `symbols()`, `symbol(name)`, `address(name)`, `addresses()`,
   `demangle(name)`. `functions()` merges every code symbol at one address
   into one `Function` with all its names (identical-code-folded aliases),

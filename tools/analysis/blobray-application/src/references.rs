@@ -2,7 +2,7 @@
 //! No instruction decoding, inferred callback edges or interprocedural expansion.
 use crate::{captured, data, in_process::Executable};
 use oer_analysis_blobray_domain::{DataRequest, DataSelector, LibraryFunction, SymbolRecord};
-use oer_analysis_elf::classify as elf;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 use oer_analysis_riscv_model::{
     AbstractValue, FunctionRecord, MemoryKind, MemoryReservation, ReferenceKind, Result,
     RunControl, ValueAlternative, WorkingMemory,
@@ -48,7 +48,7 @@ impl<'m> Targets<'m> {
                     c.checkpoint(1)?;
                     if !elf::symbol_section(symbol.raw_section, symbol.extended_section)
                         .is_defined()
-                        || (elf::symbol_kind(symbol.symbol_type) != elf::SymbolKind::Function
+                        || (SymbolKind::of_type(symbol.symbol_type) != SymbolKind::Text
                             && elf::symbol_section(symbol.raw_section, symbol.extended_section)
                                 != elf::SymbolSection::Absolute)
                     {
@@ -365,7 +365,9 @@ impl<'m> StoredScan<'m> {
                     {
                         continue;
                     }
-                    if elf::section_kind(section.section_type) == elf::SectionKind::Nobits {
+                    if oer_analysis_elf::SectionKind::of(section.section_type)
+                        == oer_analysis_elf::SectionKind::NoBits
+                    {
                         self.summary.nobits_sections += 1;
                         continue;
                     }
@@ -426,7 +428,7 @@ impl<'m> StoredScan<'m> {
                                     symbol.extended_section,
                                 )
                                 .index();
-                                if elf::symbol_kind(symbol.symbol_type) == elf::SymbolKind::Object
+                                if SymbolKind::of_type(symbol.symbol_type) == SymbolKind::Data
                                     && index == Some(section.index)
                                     && symbol.value <= address
                                     && address - symbol.value < symbol.size

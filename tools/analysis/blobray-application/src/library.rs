@@ -3,7 +3,7 @@ use crate::captured::{Member, visit_members};
 use crate::in_process::Executable;
 use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
-use oer_analysis_elf::classify as elf;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 use std::collections::BTreeSet;
 mod queries;
 mod summaries;
@@ -305,7 +305,7 @@ impl ElfSink for Selection {
     }
     fn symbol(&mut self, r: &SymbolRecord, _: &mut dyn RunControl) -> Result<()> {
         let section = elf::symbol_section(r.raw_section, r.extended_section).index();
-        if elf::symbol_kind(r.symbol_type) == elf::SymbolKind::Function
+        if SymbolKind::of_type(r.symbol_type) == SymbolKind::Text
             && section.is_some_and(|s| self.executable.binary_search(&s).is_ok())
         {
             self.functions.push(r.clone());
@@ -444,9 +444,7 @@ fn analyze_object(
         gap("object payload unavailable", control)?;
     }
     if !elf.as_ref().is_some_and(|e| {
-        e.bits == 32
-            && e.little_endian
-            && e.machine == 243
+        elf::is_riscv32_little_endian(e.bits, e.little_endian, e.machine)
             && matches!(
                 elf::object_kind(e.object_type),
                 elf::ObjectKind::Relocatable | elf::ObjectKind::Executable

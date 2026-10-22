@@ -2,22 +2,6 @@
 use object::elf;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SymbolKind {
-    Function,
-    Object,
-    Other(u8),
-}
-
-/// Accepts either `st_info` or its already extracted type nibble.
-pub fn symbol_kind(raw: u8) -> SymbolKind {
-    match raw & 0xf {
-        elf::STT_FUNC => SymbolKind::Function,
-        elf::STT_OBJECT => SymbolKind::Object,
-        other => SymbolKind::Other(other),
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SymbolSection {
     Undefined,
     Absolute,
@@ -55,21 +39,6 @@ pub fn symbol_section(raw: u16, extended: Option<u32>) -> SymbolSection {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SectionKind {
-    Progbits,
-    Nobits,
-    Other(u32),
-}
-
-pub fn section_kind(raw: u32) -> SectionKind {
-    match raw {
-        elf::SHT_PROGBITS => SectionKind::Progbits,
-        elf::SHT_NOBITS => SectionKind::Nobits,
-        other => SectionKind::Other(other),
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SectionFlags(pub u64);
 
 impl SectionFlags {
@@ -88,6 +57,10 @@ impl SectionFlags {
     pub fn strings(self) -> bool {
         self.0 & u64::from(elf::SHF_STRINGS) != 0
     }
+
+    pub fn tls(self) -> bool {
+        self.0 & u64::from(elf::SHF_TLS) != 0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -103,6 +76,12 @@ pub fn object_kind(raw: u16) -> ObjectKind {
         elf::ET_EXEC => ObjectKind::Executable,
         other => ObjectKind::Other(other),
     }
+}
+
+/// The captured header profile shared by RV32 operations, independently of
+/// whether the object is relocatable or executable.
+pub fn is_riscv32_little_endian(bits: u8, little_endian: bool, machine: u16) -> bool {
+    bits == 32 && little_endian && machine == elf::EM_RISCV
 }
 
 /// Header-only recognition of a little-endian executable. This deliberately
@@ -144,21 +123,26 @@ mod tests {
     }
 
     #[test]
-    fn functions_objects_and_section_storage_keep_their_classification() {
-        assert_eq!(symbol_kind(elf::STT_FUNC), SymbolKind::Function);
-        assert_eq!(symbol_kind(elf::STT_OBJECT), SymbolKind::Object);
+    fn section_storage_and_flags_keep_their_classification() {
         assert_eq!(
-            symbol_kind((elf::STB_GLOBAL << 4) | elf::STT_FUNC),
-            SymbolKind::Function
+            crate::SectionKind::of(elf::SHT_NOBITS),
+            crate::SectionKind::NoBits
         );
-        assert_eq!(section_kind(elf::SHT_NOBITS), SectionKind::Nobits);
-        assert_eq!(section_kind(elf::SHT_PROGBITS), SectionKind::Progbits);
+        assert_eq!(
+            crate::SectionKind::of(elf::SHT_PROGBITS),
+            crate::SectionKind::Program
+        );
         for (raw, expected) in [
-            (elf::SHF_ALLOC, [true, false, false, false]),
-            (elf::SHF_EXECINSTR, [false, true, false, false]),
-            (elf::SHF_WRITE, [false, false, true, false]),
-            (elf::SHF_STRINGS, [false, false, false, true]),
-            (0, [false; 4]),
+            (elf::SHF_ALLOC, [true, false, false, false, false]),
+            (elf::SHF_EXECINSTR, [false, true, false, false, false]),
+            (elf::SHF_WRITE, [false, false, true, false, false]),
+            (elf::SHF_STRINGS, [false, false, false, true, false]),
+            (elf::SHF_TLS, [false, false, false, false, true]),
+            (
+                elf::SHF_ALLOC | elf::SHF_WRITE | elf::SHF_TLS,
+                [true, false, true, false, true],
+            ),
+            (0, [false; 5]),
         ] {
             let flags = SectionFlags(u64::from(raw));
             assert_eq!(
@@ -166,11 +150,22 @@ mod tests {
                     flags.allocated(),
                     flags.executable(),
                     flags.writable(),
-                    flags.strings()
+                    flags.strings(),
+                    flags.tls(),
                 ],
                 expected
             );
         }
+    }
+
+    #[test]
+    fn rv32_profile_requires_the_machine_class_and_byte_order() {
+        assert!(is_riscv32_little_endian(32, true, elf::EM_RISCV));
+        for machine in [elf::EM_NONE, elf::EM_386, elf::EM_X86_64] {
+            assert!(!is_riscv32_little_endian(32, true, machine));
+        }
+        assert!(!is_riscv32_little_endian(64, true, elf::EM_RISCV));
+        assert!(!is_riscv32_little_endian(32, false, elf::EM_RISCV));
     }
 
     #[test]

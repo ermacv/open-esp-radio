@@ -60,7 +60,9 @@ local-label strings referenced by function records. `image_symbols` returns
 sized function entries for listing renderers. These queries use the captured
 inventory and data exporter with the caller's memory and control; raw ELF
 symbol, section, flag and header classification comes from
-`oer_analysis_elf::classify`.
+`oer_analysis_elf::{SymbolKind, SectionKind}` and `classify`. Both captured
+queries and parsed ELF views use the same type and flag classifications;
+`classify::is_riscv32_little_endian` owns their shared machine/header profile.
 
 ## Linking and ROM companions
 

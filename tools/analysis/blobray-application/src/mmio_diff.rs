@@ -7,7 +7,7 @@
 //! value. Any other stored image address compares by value.
 use crate::in_process::Executable;
 use crate::*;
-use oer_analysis_elf::classify as elf;
+use oer_analysis_elf::{SymbolKind, classify as elf};
 use std::collections::BTreeMap;
 
 /// One function's MMIO accesses in one build, every instance of its name
@@ -189,8 +189,8 @@ fn symbols<'m>(
                     || !elf::symbol_section(symbol.raw_section, symbol.extended_section)
                         .is_defined()
                     || !matches!(
-                        elf::symbol_kind(symbol.symbol_type),
-                        elf::SymbolKind::Object | elf::SymbolKind::Function
+                        SymbolKind::of_type(symbol.symbol_type),
+                        SymbolKind::Data | SymbolKind::Text
                     )
                 {
                     continue;
