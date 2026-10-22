@@ -1,6 +1,6 @@
 use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
 
-use oer_esp32s31_bluetooth_memory::{BlePhyEngineCpuOwned, BlePhyEngineStorage};
+use oer_esp32s31_hal::bluetooth::engine::{BlePhyEngineCpuOwned, BlePhyEngineStorage};
 
 use super::{
     BlePhyInitializationReport, apply_register_init, apply_register_init_then_public_address,
@@ -8,7 +8,7 @@ use super::{
 
 fn model_storage() -> BlePhyEngineCpuOwned {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(BlePhyEngineStorage::new()));
-    BlePhyEngineStorage::place::<oer_esp32s31_bluetooth_memory::HostDma<0x2f00_4000>>(
+    BlePhyEngineStorage::place::<oer_esp32s31_hal::bluetooth::engine::HostDma<0x2f00_4000>>(
         oer_esp32s31_hal::dma_static::Placed::host(storage),
     )
 }
@@ -50,9 +50,9 @@ fn public_identity_is_published_after_phy_register_initialization() {
 #[test]
 fn connection_packet_start_normalization_preserves_elapsed_time() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(BlePhyEngineStorage::new()));
-    let owner = BlePhyEngineStorage::place::<oer_esp32s31_bluetooth_memory::HostDma<0x2f00_4000>>(
-        oer_esp32s31_hal::dma_static::Placed::host(storage),
-    );
+    let owner = BlePhyEngineStorage::place::<
+        oer_esp32s31_hal::bluetooth::engine::HostDma<0x2f00_4000>,
+    >(oer_esp32s31_hal::dma_static::Placed::host(storage));
     let calibration = owner.le_1m_packet_start_calibration();
 
     let first = calibration.normalize_controller_micros(20_000);

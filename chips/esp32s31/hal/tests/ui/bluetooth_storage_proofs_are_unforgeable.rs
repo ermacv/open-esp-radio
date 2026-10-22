@@ -5,7 +5,7 @@ use oer_esp32s31_hal::bluetooth::{
 };
 use oer_esp32s31_hal::layouts::{BleDeviceTable, DmaRef};
 
-// The memory crate's codec vouches for the storage, in an unsafe block.
+// The HAL engine's codec vouches for the storage, in an unsafe block.
 pub fn vouched(
     first: DmaRef<BleDeviceTable>,
     count: BluetoothDeviceTableEntryCount,

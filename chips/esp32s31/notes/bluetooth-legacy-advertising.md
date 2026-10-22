@@ -223,7 +223,7 @@ The portable Link Layer owns the semantic advertisement, scan-response data
 and typed bounded `ADV_IND`/`SCAN_RSP` encodings. A later chip aggregate must
 retain that affine portable event while translating it into a short-lived S31
 memory input: two allocation-fit PDU borrows, the already selected own-address
-behavior and the translated primary-channel plan. The memory crate has no
+behavior and the translated primary-channel plan. The HAL engine has no
 portable Link Layer dependency, does not retain that event and does not parse
 or revalidate Bluetooth wire semantics. It owns only the private two-header TX
 chain, the exact affine non-scanning RX pool, the common advertising reset

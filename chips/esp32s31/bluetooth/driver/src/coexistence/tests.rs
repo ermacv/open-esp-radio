@@ -6,7 +6,7 @@ use super::{
 };
 
 fn values<const N: usize>(
-    lanes: [oer_esp32s31_bluetooth_memory::SchedulerItemCoexistencePriority; N],
+    lanes: [oer_esp32s31_hal::bluetooth::engine::SchedulerItemCoexistencePriority; N],
 ) -> [u8; N] {
     lanes.map(|lane| lane.value())
 }

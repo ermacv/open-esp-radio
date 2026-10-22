@@ -82,6 +82,49 @@ pub struct TaskResources {
 
 #[cfg(any(target_arch = "riscv32", test))]
 impl TaskResources {
+    /// Bind initialized registers and one placed arena to their HAL engine.
+    #[cfg(target_arch = "riscv32")]
+    #[allow(
+        clippy::type_complexity,
+        reason = "refusal returns the exact affine input owners"
+    )]
+    pub fn bind_engine<
+        'call,
+        'pool,
+        'epoch,
+        D: oer_esp32s31_hal::bluetooth::engine::ControllerDmaSpace,
+        const A: usize,
+        const C: usize,
+        const N: usize,
+        const R: usize,
+        const O: usize,
+        const Q: usize,
+    >(
+        &'call mut self,
+        arena: oer_esp32s31_hal::dma_static::Placed<
+            oer_esp32s31_hal::bluetooth::engine::BluetoothArena<A, C, N, R, O>,
+        >,
+        pool: oer_esp32s31_hal::bluetooth::engine::PoolScope<'pool>,
+        epoch: oer_esp32s31_hal::bluetooth::engine::EpochScope<'epoch>,
+        config: oer_esp32s31_hal::bluetooth::engine::SchedulerAllocationConfig,
+    ) -> Result<
+        oer_esp32s31_hal::bluetooth::engine::Engine<'call, 'pool, 'epoch, A, C, N, R, O, Q>,
+        oer_esp32s31_hal::bluetooth::engine::EngineBindFailure<
+            oer_esp32s31_hal::bluetooth::engine::EngineRegisters<'call>,
+            oer_esp32s31_hal::dma_static::Placed<
+                oer_esp32s31_hal::bluetooth::engine::BluetoothArena<A, C, N, R, O>,
+            >,
+        >,
+    > {
+        oer_esp32s31_hal::bluetooth::engine::Engine::bind::<D>(
+            &mut self.registers,
+            arena,
+            pool,
+            epoch,
+            config,
+        )
+    }
+
     /// The HAL task owner, which proves the Bluetooth module clocks to the
     /// shared PHY domain and BTBB.
     #[cfg(target_arch = "riscv32")]

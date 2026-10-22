@@ -6,7 +6,7 @@ use crate::{
     },
     scheduler::SchedulerInitialized,
 };
-use oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig;
+use oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig;
 use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::bluetooth::{

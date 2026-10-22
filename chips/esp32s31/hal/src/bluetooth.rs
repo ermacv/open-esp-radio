@@ -353,6 +353,8 @@ impl ClockedOwner {
                 time_latch: ControllerTimeLatch::new(),
                 reunitable: true,
                 epoch: ControllerEpoch::next(),
+                #[cfg(feature = "bluetooth-engine")]
+                arena_state: ControllerArenaState::Uninitialized,
             },
             InterruptSetupOwner {
                 registers: interrupts,
@@ -447,6 +449,8 @@ pub struct TaskOwner {
     time_latch: ControllerTimeLatch,
     reunitable: bool,
     epoch: ControllerEpoch,
+    #[cfg(feature = "bluetooth-engine")]
+    arena_state: ControllerArenaState,
 }
 
 /// One task owner's span, from its separation out of the clocked owner to its
@@ -523,6 +527,8 @@ impl TaskOwner {
             time_latch: _,
             reunitable: _,
             epoch: _,
+            #[cfg(feature = "bluetooth-engine")]
+                arena_state: _,
         } = self;
         Ok(ClockedOwner {
             partition: Partition {
@@ -602,6 +608,10 @@ impl TaskOwner {
     ) {
         self.reunitable = false;
         self.registers.initialize_controller_hal(config);
+        #[cfg(feature = "bluetooth-engine")]
+        if self.arena_state == ControllerArenaState::Uninitialized {
+            self.arena_state = ControllerArenaState::Ready;
+        }
     }
 
     /// Apply the exact modem low-power timer register prefix before source 127
@@ -1169,6 +1179,8 @@ pub struct ControllerHal<'registers> {
     registers: &'registers mut BluetoothTaskRegisters,
     time_latch: &'registers mut ControllerTimeLatch,
     epoch: ControllerEpoch,
+    #[cfg(feature = "bluetooth-engine")]
+    arena_state: &'registers mut ControllerArenaState,
 }
 
 /// Public Bluetooth Controller identity in canonical display order.
@@ -1259,12 +1271,9 @@ impl BlePhyHardwareObjects {
     ///
     /// The environment and the resolving list `inputs` names are `'static`
     /// controller-SRAM storage of the BLE PHY engine that the CPU reaches
-    /// only through volatile accesses. The memory crate's BLE PHY engine
+    /// only through volatile accesses. The HAL engine's BLE PHY engine
     /// binding is the one caller.
-    #[allow(
-        unsafe_code,
-        reason = "the memory crate's codec vouches for the storage"
-    )]
+    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub const unsafe fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
         Self { inputs }
     }
@@ -1281,12 +1290,9 @@ impl DirectionFindingDescriptor {
     ///
     /// `address` is the disabled-CTE descriptor of a `'static`
     /// direction-finding workspace in controller SRAM that the CPU reaches
-    /// only through volatile accesses. The memory crate's workspace binding is
+    /// only through volatile accesses. The HAL engine's workspace binding is
     /// the one caller.
-    #[allow(
-        unsafe_code,
-        reason = "the memory crate's codec vouches for the storage"
-    )]
+    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub const unsafe fn bind(
         address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
     ) -> Self {
@@ -1306,11 +1312,8 @@ impl DeviceTablePublication {
     ///
     /// `count` entries from `first_entry` are a `'static` device table in
     /// controller SRAM that the CPU reaches only through volatile accesses.
-    /// The memory crate's device table is the one caller.
-    #[allow(
-        unsafe_code,
-        reason = "the memory crate's codec vouches for the storage"
-    )]
+    /// The HAL engine's device table is the one caller.
+    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub const unsafe fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
         count: BluetoothDeviceTableEntryCount,
@@ -1343,12 +1346,9 @@ impl RxChainHead {
     /// `head` is the first header of a `'static` receive chain in controller
     /// SRAM whose every link points into that chain's own storage, which the
     /// CPU reaches only through volatile accesses; `selector` is the chain's
-    /// list and `scanning` whether it is the scanner's. The memory crate's
+    /// list and `scanning` whether it is the scanner's. The HAL engine's
     /// receive chain is the one caller.
-    #[allow(
-        unsafe_code,
-        reason = "the memory crate's codec vouches for the storage"
-    )]
+    #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
     pub const unsafe fn new(
         selector: BluetoothMemoryListSelector,
         head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
@@ -2123,6 +2123,8 @@ pub trait ControllerHalBorrow: sealed::ControllerHalBorrow {
             registers: &mut owner.registers,
             time_latch: &mut owner.time_latch,
             epoch: owner.epoch,
+            #[cfg(feature = "bluetooth-engine")]
+            arena_state: &mut owner.arena_state,
         }
     }
 }
@@ -2131,3 +2133,15 @@ impl ControllerHalBorrow for TaskOwner {}
 
 #[cfg(test)]
 mod tests;
+
+/// Controller-memory ownership and scheduler protocol.
+#[cfg(feature = "bluetooth-engine")]
+pub mod engine;
+
+#[cfg(feature = "bluetooth-engine")]
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ControllerArenaState {
+    Uninitialized,
+    Ready,
+    Bound,
+}

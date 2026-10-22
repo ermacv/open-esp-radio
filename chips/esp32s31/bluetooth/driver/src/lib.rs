@@ -1,7 +1,7 @@
 //! ESP32-S31 Bluetooth hardware engine.
 //!
-//! PAC/HAL owns MMIO, and the separate memory crate owns controller-SRAM
-//! layouts and CPU/hardware ownership. This crate joins those contracts into
+//! The HAL owns MMIO, controller-SRAM layouts and CPU/hardware ownership.
+//! Its Bluetooth engine retains the register token and one placed arena. This crate joins those contracts into
 //! the radio engine: clocks, controller HAL and time, BLE PHY, interrupts,
 //! the modem low-power timer, and the hardware scheduler with its timeline,
 //! finished lists and single-item primitives. It knows no Link Layer role.
@@ -37,7 +37,7 @@ pub(crate) fn diagnostic_settle(
     clock: &dyn oer_time::Clock,
 ) -> oer_esp32s31_hal::settle::Settle<'_, dyn oer_time::Clock + '_> {
     oer_esp32s31_hal::settle::Settle::new(
-        oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_SETTLE,
+        oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE,
         clock,
     )
 }
@@ -53,6 +53,7 @@ pub mod modem_timer_retirement;
 #[cfg(target_arch = "riscv32")]
 pub mod phy;
 pub mod resources;
+pub mod roles;
 pub mod runtime_resources;
 pub mod scheduler;
 /// Retirement and reset of a stopped Controller epoch.
@@ -69,8 +70,6 @@ pub use ble_phy::AlwaysAwakeTimingReady;
 pub use controller_time::{
     ControllerDurationError, ControllerSchedulerEpoch, ControllerTimeSample,
 };
-
-pub mod memory;
 
 #[cfg(test)]
 mod test_clocks;

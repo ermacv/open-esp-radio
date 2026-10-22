@@ -10,14 +10,14 @@ use crate::{phy::ControllerPhyJoined, resources::InterruptBankOwner};
 #[cfg(any(target_arch = "riscv32", test))]
 use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_bluetooth_memory::BlePhyLe1MPacketStartCalibration;
+use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_bluetooth_memory::{
+use oer_esp32s31_hal::bluetooth::engine::BlePhyLe1MPacketStartCalibration;
+#[cfg(target_arch = "riscv32")]
+use oer_esp32s31_hal::bluetooth::engine::{
     BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceLink,
     LePacketCapturedTime, PeripheralConnectionCapturedAnchorTime,
 };
-#[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
 #[cfg(any(target_arch = "riscv32", test))]
 use oer_esp32s31_hal::bluetooth::{BlePhyHardwareObjects, ControllerPublicAddress};
 
@@ -36,7 +36,7 @@ pub(crate) struct DirectionFindingWorkspaceHardwareOwned {
 #[cfg(target_arch = "riscv32")]
 impl DirectionFindingWorkspaceHardwareOwned {
     const fn link(&self) -> DirectionFindingWorkspaceLink {
-        self.storage.binding().link()
+        self.storage.link()
     }
 }
 
@@ -54,7 +54,7 @@ pub struct BlePhyInitializationReport;
 #[must_use = "the always-awake timing observation must be consumed by DTM scheduling"]
 #[cfg(target_arch = "riscv32")]
 pub struct AlwaysAwakeTimingReady {
-    scheduler_instant: oer_esp32s31_bluetooth_memory::scheduler::time::SchedulerInstant,
+    scheduler_instant: oer_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -65,7 +65,7 @@ impl AlwaysAwakeTimingReady {
     ) -> Self {
         Self {
             scheduler_instant:
-                oer_esp32s31_bluetooth_memory::scheduler::time::SchedulerInstant::from_image(
+                oer_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant::from_image(
                     epoch.project_without_reanchor(&sample),
                 ),
         }
@@ -74,7 +74,7 @@ impl AlwaysAwakeTimingReady {
     /// Consume the post-enable timing proof into its microsecond-domain instant.
     pub const fn into_scheduler_instant(
         self,
-    ) -> oer_esp32s31_bluetooth_memory::scheduler::time::SchedulerInstant {
+    ) -> oer_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant {
         self.scheduler_instant
     }
 }
@@ -298,7 +298,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
 
 #[cfg(any(target_arch = "riscv32", test))]
 fn apply_register_init_then_public_address<T>(
-    storage: &oer_esp32s31_bluetooth_memory::BlePhyEngineCpuOwned,
+    storage: &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned,
     public_address: BluetoothPublicDeviceAddress,
     target: &mut T,
     initialize: impl FnOnce(&mut T, &BlePhyHardwareObjects),
@@ -314,7 +314,7 @@ fn apply_register_init_then_public_address<T>(
 
 #[cfg(any(target_arch = "riscv32", test))]
 fn apply_register_init(
-    storage: &oer_esp32s31_bluetooth_memory::BlePhyEngineCpuOwned,
+    storage: &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned,
     initialize: impl FnOnce(&BlePhyHardwareObjects),
 ) -> BlePhyInitializationReport {
     initialize(&storage.hardware_objects());

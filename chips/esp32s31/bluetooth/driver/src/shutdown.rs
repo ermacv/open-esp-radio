@@ -14,7 +14,9 @@
 
 use oer_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_esp32s31_bluetooth_memory::{BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned};
+use oer_esp32s31_hal::bluetooth::engine::{
+    BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned,
+};
 use oer_esp32s31_hal::{
     bluetooth::{
         BluetoothControllerOutputReleaseError, BluetoothControllerReset, BluetoothShutdownError,

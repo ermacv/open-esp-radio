@@ -8,10 +8,14 @@ repository.workspace = true
 description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 
 [features]
+# The BLE driver enables its controller-memory engine; Wi-Fi images keep
+# their existing dependency graph and code-generation identity.
+bluetooth-engine = ["dep:oer-esp32s31-knowledge"]
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
 test-support = ["oer-esp32s31-pac/test-support", "oer-espressif-ieee802154-engine/test-support"]
 
 [dependencies]
+oer-esp32s31-knowledge = { path = "../knowledge", optional = true }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
 vcell = "0.1.3"

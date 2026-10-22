@@ -257,7 +257,7 @@ item's compressed predecessor, advances the private head to the predecessor,
 detaches the selected item and passes only that item to the common scheduler;
 it does not publish the complete two-item private chain. The memory codec
 models that transition explicitly and hands only the detached item to the
-executor. No compressed pointer or list word leaves the memory crate.
+executor. No compressed pointer or list word leaves the HAL engine.
 
 These dependencies explain why Access Address plus CRCInit is not a runnable
 event image. A connection receives through its own class-zero chain, whose

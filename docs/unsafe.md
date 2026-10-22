@@ -43,7 +43,7 @@ Below it are, by directory (`/` ends a domain):
 | Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
-| Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout`, `chips/esp32s31/bluetooth/memory` |
+| Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
@@ -80,10 +80,17 @@ radio must first claim the slot the release freed. Preserve the proof at the
 smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
-`esp32s31-bluetooth-memory` is the core of the controller-SRAM protocol:
-the controller walks and writes that memory, so, like the HAL's DMA modules,
-the crate whose codecs and scheduler lists encode every address the
-controller follows holds the narrow unsafe code that publishes them.
+`oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
+Its `Engine` retains the controller register token and one placed
+`BluetoothArena`. Its codecs and scheduler lists encode the addresses
+the controller follows and hold the narrow unsafe publication boundary.
+Role builders in the driver operate on detached value seeds, never layout
+references. Pool and epoch brands bind each affine lease to its owner;
+logical item identities also carry an acquisition generation. Only the
+engine returns listed items after completion or the cancellation protocol.
+The driver's BLE PHY initialization and shutdown retain separate PHY and DF
+owners; they do not install this aggregate engine. The HAL also exposes
+standalone component placement and publication APIs.
 `scheduler::hardware::live` publishes list-zero items only after resolving
 each address to a submitted item of the `'static` scheduler pools, in the
 executor's order. The BLE PHY engine, the direction-finding workspace, the
