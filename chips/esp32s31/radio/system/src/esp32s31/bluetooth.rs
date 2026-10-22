@@ -37,7 +37,7 @@ pub struct WithBluetooth<C: PlatformClockProvider, T, O, H> {
     power: Option<CommonPower<BluetoothClient>>,
     membership: Option<BluetoothPhyMembership>,
     installation: Option<Installation>,
-    permission: Option<Permission>,
+    configuration: Option<BluetoothJoin>,
 }
 
 enum Coex {
@@ -62,7 +62,7 @@ impl<C: PlatformClockProvider, T, O, H> WithBluetooth<C, T, O, H> {
             power: None,
             membership: None,
             installation: None,
-            permission: None,
+            configuration: None,
         }
     }
 
@@ -100,8 +100,16 @@ impl<C: PlatformClockProvider, T, O, H> WithBluetooth<C, T, O, H> {
         Ok((self.shared, cold, absent, self.controller))
     }
 
+    /// Initial operation and its already rounded provider power.
+    pub const fn configuration(&self) -> Option<BluetoothJoin> {
+        self.configuration
+    }
+
     pub const fn permission(&self) -> Option<Permission> {
-        self.permission
+        match self.configuration {
+            Some(configuration) => Some(configuration.permission()),
+            None => None,
+        }
     }
 }
 
@@ -172,12 +180,29 @@ where
         <Wifi as oer_esp32s31_radio_client::Client>::Retuned,
         Failed<<Wifi as oer_esp32s31_radio_client::Client>::RetuneReturned>,
     > {
+        if self.track_tick().await.is_err() {
+            return Err(Failed {
+                returned: retune.wifi,
+                cause: Failure::Poisoned,
+            });
+        }
         self.shared.retune(retune).await
     }
     async fn exit(
         &mut self,
         leave: <Wifi as oer_esp32s31_radio_client::Client>::Leave,
     ) -> (<Wifi as oer_esp32s31_radio_client::Client>::Left, Exit) {
+        if self.track_tick().await.is_err() {
+            return (
+                oer_esp32s31_radio_client::wifi::WifiLeft {
+                    wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
+                },
+                Exit {
+                    last: false,
+                    health: DomainHealth::Poisoned,
+                },
+            );
+        }
         self.shared.exit(leave).await
     }
 }
@@ -243,7 +268,7 @@ where
         };
         let joined = join_bluetooth(ready, task, &self.shared.timer).map_err(|_| failed())?;
         self.membership = Some(joined.membership);
-        self.permission = Some(join.permission);
+        self.configuration = Some(join);
         Ok(BluetoothJoined { installation, phy })
     }
 
@@ -285,6 +310,9 @@ where
         if self.installation != Some(installation) || !self.controller.is_retired(installation.0) {
             return poisoned();
         }
+        if self.track_tick().await.is_err() {
+            return poisoned();
+        }
         let Some(task) = self.controller.task_owner() else {
             return poisoned();
         };
@@ -324,7 +352,7 @@ where
                 self.cold = Some(cold);
                 self.coex = Some(Coex::Absent(absent));
                 self.installation = None;
-                self.permission = None;
+                self.configuration = None;
                 (
                     BluetoothLeft { stopped: true },
                     Exit {

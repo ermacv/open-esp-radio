@@ -51,6 +51,37 @@ fn passive_permission_refuses_every_operation_that_transmits() {
     }
     assert_eq!(permission.authorize(Operation::PassiveScan), Ok(()));
     assert_eq!(permission.authorize(Operation::DtmRx), Ok(()));
+    for operation in [
+        Operation::Advertising,
+        Operation::ActiveScan,
+        Operation::CreateConnection,
+        Operation::DtmTx,
+    ] {
+        assert_eq!(
+            BluetoothJoin::new(permission, operation, Some(requested(band(false), 0))),
+            Err(Refusal::PassiveOnly)
+        );
+    }
+    assert!(BluetoothJoin::new(permission, Operation::DtmRx, None).is_ok());
+}
+
+#[test]
+fn initial_transmission_needs_explicit_power_and_installs_the_lower_provider_level() {
+    let band = band(false);
+    let permission = Permission::new(band, limits(975));
+    assert_eq!(
+        BluetoothJoin::new(permission, Operation::DtmTx, None),
+        Err(Refusal::PowerRequired)
+    );
+    assert_eq!(
+        BluetoothJoin::new(permission, Operation::DtmTx, Some(requested(band, 10))),
+        Err(Refusal::AboveCeiling)
+    );
+    let join = BluetoothJoin::new(permission, Operation::DtmTx, Some(requested(band, 9)))
+        .expect("bounded initial TX");
+    assert_eq!(join.operation(), Operation::DtmTx);
+    assert_eq!(join.permission(), permission);
+    assert!(join.power().expect("explicit TX power").level_dbm() <= 9);
 }
 
 #[test]

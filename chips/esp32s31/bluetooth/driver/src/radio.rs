@@ -84,7 +84,10 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
         runtime: ControllerRuntimeResources<'static, MT, X>,
         cells: &'static ControllerEventCells<X>,
         address: oer_bluetooth_hci::BluetoothPublicDeviceAddress,
-    ) -> Self {
+    ) -> Self
+    where
+        F: FnOnce(ClockedOwner) -> Result<(Engine<M>, InterruptSetupOwner), E>,
+    {
         Self {
             factory: Some(factory),
             runtime: Some(runtime),

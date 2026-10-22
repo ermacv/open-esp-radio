@@ -67,6 +67,7 @@ pub enum Refusal {
     PassiveOnly,
     AboveCeiling,
     BelowProviderMinimum,
+    PowerRequired,
 }
 
 impl Permission {
@@ -117,8 +118,64 @@ impl Permission {
 pub struct Installation(pub u32);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// The initial operation is validated before it can enter an actor cell.
+///
+/// ```
+/// use oer_esp32s31_radio_client::bluetooth::{BluetoothJoin, Permission, Operation};
+/// fn receive(permission: Permission) {
+///     let _ = BluetoothJoin::new(permission, Operation::DtmRx, None);
+/// }
+/// ```
+///
+/// ```compile_fail,E0451
+/// use oer_esp32s31_radio_client::bluetooth::{BluetoothJoin, Permission, Operation};
+/// fn bypass(permission: Permission) -> BluetoothJoin {
+///     BluetoothJoin { permission, operation: Operation::DtmTx, power: None }
+/// }
+/// ```
 pub struct BluetoothJoin {
-    pub permission: Permission,
+    permission: Permission,
+    operation: Operation,
+    power: Option<LeTxPower>,
+}
+
+impl BluetoothJoin {
+    /// Validate the initial operation before posting or touching common RF.
+    /// A transmitting operation requires an explicit, bounded power request.
+    pub const fn new(
+        permission: Permission,
+        operation: Operation,
+        requested: Option<TxPower>,
+    ) -> Result<Self, Refusal> {
+        if let Err(error) = permission.authorize(operation) {
+            return Err(error);
+        }
+        let power = match operation {
+            Operation::PassiveScan | Operation::DtmRx => None,
+            _ => match requested {
+                Some(requested) => match permission.tx_power(operation, requested) {
+                    Ok(power) => Some(power),
+                    Err(error) => return Err(error),
+                },
+                None => return Err(Refusal::PowerRequired),
+            },
+        };
+        Ok(Self {
+            permission,
+            operation,
+            power,
+        })
+    }
+
+    pub const fn permission(self) -> Permission {
+        self.permission
+    }
+    pub const fn operation(self) -> Operation {
+        self.operation
+    }
+    pub const fn power(self) -> Option<LeTxPower> {
+        self.power
+    }
 }
 
 pub struct BluetoothJoined {

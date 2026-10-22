@@ -6,7 +6,8 @@ use oer_esp32s31_radio_client::bluetooth::{
 
 impl ClientBackend<Bluetooth, RcSlow> for Model {
     fn admits(&self, _: &BluetoothJoin) -> bool {
-        self.0.borrow().ble_available
+        let script = self.0.borrow();
+        script.ble_available && !script.bluetooth
     }
     async fn enter(
         &mut self,
@@ -72,8 +73,8 @@ impl ClientBackend<Bluetooth, RcSlow> for Model {
 }
 
 fn join() -> BluetoothJoin {
-    BluetoothJoin {
-        permission: Permission::new(
+    BluetoothJoin::new(
+        Permission::new(
             oer_radio_regulatory::TEST_DOMAIN
                 .permit(oer_bluetooth_le_radio::LeBand)
                 .expect("LE test band"),
@@ -83,7 +84,10 @@ fn join() -> BluetoothJoin {
                 owner_cap_mbm: Some(1000),
             },
         ),
-    }
+        bluetooth::Operation::DtmRx,
+        None,
+    )
+    .expect("permitted receiver installation")
 }
 
 fn multi<F: Future<Output = ()>>(
@@ -269,4 +273,21 @@ fn preflight_refusal_never_registers_or_wakes_rf() {
         );
     });
     assert!(model.log().is_empty());
+}
+
+#[test]
+fn a_second_role_cannot_join_another_bluetooth_client() {
+    let model = model(Script { ble_available: true, ..Script::default() });
+    multi(&model, |_, ble| async {
+        let (ble, first) = ble.join(join()).await;
+        let first = first.ok().expect("one Bluetooth installation");
+        let (ble, first) = ble.track(first.member, first.payload.installation).await;
+        let first = first.ok().expect("tracked Bluetooth");
+        let (ble, duplicate) = ble.join(join()).await;
+        assert_eq!(duplicate.err().expect("one Bluetooth client for all roles").cause, Failure::Refused);
+        model.0.borrow_mut().ble_stopped = true;
+        let (_, left) = ble.leave(Leaving::Tracked(first.member), first.payload).await;
+        assert!(left.payload.stopped);
+    });
+    assert_eq!(model.log(), vec![REGISTERED, Event::BleEnter, Event::BleTrack, Event::BleExit, Event::CloseRf]);
 }
