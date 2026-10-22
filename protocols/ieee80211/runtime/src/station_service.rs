@@ -1076,9 +1076,15 @@ impl<
     ) -> oer_memory::Placed<'s, Self> {
         const {
             let _power = Levels::<B::Caps>::POWER;
-            assert!(
-                B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
-                    >= <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
+            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
+            const fn check(storage: usize, terminals: usize) {
+                if storage < terminals {
+                    panic!("the service retains the backend's complete terminal capacity");
+                }
+            }
+            check(
+                B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY,
+                <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY,
             );
         };
         oer_memory::Placed::init(storage, |place| {
@@ -1158,7 +1164,11 @@ impl<
                         data => |place| StaData::finish_placed(data, place).into_mut(),
                         rates: { rates.disconnected(); rates.read() },
                         counters: counters.read(),
-                        _places: places.take().expect("station returns its places"),
+                        _places: {
+                            #[expect(clippy::expect_used, reason = "the preceding station initializer returns its places")]
+                            let places = places.take().expect("station returns its places");
+                            places
+                        },
                         _arbiter: arbiter.read(),
                         _pending: pending.read(),
                         _terminal_access: terminal_access.read(),
