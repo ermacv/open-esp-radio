@@ -60,7 +60,7 @@ impl Summary {
                 .current_dir(&spec.root)
                 .arg("-vV"),
         )?;
-        let configuration_sha256 = spec
+        let mut configuration_sha256: BTreeMap<String, Option<String>> = spec
             .runtime_environment
             .iter()
             .map(|(name, value)| {
@@ -72,6 +72,38 @@ impl Summary {
                 )
             })
             .collect();
+        // Cargo's [env] defaults and ambient compiler configuration are part
+        // of the image too. Keep values private, including those set by a
+        // caller instead of by the runtime recipe.
+        let config: toml::Table = toml::from_str(&std::fs::read_to_string(
+            spec.root.join(".cargo/config.toml"),
+        )?)?;
+        let mut forced = BTreeMap::new();
+        if let Some(defaults) = config.get("env").and_then(toml::Value::as_table) {
+            for (name, setting) in defaults
+                .iter()
+                .filter(|(name, _)| image_configuration(name))
+            {
+                let value = setting
+                    .as_str()
+                    .or_else(|| setting.get("value").and_then(toml::Value::as_str))
+                    .ok_or("invalid image environment setting")?;
+                let digest = Some(oer_os_durable::sha256_bytes(value.as_bytes()));
+                configuration_sha256.insert(name.clone(), digest.clone());
+                if setting.get("force").and_then(toml::Value::as_bool) == Some(true) {
+                    forced.insert(name.clone(), digest);
+                }
+            }
+        }
+        for (name, value) in std::env::vars_os() {
+            if let Some(name) = name.to_str().filter(|name| image_configuration(name)) {
+                configuration_sha256.insert(
+                    name.into(),
+                    Some(oer_os_durable::sha256_bytes(value.as_encoded_bytes())),
+                );
+            }
+        }
+        configuration_sha256.extend(forced);
         let policy_path = spec.root.join(&spec.stack_policy);
         let source = std::fs::read_to_string(&policy_path)?;
         let policy: toml::Table = toml::from_str(&source)?;
@@ -135,6 +167,17 @@ impl Summary {
 
     pub(crate) fn flags(&mut self, elf: &str, command: &Command, root: &Path) -> Result<()> {
         let mut flags = BTreeMap::new();
+        for name in ["CARGO_ENCODED_RUSTFLAGS", "CFLAGS", "CXXFLAGS", "CC", "CXX"] {
+            if let Some(value) = std::env::var_os(name) {
+                flags.insert(
+                    name.into(),
+                    value
+                        .to_str()
+                        .ok_or("non-UTF-8 compiler flags")?
+                        .replace(root.to_str().ok_or("non-UTF-8 checkout path")?, "$ROOT"),
+                );
+            }
+        }
         for (key, value) in command.get_envs() {
             let key = key.to_str().ok_or("non-UTF-8 compiler environment name")?;
             if (key.contains("FLAGS") || key.starts_with("OPEN_RADIO_"))
@@ -170,6 +213,10 @@ impl Summary {
         }
         Ok(summary)
     }
+}
+
+fn image_configuration(name: &str) -> bool {
+    name.starts_with("ESP_HAL_CONFIG_") || name.starts_with("CARGO_PROFILE_")
 }
 
 fn capture(command: &mut Command) -> Result<String> {

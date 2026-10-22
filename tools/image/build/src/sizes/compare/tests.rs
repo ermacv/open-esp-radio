@@ -211,3 +211,25 @@ fn directory_comparison_is_read_only_and_reports_every_image() {
     assert!(result.output.contains("overall: same"));
     assert!(compare_directories(&base, &temp.path().join("missing")).is_err());
 }
+
+#[test]
+fn stack_allocation_flags_are_reported_by_the_allocation_rule() {
+    let mut a = summary();
+    a.provenance.flags.insert(
+        "runtime".into(),
+        BTreeMap::from([
+            ("RUSTFLAGS".into(), "same compiler flags".into()),
+            ("OPEN_RADIO_IRQ_STACK_BYTES".into(), "8192".into()),
+        ]),
+    );
+    let mut b = a.clone();
+    b.provenance
+        .flags
+        .get_mut("runtime")
+        .unwrap()
+        .insert("OPEN_RADIO_IRQ_STACK_BYTES".into(), "16384".into());
+    runtime(&mut b)
+        .allocated_stacks
+        .insert("cpu0".into(), 16384);
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Stop);
+}

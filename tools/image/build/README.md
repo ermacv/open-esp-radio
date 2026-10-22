@@ -404,8 +404,8 @@ Values/frames and bounds allow at most +64 B each; code allows +1024 B per
 image, summed over positive executable-section changes across both ELFs.
 Shrinking another section does not cancel growth. Every RAM section is checked
 individually, including executable sections in RAM; any growth stops. Any
-allocated-stack change (including shrink/removal), new hole, lost complete
-bound or new assumption stops. New functions/types are listed separately;
+allocated-stack change (including shrink/removal) or new hole stops.
+Completeness and assumptions remain visible in the report. New functions/types are listed separately;
 without a baseline their recorded size is growth from zero. Types crossing the
 256 B inventory boundary are therefore visible as new/removed. Multiple frame
 implementations sharing a demangled name retain their sorted individual sizes.

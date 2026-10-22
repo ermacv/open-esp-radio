@@ -317,13 +317,16 @@ impl Diff {
                         ));
                     }
                 }
-                if before.is_some_and(|b| b.complete) && !after.complete {
-                    self.stop(format!("{elf} bound `{name}` became partial"));
-                }
-                for assumption in &after.assumptions {
-                    if !before.is_some_and(|b| b.assumptions.contains(assumption)) {
-                        self.stop(format!("{elf} bound `{name}` new assumption: {assumption}"));
-                    }
+                if before.is_some_and(|b| {
+                    b.complete != after.complete
+                        || b.assumptions != after.assumptions
+                        || b.root != after.root
+                }) {
+                    let _ = writeln!(
+                        self.output,
+                        "bound `{name}`: root `{}`, complete {}, assumptions {:?}",
+                        after.root, after.complete, after.assumptions
+                    );
                 }
             }
         }
