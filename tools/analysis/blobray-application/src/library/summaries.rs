@@ -426,7 +426,9 @@ pub(super) fn analyze<'a>(
                     payload,
                     input,
                     safe,
-                    linked: elf.as_ref().is_some_and(|e| e.object_type == 2),
+                    linked: elf.as_ref().is_some_and(|e| {
+                        elf::object_kind(e.object_type) == elf::ObjectKind::Executable
+                    }),
                 },
                 c.position(),
             )?;
