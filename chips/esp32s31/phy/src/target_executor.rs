@@ -411,13 +411,17 @@ macro_rules! define_timeout_pbus_executor {
 // Each phase is a named settle and ends in the parent timeout completion.
 macro_rules! define_direct_timeout_pbus_executor {
     ($function:ident, $binding:ty, $completion:ty) => {
+        #[inline]
         pub fn $function<C: oer_time::Clock + ?Sized>(
             mut binding: $binding,
             registers: &mut impl SharedPhyAccess,
             clock: &C,
         ) -> Result<$completion, PhyTargetPortError> {
             use crate::executor::wait::poll::settled;
-            if settled(clock, || binding.start_target(registers).ok()).is_err() {
+            // PBus publication has no busy result: this only checks the linear
+            // binding's phase before writing the command. A second settle and
+            // clock sample cannot make an invalid phase publish successfully.
+            if binding.start_target(registers).is_err() {
                 return Ok(binding.into_timeout_completion());
             }
             let completed = settled(clock, || match binding.observe_target_edge(registers) {

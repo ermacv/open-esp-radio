@@ -32,8 +32,9 @@ const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
 
 // Admit another complete command only while the current batch is short.
-// Direct I2C retains its own 20-us answer bound; the remaining poll budget
-// belongs to model advancement and the inclusive engine observer.
+// Direct I2C retains its own 20-us answer bound. RX admits only short PBus
+// leaves as subsequent atoms; the remainder belongs to model advancement and
+// the inclusive engine observer. The allowance starts at poll entry.
 const BATCH_MICROS: u64 = 20;
 const BATCH_COMMANDS: u8 = 4;
 
@@ -747,7 +748,7 @@ impl<
             let mut rfpll_sample = None;
             let batch_started = match &route {
                 RouteProj::Transport { job, .. }
-                    if matches!(&job.work, Work::Dcode { .. })
+                    if matches!(&job.work, Work::Dcode { .. } | Work::RxGain(_))
                         || matches!(&job.work, Work::Rfpll(_)) && !job.rfpll_observed =>
                 {
                     Some(started.unwrap_or_else(|| clock.now()))
@@ -838,6 +839,13 @@ impl<
                         if batch_commands < BATCH_COMMANDS
                             && batch_started.is_some_and(|at|
                                 clock.now().saturating_duration_since(at).as_micros() < BATCH_MICROS)
+                            && match &route {
+                                RouteProj::Transport { job, .. } => match &job.work {
+                                    Work::RxGain(run) => run.batch_ready(),
+                                    _ => true,
+                                },
+                                _ => false,
+                            }
                         {
                             continue;
                         }
