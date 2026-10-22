@@ -69,14 +69,27 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                     Err("recorded calibration requires Wi-Fi cold and 1..=255 boots".into())
                 };
             }
-            Self::TrackingHold { ticks, batches, .. }
-            | Self::TrackingHoldWifi { ticks, batches, .. } => {
+            Self::TrackingHold {
+                ticks,
+                batches,
+                policy,
+            }
+            | Self::TrackingHoldWifi {
+                ticks,
+                batches,
+                policy,
+            } => {
+                let maximum_batches = if *policy == oer_hil_protocol::phy::HoldPolicy::Natural {
+                    40
+                } else {
+                    20
+                };
                 return if (1..=oer_hil_protocol::phy::HOLD_TICKS as u8).contains(ticks)
-                    && (1..=20).contains(batches)
+                    && (1..=maximum_batches).contains(batches)
                 {
                     Ok(())
                 } else {
-                    Err("hold ticks must be in 1..=16 and batches in 1..=20".into())
+                    Err("hold ticks must be in 1..=16; batches in 1..=40 for natural policy or 1..=20 for forced policy".into())
                 };
             }
             Self::VendorCalibration {
@@ -279,7 +292,16 @@ mod tests {
                 ..
             }
         ));
-        for batches in [0, 21, 255] {
+        let ten_minutes =
+            parse("kind='tracking-hold'\nticks=15\npolicy='natural'\nbatches=40").unwrap();
+        ten_minutes.validate().unwrap();
+        assert!(
+            parse("kind='tracking-hold'\nticks=15\nbatches=21")
+                .unwrap()
+                .validate()
+                .is_err()
+        );
+        for batches in [0, 41, 255] {
             assert!(
                 parse(&format!(
                     "kind='tracking-hold-wifi'\nticks=16\npolicy='natural'\nbatches={batches}"

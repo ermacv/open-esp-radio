@@ -120,3 +120,10 @@ branches, and records 20 bounded batches of 16 ticks under one registration.
 Each batch checks unchanged policy at stop; the final stop closes RF. This is
 unassociated idle Wi-Fi, with no generated packet traffic. Per-batch engine
 counters remain bounded independently of the number of batches.
+
+`phy-tracking-idle-wifi-10m` and `phy-tracking-idle-ieee802154-10m` retain
+one registration for 600 natural ticks, in forty batches of fifteen. They
+record actual branch occurrences, bracket durations and engine maxima.
+Natural-policy investigations retain polls above 50 microseconds; the forced
+hold scenarios enforce that poll limit. Policy checks and RF cleanup apply
+to both modes. Batch handshakes add time to the 600 one-second tick intervals.
