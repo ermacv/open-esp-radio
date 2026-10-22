@@ -4757,3 +4757,75 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_20108050"
 description = "esp32s31 existing-field use evidence from current pinned corpus: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_freq_correct+0x2f828046, word0x20108050 mask0x000001ff, explicit write-replacement; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_freq_correct+0x2f82808e, word0x20108050 mask0x00007e00, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20100C1C_TWO_DOMAIN"
+description = "esp32s31 word0x20100c1c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_bb_cfo_cfg+0x2f8283ba, mask0x07ffffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D87C_TWO_DOMAIN"
+description = "esp32s31 word0x2010d87c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D884_TWO_DOMAIN"
+description = "esp32s31 word0x2010d884. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D88C_TWO_DOMAIN"
+description = "esp32s31 word0x2010d88c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D894_TWO_DOMAIN"
+description = "esp32s31 word0x2010d894. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D864_TWO_DOMAIN"
+description = "esp32s31 word0x2010d864. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_tbtt_interval+0x2c, mask0x03c00000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D86C_TWO_DOMAIN"
+description = "esp32s31 word0x2010d86c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_tbtt_interval+0x2c, mask0x03c00000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010D874_TWO_DOMAIN"
+description = "esp32s31 word0x2010d874. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::tsf_hal_set_tbtt_interval+0x2c, mask0x03c00000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20100C14_TWO_DOMAIN"
+description = "esp32s31 word0x20100c14. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_bb_cfo_cfg+0x2f828418, mask0x7ff80000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20107430_TWO_DOMAIN"
+description = "esp32s31 word0x20107430. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_bb_cfo_cfg+0x2f828386, mask0x07ffffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20107434_TWO_DOMAIN"
+description = "esp32s31 word0x20107434. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_bb_cfo_cfg+0x2f82839a, mask0x07ffffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20107438_TWO_DOMAIN"
+description = "esp32s31 word0x20107438. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_bb_cfo_cfg+0x2f8283fa, mask0x00000fff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20107CEC_TWO_DOMAIN"
+description = "esp32s31 word0x20107cec. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87::phy_bb_cfo_cfg+0x2f828440, mask0x00000fff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010A83C_TWO_DOMAIN"
+description = "esp32s31 word0x2010a83c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::set_bredr_audio_reg_dft_value+0x452, mask0x40000000, explicit write-replacement; libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::set_bredr_audio_reg_dft_value+0x460, mask0x20000000, explicit write-replacement; libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::set_bredr_audio_reg_dft_value+0x50a, mask0x00008000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010A85C_TWO_DOMAIN"
+description = "esp32s31 word0x2010a85c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::set_bredr_audio_reg_dft_value+0x746, mask0x40000000, explicit write-replacement; libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::set_bredr_audio_reg_dft_value+0x754, mask0x20000000, explicit write-replacement; libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::set_bredr_audio_reg_dft_value+0x7f8, mask0x00008000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_2010A86C_TWO_DOMAIN"
+description = "esp32s31 word0x2010a86c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libbredr_app sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851::olc_sync_start+0x5d4, mask0x000000f8, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20102454_TWO_DOMAIN"
+description = "esp32s31 word0x20102454. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_set+0x46, mask0x40000000, explicit write-replacement; libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_set+0x88, mask0x10000000, explicit write-replacement; libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_set+0xbc, mask0x20000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "S31_MMIO_USE_20104C94_TWO_DOMAIN"
+description = "esp32s31 word0x20104c94. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4::hal_cca_set_snd20_cfg+0x18, mask0x000000ff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."

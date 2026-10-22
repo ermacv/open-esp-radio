@@ -2784,3 +2784,131 @@ description = "esp32c5 existing-field use evidence from current pinned corpus: l
 [[sources]]
 id = "C5_MMIO_DECLARED_600A4404"
 description = "esp32c5 existing-field use evidence from current pinned corpus: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_ersu_ack_rate+0x20, word0x600a4404 mask0x000000ff, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_ersu_ack_rate+0x2c, word0x600a4404 mask0x0000ff00, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_ersu_ack_rate+0x3e, word0x600a4404 mask0x00ff0000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_ersu_ack_rate+0x4a, word0x600a4404 mask0xff000000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4C7C_TWO_DOMAIN"
+description = "esp32c5 word0x600a4c7c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_vht_enable_bwsignaling_rts+0x12, mask0x00040000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A40A0_TWO_DOMAIN"
+description = "esp32c5 word0x600a40a0. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_power_save+0x1c, mask0x10000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4DEC_TWO_DOMAIN"
+description = "esp32c5 word0x600a4dec. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_wdev_timer_target_enable+0x12, mask0x00000001, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4DF4_TWO_DOMAIN"
+description = "esp32c5 word0x600a4df4. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_wdev_timer_target_enable+0x12, mask0x00000001, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD864_TWO_DOMAIN"
+description = "esp32c5 word0x600ad864. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_tbtt_interval+0x2c, mask0x03c00000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD86C_TWO_DOMAIN"
+description = "esp32c5 word0x600ad86c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_tbtt_interval+0x2c, mask0x03c00000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD874_TWO_DOMAIN"
+description = "esp32c5 word0x600ad874. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_tbtt_interval+0x2c, mask0x03c00000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4CC4_TWO_DOMAIN"
+description = "esp32c5 word0x600a4cc4. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_hw_qos_null_ra_to_trans+0x28, mask0x00000004, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4800_TWO_DOMAIN"
+description = "esp32c5 word0x600a4800. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_crypto_enable+0x5e, mask0xc0000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4804_TWO_DOMAIN"
+description = "esp32c5 word0x600a4804. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_crypto_enable+0x5e, mask0xc0000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4808_TWO_DOMAIN"
+description = "esp32c5 word0x600a4808. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_crypto_enable+0x5e, mask0xc0000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD87C_TWO_DOMAIN"
+description = "esp32c5 word0x600ad87c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_disable+0x26, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_soc_wakeup_disable+0x28, mask0x40000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD884_TWO_DOMAIN"
+description = "esp32c5 word0x600ad884. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_disable+0x26, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_soc_wakeup_disable+0x28, mask0x40000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD88C_TWO_DOMAIN"
+description = "esp32c5 word0x600ad88c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_disable+0x26, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_soc_wakeup_disable+0x28, mask0x40000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD894_TWO_DOMAIN"
+description = "esp32c5 word0x600ad894. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_disable+0x26, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_modem_wakeup_disable+0x28, mask0x20000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_rf_ctrl_disable+0x28, mask0x10000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::tsf_hal_set_timer_soc_wakeup_disable+0x28, mask0x40000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4C1C_TWO_DOMAIN"
+description = "esp32c5 word0x600a4c1c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_set_bbrxhung_time+0x14, mask0x00000fff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4D74_TWO_DOMAIN"
+description = "esp32c5 word0x600a4d74. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::mac_tx_set_tb+0xee, mask0x000fffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4D7C_TWO_DOMAIN"
+description = "esp32c5 word0x600a4d7c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::mac_tx_set_tb+0xee, mask0x000fffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4D84_TWO_DOMAIN"
+description = "esp32c5 word0x600a4d84. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::mac_tx_set_tb+0xee, mask0x000fffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4D8C_TWO_DOMAIN"
+description = "esp32c5 word0x600a4d8c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::mac_tx_set_tb+0xee, mask0x000fffff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A40F4_TWO_DOMAIN"
+description = "esp32c5 word0x600a40f4. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_sniffer_set_promis_misc_pkt+0x5a, mask0x000000ff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4C94_TWO_DOMAIN"
+description = "esp32c5 word0x600a4c94. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_cca_set_snd20_cfg+0x18, mask0x000000ff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600A4E9C_TWO_DOMAIN"
+description = "esp32c5 word0x600a4e9c. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_he_disable_obss_narrow_bw_ru+0x24, mask0x00000001, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD87C_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad87c. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_tsf_timer_get_target+0x18, mask0x00000007, read Exact Store; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x0ffffff8, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD884_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad884. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_tsf_timer_get_target+0x18, mask0x00000007, read Exact Store; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x0ffffff8, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD88C_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad88c. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_tsf_timer_get_target+0x18, mask0x00000007, read Exact Store; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x0ffffff8, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD894_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad894. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_tsf_timer_get_target+0x18, mask0x00000007, read Exact Store; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x0ffffff8, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD85C_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad85c. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer+0x1e, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer_wakeup+0x16, mask0x40000000, explicit write-replacement; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x3c000000, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD864_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad864. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer+0x1e, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer_wakeup+0x16, mask0x40000000, explicit write-replacement; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x3c000000, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD86C_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad86c. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer+0x1e, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer_wakeup+0x16, mask0x40000000, explicit write-replacement; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x3c000000, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD874_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad874. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer+0x1e, mask0x80000000, explicit write-replacement; libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_disable_tsf_timer_wakeup+0x16, mask0x40000000, explicit write-replacement; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x3c000000, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."
+
+[[sources]]
+id = "C5_MMIO_USE_600AD8A4_TWO_DOMAIN_RUN"
+description = "esp32c5 word0x600ad8a4. Positive pinned source-use facts after sparse word declarations extended the compared indexed runs: libpp sha256 9d6192d056021523ce567a5de3a9e7b1fe2e9f6da23349c68a4e2cee0c8c3046::hal_tsf_timer_get_target+0x18, mask0x00000007, read Exact Store; rom-rev0 sha256 34141e699c5f0f420ab18b714a7d0f198378c5f3025f449058431d7e9cc630ad::hal_tsf_timer_set_target+0x40008d8c, mask0x000000f8, read Exact Store. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory conservative candidate-address bounds, including broad ROM timer targets. Read uses and explicit replacement count; same-word preservation and unknown-reset initialization images do not. No hardware meaning, reset, read safety or modified-write effect is inferred."

@@ -2627,7 +2627,13 @@ peripheral-type = "PhyFedataWifiRecovered"
 peripheral-module = "phy_fedata_wifi_recovered"
 scope = []
 register-method = "word_0014_opaque"
-fields = []
+
+[[registers.fields]]
+svd-name = "BITS_19_30_OPAQUE"
+method = "bits_19_30_opaque"
+bit-offset = 19
+bit-width = 12
+access = "read-write"
 
 [[registers]]
 address = 537922584
@@ -2657,6 +2663,13 @@ peripheral-type = "PhyFedataWifiRecovered"
 peripheral-module = "phy_fedata_wifi_recovered"
 scope = []
 register-method = "word_001c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_26_OPAQUE"
+method = "bits_0_26_opaque"
+bit-offset = 0
+bit-width = 27
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "BITS_27_31_OPAQUE"
@@ -9824,6 +9837,13 @@ svd-name = "BITS_2_27_OPAQUE"
 method = "bits_2_27_opaque"
 bit-offset = 2
 bit-width = 26
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_30_OPAQUE"
+method = "bits_28_30_opaque"
+bit-offset = 28
+bit-width = 3
 access = "read-write"
 
 [[registers.fields]]
@@ -23265,6 +23285,24 @@ svd-name = "BITS_25_31_OPAQUE"
 method = "bits_25_31_opaque"
 bit-offset = 25
 bit-width = 7
+access = "read-write"
+
+[[registers]]
+address = 537939092
+width = 32
+access = "read-write"
+identity = "MODEM_RADIO_CORE_LOW_OBSERVED.WORD_4C94_OPAQUE"
+peripheral = "MODEM_RADIO_CORE_LOW_OBSERVED"
+peripheral-type = "ModemRadioCoreLowObserved"
+peripheral-module = "modem_radio_core_low_observed"
+scope = []
+register-method = "word_4c94_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
 access = "read-write"
 
 [[registers]]
@@ -43684,6 +43722,13 @@ scope = []
 register-method = "word_0430_opaque"
 
 [[registers.fields]]
+svd-name = "BITS_0_26_OPAQUE"
+method = "bits_0_26_opaque"
+bit-offset = 0
+bit-width = 27
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BIT_27_OPAQUE"
 method = "bit_27_opaque"
 bit-offset = 27
@@ -43700,7 +43745,13 @@ peripheral-type = "PhyAgcRecoveredGaps"
 peripheral-module = "phy_agc_recovered_gaps"
 scope = []
 register-method = "word_0434_opaque"
-fields = []
+
+[[registers.fields]]
+svd-name = "BITS_0_26_OPAQUE"
+method = "bits_0_26_opaque"
+bit-offset = 0
+bit-width = 27
+access = "read-write"
 
 [[registers]]
 address = 537949240
@@ -43712,7 +43763,13 @@ peripheral-type = "PhyAgcRecoveredGaps"
 peripheral-module = "phy_agc_recovered_gaps"
 scope = []
 register-method = "word_0438_opaque"
-fields = []
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
 
 [[registers]]
 address = 537949244
@@ -44935,6 +44992,13 @@ peripheral-type = "PhyBbRecoveredGaps"
 peripheral-module = "phy_bb_recovered_gaps"
 scope = []
 register-method = "word_00ec_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "BIT_12_OPAQUE"
@@ -48014,10 +48078,24 @@ bit-width = 15
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BIT_15_OPAQUE"
+method = "bit_15_opaque"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_16_28_OPAQUE"
 method = "bits_16_28_opaque"
 bit-offset = 16
 bit-width = 13
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_29_30_OPAQUE"
+method = "bits_29_30_opaque"
+bit-offset = 29
+bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
@@ -48154,10 +48232,24 @@ bit-width = 15
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BIT_15_OPAQUE"
+method = "bit_15_opaque"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_16_28_OPAQUE"
 method = "bits_16_28_opaque"
 bit-offset = 16
 bit-width = 13
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_29_30_OPAQUE"
+method = "bits_29_30_opaque"
+bit-offset = 29
+bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
@@ -48237,6 +48329,13 @@ svd-name = "BITS_0_2_OPAQUE"
 method = "bits_0_2_opaque"
 bit-offset = 0
 bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_3_7_OPAQUE"
+method = "bits_3_7_opaque"
+bit-offset = 3
+bit-width = 5
 access = "read-write"
 
 [[registers.fields]]
@@ -50062,6 +50161,13 @@ bit-width = 22
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_22_25_OPAQUE"
+method = "bits_22_25_opaque"
+bit-offset = 22
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_30_31_OPAQUE"
 method = "bits_30_31_opaque"
 bit-offset = 30
@@ -50137,6 +50243,13 @@ svd-name = "BITS_0_21_OPAQUE"
 method = "bits_0_21_opaque"
 bit-offset = 0
 bit-width = 22
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_22_25_OPAQUE"
+method = "bits_22_25_opaque"
+bit-offset = 22
+bit-width = 4
 access = "read-write"
 
 [[registers.fields]]
@@ -50218,6 +50331,13 @@ bit-width = 22
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_22_25_OPAQUE"
+method = "bits_22_25_opaque"
+bit-offset = 22
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_30_31_OPAQUE"
 method = "bits_30_31_opaque"
 bit-offset = 30
@@ -50266,6 +50386,13 @@ svd-name = "TARGET_HIGH"
 method = "target_high"
 bit-offset = 0
 bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
 access = "read-write"
 
 [[registers.fields]]
@@ -50321,6 +50448,13 @@ bit-width = 3
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "WAKEUP_ENABLE"
 method = "wakeup_enable"
 bit-offset = 30
@@ -50373,6 +50507,13 @@ bit-width = 3
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "WAKEUP_ENABLE"
 method = "wakeup_enable"
 bit-offset = 30
@@ -50422,6 +50563,13 @@ svd-name = "TARGET_HIGH"
 method = "target_high"
 bit-offset = 0
 bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
 access = "read-write"
 
 [[registers.fields]]

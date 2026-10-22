@@ -972,6 +972,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 3
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_2458_OPAQUE"
@@ -2724,6 +2730,20 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
 bitWidth = 1
 
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_4C94_OPAQUE"
+addressOffset = 0x4c94
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
 [[review]]
 entity = "MODEM_RADIO_CORE_LOW_OBSERVED"
 sources = ["S31_MMIO_MODEM_RADIO_CORE_LOW"]
@@ -6514,6 +6534,18 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0844_OPAQUE"
@@ -6624,6 +6656,18 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0860_OPAQUE"
@@ -6686,6 +6730,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_3_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 5
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0870_OPAQUE"
@@ -6996,6 +7046,12 @@ name = "BITS_30_31_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 30
 bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 4
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_386C_OPAQUE"
@@ -7016,6 +7072,12 @@ name = "BITS_30_31_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 30
 bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 4
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_3874_OPAQUE"
@@ -7036,6 +7098,12 @@ name = "BITS_30_31_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 30
 bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 4
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_38D0_OPAQUE"
@@ -9074,6 +9142,94 @@ completeness = "partial"
 [[review]]
 entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_0084_OPAQUE.BITS_2_31_OPAQUE"
 sources = ["S31_MMIO_USE_2010A084_RUN", "S31_MMIO_DECLARED_2010A084"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_3864_OPAQUE.BITS_22_25_OPAQUE"
+sources = ["S31_MMIO_USE_2010D864_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_386C_OPAQUE.BITS_22_25_OPAQUE"
+sources = ["S31_MMIO_USE_2010D86C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_3874_OPAQUE.BITS_22_25_OPAQUE"
+sources = ["S31_MMIO_USE_2010D874_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_083C_OPAQUE.BIT_15_OPAQUE"
+sources = ["S31_MMIO_USE_2010A83C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_083C_OPAQUE.BITS_29_30_OPAQUE"
+sources = ["S31_MMIO_USE_2010A83C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_085C_OPAQUE.BIT_15_OPAQUE"
+sources = ["S31_MMIO_USE_2010A85C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_085C_OPAQUE.BITS_29_30_OPAQUE"
+sources = ["S31_MMIO_USE_2010A85C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_MID_OBSERVED.WORD_086C_OPAQUE.BITS_3_7_OPAQUE"
+sources = ["S31_MMIO_USE_2010A86C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_LOW_OBSERVED.WORD_2454_OPAQUE.BITS_28_30_OPAQUE"
+sources = ["S31_MMIO_USE_20102454_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_LOW_OBSERVED.WORD_4C94_OPAQUE"
+sources = ["S31_MMIO_USE_20104C94_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_RADIO_CORE_LOW_OBSERVED.WORD_4C94_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_USE_20104C94_TWO_DOMAIN"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"

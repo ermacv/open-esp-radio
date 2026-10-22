@@ -14,6 +14,12 @@ addressOffset = 0x14
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 19
+bitWidth = 12
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -44,6 +50,12 @@ name = "BITS_27_31_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 27
 bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 27
 [[peripheral-review]]
 entity = "PHY_FEDATA_WIFI_RECOVERED"
 opaque-entities = [
@@ -78,6 +90,22 @@ completeness = "partial"
 [[review]]
 entity = "PHY_FEDATA_WIFI_RECOVERED.WORD_001C_OPAQUE.BITS_27_31_OPAQUE"
 sources = ["S31_MMIO_USE_20100C1C", "S31_MMIO_DECLARED_20100C1C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FEDATA_WIFI_RECOVERED.WORD_001C_OPAQUE.BITS_0_26_OPAQUE"
+sources = ["S31_MMIO_USE_20100C1C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FEDATA_WIFI_RECOVERED.WORD_0014_OPAQUE.BITS_19_30_OPAQUE"
+sources = ["S31_MMIO_USE_20100C14_TWO_DOMAIN"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"

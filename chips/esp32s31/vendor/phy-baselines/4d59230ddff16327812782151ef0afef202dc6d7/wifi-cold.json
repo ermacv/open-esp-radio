@@ -7,7 +7,7 @@
   "signature": {
     "idf-revision": "4d59230ddff16327812782151ef0afef202dc6d7",
     "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
-    "model-sha256": "70d732ad60b989ebd5bd9ff4fe1873e497ea5c457c0e904955f28a01d8f38656",
+    "model-sha256": "f36313a8cc13bbd1ba2a3e2ee073bd2d996a8243f5a6b70e06244a21a291e05d",
     "relation-sha256": "9cfaa367b51c6fecf0bf37a8bffe7a97fb8c2f221bcc4aa5c840437f1ee94dc2",
     "review-sha256": "3f3af92decee5d0205110e81879b09b7bb63517d7a4608b2d0237e4b3638f93c",
     "recipe-sha256": "fe681c2e2f8321e6423bf983ee1e920f8c743284b0128d050421836f97b8a888"
@@ -883,9 +883,9 @@
       "address": 537949232,
       "signed": false,
       "mask": [
-        134217728
+        268435455
       ],
-      "shared": 0,
+      "shared": 127768985,
       "boards": {}
     },
     "PHY_AGC_RECOVERED_GAPS.WORD_0434_OPAQUE": {
@@ -895,10 +895,9 @@
       "address": 537949236,
       "signed": false,
       "mask": [
-        0
+        134217727
       ],
-      "excluded": "the source model declares no compared bits",
-      "shared": 0,
+      "shared": 127768985,
       "boards": {}
     },
     "PHY_AGC_RECOVERED_GAPS.WORD_0438_OPAQUE": {
@@ -908,10 +907,9 @@
       "address": 537949240,
       "signed": false,
       "mask": [
-        0
+        4095
       ],
-      "excluded": "the source model declares no compared bits",
-      "shared": 0,
+      "shared": 2151,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL": {
@@ -1760,9 +1758,9 @@
       "address": 537951468,
       "signed": false,
       "mask": [
-        4096
+        8191
       ],
-      "shared": 0,
+      "shared": 2151,
       "boards": {}
     },
     "PHY_BRX_RECOVERED_GAPS.WORD_0050_OPAQUE": {
@@ -2474,10 +2472,9 @@
       "address": 537922580,
       "signed": false,
       "mask": [
-        0
+        2146959360
       ],
-      "excluded": "the source model declares no compared bits",
-      "shared": 0,
+      "shared": 1127743488,
       "boards": {}
     },
     "PHY_FEDATA_WIFI_RECOVERED.WORD_0018_OPAQUE": {
@@ -2499,9 +2496,9 @@
       "address": 537922588,
       "signed": false,
       "mask": [
-        4160749568
+        4294967295
       ],
-      "shared": 0,
+      "shared": 127768986,
       "boards": {}
     },
     "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0": {

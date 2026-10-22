@@ -1116,132 +1116,134 @@ pub mod modem_radio_core_low_observed {
         word_4c50_opaque: Word4c50Opaque,
         _reserved75: [u8; 0x20],
         word_4c74_opaque: Word4c74Opaque,
-        _reserved76: [u8; 0x84],
+        _reserved76: [u8; 0x1c],
+        word_4c94_opaque: Word4c94Opaque,
+        _reserved77: [u8; 0x64],
         word_4cfc_opaque: Word4cfcOpaque,
-        _reserved77: [u8; 0x0c],
-        word_4d0c_opaque: Word4d0cOpaque,
         _reserved78: [u8; 0x0c],
-        word_4d1c_opaque: Word4d1cOpaque,
+        word_4d0c_opaque: Word4d0cOpaque,
         _reserved79: [u8; 0x0c],
+        word_4d1c_opaque: Word4d1cOpaque,
+        _reserved80: [u8; 0x0c],
         word_4d2c_opaque: Word4d2cOpaque,
-        _reserved80: [u8; 0x010c],
+        _reserved81: [u8; 0x010c],
         word_4e3c_opaque: Word4e3cOpaque,
-        _reserved81: [u8; 0x34],
+        _reserved82: [u8; 0x34],
         word_4e74_opaque: Word4e74Opaque,
-        _reserved82: [u8; 0x04],
+        _reserved83: [u8; 0x04],
         word_4e7c_opaque: Word4e7cOpaque,
         word_4e80_opaque: Word4e80Opaque,
         word_4e84_opaque: Word4e84Opaque,
         word_4e88_opaque: Word4e88Opaque,
-        _reserved86: [u8; 0x64],
+        _reserved87: [u8; 0x64],
         word_4ef0_opaque: Word4ef0Opaque,
-        _reserved87: [u8; 0x04],
+        _reserved88: [u8; 0x04],
         word_4ef8_opaque: Word4ef8Opaque,
         word_4efc_opaque: Word4efcOpaque,
         word_4f00_opaque: Word4f00Opaque,
         word_4f04_opaque: Word4f04Opaque,
-        _reserved91: [u8; 0x64],
+        _reserved92: [u8; 0x64],
         word_4f6c_opaque: Word4f6cOpaque,
-        _reserved92: [u8; 0x04],
+        _reserved93: [u8; 0x04],
         word_4f74_opaque: Word4f74Opaque,
         word_4f78_opaque: Word4f78Opaque,
         word_4f7c_opaque: Word4f7cOpaque,
         word_4f80_opaque: Word4f80Opaque,
-        _reserved96: [u8; 0x64],
+        _reserved97: [u8; 0x64],
         word_4fe8_opaque: Word4fe8Opaque,
-        _reserved97: [u8; 0x04],
+        _reserved98: [u8; 0x04],
         word_4ff0_opaque: Word4ff0Opaque,
         word_4ff4_opaque: Word4ff4Opaque,
         word_4ff8_opaque: Word4ff8Opaque,
         word_4ffc_opaque: Word4ffcOpaque,
-        _reserved101: [u8; 0x64],
+        _reserved102: [u8; 0x64],
         word_5064_opaque: Word5064Opaque,
-        _reserved102: [u8; 0x04],
+        _reserved103: [u8; 0x04],
         word_506c_opaque: Word506cOpaque,
         word_5070_opaque: Word5070Opaque,
         word_5074_opaque: Word5074Opaque,
         word_5078_opaque: Word5078Opaque,
-        _reserved106: [u8; 0x64],
+        _reserved107: [u8; 0x64],
         word_50e0_opaque: Word50e0Opaque,
-        _reserved107: [u8; 0x04],
+        _reserved108: [u8; 0x04],
         word_50e8_opaque: Word50e8Opaque,
         word_50ec_opaque: Word50ecOpaque,
         word_50f0_opaque: Word50f0Opaque,
         word_50f4_opaque: Word50f4Opaque,
-        _reserved111: [u8; 0x64],
+        _reserved112: [u8; 0x64],
         word_515c_opaque: Word515cOpaque,
-        _reserved112: [u8; 0x04],
+        _reserved113: [u8; 0x04],
         word_5164_opaque: Word5164Opaque,
         word_5168_opaque: Word5168Opaque,
         word_516c_opaque: Word516cOpaque,
         word_5170_opaque: Word5170Opaque,
-        _reserved116: [u8; 0x64],
+        _reserved117: [u8; 0x64],
         word_51d8_opaque: Word51d8Opaque,
-        _reserved117: [u8; 0x04],
+        _reserved118: [u8; 0x04],
         word_51e0_opaque: Word51e0Opaque,
         word_51e4_opaque: Word51e4Opaque,
         word_51e8_opaque: Word51e8Opaque,
         word_51ec_opaque: Word51ecOpaque,
-        _reserved121: [u8; 0x64],
+        _reserved122: [u8; 0x64],
         word_5254_opaque: Word5254Opaque,
-        _reserved122: [u8; 0x04],
+        _reserved123: [u8; 0x04],
         word_525c_opaque: Word525cOpaque,
         word_5260_opaque: Word5260Opaque,
         word_5264_opaque: Word5264Opaque,
         word_5268_opaque: Word5268Opaque,
-        _reserved126: [u8; 0x64],
+        _reserved127: [u8; 0x64],
         word_52d0_opaque: Word52d0Opaque,
-        _reserved127: [u8; 0x04],
+        _reserved128: [u8; 0x04],
         word_52d8_opaque: Word52d8Opaque,
         word_52dc_opaque: Word52dcOpaque,
         word_52e0_opaque: Word52e0Opaque,
         word_52e4_opaque: Word52e4Opaque,
-        _reserved131: [u8; 0x64],
+        _reserved132: [u8; 0x64],
         word_534c_opaque: Word534cOpaque,
-        _reserved132: [u8; 0x04],
+        _reserved133: [u8; 0x04],
         word_5354_opaque: Word5354Opaque,
         word_5358_opaque: Word5358Opaque,
         word_535c_opaque: Word535cOpaque,
         word_5360_opaque: Word5360Opaque,
-        _reserved136: [u8; 0x6c],
+        _reserved137: [u8; 0x6c],
         word_53d0_opaque: Word53d0Opaque,
         word_53d4_opaque: Word53d4Opaque,
-        _reserved138: [u8; 0x04],
+        _reserved139: [u8; 0x04],
         word_53dc_opaque: Word53dcOpaque,
-        _reserved139: [u8; 0x6c],
+        _reserved140: [u8; 0x6c],
         word_544c_opaque: Word544cOpaque,
         word_5450_opaque: Word5450Opaque,
-        _reserved141: [u8; 0x04],
+        _reserved142: [u8; 0x04],
         word_5458_opaque: Word5458Opaque,
-        _reserved142: [u8; 0x6c],
+        _reserved143: [u8; 0x6c],
         word_54c8_opaque: Word54c8Opaque,
         word_54cc_opaque: Word54ccOpaque,
-        _reserved144: [u8; 0x04],
+        _reserved145: [u8; 0x04],
         word_54d4_opaque: Word54d4Opaque,
-        _reserved145: [u8; 0x6c],
+        _reserved146: [u8; 0x6c],
         word_5544_opaque: Word5544Opaque,
         word_5548_opaque: Word5548Opaque,
-        _reserved147: [u8; 0x04],
+        _reserved148: [u8; 0x04],
         word_5550_opaque: Word5550Opaque,
-        _reserved148: [u8; 0x0aac],
+        _reserved149: [u8; 0x0aac],
         word_6000_opaque: Word6000Opaque,
-        _reserved149: [u8; 0x10d8],
+        _reserved150: [u8; 0x10d8],
         word_70dc_opaque: Word70dcOpaque,
-        _reserved150: [u8; 0xf4],
+        _reserved151: [u8; 0xf4],
         word_71d4_opaque: Word71d4Opaque,
-        _reserved151: [u8; 0x023c],
+        _reserved152: [u8; 0x023c],
         word_7414_opaque: Word7414Opaque,
         word_7418_opaque: Word7418Opaque,
-        _reserved153: [u8; 0x0810],
+        _reserved154: [u8; 0x0810],
         word_7c2c_opaque: Word7c2cOpaque,
-        _reserved154: [u8; 0x094c],
+        _reserved155: [u8; 0x094c],
         word_857c_opaque: Word857cOpaque,
-        _reserved155: [u8; 0x03c4],
+        _reserved156: [u8; 0x03c4],
         word_8944_opaque: Word8944Opaque,
-        _reserved156: [u8; 0x0ee8],
+        _reserved157: [u8; 0x0ee8],
         word_9830_opaque: Word9830Opaque,
         word_9834_opaque: Word9834Opaque,
-        _reserved158: [u8; 0x88],
+        _reserved159: [u8; 0x88],
         word_98c0_opaque: Word98c0Opaque,
     }
     impl RegisterBlock {
@@ -1624,6 +1626,11 @@ pub mod modem_radio_core_low_observed {
         #[inline(always)]
         pub const fn word_4c74_opaque(&self) -> &Word4c74Opaque {
             &self.word_4c74_opaque
+        }
+        #[doc = "0x4c94 - Opaque: meaning not established. Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."]
+        #[inline(always)]
+        pub const fn word_4c94_opaque(&self) -> &Word4c94Opaque {
+            &self.word_4c94_opaque
         }
         #[doc = "0x4cfc - Opaque: meaning not established. Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established."]
         #[inline(always)]
@@ -4085,6 +4092,10 @@ pub mod modem_radio_core_low_observed {
         pub type Bits2_27OpaqueR = crate::FieldReader<u32>;
         #[doc = "Field `BITS_2_27_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits2_27OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 26, u32>;
+        #[doc = "Field `BITS_28_30_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits28_30OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_28_30_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits28_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 3>;
         #[doc = "Field `BIT_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bit31OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -4094,6 +4105,11 @@ pub mod modem_radio_core_low_observed {
             #[inline(always)]
             pub fn bits_2_27_opaque(&self) -> Bits2_27OpaqueR {
                 Bits2_27OpaqueR::new((self.bits >> 2) & 0x03ff_ffff)
+            }
+            #[doc = "Bits 28:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_28_30_opaque(&self) -> Bits28_30OpaqueR {
+                Bits28_30OpaqueR::new(((self.bits >> 28) & 7) as u8)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -4106,6 +4122,11 @@ pub mod modem_radio_core_low_observed {
             #[inline(always)]
             pub fn bits_2_27_opaque(&mut self) -> Bits2_27OpaqueW<'_, Word2454OpaqueSpec> {
                 Bits2_27OpaqueW::new(self, 2)
+            }
+            #[doc = "Bits 28:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_28_30_opaque(&mut self) -> Bits28_30OpaqueW<'_, Word2454OpaqueSpec> {
+                Bits28_30OpaqueW::new(self, 28)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -7242,6 +7263,45 @@ pub mod modem_radio_core_low_observed {
         #[doc = "`read()` method returns [`word_98c0_opaque::R`](R) reader structure"]
         impl crate::Readable for Word98c0OpaqueSpec {}
     }
+    #[doc = "WORD_4C94_OPAQUE (rw) register accessor: Opaque: meaning not established. Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_4c94_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_4c94_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_4c94_opaque`] module"]
+    #[doc(alias = "WORD_4C94_OPAQUE")]
+    pub type Word4c94Opaque = crate::Reg<word_4c94_opaque::Word4c94OpaqueSpec>;
+    #[doc = "Opaque: meaning not established. Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."]
+    pub mod word_4c94_opaque {
+        #[doc = "Register `WORD_4C94_OPAQUE` reader"]
+        pub type R = crate::R<Word4c94OpaqueSpec>;
+        #[doc = "Register `WORD_4C94_OPAQUE` writer"]
+        pub type W = crate::W<Word4c94OpaqueSpec>;
+        #[doc = "Field `BITS_0_7_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_7OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_0_7_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8>;
+        impl R {
+            #[doc = "Bits 0:7 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_7_opaque(&self) -> Bits0_7OpaqueR {
+                Bits0_7OpaqueR::new((self.bits & 0xff) as u8)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:7 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_7_opaque(&mut self) -> Bits0_7OpaqueW<'_, Word4c94OpaqueSpec> {
+                Bits0_7OpaqueW::new(self, 0)
+            }
+        }
+        #[doc = "Opaque: meaning not established. Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_4c94_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_4c94_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct Word4c94OpaqueSpec;
+        impl crate::RegisterSpec for Word4c94OpaqueSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`word_4c94_opaque::R`](R) reader structure"]
+        impl crate::Readable for Word4c94OpaqueSpec {}
+        #[doc = "`write(|w| ..)` method takes [`word_4c94_opaque::W`](W) writer structure"]
+        impl crate::Writable for Word4c94OpaqueSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
 }
 #[doc = "Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown."]
 pub type ModemRadioCoreMidObserved =
@@ -10216,10 +10276,18 @@ pub mod modem_radio_core_mid_observed {
         pub type Bits0_14OpaqueR = crate::FieldReader<u16>;
         #[doc = "Field `BITS_0_14_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits0_14OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 15, u16>;
+        #[doc = "Field `BIT_15_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bit15OpaqueR = crate::BitReader;
+        #[doc = "Field `BIT_15_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bit15OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `BITS_16_28_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits16_28OpaqueR = crate::FieldReader<u16>;
         #[doc = "Field `BITS_16_28_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits16_28OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 13, u16>;
+        #[doc = "Field `BITS_29_30_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits29_30OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_29_30_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits29_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
         #[doc = "Field `BIT_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bit31OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -10230,10 +10298,20 @@ pub mod modem_radio_core_mid_observed {
             pub fn bits_0_14_opaque(&self) -> Bits0_14OpaqueR {
                 Bits0_14OpaqueR::new((self.bits & 0x7fff) as u16)
             }
+            #[doc = "Bit 15 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bit_15_opaque(&self) -> Bit15OpaqueR {
+                Bit15OpaqueR::new(((self.bits >> 15) & 1) != 0)
+            }
             #[doc = "Bits 16:28 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
             pub fn bits_16_28_opaque(&self) -> Bits16_28OpaqueR {
                 Bits16_28OpaqueR::new(((self.bits >> 16) & 0x1fff) as u16)
+            }
+            #[doc = "Bits 29:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_29_30_opaque(&self) -> Bits29_30OpaqueR {
+                Bits29_30OpaqueR::new(((self.bits >> 29) & 3) as u8)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -10247,10 +10325,20 @@ pub mod modem_radio_core_mid_observed {
             pub fn bits_0_14_opaque(&mut self) -> Bits0_14OpaqueW<'_, Word083cOpaqueSpec> {
                 Bits0_14OpaqueW::new(self, 0)
             }
+            #[doc = "Bit 15 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bit_15_opaque(&mut self) -> Bit15OpaqueW<'_, Word083cOpaqueSpec> {
+                Bit15OpaqueW::new(self, 15)
+            }
             #[doc = "Bits 16:28 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
             pub fn bits_16_28_opaque(&mut self) -> Bits16_28OpaqueW<'_, Word083cOpaqueSpec> {
                 Bits16_28OpaqueW::new(self, 16)
+            }
+            #[doc = "Bits 29:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_29_30_opaque(&mut self) -> Bits29_30OpaqueW<'_, Word083cOpaqueSpec> {
+                Bits29_30OpaqueW::new(self, 29)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -10517,10 +10605,18 @@ pub mod modem_radio_core_mid_observed {
         pub type Bits0_14OpaqueR = crate::FieldReader<u16>;
         #[doc = "Field `BITS_0_14_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits0_14OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 15, u16>;
+        #[doc = "Field `BIT_15_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bit15OpaqueR = crate::BitReader;
+        #[doc = "Field `BIT_15_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bit15OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
         #[doc = "Field `BITS_16_28_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits16_28OpaqueR = crate::FieldReader<u16>;
         #[doc = "Field `BITS_16_28_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits16_28OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 13, u16>;
+        #[doc = "Field `BITS_29_30_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits29_30OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_29_30_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits29_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
         #[doc = "Field `BIT_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bit31OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -10531,10 +10627,20 @@ pub mod modem_radio_core_mid_observed {
             pub fn bits_0_14_opaque(&self) -> Bits0_14OpaqueR {
                 Bits0_14OpaqueR::new((self.bits & 0x7fff) as u16)
             }
+            #[doc = "Bit 15 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bit_15_opaque(&self) -> Bit15OpaqueR {
+                Bit15OpaqueR::new(((self.bits >> 15) & 1) != 0)
+            }
             #[doc = "Bits 16:28 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
             pub fn bits_16_28_opaque(&self) -> Bits16_28OpaqueR {
                 Bits16_28OpaqueR::new(((self.bits >> 16) & 0x1fff) as u16)
+            }
+            #[doc = "Bits 29:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_29_30_opaque(&self) -> Bits29_30OpaqueR {
+                Bits29_30OpaqueR::new(((self.bits >> 29) & 3) as u8)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -10548,10 +10654,20 @@ pub mod modem_radio_core_mid_observed {
             pub fn bits_0_14_opaque(&mut self) -> Bits0_14OpaqueW<'_, Word085cOpaqueSpec> {
                 Bits0_14OpaqueW::new(self, 0)
             }
+            #[doc = "Bit 15 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bit_15_opaque(&mut self) -> Bit15OpaqueW<'_, Word085cOpaqueSpec> {
+                Bit15OpaqueW::new(self, 15)
+            }
             #[doc = "Bits 16:28 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
             pub fn bits_16_28_opaque(&mut self) -> Bits16_28OpaqueW<'_, Word085cOpaqueSpec> {
                 Bits16_28OpaqueW::new(self, 16)
+            }
+            #[doc = "Bits 29:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_29_30_opaque(&mut self) -> Bits29_30OpaqueW<'_, Word085cOpaqueSpec> {
+                Bits29_30OpaqueW::new(self, 29)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -10701,6 +10817,10 @@ pub mod modem_radio_core_mid_observed {
         pub type Bits0_2OpaqueR = crate::FieldReader;
         #[doc = "Field `BITS_0_2_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits0_2OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 3>;
+        #[doc = "Field `BITS_3_7_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits3_7OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_3_7_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits3_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 5>;
         #[doc = "Field `BIT_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bit31OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -10710,6 +10830,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_2_opaque(&self) -> Bits0_2OpaqueR {
                 Bits0_2OpaqueR::new((self.bits & 7) as u8)
+            }
+            #[doc = "Bits 3:7 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_3_7_opaque(&self) -> Bits3_7OpaqueR {
+                Bits3_7OpaqueR::new(((self.bits >> 3) & 0x1f) as u8)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -10722,6 +10847,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_2_opaque(&mut self) -> Bits0_2OpaqueW<'_, Word086cOpaqueSpec> {
                 Bits0_2OpaqueW::new(self, 0)
+            }
+            #[doc = "Bits 3:7 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_3_7_opaque(&mut self) -> Bits3_7OpaqueW<'_, Word086cOpaqueSpec> {
+                Bits3_7OpaqueW::new(self, 3)
             }
             #[doc = "Bit 31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -11529,6 +11659,10 @@ pub mod modem_radio_core_mid_observed {
         pub type Bits0_21OpaqueR = crate::FieldReader<u32>;
         #[doc = "Field `BITS_0_21_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits0_21OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 22, u32>;
+        #[doc = "Field `BITS_22_25_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits22_25OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_22_25_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits22_25OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
         #[doc = "Field `BITS_30_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits30_31OpaqueR = crate::FieldReader;
         #[doc = "Field `BITS_30_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -11538,6 +11672,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_21_opaque(&self) -> Bits0_21OpaqueR {
                 Bits0_21OpaqueR::new(self.bits & 0x003f_ffff)
+            }
+            #[doc = "Bits 22:25 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_22_25_opaque(&self) -> Bits22_25OpaqueR {
+                Bits22_25OpaqueR::new(((self.bits >> 22) & 0x0f) as u8)
             }
             #[doc = "Bits 30:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -11550,6 +11689,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_21_opaque(&mut self) -> Bits0_21OpaqueW<'_, Word3864OpaqueSpec> {
                 Bits0_21OpaqueW::new(self, 0)
+            }
+            #[doc = "Bits 22:25 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_22_25_opaque(&mut self) -> Bits22_25OpaqueW<'_, Word3864OpaqueSpec> {
+                Bits22_25OpaqueW::new(self, 22)
             }
             #[doc = "Bits 30:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -11582,6 +11726,10 @@ pub mod modem_radio_core_mid_observed {
         pub type Bits0_21OpaqueR = crate::FieldReader<u32>;
         #[doc = "Field `BITS_0_21_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits0_21OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 22, u32>;
+        #[doc = "Field `BITS_22_25_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits22_25OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_22_25_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits22_25OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
         #[doc = "Field `BITS_30_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits30_31OpaqueR = crate::FieldReader;
         #[doc = "Field `BITS_30_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -11591,6 +11739,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_21_opaque(&self) -> Bits0_21OpaqueR {
                 Bits0_21OpaqueR::new(self.bits & 0x003f_ffff)
+            }
+            #[doc = "Bits 22:25 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_22_25_opaque(&self) -> Bits22_25OpaqueR {
+                Bits22_25OpaqueR::new(((self.bits >> 22) & 0x0f) as u8)
             }
             #[doc = "Bits 30:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -11603,6 +11756,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_21_opaque(&mut self) -> Bits0_21OpaqueW<'_, Word386cOpaqueSpec> {
                 Bits0_21OpaqueW::new(self, 0)
+            }
+            #[doc = "Bits 22:25 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_22_25_opaque(&mut self) -> Bits22_25OpaqueW<'_, Word386cOpaqueSpec> {
+                Bits22_25OpaqueW::new(self, 22)
             }
             #[doc = "Bits 30:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -11635,6 +11793,10 @@ pub mod modem_radio_core_mid_observed {
         pub type Bits0_21OpaqueR = crate::FieldReader<u32>;
         #[doc = "Field `BITS_0_21_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits0_21OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 22, u32>;
+        #[doc = "Field `BITS_22_25_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits22_25OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_22_25_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits22_25OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
         #[doc = "Field `BITS_30_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits30_31OpaqueR = crate::FieldReader;
         #[doc = "Field `BITS_30_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
@@ -11644,6 +11806,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_21_opaque(&self) -> Bits0_21OpaqueR {
                 Bits0_21OpaqueR::new(self.bits & 0x003f_ffff)
+            }
+            #[doc = "Bits 22:25 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_22_25_opaque(&self) -> Bits22_25OpaqueR {
+                Bits22_25OpaqueR::new(((self.bits >> 22) & 0x0f) as u8)
             }
             #[doc = "Bits 30:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -11656,6 +11823,11 @@ pub mod modem_radio_core_mid_observed {
             #[inline(always)]
             pub fn bits_0_21_opaque(&mut self) -> Bits0_21OpaqueW<'_, Word3874OpaqueSpec> {
                 Bits0_21OpaqueW::new(self, 0)
+            }
+            #[doc = "Bits 22:25 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_22_25_opaque(&mut self) -> Bits22_25OpaqueW<'_, Word3874OpaqueSpec> {
+                Bits22_25OpaqueW::new(self, 22)
             }
             #[doc = "Bits 30:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
@@ -44456,6 +44628,10 @@ pub mod wifi_mac_tsf_timer {
         pub type TargetHighR = crate::FieldReader;
         #[doc = "Field `TARGET_HIGH` writer - Project-assigned name. Bits 34:32 of the 64-bit TSF target. Complete libpp\\[hal_tsf.o\\]::hal_tsf_timer_set_target replaces them from its third argument and hal_tsf_timer_get_target returns them through its second output pointer; libpp\\[pm_twt.o\\]::pm_on_isr_twt_wake passes the high word of the stored 64-bit wake TSF there, and libpp\\[pm_twt.o\\]::pm_twt_set_target_tsf parks a timer with an all-ones low word and seven."]
         pub type TargetHighW<'a, REG> = crate::FieldWriter<'a, REG, 3>;
+        #[doc = "Field `BITS_28_29_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits28_29OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_28_29_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits28_29OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
         #[doc = "Field `WAKEUP_ENABLE` reader - Project-assigned name. Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup."]
         pub type WakeupEnableR = crate::BitReader;
         #[doc = "Field `WAKEUP_ENABLE` writer - Project-assigned name. Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup."]
@@ -44469,6 +44645,11 @@ pub mod wifi_mac_tsf_timer {
             #[inline(always)]
             pub fn target_high(&self) -> TargetHighR {
                 TargetHighR::new((self.bits & 7) as u8)
+            }
+            #[doc = "Bits 28:29 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_28_29_opaque(&self) -> Bits28_29OpaqueR {
+                Bits28_29OpaqueR::new(((self.bits >> 28) & 3) as u8)
             }
             #[doc = "Bit 30 - Project-assigned name. Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup."]
             #[inline(always)]
@@ -44486,6 +44667,11 @@ pub mod wifi_mac_tsf_timer {
             #[inline(always)]
             pub fn target_high(&mut self) -> TargetHighW<'_, ControlSpec> {
                 TargetHighW::new(self, 0)
+            }
+            #[doc = "Bits 28:29 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_28_29_opaque(&mut self) -> Bits28_29OpaqueW<'_, ControlSpec> {
+                Bits28_29OpaqueW::new(self, 28)
             }
             #[doc = "Bit 30 - Project-assigned name. Set by hal_enable_tsf_timer_wakeup and cleared by hal_disable_tsf_timer_wakeup."]
             #[inline(always)]
@@ -51670,12 +51856,24 @@ pub mod phy_fedata_wifi_recovered {
         pub type R = crate::R<Word0014OpaqueSpec>;
         #[doc = "Register `WORD_0014_OPAQUE` writer"]
         pub type W = crate::W<Word0014OpaqueSpec>;
-        impl core::fmt::Debug for R {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{}", self.bits())
+        #[doc = "Field `BITS_19_30_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits19_30OpaqueR = crate::FieldReader<u16>;
+        #[doc = "Field `BITS_19_30_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits19_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 12, u16>;
+        impl R {
+            #[doc = "Bits 19:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_19_30_opaque(&self) -> Bits19_30OpaqueR {
+                Bits19_30OpaqueR::new(((self.bits >> 19) & 0x0fff) as u16)
             }
         }
-        impl W {}
+        impl W {
+            #[doc = "Bits 19:30 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_19_30_opaque(&mut self) -> Bits19_30OpaqueW<'_, Word0014OpaqueSpec> {
+                Bits19_30OpaqueW::new(self, 19)
+            }
+        }
         #[doc = "Opaque: meaning not established. Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0014_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0014_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct Word0014OpaqueSpec;
         impl crate::RegisterSpec for Word0014OpaqueSpec {
@@ -51736,11 +51934,20 @@ pub mod phy_fedata_wifi_recovered {
         pub type R = crate::R<Word001cOpaqueSpec>;
         #[doc = "Register `WORD_001C_OPAQUE` writer"]
         pub type W = crate::W<Word001cOpaqueSpec>;
+        #[doc = "Field `BITS_0_26_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_26OpaqueR = crate::FieldReader<u32>;
+        #[doc = "Field `BITS_0_26_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_26OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 27, u32>;
         #[doc = "Field `BITS_27_31_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits27_31OpaqueR = crate::FieldReader;
         #[doc = "Field `BITS_27_31_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
         pub type Bits27_31OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 5>;
         impl R {
+            #[doc = "Bits 0:26 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_26_opaque(&self) -> Bits0_26OpaqueR {
+                Bits0_26OpaqueR::new(self.bits & 0x07ff_ffff)
+            }
             #[doc = "Bits 27:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
             pub fn bits_27_31_opaque(&self) -> Bits27_31OpaqueR {
@@ -51748,6 +51955,11 @@ pub mod phy_fedata_wifi_recovered {
             }
         }
         impl W {
+            #[doc = "Bits 0:26 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_26_opaque(&mut self) -> Bits0_26OpaqueW<'_, Word001cOpaqueSpec> {
+                Bits0_26OpaqueW::new(self, 0)
+            }
             #[doc = "Bits 27:31 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
             #[inline(always)]
             pub fn bits_27_31_opaque(&mut self) -> Bits27_31OpaqueW<'_, Word001cOpaqueSpec> {
@@ -68494,11 +68706,20 @@ pub mod phy_agc_recovered_gaps {
         pub type R = crate::R<Word0430OpaqueSpec>;
         #[doc = "Register `WORD_0430_OPAQUE` writer"]
         pub type W = crate::W<Word0430OpaqueSpec>;
+        #[doc = "Field `BITS_0_26_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_26OpaqueR = crate::FieldReader<u32>;
+        #[doc = "Field `BITS_0_26_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_26OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 27, u32>;
         #[doc = "Field `BIT_27_OPAQUE` reader - Opaque: meaning not established."]
         pub type Bit27OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_27_OPAQUE` writer - Opaque: meaning not established."]
         pub type Bit27OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
+            #[doc = "Bits 0:26 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_26_opaque(&self) -> Bits0_26OpaqueR {
+                Bits0_26OpaqueR::new(self.bits & 0x07ff_ffff)
+            }
             #[doc = "Bit 27 - Opaque: meaning not established."]
             #[inline(always)]
             pub fn bit_27_opaque(&self) -> Bit27OpaqueR {
@@ -68506,6 +68727,11 @@ pub mod phy_agc_recovered_gaps {
             }
         }
         impl W {
+            #[doc = "Bits 0:26 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_26_opaque(&mut self) -> Bits0_26OpaqueW<'_, Word0430OpaqueSpec> {
+                Bits0_26OpaqueW::new(self, 0)
+            }
             #[doc = "Bit 27 - Opaque: meaning not established."]
             #[inline(always)]
             pub fn bit_27_opaque(&mut self) -> Bit27OpaqueW<'_, Word0430OpaqueSpec> {
@@ -68533,12 +68759,24 @@ pub mod phy_agc_recovered_gaps {
         pub type R = crate::R<Word0434OpaqueSpec>;
         #[doc = "Register `WORD_0434_OPAQUE` writer"]
         pub type W = crate::W<Word0434OpaqueSpec>;
-        impl core::fmt::Debug for R {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{}", self.bits())
+        #[doc = "Field `BITS_0_26_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_26OpaqueR = crate::FieldReader<u32>;
+        #[doc = "Field `BITS_0_26_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_26OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 27, u32>;
+        impl R {
+            #[doc = "Bits 0:26 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_26_opaque(&self) -> Bits0_26OpaqueR {
+                Bits0_26OpaqueR::new(self.bits & 0x07ff_ffff)
             }
         }
-        impl W {}
+        impl W {
+            #[doc = "Bits 0:26 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_26_opaque(&mut self) -> Bits0_26OpaqueW<'_, Word0434OpaqueSpec> {
+                Bits0_26OpaqueW::new(self, 0)
+            }
+        }
         #[doc = "Opaque: meaning not established. Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0434_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0434_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct Word0434OpaqueSpec;
         impl crate::RegisterSpec for Word0434OpaqueSpec {
@@ -68560,12 +68798,24 @@ pub mod phy_agc_recovered_gaps {
         pub type R = crate::R<Word0438OpaqueSpec>;
         #[doc = "Register `WORD_0438_OPAQUE` writer"]
         pub type W = crate::W<Word0438OpaqueSpec>;
-        impl core::fmt::Debug for R {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{}", self.bits())
+        #[doc = "Field `BITS_0_11_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_11OpaqueR = crate::FieldReader<u16>;
+        #[doc = "Field `BITS_0_11_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_11OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 12, u16>;
+        impl R {
+            #[doc = "Bits 0:11 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_11_opaque(&self) -> Bits0_11OpaqueR {
+                Bits0_11OpaqueR::new((self.bits & 0x0fff) as u16)
             }
         }
-        impl W {}
+        impl W {
+            #[doc = "Bits 0:11 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_11_opaque(&mut self) -> Bits0_11OpaqueW<'_, Word0438OpaqueSpec> {
+                Bits0_11OpaqueW::new(self, 0)
+            }
+        }
         #[doc = "Opaque: meaning not established. Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0438_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0438_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct Word0438OpaqueSpec;
         impl crate::RegisterSpec for Word0438OpaqueSpec {
@@ -69226,11 +69476,20 @@ pub mod phy_bb_recovered_gaps {
         pub type R = crate::R<Word00ecOpaqueSpec>;
         #[doc = "Register `WORD_00EC_OPAQUE` writer"]
         pub type W = crate::W<Word00ecOpaqueSpec>;
+        #[doc = "Field `BITS_0_11_OPAQUE` reader - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_11OpaqueR = crate::FieldReader<u16>;
+        #[doc = "Field `BITS_0_11_OPAQUE` writer - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+        pub type Bits0_11OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 12, u16>;
         #[doc = "Field `BIT_12_OPAQUE` reader - Opaque: meaning not established."]
         pub type Bit12OpaqueR = crate::BitReader;
         #[doc = "Field `BIT_12_OPAQUE` writer - Opaque: meaning not established."]
         pub type Bit12OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
+            #[doc = "Bits 0:11 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_11_opaque(&self) -> Bits0_11OpaqueR {
+                Bits0_11OpaqueR::new((self.bits & 0x0fff) as u16)
+            }
             #[doc = "Bit 12 - Opaque: meaning not established."]
             #[inline(always)]
             pub fn bit_12_opaque(&self) -> Bit12OpaqueR {
@@ -69238,6 +69497,11 @@ pub mod phy_bb_recovered_gaps {
             }
         }
         impl W {
+            #[doc = "Bits 0:11 - Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown."]
+            #[inline(always)]
+            pub fn bits_0_11_opaque(&mut self) -> Bits0_11OpaqueW<'_, Word00ecOpaqueSpec> {
+                Bits0_11OpaqueW::new(self, 0)
+            }
             #[doc = "Bit 12 - Opaque: meaning not established."]
             #[inline(always)]
             pub fn bit_12_opaque(&mut self) -> Bit12OpaqueW<'_, Word00ecOpaqueSpec> {

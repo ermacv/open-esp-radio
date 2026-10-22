@@ -340,6 +340,12 @@ bitWidth = 26
 minimum = 0x0
 maximum = 0x3FFFFFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -704,3 +710,11 @@ completeness = "partial"
 entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BIT_27_OPAQUE"
 sources = ["C5_MMIO_DECLARED_600AD830"]
 naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TBTT_INTERVAL.BITS_26_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD85C_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

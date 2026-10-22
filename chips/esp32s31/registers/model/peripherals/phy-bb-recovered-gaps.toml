@@ -115,6 +115,12 @@ name = "BIT_12_OPAQUE"
 bitOffset = 12
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 12
 [[peripheral-review]]
 entity = "PHY_BB_RECOVERED_GAPS"
 opaque-entities = [
@@ -210,3 +216,11 @@ naming = "opaque"
 entity = "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE.BIT_12_OPAQUE"
 sources = ["S31_MMIO_DECLARED_20107CEC"]
 naming = "opaque"
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_USE_20107CEC_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

@@ -318,6 +318,12 @@ name = "BIT_16_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 16
 bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_00A4_OPAQUE"
@@ -692,6 +698,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 8
 bitWidth = 19
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_00FC_OPAQUE"
@@ -2260,6 +2272,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 17
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0804_OPAQUE"
@@ -2274,6 +2292,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 17
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0810_OPAQUE"
@@ -2336,6 +2360,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 30
 bitWidth = 2
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 12
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0C20_OPAQUE"
@@ -2562,6 +2592,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 15
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0C80_OPAQUE"
@@ -3462,6 +3498,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 4
 bitWidth = 5
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0EA0_OPAQUE"
@@ -4428,6 +4470,132 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
 bitWidth = 8
 
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0DEC_OPAQUE"
+addressOffset = 0xdec
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0DF4_OPAQUE"
+addressOffset = 0xdf4
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0CC4_OPAQUE"
+addressOffset = 0xcc4
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0808_OPAQUE"
+addressOffset = 0x808
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0D74_OPAQUE"
+addressOffset = 0xd74
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 20
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0D7C_OPAQUE"
+addressOffset = 0xd7c
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 20
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0D84_OPAQUE"
+addressOffset = 0xd84
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 20
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0D8C_OPAQUE"
+addressOffset = 0xd8c
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 20
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0C94_OPAQUE"
+addressOffset = 0xc94
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
 [[review]]
 entity = "MODEM_WIFI_MAC_OBSERVED"
 sources = ["C5_MMIO_MODEM_WIFI_MAC"]
@@ -9276,6 +9444,18 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
 bitWidth = 22
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_006C_OPAQUE"
@@ -9290,6 +9470,18 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
 bitWidth = 22
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0074_OPAQUE"
@@ -9304,6 +9496,18 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 0
 bitWidth = 22
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0080_OPAQUE"
@@ -9402,6 +9606,12 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 8
 bitWidth = 24
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_00A8_OPAQUE"
@@ -9456,6 +9666,86 @@ description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 30
 bitWidth = 2
 
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_007C_OPAQUE"
+addressOffset = 0x7c
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
+
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 28
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0084_OPAQUE"
+addressOffset = 0x84
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
+
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 28
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_008C_OPAQUE"
+addressOffset = 0x8c
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
+
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 28
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0094_OPAQUE"
+addressOffset = 0x94
+size = 32
+access = "read-write"
+description = "Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established."
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 28
 [[review]]
 entity = "MODEM_WIFI_MAC_POWER_OBSERVED"
 sources = ["C5_MMIO_MODEM_WIFI_MAC_POWER"]
@@ -10250,6 +10540,358 @@ completeness = "partial"
 [[review]]
 entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0120_OPAQUE.BITS_16_31_OPAQUE"
 sources = ["C5_MMIO_USE_600A4120_RUN", "C5_MMIO_DECLARED_600A4120"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C7C_OPAQUE.BIT_18_OPAQUE"
+sources = ["C5_MMIO_USE_600A4C7C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_00A0_OPAQUE.BIT_28_OPAQUE"
+sources = ["C5_MMIO_USE_600A40A0_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0064_OPAQUE.BITS_22_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD864_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_006C_OPAQUE.BITS_22_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD86C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0074_OPAQUE.BITS_22_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD874_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0800_OPAQUE.BITS_30_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A4800_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0804_OPAQUE.BITS_30_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A4804_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C1C_OPAQUE.BITS_0_11_OPAQUE"
+sources = ["C5_MMIO_USE_600A4C1C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_00F4_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_USE_600A40F4_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E9C_OPAQUE.BIT_0_OPAQUE"
+sources = ["C5_MMIO_USE_600A4E9C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DEC_OPAQUE"
+sources = ["C5_MMIO_USE_600A4DEC_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DEC_OPAQUE.BIT_0_OPAQUE"
+sources = ["C5_MMIO_USE_600A4DEC_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DF4_OPAQUE"
+sources = ["C5_MMIO_USE_600A4DF4_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DF4_OPAQUE.BIT_0_OPAQUE"
+sources = ["C5_MMIO_USE_600A4DF4_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CC4_OPAQUE"
+sources = ["C5_MMIO_USE_600A4CC4_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CC4_OPAQUE.BIT_2_OPAQUE"
+sources = ["C5_MMIO_USE_600A4CC4_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0808_OPAQUE"
+sources = ["C5_MMIO_USE_600A4808_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0808_OPAQUE.BITS_30_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A4808_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_007C_OPAQUE"
+sources = ["C5_MMIO_USE_600AD87C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_007C_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD87C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0084_OPAQUE"
+sources = ["C5_MMIO_USE_600AD884_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0084_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD884_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_008C_OPAQUE"
+sources = ["C5_MMIO_USE_600AD88C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_008C_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD88C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0094_OPAQUE"
+sources = ["C5_MMIO_USE_600AD894_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0094_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD894_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D74_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D74_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D74_OPAQUE.BITS_0_19_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D74_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D7C_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D7C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D7C_OPAQUE.BITS_0_19_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D7C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D84_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D84_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D84_OPAQUE.BITS_0_19_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D84_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D8C_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D8C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D8C_OPAQUE.BITS_0_19_OPAQUE"
+sources = ["C5_MMIO_USE_600A4D8C_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C94_OPAQUE"
+sources = ["C5_MMIO_USE_600A4C94_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C94_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_USE_600A4C94_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_007C_OPAQUE.BITS_0_27_OPAQUE"
+sources = ["C5_MMIO_USE_600AD87C_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0084_OPAQUE.BITS_0_27_OPAQUE"
+sources = ["C5_MMIO_USE_600AD884_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_008C_OPAQUE.BITS_0_27_OPAQUE"
+sources = ["C5_MMIO_USE_600AD88C_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0094_OPAQUE.BITS_0_27_OPAQUE"
+sources = ["C5_MMIO_USE_600AD894_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0064_OPAQUE.BITS_26_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD864_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_006C_OPAQUE.BITS_26_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD86C_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0074_OPAQUE.BITS_26_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD874_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_00A4_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_USE_600AD8A4_TWO_DOMAIN_RUN"]
 naming = "opaque"
 provenance = "observed"
 accuracy = "exact"

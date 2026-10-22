@@ -170,6 +170,12 @@ name = "BIT_27_OPAQUE"
 bitOffset = 27
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 27
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -179,6 +185,12 @@ addressOffset = 0x434
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 27
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -188,6 +200,12 @@ addressOffset = 0x438
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 12
 [[peripheral-review]]
 entity = "PHY_AGC_RECOVERED_GAPS"
 opaque-entities = [
@@ -314,3 +332,27 @@ naming = "descriptive"
 entity = "PHY_AGC_RECOVERED_GAPS.WORD_00F4_OPAQUE.RIFS_MODE_ENABLE"
 sources = ["S31_MMIO_DECLARED_201070F4"]
 naming = "descriptive"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE.BITS_0_26_OPAQUE"
+sources = ["S31_MMIO_USE_20107430_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0434_OPAQUE.BITS_0_26_OPAQUE"
+sources = ["S31_MMIO_USE_20107434_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0438_OPAQUE.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_USE_20107438_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
