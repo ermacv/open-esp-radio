@@ -65,7 +65,8 @@ enum Check {
     },
     /// Reject vendor uses of absent register bits in every pinned vendor
     /// binary; report violations, unknown bits and corpus limits in
-    /// `target/register-inventory/<chip>/report.txt`. Requires Blobray schema 9.
+    /// `target/register-inventory/<chip>/report.txt`. Analyzes typed Blobray
+    /// records in process.
     Inventory {
         #[arg(long)]
         chip: String,

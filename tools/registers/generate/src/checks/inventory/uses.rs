@@ -1,19 +1,19 @@
-//! Vendor-use policy for register-accesses schema 9. Expression selection
+//! Vendor-use policy for typed register accesses. Expression selection
 //! masks are deliberately not evidence of read use.
 use super::{DeclaredWord, Function, Region, Target, region_of};
 use crate::Result;
+use oer_analysis_blobray_application::library::Assumptions;
 use oer_analysis_blobray_domain::{
-    ReadPrecision, ReadUses, RegisterMask, RegisterMaskKind, StoredBits, StoredBitsSource,
+    IndexedAddress, ReadPrecision, ReadUses, RegisterAccess, RegisterAccessSummary, RegisterMask,
+    RegisterMaskKind, StoredBits, StoredBitsSource,
 };
+use oer_analysis_riscv_model::{ArtifactId, CallAbi, FunctionRecord, MemoryKind, ReadOnlyWindow};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod read_policy;
 #[cfg(test)]
 mod tests;
-mod wire;
-
-use wire::Document;
 
 /// Evidence retained for one access at one candidate address. Masks here
 /// refer to bit positions in the containing MMIO word.
@@ -68,19 +68,35 @@ pub struct AddressLimit {
     pub function: Function,
     pub symbol: serde_json::Value,
     pub record: u64,
-    pub target: Option<super::Indexed>,
+    pub target: Option<IndexedAddress>,
     pub compared_addresses: usize,
+}
+
+/// One pinned input, named by its role and the digest of the analyzed bytes.
+#[derive(Clone, Debug, Serialize)]
+pub struct Input {
+    pub role: String,
+    pub sha256: ArtifactId,
+}
+
+/// The inputs and assumptions of the same in-process analysis as its summary.
+#[derive(Debug, Serialize)]
+pub struct Corpus {
+    pub inputs: Vec<Input>,
+    pub abi: Option<CallAbi>,
+    pub call_summaries: bool,
+    pub read_only: Vec<ReadOnlyWindow>,
+    pub summary: RegisterAccessSummary,
 }
 
 /// The inputs, assumptions and analysis coverage are copied from Blobray,
 /// so a list of violations never implies coverage of an entire vendor.
 #[derive(Debug, Serialize)]
 pub struct Report {
-    pub schema: u32,
-    pub corpus: wire::Corpus,
+    pub corpus: Corpus,
     pub words: Vec<Word>,
     pub address_limits: Vec<AddressLimit>,
-    pub coverage_gaps: Vec<serde_json::Value>,
+    pub coverage_gaps: Vec<RegisterAccess>,
     pub resolved_indexed_reads: read_policy::Accounting,
     pub all_reads: read_policy::Accounting,
 }
@@ -116,7 +132,7 @@ impl Report {
     pub fn render(&self, chip: &str) -> String {
         let summary = &self.corpus.summary;
         let mut text = format!(
-            "Vendor bit-use check of {chip}: {} words with used reserved or absent bits\n  {} compared words; {} words with unknown bits\n  functions {} partial {} blocked {} gaps {} unresolved {} indexed {}\n  register-accesses schema {}; ABI {:?}; call_returns {}\n",
+            "Vendor bit-use check of {chip}: {} words with used reserved or absent bits\n  {} compared words; {} words with unknown bits\n  functions {} partial {} blocked {} gaps {} unresolved {} indexed {}\n  register-accesses; ABI {:?}; call_summaries {}\n",
             self.violations(),
             self.words.len(),
             self.words
@@ -129,9 +145,8 @@ impl Report {
             summary.gaps,
             summary.unresolved_addresses,
             summary.indexed_addresses,
-            self.schema,
             self.corpus.abi,
-            self.corpus.call_returns,
+            self.corpus.call_summaries,
         );
         text.push_str(&format!(
             "  reserved-used {} words / {} bits; absent-used {} words / {} bits\n",
@@ -152,6 +167,32 @@ impl Report {
                 .map(|word| word.absent_violation_bits.count_ones())
                 .sum::<u32>(),
         ));
+        let mut command = String::from(
+            "  Reproduce JSON: cargo blobray --format json register-accesses --timeout-secs 3600",
+        );
+        if let Some(CallAbi::RiscvInteger) = self.corpus.abi {
+            command.push_str(" --abi riscv-integer");
+        }
+        if self.corpus.call_summaries {
+            command.push_str(" --call-summaries");
+        }
+        for window in &self.corpus.read_only {
+            command.push_str(&format!(
+                " --read-only {:#x}:{:#x}",
+                window.start, window.length
+            ));
+        }
+        for input in &self.corpus.inputs {
+            command.push_str(&format!(
+                " --input {}=pin:{chip}/{}",
+                input.role, input.role
+            ));
+        }
+        for range in &summary.ranges {
+            command.push_str(&format!(" --range {:#x}:{:#x}", range.start, range.length));
+        }
+        text.push_str(&command);
+        text.push('\n');
         text.push_str("  Corpus: every function of the listed pinned vendor binaries; static may-accesses in owned MMIO ranges.\n  Excludes firmware outputs, non-binary sources, accesses outside these ranges, and RAM layouts.\n  Blocked/gap code and unresolved addresses cannot establish absence; large/unbounded indexed accesses compare only declared arrays/runs.\n  Named diagnostic calls in the cited fixed list do not count as use; all other sinks and Exact/May do. Read-selection does not. Unknown is neither use nor absence.\n");
         self.resolved_indexed_reads
             .render(&mut text, "resolved/indexed MMIO");
@@ -161,9 +202,12 @@ impl Report {
             text.push_str(&format!("  input {} sha256 {}\n", input.role, input.sha256));
         }
         for range in &summary.ranges {
-            text.push_str(&format!("  range {range}\n"));
+            text.push_str(&format!("  range {}\n", serde_json::json!(range)));
         }
-        text.push_str(&format!("  partial causes: {}\n", summary.partial_causes));
+        text.push_str(&format!(
+            "  partial causes: {}\n",
+            serde_json::json!(summary.partial_causes)
+        ));
         for word in self.words.iter().filter(|word| word.violation_bits != 0) {
             text.push_str(&format!(
                 "\nVIOLATION 0x{:08x} {} [{}] reserved-used 0x{:08x}; absent-used 0x{:08x}; used 0x{:08x} declared 0x{:08x}{}\n",
@@ -219,7 +263,7 @@ impl Report {
             ));
         }
         for gap in &self.coverage_gaps {
-            text.push_str(&format!("\nCOVERAGE GAP {gap}\n"));
+            text.push_str(&format!("\nCOVERAGE GAP {}\n", serde_json::json!(gap)));
         }
         text
     }
@@ -238,65 +282,117 @@ fn render_evidence(text: &mut String, evidence: &Evidence) {
     ));
 }
 
-/// Compare a complete schema-9 document with the declared source model.
-/// A missing load classification is a contract error, never an unused read.
-pub fn check(
-    chip: &str,
-    accesses: &str,
-    inputs: &[String],
-    regions: &[Region],
-    declared: &BTreeMap<u32, DeclaredWord>,
-    arrays: &[Vec<u32>],
-) -> Result<Report> {
-    let policy = read_policy::Policy::for_chip(chip)?;
-    if declared
-        .values()
-        .any(|word| word.reserved.values().any(|mask| mask & word.fields != 0))
-    {
-        return Err("declared field overlaps cited reserved bits".into());
+/// Fold each typed record directly into compared words and coverage limits.
+/// The corpus itself is never retained.
+pub struct Accumulator<'a> {
+    policy: read_policy::Policy,
+    inputs: &'a [Input],
+    assumptions: Assumptions<'a>,
+    regions: &'a [Region],
+    declared: &'a BTreeMap<u32, DeclaredWord>,
+    arrays: &'a [Vec<u32>],
+    words: BTreeMap<u32, Word>,
+    address_limits: Vec<AddressLimit>,
+    coverage_gaps: Vec<RegisterAccess>,
+    all_reads: read_policy::Accounting,
+    resolved_indexed_reads: read_policy::Accounting,
+}
+
+impl<'a> Accumulator<'a> {
+    pub fn new(
+        chip: &str,
+        inputs: &'a [Input],
+        assumptions: Assumptions<'a>,
+        regions: &'a [Region],
+        declared: &'a BTreeMap<u32, DeclaredWord>,
+        arrays: &'a [Vec<u32>],
+    ) -> Result<Self> {
+        let policy = read_policy::Policy::for_chip(chip)?;
+        if declared
+            .values()
+            .any(|word| word.reserved.values().any(|mask| mask & word.fields != 0))
+        {
+            return Err("declared field overlaps cited reserved bits".into());
+        }
+        Ok(Self {
+            policy,
+            inputs,
+            assumptions,
+            regions,
+            declared,
+            arrays,
+            words: BTreeMap::new(),
+            address_limits: Vec::new(),
+            coverage_gaps: Vec::new(),
+            all_reads: read_policy::Accounting::default(),
+            resolved_indexed_reads: read_policy::Accounting::default(),
+        })
     }
-    let document = Document::parse(accesses, inputs)?;
-    let mut words = BTreeMap::<u32, Word>::new();
-    let mut address_limits = Vec::new();
-    let mut coverage_gaps = Vec::new();
-    let mut all_reads = read_policy::Accounting::default();
-    let mut resolved_indexed_reads = read_policy::Accounting::default();
-    for raw in document.records {
-        if raw.get("kind").and_then(|kind| kind.as_str()) != Some("observation") {
-            coverage_gaps.push(raw);
-            continue;
-        }
-        let access: wire::Observation = serde_json::from_value(raw)?;
-        if access.fact.kind == "expression" {
-            continue;
-        }
-        if access.fact.kind != "memory-access" {
-            return Err(format!("unexpected MMIO fact {}", access.fact.kind).into());
-        }
-        let function = access.function.resolve(inputs)?;
-        let width = access.fact.width.ok_or("MMIO access without width")?;
-        let full = width_mask(width)?;
-        let load = match access.fact.access.as_deref() {
-            Some("load" | "float-load") => true,
-            Some("store" | "float-store") => false,
-            _ => return Err("MMIO access without load/store kind".into()),
+
+    pub fn observe(&mut self, access: &RegisterAccess) -> Result<()> {
+        let RegisterAccess::Observation {
+            function,
+            record,
+            fact,
+            address,
+            indexed,
+            mask,
+            stored,
+            reads,
+            ..
+        } = access
+        else {
+            self.coverage_gaps.push(access.clone());
+            return Ok(());
         };
+        let (offset, load, width) = match fact.as_ref() {
+            FunctionRecord::Expression { .. } => return Ok(()),
+            FunctionRecord::MemoryAccess {
+                offset,
+                access,
+                width,
+                ..
+            } => (
+                *offset,
+                match access {
+                    MemoryKind::Load | MemoryKind::FloatLoad => true,
+                    MemoryKind::Store | MemoryKind::FloatStore => false,
+                    _ => return Err("MMIO access without load/store kind".into()),
+                },
+                *width,
+            ),
+            _ => return Err("unexpected MMIO fact".into()),
+        };
+        let input = usize::try_from(function.input)
+            .ok()
+            .and_then(|i| self.inputs.get(i))
+            .ok_or("MMIO function of an unknown input")?;
+        let name = function
+            .name
+            .as_deref()
+            .ok_or("MMIO observation of an unnamed function")?;
+        let symbol = serde_json::to_value(&function.symbol)?;
+        let function = (input.role.clone(), std::str::from_utf8(name)?.to_owned());
+        let policy = &self.policy;
+        let (regions, declared, arrays) = (self.regions, self.declared, self.arrays);
+        let (words, address_limits) = (&mut self.words, &mut self.address_limits);
+        let full = width_mask(width)?;
         if load {
-            let reads = access.reads.as_ref().ok_or("schema-9 load without reads")?;
+            let reads = reads.as_ref().ok_or("load without reads")?;
             validate_reads(reads, full)?;
-            all_reads.observe(reads, full, &policy);
-            if access.address.is_some() || access.indexed.is_some() {
-                resolved_indexed_reads.observe(reads, full, &policy);
+            self.all_reads.observe(reads, full, policy);
+            if address.is_some() || indexed.is_some() {
+                self.resolved_indexed_reads.observe(reads, full, policy);
             }
         } else {
-            validate_stored(access.stored.as_deref(), full)?;
+            validate_stored(stored.as_deref(), full)?;
         }
-        if let Some(mask) = access.mask
+        if let Some(mask) = mask
             && mask.bits & !full != 0
         {
             return Err("MMIO mask exceeds access width".into());
         }
-        let target = match (access.address, access.indexed) {
+        let target = match (*address, *indexed) {
             (Some(address), _) => Some(Target::Address(address)),
             (None, Some(indexed)) if indexed.stride != 0 => Some(Target::Indexed(indexed)),
             (None, Some(_)) => return Err("zero indexed stride".into()),
@@ -304,7 +400,7 @@ pub fn check(
         };
         let addresses = match target {
             Some(Target::Address(address)) => vec![address],
-            Some(Target::Indexed(indexed)) => indexed.addresses(arrays, declared),
+            Some(Target::Indexed(indexed)) => super::addresses(indexed, arrays, declared),
             None => vec![],
         };
         if target.is_none()
@@ -312,9 +408,9 @@ pub fn check(
         {
             address_limits.push(AddressLimit {
                 function: function.clone(),
-                symbol: access.function.symbol.clone(),
-                record: access.record,
-                target: access.indexed,
+                symbol: symbol.clone(),
+                record: *record,
+                target: *indexed,
                 compared_addresses: addresses.len(),
             });
         }
@@ -324,9 +420,9 @@ pub fn check(
             }
             let (reset, known) = access_reset(address, full, declared);
             let evidence = if load {
-                read_evidence(access.reads.as_ref().ok_or("load without reads")?, &policy)
+                read_evidence(reads.as_ref().ok_or("load without reads")?, policy)
             } else {
-                store_evidence(access.stored.as_deref(), access.mask, full, reset, known)
+                store_evidence(stored.as_deref(), *mask, full, reset, known)
             };
             let mut previous_word = None;
             for byte in 0..u32::from(width) {
@@ -385,12 +481,9 @@ pub fn check(
                     }
                     let entry = Evidence {
                         function: function.clone(),
-                        record: access.record,
-                        symbol: access.function.symbol.clone(),
-                        site: access
-                            .fact
-                            .offset
-                            .ok_or("MMIO access without instruction offset")?,
+                        record: *record,
+                        symbol: symbol.clone(),
+                        site: offset,
                         bits,
                         reason: reason.clone(),
                     };
@@ -416,28 +509,45 @@ pub fn check(
                 }
             }
         }
+        Ok(())
     }
-    for word in words.values_mut() {
-        word.may_only_bits = word.may_bits & !word.exact_bits;
-        merge_evidence(&mut word.diagnostics);
-        word.reserved_violation_bits = word.used_bits & word.reserved_bits;
-        word.absent_violation_bits = word.used_bits & !(word.declared_bits | word.reserved_bits);
-        word.violation_bits = word.reserved_violation_bits | word.absent_violation_bits;
-        word.inactive_bits = word.observed_bits & !(word.used_bits | word.unknown_bits);
-        merge_evidence(&mut word.uses);
-        merge_evidence(&mut word.unknown);
+
+    pub fn finish(mut self, summary: RegisterAccessSummary) -> Report {
+        let Self {
+            words,
+            all_reads,
+            resolved_indexed_reads,
+            policy,
+            ..
+        } = &mut self;
+        for word in words.values_mut() {
+            word.may_only_bits = word.may_bits & !word.exact_bits;
+            merge_evidence(&mut word.diagnostics);
+            word.reserved_violation_bits = word.used_bits & word.reserved_bits;
+            word.absent_violation_bits =
+                word.used_bits & !(word.declared_bits | word.reserved_bits);
+            word.violation_bits = word.reserved_violation_bits | word.absent_violation_bits;
+            word.inactive_bits = word.observed_bits & !(word.used_bits | word.unknown_bits);
+            merge_evidence(&mut word.uses);
+            merge_evidence(&mut word.unknown);
+        }
+        all_reads.finish(policy);
+        resolved_indexed_reads.finish(policy);
+        Report {
+            corpus: Corpus {
+                inputs: self.inputs.to_vec(),
+                abi: self.assumptions.abi,
+                call_summaries: self.assumptions.call_summaries,
+                read_only: self.assumptions.read_only.to_vec(),
+                summary,
+            },
+            words: self.words.into_values().collect(),
+            address_limits: self.address_limits,
+            coverage_gaps: self.coverage_gaps,
+            all_reads: self.all_reads,
+            resolved_indexed_reads: self.resolved_indexed_reads,
+        }
     }
-    all_reads.finish(&policy);
-    resolved_indexed_reads.finish(&policy);
-    Ok(Report {
-        schema: document.schema,
-        corpus: document.corpus,
-        words: words.into_values().collect(),
-        address_limits,
-        coverage_gaps,
-        all_reads,
-        resolved_indexed_reads,
-    })
 }
 
 fn merge_evidence(evidence: &mut Vec<Evidence>) {

@@ -83,9 +83,8 @@ fn an_indexed_access_touches_its_bounded_words_or_its_declared_array() {
         "templates with two or more elements at one stride"
     );
     let declared = declared_words(&registers);
-    let words = |observation: Indexed| -> Vec<(u32, usize)> {
-        observation
-            .addresses(&arrays, &declared)
+    let words = |observation: IndexedAddress| -> Vec<(u32, usize)> {
+        addresses(observation, &arrays, &declared)
             .into_iter()
             .filter(|address| (0x1000..0x1100).contains(address))
             .map(|address| (address, 1))
@@ -135,12 +134,16 @@ fn an_indexed_access_touches_its_bounded_words_or_its_declared_array() {
         register(0x1070, 32, "QUEUE_Q3_HIGH", vec![field("F", 0, 8)]),
     ];
     let declared = declared_words(&single);
-    let reached = indexed(0x1040, 0x10, Some(256)).addresses(&super::arrays(&single), &declared);
+    let reached = addresses(
+        indexed(0x1040, 0x10, Some(256)),
+        &super::arrays(&single),
+        &declared,
+    );
     assert_eq!(reached, [0x1040, 0x1050], "0x1060 is undeclared");
 }
 
-fn indexed(base: u32, stride: i32, count: Option<u32>) -> Indexed {
-    Indexed {
+fn indexed(base: u32, stride: i32, count: Option<u32>) -> IndexedAddress {
+    IndexedAddress {
         base,
         stride,
         count,
