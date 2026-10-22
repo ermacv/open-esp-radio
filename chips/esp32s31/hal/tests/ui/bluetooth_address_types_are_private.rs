@@ -15,3 +15,7 @@ use oer_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0
 use oer_esp32s31_hal::types::BluetoothControllerSramAddress as RawControllerAddress; // ui-error: E0603
 #[cfg(ui_reject)]
 use oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs; // ui-error: E0603
+#[cfg(ui_reject)]
+use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
+#[cfg(ui_reject)]
+use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432

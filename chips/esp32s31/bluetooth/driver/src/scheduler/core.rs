@@ -268,6 +268,11 @@ impl ControllerHalInitialized {
     /// in its event cells' executor where the caller runs, and is consumed
     /// into the same powered ownership epoch; it replaces the vendor event,
     /// broker-node and task containers instead of emulating their ABI.
+    ///
+    /// # Errors
+    ///
+    /// A non-pristine runtime or foreign executor context returns both input
+    /// owners unchanged, before any scheduler hardware write.
     #[cfg(target_arch = "riscv32")]
     pub fn initialize_scheduler<'cells, X: SignalExecutor, const MODEM_TIMER_CAPACITY: usize>(
         self,

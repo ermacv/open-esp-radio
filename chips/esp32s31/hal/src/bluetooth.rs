@@ -79,8 +79,7 @@ pub use oer_esp32s31_pac::{
     BluetoothSchedulerRunInterruptsPrepared, BluetoothSchedulerSkipCleared,
     BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipPublished,
     BluetoothSchedulerSkipResult, BluetoothSchedulerSoftwareListRemovalIdle,
-    BluetoothSchedulerSoftwareListRemovalInterruptStep, BluetoothSchedulerSoftwareListRemovalJoin,
-    BluetoothSchedulerSoftwareListRemovalReady, BluetoothSchedulerStopped,
+    BluetoothSchedulerSoftwareListRemovalInterruptStep, BluetoothSchedulerStopped,
     BluetoothSchedulerWorkObservation, ModemSysconBluetoothObservation,
     PlatformClockPowerObservation, SharedModemClockObservation,
 };
@@ -90,7 +89,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerHardwareListHeadPublished,
     BluetoothSchedulerHardwareListHeadRetirementObservation, BluetoothSchedulerLockModifyRequest,
     BluetoothSchedulerRunEventPublished, BluetoothSchedulerSkipRequest,
-    BluetoothSchedulerStoppedHeadRetirement,
+    BluetoothSchedulerSoftwareListRemovalJoin, BluetoothSchedulerStoppedHeadRetirement,
 };
 
 /// The Bluetooth partition split into its task registers, modem low-power
@@ -1965,7 +1964,7 @@ impl ControllerHal<'_> {
 
     /// Finish one finite task-owned software-list removal observation after a
     /// fresh interrupt-side idle sample.
-    pub fn finish_scheduler_software_list_removal(
+    pub(crate) fn finish_scheduler_software_list_removal(
         &mut self,
         idle: BluetoothSchedulerSoftwareListRemovalIdle,
         head: BluetoothSchedulerHardwareListHeadEmptyObserved,

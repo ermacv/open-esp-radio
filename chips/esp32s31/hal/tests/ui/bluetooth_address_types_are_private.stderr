@@ -10,6 +10,18 @@ help: a similar name exists in the module
 13 + use oer_esp32s31_hal::bluetooth::BluetoothControllerReset; // ui-error: E0432
    |
 
+error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady`
+  --> tests/ui/bluetooth_address_types_are_private.rs:21:5
+   |
+21 | use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BluetoothSchedulerSoftwareListRemovalReady` in `bluetooth`
+   |
+help: a similar name exists in the module
+   |
+21 - use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432
+21 + use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalIdle; // ui-error: E0432
+   |
+
 error[E0603]: struct `DeviceTablePublication` is private
  --> tests/ui/bluetooth_address_types_are_private.rs:5:34
   |
@@ -90,4 +102,21 @@ help: import `BluetoothPhyRegisterInitInputs` directly
    |
 17 - use oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs; // ui-error: E0603
 17 + use oer_esp32s31_pac::bluetooth::phy::BluetoothPhyRegisterInitInputs; // ui-error: E0603
+   |
+
+error[E0603]: enum `BluetoothSchedulerSoftwareListRemovalJoin` is private
+  --> tests/ui/bluetooth_address_types_are_private.rs:19:34
+   |
+19 | use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private enum
+   |
+note: the enum `BluetoothSchedulerSoftwareListRemovalJoin` is defined here
+  --> src/bluetooth.rs
+   |
+   |     BluetoothSchedulerSoftwareListRemovalJoin, BluetoothSchedulerStoppedHeadRetirement,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: import `BluetoothSchedulerSoftwareListRemovalJoin` directly
+   |
+19 - use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
+19 + use oer_esp32s31_pac::bluetooth::scheduler::runtime::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
    |
