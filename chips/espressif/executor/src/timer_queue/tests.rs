@@ -20,7 +20,18 @@ use std::{
     reason = "test executor needs its unique pender ABI symbol"
 )]
 #[unsafe(export_name = "__pender")]
-fn pender(_: *mut ()) {}
+fn pender(context: *mut ()) {
+    if !context.is_null() {
+        // SAFETY: the pending-bit test supplies its own leaked PendingBit;
+        // all other executors in this test binary use a null context.
+        let pending = unsafe { &*(context as *const PendingBit) };
+        pending.0.store(true, Ordering::Release);
+    }
+}
+
+struct PendingBit(std::sync::atomic::AtomicBool);
+
+mod pending;
 
 #[derive(Default)]
 struct Probe {
