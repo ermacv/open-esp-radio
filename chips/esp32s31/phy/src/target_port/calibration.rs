@@ -153,7 +153,11 @@ pub(super) fn observe_dcode_result<O: PhyTargetObserver>(
     child: &PhyCalibrationDcodeTransition,
     result: &Result<(), PhyTargetPortError>,
 ) {
-    observer.dcode_result(&child.action(), result);
+    observer.dcode_result(format_args!(
+        "action={:?} result={:?}",
+        child.action(),
+        result
+    ));
 }
 
 /// Run RX-DC calibration and publish both gain banks using the admitted owner.

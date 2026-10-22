@@ -263,12 +263,7 @@ pub trait PhyTargetObserver {
     }
 
     fn dcode_pll_lock(&mut self, _locked: bool) {}
-    fn dcode_result(
-        &mut self,
-        _action: &crate::analog::dcode::PhyDcodeAction,
-        _result: &Result<(), PhyTargetPortError>,
-    ) {
-    }
+    fn dcode_result(&mut self, _diagnostic: core::fmt::Arguments<'_>) {}
 
     /// Emitted once after a terminally successful RX-gain child. The child
     /// performs no diagnostic clock reads while accumulating these counts.
