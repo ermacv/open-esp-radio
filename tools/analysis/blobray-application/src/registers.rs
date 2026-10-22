@@ -20,10 +20,11 @@ pub(crate) struct Candidate<'a> {
     pub mask: Option<RegisterMask>,
 }
 
-/// One lazy CFG pass supplies selected read uses and stored provenance for
-/// register-accesses and MMIO comparison.
+/// Two lazy domains of one CFG engine supply selected read uses and stored
+/// provenance, with independent function budgets.
 pub(crate) struct ReadObservations<'f, 'a, 'm> {
     evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
+    provenance: oer_analysis_blobray_analysis::registers::StoredProvenanceEvaluator<'f, 'a, 'm>,
     facts: &'f Facts<'a, 'm>,
     memory: &'m WorkingMemory,
     decoder: &'f dyn FunctionSemantics,
@@ -50,6 +51,9 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
+                facts, memory,
+            ),
+            provenance: oer_analysis_blobray_analysis::registers::StoredProvenanceEvaluator::new(
                 facts, memory,
             ),
             facts,
@@ -82,7 +86,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ..
         } = fact
         {
-            self.analyze(c)?;
+            self.analyze_reads(c)?;
             let mut reads = self.evaluator.reads(*offset, address, *width, *access, c)?;
             for usage in &mut reads.uses {
                 if let ReadSink::CallArgument { site, callee, .. } = &mut usage.sink {
@@ -94,7 +98,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             Ok(None)
         }
     }
-    fn analyze(&mut self, c: &mut dyn RunControl) -> Result<()> {
+    fn prepare_links(&mut self, c: &mut dyn RunControl) -> Result<()> {
         if self.links.is_none() {
             self.links = Some(CallLinks::new(
                 self.facts,
@@ -104,6 +108,10 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 c,
             )?);
         }
+        Ok(())
+    }
+    fn analyze_reads(&mut self, c: &mut dyn RunControl) -> Result<()> {
+        self.prepare_links(c)?;
         let links = self
             .links
             .as_ref()
@@ -136,8 +144,23 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             ..
         } = fact
         {
-            self.analyze(c)?;
-            Ok(Some(self.evaluator.stored(
+            self.prepare_links(c)?;
+            let links = self
+                .links
+                .as_ref()
+                .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call links"))?;
+            let summaries = self.summaries;
+            self.provenance.analyze(
+                self.abi,
+                self.decoder,
+                &|site| {
+                    links
+                        .callee(site)
+                        .and_then(|callee| summaries.summary(callee))
+                },
+                c,
+            )?;
+            Ok(Some(self.provenance.stored(
                 *offset,
                 address,
                 *width,

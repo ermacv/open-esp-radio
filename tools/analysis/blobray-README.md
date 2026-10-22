@@ -82,6 +82,21 @@ work/deadline checks. A function's dependency pass has an additional cap of
 report `work-limit` without exhausting the
 whole library operation. Known sinks take precedence over limits.
 
+`stored` projects a second domain of the same CFG engine. Each register bit
+holds one tag: unknown, zero, one, or a source bit; stack bytes hold eight tags.
+This pass tracks every load and entry register. Joins keep equal tags and
+replace differing tags with unknown. Integer operations, stack forwarding and
+callee return mappings use the common interpreter. Numeric alternatives retain
+only constant bits shared by all alternatives. Its function budget has the same
+formula, independently of the dependency pass. On exhaustion, stores outside
+the forward closure of pending transfers retain their proven cells; literal
+store facts remain available inside it.
+
+Read dependencies describe paths carrying each source. Stored provenance
+requires one tag across all incoming paths. In particular, distinct loads
+joining before one store can be preserved in `reads` while their stored source
+is unknown.
+
 Grouped human output prints `reads[used=... unknown=... preserved=... unused=...]`
 with sink sites, precision and limit reasons. `read-selection` remains an
 expression observation. Blobray reports these paths; register checker policy,

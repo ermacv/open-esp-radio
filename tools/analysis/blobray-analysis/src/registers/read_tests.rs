@@ -57,6 +57,16 @@ impl FunctionSemantics for Decoder {
                 signed: false,
                 swap: false,
             },
+            Some(6) => SemanticOp::Memory {
+                kind: MemoryKind::Store,
+                base: 5,
+                displacement: 0,
+                width: 4,
+                dest: None,
+                source: Some(6),
+                signed: false,
+                swap: false,
+            },
             Some(5) => SemanticOp::Integer {
                 op: IntegerOp::Add,
                 dest: 6,
@@ -130,7 +140,7 @@ fn read_states_and_sink_storage_are_admitted_reused_and_released() {
         let records = graph(128);
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
         let before = memory.used();
-        let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+        let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
         let mut steps = 0;
         reads
             .analyze(
@@ -187,7 +197,7 @@ fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates()
         {
             let records = graph(128);
             let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
-            let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+            let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
             let mut steps = 0;
             reads
                 .analyze(
@@ -229,7 +239,7 @@ fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates()
     let memory = WorkingMemory::new(1 << 20).expect("working memory");
     let records = graph(2);
     let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
-    let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+    let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
     assert_eq!(
         reads
             .analyze(
@@ -249,7 +259,7 @@ fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates()
 fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
     let memory = WorkingMemory::new(1 << 20).expect("working memory");
     let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
-    let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+    let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
     let mut c = || Ok(());
     let address = number(0x20000);
     reads
@@ -261,7 +271,6 @@ fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
                     address: &address,
                     width: 4,
                 },
-                observed: true,
                 preserved: 0,
                 limits: [0; 4],
                 event: 0,
@@ -269,20 +278,15 @@ fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
             c.position(),
         )
         .expect("source");
-    let original = reads
-        .seed(0, 4, false, u32::MAX, &mut c)
-        .expect("load seed");
+    let original = Reads::seed(&mut reads, 0, 4, false, u32::MAX, &mut c).expect("load seed");
     assert_eq!(
-        reads.join_flow(original, 0, &mut c).expect("join absent"),
+        Reads::join(&mut reads, original, 0, &mut c).expect("join absent"),
         original
     );
-    let shifted = reads
-        .map_flow(original, |i| i.checked_sub(1), &mut c)
-        .expect("shift");
-    let join = reads
-        .join_flow(original, shifted, &mut c)
-        .expect("conflicting join");
+    let shifted = Reads::map(&mut reads, original, |i| i.checked_sub(1), &mut c).expect("shift");
+    let join = Reads::join(&mut reads, original, shifted, &mut c).expect("conflicting join");
     let dependency = reads
+        .domain
         .flows
         .values(join)
         .expect("flow")
@@ -296,7 +300,7 @@ fn a_large_straight_line_function_gets_a_size_proportional_budget() {
     let memory = WorkingMemory::new(64 << 20).expect("working memory");
     let records = graph(8192);
     let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("large facts");
-    let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+    let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
     let mut work = 0;
     struct Count<'a>(&'a mut u64);
     impl RunControl for Count<'_> {
@@ -369,7 +373,7 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
     let mut budget = Budget(local_limit * 3);
     {
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("large facts");
-        let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+        let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
         reads
             .analyze(
                 None,
@@ -398,7 +402,7 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
     {
         let records = graph(2);
         let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("small facts");
-        let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+        let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
         reads
             .analyze(
                 None,
@@ -413,6 +417,102 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
             .expect("next result");
         assert!(result.unknown.is_empty());
         assert_eq!(result.uses.first().expect("branch use").bits, u32::MAX);
+    }
+    assert_eq!(memory.used(), 0);
+}
+
+/// A dependency means that a source reaches a sink on paths carrying it.
+/// A single-origin provenance tag must agree on every incoming path. These
+/// contracts differ when two physical loads meet at one store.
+#[test]
+fn distinct_loads_at_a_join_keep_read_preservation_but_have_no_single_origin() {
+    let memory = WorkingMemory::new(1 << 20).expect("memory");
+    {
+        let mut records = Vec::new();
+        for (site, byte) in [(0, 3), (4, 1), (8, 0), (12, 1), (16, 6), (20, 0)] {
+            records.push(FunctionRecord::Instruction {
+                offset: site,
+                bytes: vec![byte],
+                decoded: DecodedOp {
+                    length: 4,
+                    text: String::new(),
+                    flow: if site == 20 {
+                        InstructionFlow::Return { base: 1 }
+                    } else {
+                        InstructionFlow::Next
+                    },
+                },
+            });
+        }
+        for (from, target, relation) in [
+            (0, 4, EdgeKind::Fallthrough),
+            (0, 12, EdgeKind::Taken),
+            (4, 8, EdgeKind::Fallthrough),
+            (8, 16, EdgeKind::Jump),
+            (12, 16, EdgeKind::Fallthrough),
+            (16, 20, EdgeKind::Fallthrough),
+        ] {
+            records.push(FunctionRecord::Edge {
+                from,
+                target: Some(target),
+                relation,
+                external: false,
+            });
+        }
+        records.push(FunctionRecord::Edge {
+            from: 20,
+            target: None,
+            relation: EdgeKind::Return,
+            external: true,
+        });
+        for site in [4, 12, 16] {
+            records.push(FunctionRecord::MemoryAccess {
+                offset: site,
+                access: if site == 16 {
+                    MemoryKind::Store
+                } else {
+                    MemoryKind::Load
+                },
+                address: number(0x20000),
+                width: 4,
+                value: None,
+                relocation: None,
+            });
+        }
+        let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
+        let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+        reads
+            .analyze(
+                None,
+                &Decoder,
+                &mut |_, _, _| Ok(true),
+                &|_| None,
+                &mut || Ok(()),
+            )
+            .expect("read domain");
+        for site in [4, 12] {
+            let result = reads
+                .reads(site, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
+                .expect("read uses");
+            assert_eq!(result.preserved, u32::MAX);
+            assert!(result.uses.is_empty());
+            assert!(result.unknown.is_empty());
+        }
+        let mut provenance = StoredProvenanceEvaluator::new(&facts, &memory);
+        provenance
+            .analyze(None, &Decoder, &|_| None, &mut || Ok(()))
+            .expect("provenance domain");
+        assert!(!provenance.work_limited());
+        assert_eq!(
+            provenance
+                .stored(16, &number(0x20000), 4, None, &mut || Ok(()))
+                .expect("projection"),
+            [StoredBits {
+                low: 0,
+                width: 32,
+                source: StoredBitsSource::Unknown
+            }]
+        );
     }
     assert_eq!(memory.used(), 0);
 }
