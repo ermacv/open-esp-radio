@@ -56,6 +56,7 @@ fn inputs(ctx: &Checkout, chip: &str) -> Result<(Vec<inventory::uses::Input>, Ve
 /// Analyze typed accesses and fold them into words as each record arrives.
 fn accesses(
     chip: &str,
+    signatures: &oer_analysis_blobray_application::signatures::Signatures,
     inputs: &[inventory::uses::Input],
     executables: &[Executable],
     regions: &[Region],
@@ -71,6 +72,7 @@ fn accesses(
     let assumptions = Assumptions {
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
+        signatures: Some(signatures),
         read_only: &[],
     };
     let ranges: Vec<_> = regions
@@ -111,8 +113,16 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
     fs::create_dir_all(&directory)?;
     let (inputs, executables) = inputs(ctx, chip)?;
     let (registers, regions) = inventory::model(&ctx.root, chip)?;
+    let signatures =
+        oer_analysis_blobray_application::signatures::Signatures::parse(&fs::read_to_string(
+            ctx.root
+                .join("chips")
+                .join(chip)
+                .join("vendor/facts/idf-function-signatures.toml"),
+        )?)?;
     let mut report = accesses(
         chip,
+        &signatures,
         &inputs,
         &executables,
         &regions,

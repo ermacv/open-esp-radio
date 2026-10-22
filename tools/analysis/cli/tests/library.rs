@@ -574,6 +574,7 @@ fn a_call_takes_the_constants_its_callee_returns() {
             Assumptions {
                 abi: None,
                 call_summaries,
+                signatures: None,
                 read_only: &[],
             },
         )
@@ -664,6 +665,7 @@ fn returned_addresses(inputs: &[Executable], name: &str) -> Vec<u32> {
         Assumptions {
             abi: None,
             call_summaries: true,
+            signatures: None,
             read_only: &[],
         },
     )
@@ -815,6 +817,7 @@ fn summary_order_preserves_valid_functions_before_a_malformed_archive_suffix() {
             Assumptions {
                 abi: Some(CallAbi::RiscvInteger),
                 call_summaries,
+                signatures: None,
                 ..Default::default()
             },
         )

@@ -38,17 +38,35 @@ pub struct ArgumentSummary {
     pub returned: Vec<ReturnedArgument>,
 }
 
+/// ABI shape supplied by a signature through the same callee port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CallContract {
+    pub arguments: u8,
+    pub results: u8,
+}
+
 /// One producer's complete callee contract, shared by value and bit-flow users.
 /// Dynamic storage is admitted and retained by the producer, never this port.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct CallSummary {
+    pub contract: Option<CallContract>,
+    /// True only for a signature fallback; computed consumption stays authoritative.
+    pub contract_only: bool,
     /// Sorted distinct constants at every return, for a0 and a1; a missing
     /// slot means the result is not a proven constant set.
     pub results: [Option<Vec<u32>>; 2],
     pub arguments: ArgumentSummary,
 }
 impl CallSummary {
+    pub fn returns(&self, register: u8) -> bool {
+        register
+            .checked_sub(10)
+            .is_some_and(|word| word < self.contract.map_or(2, |c| c.results))
+    }
     pub fn result(&self, register: u8) -> Option<&[u32]> {
+        if !self.returns(register) {
+            return None;
+        }
         self.results
             .get(usize::from(register.checked_sub(10)?))?
             .as_deref()
@@ -58,6 +76,10 @@ impl CallSummary {
 /// Facts of the function a call reaches. Absence means unknown results and
 /// May consumption of every argument bit. Consumers never invent signatures.
 pub trait CallSummaries {
+    /// Contract of the currently analyzed function, when scoped by its producer.
+    fn current(&self) -> Option<&CallSummary> {
+        None
+    }
     fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary>;
 }
 

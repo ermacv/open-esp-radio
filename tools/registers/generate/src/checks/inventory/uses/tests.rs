@@ -135,6 +135,7 @@ fn assumptions() -> Assumptions<'static> {
     Assumptions {
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
+        signatures: None,
         read_only: &[],
     }
 }
@@ -149,7 +150,8 @@ fn regions() -> [Region; 1] {
 
 fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
     let mut summary = RegisterAccessSummary {
-        schema: 3,
+        schema: 4,
+        contract_narrowed_bits: 0,
         functions: 1,
         partial_functions: 0,
         partial_causes: PartialCauses::default(),

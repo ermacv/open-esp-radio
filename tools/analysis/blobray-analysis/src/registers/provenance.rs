@@ -512,7 +512,7 @@ impl<'f, 'a, 'm> StoredProvenanceEvaluator<'f, 'a, 'm> {
         &mut self,
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         self.engine
@@ -902,6 +902,7 @@ mod tests {
                             width: if id == 2 { 1 } else { 4 },
                         },
                         preserved: 0,
+                        narrowed: 0,
                         limits: [0; 4],
                         event: 0,
                     },
@@ -1026,6 +1027,7 @@ mod tests {
                         width: 4,
                     },
                     preserved: 0,
+                    narrowed: 0,
                     limits: [0; 4],
                     event: 0,
                 },

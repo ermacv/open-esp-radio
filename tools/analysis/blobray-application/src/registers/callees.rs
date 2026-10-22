@@ -97,6 +97,11 @@ impl<'m> Callees<'m> {
         Ok(out)
     }
 
+    pub(crate) fn named_addresses(&self) -> impl Iterator<Item = (u32, &[u8])> {
+        self.definitions
+            .iter()
+            .filter_map(|d| Some((d.address?, d.name.as_deref()?)))
+    }
     pub(crate) fn len(&self) -> usize {
         self.definitions.len()
     }

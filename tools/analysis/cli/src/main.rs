@@ -39,6 +39,9 @@ struct Assumptions {
     /// callee-first order; result constants propagate through acyclic calls.
     #[arg(long)]
     call_summaries: bool,
+    /// Apply public-header ABI contracts through call summaries.
+    #[arg(long, requires = "call_summaries", value_name = "FILE", value_parser = parse_signatures)]
+    signatures: Option<app::signatures::Signatures>,
     /// START:LENGTH range read-only at run time whatever a linked image's
     /// section flags say, such as flash mapped for reading: constants are
     /// read from it. Take it from the chip's memory map; repeat for more.
@@ -51,9 +54,16 @@ impl Assumptions {
         app::library::Assumptions {
             abi: self.abi.map(|AbiArg::RiscvInteger| CallAbi::RiscvInteger),
             call_summaries: self.call_summaries,
+            signatures: self.signatures.as_ref(),
             read_only: &self.read_only,
         }
     }
+}
+
+fn parse_signatures(path: &str) -> Result<app::signatures::Signatures> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| Error::new(ErrorCode::Io, format!("{path}: {e}")))?;
+    app::signatures::Signatures::parse(&text)
 }
 
 #[derive(Parser)]

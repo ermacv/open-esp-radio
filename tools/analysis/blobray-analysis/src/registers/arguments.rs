@@ -9,7 +9,17 @@ pub(super) struct ReturnedDependency {
 
 /// Site resolution returns the shared model port's contract; this callback
 /// does not produce or own callee facts.
-pub type CallAt<'s> = dyn Fn(u64) -> Option<&'s CallSummary> + 's;
+pub trait CallAt<'s> {
+    fn summary(&self, site: u64) -> Option<&'s CallSummary>;
+    fn current(&self) -> Option<&'s CallSummary> {
+        None
+    }
+}
+impl<'s, F: Fn(u64) -> Option<&'s CallSummary>> CallAt<'s> for F {
+    fn summary(&self, site: u64) -> Option<&'s CallSummary> {
+        self(site)
+    }
+}
 
 /// A compact, owned recipe for the same CFG pass. Capture drops borrowed
 /// expression/address facts and keeps only lifted operations, stack/constant
@@ -50,7 +60,7 @@ impl<'m> ArgumentProgram<'m> {
 
     pub fn summarize(
         self,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {

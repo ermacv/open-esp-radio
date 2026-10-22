@@ -292,6 +292,8 @@ impl PartialCauses {
 #[serde(deny_unknown_fields)]
 pub struct RegisterAccessSummary {
     pub schema: u32,
+    /// Distinct source bits per selected load with a sink removed directly by a signature.
+    pub contract_narrowed_bits: u64,
     /// Explicit candidate intervals; empty selects every numeric address.
     pub ranges: Vec<ImageRegion>,
     pub functions: u64,

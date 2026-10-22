@@ -436,12 +436,14 @@ struct ReadSlot<B> {
 struct ReadState<F: FlowValue> {
     registers: [ReadCell<F>; 32],
     slots: usize,
+    invalid_results: [Option<u64>; 2],
 }
 impl<F: FlowValue> ReadState<F> {
     fn entry() -> Self {
         let mut state = Self {
             registers: [ReadCell::default(); 32],
             slots: 0,
+            invalid_results: [None; 2],
         };
         state.set(0, ReadCell::constant(0));
         state.set(
@@ -467,6 +469,12 @@ impl<F: FlowValue> ReadState<F> {
         }
     }
     fn set(&mut self, register: u8, value: ReadCell<F>) {
+        if let Some(slot) = register
+            .checked_sub(10)
+            .and_then(|r| self.invalid_results.get_mut(usize::from(r)))
+        {
+            *slot = None;
+        }
         if let Some(slot) = self.registers.get_mut(usize::from(register)) {
             *slot = value;
         }
@@ -513,6 +521,7 @@ enum ReadOrigin<'a> {
 struct ReadSource<'a> {
     origin: ReadOrigin<'a>,
     preserved: u32,
+    narrowed: u32,
     limits: [u32; 4],
     event: usize,
 }
@@ -621,7 +630,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
         select: &mut SelectRead<'_>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         if self.ready {
@@ -774,6 +783,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                             width: *width,
                         },
                         preserved: 0,
+                        narrowed: 0,
                         limits: [0; 4],
                         event: 0,
                     },
@@ -1034,6 +1044,17 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             {
                 *cell = self.join_cell(a, b, c)?;
             }
+            for ((slot, a), b) in joined
+                .invalid_results
+                .iter_mut()
+                .zip(old.invalid_results)
+                .zip(state.invalid_results)
+            {
+                *slot = match (a, b) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a, b) => a.or(b),
+                };
+            }
             joined.slots = self.join_stacks(old.slots, state.slots, c)?;
             if old == joined {
                 return Ok(());
@@ -1054,7 +1075,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
     fn solve(
         &mut self,
         abi: Option<CallAbi>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut ReadWork<'_>,
     ) -> Result<()> {
         if self.nodes.is_empty() {
@@ -1071,6 +1092,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     ReadSource {
                         origin: ReadOrigin::Entry(register),
                         preserved: 0,
+                        narrowed: 0,
                         limits: [0; 4],
                         event: 0,
                     },
@@ -1126,13 +1148,35 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         id: usize,
         input: ReadState<D::Flow>,
         abi: Option<CallAbi>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         emit: bool,
         c: &mut dyn RunControl,
     ) -> Result<ReadState<D::Flow>> {
         let instruction = self.node(id)?.instruction;
         let mut output = input;
         if emit {
+            for (word, callsite) in input.invalid_results.iter().enumerate() {
+                let register = 10 + word as u8;
+                let explicit_read = instruction.operation != SemanticOp::Unsupported
+                    && instruction.operation.reads_register(register)
+                    || instruction.opaque & (1 << register) != 0
+                        && instruction.operation != SemanticOp::Unsupported
+                    || instruction
+                        .branch
+                        .is_some_and(|(_, l, r)| [l, r].contains(&Operand::Register(register)))
+                    || matches!(instruction.flow, InstructionFlow::Indirect { base, .. } if base == register);
+                if let Some(callsite) = callsite
+                    && explicit_read
+                {
+                    return Err(Error::new(
+                        ErrorCode::Conflict,
+                        format!(
+                            "signature conflict: a{} read at +{:#x} after call +{:#x} which supplies no such result",
+                            word, instruction.site, callsite
+                        ),
+                    ));
+                }
+            }
             if let Some((_, left, right)) = instruction.branch {
                 for value in [left, right] {
                     D::sink(
@@ -1175,7 +1219,11 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             }
             if matches!(instruction.flow, InstructionFlow::Return { .. }) {
                 for register in CallAbi::RiscvInteger.results() {
-                    D::return_value(self, input.register(register).flow, register, c)?;
+                    if calls.current().is_none_or(|s| s.returns(register)) {
+                        D::return_value(self, input.register(register).flow, register, c)?;
+                    } else {
+                        D::narrow(self, input.register(register).flow, c)?;
+                    }
                 }
                 self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
             }
@@ -1384,6 +1432,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 }
             }
             SemanticOp::Unsupported => {
+                output.invalid_results = [None; 2];
                 output.registers = ReadState::entry().registers;
                 output.set(2, ReadCell::default());
                 output.slots = 0;
@@ -1447,20 +1496,26 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         }
         if instruction.arguments && !instruction.call && emit {
             // A tail transfer returns the target's result directly to our caller.
-            if let Some(summary) = calls(instruction.site) {
+            if let Some(summary) = calls.summary(instruction.site) {
                 for register in CallAbi::RiscvInteger.results() {
-                    let flow = self.call_result(input, &summary.arguments, register, c)?;
-                    D::return_value(self, flow, register, c)?;
+                    if summary.returns(register)
+                        && calls.current().is_none_or(|s| s.returns(register))
+                    {
+                        let flow = self.call_result(input, &summary.arguments, register, c)?;
+                        D::return_value(self, flow, register, c)?;
+                    }
                 }
             }
         }
         if instruction.call {
             if let Some(abi) = abi {
                 let mut results = [ReadCell::default(); 2];
-                if let Some(summary) = calls(instruction.site) {
+                if let Some(summary) = calls.summary(instruction.site) {
                     for (cell, register) in results.iter_mut().zip(abi.results()) {
-                        cell.flow = self.call_result(input, &summary.arguments, register, c)?;
-                        D::call_constants(cell, summary, register);
+                        if summary.returns(register) {
+                            cell.flow = self.call_result(input, &summary.arguments, register, c)?;
+                            D::call_constants(cell, summary, register);
+                        }
                     }
                 }
                 for register in abi.clobbered() {
@@ -1468,11 +1523,22 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 }
                 for (register, cell) in abi.results().into_iter().zip(results) {
                     output.set(register, cell);
+                    if calls
+                        .summary(instruction.site)
+                        .is_some_and(|s| !s.returns(register))
+                    {
+                        if let Some(slot) =
+                            output.invalid_results.get_mut(usize::from(register - 10))
+                        {
+                            *slot = Some(instruction.site);
+                        }
+                    }
                 }
             } else {
                 if emit {
                     self.limit_state(output, ReadLimitKind::UnsupportedOperation, c)?;
                 }
+                output.invalid_results = [None; 2];
                 output.registers = ReadState::entry().registers;
                 output.set(2, ReadCell::default());
             }
@@ -1513,17 +1579,25 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         input: ReadState<D::Flow>,
         site: u64,
         abi: CallAbi,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         for register in abi.arguments() {
-            let consumed = calls(site)
+            let consumed = calls
+                .summary(site)
                 .map(|s| &s.arguments)
                 .and_then(|s| s.consumed.get(usize::from(register - 10)).copied())
                 .unwrap_or(ArgumentConsumption {
                     exact: 0,
                     may: u32::MAX,
                 });
+            if calls.summary(site).is_some_and(|s| {
+                s.contract_only
+                    && s.contract
+                        .is_some_and(|shape| register >= 10 + shape.arguments)
+            }) {
+                D::narrow(self, input.register(register).flow, c)?;
+            }
             D::consume_argument(
                 self,
                 input.register(register).flow,
@@ -1573,10 +1647,17 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         abi: Option<CallAbi>,
         decoder: &dyn FunctionSemantics,
         select: &mut SelectRead<'_>,
-        calls: &CallAt<'_>,
+        calls: &dyn CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         self.engine.analyze(abi, decoder, select, calls, c)
+    }
+    pub fn contract_narrowed_bits(&self) -> u64 {
+        self.engine
+            .sources
+            .iter()
+            .map(|s| u64::from(s.narrowed.count_ones()))
+            .sum()
     }
     pub fn reads(
         &self,

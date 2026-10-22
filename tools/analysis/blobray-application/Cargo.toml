@@ -9,6 +9,7 @@ publish = false
 description = "Blobray operations over captured executables inside the calling process"
 
 [dependencies]
+toml = "=1.1.4"
 rustc-demangle = "=0.1.28"
 oer-analysis-riscv-program = { path = "../riscv-program" }
 oer-analysis-riscv-analysis = { path = "../riscv-analysis" }

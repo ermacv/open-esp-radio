@@ -145,6 +145,13 @@ pub(super) trait Domain<'m>: Sized {
     ) -> Result<()> {
         Ok(())
     }
+    fn narrow(
+        _e: &mut FlowEngine<'_, '_, 'm, Self>,
+        _flow: Self::Flow,
+        _c: &mut dyn RunControl,
+    ) -> Result<()> {
+        Ok(())
+    }
     fn return_value(
         _e: &mut FlowEngine<'_, '_, 'm, Self>,
         _flow: Self::Flow,
@@ -277,6 +284,32 @@ impl<'m> Domain<'m> for Reads<'m> {
         c: &mut dyn RunControl,
     ) -> Result<()> {
         e.read_consume_argument(flow, consumed, site, register, c)
+    }
+    fn narrow(
+        e: &mut FlowEngine<'_, '_, 'm, Self>,
+        flow: usize,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
+        let len = e.domain.flows.values(flow)?.len();
+        for index in 0..len {
+            c.checkpoint(1)?;
+            let dependency = *e
+                .domain
+                .flows
+                .values(flow)?
+                .get(index)
+                .ok_or_else(read_integrity)?;
+            let bits = dependency
+                .exact
+                .iter()
+                .chain(&dependency.may)
+                .fold(0, |a, b| a | b);
+            e.sources
+                .get_mut(dependency.source)
+                .ok_or_else(read_integrity)?
+                .narrowed |= bits;
+        }
+        Ok(())
     }
     fn return_value(
         e: &mut FlowEngine<'_, '_, 'm, Self>,

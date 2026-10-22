@@ -3,7 +3,7 @@ use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
 mod arguments;
 mod callees;
-pub(crate) use arguments::{CallKey, CallLinks};
+pub(crate) use arguments::{CallKey, CallLinks, Calls};
 pub(crate) use callees::Callees;
 
 fn invalid(s: &str) -> Error {
@@ -69,6 +69,9 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         }
     }
 
+    pub fn contract_narrowed_bits(&self) -> u64 {
+        self.evaluator.contract_narrowed_bits()
+    }
     pub fn reads(
         &mut self,
         fact: &FunctionRecord,
@@ -121,11 +124,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             self.abi,
             self.decoder,
             &mut |address, width, c| selected_read(address, width, self.ranges, c),
-            &|site| {
-                links
-                    .callee(site)
-                    .and_then(|callee| summaries.summary(callee))
-            },
+            &Calls { links, summaries },
             c,
         )?;
         Ok(())
@@ -153,16 +152,8 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 .as_ref()
                 .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing call links"))?;
             let summaries = self.summaries;
-            self.provenance.analyze(
-                self.abi,
-                self.decoder,
-                &|site| {
-                    links
-                        .callee(site)
-                        .and_then(|callee| summaries.summary(callee))
-                },
-                c,
-            )?;
+            self.provenance
+                .analyze(self.abi, self.decoder, &Calls { links, summaries }, c)?;
             let mut stored = self
                 .provenance
                 .stored(*offset, address, *width, value.as_ref(), c)?;

@@ -149,6 +149,10 @@ impl Report {
             self.corpus.call_summaries,
         );
         text.push_str(&format!(
+            "  signature-narrowed {} bits\n",
+            summary.contract_narrowed_bits
+        ));
+        text.push_str(&format!(
             "  reserved-used {} words / {} bits; absent-used {} words / {} bits\n",
             self.words
                 .iter()

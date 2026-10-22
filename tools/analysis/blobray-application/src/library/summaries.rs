@@ -1,6 +1,6 @@
 //! One corpus producer for the shared result/argument port, in two analyses.
 use super::*;
-use crate::registers::{CallKey, CallLinks, Callees};
+use crate::registers::{CallKey, CallLinks, Callees, Calls};
 use oer_analysis_blobray_analysis::registers::ArgumentProgram;
 use oer_analysis_blobray_artifacts::{MemberIndex, PreparedObject, prepare_captured};
 use oer_analysis_riscv_analysis::{AnalysisSummary, PreparedReferences, ProvenTables};
@@ -31,7 +31,21 @@ struct Group {
     representative: Option<usize>,
     conflict: bool,
 }
+struct Scoped<'s> {
+    table: &'s dyn CallSummaries,
+    current: Option<CallSummary>,
+}
+impl CallSummaries for Scoped<'_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.table.summary(callee)
+    }
+    fn current(&self) -> Option<&CallSummary> {
+        self.current.as_ref()
+    }
+}
 struct Summaries<'m> {
+    contracts: BTreeMap<Vec<u8>, CallSummary>,
+    contract_addresses: BTreeMap<u32, Option<Vec<u8>>>,
     entries: AdmittedVec<'m, Entry<'m>>,
     groups: Groups,
     ledger: Ledger<'m>,
@@ -77,15 +91,24 @@ impl Groups {
 }
 impl CallSummaries for Summaries<'_> {
     fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
-        let group = self.groups.callee(callee)?;
-        if group.remaining != 0 || group.conflict {
-            return None;
-        }
-        self.entries
-            .get(group.representative?)?
-            .summary
-            .as_ref()
-            .map(|s| &s.value)
+        let computed = self.groups.callee(callee).and_then(|group| {
+            if group.remaining != 0 || group.conflict {
+                return None;
+            }
+            self.entries
+                .get(group.representative?)?
+                .summary
+                .as_ref()
+                .map(|s| &s.value)
+        });
+        computed.or_else(|| match callee {
+            Callee::Symbol(name) => self.contracts.get(name),
+            Callee::Address(address) => self
+                .contract_addresses
+                .get(&address)
+                .and_then(|n| n.as_deref())
+                .and_then(|n| self.contracts.get(n)),
+        })
     }
 }
 fn integrity() -> Error {
@@ -94,14 +117,40 @@ fn integrity() -> Error {
 impl<'m> Summaries<'m> {
     fn new(
         catalog: &Callees<'m>,
+        signatures: Option<&crate::signatures::Signatures>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Self> {
         let mut out = Self {
+            contracts: BTreeMap::new(),
+            contract_addresses: BTreeMap::new(),
             entries: AdmittedVec::new(memory),
             groups: Groups::default(),
             ledger: Ledger::new(memory, c)?,
         };
+        if let Some(signatures) = signatures {
+            for signature in signatures.functions() {
+                c.checkpoint(1)?;
+                let name = signature.name.as_bytes().to_vec();
+                out.ledger.admit(name.capacity(), c)?;
+                *out.ledger
+                    .entry(&mut out.contracts, name, || signature.summary(), c)? =
+                    signature.summary();
+            }
+            for (address, name) in catalog.named_addresses() {
+                c.checkpoint(1)?;
+                let slot = out.ledger.entry(
+                    &mut out.contract_addresses,
+                    address,
+                    || Some(name.to_vec()),
+                    c,
+                )?;
+                if slot.as_deref().is_some_and(|n| n != name) {
+                    *slot = None;
+                }
+                out.ledger.admit(name.len(), c)?;
+            }
+        }
         for id in 0..catalog.len() {
             c.checkpoint(1)?;
             let definition = catalog.definition(id);
@@ -195,7 +244,7 @@ pub(super) fn analyze<'a>(
     c: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
-    let mut table = Summaries::new(catalog, memory, c)?;
+    let mut table = Summaries::new(catalog, assumptions.signatures, memory, c)?;
     let mut objects = AdmittedVec::new(memory);
     // Preparation is structural; each function is analyzed exactly once here
     // without summaries, and once below with its completed callee contracts.
@@ -456,12 +505,19 @@ pub(super) fn analyze<'a>(
                 if let (Some(object), Some(function)) =
                     (object, table.entry(member)?.function.as_ref())
                 {
+                    let signature = assumptions
+                        .signatures
+                        .and_then(|s| function.name.as_deref().and_then(|n| s.get(n)));
+                    let scoped = Scoped {
+                        table: &table,
+                        current: signature.map(|s| s.summary()),
+                    };
                     match research(
                         &mut objects,
                         object,
                         function,
                         assumptions,
-                        &table,
+                        &scoped,
                         decoder,
                         memory,
                         c,
@@ -473,7 +529,7 @@ pub(super) fn analyze<'a>(
                                 coverage: summary.coverage,
                                 semantics: summary.semantics,
                                 jump_tables: &found.tables,
-                                summaries: &table,
+                                summaries: &scoped,
                             };
                             if !recursive
                                 && objects.get(object).ok_or_else(integrity)?.safe
@@ -489,12 +545,68 @@ pub(super) fn analyze<'a>(
                                 contract = produce(
                                     &facts,
                                     analyzed.records,
-                                    &table,
+                                    &scoped,
                                     &links,
                                     decoder,
                                     memory,
                                     c,
-                                )?;
+                                )
+                                .map_err(|mut error| {
+                                    if error.code == ErrorCode::Conflict {
+                                        error.message = format!(
+                                            "function {} ({:?}): {}",
+                                            String::from_utf8_lossy(
+                                                function.name.as_deref().unwrap_or(b"?")
+                                            ),
+                                            function.symbol,
+                                            error.message
+                                        );
+                                    }
+                                    error
+                                })?;
+                            }
+                            if let (Some(signature), Some(summary)) = (signature, contract.as_mut())
+                            {
+                                for (word, consumed) in summary
+                                    .value
+                                    .arguments
+                                    .consumed
+                                    .iter()
+                                    .enumerate()
+                                    .skip(usize::from(signature.arguments))
+                                {
+                                    if consumed.exact | consumed.may != 0 {
+                                        return Err(Error::new(
+                                            ErrorCode::Conflict,
+                                            format!(
+                                                "signature {} ({}), function {:?}: computed summary consumes a{} beyond {} argument words",
+                                                signature.name,
+                                                signature.source,
+                                                function.symbol,
+                                                word,
+                                                signature.arguments
+                                            ),
+                                        ));
+                                    }
+                                }
+                                let shape = signature.summary().contract;
+                                summary.value.contract = shape;
+                                for register in [10, 11] {
+                                    if !summary.value.returns(register) {
+                                        if let Some(result) = summary
+                                            .value
+                                            .results
+                                            .get_mut(usize::from(register - 10))
+                                        {
+                                            *result = None;
+                                        }
+                                    }
+                                }
+                                summary
+                                    .value
+                                    .arguments
+                                    .returned
+                                    .retain(|r| shape.is_none_or(|s| r.register < 10 + s.results));
                             }
                             visit(LibraryOutcome::Analyzed(analyzed), c)?;
                         }
@@ -611,15 +723,8 @@ fn try_produce<'a>(
     c: &mut dyn RunControl,
 ) -> Result<Option<OwnedSummary<'a>>> {
     let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
-    let Some((arguments, argument_memory)) = program.summarize(
-        &|site| {
-            links
-                .callee(site)
-                .and_then(|callee| summaries.summary(callee))
-        },
-        memory,
-        c,
-    )?
+    let Some((arguments, argument_memory)) =
+        program.summarize(&Calls { links, summaries }, memory, c)?
     else {
         return Ok(None);
     };
@@ -637,7 +742,11 @@ fn try_produce<'a>(
         }
     }
     Ok(Some(OwnedSummary {
-        value: CallSummary { results, arguments },
+        value: CallSummary {
+            results,
+            arguments,
+            ..CallSummary::default()
+        },
         _arguments: argument_memory,
         _results: ledger.into_reservation(),
     }))

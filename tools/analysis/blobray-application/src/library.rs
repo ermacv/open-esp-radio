@@ -101,6 +101,7 @@ pub fn analyze_library(
     control: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
+    assumptions.validate()?;
     if assumptions.call_summaries {
         let catalog = crate::registers::Callees::capture(inputs, memory, control)?;
         summaries::analyze(
@@ -273,10 +274,23 @@ pub struct Assumptions<'a> {
     /// function in callee-first order with shared result/argument contracts.
     /// Constants propagate through any acyclic call depth in two analyses.
     pub call_summaries: bool,
+    pub signatures: Option<&'a crate::signatures::Signatures>,
     /// Address ranges read-only at run time whatever a linked image's
     /// section flags say, such as flash mapped for reading: constants are
     /// read from the file-backed bytes inside them.
     pub read_only: &'a [ReadOnlyWindow],
+}
+
+impl Assumptions<'_> {
+    fn validate(self) -> Result<()> {
+        if self.signatures.is_some() && !self.call_summaries {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "signatures require call summaries",
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// The sections and function symbols of one object.
@@ -607,7 +621,8 @@ pub fn register_accesses(
     crate::registers::validate_ranges(ranges)?;
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut summary = RegisterAccessSummary {
-        schema: 3,
+        schema: 4,
+        contract_narrowed_bits: 0,
         ranges: ranges.to_vec(),
         functions: 0,
         partial_functions: 0,
@@ -662,7 +677,9 @@ pub fn register_accesses(
                     },
                     c,
                 )
-            })
+            })?;
+            summary.contract_narrowed_bits += reads.contract_narrowed_bits();
+            Ok(())
         }
         LibraryOutcome::Blocked { function, error } => {
             summary.blocked_functions += 1;
@@ -690,6 +707,7 @@ pub fn register_accesses(
             )
         }
     };
+    assumptions.validate()?;
     if assumptions.call_summaries {
         summaries::analyze(
             inputs,

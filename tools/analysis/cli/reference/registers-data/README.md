@@ -159,14 +159,32 @@ flow-incomplete callees and exhausted summaries consume all argument bits as
 `may`. Summaries use admitted working memory and are memoized in callee-first
 order in the second function analysis. The same callee port supplies result
 constants to value analysis. Without the flag, no summary narrows argument uses.
-The register-access schema remains 9.
+`--signatures FILE` reads the generated `[[function]]` TOML contracts. It requires
+`--call-summaries`. `arguments` counts occupied RV32 a0–a7 words (at most eight),
+and `result` is `void`, `u32` or `u64`. Unknown results and duplicate names are
+errors. Application owns this parser; the register checker uses it too.
+
+Contracts enter through `CallSummaries`: a callee without a computed summary
+consumes only its declared argument words with May precision. Absent result
+words carry neither dependencies nor constants. A computed summary remains
+in force and is checked against the contract; declared absent return words
+are excluded from Return sinks. Missing signatures retain the usual behavior.
+A computed summary consuming a word beyond the declaration, or an instruction
+reading an absent result after a call, fails with `conflict`, the function,
+call/read offsets or the declared source location. No conflicting contract is
+silently preferred. `summary.contract_narrowed_bits` counts distinct source bits
+per selected load whose CallArgument or Return sink a signature directly removes;
+a bit removed at several sinks of that load counts once, even if another sink
+still consumes it. The typed summary schema is 4.
+
+The register-access schema is 10.
 See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
 
 Human groups show the four classes, sinks, precision and reasons; observations
 with different `reads` remain separate entries. Selection masks retain their
 expression meaning and do not by themselves indicate a read use.
 
-The JSON document streams `{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+The JSON document streams `{"schema":10,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 `records` holds the selected records and `groups` appears only with
 `--group-by`.
 `inputs` lists each input's role and SHA-256. A record is an `observation` (the

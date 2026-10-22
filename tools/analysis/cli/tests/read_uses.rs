@@ -498,7 +498,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
         "call results carry no dependency on the previous argument"
     );
-    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 9);
+    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 10);
     assert!(
         oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
     );
@@ -1382,4 +1382,187 @@ ret
         }
     }
     assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn idf_contracts_narrow_external_arguments_returns_and_reject_conflicts() {
+    use oer_analysis_blobray_application::{
+        library::{LibraryOutcome, analyze_library},
+        signatures::Signatures,
+    };
+    let sig = |name: &str, arguments: u8, result: &str| {
+        format!(
+            "[[function]]\nname='{name}'\narguments={arguments}\nresult='{result}'\nsource='synthetic.h:1'\n"
+        )
+    };
+    let code = |body: &str| {
+        fixture(&format!(
+            r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.caller,"ax",@progbits
+.globl caller
+.type caller,@function
+caller:
+{body}
+.size caller, .-caller
+"#);
+"##
+        ))
+    };
+    for argument in 0..8 {
+        let inputs = [Executable::new(code(&format!(
+            "lui t0, 0x20107\nlw a{argument}, 0(t0)\ncall external\nret"
+        )))];
+        for signatures in [
+            None,
+            Some(Signatures::parse(&sig("external", 1, "void")).unwrap()),
+        ] {
+            let memory = WorkingMemory::new(64 << 20).unwrap();
+            let mut found = None;
+            let summary = register_accesses(
+                &inputs,
+                Assumptions {
+                    abi: Some(CallAbi::RiscvInteger),
+                    call_summaries: true,
+                    signatures: signatures.as_ref(),
+                    ..Default::default()
+                },
+                &[],
+                &oer_analysis_riscv_lift::RiscvDecoder,
+                &memory,
+                &mut || Ok(()),
+                &mut |record, _| {
+                    if let RegisterAccess::Observation {
+                        reads: Some(reads), ..
+                    } = record
+                    {
+                        found = Some(reads.clone());
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+            let reads = found.unwrap();
+            if signatures.is_some() && argument >= 1 {
+                assert!(reads.uses.is_empty(), "a{argument}: {reads:?}");
+                assert_eq!(reads.unused, u32::MAX);
+                assert_eq!(summary.contract_narrowed_bits, 32);
+            } else {
+                assert!(reads.uses.iter().any(|u| u.precision == ReadPrecision::May && matches!(u.sink, ReadSink::CallArgument { register, .. } if register == 10 + argument)));
+                assert_eq!(summary.contract_narrowed_bits, 0);
+            }
+            assert_eq!(memory.used(), 0);
+        }
+    }
+    for result in ["void", "u32", "u64"] {
+        let signatures = Signatures::parse(&sig("external", 0, result)).unwrap();
+        let memory = WorkingMemory::new(64 << 20).unwrap();
+        let mut returned = None;
+        analyze_library(
+            &[Executable::new(code("call external\nret"))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |outcome, _| {
+                if let LibraryOutcome::Analyzed(a) = outcome {
+                    for record in a.records {
+                        if let FunctionRecord::ReturnValue { low, high, .. } = record {
+                            returned = Some((low.clone(), high.clone()));
+                        }
+                    }
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        let (low, high) = returned.unwrap();
+        assert_eq!(low == AbstractValue::Unknown, result == "void");
+        assert_eq!(high == AbstractValue::Unknown, result != "u64");
+    }
+    // A captured void function no longer consumes MMIO bits at ret.
+    let signatures = Signatures::parse(&sig("caller", 0, "void")).unwrap();
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    let mut found = None;
+    let summary = register_accesses(
+        &[Executable::new(code("lui t0, 0x20107\nlw a0, 0(t0)\nret"))],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signatures),
+            ..Default::default()
+        },
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |record, _| {
+            if let RegisterAccess::Observation {
+                reads: Some(reads), ..
+            } = record
+            {
+                found = Some(reads.clone());
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert!(found.unwrap().uses.is_empty());
+    assert_eq!(summary.contract_narrowed_bits, 32);
+    for (body, signature, expected) in [
+        (
+            "bnez a2, 1f\n1: ret",
+            sig("caller", 2, "void"),
+            "consumes a2",
+        ),
+        (
+            "call external\naddi t0, a0, 1\nret",
+            sig("external", 0, "void"),
+            "read at +0x8 after call +0x4",
+        ),
+        (
+            "call external\naddi t0, a1, 1\nret",
+            sig("external", 0, "u32"),
+            "a1 read",
+        ),
+    ] {
+        let signatures = Signatures::parse(&signature).unwrap();
+        let error = analyze_library(
+            &[Executable::new(code(body))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |_, _| Ok(()),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Conflict);
+        assert!(error.message.contains(expected), "{}", error.message);
+        assert!(error.message.contains("caller"));
+    }
+    let error = analyze_library(
+        &[],
+        Assumptions {
+            signatures: Some(&signatures),
+            ..Default::default()
+        },
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |_, _| Ok(()),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidRequest);
 }
