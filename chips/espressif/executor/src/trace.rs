@@ -4,22 +4,22 @@
     reason = "Embassy requires unique global trace ABI symbols"
 )]
 
-#[cfg(feature = "chip")]
-fn with_state(executor: u32, f: impl FnOnce(&crate::ready::ReadyState)) {
-    f(crate::executor::ready_state(executor));
-}
-
-#[cfg(all(test, not(feature = "chip")))]
-use crate::ready::tests::with_state;
-
 #[unsafe(export_name = "_embassy_trace_task_ready_begin")]
+#[inline(never)]
 fn ready_begin(executor: u32, _task: u32) {
-    with_state(executor, crate::ready::ReadyState::ready_begin);
+    #[cfg(feature = "chip")]
+    crate::executor::task_ready_begin(executor);
+    #[cfg(all(test, not(feature = "chip")))]
+    crate::ready::tests::with_state(executor, crate::ready::ReadyState::ready_begin);
 }
 
 #[unsafe(export_name = "_embassy_trace_task_exec_begin")]
+#[inline(never)]
 fn exec_begin(executor: u32, _task: u32) {
-    with_state(executor, crate::ready::ReadyState::exec_begin);
+    #[cfg(feature = "chip")]
+    crate::executor::task_exec_begin(executor);
+    #[cfg(all(test, not(feature = "chip")))]
+    crate::ready::tests::with_exec_state(executor, crate::ready::ReadyState::exec_begin);
 }
 
 #[unsafe(export_name = "_embassy_trace_poll_start")]

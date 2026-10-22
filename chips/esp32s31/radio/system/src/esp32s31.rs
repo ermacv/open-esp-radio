@@ -87,7 +87,7 @@ pub struct Esp32s31Radio<C: PlatformClockProvider, T, O> {
 impl<C, T, O> Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
 {
     /// The backend over the split radio domain and Wi-Fi's coexistence
@@ -191,7 +191,7 @@ where
 impl<C, T, O> PhyDomain for Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
 {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
@@ -281,7 +281,7 @@ where
 impl<C, T, O> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
 {
     async fn enter(

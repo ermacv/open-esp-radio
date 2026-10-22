@@ -135,3 +135,11 @@ mod tests {
         assert_eq!(timer.now(), Instant::from_micros(1));
     }
 }
+
+// The sequential probe executor has no peer tasks and deliberately preserves
+// one checkpoint per atom; requested-time traces never model CPU cost.
+impl oer_cooperate::CooperativeTimer for TraceTimer {
+    fn should_yield(&self) -> bool {
+        true
+    }
+}

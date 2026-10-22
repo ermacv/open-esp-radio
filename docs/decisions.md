@@ -185,8 +185,10 @@ bounds) live in the code that applies them.
   entry; IEEE 802.15.4 and BLE do not receive that reset.
 - **Retune** runs `ic_mac_deinit → phy_change_channel → ic_mac_init` as one
   transaction; a failure after the first RF write poisons the PHY domain.
-- **PHY slicing.** Calibration and tracking are cut into bounded P2 steps:
-  delays and readiness polls become timer-woken waits. Each phase states the
+- **PHY slicing.** Calibration and tracking are cut into bounded P2 steps.
+  A ready P2 peer waits for at most one atom, no longer than 50 µs. With no
+  ready peers, polling may continue for at most 1 ms, as an accounting guard.
+  Delays and readiness polls become timer-woken waits. Each phase states the
   per-step bound, the answer bound per request kind and the worst tracking
   tick, provisional until measured. Slicing keeps calibration results within
   the vendor spread. A section that cannot be sliced without leaving that

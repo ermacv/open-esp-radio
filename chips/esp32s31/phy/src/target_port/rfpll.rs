@@ -4,8 +4,9 @@
 //! radio traffic, acquire a coex grant, or commit a tracking temperature.
 //! `maintain` includes the current frequency-control entry and restoration;
 //! `search` and `correct` are children requiring that boundary from the caller.
-//! Runtime execution polls I2C directly. The P1 engine batches complete bus
-//! commands, retaining partial reads and masked writes between polls. It measures the
+//! Runtime execution polls I2C directly. The cooperative engine advances bus
+//! commands while no peer or poll guard requires a yield, retaining partial
+//! reads and masked writes between polls. It measures the
 //! required 5-us minimum after the last capacitor write before status; the ROM
 //! supplies only any remaining settle. Memory entries retain a whole read/write.
 //! The entry settle remains 2 µs; direct I2C keeps its named 20-µs settle.
@@ -28,7 +29,7 @@ use crate::{
 /// A hardware failure leaves that borrow with the caller for fault containment;
 /// this entry does not imply that normal RF operation may resume.
 #[cfg(any(test, oer_probe))]
-pub async fn search<D: PhyShortDelay, C: oer_time::Timer>(
+pub async fn search<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
 ) -> Result<rfpll::search::Outcome, PhyTargetPortError> {
@@ -50,7 +51,7 @@ pub async fn search<D: PhyShortDelay, C: oer_time::Timer>(
 /// Search, update every frequency-memory entry when the measured delta is
 /// nonzero, and restore the current channel index before returning success.
 #[cfg(any(test, oer_probe))]
-pub async fn correct<D: PhyShortDelay, C: oer_time::Timer>(
+pub async fn correct<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     current_channel: u16,
@@ -84,7 +85,7 @@ pub async fn correct<D: PhyShortDelay, C: oer_time::Timer>(
 /// disable bit; the existing typed baseband-mode accessor implements the new
 /// operations without duplicating the physical register's identity.
 #[cfg(any(test, oer_probe))]
-pub async fn maintain<D: PhyShortDelay, C: oer_time::Timer>(
+pub async fn maintain<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     current_channel: u16,
@@ -165,7 +166,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
 /// all waits. Success is available only after restoration (or a hardware-free
 /// skip). Error or cancellation requires the caller to contain the failed epoch.
 #[cfg(any(test, oer_probe))]
-pub async fn track<D: PhyShortDelay, C: oer_time::Timer>(
+pub async fn track<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     request: rfpll::thermal::Request,
@@ -208,7 +209,7 @@ pub async fn track<D: PhyShortDelay, C: oer_time::Timer>(
 /// failure; the inner one is the transition's own fail-closed outcome.
 #[cfg(any(test, oer_probe))]
 pub async fn program<D: PhyShortDelay>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     request: crate::analog::rfpll::RfpllFrequencyRequest,
 ) -> Result<

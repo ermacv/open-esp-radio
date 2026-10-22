@@ -196,8 +196,8 @@ fn validate_engine(engine: &HoldPolls, ticks: u8, policy: HoldPolicy) -> Result<
     {
         return Err("INCOMPLETE: missing or invalid engine poll observations".into());
     }
-    if policy == HoldPolicy::Forced && engine.maximum_micros > 50 {
-        return Err("P1 engine poll exceeded 50 microseconds".into());
+    if policy == HoldPolicy::Forced && engine.maximum_micros > oer_cooperate::MAX_POLL_MICROS {
+        return Err("engine poll exceeded the 1 ms continuous-poll guard".into());
     }
     Ok(())
 }
@@ -330,17 +330,31 @@ mod tests {
 mod natural_tests {
     use super::*;
     #[test]
-    fn natural_rate_investigation_retains_long_polls_without_relaxing_forced_gate() {
+    fn continuous_poll_guard_keeps_ready_peer_response_as_a_separate_proof() {
         let timing = HoldPolls {
             polls: 2,
             pending: 1,
             resumes: 1,
             ready_edges: 1,
-            total_micros: 60,
-            maximum_micros: 60,
+            total_micros: 1_001,
+            maximum_micros: 1_001,
             ..Default::default()
         };
         assert!(validate_engine(&timing, 1, HoldPolicy::Natural).is_ok());
+        for micros in [50, 60, 1_000] {
+            assert!(
+                validate_engine(
+                    &HoldPolls {
+                        total_micros: micros,
+                        maximum_micros: micros,
+                        ..timing
+                    },
+                    1,
+                    HoldPolicy::Forced
+                )
+                .is_ok()
+            );
+        }
         assert!(validate_engine(&timing, 1, HoldPolicy::Forced).is_err());
         assert!(
             validate_engine(

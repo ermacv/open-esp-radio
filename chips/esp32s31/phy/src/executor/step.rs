@@ -7,6 +7,7 @@ pub(crate) mod rfpll;
 pub(crate) mod temperature;
 pub(crate) mod wifi_i2c;
 pub(crate) use io::Registers;
+use oer_cooperate::CooperativeTimer as Timer;
 
 use crate::{
     analog::pbus::{
@@ -25,17 +26,13 @@ use core::{
     task::{Context, Poll},
 };
 use io::Io;
-use oer_time::{Clock, Duration, Instant, Timer};
+use oer_time::{Clock, Duration, Instant};
 
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
 
-// Admit another complete command only while the current batch is short.
-// Direct I2C retains its own 20-us answer bound. RX admits only short PBus
-// leaves as subsequent atoms; the remainder belongs to model advancement and
-// the inclusive engine observer. The allowance starts at poll entry.
-const BATCH_MICROS: u64 = 20;
-const BATCH_COMMANDS: u8 = 4;
+// Leave 100 us for admission, one <=50-us atom and the return path.
+const POLL_ADMISSION_MICROS: u64 = oer_cooperate::POLL_ADMISSION_MICROS as u64;
 
 // T7's answer includes timer/executor resumption: hardware boundary 20 us,
 // measured resume lateness 66 us and 14 us margin. It starts when command
@@ -710,16 +707,7 @@ impl<
             let mut ready_elapsed = None;
             let mut ready_started = None;
             let mut rfpll_sample = None;
-            let batch_started = match &route {
-                RouteProj::Transport { job, .. }
-                    if matches!(&job.work, Work::Dcode { .. })
-                        || matches!(&job.work, Work::Rfpll(_)) && !job.rfpll_observed =>
-                {
-                    Some(started.unwrap_or_else(|| clock.now()))
-                }
-                _ => None,
-            };
-            let mut batch_commands = 0;
+            let batch_started = started.unwrap_or_else(|| clock.now());
             let result = loop {
                 if *this.gate == Gate::Yield {
                     if let Some(trace) = this.trace.as_deref_mut() {
@@ -799,10 +787,8 @@ impl<
                     Step::Failure(error) => break Poll::Ready(Err(error)),
                     Step::Rfpll(_) | Step::Runnable => {
                         if let Step::Rfpll(sample) = step { rfpll_sample = Some(sample); }
-                        batch_commands += 1;
-                        if batch_commands < BATCH_COMMANDS
-                            && batch_started.is_some_and(|at|
-                                clock.now().saturating_duration_since(at).as_micros() < BATCH_MICROS)
+                        if this.rfpll.is_none() && !this.timer.should_yield()
+                            && clock.now().saturating_duration_since(batch_started).as_micros() < POLL_ADMISSION_MICROS
                         {
                             continue;
                         }

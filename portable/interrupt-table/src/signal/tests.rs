@@ -288,3 +288,34 @@ fn each_new_fact_pends_once_and_duplicates_do_not_pend() {
     raised.pend.expect("one new fact").pend();
     assert_eq!(pends() - before, 3);
 }
+
+#[test]
+fn list_pending_observation_preserves_undelivered_and_delivered_facts() {
+    enum ObserveExecutor {}
+    std::thread_local! {static OBSERVE_LIST: &'static SignalList=Box::leak(Box::new(SignalList::new()));}
+    #[allow(
+        unsafe_code,
+        reason = "fixture owns its signal list on this test thread"
+    )]
+    // SAFETY: only this test thread accesses its fixture list and signals;
+    // pend never polls, and running is true only in this test's context.
+    unsafe impl SignalExecutor for ObserveExecutor {
+        fn pend(_: &'static IrqSignal<Self>) {}
+        fn running() -> bool {
+            true
+        }
+        fn list() -> &'static SignalList {
+            OBSERVE_LIST.with(|list| *list)
+        }
+    }
+    let signal = Box::leak(Box::new(IrqSignal::<ObserveExecutor>::new()));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert!(signal.poll_take(&mut cx).is_pending());
+    assert_eq!(has_pending::<ObserveExecutor>(), Ok(false));
+    signal.raise(1);
+    assert_eq!(has_pending::<ObserveExecutor>(), Ok(true));
+    service::<ObserveExecutor>();
+    assert_eq!(has_pending::<ObserveExecutor>(), Ok(true));
+    assert_eq!(signal.take(), Ok(1));
+    assert_eq!(has_pending::<ObserveExecutor>(), Ok(false));
+}
