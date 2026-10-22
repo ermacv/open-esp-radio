@@ -8,7 +8,7 @@ use oer_time::{Clock, Instant};
 
 /// Outline the platform clock conversion once without changing its identity,
 /// read count or time semantics in the direct observation loop.
-pub(super) struct OutlinedClock<'a, C: ?Sized>(pub(super) &'a C);
+pub(crate) struct OutlinedClock<'a, C: ?Sized>(pub(crate) &'a C);
 #[inline(never)]
 pub(super) fn clock_now<C: Clock + ?Sized>(clock: &C) -> Instant {
     clock.now()

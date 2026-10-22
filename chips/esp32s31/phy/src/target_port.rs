@@ -55,12 +55,7 @@ use crate::{
         run_phy_calibration_tracking, run_phy_param_tracking, run_phy_register,
     },
     rx::{
-        dc_offset::{
-            PhyRxDcMinimumCompletion, PhyRxDcMinimumExternalBinding, PhyRxDcoCompletion,
-            PhyRxDcoExternalBinding,
-        },
-        gain::{PhyRxGainInitCompletion, PhyRxGainInitExternalBinding},
-        gain_calibration::{PhyRxDcCalibrationCompletion, PhyRxDcCalibrationExternalBinding},
+        dc_offset::{PhyRxDcoCompletion, PhyRxDcoExternalBinding},
         iq::{
             PhyRxIqCoverCompletion, PhyRxIqCoverExternalBinding, PhyRxIqDataCompletion,
             PhyRxIqDataExternalBinding, PhyRxIqEstimatorCompletion,
@@ -74,9 +69,9 @@ use crate::{
     target_executor::{
         PhyTargetPortError, complete_bluetooth_i2c, complete_bluetooth_pbus, complete_channel_i2c,
         complete_dcode_i2c, complete_final_i2c, complete_i2c_configuration, complete_masked_i2c,
-        complete_rx_dc_calibration_pbus, complete_rx_dco_pbus, complete_rx_saturation_pbus,
-        complete_rxiq_adjusted_tx_i2c, complete_rxiq_gain_i2c, complete_rxiq_gain_pbus,
-        complete_rxiq_init_i2c, complete_rxiq_init_pbus, complete_temperature_i2c,
+        complete_rx_dco_pbus, complete_rx_saturation_pbus, complete_rxiq_adjusted_tx_i2c,
+        complete_rxiq_gain_i2c, complete_rxiq_gain_pbus, complete_rxiq_init_i2c,
+        complete_rxiq_init_pbus, complete_temperature_i2c,
         complete_tx_calibration_environment_pbus, complete_tx_dc_pbus, complete_tx_dc_pwdet_pbus,
         complete_tx_dc_pwdet_search_pbus, complete_tx_power_i2c, complete_txiq_init_i2c,
         complete_txiq_pbus, write_i2c_direct,
@@ -308,6 +303,7 @@ pub struct PhyTargetPortCounters {
     pub delays: u16,
     pub reset_samples: u16,
     pub rf_operations: u32,
+    /// Completed baseband port operations; the retained RX program is one child.
     pub baseband_operations: u32,
 }
 
@@ -1159,52 +1155,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_rx_dc_minimum(
-        &self,
-        binding: PhyRxDcMinimumExternalBinding,
-        registers: &mut impl SharedPhyAccess,
-    ) -> Result<PhyRxDcMinimumCompletion, PhyTargetPortError> {
-        match binding {
-            PhyRxDcMinimumExternalBinding::DcIq(binding) => Ok(PhyRxDcMinimumCompletion::DcIq(
-                self.complete_dc_iq(binding, registers).await?,
-            )),
-        }
-    }
-
-    async fn complete_rx_dc_calibration(
-        &self,
-        binding: PhyRxDcCalibrationExternalBinding,
-        registers: &mut impl SharedPhyContext,
-    ) -> Result<PhyRxDcCalibrationCompletion, PhyTargetPortError> {
-        match binding {
-            PhyRxDcCalibrationExternalBinding::Mmio(binding) => binding
-                .execute_target(registers)
-                .map_err(|_| PhyTargetPortError::HardwareInvariant),
-            PhyRxDcCalibrationExternalBinding::Pbus(binding) => {
-                complete_rx_dc_calibration_pbus(binding, registers, self.timer)
-            }
-            PhyRxDcCalibrationExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
-                Ok(binding.into_completion())
-            }
-            PhyRxDcCalibrationExternalBinding::Minimum(binding) => {
-                Ok(PhyRxDcCalibrationCompletion::Minimum(
-                    self.complete_rx_dc_minimum(binding, registers).await?,
-                ))
-            }
-        }
-    }
-
-    async fn complete_rx_gain(
-        &self,
-        binding: PhyRxGainInitExternalBinding,
-        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
-    ) -> Result<PhyRxGainInitCompletion, PhyTargetPortError> {
-        crate::executor::step::rx_gain::complete::<D, _, _>(binding, registers, self.timer)
-            .await
-            .map_err(step::port_error)
-    }
-
     async fn complete_channel<P, O: PhyTargetObserver>(
         &self,
         binding: PhyChipChannelExternalBinding,
@@ -1521,9 +1471,6 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             )),
             PhyBbExternalBinding::RxSaturation(binding) => Ok(PhyBbInitCompletion::RxSaturation(
                 self.complete_rx_saturation(binding, registers).await?,
-            )),
-            PhyBbExternalBinding::RxGain(binding) => Ok(PhyBbInitCompletion::RxGain(
-                self.complete_rx_gain(binding, registers).await?,
             )),
             PhyBbExternalBinding::Channel(binding) => Ok(PhyBbInitCompletion::Channel(
                 self.complete_channel(binding, platform, registers, observer)
@@ -1926,10 +1873,9 @@ impl<
                 let mut child = transition
                     .begin_rx_gain_recalibration()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                let result = calibration::rx_gain::<D, _, _>(
+                let result = calibration::rx_gain_init::<D, _>(
                     self.timer,
-                    &mut child,
-                    self.platform,
+                    child.transition_mut(),
                     self.registers,
                     |operation, event| {
                         if operation.is_rx_gain_region() {
@@ -2176,6 +2122,27 @@ impl<
 > PhyRegisterPort for TargetPhyRegisterPort<'_, P, R, D, T, O>
 {
     type Error = PhyTargetPortError;
+
+    async fn rx_gain<'b>(
+        &'b mut self,
+        program: &'b mut crate::rx::gain::RxProgram,
+    ) -> Result<(), Self::Error> {
+        self.observer.operation_started();
+        let result = calibration::rx_gain_init::<D, _>(
+            self.timer,
+            program,
+            self.registers,
+            |_, _| {},
+            |_| {},
+            None,
+        )
+        .await;
+        if result.is_ok() {
+            self.counters.baseband_operations += 1;
+            self.observer.operation_completed();
+        }
+        result
+    }
 
     async fn complete(
         &mut self,

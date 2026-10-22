@@ -123,6 +123,12 @@ fn lowering_failure_identifies_the_pending_action_without_calling_the_port() {
     struct UnreachablePort;
     impl PhyRegisterPort for UnreachablePort {
         type Error = ();
+        async fn rx_gain<'a>(
+            &'a mut self,
+            _program: &'a mut crate::rx::gain::RxProgram,
+        ) -> Result<(), Self::Error> {
+            panic!("unsupported action must not reach RX hardware")
+        }
         async fn complete(
             &mut self,
             _binding: super::PhyRegisterExternalBinding,

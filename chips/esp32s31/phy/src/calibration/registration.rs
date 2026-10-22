@@ -162,6 +162,8 @@ pub struct PhyRegisterOutcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterLocalStep {
     StateAdvanced,
+    /// The retained RX program is borrowed, never lowered through leaf envelopes.
+    RxGain,
     External(PhyRegisterAction),
     Complete(PhyRegisterOutcome),
     Failed(PhyRegisterFailure),
@@ -635,6 +637,13 @@ impl PhyRegisterTransition {
         }
     }
 
+    pub(crate) fn rx_program_mut(&mut self) -> Option<&mut crate::rx::gain::RxProgram> {
+        match self.phase.as_mut() {
+            Some(Phase::Baseband(parent)) => parent.rx_program_mut(),
+            _ => None,
+        }
+    }
+
     // Keep phase temporaries in this synchronous model step, rather than in
     // every registration future's poll frame.
     #[inline(never)]
@@ -803,6 +812,10 @@ impl PhyRegisterTransition {
                     crate::calibration::baseband::PhyBbInitLocalStep::StateAdvanced => {
                         self.phase = Some(Phase::Baseband(transition));
                         Ok(PhyRegisterLocalStep::StateAdvanced)
+                    }
+                    crate::calibration::baseband::PhyBbInitLocalStep::RxGain => {
+                        self.phase = Some(Phase::Baseband(transition));
+                        Ok(PhyRegisterLocalStep::RxGain)
                     }
                     crate::calibration::baseband::PhyBbInitLocalStep::External(action) => {
                         self.phase = Some(Phase::Baseband(transition));

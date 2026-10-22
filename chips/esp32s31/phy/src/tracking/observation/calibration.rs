@@ -1,13 +1,7 @@
 //! Stable action identities for calibration timing. Bit 7 marks the first
 //! occurrence of an RX action in its retained execution region, not cache state.
 use crate::{
-    calibration::estimator::PhyDcIqAction as Iq,
-    channel::PhyChipChannelAction as Channel,
-    rx::{
-        dc_offset::PhyRxDcMinimumAction as Minimum,
-        gain::{PhyRxGainInitAction as Init, PhyRxGainPublishAction as Publish},
-        gain_calibration::{PhyRxDcCalibrationAction as Calibration, PhyRxGainDcAction as Dc},
-    },
+    calibration::estimator::PhyDcIqAction as Iq, channel::PhyChipChannelAction as Channel,
 };
 
 pub(crate) fn channel(action: &Channel) -> u8 {
@@ -31,63 +25,6 @@ pub(crate) fn channel(action: &Channel) -> u8 {
         Channel::ConfigureChannelCbw { .. } => 17,
         Channel::ClearDcMemory => 18,
         Channel::Complete(_) | Channel::Failed(_) => 0,
-    }
-}
-
-pub(crate) fn rx(action: &Init) -> u8 {
-    match action {
-        Init::PrepareDcControlRestore => 1,
-        Init::RestoreDcControl => 2,
-        Init::ConfigureLimits { .. } => 3,
-        Init::EnableIqCorrection => 4,
-        Init::Dc(action) => match action {
-            Dc::ConfigureRegisters { .. } => 5,
-            Dc::Rfpll(_) => 6,
-            Dc::ConfigurePbusDebugMode => 7,
-            Dc::ForcePbus { .. } => 8,
-            Dc::ConfigureClock { .. } => 9,
-            Dc::ReadPbus { .. } => 10,
-            Dc::I2c(_) => 11,
-            Dc::ConfigurePbusWorkMode => 12,
-            Dc::DelayMicros { .. } => 13,
-            Dc::ConfigurePbusWorkModePulse => 14,
-            Dc::ClearPbusWorkModePulse => 15,
-            Dc::Calibration(action) => rx_calibration(action),
-            Dc::Complete | Dc::Failed(_) => 0,
-        },
-        Init::Publish(action) => match action {
-            Publish::ConfigurePbusDebugMode { .. } => 26,
-            Publish::ForcePbus { .. } => 27,
-            Publish::ConfigureClock { .. } => 28,
-            Publish::ProgramEntry { .. } => 29,
-            Publish::ConfigurePbusWorkMode { .. } => 30,
-            Publish::DelayMicros { .. } => 31,
-            Publish::ConfigurePbusWorkModePulse { .. } => 32,
-            Publish::ClearPbusWorkModePulse { .. } => 33,
-            Publish::Complete(_) | Publish::Failed(_) => 0,
-        },
-        Init::Complete | Init::Failed(_) => 0,
-    }
-}
-
-pub(crate) fn rx_calibration(action: &Calibration) -> u8 {
-    match action {
-        Calibration::PrepareControlRestore => 16,
-        Calibration::ReadPbus { .. } => 17,
-        Calibration::ForcePbus(_) => 18,
-        Calibration::DelayMicros { .. } => 19,
-        Calibration::RestoreControl => 20,
-        Calibration::Minimum(Minimum::DcIq(action)) => match action {
-            Iq::Configure(_) => 21,
-            Iq::SetEnable { .. } => 22,
-            Iq::DelayMicros { .. } => 23,
-            Iq::AwaitReadinessEdge { .. } => 24,
-            Iq::ReadAccumulators(_) => 25,
-            Iq::Complete(_) | Iq::Failed(_) => 0,
-        },
-        Calibration::Complete(_)
-        | Calibration::Failed(_)
-        | Calibration::Minimum(Minimum::Complete(_) | Minimum::Failed(_)) => 0,
     }
 }
 

@@ -32,11 +32,6 @@ use crate::{
     channel::{PhyChipChannelCompletion, PhyChipChannelI2cBinding},
     rx::{
         dc_offset::{PhyRxDcoCompletion, PhyRxDcoPbusBinding},
-        gain::{PhyRxGainPublishCompletion, PhyRxGainPublishPbusBinding},
-        gain_calibration::{
-            PhyRxDcCalibrationCompletion, PhyRxDcCalibrationPbusBinding, PhyRxGainDcCompletion,
-            PhyRxGainDcPbusBinding,
-        },
         iq::{
             PhyRxIqAdjustedTxCompletion, PhyRxIqAdjustedTxI2cBinding, PhyRxIqGainCompletion,
             PhyRxIqGainI2cBinding, PhyRxIqGainPbusBinding, PhyRxIqInitCompletion,
@@ -328,41 +323,6 @@ macro_rules! define_i2c_executor {
 /// phy_chip_i2c_readReg_org / phy_chip_i2c_writeReg. No settle is specified
 /// between command publication and status reads. Publication and terminal
 /// recognition share one named settle.
-pub fn complete_rx_gain_i2c<C: oer_time::Clock + ?Sized>(
-    mut binding: MaskedI2cWriteBinding,
-    registers: &mut impl SharedPhyAccess,
-    clock: &C,
-) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::Address>, PhyTargetPortError> {
-    let completed = crate::executor::wait::i2c::complete(
-        clock,
-        &mut binding,
-        MaskedI2cWriteBinding::action,
-        |binding, action| {
-            match action {
-                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
-                    match binding.start_target(registers) {
-                        Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                        Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
-                    }
-                }
-                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                    binding
-                        .observe_target_edge(registers)
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                }
-                PhyColdI2cAction::Complete(_) => {}
-            }
-            Ok(())
-        },
-    )?;
-    if !completed {
-        return Err(PhyTargetPortError::HardwareEdgeTimedOut);
-    }
-    binding
-        .into_completion()
-        .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-}
 
 // These bindings model a PBus timeout as an ordinary completion consumed by
 // their parent transition. Keep the finite wait and the timeout conversion in
@@ -409,36 +369,6 @@ macro_rules! define_timeout_pbus_executor {
 // RX gain uses the direct rev0 phy_pbus_force_test completion loop
 // (command 0x2f82424e, status 0x2f824256). There is no intervening settle.
 // Each phase is a named settle and ends in the parent timeout completion.
-macro_rules! define_direct_timeout_pbus_executor {
-    ($function:ident, $binding:ty, $completion:ty) => {
-        #[inline]
-        pub fn $function<C: oer_time::Clock + ?Sized>(
-            mut binding: $binding,
-            registers: &mut impl SharedPhyAccess,
-            clock: &C,
-        ) -> Result<$completion, PhyTargetPortError> {
-            use crate::executor::wait::poll::settled;
-            // PBus publication has no busy result: this only checks the linear
-            // binding's phase before writing the command. A second settle and
-            // clock sample cannot make an invalid phase publish successfully.
-            if binding.start_target(registers).is_err() {
-                return Ok(binding.into_timeout_completion());
-            }
-            let completed = settled(clock, || match binding.observe_target_edge(registers) {
-                Ok(PhyPbusHardwareObservation::EdgeConsumed) => Some(Ok(())),
-                Ok(_) => None,
-                Err(_) => Some(Err(PhyTargetPortError::UnexpectedBinding)),
-            });
-            match completed {
-                Ok(observed) => observed?,
-                Err(_) => return Ok(binding.into_timeout_completion()),
-            }
-            binding
-                .into_completion()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-        }
-    };
-}
 
 define_i2c_executor!(
     complete_masked_i2c,
@@ -592,21 +522,6 @@ define_timeout_pbus_executor!(
     complete_rx_saturation_pbus,
     PhyRxSaturationPbusBinding,
     PhyRxSaturationCompletion
-);
-define_direct_timeout_pbus_executor!(
-    complete_rx_dc_calibration_pbus,
-    PhyRxDcCalibrationPbusBinding,
-    PhyRxDcCalibrationCompletion
-);
-define_direct_timeout_pbus_executor!(
-    complete_rx_gain_dc_pbus,
-    PhyRxGainDcPbusBinding,
-    PhyRxGainDcCompletion
-);
-define_direct_timeout_pbus_executor!(
-    complete_rx_gain_publish_pbus,
-    PhyRxGainPublishPbusBinding,
-    PhyRxGainPublishCompletion
 );
 
 #[cfg(test)]
