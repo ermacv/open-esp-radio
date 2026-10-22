@@ -672,7 +672,10 @@ impl<
         {
             let terminal = job.finished;
             match &mut job.work {
-                Work::RxGain(run) => run.execution.observe_engine(timing, run.scratch.action()),
+                Work::RxGain(run) => {
+                    run.execution.observe_engine(timing, run.scratch.action());
+                    run.scratch.observe_poll(run.execution, timing);
+                }
                 Work::Channel { gain, .. } => gain.observe(timing, terminal),
                 _ => {}
             }
@@ -964,6 +967,10 @@ pub(crate) fn drive_calibration<
     timer: &'a T,
     stats: Option<&'a mut EngineTiming>,
 ) -> impl Future<Output = Result<(), Failure>> + 'a {
+    if let Work::RxGain(run) = &mut job.work {
+        run.scratch
+            .start_poll_timing(stats.as_ref().map_or(0, |timing| timing.total_micros));
+    }
     CalibrationTrace {
         inner: driver::<D, _, _>(
             Input::Transport { job, stats },

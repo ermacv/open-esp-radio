@@ -146,6 +146,7 @@ pub fn name(channel: bool, tag: u8) -> &'static str {
             31 => "Publish.DelayMicros",
             32 => "Publish.ConfigurePbusWorkModePulse",
             33 => "Publish.ClearPbusWorkModePulse",
+            34 => "Dc.I2c.Prepare",
             _ => "Terminal",
         }
     }

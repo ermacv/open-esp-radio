@@ -50,6 +50,9 @@ pub(crate) struct Io {
     frequency_failure: bool,
     dc_iq_pending: usize,
     dc_iq_events: Vec<&'static str>,
+    rx_i2c_failure: bool,
+    rx_i2c_clock: Option<Rc<VirtualClock<1>>>,
+    rx_i2c_calls: usize,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
     rfpll_times: Vec<Instant>,
     rfpll_write_micros: u64,
@@ -78,6 +81,50 @@ impl Io {
             PhyRxGainPublishCompletion as PubDone, PhyRxGainPublishExternalBinding as Publish,
         };
         let binding = match binding {
+            Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::I2c(
+                mut binding,
+            )) => {
+                if self.rx_i2c_failure {
+                    return Err(Failure::Binding);
+                }
+                self.atom();
+                self.actions.push(binding.action());
+                match binding.action() {
+                    PhyColdI2cAction::StartRead { .. } => {
+                        binding.read_started().map_err(|_| Failure::Binding)?;
+                        self.actions.push(binding.action());
+                        binding
+                            .observe_read_result(Ok(0))
+                            .map_err(|_| Failure::Binding)?;
+                    }
+                    PhyColdI2cAction::StartWrite { .. } => {
+                        binding.write_started().map_err(|_| Failure::Binding)?;
+                        self.actions.push(binding.action());
+                        binding
+                            .observe_write_result(Ok(()))
+                            .map_err(|_| Failure::Binding)?;
+                    }
+                    _ => return Err(Failure::Binding),
+                }
+                if let Some(clock) = &self.rx_i2c_clock {
+                    clock
+                        .advance(Duration::from_micros(if self.rx_i2c_calls == 0 {
+                            10
+                        } else {
+                            3
+                        }))
+                        .expect("test clock fits");
+                }
+                self.rx_i2c_calls += 1;
+                return binding
+                    .into_completion()
+                    .map(|done| {
+                        Done::Dc(crate::rx::gain_calibration::PhyRxGainDcCompletion::I2c(
+                            done,
+                        ))
+                    })
+                    .map_err(|_| Failure::Binding);
+            }
             Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::Calibration(
                 crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding::Minimum(
                     crate::rx::dc_offset::PhyRxDcMinimumExternalBinding::DcIq(

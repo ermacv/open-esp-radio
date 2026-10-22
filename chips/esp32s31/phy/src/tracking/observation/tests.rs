@@ -112,6 +112,8 @@ fn rx_execution_summary_is_single_and_scoped_to_the_active_child() {
         maximum_parts_actions: [0; 3],
         maximum_engine_micros: [0; 2],
         maximum_engine_actions: [0; 2],
+        i2c_poll_micros: [[0; 2]; 2],
+        i2c_samples: [0; 2],
         quality: None,
         minimum_searches: 121,
         minimum_operations: 191,

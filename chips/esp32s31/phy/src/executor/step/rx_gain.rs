@@ -86,6 +86,8 @@ pub(crate) struct Scratch {
     pub(super) completion: Option<PhyRxGainInitCompletion>,
     seen_actions: u64,
     lowering: Option<PhyRxGainInitAction>,
+    poll_total_micros: u32,
+    poll_sample: u8,
 }
 
 impl Scratch {
@@ -109,6 +111,42 @@ impl Scratch {
     pub(super) fn action(&self) -> u8 {
         (self.seen_actions >> 56) as u8
     }
+
+    fn set_action(&mut self, tag: u8) {
+        self.seen_actions = (self.seen_actions & 0x00ff_ffff_ffff_ffff) | (u64::from(tag) << 56);
+    }
+
+    pub(super) fn start_poll_timing(&mut self, total: u32) {
+        self.poll_total_micros = total;
+        self.poll_sample = 0;
+    }
+
+    /// Called after Driver's final timestamp; no diagnostic work is charged
+    /// to the I2C transaction or excluded from the engine's poll duration.
+    pub(super) fn observe_poll(
+        &mut self,
+        execution: &mut RxGainExecution,
+        timing: &mut crate::tracking::observation::EngineTiming,
+    ) {
+        let elapsed = timing.total_micros.checked_sub(self.poll_total_micros);
+        self.poll_total_micros = timing.total_micros;
+        let tag = core::mem::take(&mut self.poll_sample);
+        let stage = match tag & 0x7f {
+            34 => 0,
+            11 => 1,
+            _ => return,
+        };
+        let elapsed = elapsed.unwrap_or_else(|| {
+            timing.invalid = true;
+            u32::MAX
+        });
+        let repeat = usize::from(tag & 0x80 == 0);
+        execution.i2c_poll_micros[stage][repeat] =
+            execution.i2c_poll_micros[stage][repeat].max(elapsed);
+        if stage == 1 {
+            execution.i2c_samples[repeat] += 1;
+        }
+    }
 }
 
 pub(super) struct Run<'a> {
@@ -127,6 +165,7 @@ impl Run<'_> {
         clock: &C,
         now: Instant,
     ) -> Result<Step, Failure> {
+        self.scratch.poll_sample = 0;
         if self.transition.phase() != Some(self.phase) {
             return Ok(Step::Complete);
         }
@@ -136,37 +175,56 @@ impl Run<'_> {
         } else {
             Instant::EPOCH
         };
-        self.scratch.lowering = Some(self.transition.action());
+        let prepared = self.scratch.binding.is_some();
         let mut tag = 0;
-        if self.measured {
-            let action = crate::tracking::observation::calibration::rx(
-                self.scratch.lowering.as_ref().ok_or(Failure::Binding)?,
-            );
-            tag = self.scratch.observe_action(action);
-        }
-        let action = self.scratch.lowering.as_ref().ok_or(Failure::Binding)?;
-        if matches!(
-            action,
-            PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
-                PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(
-                    PhyDcIqAction::Configure(_)
+        if !prepared {
+            self.scratch.lowering = Some(self.transition.action());
+            if self.measured {
+                let action = crate::tracking::observation::calibration::rx(
+                    self.scratch.lowering.as_ref().ok_or(Failure::Binding)?,
+                );
+                tag = self.scratch.observe_action(action);
+            }
+            let action = self.scratch.lowering.as_ref().ok_or(Failure::Binding)?;
+            if matches!(
+                action,
+                PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
+                    PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(
+                        PhyDcIqAction::Configure(_)
+                    ))
                 ))
-            ))
-        ) && self.execution.minimum_operations
-            > 100_000 - u32::from(crate::HARDWARE_EDGE_LIMIT) - 8
-        {
-            #[cfg(target_arch = "riscv32")]
-            return Err(Failure::Target(
-                crate::target_executor::PhyTargetPortError::RfOperationLimit,
-            ));
-            #[cfg(not(target_arch = "riscv32"))]
-            return Err(Failure::Binding);
+            ) && self.execution.minimum_operations
+                > 100_000 - u32::from(crate::HARDWARE_EDGE_LIMIT) - 8
+            {
+                #[cfg(target_arch = "riscv32")]
+                return Err(Failure::Target(
+                    crate::target_executor::PhyTargetPortError::RfOperationLimit,
+                ));
+                #[cfg(not(target_arch = "riscv32"))]
+                return Err(Failure::Binding);
+            }
+            Self::observe(self.execution, action);
+            self.scratch.binding = Some(
+                crate::rx::gain::PhyRxGainInitExternalBinding::lower(*action)
+                    .map_err(|_| Failure::Binding)?,
+            );
+            // lower() only constructs a binding (gain::PhyRxGainInitExternalBinding
+            // and gain_calibration::PhyRxGainDcExternalBinding). No I2C command has
+            // started: the borrowed RF/bus owner can yield before the whole helper.
+            if matches!(action, PhyRxGainInitAction::Dc(PhyRxGainDcAction::I2c(_))) {
+                if self.measured {
+                    tag = 34 | (tag & 0x80);
+                    self.scratch.set_action(tag);
+                    self.scratch.poll_sample = tag;
+                    Self::record_part(self.execution, 0, tag, started, stamp.now());
+                }
+                return Ok(Step::Runnable);
+            }
+        } else if self.measured {
+            tag = 11 | (self.scratch.action() & 0x80);
+            self.scratch.set_action(tag);
+            self.scratch.poll_sample = tag;
         }
-        Self::observe(self.execution, action);
-        self.scratch.binding = Some(
-            crate::rx::gain::PhyRxGainInitExternalBinding::lower(*action)
-                .map_err(|_| Failure::Binding)?,
-        );
         let lowered = if self.measured {
             stamp.now()
         } else {

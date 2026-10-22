@@ -513,6 +513,11 @@ pub struct RxGainExecution {
     pub maximum_parts_actions: [u8; 3],
     pub maximum_engine_micros: [u32; 2],
     pub maximum_engine_actions: [u8; 2],
+    /// Poll maxima by I2C stage (pure preparation, complete helper+commit),
+    /// then first/repeated action within the same retained RX phase.
+    pub i2c_poll_micros: [[u32; 2]; 2],
+    /// Completed helper polls, first/repeated within the RX phase.
+    pub i2c_samples: [u32; 2],
     /// Complete RX DC product quality; absent when that child did not complete.
     pub quality: Option<crate::rx::gain_calibration::PhyRxGainDcQuality>,
     pub minimum_searches: u32,
