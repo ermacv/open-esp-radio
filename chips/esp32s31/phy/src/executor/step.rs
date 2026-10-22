@@ -357,7 +357,7 @@ impl<'a> Job<'a> {
                 };
             }
             Work::RxGain(run) => {
-                self.ready_started = Some(clock.now());
+                self.ready_started = Some(now);
                 return run.advance::<D, _>(&mut io, clock, now);
             }
             Work::Dcode {
@@ -837,8 +837,6 @@ impl<
                         if let Step::Rfpll(sample) = step { rfpll_sample = Some(sample); }
                         batch_commands += 1;
                         if batch_commands < BATCH_COMMANDS
-                            && batch_started.is_some_and(|at|
-                                clock.now().saturating_duration_since(at).as_micros() < BATCH_MICROS)
                             && match &route {
                                 RouteProj::Transport { job, .. } => match &job.work {
                                     Work::RxGain(run) => run.batch_ready(),
@@ -846,6 +844,8 @@ impl<
                                 },
                                 _ => false,
                             }
+                            && batch_started.is_some_and(|at|
+                                clock.now().saturating_duration_since(at).as_micros() < BATCH_MICROS)
                         {
                             continue;
                         }

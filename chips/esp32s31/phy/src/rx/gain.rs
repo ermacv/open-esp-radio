@@ -831,6 +831,15 @@ impl PhyRxGainInitTransition {
         }
     }
 
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn calibration_pbus_ready(&self) -> bool {
+        match &self.step {
+            InitStep::Dc(transition) => transition.calibration_pbus_ready(),
+            _ => false,
+        }
+    }
+
     /// A calibration child can advance to another gain or DC cleanup, but only
     /// the ordinary DC tail can finish the root and publish its coefficients.
     #[cfg(any(target_arch = "riscv32", test))]

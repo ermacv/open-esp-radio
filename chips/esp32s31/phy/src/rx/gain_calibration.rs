@@ -351,6 +351,20 @@ fn execute_minimum_target<D: crate::executor::wait::PhyShortDelay>(
 }
 
 impl PhyRxDcCalibrationTransition {
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn pbus_ready(&self) -> bool {
+        matches!(
+            self.step,
+            Step::ReadPbus
+                | Step::ForceI
+                | Step::ForceQ
+                | Step::ForceRadioLevel { .. }
+                | Step::CleanupI { .. }
+                | Step::CleanupQ { .. }
+        )
+    }
+
     /// Execute the complete current-vendor one-step RX-DC routine as one
     /// blocking target transaction. The event-driven transition remains the
     /// executable host model; production does not dispatch its individual
@@ -1147,6 +1161,16 @@ pub struct PhyRxGainDcTransition {
 }
 
 impl PhyRxGainDcTransition {
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[inline]
+    pub(crate) fn calibration_pbus_ready(&self) -> bool {
+        match &self.step {
+            DcStep::FineCalibration { transition, .. }
+            | DcStep::CalibrateBaseband { transition, .. } => transition.pbus_ready(),
+            _ => false,
+        }
+    }
+
     /// Project the live calibration cursor without packing the outer DC action.
     #[cfg(any(target_arch = "riscv32", test))]
     #[inline]
