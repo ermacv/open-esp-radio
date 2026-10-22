@@ -39,10 +39,11 @@ struct Bank<'id, Ty: PhaseTypes<'id>> {
 
 struct Header<'id, Ty: PhaseTypes<'id>> {
     association: Option<(LinkEpoch<'id, Ty::EpochPath>, Bssid)>,
-    pending: [Option<[u8; 9]>; PENDING],
+    pending: heapless::Deque<[u8; 9], PENDING>,
     ready: [u8; WINDOW],
     ready_len: u8,
-    deferred: u8,
+    // Slot reuse must not reorder management CCMP packet numbers.
+    deferred: heapless::Deque<u8, WINDOW>,
     failed: bool,
     gap_timeout: Duration,
 }
@@ -72,10 +73,10 @@ impl<'id, Ty: PhaseTypes<'id>, const BANKS: usize, const FRAMES: usize>
         Self {
             header: Header {
                 association: None,
-                pending: [None; PENDING],
+                pending: heapless::Deque::new(),
                 ready: [0; WINDOW],
                 ready_len: 0,
-                deferred: 0,
+                deferred: heapless::Deque::new(),
                 failed: false,
                 gap_timeout,
             },
@@ -117,7 +118,7 @@ pub struct RxBlockAckView<'id, Ty: PhaseTypes<'id>> {
 
 #[derive(Clone, Copy)]
 pub(super) enum ReplyPlace {
-    Queued(usize),
+    Queued,
     Bank(usize),
 }
 pub(super) enum RxDisposition<'id, Ty: PhaseTypes<'id>> {
@@ -129,17 +130,11 @@ pub(super) enum RxDisposition<'id, Ty: PhaseTypes<'id>> {
 
 impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
     fn queue(&mut self, response: [u8; 9]) -> bool {
-        match self.header.pending.iter_mut().find(|place| place.is_none()) {
-            Some(place) => {
-                *place = Some(response);
-                true
-            }
-            None => false,
-        }
+        self.header.pending.push_back(response).is_ok()
     }
 
     pub(super) fn can_receive_management(&self) -> bool {
-        self.header.pending.iter().any(Option::is_none)
+        !self.header.pending.is_full()
     }
 
     pub(super) fn failed(&self) -> bool {
@@ -184,30 +179,30 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
         frame: Ty::RxBuffer,
         meta: Ty::RxMeta,
     ) -> Result<(), Retained<'id, Ty>> {
-        let Some(slot) = self.frames.iter().position(Option::is_none) else {
-            return Err((frame, meta));
-        };
-        let Some(bit) = u32::try_from(slot)
-            .ok()
-            .and_then(|shift| 1u8.checked_shl(shift))
+        let Some((slot, place)) = self
+            .frames
+            .iter_mut()
+            .enumerate()
+            .find(|(_, place)| place.is_none())
         else {
             return Err((frame, meta));
         };
-        if let Some(place) = self.frames.get_mut(slot) {
-            *place = Some((frame, meta));
+        let Ok(slot) = u8::try_from(slot) else {
+            return Err((frame, meta));
+        };
+        if self.header.deferred.push_back(slot).is_err() {
+            return Err((frame, meta));
         }
-        self.header.deferred |= bit;
+        *place = Some((frame, meta));
         Ok(())
     }
 
     pub(super) fn pop_deferred(&mut self) -> Option<Retained<'id, Ty>> {
-        if !self.can_receive_management() || self.header.deferred == 0 {
+        if !self.can_receive_management() {
             return None;
         }
-        let shift = self.header.deferred.trailing_zeros();
-        let bit = 1u8.checked_shl(shift)?;
-        self.header.deferred &= !bit;
-        self.frames.get_mut(usize::try_from(shift).ok()?)?.take()
+        let slot = self.header.deferred.pop_front()?;
+        self.frames.get_mut(usize::from(slot))?.take()
     }
 
     pub(super) fn deadline(&self) -> Option<Instant> {
@@ -236,9 +231,9 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
             phase.recycle(frame.0);
         }
         self.header.association = None;
-        self.header.pending.fill(None);
+        self.header.pending.clear();
         self.header.ready_len = 0;
-        self.header.deferred = 0;
+        self.header.deferred.clear();
         self.header.failed = false;
     }
 
@@ -402,15 +397,9 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
 
     pub(super) fn next_reply(&self) -> Option<(ReplyPlace, RxBlockAckReply<'id, Ty::EpochPath>)> {
         let (epoch, bssid) = self.header.association?;
-        if let Some((index, body)) = self
-            .header
-            .pending
-            .iter()
-            .enumerate()
-            .find_map(|(index, body)| body.map(|body| (index, body)))
-        {
+        if let Some(body) = self.header.pending.front().copied() {
             return RxBlockAckReply::from_body(epoch, bssid, body)
-                .map(|reply| (ReplyPlace::Queued(index), reply));
+                .map(|reply| (ReplyPlace::Queued, reply));
         }
         self.banks.iter().enumerate().find_map(|(index, bank)| {
             if !bank.response {
@@ -424,10 +413,8 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
 
     pub(super) fn sent(&mut self, place: ReplyPlace) {
         match place {
-            ReplyPlace::Queued(index) => {
-                if let Some(place) = self.header.pending.get_mut(index) {
-                    *place = None;
-                }
+            ReplyPlace::Queued => {
+                let _sent = self.header.pending.pop_front();
             }
             ReplyPlace::Bank(index) => {
                 if let Some(bank) = self.banks.get_mut(index) {

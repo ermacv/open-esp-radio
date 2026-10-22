@@ -416,6 +416,31 @@ fn a_busy_control_transmitter_retains_a_second_tids_response() {
 }
 
 #[test]
+fn response_pressure_defers_management_without_overtaking_older_requests() {
+    let counters = run_with(ht_config(), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.air.hold(WmmAccessCategory::Voice, true);
+            // One in-flight reply, eight pending refusals and three raw RX
+            // owners exercise both queues without exceeding model RX credits.
+            for dialog in 1..=12 {
+                world.air.receive(&addba(dialog, 15, 10, 0), meta());
+                assert!(world.delivered().await.is_empty());
+            }
+            world.air.hold(WmmAccessCategory::Voice, false);
+            for expected in 1..=12 {
+                assert!(matches!(response(&world.sent(&mut seen, 0xd0).await),
+                BlockAckAction::AddbaResponse { dialog_token, status: 37, .. } if dialog_token == expected));
+            }
+            world.command(ServiceCommand::Stop).await;
+        })
+    });
+    assert_eq!(counters.events_lost.get(), 0);
+    assert_eq!(counters.rx_frames_dropped.get(), 0);
+}
+
+#[test]
 fn only_a_bar_from_the_associated_transmitter_moves_its_tid_window() {
     run_with(ht_config(), |world| {
         Box::pin(async move {
