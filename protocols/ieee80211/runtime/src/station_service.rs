@@ -1144,7 +1144,6 @@ impl<
                 pending
             }
         );
-        rates.disconnected();
         oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.move_to(place).into_mut(),
@@ -1157,7 +1156,7 @@ impl<
                             station.into_mut()
                         },
                         data => |place| StaData::finish_placed(data, place).into_mut(),
-                        rates: rates.read(),
+                        rates: { rates.disconnected(); rates.read() },
                         counters: counters.read(),
                         _places: places.take().expect("station returns its places"),
                         _arbiter: arbiter.read(),

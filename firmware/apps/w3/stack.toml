@@ -9,7 +9,8 @@ root = "runtime_main"
 bottom_symbol = "__runtime_cpu0_task_stack_bottom"
 top_symbol = "__runtime_cpu0_task_stack_top"
 minimum_free_bytes = 16384
-allocation_bytes = 1048576
+# Temporary bound; the next PR lowers it by placing child futures and service banks in static memory.
+allocation_bytes = 486848
 
 [interrupt_stacks]
 minimum_free_bytes = 4096

@@ -2305,10 +2305,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             credits = Some(granted);
             station
         });
-        (
-            station.read(),
-            credits.expect("construction grants command credits"),
-        )
+        #[expect(
+            clippy::expect_used,
+            reason = "Placed::init calls its initializer exactly once before returning"
+        )]
+        let credits = credits.expect("construction grants command credits");
+        (station.read(), credits)
     }
 
     fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(

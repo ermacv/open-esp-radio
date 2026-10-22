@@ -786,6 +786,7 @@ struct Body<'w, 'b, S, const GROUPS: usize> {
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
+    placed: bool,
 }
 
 /// A test's script: the access point and the application, on the world.
@@ -916,11 +917,32 @@ where
                 output: &mut output,
             };
             let script = self.script;
-            let (completed, ()) = join(service.run(owner, &mut io, &*world.clock), async move {
+            let script = async move {
                 script(world).await;
                 world.command(ServiceCommand::Stop).await;
-            })
-            .await;
+            };
+            let completed = if self.placed {
+                let mut service_storage = core::mem::MaybeUninit::uninit();
+                let service =
+                    oer_memory::Placed::init(&mut service_storage, |place| place.write(service));
+                let mut completed_storage = core::mem::MaybeUninit::uninit();
+                let (completed, ()) = join(
+                    StationService::run_placed(
+                        service,
+                        &mut completed_storage,
+                        owner,
+                        &mut io,
+                        &*world.clock,
+                    ),
+                    script,
+                )
+                .await;
+                completed.read()
+            } else {
+                join(service.run(owner, &mut io, &*world.clock), script)
+                    .await
+                    .0
+            };
             let completed = if let Some(protected) = world.restart_stopped_service.get() {
                 let stopped = completed.into_stopped().ok().expect("ordinary Stop");
                 let RestartedService {
@@ -1150,11 +1172,24 @@ where
     S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
         + Send,
 {
+    run_case_with_placement::<S, GROUPS>(config, script, refuse_initial_enable, false)
+}
+
+fn run_case_with_placement<S, const GROUPS: usize>(
+    config: TestConfig,
+    script: S,
+    refuse_initial_enable: bool,
+    placed: bool,
+) -> ServiceCounters
+where
+    S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
+        + Send,
+{
     std::thread::scope(|scope| {
         std::thread::Builder::new()
             .stack_size(16 << 20)
             .spawn_scoped(scope, move || {
-                run_case_on_this_thread::<S, GROUPS>(config, script, refuse_initial_enable)
+                run_case_on_this_thread::<S, GROUPS>(config, script, refuse_initial_enable, placed)
             })
             .expect("a thread with a stack for the case")
             .join()
@@ -1166,6 +1201,7 @@ fn run_case_on_this_thread<S, const GROUPS: usize>(
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
+    placed: bool,
 ) -> ServiceCounters
 where
     S: for<'w, 'b, 'id, 'scope> FnOnce(&'w Application<'w, 'b, 'id, LocalId<'scope>>) -> Script<'w>
@@ -1218,6 +1254,7 @@ where
                             config,
                             script,
                             refuse_initial_enable,
+                            placed,
                         },
                     )
                     .await
@@ -2657,5 +2694,62 @@ fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
                 world.restart_stopped_service.set(Some(protected));
             })
         });
+    }
+}
+
+#[test]
+fn placed_service_retires_its_banks_on_stop_drained_and_quarantined_ports() {
+    for end in [
+        None,
+        Some(ExpectedStreamEnd::Drained),
+        Some(ExpectedStreamEnd::FalseDrained),
+        Some(ExpectedStreamEnd::Quarantined),
+    ] {
+        run_case_with_placement::<_, 2>(
+            config(StaSecurity::Open),
+            |world| {
+                Box::pin(async move {
+                    let mut seen = 0;
+                    world.associate(&mut seen, false).await;
+                    world
+                        .notice(StaNotice::Connected {
+                            bssid: oer_ieee80211_wire::address::Bssid::new(
+                                IndividualAddress::new(BSSID).unwrap(),
+                            )
+                            .unwrap(),
+                            channel: 6,
+                        })
+                        .await;
+                    if let Some(end) = end {
+                        world
+                            .air
+                            .hold_completion(WmmAccessCategory::BestEffort, true);
+                        world.send_msdu([2, 0, 0, 0, 0, 7]);
+                        world.sent(&mut seen, DATA).await;
+                        world.expected_stream_end.set(Some(end));
+                        match end {
+                            ExpectedStreamEnd::Drained => {
+                                world.air.fail_after_terminals();
+                                world
+                                    .air
+                                    .hold_completion(WmmAccessCategory::BestEffort, false);
+                            }
+                            ExpectedStreamEnd::FalseDrained => world.air.falsely_claim_drained(),
+                            ExpectedStreamEnd::Quarantined => world.air.poison(),
+                            ExpectedStreamEnd::SubmissionFailed => unreachable!(),
+                        }
+                        world
+                            .notice(StaNotice::Disconnected(
+                                oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(
+                                    oer_ieee80211_arbiter::LeaveReason::PortFailed,
+                                ),
+                            ))
+                            .await;
+                    }
+                })
+            },
+            false,
+            true,
+        );
     }
 }
