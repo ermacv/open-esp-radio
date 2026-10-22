@@ -308,7 +308,16 @@ A bound also lists every function its root reaches over what is resolved
 floating-point CSR accesses (`FunctionFacts::float_sites`): what checks of a
 context's code, such as the firmware gate's interrupt-context checks, read.
 
-`Analysis::reached_cut(root, resolutions, cut)` uses the same walk as
+`Bound::predecessors` retains one caller/callsite edge at first discovery of
+each non-root function. `Bound::witness` reconstructs a root-to-function path
+through these parents without searching call edges again. It returns no path
+for a function beyond an unresolved transfer. This first-discovery path need
+not be shortest and is independent of the deepest stack path in `Bound::path`.
+Bound builders take the caller's `Ledger` and `RunControl`; predecessor entries
+are admitted before allocation. Cloned interrupt bounds share their immutable
+predecessor map.
+
+`Analysis::reached_cut(root, resolutions, cut, keep, control)` uses the same walk as
 `Bound::reached`, stopping at transfers whose instruction sites are in `cut`.
 The function owning a cut site remains reached. `task_poll_sites` obtains the
 dequeue call sites from `Fact::TaskPolls` and `Fact::NoTasks` in `Resolutions`,

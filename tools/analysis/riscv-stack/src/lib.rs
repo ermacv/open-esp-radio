@@ -839,7 +839,9 @@ impl FunctionFacts {
 }
 
 impl Analysis {
-    /// The worst-case bound of the function at `root`.
+    /// The worst-case bound of the function at `root`. First-discovery
+    /// predecessor storage is admitted in `keep`, which the caller holds
+    /// while the bound counts against its operation's working memory.
     pub fn bound(
         &self,
         root: u32,

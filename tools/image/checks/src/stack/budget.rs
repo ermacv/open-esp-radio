@@ -11,9 +11,12 @@
 //! keeps of each function, the DWARF and type facts, and the resolutions
 //! (`oer-analysis-riscv-stack`). Outside it stay the caches addr2line grows for the
 //! inline chains, which the working memory's contract leaves to the
-//! library, and the bounds the stack checks compute afterwards. The runtime and
-//! bootstrap stack reports state what the image's analysis used of these
-//! limits; the interrupt check reads its image facts within the same limits.
+//! library, and the pre-existing bound scratch and critical-path structures.
+//! First-discovery predecessors are admitted by each bound's caller through
+//! a ledger, alongside the image's retained facts, within these same limits.
+//! The runtime and bootstrap stack reports state the original image-analysis
+//! usage; the separate reachability reports include the peak with witnesses.
+//! The interrupt check reads its image facts within the same limits.
 use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, RunPosition};
 use std::time::{Duration, Instant};
 
