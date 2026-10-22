@@ -4,7 +4,8 @@
 its caller gives as bytes, inside the caller's process. Its internal
 dependencies are [domain](../blobray-domain/README.md),
 [artifacts](../blobray-artifacts/README.md), [analysis](../blobray-analysis/README.md) and
-[verification](../blobray-verification/README.md). It does not depend on a concrete
+[verification](../blobray-verification/README.md), and
+[ELF classification](../elf/src/classify.rs). It does not depend on a concrete
 ISA backend or linker adapter: both are injected.
 
 Every operation takes `in_process::Executable` values, a `WorkingMemory` and a
@@ -37,6 +38,29 @@ ranges and streams `RegisterAccess` records with a summary. Observed access
 widths and masks are never promoted to hardware declarations; source
 publication remains with the independent register tool. See
 [function analysis](../cli/reference/analysis/README.md#function-analysis-contract).
+
+`library::field_accesses`, `library::call_arguments` and `library::callers`
+take the same inputs, assumptions, injected decoder, memory and control,
+plus query parameters and an emission callback. They return summaries;
+`library::queries` counts analyzed, partial and blocked functions and gaps
+once for all three operations. Selected function payloads and blocked outcomes
+are streamed through `FunctionResult`; `CallerResult` also emits candidate
+pointer storage. The `field`, `call_arguments` and `references` modules own
+the projections and their result types. None of them depends on CLI wire types.
+
+`access_groups` owns `AccessFilter`, `GroupBy` and typed register-access groups.
+Filters and groups do not change the whole-analysis summary. CLI owns their
+human rendering and the JSON document envelopes; `register_accesses` and its
+summary contract are unchanged.
+
+## Inventory queries
+
+`symbols` owns symbol rows, read-only string rows, string sections and the
+local-label strings referenced by function records. `image_symbols` returns
+sized function entries for listing renderers. These queries use the captured
+inventory and data exporter with the caller's memory and control; raw ELF
+symbol, section, flag and header classification comes from
+`oer_analysis_elf::classify`.
 
 ## Linking and ROM companions
 

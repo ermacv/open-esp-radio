@@ -3,8 +3,8 @@
 #[allow(dead_code)]
 mod support;
 use oer_analysis_blobray_application::in_process::Executable;
+use oer_analysis_blobray_application::references::{StoredScan, Targets};
 use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, WorkingMemory};
-use oer_tool_analysis_cli::references::{StoredScan, Targets};
 use serde_json::{Value, json};
 use std::process::Command;
 
@@ -320,52 +320,6 @@ impl RunControl for Work {
             .ok_or_else(|| Error::new(ErrorCode::ResourceLimited, "test budget"))?;
         Ok(())
     }
-}
-
-#[test]
-fn data_scan_resource_failure_is_an_error_even_after_candidates_were_found() {
-    let input = Executable::new(image(
-        0x1000,
-        &[0x00008067],
-        &[("entry", 0x1000, 4, 2, 1), ("target", 0x2334, 0, 0, 0xfff1)],
-        true,
-    ));
-    let memory = WorkingMemory::new(1 << 20).unwrap();
-    let targets = Targets::capture(
-        std::slice::from_ref(&input),
-        &["target".into()],
-        &memory,
-        &mut || Ok(()),
-    )
-    .unwrap();
-    let mut complete = StoredScan::new(&memory, &mut || Ok(())).unwrap();
-    let mut meter = Work(u64::MAX);
-    complete
-        .scan_data(std::slice::from_ref(&input), &targets, &memory, &mut meter)
-        .unwrap();
-    let count = u64::MAX - meter.0;
-    assert_eq!(complete.references.len(), 2);
-    drop(complete);
-    // Refuse on the last work checkpoint: earlier findings cannot turn failure into success.
-    let mut scan = StoredScan::new(&memory, &mut || Ok(())).unwrap();
-    let error = scan
-        .scan_data(
-            std::slice::from_ref(&input),
-            &targets,
-            &memory,
-            &mut Work(count - 1),
-        )
-        .unwrap_err();
-    assert_eq!(error.code, ErrorCode::ResourceLimited);
-    assert!(!scan.references.is_empty());
-    // A held budget leaves too little memory for the exported section.
-    let _held = memory
-        .reserve((1 << 20) - memory.used() - 8, Default::default())
-        .unwrap();
-    let error = scan
-        .scan_data(&[input], &targets, &memory, &mut || Ok(()))
-        .unwrap_err();
-    assert_eq!(error.code, ErrorCode::ResourceLimited);
 }
 
 #[test]

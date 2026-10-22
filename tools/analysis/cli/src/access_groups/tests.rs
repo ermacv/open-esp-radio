@@ -6,7 +6,9 @@ use oer_analysis_riscv_model::{
     ObjectLocation, SymbolId, SymbolTableKind,
 };
 
-use super::{AccessEntry, AccessFilter, AccessGroup, AccessGroups, GroupBy, GroupFunction};
+use oer_analysis_blobray_application::access_groups::{
+    AccessEntry, AccessFilter, AccessGroup, AccessGroups, GroupBy, GroupFunction,
+};
 
 fn function(name: &str) -> LibraryFunction {
     LibraryFunction {
@@ -87,44 +89,6 @@ fn records() -> Vec<RegisterAccess> {
 }
 
 #[test]
-fn a_word_filter_keeps_its_observations_and_every_blocked_function_and_gap() {
-    let filter = AccessFilter {
-        words: vec![0x2010_713c],
-        functions: Vec::new(),
-    };
-    let kept: Vec<_> = records().into_iter().filter(|r| filter.keeps(r)).collect();
-    assert_eq!(
-        kept.len(),
-        5,
-        "three observations in the word, the blocked function and the gap"
-    );
-    assert!(kept.iter().all(|record| match record {
-        RegisterAccess::Observation { address, .. } =>
-            *address == Some(0x2010_713c) || *address == Some(0x2010_713e),
-        _ => true,
-    }));
-}
-
-#[test]
-fn a_function_filter_keeps_only_that_functions_observations_and_blocks() {
-    let filter = AccessFilter {
-        words: Vec::new(),
-        functions: vec!["phy_set_rx_gain_table".into()],
-    };
-    let kept: Vec<_> = records().into_iter().filter(|r| filter.keeps(r)).collect();
-    assert_eq!(
-        kept.len(),
-        3,
-        "two observations, unresolved included, and the gap"
-    );
-    assert!(
-        !kept
-            .iter()
-            .any(|record| matches!(record, RegisterAccess::Blocked { .. }))
-    );
-}
-
-#[test]
 fn address_groups_list_each_accessing_function_by_access_and_mask() {
     let mut groups = AccessGroups::new(GroupBy::Address);
     records().iter().for_each(|record| groups.add(record));
@@ -168,7 +132,7 @@ fn address_groups_list_each_accessing_function_by_access_and_mask() {
         ]
     );
     assert_eq!(
-        groups.human(),
+        super::human(&groups),
         [
             "unresolved",
             "  phy_set_rx_gain_table (input 0, member 0) load 4B x1",
@@ -187,7 +151,7 @@ fn function_groups_list_each_accessed_word() {
     let mut groups = AccessGroups::new(GroupBy::Function);
     records().iter().for_each(|record| groups.add(record));
     assert_eq!(
-        groups.human(),
+        super::human(&groups),
         [
             "phy_set_rx_gain_table (input 0, member 0)",
             "  unresolved load 4B x1",
@@ -214,7 +178,7 @@ fn same_named_functions_of_different_members_stay_apart() {
         groups.add(&record);
     }
     assert_eq!(
-        groups.human(),
+        super::human(&groups),
         [
             "local_helper (input 0, member 2)",
             "  0x2010702c store 4B x1",
@@ -297,7 +261,7 @@ fn loads_of_different_widths_stay_separate_entries() {
         groups.add(&record);
     }
     assert_eq!(
-        groups.human(),
+        super::human(&groups),
         [
             "store_byte (input 0, member 0)",
             "  0x2010702c store 4B [7:0]=load 1B 0xa[7:0] x1",
@@ -330,7 +294,7 @@ fn an_indexed_observation_is_selected_by_the_words_its_progression_reaches() {
     let mut groups = AccessGroups::new(GroupBy::Address);
     groups.add(&record);
     assert_eq!(
-        groups.human(),
+        super::human(&groups),
         [
             "unresolved",
             "  coex_hw_timer_set (input 0, member 0) indexed 0x2010f400+0x10*i (i<6) store 4B x1",
@@ -393,7 +357,7 @@ fn read_classes_stay_separate_and_render_sinks_precision_and_limits() {
         2
     );
     assert_eq!(
-        groups.human(),
+        super::human(&groups),
         [
             "read_bits (input 0, member 0)",
             "  0x2010702c load 4B reads[preserved=0x00000000 unused=0xffffffff] x1",

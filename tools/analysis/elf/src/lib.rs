@@ -17,6 +17,7 @@ use object::{
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub mod classify;
 pub mod dwarf;
 pub mod rv32;
 

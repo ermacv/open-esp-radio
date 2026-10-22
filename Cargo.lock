@@ -2462,11 +2462,14 @@ dependencies = [
 name = "oer-analysis-blobray-application"
 version = "0.1.0"
 dependencies = [
+ "object 0.39.1",
  "oer-analysis-blobray-analysis",
  "oer-analysis-blobray-artifacts",
  "oer-analysis-blobray-domain",
  "oer-analysis-blobray-verification",
+ "oer-analysis-elf",
  "oer-analysis-riscv-analysis",
+ "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
  "rustc-demangle",

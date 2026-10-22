@@ -4,6 +4,7 @@
 use crate::captured::visit_members;
 use crate::in_process::{Executable, find};
 use crate::*;
+use oer_analysis_elf::classify as elf;
 use std::path::PathBuf;
 
 pub const LINK_METADATA_BYTES: u64 = 8 * 1024 * 1024;
@@ -344,7 +345,10 @@ fn collect(
                 block(&mut blockers, message)?;
             }
             let elf = header.is_some_and(|e| {
-                e.bits == 32 && e.little_endian && e.machine == 243 && e.object_type == 1
+                e.bits == 32
+                    && e.little_endian
+                    && e.machine == 243
+                    && elf::object_kind(e.object_type) == elf::ObjectKind::Relocatable
             });
             if !elf || payload.is_none() {
                 block(

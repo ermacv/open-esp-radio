@@ -3,8 +3,14 @@ use crate::captured::{Member, visit_members};
 use crate::in_process::Executable;
 use crate::*;
 use oer_analysis_blobray_analysis::navigation::Facts;
+use oer_analysis_elf::classify as elf;
 use std::collections::BTreeSet;
+mod queries;
 mod summaries;
+pub use queries::{
+    CallerResult, CallersSummary, FieldSummary, FunctionResult, QuerySummary, call_arguments,
+    callers, field_accesses,
+};
 
 /// One analyzed function with its records, borrowed for a visit.
 pub struct AnalyzedFunction<'a> {
@@ -289,7 +295,7 @@ struct Selection {
 }
 impl ElfSink for Selection {
     fn section(&mut self, r: &SectionRecord, c: &mut dyn RunControl) -> Result<()> {
-        if r.flags & 4 != 0 && r.size != 0 {
+        if elf::SectionFlags(r.flags).executable() && r.size != 0 {
             match self.executable.binary_search(&r.index) {
                 Ok(_) => return Err(Error::new(ErrorCode::Integrity, "duplicate section index")),
                 Err(i) => self.executable.insert(i, r.index),
@@ -298,15 +304,9 @@ impl ElfSink for Selection {
         c.checkpoint(1)
     }
     fn symbol(&mut self, r: &SymbolRecord, _: &mut dyn RunControl) -> Result<()> {
-        // STT_FUNC in a section already known to be executable.
-        let section = if r.raw_section == 0xffff {
-            r.extended_section
-        } else if r.raw_section > 0 && r.raw_section < 0xff00 {
-            Some(u32::from(r.raw_section))
-        } else {
-            None
-        };
-        if r.symbol_type == 2 && section.is_some_and(|s| self.executable.binary_search(&s).is_ok())
+        let section = elf::symbol_section(r.raw_section, r.extended_section).index();
+        if elf::symbol_kind(r.symbol_type) == elf::SymbolKind::Function
+            && section.is_some_and(|s| self.executable.binary_search(&s).is_ok())
         {
             self.functions.push(r.clone());
         }
@@ -444,7 +444,13 @@ fn analyze_object(
         gap("object payload unavailable", control)?;
     }
     if !elf.as_ref().is_some_and(|e| {
-        e.bits == 32 && e.little_endian && e.machine == 243 && matches!(e.object_type, 1 | 2)
+        e.bits == 32
+            && e.little_endian
+            && e.machine == 243
+            && matches!(
+                elf::object_kind(e.object_type),
+                elf::ObjectKind::Relocatable | elf::ObjectKind::Executable
+            )
     }) {
         gap(
             "object is not a supported ELF32 little-endian RISC-V relocatable or executable",
@@ -458,14 +464,17 @@ fn analyze_object(
         )?;
     }
     if selection.functions.is_empty()
-        && (!selection.executable.is_empty() || elf.as_ref().is_some_and(|e| e.object_type == 2))
+        && (!selection.executable.is_empty()
+            || elf
+                .as_ref()
+                .is_some_and(|e| elf::object_kind(e.object_type) == elf::ObjectKind::Executable))
     {
         gap(
             "executable sections have no selected function symbols",
             control,
         )?;
     }
-    let object_type = elf.as_ref().map(|e| e.object_type);
+    let object_type = elf.as_ref().map(|e| elf::object_kind(e.object_type));
     let (Some(bytes), Some(payload)) = (bytes, payload) else {
         return Ok(());
     };
@@ -510,13 +519,13 @@ fn analyze_object(
             let mut object_tables = None;
             let mut image_facts = None;
             match object_type {
-                Some(1) => {
+                Some(elf::ObjectKind::Relocatable) => {
                     match oer_analysis_riscv_program::tables::ObjectTables::new(bytes, memory, c) {
                         Ok(tables) => object_tables = Some(tables),
                         Err(error) => unreadable(error, c)?,
                     }
                 }
-                Some(2) => {
+                Some(elf::ObjectKind::Executable) => {
                     match oer_analysis_riscv_program::facts::ImageFacts::new(
                         bytes, read_only, memory, c,
                     ) {

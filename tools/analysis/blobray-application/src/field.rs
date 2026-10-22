@@ -6,6 +6,7 @@
 //! access lands 148 bytes after the loaded pointer. Additions of constants
 //! fold into the current displacement; every load starts the next one.
 
+use oer_analysis_blobray_domain::LibraryFunction;
 use oer_analysis_riscv_model::{
     AbstractValue, Expression, FunctionIndex, FunctionRecord, IntegerOp, MemoryKind, Result,
     RunControl, SymbolId,
@@ -190,3 +191,11 @@ fn fold(
 
 #[cfg(test)]
 mod tests;
+
+/// One function's accesses of the requested field.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FieldAccessFunction {
+    pub function: LibraryFunction,
+    pub accesses: Vec<crate::field::FieldAccess>,
+}

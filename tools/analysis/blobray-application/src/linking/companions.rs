@@ -1,6 +1,7 @@
 //! Explicit companion definitions are captured occurrences, never fabricated
 //! implementations.
 use super::*;
+use oer_analysis_elf::classify as elf;
 
 /// The companion records of one static executable, matched by symbol.
 struct Scan<'a> {
@@ -32,7 +33,7 @@ impl ElfSink for Scan<'_> {
 /// own pass over its inputs applies this, so resolving the companions reads
 /// only the companions' executables.
 pub(super) fn check_link_symbol(names: &[(String, u32)], r: &SymbolRecord) -> Result<()> {
-    if r.raw_section != 0
+    if elf::symbol_section(r.raw_section, r.extended_section).is_defined()
         && r.binding != 0
         && r.name
             .as_ref()
@@ -72,14 +73,23 @@ fn records(
         let bytes: &[u8] = executable.bytes();
         let (_, header) = inspect_source(&bytes, &companion.object, memory, c, &mut scan)?;
         let executable = header.is_some_and(|e| {
-            e.object_type == 2 && e.bits == 32 && e.machine == 243 && e.little_endian
+            elf::object_kind(e.object_type) == elf::ObjectKind::Executable
+                && e.bits == 32
+                && e.machine == 243
+                && e.little_endian
         });
         for (slot, record) in records.iter_mut().zip(scan.matches) {
             let Some(record) = record else {
                 continue;
             };
             // STT_OBJECT (1) or STT_FUNC (2); the carrier validates the extent.
-            if !executable || !matches!(record.symbol_type, 1 | 2) || record.raw_section == 0 {
+            if !executable
+                || !matches!(
+                    elf::symbol_kind(record.symbol_type),
+                    elf::SymbolKind::Object | elf::SymbolKind::Function
+                )
+                || !elf::symbol_section(record.raw_section, record.extended_section).is_defined()
+            {
                 return Err(Error::new(
                     ErrorCode::InvalidRequest,
                     "companion requires a defined function or data object in a captured static RV32 ELF",

@@ -5,8 +5,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use oer_analysis_blobray_application as app;
 use oer_analysis_riscv_model::{
-    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionIndex, ReadOnlyWindow, RecordPolicy,
-    Result,
+    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, ReadOnlyWindow, Result,
 };
 use std::io::Write;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
@@ -186,7 +185,7 @@ enum Command {
         #[arg(long = "object", value_name = "MEMBER")]
         object: Option<String>,
         /// The shortest string reported.
-        #[arg(long = "min-length", default_value_t = oer_tool_analysis_cli::symbols::MIN_STRING)]
+        #[arg(long = "min-length", default_value_t = app::symbols::MIN_STRING)]
         min_length: usize,
         #[command(flatten)]
         limits: InProcessOptions,
@@ -216,10 +215,10 @@ enum GroupKey {
 }
 
 impl GroupKey {
-    fn by(self) -> oer_tool_analysis_cli::access_groups::GroupBy {
+    fn by(self) -> app::access_groups::GroupBy {
         match self {
-            Self::Address => oer_tool_analysis_cli::access_groups::GroupBy::Address,
-            Self::Function => oer_tool_analysis_cli::access_groups::GroupBy::Function,
+            Self::Address => app::access_groups::GroupBy::Address,
+            Self::Function => app::access_groups::GroupBy::Function,
         }
     }
 }
@@ -312,7 +311,7 @@ fn run(command: Command, format: Format) -> Result<ExitCode> {
                         .map_err(|_| invalid("--address exceeds 32 bits"))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let filter = oer_tool_analysis_cli::access_groups::AccessFilter { words, functions };
+            let filter = app::access_groups::AccessFilter { words, functions };
             register_accesses(
                 inputs,
                 ranges,
@@ -402,42 +401,31 @@ fn field_accesses(
     let mut control = limits.control();
     let mut functions = Vec::new();
     let mut blocked = Vec::new();
-    let mut gaps = 0_u64;
-    let mut unknown_addresses = 0_u64;
-    let mut partial = 0_u64;
-    let mut partial_causes = oer_analysis_blobray_domain::PartialCauses::default();
-    app::library::analyze_library(
+    let summary = app::library::field_accesses(
         &executables,
         assumptions,
+        offset,
+        width,
         &oer_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
-        &mut |outcome, c| {
-            match outcome {
-                app::library::LibraryOutcome::Analyzed(analyzed) => {
-                    partial += u64::from(!analyzed.complete());
-                    partial_causes.add(analyzed.partial_causes(c)?);
-                    unknown_addresses +=
-                        oer_tool_analysis_cli::field::unknown_addresses(analyzed.records);
-                    let facts =
-                        FunctionIndex::new(analyzed.records, RecordPolicy::Dictionary, &memory, c)?;
-                    let accesses =
-                        oer_tool_analysis_cli::field::field_accesses(&facts, offset, width, c)?;
-                    if !accesses.is_empty() {
-                        functions.push(oer_tool_analysis_cli::wire::FieldAccessFunction {
-                            function: analyzed.function.clone(),
-                            accesses,
-                        });
-                    }
+        &mut |result, _| {
+            match result {
+                app::library::FunctionResult::Matched(function) => functions.push(function.clone()),
+                app::library::FunctionResult::Blocked { function, .. } => {
+                    blocked.push(function.clone())
                 }
-                app::library::LibraryOutcome::Blocked { function, .. } => {
-                    blocked.push(function.clone());
-                }
-                app::library::LibraryOutcome::Gap { .. } => gaps += 1,
             }
             Ok(())
         },
     )?;
+    let unknown_addresses = summary.unknown_addresses;
+    let app::library::QuerySummary {
+        partial,
+        partial_causes,
+        gaps,
+        ..
+    } = summary.analysis;
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
@@ -478,9 +466,8 @@ fn field_accesses(
                     .unwrap_or_default();
                 for access in &function.accesses {
                     let root = match &access.root {
-                        oer_tool_analysis_cli::field::FieldRoot::Symbol {
-                            name: Some(name),
-                            ..
+                        app::field::FieldRoot::Symbol {
+                            name: Some(name), ..
                         } => name.clone(),
                         other => format!("{other:?}"),
                     };
@@ -545,14 +532,19 @@ fn function_records(
     let images = match format {
         Format::Human => executables
             .iter()
-            .map(|executable| image_symbols(executable, &memory, &mut control))
+            .map(|executable| {
+                app::symbols::image_symbols(executable, &memory, &mut control)
+                    .map(|symbols| symbols.map(oer_tool_analysis_cli::listing::ImageSymbols::new))
+            })
             .collect::<Result<Vec<_>>>()?,
         Format::Json => Vec::new(),
     };
     // The string sections the named functions' objects hold, read on the
     // same control before the analysis, like the image names.
     let strings = match format {
-        Format::Human => string_sections(&executables, &names, &memory, &mut control)?,
+        Format::Human => {
+            app::symbols::string_sections(&executables, &names, &memory, &mut control)?
+        }
         Format::Json => std::collections::BTreeMap::new(),
     };
     let wanted = |function: &oer_analysis_blobray_domain::LibraryFunction| {
@@ -604,7 +596,6 @@ fn function_records(
     } else {
         ExitCode::FAILURE
     };
-    let mut texts = referenced_strings(&functions, &strings);
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
@@ -650,9 +641,7 @@ fn function_records(
                         oer_tool_analysis_cli::listing::listing(
                             records,
                             images.get(function.input as usize).and_then(Option::as_ref),
-                            &texts
-                                .remove(&(function.input, function.symbol.clone()))
-                                .unwrap_or_default(),
+                            &app::symbols::referenced_strings(function, records, &strings),
                         )
                         .iter()
                         .try_for_each(|line| writeln!(out, "{line}"))
@@ -680,117 +669,6 @@ fn function_records(
     }
     out.flush().map_err(io_error)?;
     Ok(status)
-}
-
-/// The bytes of every read-only string section (`SHF_STRINGS`) of the
-/// objects that define a function `names` names, by object and section.
-fn string_sections(
-    executables: &[app::in_process::Executable],
-    names: &[String],
-    memory: &oer_analysis_riscv_model::WorkingMemory,
-    control: &mut app::in_process::Limits,
-) -> Result<std::collections::BTreeMap<(oer_analysis_riscv_model::ObjectId, u32), Vec<u8>>> {
-    let mut sections = std::collections::BTreeMap::new();
-    for executable in executables {
-        let inventory = app::captured::inventory(executable, memory, control)?;
-        for object in &inventory.objects {
-            let Some(elf) = &object.elf else { continue };
-            let defines = elf.symbols.iter().any(|symbol| {
-                symbol.raw_section != 0
-                    && symbol
-                        .name
-                        .as_deref()
-                        .is_some_and(|name| names.iter().any(|wanted| wanted.as_bytes() == name))
-            });
-            if !defines {
-                continue;
-            }
-            for section in oer_tool_analysis_cli::symbols::read_only_data(elf) {
-                if oer_tool_analysis_cli::symbols::is_string_section(elf, section.index) {
-                    let bytes = section_bytes(&object.id, section, executables, memory, control)?;
-                    sections.insert((object.id.clone(), section.index), bytes);
-                }
-            }
-        }
-    }
-    Ok(sections)
-}
-
-/// The text each analyzed function's `.L` local-label relocations name in a
-/// read-only string section of `sections`, by function and instruction
-/// offset. A PCREL low reference names its high part's label and addend, so
-/// both instructions of the pair show the same text; labels of other data,
-/// such as jump tables, are not text.
-#[allow(clippy::type_complexity)]
-fn referenced_strings(
-    functions: &[oer_tool_analysis_cli::wire::NamedFunction],
-    sections: &std::collections::BTreeMap<(oer_analysis_riscv_model::ObjectId, u32), Vec<u8>>,
-) -> std::collections::BTreeMap<
-    (u64, oer_analysis_riscv_model::SymbolId),
-    std::collections::BTreeMap<u64, Vec<String>>,
-> {
-    let mut texts: std::collections::BTreeMap<_, std::collections::BTreeMap<u64, Vec<String>>> =
-        std::collections::BTreeMap::new();
-    for function in functions {
-        let oer_tool_analysis_cli::wire::NamedFunction::Analyzed {
-            function, records, ..
-        } = function
-        else {
-            continue;
-        };
-        for record in records {
-            let oer_analysis_riscv_model::FunctionRecord::Reference {
-                raw,
-                target,
-                addend,
-                ..
-            } = record
-            else {
-                continue;
-            };
-            let (Some(section), true) = (target.section, target.name.starts_with(b".L")) else {
-                continue;
-            };
-            let Some(bytes) = sections.get(&(function.symbol.object.clone(), section)) else {
-                continue;
-            };
-            let Some(offset) = target.offset.checked_add_signed(addend.unwrap_or(0)) else {
-                continue;
-            };
-            if let Some(text) = oer_tool_analysis_cli::symbols::string_at(bytes, offset)
-                .filter(|text| !text.is_empty())
-            {
-                texts
-                    .entry((function.input, function.symbol.clone()))
-                    .or_default()
-                    .entry(raw.offset)
-                    .or_default()
-                    .push(text);
-            }
-        }
-    }
-    texts
-}
-
-/// The complete bytes of `section` of `object`, as its inventory record
-/// sizes it, without another inventory pass.
-fn section_bytes(
-    object: &oer_analysis_riscv_model::ObjectId,
-    section: &oer_analysis_blobray_domain::SectionRecord,
-    executables: &[app::in_process::Executable],
-    memory: &oer_analysis_riscv_model::WorkingMemory,
-    control: &mut app::in_process::Limits,
-) -> Result<Vec<u8>> {
-    let request = oer_analysis_blobray_domain::DataRequest {
-        object: object.clone(),
-        symbol: None,
-        ranges: vec![oer_analysis_blobray_domain::DataSelector::Section {
-            section: section.index,
-            offset: 0,
-            length: section.size,
-        }],
-    };
-    Ok(app::data::export(&request, executables, memory, control)?.bytes)
 }
 
 /// Compare the MMIO behavior of the builds `old` and `new` names.
@@ -878,7 +756,7 @@ fn symbols(
     let mut rows = Vec::new();
     for (index, (input, executable)) in inputs.iter().zip(&executables).enumerate() {
         let inventory = app::captured::inventory(executable, &memory, &mut control)?;
-        rows.extend(oer_tool_analysis_cli::symbols::rows(
+        rows.extend(app::symbols::rows(
             index as u64,
             &input.role,
             &inventory,
@@ -938,39 +816,13 @@ fn strings(
         .collect::<Result<Vec<_>>>()?;
     let memory = limits.memory()?;
     let mut control = limits.control();
-    let mut rows = Vec::new();
-    for (index, executable) in executables.iter().enumerate() {
-        let inventory = app::captured::inventory(executable, &memory, &mut control)?;
-        for object in &inventory.objects {
-            let name = object
-                .name
-                .as_deref()
-                .map(|name| String::from_utf8_lossy(name).into_owned());
-            if member
-                .as_ref()
-                .is_some_and(|wanted| name.as_ref() != Some(wanted))
-            {
-                continue;
-            }
-            let Some(elf) = &object.elf else { continue };
-            for section in oer_tool_analysis_cli::symbols::read_only_data(elf) {
-                let bytes =
-                    section_bytes(&object.id, section, &executables, &memory, &mut control)?;
-                for (offset, text) in oer_tool_analysis_cli::symbols::strings(&bytes, minimum) {
-                    rows.push(oer_tool_analysis_cli::wire::StringRow {
-                        input: index as u64,
-                        member: name.clone(),
-                        section: section
-                            .name
-                            .as_deref()
-                            .map(|name| String::from_utf8_lossy(name).into_owned()),
-                        offset,
-                        text,
-                    });
-                }
-            }
-        }
-    }
+    let rows = app::symbols::string_rows(
+        &executables,
+        member.as_deref(),
+        minimum,
+        &memory,
+        &mut control,
+    )?;
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
@@ -1016,44 +868,6 @@ fn described(
             },
         )
         .collect()
-}
-
-/// The sized function symbols of `executable` when it is one little-endian
-/// executable image (ET_EXEC), whose transfers carry no relocations to name
-/// them. Other inputs are recognized from their first bytes and inventoried
-/// no further.
-fn image_symbols(
-    executable: &app::in_process::Executable,
-    memory: &oer_analysis_riscv_model::WorkingMemory,
-    control: &mut app::in_process::Limits,
-) -> Result<Option<oer_tool_analysis_cli::listing::ImageSymbols>> {
-    const ET_EXEC: u16 = 2;
-    const STT_FUNC: u8 = 2;
-    // Decide from the ELF header alone, so an archive or relocatable object
-    // costs no second inventory pass against the analysis' shared budget.
-    if !oer_tool_analysis_cli::listing::is_executable_image(executable.bytes()) {
-        return Ok(None);
-    }
-    let inventory = app::captured::inventory(executable, memory, control)?;
-    let [object] = inventory.objects.as_slice() else {
-        return Ok(None);
-    };
-    let Some(elf) = object.elf.as_ref().filter(|elf| elf.object_type == ET_EXEC) else {
-        return Ok(None);
-    };
-    Ok(Some(oer_tool_analysis_cli::listing::ImageSymbols::new(
-        elf.symbols
-            .iter()
-            .filter(|symbol| symbol.symbol_type & 0xf == STT_FUNC)
-            .filter_map(|symbol| {
-                let name = symbol.name.as_deref()?;
-                Some((
-                    symbol.value,
-                    symbol.size,
-                    String::from_utf8_lossy(name).into_owned(),
-                ))
-            }),
-    )))
 }
 
 fn io_error(e: std::io::Error) -> Error {
@@ -1172,8 +986,8 @@ fn json_error(e: serde_json::Error) -> Error {
 fn register_accesses(
     inputs: Vec<OsString>,
     ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
-    filter: oer_tool_analysis_cli::access_groups::AccessFilter,
-    group_by: Option<oer_tool_analysis_cli::access_groups::GroupBy>,
+    filter: app::access_groups::AccessFilter,
+    group_by: Option<app::access_groups::GroupBy>,
     assumptions: app::library::Assumptions<'_>,
     limits: InProcessOptions,
     format: Format,
@@ -1196,10 +1010,10 @@ fn register_accesses(
     let json = matches!(format, Format::Json);
     let filtered = !filter.words.is_empty() || !filter.functions.is_empty();
     let group_by = match (group_by, json, filtered) {
-        (None, false, true) => Some(oer_tool_analysis_cli::access_groups::GroupBy::Address),
+        (None, false, true) => Some(app::access_groups::GroupBy::Address),
         (group_by, _, _) => group_by,
     };
-    let mut groups = group_by.map(oer_tool_analysis_cli::access_groups::AccessGroups::new);
+    let mut groups = group_by.map(app::access_groups::AccessGroups::new);
     if json {
         let described: Vec<_> = inputs
             .iter()
@@ -1266,7 +1080,7 @@ fn register_accesses(
         writeln!(out).map_err(io_error)?;
     } else {
         if let Some(groups) = &groups {
-            for line in groups.human() {
+            for line in oer_tool_analysis_cli::access_groups::human(&groups) {
                 writeln!(out, "{line}").map_err(io_error)?;
             }
         }
@@ -1311,43 +1125,26 @@ fn call_arguments(
         .collect::<Result<Vec<_>>>()?;
     let memory = limits.memory()?;
     let mut control = limits.control();
-    let targets = oer_tool_analysis_cli::references::Targets::capture(
-        &executables,
-        &symbols,
-        &memory,
-        &mut control,
-    )?;
     let mut callers = Vec::new();
     let mut blocked = Vec::new();
-    let (mut partial, mut gaps) = (0_u64, 0_u64);
-    let mut partial_causes = oer_analysis_blobray_domain::PartialCauses::default();
-    app::library::analyze_library(
+    let app::library::QuerySummary {
+        partial,
+        partial_causes,
+        gaps,
+        ..
+    } = app::library::call_arguments(
         &executables,
         assumptions,
+        &symbols,
         &oer_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
-        &mut |outcome, c| {
-            match outcome {
-                app::library::LibraryOutcome::Analyzed(analyzed) => {
-                    partial += u64::from(!analyzed.complete());
-                    partial_causes.add(analyzed.partial_causes(c)?);
-                    let facts =
-                        FunctionIndex::new(analyzed.records, RecordPolicy::Dictionary, &memory, c)?;
-                    let sites = oer_tool_analysis_cli::call_arguments::call_sites(
-                        &facts, &symbols, &targets, c,
-                    )?;
-                    if !sites.is_empty() {
-                        callers.push(oer_tool_analysis_cli::wire::CallingFunction {
-                            function: analyzed.function.clone(),
-                            sites,
-                        });
-                    }
+        &mut |result, _| {
+            match result {
+                app::library::FunctionResult::Matched(function) => callers.push(function.clone()),
+                app::library::FunctionResult::Blocked { function, .. } => {
+                    blocked.push(function.clone())
                 }
-                app::library::LibraryOutcome::Blocked { function, .. } => {
-                    blocked.push(function.clone());
-                }
-                app::library::LibraryOutcome::Gap { .. } => gaps += 1,
             }
             Ok(())
         },
@@ -1397,7 +1194,12 @@ fn call_arguments(
                         site.arguments
                             .iter()
                             .enumerate()
-                            .map(|(index, value)| format!("a{index}={}", value.human()))
+                            .map(|(index, value)| {
+                                format!(
+                                    "a{index}={}",
+                                    oer_tool_analysis_cli::call_arguments::human(value)
+                                )
+                            })
                             .collect::<Vec<_>>()
                             .join(", ")
                     };
@@ -1406,7 +1208,7 @@ fn call_arguments(
                         "{name} (input {}) +{:x}: {} {}({arguments}){}{}",
                         caller.function.input,
                         site.offset,
-                        site.kind.human(),
+                        oer_tool_analysis_cli::references::kind_human(site.kind),
                         String::from_utf8_lossy(&site.target),
                         destination_human(site.destination.as_ref()),
                         alternatives_human(site.alternatives),
@@ -1451,54 +1253,38 @@ fn callers(
         .collect::<Result<Vec<_>>>()?;
     let memory = limits.memory()?;
     let mut control = limits.control();
-    let targets = oer_tool_analysis_cli::references::Targets::capture(
-        &executables,
-        &symbols,
-        &memory,
-        &mut control,
-    )?;
-    let mut stored = oer_tool_analysis_cli::references::StoredScan::new(&memory, &mut control)?;
-    stored.scan_data(&executables, &targets, &memory, &mut control)?;
-    let mut functions = 0_u64;
-    let mut partial = 0_u64;
-    let mut partial_causes = oer_analysis_blobray_domain::PartialCauses::default();
     let mut callers = Vec::new();
     let mut blocked = Vec::new();
-    let mut gaps = 0_u64;
-    app::library::analyze_library(
+    let mut stored = Vec::new();
+    let summary = app::library::callers(
         &executables,
         assumptions,
+        &symbols,
         &oer_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
-        &mut |outcome, c| {
-            match outcome {
-                app::library::LibraryOutcome::Analyzed(analyzed) => {
-                    functions += 1;
-                    partial += u64::from(!analyzed.complete());
-                    partial_causes.add(analyzed.partial_causes(c)?);
-                    let references = oer_tool_analysis_cli::references::call_sites(
-                        analyzed.records,
-                        &symbols,
-                        &targets,
-                        c,
-                    )?;
-                    stored.materialized(analyzed.function, analyzed.records, &targets, c)?;
-                    if !references.is_empty() {
-                        callers.push(oer_tool_analysis_cli::wire::Caller {
-                            function: analyzed.function.clone(),
-                            references,
-                        });
-                    }
-                }
-                app::library::LibraryOutcome::Blocked { function, .. } => {
-                    blocked.push(function.clone());
-                }
-                app::library::LibraryOutcome::Gap { .. } => gaps += 1,
+        &mut |result, _| {
+            match result {
+                app::library::CallerResult::Function(app::library::FunctionResult::Matched(
+                    function,
+                )) => callers.push(function.clone()),
+                app::library::CallerResult::Function(app::library::FunctionResult::Blocked {
+                    function,
+                    ..
+                }) => blocked.push(function.clone()),
+                app::library::CallerResult::Stored(reference) => stored.push(reference.clone()),
             }
             Ok(())
         },
     )?;
+    let app::library::QuerySummary {
+        functions,
+        partial,
+        partial_causes,
+        gaps,
+        ..
+    } = summary.analysis;
+    let scan = summary.scan;
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
@@ -1519,8 +1305,8 @@ fn callers(
                 read_only: assumptions.read_only.to_vec(),
                 symbols,
                 callers,
-                stored: stored.references,
-                scan: stored.summary,
+                stored,
+                scan,
                 functions,
                 partial,
                 partial_causes,
@@ -1544,7 +1330,7 @@ fn callers(
                         "{name} (input {}) +{:x}: {}{} {}{}{}",
                         caller.function.input,
                         reference.offset,
-                        reference.kind.human(),
+                        oer_tool_analysis_cli::references::kind_human(reference.kind),
                         reference
                             .relocation_kind
                             .map(|kind| format!(" {kind:?}"))
@@ -1561,8 +1347,8 @@ fn callers(
                 "stored: candidates for indirect calls, not proven calls"
             )
             .map_err(io_error)?;
-            for reference in &stored.references {
-                use oer_tool_analysis_cli::references::Stored;
+            for reference in &stored {
+                use app::references::Stored;
                 match reference {
                     Stored::StoredWord { input, section, section_name, address, owners, destination } => {
                         let owners = owners.iter().map(|owner| String::from_utf8_lossy(owner.name.as_deref().unwrap_or_default())).collect::<Vec<_>>().join(", ");
@@ -1577,7 +1363,7 @@ fn callers(
                     }
                 }.map_err(io_error)?;
             }
-            writeln!(out, "scanned {} sections, {} words; {} NOBITS sections without captured words; {} incomplete inventories", stored.summary.sections, stored.summary.words, stored.summary.nobits_sections, stored.summary.incomplete_inventories).map_err(io_error)?;
+            writeln!(out, "scanned {} sections, {} words; {} NOBITS sections without captured words; {} incomplete inventories", scan.sections, scan.words, scan.nobits_sections, scan.incomplete_inventories).map_err(io_error)?;
             writeln!(
                 out,
                 "{} functions reference the symbols; {functions} analyzed, {partial} partial{}, {} blocked; {gaps} gaps",
@@ -1592,7 +1378,7 @@ fn callers(
     Ok(ExitCode::SUCCESS)
 }
 
-fn destination_human(target: Option<&oer_tool_analysis_cli::references::Target>) -> String {
+fn destination_human(target: Option<&app::references::Target>) -> String {
     target
         .map(|target| format!(" (target input {}, {:#x})", target.input, target.address))
         .unwrap_or_default()

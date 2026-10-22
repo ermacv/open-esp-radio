@@ -7,6 +7,7 @@
 //! value. Any other stored image address compares by value.
 use crate::in_process::Executable;
 use crate::*;
+use oer_analysis_elf::classify as elf;
 use std::collections::BTreeMap;
 
 /// One function's MMIO accesses in one build, every instance of its name
@@ -174,15 +175,23 @@ fn symbols<'m>(
         let inventory = crate::captured::inventory(input, memory, control)?;
         let mut symbols = Symbols::default();
         for object in &inventory.objects {
-            let Some(elf) = object.elf.as_ref().filter(|elf| elf.object_type == 2) else {
+            let Some(elf) = object
+                .elf
+                .as_ref()
+                .filter(|elf| elf::object_kind(elf.object_type) == elf::ObjectKind::Executable)
+            else {
                 continue;
             };
             for symbol in &elf.symbols {
                 control.checkpoint(1)?;
                 // A defined function or data object with a size.
                 if symbol.size == 0
-                    || symbol.raw_section == 0
-                    || !matches!(symbol.symbol_type, 1 | 2)
+                    || !elf::symbol_section(symbol.raw_section, symbol.extended_section)
+                        .is_defined()
+                    || !matches!(
+                        elf::symbol_kind(symbol.symbol_type),
+                        elf::SymbolKind::Object | elf::SymbolKind::Function
+                    )
                 {
                     continue;
                 }
