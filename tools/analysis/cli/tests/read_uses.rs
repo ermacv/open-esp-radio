@@ -1600,6 +1600,14 @@ caller:
             "call external\naddi sp, sp, -16\nsw a0, 0(sp)\nlw t0, 0(sp)\naddi sp, sp, 16\nbnez t0, 1f\n1: ret",
             true,
         ),
+        (
+            "call external\naddi sp,sp,-16\nsw a0,0(sp)\nlw t0,0(s0)\nsw t0,0(sp)\nlw t1,0(sp)\naddi sp,sp,16\nbnez t1,1f\n1: ret",
+            false, // An unknown untracked overwrite erases the old stack source.
+        ),
+        (
+            "call external\naddi sp,sp,-16\nsw a0,0(sp)\nsw zero,0(sp)\nlw t1,0(sp)\naddi sp,sp,16\nbnez t1,1f\n1: ret",
+            false, // Constants remain tracked by the compact audit stack.
+        ),
         ("call external\nsw a0, 0(s0)\nret", true),
     ] {
         let result = analyze_library(
@@ -2061,4 +2069,133 @@ bnez a0, 1f
         }
         assert_eq!(memory.used(), 0);
     }
+}
+
+#[test]
+fn an_exhausted_audit_disables_only_that_functions_contract() {
+    use oer_analysis_blobray_application::signatures::Signatures;
+    let calls = (0..100)
+        .map(|i| format!("call external\nsw a0, {}(sp)\n", i * 4))
+        .collect::<String>();
+    let source = format!(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.limited,"ax",@progbits
+.globl limited
+.type limited,@function
+limited:
+addi sp,sp,-512
+sw ra,508(sp)
+{calls}
+lui t0,0x20107
+lw a0,0(t0)
+call identity
+lw ra,508(sp)
+addi sp,sp,512
+ret
+.size limited,.-limited
+.section .text.healthy,"ax",@progbits
+.globl healthy
+.type healthy,@function
+healthy:
+lui t0,0x20107
+lw a0,4(t0)
+ret
+.size healthy,.-healthy
+.section .text.identity,"ax",@progbits
+.globl identity
+.type identity,@function
+identity: ret
+.size identity,.-identity
+"#);
+"##
+    );
+    let inputs = [Executable::new(fixture(&source))];
+    let mut text = ["limited", "healthy", "external"]
+        .map(|name| {
+            format!(
+                "[[function]]\nname='{name}'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n"
+            )
+        })
+        .join("\n");
+    text.push_str(
+        "\n[[function]]\nname='identity'\narguments=1\nresult='void'\nsource='synthetic.h:1'\n",
+    );
+    let signatures = Signatures::parse(&text).unwrap();
+    let mut verified = false;
+    for mib in [1, 2, 4, 8, 16, 32, 64] {
+        let memory = WorkingMemory::new(mib << 20).unwrap();
+        let mut reads = BTreeMap::new();
+        let result = register_accesses(
+            &inputs,
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &[],
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |r, _| {
+                if let RegisterAccess::Observation {
+                    function,
+                    reads: Some(uses),
+                    ..
+                } = r
+                {
+                    reads.insert(function.name.clone().unwrap(), uses.clone());
+                }
+                Ok(())
+            },
+        );
+        assert_eq!(
+            memory.used(),
+            0,
+            "all function-local state must be released"
+        );
+        let Ok(summary) = result else { continue };
+        if summary.signature_audit_incomplete.is_empty() {
+            continue;
+        }
+        assert_eq!(summary.signature_audit_incomplete.len(), 1);
+        assert_eq!(
+            summary.signature_audit_incomplete[0]
+                .function
+                .name
+                .as_deref(),
+            Some(b"limited".as_slice())
+        );
+        assert_eq!(
+            summary.signature_audit_incomplete[0].reason.code,
+            ErrorCode::ResourceLimited
+        );
+        assert!(summary.signature_conflicts.is_empty());
+        assert_eq!(summary.functions, 3);
+        assert_eq!(summary.blocked_functions, 0);
+        assert_eq!(summary.gaps, 0);
+        let limited = &reads[b"limited".as_slice()];
+        assert_eq!(limited.unused, 0);
+        assert_eq!(limited.preserved, 0);
+        assert_eq!(
+            limited.uses.iter().fold(0, |m, u| m | u.bits)
+                | limited.unknown.iter().fold(0, |m, u| m | u.bits),
+            u32::MAX,
+            "the unaudited function must retain use or explicit uncertainty"
+        );
+        assert!(reads[b"healthy".as_slice()].uses.is_empty());
+        assert_eq!(
+            summary.contract_narrowed_bits, 32,
+            "only the healthy function narrows its return"
+        );
+        verified = true;
+        break;
+    }
+    assert!(
+        verified,
+        "fixture must exhaust one bounded audit while retaining both functions"
+    );
 }

@@ -12,7 +12,9 @@ use oer_analysis_blobray_application::{
 };
 use oer_analysis_blobray_domain::ImageRegion;
 use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::{CallAbi, DEFAULT_WORK_UNITS, Error, ErrorCode, WorkingMemory};
+use oer_analysis_riscv_model::{
+    CallAbi, DEFAULT_WORK_UNITS, DEFAULT_WORKING_BYTES, Error, ErrorCode, WorkingMemory,
+};
 use oer_os_process::Checkout;
 use std::{
     collections::BTreeSet,
@@ -24,10 +26,6 @@ use std::{
 /// Wall-clock budget of one Blobray operation. Analyzing every pinned
 /// binary takes most of it; the host's default budget is shorter.
 const OPERATION_TIMEOUT_SECS: u64 = 3600;
-/// The complete signature audit of the largest library function needs more
-/// admitted memory than the interactive CLI default. Production work budgets
-/// and summary publication rules are unchanged.
-const OPERATION_WORKING_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Every pinned vendor binary of `chip`, in pin order. Firmware outputs are
 /// applications linked from these binaries, and sources are not code.
@@ -70,7 +68,7 @@ fn accesses(
         inputs.len()
     );
     // The same assumptions and resource bounds as the CLI invocation:
-    // --abi riscv-integer --call-summaries --working-memory-mib 1024 --timeout-secs 3600.
+    // --abi riscv-integer --call-summaries --timeout-secs 3600.
     let assumptions = Assumptions {
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
@@ -84,7 +82,7 @@ fn accesses(
             length: u64::from(r.end - r.start),
         })
         .collect();
-    let memory = WorkingMemory::new(OPERATION_WORKING_BYTES)?;
+    let memory = WorkingMemory::new(DEFAULT_WORKING_BYTES)?;
     let mut control = Limits::new(
         DEFAULT_WORK_UNITS,
         Duration::from_secs(OPERATION_TIMEOUT_SECS),

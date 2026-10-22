@@ -156,7 +156,7 @@ fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
         signature_conflicts: Vec::new(),
         rom_signature_diagnostics: Vec::new(),
         rom_signature_diagnostic_count: 0,
-        rom_signature_audit_incomplete: Vec::new(),
+        rom_signature_summary_unavailable: Vec::new(),
         signature_audit_incomplete: Vec::new(),
         functions: 1,
         partial_functions: 0,
@@ -930,8 +930,11 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
                 sink: ReadSink::Branch { site: 16 },
             },
         });
-    report.corpus.summary.rom_signature_audit_incomplete.push(
-        oer_analysis_blobray_domain::SignatureAuditIncomplete {
+    report
+        .corpus
+        .summary
+        .rom_signature_summary_unavailable
+        .push(oer_analysis_blobray_domain::SignatureAuditIncomplete {
             function: LibraryFunction {
                 input: 0,
                 symbol: symbol(b"fixture"),
@@ -941,8 +944,7 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
                 oer_analysis_riscv_model::ErrorCode::ResourceLimited,
                 "synthetic ROM diagnostic limit",
             ),
-        },
-    );
+        });
     let directory = tempfile::tempdir().unwrap();
     crate::checks::inventory::run::write_report(directory.path(), "fixture", &report).unwrap();
     let json: Value =
@@ -959,5 +961,5 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
     let text = std::fs::read_to_string(directory.path().join("report.txt")).unwrap();
     assert!(text.contains("ROM/HEADER synthetic_rom"));
     assert!(text.contains("Exact"));
-    assert!(text.contains("INCOMPLETE ROM DIAGNOSTIC large_synthetic_rom"));
+    assert!(text.contains("UNAVAILABLE ROM SUMMARY large_synthetic_rom"));
 }

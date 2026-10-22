@@ -187,14 +187,19 @@ before failing. Conflicting results remain diagnostic; acceptance cannot rely on
 the narrowed verdicts until the contracts agree. Computed Exact consumption is
 retained alongside its conflict, rather than silently dropped.
 `summary.signature_audit_incomplete` lists functions whose audit did not reach a
-fixed point within the existing resource bounds; checking also fails when this
-list is nonempty. Failed local audits receive diagnostic retries with 16× and
-256× work allowances; their summaries are discarded, so the production summary
-budget and publication rule stay unchanged. The overall work/memory/deadline
-controls still apply. Larger corpora can use the existing resource flags such as
-`--working-memory-mib` to finish the audit. The inventory checker uses a 1024 MiB
-working-memory bound for its complete corpus audit; the interactive CLI default
-is unchanged. Audit observes fixed-point sink events before
+fixed point within the existing resource bounds. Its contract is disabled locally:
+records and a computed summary are produced without header projections or external
+signature fallbacks for that function. Other functions continue normally. The CLI
+still closes the full report before returning nonzero for incomplete applicable
+audits. Entry checks share the original summary pass; a separate query tracks
+only unverified entry words and absent call results. It has one fixed work
+allowance (16 times the summary allowance), charged to the unchanged global
+work cap. There are no escalating retries. Audit-only stack storage discards
+wholly unknown untracked bytes and periodically releases historical maps while
+retaining every live CFG state. Every audit allocation is function-local.
+Both CLI and inventory use `DEFAULT_WORKING_BYTES` (256 MiB); the checker has
+no increased memory limit.
+Audit observes fixed-point sink events before
 aggregation, so a separate May use cannot hide Exact evidence. A stack spill and
 reload alone is not a sink; dead arithmetic and May flow are not conflicts.
 May consumption beyond the declared inputs is removed by the ABI contract.
@@ -209,10 +214,11 @@ register, bit mask, sink and Exact or May precision. These are observations of
 the unmodified computed flow, never errors or reasons to narrow it.
 `summary.rom_signature_diagnostic_count` counts those source-register/sink events;
 two precisions at a sink count separately. They appear in both inventory reports
-and do not change the exit status. Resource-limited ROM-only audits appear in
-`summary.rom_signature_audit_incomplete` and are also nonfatal. An audit that
-checks an applicable contract still fails if incomplete. No `noreturn` facts
-are inferred or added.
+and do not change the exit status. ROM diagnostics reuse the ordinary computed
+summary pass; there is no additional ROM audit. Original summaries unavailable
+within their normal budget appear in `summary.rom_signature_summary_unavailable`
+with a reason and are nonfatal. Applicable contract audits remain distinct.
+No `noreturn` facts are inferred or added.
 The typed summary schema is 4.
 
 The register-access schema is 10.

@@ -19,7 +19,7 @@ pub struct AnalyzedFunction<'a> {
     pub conflicts: &'a [SignatureConflict],
     pub rom_signature_diagnostics: &'a [RomSignatureDiagnostic],
     pub signature_audit_complete: Option<bool>,
-    pub rom_signature_audit_complete: Option<bool>,
+    pub rom_signature_summary_complete: Option<bool>,
     pub signature_audit_failure: Option<&'a Error>,
 }
 impl AnalyzedFunction<'_> {
@@ -601,7 +601,7 @@ fn analyze_object(
                             summaries: returns,
                             conflicts: &[],
                             rom_signature_diagnostics: &[],
-                            rom_signature_audit_complete: None,
+                            rom_signature_summary_complete: None,
                             signature_audit_complete: None,
                             signature_audit_failure: None,
                         }),
@@ -657,7 +657,7 @@ pub fn register_accesses(
         signature_conflicts: Vec::new(),
         rom_signature_diagnostics: Vec::new(),
         rom_signature_diagnostic_count: 0,
-        rom_signature_audit_incomplete: Vec::new(),
+        rom_signature_summary_unavailable: Vec::new(),
         signature_audit_incomplete: Vec::new(),
         ranges: ranges.to_vec(),
         functions: 0,
@@ -672,14 +672,16 @@ pub fn register_accesses(
     let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
-            for (complete, failures) in [
+            for (complete, failures, reason) in [
                 (
                     analyzed.signature_audit_complete,
                     &mut summary.signature_audit_incomplete,
+                    "signature audit did not finish within its per-function budget",
                 ),
                 (
-                    analyzed.rom_signature_audit_complete,
-                    &mut summary.rom_signature_audit_incomplete,
+                    analyzed.rom_signature_summary_complete,
+                    &mut summary.rom_signature_summary_unavailable,
+                    "computed ROM summary unavailable within the original per-function budget",
                 ),
             ] {
                 if complete != Some(false) {
@@ -690,9 +692,7 @@ pub fn register_accesses(
                     reason: analyzed
                         .signature_audit_failure
                         .cloned()
-                        .unwrap_or_else(|| {
-                            Error::new(ErrorCode::Unavailable, "audit has no fixed point")
-                        }),
+                        .unwrap_or_else(|| Error::new(ErrorCode::Unavailable, reason)),
                 };
                 conflict_memory.admit(
                     serde_json::to_vec(&failure)
@@ -855,7 +855,7 @@ mod tests {
             summaries: &NoSummaries,
             conflicts: &[],
             rom_signature_diagnostics: &[],
-            rom_signature_audit_complete: None,
+            rom_signature_summary_complete: None,
             signature_audit_complete: None,
             signature_audit_failure: None,
         }

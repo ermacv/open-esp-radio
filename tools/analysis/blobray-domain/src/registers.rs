@@ -363,8 +363,9 @@ pub struct RegisterAccessSummary {
     /// Source-register/sink events, including both Exact and May precision.
     pub rom_signature_diagnostics: Vec<RomSignatureDiagnostic>,
     pub rom_signature_diagnostic_count: u64,
-    /// Resource limits of ROM-only diagnostics never fail the contract check.
-    pub rom_signature_audit_incomplete: Vec<SignatureAuditIncomplete>,
+    /// ROM diagnostics reuse the original summary pass; unavailable summaries
+    /// stay explicit and never become a contract audit or error.
+    pub rom_signature_summary_unavailable: Vec<SignatureAuditIncomplete>,
     /// Audits that could not reach a fixed point within the existing resource bounds.
     pub signature_audit_incomplete: Vec<SignatureAuditIncomplete>,
     /// Explicit candidate intervals; empty selects every numeric address.

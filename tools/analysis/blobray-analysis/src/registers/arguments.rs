@@ -73,7 +73,7 @@ impl<'m> ArgumentProgram<'m> {
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
-        self.summarize_inner(calls, memory, c, None, None, true)
+        self.summarize_inner(calls, memory, c, None, false, u32::MAX)
     }
 
     pub fn summarize_observed(
@@ -83,21 +83,20 @@ impl<'m> ArgumentProgram<'m> {
         c: &mut dyn RunControl,
         observe: &mut ObserveArgument<'_>,
     ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
-        self.summarize_inner(calls, memory, c, Some(observe), None, true)
+        self.summarize_inner(calls, memory, c, Some(observe), false, u32::MAX)
     }
 
-    /// A diagnostic retry can spend more work without publishing a new summary.
+    /// A separate bounded audit tracks only the invalid entry words and absent
+    /// results. Ordinary #317 summary production retains all eight entry sources.
     pub fn audit(
         self,
         calls: &dyn CallAt<'_>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
         observe: &mut ObserveArgument<'_>,
-        work_multiplier: u64,
+        entry_registers: u32,
     ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
-        let budget =
-            read_work_limit(self.instructions.len()).saturating_mul(work_multiplier.max(1));
-        self.summarize_inner(calls, memory, c, Some(observe), Some(budget), false)
+        self.summarize_inner(calls, memory, c, Some(observe), true, entry_registers)
     }
 
     fn summarize_inner(
@@ -106,8 +105,8 @@ impl<'m> ArgumentProgram<'m> {
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
         mut observe: Option<&mut ObserveArgument<'_>>,
-        work_limit: Option<u64>,
-        recover: bool,
+        audit_results: bool,
+        entry_registers: u32,
     ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
         if self.instructions.is_empty() {
             return Ok(None);
@@ -115,14 +114,20 @@ impl<'m> ArgumentProgram<'m> {
         let facts = Facts::new(&[], memory, c)?;
         let mut evaluator = FlowEngine::<Reads>::new(&facts, memory);
         evaluator.summary_mode = true;
-        evaluator.audit_results = observe.is_some();
+        evaluator.audit_results = audit_results;
+        evaluator.entry_registers = entry_registers;
         evaluator.edges = self.edges;
         evaluator.dispatches = self.dispatches;
-        let mut work = ReadWork {
-            caller: c,
-            remaining: work_limit.unwrap_or_else(|| read_work_limit(self.instructions.len())),
-            instruction_only: false,
-        };
+        let mut work =
+            ReadWork {
+                caller: c,
+                // One bounded query replaces the old escalating 16x/256x retries.
+                // Summary production keeps its original allowance. Every audit
+                // operation is still charged to the caller's unchanged global cap.
+                remaining: read_work_limit(self.instructions.len())
+                    .saturating_mul(if audit_results { 16 } else { 1 }),
+                instruction_only: false,
+            };
         let result = (|| {
             for instruction in self.instructions.iter().copied() {
                 work.checkpoint(1)?;
@@ -208,7 +213,7 @@ impl<'m> ArgumentProgram<'m> {
         match result {
             Ok(summary) => Ok(Some(summary)),
             Err(error)
-                if recover
+                if !audit_results
                     && matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
             {
                 Ok(None)

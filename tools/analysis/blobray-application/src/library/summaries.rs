@@ -15,8 +15,13 @@ struct RawConflict {
     origin: ArgumentSource,
     usage: ReadUse,
 }
+struct RawSummary<'m> {
+    value: CallSummary,
+    _memory: MemoryReservation<'m>,
+}
 struct OwnedSummary<'m> {
     value: CallSummary,
+    raw: Option<Box<RawSummary<'m>>>,
     _arguments: MemoryReservation<'m>,
     _results: MemoryReservation<'m>,
 }
@@ -39,6 +44,14 @@ struct Group {
 struct Scoped<'s> {
     table: &'s dyn CallSummaries,
     current: Option<CallSummary>,
+}
+/// Preserve the original physical return wiring while producing a summary.
+/// The current function's header projection is added only after its audit.
+struct UnshapedCurrent<'s>(&'s dyn CallSummaries);
+impl CallSummaries for UnshapedCurrent<'_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.0.summary(callee)
+    }
 }
 impl CallSummaries for Scoped<'_> {
     fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
@@ -94,28 +107,39 @@ impl Groups {
         }
     }
 }
-impl CallSummaries for Summaries<'_> {
-    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
-        let computed = self.groups.callee(callee).and_then(|group| {
-            if group.remaining != 0 || group.conflict {
-                return None;
-            }
-            self.entries
-                .get(group.representative?)?
-                .summary
-                .as_ref()
-                .map(|s| &s.value)
-        });
-        computed.or_else(|| match callee {
-            Callee::Symbol(name) => self.contracts.get(name),
-            Callee::Address(address) => self
-                .contract_addresses
-                .get(&address)
-                .and_then(|n| n.as_deref())
-                .and_then(|n| self.contracts.get(n)),
-        })
+impl Summaries<'_> {
+    fn computed(&self, callee: Callee<'_>) -> Option<&OwnedSummary<'_>> {
+        let group = self.groups.callee(callee)?;
+        if group.remaining != 0 || group.conflict {
+            return None;
+        }
+        self.entries.get(group.representative?)?.summary.as_ref()
     }
 }
+impl CallSummaries for Summaries<'_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.computed(callee)
+            .map(|s| &s.value)
+            .or_else(|| match callee {
+                Callee::Symbol(name) => self.contracts.get(name),
+                Callee::Address(address) => self
+                    .contract_addresses
+                    .get(&address)
+                    .and_then(|n| n.as_deref())
+                    .and_then(|n| self.contracts.get(n)),
+            })
+    }
+}
+/// The existing computed port without any signature fallback or projection.
+struct Computed<'s, 'm>(&'s Summaries<'m>);
+impl CallSummaries for Computed<'_, '_> {
+    fn summary(&self, callee: Callee<'_>) -> Option<&CallSummary> {
+        self.0
+            .computed(callee)
+            .map(|s| s.raw.as_ref().map_or(&s.value, |r| &r.value))
+    }
+}
+
 fn integrity() -> Error {
     Error::new(ErrorCode::Integrity, "invalid corpus summary graph")
 }
@@ -527,6 +551,7 @@ pub(super) fn analyze<'a>(
             for member in component.iter().copied() {
                 let object = table.entry(member)?.object;
                 let mut contract = None;
+                let mut disable_contract = false;
                 if let (Some(object), Some(function)) =
                     (object, table.entry(member)?.function.as_ref())
                 {
@@ -536,7 +561,8 @@ pub(super) fn analyze<'a>(
                     let linked = objects.get(object).ok_or_else(integrity)?.linked;
                     let applied_signature = signature.filter(|_| !linked);
                     let rom_signature = signature.filter(|_| linked);
-                    let scoped = Scoped {
+                    let computed = Computed(&table);
+                    let mut scoped = Scoped {
                         table: &table,
                         current: applied_signature.map(|s| s.summary()),
                     };
@@ -550,7 +576,7 @@ pub(super) fn analyze<'a>(
                         memory,
                         c,
                     ) {
-                        Ok((records, summary, found)) => {
+                        Ok((mut records, mut summary, mut found)) => {
                             let mut conflicts = AdmittedVec::new(memory);
                             let mut rom_diagnostics = AdmittedVec::new(memory);
                             let mut conflict_names = Ledger::new(memory, c)?;
@@ -558,46 +584,32 @@ pub(super) fn analyze<'a>(
                             let mut audit_complete = None;
                             let mut applied_audit = false;
                             let mut audit_failure = None;
-                            let mut analyzed = AnalyzedFunction {
-                                function,
-                                records: &records,
-                                coverage: summary.coverage,
-                                semantics: summary.semantics,
-                                jump_tables: &found.tables,
-                                summaries: &scoped,
-                                conflicts: &[],
-                                rom_signature_diagnostics: &[],
-                                rom_signature_audit_complete: None,
-                                signature_audit_complete: None,
-                                signature_audit_failure: None,
-                            };
+                            let mut entry_complete = None;
                             let publish = !recursive
                                 && objects.get(object).ok_or_else(integrity)?.safe
-                                && eligible(
-                                    analyzed.coverage,
-                                    analyzed.semantics,
-                                    analyzed.records,
-                                    c,
-                                )?;
+                                && eligible(summary.coverage, summary.semantics, &records, c)?;
                             if publish || assumptions.signatures.is_some() {
                                 let facts = Facts::new(&records, memory, c)?;
                                 let links = CallLinks::new(&facts, function, catalog, memory, c)?;
-                                applied_audit = needs_audit(&scoped, &links, None);
-                                let produced = if publish {
+                                let entry_required =
+                                    applied_signature.is_some_and(|s| s.arguments < 8);
+                                let results_required = needs_result_audit(&scoped, &links);
+                                applied_audit = entry_required || results_required;
+                                contract = if publish {
                                     produce(
                                         &facts,
-                                        analyzed.records,
+                                        &records,
                                         &scoped,
                                         rom_signature,
                                         &links,
                                         decoder,
                                         memory,
                                         &mut raw_conflicts,
-                                        &mut audit_complete,
+                                        &mut entry_complete,
                                         c,
-                                    )
-                                } else if needs_audit(&scoped, &links, rom_signature) {
-                                    argument_summary(
+                                    )?
+                                } else if entry_required || rom_signature.is_some() {
+                                    let _ = argument_summary(
                                         &facts,
                                         &scoped,
                                         rom_signature,
@@ -605,75 +617,87 @@ pub(super) fn analyze<'a>(
                                         decoder,
                                         memory,
                                         &mut raw_conflicts,
-                                        &mut audit_complete,
-                                        None,
+                                        &mut entry_complete,
                                         c,
-                                    )
-                                    .map(|_| None)
+                                    )?;
+                                    None
                                 } else {
-                                    Ok(None)
+                                    None
                                 };
-                                contract = produced?;
-                                if audit_complete == Some(false) {
-                                    raw_conflicts.truncate(0);
-                                    match argument_summary(
+                                let audit_entries = entry_required && entry_complete != Some(true);
+                                if results_required || audit_entries {
+                                    let entries = if audit_entries {
+                                        (0x3fc00u32)
+                                            & (u32::MAX
+                                                << (10
+                                                    + applied_signature.map_or(8, |s| s.arguments)))
+                                    } else {
+                                        0
+                                    };
+                                    match audit(
                                         &facts,
                                         &scoped,
-                                        rom_signature,
                                         &links,
+                                        entries,
                                         decoder,
                                         memory,
                                         &mut raw_conflicts,
-                                        &mut audit_complete,
-                                        Some(16),
                                         c,
                                     ) {
-                                        Ok(_) => {}
+                                        Ok(()) => audit_complete = Some(true),
                                         Err(e)
                                             if matches!(
                                                 e.code,
                                                 ErrorCode::ResourceLimited | ErrorCode::TimedOut
                                             ) =>
                                         {
+                                            audit_complete = Some(false);
                                             audit_failure = Some(e);
                                         }
                                         Err(e) => return Err(e),
                                     }
+                                } else if entry_required {
+                                    audit_complete = entry_complete;
                                 }
-                                // A few large recipes need a second diagnostic-only work allowance.
-                                // Neither retry is eligible to replace the originally produced summary.
-                                if audit_complete == Some(false)
-                                    && audit_failure.as_ref().is_some_and(|e| {
-                                        e.code == ErrorCode::ResourceLimited && e.memory.is_none()
-                                    })
-                                {
-                                    raw_conflicts.truncate(0);
-                                    match argument_summary(
+                            }
+                            // A failed function cannot publish or observe a signature projection.
+                            // All audit recipes and states above have been dropped before this retry.
+                            if audit_complete == Some(false) {
+                                disable_contract = true;
+                                contract = None;
+                                scoped.current = None;
+                                scoped.table = &computed;
+                                drop(records);
+                                (records, summary, found) = research(
+                                    &mut objects,
+                                    object,
+                                    function,
+                                    assumptions,
+                                    &scoped,
+                                    decoder,
+                                    memory,
+                                    c,
+                                )?;
+                                if publish {
+                                    let facts = Facts::new(&records, memory, c)?;
+                                    let links =
+                                        CallLinks::new(&facts, function, catalog, memory, c)?;
+                                    contract = produce(
                                         &facts,
+                                        &records,
                                         &scoped,
-                                        rom_signature,
+                                        None,
                                         &links,
                                         decoder,
                                         memory,
                                         &mut raw_conflicts,
-                                        &mut audit_complete,
-                                        Some(256),
+                                        &mut None,
                                         c,
-                                    ) {
-                                        Ok(_) => {
-                                            audit_failure = None;
-                                        }
-                                        Err(e)
-                                            if matches!(
-                                                e.code,
-                                                ErrorCode::ResourceLimited | ErrorCode::TimedOut
-                                            ) =>
-                                        {
-                                            audit_failure = Some(e);
-                                        }
-                                        Err(e) => return Err(e),
-                                    }
+                                    )?;
                                 }
+                            }
+                            {
+                                let facts = Facts::new(&records, memory, c)?;
                                 let mut sites = CallSites::new(&facts, memory);
                                 for raw in raw_conflicts.iter() {
                                     c.checkpoint(1)?;
@@ -757,9 +781,26 @@ pub(super) fn analyze<'a>(
                                     conflicts.push(conflict, c.position())?;
                                 }
                             }
-                            if let (Some(signature), Some(summary)) =
-                                (applied_signature, contract.as_mut())
-                            {
+                            if let (Some(signature), Some(summary)) = (
+                                applied_signature.filter(|_| audit_complete != Some(false)),
+                                contract.as_mut(),
+                            ) {
+                                let bytes = summary.value.arguments.returned.capacity()
+                                    * std::mem::size_of::<ReturnedArgument>()
+                                    + summary
+                                        .value
+                                        .results
+                                        .iter()
+                                        .flatten()
+                                        .map(|v| v.capacity() * std::mem::size_of::<u32>())
+                                        .sum::<usize>();
+                                summary.raw = Some(Box::new(RawSummary {
+                                    _memory: memory.reserve(
+                                        (bytes + std::mem::size_of::<RawSummary<'_>>()) as u64,
+                                        c.position(),
+                                    )?,
+                                    value: summary.value.clone(),
+                                }));
                                 for (word, consumed) in summary
                                     .value
                                     .arguments
@@ -791,13 +832,19 @@ pub(super) fn analyze<'a>(
                                     })
                                 });
                             }
-                            analyzed.conflicts = &conflicts;
-                            analyzed.rom_signature_diagnostics = &rom_diagnostics;
-                            analyzed.signature_audit_complete =
-                                audit_complete.filter(|_| applied_audit);
-                            analyzed.rom_signature_audit_complete =
-                                rom_signature.and(audit_complete);
-                            analyzed.signature_audit_failure = audit_failure.as_ref();
+                            let analyzed = AnalyzedFunction {
+                                function,
+                                records: &records,
+                                coverage: summary.coverage,
+                                semantics: summary.semantics,
+                                jump_tables: &found.tables,
+                                summaries: &scoped,
+                                conflicts: &conflicts,
+                                rom_signature_diagnostics: &rom_diagnostics,
+                                signature_audit_complete: audit_complete.filter(|_| applied_audit),
+                                rom_signature_summary_complete: rom_signature.and(entry_complete),
+                                signature_audit_failure: audit_failure.as_ref(),
+                            };
                             visit(LibraryOutcome::Analyzed(analyzed), c)?;
                         }
                         Err(e) if blocks_function(&e) => visit(
@@ -809,6 +856,16 @@ pub(super) fn analyze<'a>(
                         )?,
                         Err(e) => return Err(e),
                     }
+                }
+                if disable_contract
+                    && let Some(name) = table
+                        .entry(member)?
+                        .function
+                        .as_ref()
+                        .and_then(|f| f.name.as_deref())
+                {
+                    let name = name.to_vec();
+                    table.contracts.remove(name.as_slice());
                 }
                 table.finish(member, contract)?;
             }
@@ -938,7 +995,6 @@ fn try_produce<'a>(
         memory,
         conflicts,
         audit_complete,
-        None,
         c,
     )?
     else {
@@ -963,6 +1019,7 @@ fn try_produce<'a>(
             arguments,
             ..CallSummary::default()
         },
+        raw: None,
         _arguments: argument_memory,
         _results: ledger.into_reservation(),
     }))
@@ -980,15 +1037,22 @@ fn argument_summary<'a>(
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
     audit_complete: &mut Option<bool>,
-    diagnostic_multiplier: Option<u64>,
     c: &mut dyn RunControl,
 ) -> Result<Option<(ArgumentSummary, MemoryReservation<'a>)>> {
-    let audit = needs_audit(summaries, links, rom_signature);
+    let audit = rom_signature.is_some()
+        || summaries
+            .current()
+            .and_then(|s| s.contract)
+            .is_some_and(|s| s.arguments < 8);
     if audit {
         *audit_complete = Some(false);
     }
     let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
-    let calls = Calls { links, summaries };
+    let unshaped = UnshapedCurrent(summaries);
+    let calls = Calls {
+        links,
+        summaries: &unshaped,
+    };
     if !audit {
         return program.summarize(&calls, memory, c);
     }
@@ -1005,37 +1069,66 @@ fn argument_summary<'a>(
             ArgumentSource::MissingResult { .. } => usage.precision == ReadPrecision::Exact,
         };
         if conflict {
-            conflicts.push(
-                RawConflict {
-                    origin,
-                    usage: usage.clone(),
-                },
-                c.position(),
-            )?;
+            record_conflict(conflicts, origin, usage, c)?;
         }
         Ok(())
     };
-    let result = if let Some(multiplier) = diagnostic_multiplier {
-        program.audit(&calls, memory, c, &mut observe, multiplier)?
-    } else {
-        program.summarize_observed(&calls, memory, c, &mut observe)?
-    };
+    let result = program.summarize_observed(&calls, memory, c, &mut observe)?;
     *audit_complete = Some(result.is_some());
     Ok(result)
 }
-fn needs_audit(
+#[allow(clippy::too_many_arguments)]
+fn audit<'a>(
+    facts: &Facts<'_, 'a>,
     summaries: &dyn CallSummaries,
     links: &CallLinks<'_>,
-    rom_signature: Option<&crate::signatures::FunctionSignature>,
-) -> bool {
-    rom_signature.is_some()
-        || summaries.current().is_some()
-        || links.keys().any(|key| {
-            summaries
-                .summary(key.borrowed())
-                .and_then(|s| s.contract)
-                .is_some_and(|s| s.results < 2)
-        })
+    entries: u32,
+    decoder: &dyn FunctionSemantics,
+    memory: &'a WorkingMemory,
+    conflicts: &mut AdmittedVec<'a, RawConflict>,
+    c: &mut dyn RunControl,
+) -> Result<()> {
+    let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
+    let calls = Calls { links, summaries };
+    let mut observe = |origin, usage: &ReadUse, c: &mut dyn RunControl| {
+        if usage.precision == ReadPrecision::Exact {
+            record_conflict(conflicts, origin, usage, c)?;
+        }
+        Ok(())
+    };
+    program
+        .audit(&calls, memory, c, &mut observe, entries)?
+        .ok_or_else(|| Error::new(ErrorCode::Unavailable, "audit has no fixed point"))?;
+    Ok(())
+}
+fn record_conflict(
+    conflicts: &mut AdmittedVec<'_, RawConflict>,
+    origin: ArgumentSource,
+    usage: &ReadUse,
+    c: &mut dyn RunControl,
+) -> Result<()> {
+    if !conflicts
+        .iter()
+        .any(|r| r.origin == origin && r.usage == *usage)
+    {
+        conflicts.push(
+            RawConflict {
+                origin,
+                usage: usage.clone(),
+            },
+            c.position(),
+        )?;
+    }
+    Ok(())
+}
+
+fn needs_result_audit(summaries: &dyn CallSummaries, links: &CallLinks<'_>) -> bool {
+    links.keys().any(|key| {
+        summaries
+            .summary(key.borrowed())
+            .and_then(|s| s.contract)
+            .is_some_and(|s| s.results < 2)
+    })
 }
 
 #[cfg(test)]

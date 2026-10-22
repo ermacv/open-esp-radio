@@ -1294,9 +1294,9 @@ fn register_accesses(
         }
         writeln!(
             out,
-            "{} ROM/header diagnostics ({} incomplete ROM-only audits)",
+            "{} ROM/header diagnostics ({} unavailable computed ROM summaries)",
             summary.rom_signature_diagnostic_count,
-            summary.rom_signature_audit_incomplete.len()
+            summary.rom_signature_summary_unavailable.len()
         )
         .map_err(io_error)?;
         for diagnostic in &summary.rom_signature_diagnostics {

@@ -161,13 +161,13 @@ impl Report {
             summary.signature_audit_incomplete.len()
         ));
         text.push_str(&format!(
-            "  ROM/header diagnostics {} (contracts do not apply to linked bodies; {} incomplete ROM-only audits)\n",
+            "  ROM/header diagnostics {} (contracts do not apply to linked bodies; {} unavailable computed ROM summaries)\n",
             summary.rom_signature_diagnostic_count,
-            summary.rom_signature_audit_incomplete.len()
+            summary.rom_signature_summary_unavailable.len()
         ));
-        for failure in &summary.rom_signature_audit_incomplete {
+        for failure in &summary.rom_signature_summary_unavailable {
             text.push_str(&format!(
-                "  INCOMPLETE ROM DIAGNOSTIC {}: {}\n",
+                "  UNAVAILABLE ROM SUMMARY {}: {}\n",
                 String::from_utf8_lossy(failure.function.name.as_deref().unwrap_or(b"?")),
                 failure.reason
             ));

@@ -693,3 +693,82 @@ fn a_word_and_a_forced_bit_at_a_join_remain_unknown_while_other_bits_are_kept() 
         })
     );
 }
+
+#[test]
+fn audit_stack_collection_preserves_live_maps_and_shared_roots() {
+    let memory = WorkingMemory::new(4 << 20).unwrap();
+    {
+        let records = graph(2);
+        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
+        let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
+        reads
+            .prepare(&Decoder, &mut |_, _, _| Ok(false), &mut || Ok(()))
+            .unwrap();
+        let mut roots = Vec::new();
+        let mut stack = 0;
+        for value in 0..300 {
+            stack = reads
+                .store_byte(stack, -8, ReadCell::constant(value), &mut || Ok(()))
+                .unwrap();
+            if value == 100 || value == 200 {
+                roots.push(stack);
+            }
+        }
+        let before = roots
+            .iter()
+            .map(|&id| {
+                reads
+                    .stacks
+                    .values(id)
+                    .unwrap()
+                    .iter()
+                    .map(|s| (s.offset, s.cell))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for (id, root) in [roots[0], roots[1], roots[0]].into_iter().enumerate() {
+            let mut state = ReadState::entry();
+            state.slots = root;
+            reads.nodes[id].input = Some(state);
+        }
+        let old = reads.stacks.entries.len();
+        reads.audit_stack_gc_at = 0;
+        reads.compact_audit_stacks(&mut || Ok(())).unwrap();
+        assert_eq!(
+            reads.stacks.entries.len(),
+            old,
+            "ordinary #317 state is unchanged"
+        );
+        reads.audit_results = true;
+        reads.compact_audit_stacks(&mut || Ok(())).unwrap();
+        assert!(reads.stacks.entries.len() < old);
+        for (id, expected) in [(0, &before[0]), (1, &before[1]), (2, &before[0])] {
+            let root = reads.nodes[id].input.unwrap().slots;
+            let values = reads
+                .stacks
+                .values(root)
+                .unwrap()
+                .iter()
+                .map(|s| (s.offset, s.cell))
+                .collect::<Vec<_>>();
+            assert_eq!(&values, expected);
+        }
+        assert_eq!(
+            reads.nodes[0].input.unwrap().slots,
+            reads.nodes[2].input.unwrap().slots
+        );
+        let erased = reads
+            .store_byte(
+                reads.nodes[0].input.unwrap().slots,
+                -8,
+                ReadCell::default(),
+                &mut || Ok(()),
+            )
+            .unwrap();
+        assert!(
+            reads.stacks.values(erased).unwrap().is_empty(),
+            "unknown overwrites erase an earlier tracked byte"
+        );
+    }
+    assert_eq!(memory.used(), 0);
+}

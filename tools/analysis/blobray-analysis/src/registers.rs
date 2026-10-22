@@ -175,6 +175,7 @@ struct ReadSet {
 /// Immutable, interned sets. Every backing allocation is admitted before
 /// growth; ids, not cloned maps, are kept in the CFG states.
 struct ReadSets<'m, T> {
+    memory: &'m WorkingMemory,
     entries: AdmittedVec<'m, T>,
     sets: AdmittedVec<'m, ReadSet>,
     buckets: AdmittedVec<'m, usize>,
@@ -188,6 +189,7 @@ fn read_integrity() -> Error {
 impl<'m, T: Copy + Eq + std::hash::Hash> ReadSets<'m, T> {
     fn new(memory: &'m WorkingMemory) -> Self {
         Self {
+            memory,
             entries: AdmittedVec::new(memory),
             sets: AdmittedVec::new(memory),
             buckets: AdmittedVec::new(memory),
@@ -599,7 +601,9 @@ struct FlowEngine<'f, 'a, 'm, D: Domain<'m>> {
     work_limit: bool,
     summary_mode: bool,
     audit_results: bool,
+    entry_registers: u32,
     result_sources: AdmittedVec<'m, (u64, u8, usize)>,
+    audit_stack_gc_at: usize,
     prepared: bool,
     converged: bool,
     pending: Option<usize>,
@@ -619,7 +623,9 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             work_limit: false,
             summary_mode: false,
             audit_results: false,
+            entry_registers: u32::MAX,
             result_sources: AdmittedVec::new(memory),
+            audit_stack_gc_at: 131_072,
             prepared: false,
             converged: false,
             pending: None,
@@ -980,6 +986,12 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 D::unpack(y.map(|y| y.cell).unwrap_or_default()),
                 c,
             )?;
+            // In an audit there are no selected load sources. An absent stack
+            // byte and a wholly unknown, untracked byte are identical. Keep
+            // the ordinary summary/load interpreter's representation unchanged.
+            if self.audit_results && D::pack(cell) == D::Byte::default() {
+                continue;
+            }
             self.stacks.scratch.push(
                 ReadSlot {
                     offset,
@@ -998,6 +1010,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         c: &mut dyn RunControl,
     ) -> Result<usize> {
         let len = self.stacks.values(stack)?.len();
+        let keep = !self.audit_results || cell != D::Byte::default();
         let mut inserted = false;
         for index in 0..len {
             c.checkpoint(1)?;
@@ -1008,21 +1021,54 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 .copied()
                 .ok_or_else(read_integrity)?;
             if !inserted && slot.offset >= offset {
-                self.stacks
-                    .scratch
-                    .push(ReadSlot { offset, cell }, c.position())?;
+                if keep {
+                    self.stacks
+                        .scratch
+                        .push(ReadSlot { offset, cell }, c.position())?;
+                }
                 inserted = true;
             }
             if slot.offset != offset {
                 self.stacks.scratch.push(slot, c.position())?;
             }
         }
-        if !inserted {
+        if !inserted && keep {
             self.stacks
                 .scratch
                 .push(ReadSlot { offset, cell }, c.position())?;
         }
         self.stacks.intern(c)
+    }
+    /// Audit queries retain only the immutable stack maps referenced by live
+    /// CFG inputs. This runs between transfers, when no temporary state exists;
+    /// rebasing ids preserves every byte and the fixed point. Ordinary #317
+    /// summaries and selected-load analyses never take this path.
+    fn compact_audit_stacks(&mut self, c: &mut dyn RunControl) -> Result<()> {
+        if !self.audit_results || self.stacks.entries.len() < self.audit_stack_gc_at {
+            return Ok(());
+        }
+        let memory = self.stacks.memory;
+        let old = std::mem::replace(&mut self.stacks, ReadSets::new(memory));
+        let mut rebased = AdmittedVec::new(memory);
+        for _ in 0..=old.sets.len() {
+            rebased.push(0usize, c.position())?;
+        }
+        for node in self.nodes.iter_mut() {
+            c.checkpoint(1)?;
+            let Some(state) = node.input.as_mut().filter(|s| s.slots != 0) else {
+                continue;
+            };
+            let slot = rebased.get_mut(state.slots).ok_or_else(read_integrity)?;
+            if *slot == 0 {
+                for byte in old.values(state.slots)?.iter().copied() {
+                    self.stacks.scratch.push(byte, c.position())?;
+                }
+                *slot = self.stacks.intern(c)?;
+            }
+            state.slots = *slot;
+        }
+        self.audit_stack_gc_at = 131_072.max(self.stacks.entries.len().saturating_mul(2));
+        Ok(())
     }
     fn merge(
         &mut self,
@@ -1073,7 +1119,9 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         let mut entry = ReadState::entry();
         {
             for register in 1..32 {
-                if !D::entry_source(register, self.summary_mode) {
+                if !D::entry_source(register, self.summary_mode)
+                    || self.entry_registers & (1 << register) == 0
+                {
                     continue;
                 }
                 let source = self.sources.len();
@@ -1130,6 +1178,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         let mut cursor = 0;
         while let Some(id) = self.queue.get(cursor).copied() {
             c.visit()?;
+            self.compact_audit_stacks(c)?;
             cursor += 1;
             self.pending = Some(id);
             self.node_mut(id)?.queued = false;
@@ -1156,6 +1205,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         // later join which demotes the same path to May.
         for id in 0..self.nodes.len() {
             c.visit()?;
+            self.compact_audit_stacks(c)?;
             if let Some(input) = self.node(id)?.input {
                 self.execute(id, input, abi, calls, true, c)?;
             }
