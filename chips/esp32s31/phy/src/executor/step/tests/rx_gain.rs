@@ -21,6 +21,18 @@ fn publisher() -> PhyRxGainInitTransition {
 }
 
 #[test]
+fn action_identity_preserves_first_entry_flags_across_different_actions() {
+    let mut scratch = crate::executor::step::rx_gain::Scratch::default();
+    assert_eq!(scratch.observe_action(1), 0x81);
+    assert_eq!(scratch.action(), 0x81);
+    assert_eq!(scratch.observe_action(33), 0xa1);
+    assert_eq!(scratch.observe_action(1), 1);
+    assert_eq!(scratch.observe_action(33), 33);
+    assert_eq!(scratch.action(), 33);
+    assert!(crate::executor::step::rx_gain::Scratch::default().observe_action(1) & 0x80 != 0);
+}
+
+#[test]
 fn complete_entries_cross_real_poll_boundaries_before_the_root_tail() {
     for measured in [false, true] {
         complete_publisher(measured);

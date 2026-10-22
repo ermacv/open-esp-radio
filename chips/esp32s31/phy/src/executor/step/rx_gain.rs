@@ -87,13 +87,35 @@ pub(crate) struct Scratch {
     seen_actions: u64,
 }
 
+impl Scratch {
+    // Actions occupy bits 0..33; the high byte retains the current identity.
+    // This diagnostic packing leaves the shared Run/Work transport unchanged.
+    pub(super) fn observe_action(&mut self, action: u8) -> u8 {
+        let bit = 1_u64 << action;
+        let tag = action
+            | if self.seen_actions & bit == 0 {
+                0x80
+            } else {
+                0
+            };
+        let next = ((self.seen_actions | bit) & 0x00ff_ffff_ffff_ffff) | (u64::from(tag) << 56);
+        if next != self.seen_actions {
+            self.seen_actions = next;
+        }
+        tag
+    }
+
+    pub(super) fn action(&self) -> u8 {
+        (self.seen_actions >> 56) as u8
+    }
+}
+
 pub(super) struct Run<'a> {
     pub(super) transition: &'a mut PhyRxGainInitTransition,
     pub(super) scratch: &'a mut Scratch,
     pub(super) execution: &'a mut RxGainExecution,
     pub(super) phase: Phase,
     pub(super) measured: bool,
-    pub(super) action: u8,
 }
 
 impl Run<'_> {
@@ -108,18 +130,15 @@ impl Run<'_> {
             return Ok(Step::Complete);
         }
         let started = self.measured.then(|| clock.now());
+        let action = self.transition.action();
         let mut tag = 0;
         if self.measured {
-            tag = crate::tracking::observation::calibration::rx(&self.transition.action());
-            let bit = 1_u64 << tag;
-            if self.scratch.seen_actions & bit == 0 {
-                self.scratch.seen_actions |= bit;
-                tag |= 0x80;
-            }
+            tag = self
+                .scratch
+                .observe_action(crate::tracking::observation::calibration::rx(&action));
         }
-        self.action = tag;
         if matches!(
-            self.transition.action(),
+            action,
             PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
                 PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(
                     PhyDcIqAction::Configure(_)
@@ -135,9 +154,9 @@ impl Run<'_> {
             #[cfg(not(target_arch = "riscv32"))]
             return Err(Failure::Binding);
         }
-        self.observe(self.transition.action());
+        self.observe(action);
         self.scratch.binding = Some(
-            crate::rx::gain::PhyRxGainInitExternalBinding::lower(self.transition.action())
+            crate::rx::gain::PhyRxGainInitExternalBinding::lower(action)
                 .map_err(|_| Failure::Binding)?,
         );
         let lowered = self.measured.then(|| clock.now());

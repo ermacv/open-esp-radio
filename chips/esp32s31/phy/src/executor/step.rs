@@ -1,4 +1,5 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
+mod channel_gain;
 mod i2c;
 mod io;
 pub(crate) mod power;
@@ -72,6 +73,7 @@ enum Work<'a> {
     Channel {
         binding: &'a mut Option<crate::channel::PhyChipChannelExternalBinding>,
         completion: &'a mut Option<crate::channel::PhyChipChannelCompletion>,
+        gain: channel_gain::Cursor,
     },
     RxGainAtom {
         binding: &'a mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
@@ -171,6 +173,7 @@ impl<'a> Job<'a> {
             Work::Channel {
                 binding,
                 completion,
+                gain: channel_gain::Cursor::default(),
             },
             now,
             false,
@@ -193,13 +196,19 @@ impl<'a> Job<'a> {
                 execution,
                 phase,
                 measured,
-                action: 0,
             }),
             now,
             false,
         )?;
         job.deadline = Instant::from_micros(u64::MAX);
         Ok(job)
+    }
+
+    pub(crate) fn channel_maximum_entries(&self) -> [u8; 2] {
+        match &self.work {
+            Work::Channel { gain, .. } => gain.maximum_entries(),
+            _ => [0; 2],
+        }
     }
     pub(super) fn rx_gain_atom(
         binding: &'a mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
@@ -310,12 +319,13 @@ impl<'a> Job<'a> {
             Work::Channel {
                 binding,
                 completion,
+                gain,
             } => {
                 if binding.is_none() {
                     return Ok(Step::Complete);
                 }
                 self.ready_started = Some(clock.now());
-                return if io.channel::<D, _>(clock, binding, completion)? {
+                return if io.channel::<D, _>(clock, binding, completion, gain)? {
                     Ok(Step::WaitAt(
                         now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
                     ))
@@ -660,8 +670,11 @@ impl<
             ..
         } = self.project().route.project()
         {
-            if let Work::RxGain(run) = &mut job.work {
-                run.execution.observe_engine(timing, run.action);
+            let terminal = job.finished;
+            match &mut job.work {
+                Work::RxGain(run) => run.execution.observe_engine(timing, run.scratch.action()),
+                Work::Channel { gain, .. } => gain.observe(timing, terminal),
+                _ => {}
             }
         }
     }

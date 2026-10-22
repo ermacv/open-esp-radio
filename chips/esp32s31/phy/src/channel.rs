@@ -901,6 +901,13 @@ pub struct PhyChipChannelMmioBinding {
 }
 
 impl PhyChipChannelMmioBinding {
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn tx_gain_image(&self) -> Option<&PhyWifiTxGainImage> {
+        match &self.action {
+            PhyChipChannelAction::PublishTxGain(image) => Some(image),
+            _ => None,
+        }
+    }
     pub fn new(action: PhyChipChannelAction) -> Result<Self, PhyChipChannelBindingError> {
         match action {
             PhyChipChannelAction::SetAgc { .. }

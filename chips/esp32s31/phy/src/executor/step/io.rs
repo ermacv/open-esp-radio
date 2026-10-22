@@ -129,7 +129,17 @@ impl Io<'_, '_> {
         clock: &C,
         binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
         completion: &mut Option<crate::channel::PhyChipChannelCompletion>,
+        gain: &mut super::channel_gain::Cursor,
     ) -> Result<bool, Failure> {
+        if let Some(crate::channel::PhyChipChannelExternalBinding::Mmio(command)) = binding.as_ref()
+            && let Some(image) = command.tx_gain_image()
+        {
+            if gain.advance(self, image)? {
+                *binding = None;
+                *completion = Some(crate::channel::PhyChipChannelCompletion::TxGainPublished);
+            }
+            return Ok(false);
+        }
         let binding = binding.take().ok_or(Failure::Binding)?;
         #[cfg(target_arch = "riscv32")]
         fn apply<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
@@ -227,6 +237,21 @@ impl Io<'_, '_> {
             ),
             #[cfg(test)]
             Self::Test(io, _) => io.power_gain_base(action),
+        }
+    }
+
+    pub(super) fn channel_gain_base(&mut self) -> Result<u8, Failure> {
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => Ok(
+                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
+            ),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => Ok(
+                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
+            ),
+            #[cfg(test)]
+            Self::Test(io, _) => io.channel_gain_base(),
         }
     }
 

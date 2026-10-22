@@ -1,4 +1,5 @@
 use super::*;
+mod channel_gain;
 mod dc_iq;
 mod dcode;
 mod power;
@@ -60,6 +61,7 @@ pub(crate) struct Io {
     power_failure: Option<usize>,
     power_gain_entries: Vec<oer_esp32s31_hal::types::PhyGainMemoryEntry>,
     power_gain_failure: Option<usize>,
+    channel_base_reads: usize,
     code: u8,
     byte: u8,
     busy: Rc<Cell<bool>>,

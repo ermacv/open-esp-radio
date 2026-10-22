@@ -218,6 +218,7 @@ pub trait PhyTargetObserver {
         &mut self,
         _action: u8,
         _timing: &crate::tracking::observation::EngineTiming,
+        _entries: [u8; 2],
     ) {
     }
     fn engine_completed(

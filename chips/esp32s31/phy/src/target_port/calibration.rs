@@ -366,7 +366,7 @@ pub fn channel<'a, D: PhyShortDelay + 'a, P: 'a, O: PhyTargetObserver + 'a, T: o
         inner: async move {
             use crate::{
                 channel::PhyChipChannelCompletion as Done,
-                executor::step::{Job, drive},
+                executor::step::{Job, drive_calibration},
                 tracking::observation::{EngineTiming, Operation},
             };
             let mut timing = EngineTiming::default();
@@ -391,18 +391,20 @@ pub fn channel<'a, D: PhyShortDelay + 'a, P: 'a, O: PhyTargetObserver + 'a, T: o
                 let mut completion = None;
                 let mut job = Job::channel(&mut binding, &mut completion, clock.now())
                     .map_err(super::step::port_error)?;
-                let result = drive::<D, _, _>(
+                let result = drive_calibration::<D, _, _>(
                     &mut job,
                     registers,
                     clock,
                     O::OBSERVE_ENGINE_POLLS.then_some(&mut atom_timing),
-                    None,
-                    None,
                 )
                 .await;
                 if O::OBSERVE_ENGINE_POLLS {
                     timing.merge(&atom_timing);
-                    observer.channel_action_completed(action, &atom_timing);
+                    observer.channel_action_completed(
+                        action,
+                        &atom_timing,
+                        job.channel_maximum_entries(),
+                    );
                 }
                 result.map_err(super::step::port_error)?;
                 let completion = completion.ok_or(PhyTargetPortError::UnexpectedBinding)?;
