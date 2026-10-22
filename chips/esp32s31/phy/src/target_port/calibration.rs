@@ -74,12 +74,13 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
 
 /// Run the complete D-code child, retaining its nested PLL and I2C waits.
 /// The caller retains the same maintenance and cancellation obligations as PBus clearing.
-pub fn dcode<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
-    clock: &C,
+pub async fn dcode<D: PhyShortDelay, P, T: oer_time::Timer>(
+    clock: &T,
     mut child: PhyCalibrationDcodeTransition,
     _platform: &mut P,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     mut observe: impl FnMut(bool),
+    mut timing: Option<&mut crate::tracking::observation::EngineTiming>,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
     use crate::analog::dcode::{PhyDcodeAction, PhyDcodeExternalBinding};
 
@@ -97,7 +98,15 @@ pub fn dcode<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
         }
         let binding = PhyDcodeExternalBinding::lower(action)
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        let completion = complete_dcode_direct::<D, _>(clock, binding, registers)?;
+        let completion = crate::executor::step::dcode::complete::<D, _, _>(
+            binding,
+            registers,
+            clock,
+            true,
+            timing.as_deref_mut(),
+        )
+        .await
+        .map_err(super::step::port_error)?;
         if let crate::analog::dcode::PhyDcodeCompletion::Rfpll(
             crate::analog::rfpll::RfpllFrequencyCompletion::MaskedRead {
                 field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
@@ -112,74 +121,6 @@ pub fn dcode<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
     }
     Err(PhyTargetPortError::RfOperationLimit)
-}
-
-fn complete_dcode_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    binding: crate::analog::dcode::PhyDcodeExternalBinding,
-    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-) -> Result<crate::analog::dcode::PhyDcodeCompletion, PhyTargetPortError> {
-    use crate::analog::dcode::{PhyDcodeCompletion, PhyDcodeExternalBinding};
-    match binding {
-        PhyDcodeExternalBinding::Rfpll(binding) => Ok(PhyDcodeCompletion::Rfpll(
-            registers
-                .rfpll_atom::<D, _>(clock, binding)
-                .map_err(super::step::port_error)?,
-        )),
-        PhyDcodeExternalBinding::I2c(mut binding) => {
-            use crate::analog::i2c::PhyI2cError;
-            use crate::calibration::cold::PhyColdI2cAction;
-            // One shared transition budget spans read and read/modify/write.
-            // The final observed edge also accepts its terminal state.
-            let completed = crate::executor::wait::i2c::complete(
-                clock,
-                &mut binding,
-                crate::analog::dcode::PhyDcodeI2cBinding::action,
-                |binding, action| {
-                    match action {
-                        PhyColdI2cAction::StartRead { address } => {
-                            match crate::analog::i2c::try_start_read(registers, address) {
-                                Ok(()) => binding
-                                    .read_started()
-                                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                                Err(PhyI2cError::Busy) => {}
-                            }
-                        }
-                        PhyColdI2cAction::StartWrite { address, value } => {
-                            match crate::analog::i2c::try_start_write(registers, address, value) {
-                                Ok(()) => binding
-                                    .write_started()
-                                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                                Err(PhyI2cError::Busy) => {}
-                            }
-                        }
-                        PhyColdI2cAction::AwaitReadCompletionEdge { address } => {
-                            binding
-                                .observe_read_result(crate::analog::i2c::try_finish_read(
-                                    registers, address,
-                                ))
-                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                        }
-                        PhyColdI2cAction::AwaitWriteCompletionEdge { address } => {
-                            binding
-                                .observe_write_result(crate::analog::i2c::try_finish_write(
-                                    registers, address,
-                                ))
-                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                        }
-                        PhyColdI2cAction::Complete(_) => {}
-                    }
-                    Ok(())
-                },
-            )?;
-            if !completed {
-                return Err(PhyTargetPortError::HardwareEdgeTimedOut);
-            }
-            binding
-                .into_completion()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-        }
-    }
 }
 
 /// Run RX-DC calibration and publish both gain banks using the same admitted owner.

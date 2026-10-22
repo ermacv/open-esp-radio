@@ -485,11 +485,12 @@ oer_probe_macros::probe! {
             .map_err(|_| 2u32)?;
             parent.advance(completion).map_err(|_| 3u32)?;
             let child = parent.begin_dcode().map_err(|_| 4u32)?;
-            let completion = calibration::dcode::<
+            let timer = TraceTimer::observations().with_zero_time_polls();
+            let completion = timer.run(calibration::dcode::<
                 RfpllTraceDelay,
                 _,
                 _,
-            >(&TraceTimer::observations(), child, &mut (), registers, |_| {})
+            >(&timer, child, &mut (), registers, |_| {}, None))
             .map_err(|error| match error {
                 oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut => 5u32,
                 _ => 9u32,

@@ -13,7 +13,6 @@ use core::future::Future;
 use crate::{
     HARDWARE_EDGE_LIMIT,
     analog::{
-        dcode::{PhyDcodeCompletion, PhyDcodeI2cBinding},
         i2c::MaskedI2cWriteBinding,
         pbus::PhyPbusHardwareObservation,
         temperature::{PhyTemperatureCompletion, PhyTemperatureI2cBinding},
@@ -517,7 +516,6 @@ pub async fn complete_i2c_configuration<D: PhyShortDelay>(
     }
     Err(PhyTargetPortError::HardwareEdgeTimedOut)
 }
-define_i2c_executor!(complete_dcode_i2c, PhyDcodeI2cBinding, PhyDcodeCompletion);
 define_i2c_executor!(
     complete_txiq_init_i2c,
     PhyTxIqInitI2cBinding,

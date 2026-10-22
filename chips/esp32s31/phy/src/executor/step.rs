@@ -1,4 +1,5 @@
 //! Private PHY transport jobs. Hardware ownership stays with the caller.
+pub(crate) mod dcode;
 mod i2c;
 mod io;
 pub(crate) mod power;
@@ -68,6 +69,11 @@ pub(crate) enum Step {
 }
 
 enum Work<'a> {
+    DirectI2c(&'a mut PhyColdI2cTransaction),
+    Frequency {
+        binding: &'a mut Option<crate::analog::rfpll::RfpllFrequencyExternalBinding>,
+        completion: &'a mut Option<crate::analog::rfpll::RfpllFrequencyCompletion>,
+    },
     Rfpll(rfpll::Run<'a>),
     CountedI2c(i2c::Counted<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
@@ -129,8 +135,28 @@ impl<'a> Job<'a> {
         job.deadline = Instant::from_micros(u64::MAX);
         Ok(job)
     }
+    pub(super) fn direct_i2c(
+        transaction: &'a mut PhyColdI2cTransaction,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        Self::new(Work::DirectI2c(transaction), now, false)
+    }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
+    }
+    pub(super) fn frequency(
+        binding: &'a mut Option<crate::analog::rfpll::RfpllFrequencyExternalBinding>,
+        completion: &'a mut Option<crate::analog::rfpll::RfpllFrequencyCompletion>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        Self::new(
+            Work::Frequency {
+                binding,
+                completion,
+            },
+            now,
+            false,
+        )
     }
     pub(crate) fn pbus(
         binding: &'a mut PhyPbusHardwareBinding,
@@ -222,6 +248,25 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::DirectI2c(transaction) => {
+                if matches!(transaction.action(), PhyColdI2cAction::Complete(_)) {
+                    return Ok(Step::Complete);
+                }
+                self.ready_started = Some(clock.now());
+                rfpll::direct_i2c(&mut io, clock, transaction, None, false)?;
+                return Ok(Step::Runnable);
+            }
+            Work::Frequency {
+                binding,
+                completion,
+            } => {
+                let Some(binding) = binding.take() else {
+                    return Ok(Step::Complete);
+                };
+                self.ready_started = Some(clock.now());
+                **completion = Some(io.frequency::<D, _>(clock, binding)?);
+                return Ok(Step::Runnable);
+            }
             Work::Rfpll(run) => {
                 return io.advance_rfpll::<D, _>(
                     clock,

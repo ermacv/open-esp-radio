@@ -236,6 +236,11 @@ pub struct PhyDcodeI2cBinding {
 }
 
 impl PhyDcodeI2cBinding {
+    pub(crate) fn transaction_mut(
+        &mut self,
+    ) -> &mut crate::calibration::cold::PhyColdI2cTransaction {
+        &mut self.transaction
+    }
     pub fn new(action: PhyDcodeAction) -> Result<Self, PhyDcodeBindingError> {
         let request = match action {
             PhyDcodeAction::WriteMasked { field, value } => {

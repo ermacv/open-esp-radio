@@ -177,6 +177,7 @@ fn report_engine(
         Operation::BluetoothIeee802154Power => 2,
         Operation::WifiI2c => 3,
         Operation::WifiPower => 4,
+        Operation::Dcode => 5,
         Operation::Temperature => 7,
         _ => 0,
     };
@@ -206,6 +207,12 @@ fn report_engine(
         print_fmt(format_args!(
             "OPEN_RADIO_HIL power-gain family={} count={} max-us={}\n",
             family, timing.ready_edges, timing.maximum_ready_micros
+        ));
+    }
+    if operation == Operation::Dcode {
+        print_fmt(format_args!(
+            "OPEN_RADIO_HIL dcode-atom count={} max-us={}\n",
+            timing.ready_edges, timing.maximum_ready_micros
         ));
     }
 }
