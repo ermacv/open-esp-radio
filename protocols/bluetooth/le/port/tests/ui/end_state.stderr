@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/end_state.rs:7:28
+  |
+7 |     return DtmCommand::End(idle); // ui-error: E0308
+  |            --------------- ^^^^ expected `Session<'_, P, Running>`, found `Session<'_, P, Idle>`
+  |            |
+  |            arguments to this enum variant are incorrect
+  |
+  = note: expected struct `Session<'_, P, oer_bluetooth_le_port::Running>`
+             found struct `Session<'p, P, oer_bluetooth_le_port::Idle>`
+note: tuple variant defined here
+ --> src/lib.rs
+  |
+  |     End(Session<'p, P, Running>),
+  |     ^^^

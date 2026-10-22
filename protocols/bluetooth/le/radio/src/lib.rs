@@ -13,8 +13,8 @@
 //! Descriptor images, register fields and controller ticks stay in the
 //! backend.
 //!
-//! No request/outcome port, event correlation or backend serves these values
-//! yet.
+//! The LE request/outcome contract and host reference backend live in the
+//! sibling `oer-bluetooth-le-port` and `oer-bluetooth-le-model` crates.
 
 #[cfg(test)]
 extern crate std;

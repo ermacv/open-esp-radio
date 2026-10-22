@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/foreign_context.rs:9:31
+  |
+5 | pub fn context<'p, P: PoolPath, X, Y, C: LeCapabilities>(
+  |                                 -  - found type parameter
+  |                                 |
+  |                                 expected type parameter
+...
+9 |     return Request { context: foreign, ..request }; // ui-error: E0308
+  |                               ^^^^^^^ expected type parameter `X`, found type parameter `Y`
+  |
+  = note: expected struct `PortContext<'_, <P as PoolPath>::Identity, X>`
+             found struct `PortContext<'p, <P as PoolPath>::Identity, Y>`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters

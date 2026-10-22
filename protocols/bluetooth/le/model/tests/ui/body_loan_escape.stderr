@@ -1,0 +1,12 @@
+error: lifetime may not live long enough
+ --> tests/ui/body_loan_escape.rs:5:5
+  |
+4 | pub fn keep<Id: SlotIdentity + 'static>(resources: Resources<'_, Id>) -> Box<dyn core::any::Any> {
+  |                                         --------- has type `Resources<'1, Id>`
+5 |     Box::new(resources.session) // ui-error: lifetime may not live long enough
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ coercion requires that `'1` must outlive `'static`
+  |
+help: to declare that the trait object captures data from argument `resources`, you can add an explicit `'_` lifetime bound
+  |
+4 | pub fn keep<Id: SlotIdentity + 'static>(resources: Resources<'_, Id>) -> Box<dyn core::any::Any + '_> {
+  |                                                                                                 ++++
