@@ -36,6 +36,12 @@ impl Timer for TestTimer {
 
 #[derive(Default)]
 struct Observed {
+    check_context: bool,
+    context: u8,
+    device_polls: usize,
+    abandon_contexts: Vec<u8>,
+    erased_keys: usize,
+    abandoned_publications: usize,
     publications: usize,
     statuses: Vec<(u8, u8)>,
     starts: usize,
@@ -110,6 +116,14 @@ struct TestDevice {
     completed: usize,
     stopped: bool,
 }
+impl TestDevice {
+    fn assert_driver_context(&self) {
+        let observed = self.observed.borrow();
+        if observed.check_context {
+            assert_eq!(observed.context, 2, "device access belongs to P2");
+        }
+    }
+}
 struct TestReceive {
     bytes: [u8; 26],
     released: Rc<Cell<usize>>,
@@ -145,6 +159,7 @@ impl Device<512> for TestDevice {
     type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
     fn hardware(&mut self) -> &mut Hardware {
+        self.assert_driver_context();
         &mut self.hardware
     }
     fn timer(&self) -> &TestTimer {
@@ -157,6 +172,7 @@ impl Device<512> for TestDevice {
         None
     }
     fn radio_now(&mut self) -> Result<Ieee80211Instant, radio::ClockError> {
+        self.assert_driver_context();
         Ok(Ieee80211Instant::from_micros(
             self.timer.now().as_micros() + 1234,
         ))
@@ -166,6 +182,7 @@ impl Device<512> for TestDevice {
         _: &mut Context<'_>,
         channel: oer_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>> {
+        self.assert_driver_context();
         if self.observed.borrow().hold_start {
             return Poll::Pending;
         }
@@ -175,6 +192,7 @@ impl Device<512> for TestDevice {
         Poll::Ready(Ok(()))
     }
     fn poll_stop(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Fault>> {
+        self.assert_driver_context();
         if self.observed.borrow().hold_stop {
             return Poll::Pending;
         }
@@ -189,6 +207,8 @@ impl Device<512> for TestDevice {
         receive_room: usize,
         _: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<TestReceive>, Fault>> {
+        self.assert_driver_context();
+        self.observed.borrow_mut().device_polls += 1;
         if receive_room != 0 {
             if let Some(frame) = self.observed.borrow_mut().received.pop_front() {
                 return Poll::Ready(Ok(DeviceEvent::Receive(frame)));
@@ -232,6 +252,7 @@ impl Device<512> for TestDevice {
         _: usize,
         _: &mut Context<'_>,
     ) -> Poll<Result<Option<TestReceive>, Fault>> {
+        self.assert_driver_context();
         self.observed.borrow_mut().cut_calls += 1;
         if self.observed.borrow().hold_cut {
             return Poll::Pending;
@@ -239,17 +260,29 @@ impl Device<512> for TestDevice {
         Poll::Ready(Ok(None))
     }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
+        self.assert_driver_context();
         self.observed.borrow_mut().resumed_cuts += 1;
         Ok(())
     }
     fn recycle(&mut self, frame: TestReceive) {
+        self.assert_driver_context();
         drop(frame);
     }
     fn abandon(&mut self) -> bool {
-        self.observed.borrow_mut().abandoned = true;
+        self.assert_driver_context();
+        let keys = self.hardware.installed_keys.len();
+        oer_esp32s31_ieee80211_mac::crypto::erase_lower_mac_keys(&mut self.hardware);
+        assert!(self.hardware.installed_keys.is_empty());
+        let mut observed = self.observed.borrow_mut();
+        let context = observed.context;
+        observed.abandon_contexts.push(context);
+        observed.erased_keys += keys;
+        observed.abandoned_publications = self.hardware.publications();
+        observed.abandoned = true;
         false
     }
     fn detach(&mut self) {
+        self.assert_driver_context();
         self.observed.borrow_mut().detached = true;
     }
 }
@@ -258,10 +291,18 @@ type Caps = Esp32s31Caps<512>;
 type Family<Id> = Types<Id, TestDevice, 512>;
 type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
+mod abandon;
 mod barriers;
 
 fn installed(
     statuses: Vec<(u8, u8)>,
+) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
+    installed_with_hardware(statuses, Hardware::default())
+}
+
+fn installed_with_hardware(
+    statuses: Vec<(u8, u8)>,
+    hardware: Hardware,
 ) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
     let timer = TestTimer(Rc::new(oer_time_virtual::VirtualClock::new()));
     let observed = Rc::new(RefCell::new(Observed {
@@ -269,7 +310,7 @@ fn installed(
         ..Observed::default()
     }));
     let device = TestDevice {
-        hardware: Hardware::default(),
+        hardware,
         timer: timer.clone(),
         observed: observed.clone(),
         completed: 0,
