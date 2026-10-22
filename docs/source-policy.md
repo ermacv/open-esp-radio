@@ -78,8 +78,8 @@ project may be cited for observed behaviour that a specification also fixes.
 
 ### Sources without a license
 
-Exception: the Bluetooth LE hardware engine (the S31 driver, controller
-memory, the PAC's Bluetooth initialization and the HAL's scheduler locks)
+Exception: the Bluetooth LE hardware engine (the S31 driver, the HAL's controller-memory
+engine, the PAC's Bluetooth initialization and the HAL's scheduler locks)
 keeps what it takes from `esp32s31-bt-lib` as it is.
 
 From a source that has no license, such as `esp32s31-bt-lib`, the repository

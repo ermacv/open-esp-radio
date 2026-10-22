@@ -1,36 +1,77 @@
-error: cannot construct `RxChainHead` with struct literal syntax due to private fields
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:29:5
+error[E0624]: method `publication` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:16:19
    |
-29 |     RxChainHead { scanning: true } // ui-error: cannot construct `RxChainHead` with struct literal syntax due to private fields
-   |     ^^^^^^^^^^^   -------------- private field
+16 |     let _ = table.publication(); // ui-error: E0624
+   |                   ^^^^^^^^^^^ private method
    |
-   = note: ...and other private fields `selector` and `head` that were not provided
-help: you might have meant to use the `new` associated function
+  ::: src/bluetooth/engine/le_device_table.rs
    |
-29 -     RxChainHead { scanning: true } // ui-error: cannot construct `RxChainHead` with struct literal syntax due to private fields
-29 +     RxChainHead::new(_, _, _) // ui-error: cannot construct `RxChainHead` with struct literal syntax due to private fields
-   |
+   |     pub(crate) fn publication(&self) -> DeviceTablePublication {
+   |     ---------------------------------------------------------- private method defined here
 
-error[E0061]: this method takes 1 argument but 0 arguments were supplied
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:35:24
+error[E0624]: method `publication_head` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:20:21
    |
-35 |     let _ = controller.publish_scan_start(); // ui-error: E0061
-   |                        ^^^^^^^^^^^^^^^^^^-- argument #1 of type `&RxMemoryListPublished` is missing
+20 |     let _ = receive.publication_head(); // ui-error: E0624
+   |                     ^^^^^^^^^^^^^^^^ private method
    |
-note: method defined here
-  --> src/bluetooth.rs
+  ::: src/bluetooth/engine/le_rx_chain.rs
    |
-   |     pub fn publish_scan_start(
-   |            ^^^^^^^^^^^^^^^^^^
-help: provide the argument
-   |
-35 |     let _ = controller.publish_scan_start(/* &RxMemoryListPublished */); // ui-error: E0061
-   |                                           ++++++++++++++++++++++++++++
+   |     pub(crate) fn publication_head(&self) -> crate::bluetooth::RxChainHead {
+   |     ---------------------------------------------------------------------- private method defined here
 
-error[E0133]: call to unsafe function `DeviceTablePublication::new` is unsafe and requires unsafe block
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:23:5
+error[E0624]: method `head` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:24:22
    |
-23 |     DeviceTablePublication::new(first, count) // ui-error: E0133
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+24 |     let _ = scanning.head(); // ui-error: E0624
+   |                      ^^^^ private method
    |
-   = note: consult the function's documentation for information on how to avoid undefined behavior
+  ::: src/bluetooth.rs
+   |
+   |     pub(crate) const fn head(&self) -> crate::layouts::DmaRef<crate::layouts::BleBufferHeader> {
+   |     ------------------------------------------------------------------------------------------ private method defined here
+
+error[E0624]: method `hardware_objects` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:28:17
+   |
+28 |     let _ = phy.hardware_objects(); // ui-error: E0624
+   |                 ^^^^^^^^^^^^^^^^ private method
+   |
+  ::: src/bluetooth/engine/ble_phy_engine.rs
+   |
+   |     pub(crate) fn hardware_objects(&self) -> crate::bluetooth::BlePhyHardwareObjects {
+   |     -------------------------------------------------------------------------------- private method defined here
+
+error[E0624]: method `disabled_cte_descriptor` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:32:16
+   |
+32 |     let _ = df.disabled_cte_descriptor(); // ui-error: E0624
+   |                ^^^^^^^^^^^^^^^^^^^^^^^ private method
+   |
+  ::: src/bluetooth/engine/direction_finding_workspace.rs
+   |
+   |     pub(crate) fn disabled_cte_descriptor(&self) -> crate::bluetooth::DirectionFindingDescriptor {
+   |     -------------------------------------------------------------------------------------------- private method defined here
+
+error[E0624]: method `publish_scheduler_hardware_list_head` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:36:24
+   |
+36 |       let _ = controller.publish_scheduler_hardware_list_head( // ui-error: E0624
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private method
+   |
+  ::: src/bluetooth.rs
+   |
+   | /     pub(crate) unsafe fn publish_scheduler_hardware_list_head(
+   | |         &mut self,
+   | |         index: BluetoothSchedulerHardwareListIndex,
+   | |         head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
+   | |     ) -> BluetoothSchedulerHardwareListHeadPublished {
+   | |____________________________________________________- private method defined here
+
+error[E0599]: no associated function or constant named `base` found for type parameter `S` in the current scope
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:41:16
+   |
+40 | pub fn raw_base<S: ControllerDmaSpace>() {
+   |                 - associated function or constant `base` not found for this type parameter
+41 |     let _ = S::base(&0); // ui-error: E0599
+   |                ^^^^ associated function or constant not found in `S`

@@ -1,0 +1,19 @@
+error[E0080]: evaluation panicked: a Controller runtime needs at least one modem timer slot
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_esp32s31_bluetooth_driver::runtime_resources::ControllerRuntimeResources::<'_, 0, oer_interrupt_table::signal::host::Deferred>::CAPACITY` failed here
+  |
+ ::: src/runtime_resources.rs
+  |
+  | /         assert!(
+  | |             MODEM_TIMER_CAPACITY > 0,
+  | |             "a Controller runtime needs at least one modem timer slot"
+  | |         );
+  | |_________- in this macro invocation
+
+note: erroneous constant encountered
+ --> tests/ui/runtime_needs_timer_capacity.rs:9:18
+  |
+9 | const _: usize = ControllerRuntimeResources::<0, Deferred>::CAPACITY;
+  |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

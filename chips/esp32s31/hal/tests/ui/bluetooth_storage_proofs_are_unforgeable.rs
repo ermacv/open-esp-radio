@@ -1,40 +1,42 @@
+// ui-requires: bluetooth-engine
 #![no_std]
-use oer_esp32s31_hal::bluetooth::{
-    BluetoothDeviceTableEntryCount, ControllerHal, DeviceTablePublication, RxChainHead,
-    RxMemoryListPublished,
-};
-use oer_esp32s31_hal::layouts::{BleDeviceTable, DmaRef};
+use oer_esp32s31_hal::bluetooth::{ControllerHal, RxMemoryListPublished};
+use oer_esp32s31_hal::bluetooth::engine::{LeDeviceTable, LeRxChain, BlePhyEngineCpuOwned,
+    DirectionFindingWorkspaceCpuOwned, ControllerDmaSpace};
 
-// The memory crate's codec vouches for the storage, in an unsafe block.
-pub fn vouched(
-    first: DmaRef<BleDeviceTable>,
-    count: BluetoothDeviceTableEntryCount,
-) -> DeviceTablePublication {
-    // SAFETY: the case only checks that the constructor needs `unsafe`.
-    unsafe { DeviceTablePublication::new(first, count) }
+pub fn publish(table: &LeDeviceTable, receive: &LeRxChain<2>, controller: &mut ControllerHal<'_>) {
+    table.publish(controller);
+    let _ = receive.publish_initial_head(controller);
 }
-
-// Safe code does not vouch for storage.
-#[cfg(ui_reject)]
-pub fn unvouched(
-    first: DmaRef<BleDeviceTable>,
-    count: BluetoothDeviceTableEntryCount,
-) -> DeviceTablePublication {
-    DeviceTablePublication::new(first, count) // ui-error: E0133
-}
-
-// A chain head is not filled in outside its codec.
-#[cfg(ui_reject)]
-pub fn forged_head() -> RxChainHead {
-    RxChainHead { scanning: true } // ui-error: cannot construct `RxChainHead` with struct literal syntax due to private fields
-}
-
-// The scanner starts only with a published list.
-#[cfg(ui_reject)]
-pub fn start_without_a_list(controller: &mut ControllerHal<'_>) {
-    let _ = controller.publish_scan_start(); // ui-error: E0061
-}
-
 pub fn start(controller: &mut ControllerHal<'_>, scanning: &RxMemoryListPublished) {
     let _ = controller.publish_scan_start(scanning);
+}
+#[cfg(ui_reject)]
+pub fn unbound_table(table: &LeDeviceTable) {
+    let _ = table.publication(); // ui-error: E0624
+}
+#[cfg(ui_reject)]
+pub fn unbound_receive(receive: &LeRxChain<2>) {
+    let _ = receive.publication_head(); // ui-error: E0624
+}
+#[cfg(ui_reject)]
+pub fn address(scanning: &RxMemoryListPublished) {
+    let _ = scanning.head(); // ui-error: E0624
+}
+#[cfg(ui_reject)]
+pub fn unbound_phy(phy: &BlePhyEngineCpuOwned) {
+    let _ = phy.hardware_objects(); // ui-error: E0624
+}
+#[cfg(ui_reject)]
+pub fn unbound_df(df: &DirectionFindingWorkspaceCpuOwned) {
+    let _ = df.disabled_cte_descriptor(); // ui-error: E0624
+}
+#[cfg(ui_reject)]
+pub fn raw_publish(controller: &mut ControllerHal<'_>) {
+    let _ = controller.publish_scheduler_hardware_list_head( // ui-error: E0624
+        oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex::ZERO, None);
+}
+#[cfg(ui_reject)]
+pub fn raw_base<S: ControllerDmaSpace>() {
+    let _ = S::base(&0); // ui-error: E0599
 }

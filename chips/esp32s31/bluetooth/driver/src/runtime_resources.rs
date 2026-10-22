@@ -5,10 +5,8 @@
 //! HCI Host state and do not make the radio operational; stable ISR placement
 //! and powered hardware transitions remain separate stages.
 //!
-//! The powered task endpoint executes the scheduler executor's list-zero
-//! steps: it performs their hardware actions, takes their wait observations,
-//! starts the idle scheduler, captures finished lists and publishes the
-//! global receive chains.
+//! The powered task endpoint owns controller-time service and finished-list
+//! capture. Physical scheduler transactions and graph publication stay in HAL.
 
 use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 
@@ -21,11 +19,6 @@ use crate::{
     interrupt::SchedulerWakeCell,
     modem_lp_timer_queue::{ModemLpTimerEventCell, ModemLpTimerQueue, ModemLpTimerWorkerWakeCell},
     scheduler::SchedulerFinishedListWorker,
-};
-
-#[cfg(target_arch = "riscv32")]
-use oer_esp32s31_bluetooth_memory::scheduler::hardware::{
-    SchedulerHardware, live::HalPublications,
 };
 
 /// Event cells shared between the Controller's interrupt handlers and its
@@ -95,8 +88,6 @@ pub struct ControllerRuntimeResources<'cells, const MODEM_TIMER_CAPACITY: usize,
 {
     cells: &'cells ControllerEventCells<X>,
     scheduler_finished_lists: SchedulerFinishedListWorker,
-    #[cfg(target_arch = "riscv32")]
-    scheduler_hardware: SchedulerHardware<HalPublications>,
     modem_lp_timer_queue: ModemLpTimerQueue<MODEM_TIMER_CAPACITY>,
     modem_lp_timer_epoch: BluetoothModemLpTimerEpoch,
 }
@@ -171,8 +162,6 @@ impl<'runtime, X: SignalExecutor> ControllerInterruptRuntime<'runtime, X> {
 pub struct ControllerTaskRuntime<'runtime, X: SignalExecutor> {
     cells: &'runtime ControllerEventCells<X>,
     scheduler_finished_lists: SchedulerFinishedListWorker,
-    #[cfg(target_arch = "riscv32")]
-    scheduler_hardware: SchedulerHardware<HalPublications>,
 }
 
 impl<X: SignalExecutor> ControllerTaskRuntime<'_, X> {
@@ -193,10 +182,6 @@ impl<X: SignalExecutor> ControllerTaskRuntime<'_, X> {
         if self.scheduler_finished_lists.is_active() {
             return Err(ControllerRuntimeRetirementError::FinishedLists);
         }
-        #[cfg(target_arch = "riscv32")]
-        if !self.scheduler_hardware.is_quiet() {
-            return Err(ControllerRuntimeRetirementError::ListTransaction);
-        }
         Ok(())
     }
 }
@@ -214,10 +199,7 @@ pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor> {
     pub(crate) task: TaskResources,
     pub(crate) time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-    pub(crate) config: oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig,
-    /// The scanning RX list's publication of this epoch, which a scanner
-    /// start needs.
-    pub(crate) scanning_rx: Option<oer_esp32s31_hal::bluetooth::RxMemoryListPublished>,
+    pub(crate) config: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
 }
 
 /// Why the powered task endpoint cannot be retired yet.
@@ -236,7 +218,7 @@ impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
         task: TaskResources,
         time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
         standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-        config: oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig,
+        config: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
     ) -> Self {
         Self {
             runtime,
@@ -244,7 +226,6 @@ impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
             time_scale,
             _standalone_dtm_profile: standalone_dtm_profile,
             config,
-            scanning_rx: None,
         }
     }
 
@@ -296,7 +277,7 @@ impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
     /// Source-owned scheduler policy retained by this powered epoch.
     pub const fn scheduler_config(
         &self,
-    ) -> oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig {
+    ) -> oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig {
         self.config
     }
 
@@ -314,18 +295,22 @@ impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
 impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
     ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>
 {
-    /// Construct one pristine runtime epoch over `cells` without allocation
-    /// or MMIO.
-    pub const fn new(cells: &'cells ControllerEventCells<X>) -> Self {
+    /// Compile-time proof that the runtime can retain at least one timer.
+    pub const CAPACITY: usize = {
         assert!(
             MODEM_TIMER_CAPACITY > 0,
             "a Controller runtime needs at least one modem timer slot"
         );
+        MODEM_TIMER_CAPACITY
+    };
+
+    /// Construct one pristine runtime epoch over `cells` without allocation
+    /// or MMIO.
+    pub const fn new(cells: &'cells ControllerEventCells<X>) -> Self {
+        let _ = Self::CAPACITY;
         Self {
             cells,
             scheduler_finished_lists: SchedulerFinishedListWorker::new(),
-            #[cfg(target_arch = "riscv32")]
-            scheduler_hardware: SchedulerHardware::new(),
             modem_lp_timer_queue: ModemLpTimerQueue::new(),
             modem_lp_timer_epoch: BluetoothModemLpTimerEpoch::new(),
         }
@@ -343,15 +328,8 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
     ///
     /// The caller runs outside the event cells' executor.
     pub fn is_pristine(&self) -> Result<bool, ForeignContext> {
-        #[cfg(target_arch = "riscv32")]
-        let scheduler_hardware_is_pristine =
-            self.scheduler_hardware.is_quiet() && !self.scheduler_hardware.has_run();
-        #[cfg(not(target_arch = "riscv32"))]
-        let scheduler_hardware_is_pristine = true;
-
         Ok(self.cells.is_quiet()?
             && !self.scheduler_finished_lists.is_active()
-            && scheduler_hardware_is_pristine
             && self.modem_lp_timer_queue.is_empty()
             && self.modem_lp_timer_epoch.high_byte() == 0)
     }
@@ -377,8 +355,6 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
             ControllerTaskRuntime {
                 cells,
                 scheduler_finished_lists: self.scheduler_finished_lists,
-                #[cfg(target_arch = "riscv32")]
-                scheduler_hardware: self.scheduler_hardware,
             },
             ControllerModemTimerRuntime {
                 queue: self.modem_lp_timer_queue,
@@ -395,15 +371,10 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
 pub enum ControllerRuntimeRetirementError {
     /// A captured finished-list set is not drained.
     FinishedLists,
-    /// A list transaction holds a hardware publication.
-    ListTransaction,
 }
 
 #[cfg(target_arch = "riscv32")]
 mod scheduler;
-
-#[cfg(target_arch = "riscv32")]
-pub use scheduler::{ControllerRxChainError, ControllerScanStartError};
 
 #[cfg(test)]
 mod tests;

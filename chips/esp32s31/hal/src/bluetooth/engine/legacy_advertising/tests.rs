@@ -1,0 +1,265 @@
+use crate::bluetooth::engine::test_images::{ChannelFixture, image, priority};
+use bytemuck::Zeroable;
+use std::boxed::Box;
+
+use super::{LegacyAdvertisingError, LegacyAdvertisingPool, LegacyAdvertisingStorage};
+use crate::bluetooth::engine::{
+    AdvertisingCoexistencePriorities, SchedulerItemCoexistencePriority,
+    scheduler_pool::{
+        SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError, SchedulerRoleInstance,
+        SchedulerRolePoolStorage,
+    },
+};
+
+const PDU: [u8; 8] = [0x02, 6, 1, 2, 3, 4, 5, 6];
+
+fn pool() -> LegacyAdvertisingPool<'static, 'static, 2> {
+    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<
+        LegacyAdvertisingStorage,
+        2,
+    >::zeroed()));
+    let numbers = SchedulerAllocationConfig::new(4, 1, 0)
+        .unwrap()
+        .advertising(2, 2)
+        .unwrap();
+    LegacyAdvertisingPool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
+        crate::dma_static::Placed::host(storage),
+        numbers,
+    )
+    .expect("the pool fits controller SRAM")
+}
+
+fn priorities(lanes: [u8; 4]) -> AdvertisingCoexistencePriorities {
+    AdvertisingCoexistencePriorities {
+        lanes: lanes.map(|lane| SchedulerItemCoexistencePriority::new(lane).unwrap()),
+    }
+}
+
+fn all_channels() -> ChannelFixture {
+    ChannelFixture::new(true, true, true).unwrap()
+}
+
+fn reset(
+    pool: &mut LegacyAdvertisingPool<'static, 'static, 2>,
+) -> SchedulerRoleInstance<'static, 'static> {
+    let instance = pool.acquire().unwrap();
+    pool.prepare_packet(&instance, &PDU).unwrap();
+    pool.reset_link_state(
+        &instance,
+        crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
+        crate::bluetooth::engine::LegacyAdvertisingOwnAddress::Public,
+        priority(),
+    )
+    .unwrap();
+    instance
+}
+
+fn item_number(
+    pool: &LegacyAdvertisingPool<'static, 'static, 2>,
+    instance: &SchedulerRoleInstance<'static, 'static>,
+    item: usize,
+) -> u16 {
+    let (graph, _, _) = pool.shared(instance).unwrap();
+    graph.items[item].layout.allocation_number().read().value()
+}
+
+#[test]
+fn every_item_carries_its_instance_number() {
+    let mut pool = pool();
+    let first = pool.acquire().unwrap();
+    let second = pool.acquire().unwrap();
+    for item in 0..3 {
+        assert_eq!(item_number(&pool, &first, item), 2);
+        assert_eq!(item_number(&pool, &second, item), 3);
+    }
+}
+
+#[test]
+fn an_event_lowers_one_unlinked_item_per_channel() {
+    let mut pool = pool();
+    let instance = reset(&mut pool);
+    let event = pool
+        .prepare_event(
+            &instance,
+            &image(all_channels(), 1_000, 128, 0),
+            priorities([4, 0, 13, 13]),
+        )
+        .unwrap();
+    assert_eq!(
+        event.items().collect::<std::vec::Vec<_>>(),
+        [(0, 1_000, 1_128), (1, 1_128, 1_256), (2, 1_256, 1_384)]
+    );
+    let (graph, _, _) = pool.shared(&instance).unwrap();
+    for item in &graph.items {
+        assert_eq!(item.header().hardware_next_image(), 0);
+        // Each channel item carries the event's coexistence lanes.
+        assert_eq!(
+            {
+                let image = item.layout.coexistence_priority().read();
+                [
+                    image.lane_0(),
+                    image.lane_1(),
+                    image.lane_2(),
+                    image.lane_3(),
+                ]
+            },
+            [4, 0, 13, 13]
+        );
+    }
+    assert_eq!(graph.link_state.scheduler_head(), 0);
+    assert_eq!(pool.pdu(&instance), Some(&PDU[..]));
+}
+
+#[test]
+fn only_prepared_items_are_submitted_and_the_space_links_them() {
+    let mut pool = pool();
+    let instance = reset(&mut pool);
+    assert_eq!(
+        pool.submit(&instance, 0),
+        Err(SchedulerPoolError::NotPrepared)
+    );
+    let channel_37 = ChannelFixture::new(true, false, false).unwrap();
+    pool.prepare_event(
+        &instance,
+        &image(channel_37, 0, 100, 0),
+        priorities([15; 4]),
+    )
+    .unwrap();
+    assert_eq!(
+        pool.submit(&instance, 1),
+        Err(SchedulerPoolError::NotPrepared)
+    );
+    let id = pool.submit(&instance, 0).unwrap();
+
+    let space = SchedulerItemSpace::new().with(&pool);
+    space.prepare_for_list(id, None, None);
+    assert_eq!(space.completion_status(id), None);
+    // The CPU cannot touch the instance while its item is listed.
+    assert_eq!(
+        pool.finish_event(&instance),
+        Err(LegacyAdvertisingError::Pool(
+            SchedulerPoolError::InstanceBusy
+        ))
+    );
+    pool.retire(id).unwrap();
+    pool.finish_event(&instance).unwrap();
+    // The next event starts from the allocation-time items again.
+    pool.prepare_event(
+        &instance,
+        &image(all_channels(), 500, 100, 0),
+        priorities([15; 4]),
+    )
+    .unwrap();
+}
+
+#[test]
+fn finishing_an_event_restores_the_allocation_image() {
+    let mut pool = pool();
+    let instance = reset(&mut pool);
+    let before: std::vec::Vec<_> = pool
+        .shared(&instance)
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .map(|item| crate::bluetooth::engine::shared_layout::SchedulerItemImage::read(&item.layout))
+        .collect();
+    pool.prepare_event(
+        &instance,
+        &image(all_channels(), 1_000, 128, 0),
+        priorities([15; 4]),
+    )
+    .unwrap();
+    pool.finish_event(&instance).unwrap();
+    let after: std::vec::Vec<_> = pool
+        .shared(&instance)
+        .unwrap()
+        .0
+        .items
+        .iter()
+        .map(|item| crate::bluetooth::engine::shared_layout::SchedulerItemImage::read(&item.layout))
+        .collect();
+    assert_eq!(before, after);
+    let (graph, binding, _) = pool.shared(&instance).unwrap();
+    assert_eq!(
+        graph.link_state.scheduler_head(),
+        binding.items[0].controller_address().address()
+    );
+}
+
+#[test]
+fn refused_steps_keep_the_instance_state() {
+    let mut pool = pool();
+    let instance = pool.acquire().unwrap();
+    assert_eq!(
+        pool.reset_link_state(
+            &instance,
+            crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
+            crate::bluetooth::engine::LegacyAdvertisingOwnAddress::Public,
+            priority()
+        ),
+        Err(LegacyAdvertisingError::State)
+    );
+    assert!(matches!(
+        pool.prepare_packet(&instance, &[0x02, 7, 1, 2, 3]),
+        Err(LegacyAdvertisingError::Packet(_))
+    ));
+    pool.prepare_packet(&instance, &PDU).unwrap();
+    assert_eq!(
+        pool.prepare_packet(&instance, &PDU),
+        Err(LegacyAdvertisingError::State)
+    );
+    pool.clear(&instance).unwrap();
+    assert_eq!(pool.pdu(&instance), None);
+    pool.prepare_packet(&instance, &PDU).unwrap();
+    pool.release(instance).unwrap();
+}
+
+#[test]
+fn the_controller_inserts_the_advertiser_address_before_the_data() {
+    let mut pool = pool();
+    let instance = pool.acquire().unwrap();
+    let expected = [0x42, 9, 1, 2, 3, 4, 5, 0xc6, 2, 1, 6];
+    pool.prepare_packet(&instance, &expected).unwrap();
+    pool.reset_link_state(
+        &instance,
+        crate::bluetooth::engine::LeTxPower::from_dbm(7).expect("provider level"),
+        crate::bluetooth::engine::LegacyAdvertisingOwnAddress::Random([1, 2, 3, 4, 5, 0xc6]),
+        priority(),
+    )
+    .unwrap();
+    let (graph, _, state) = pool.shared(&instance).unwrap();
+    let super::LegacyAdvertisingState::Reset(length) = *state else {
+        panic!("the reset state keeps the packet length")
+    };
+    assert_eq!(
+        graph
+            .tx_packet
+            .model_transmitted_pdu(length, [1, 2, 3, 4, 5, 0xc6]),
+        expected
+    );
+    assert_eq!(pool.pdu(&instance), Some(&expected[..]));
+}
+
+#[test]
+fn reset_refuses_a_short_address_before_changing_the_packet() {
+    let mut pool = pool();
+    let instance = pool.acquire().expect("fixture slot");
+    pool.prepare_packet(&instance, &[0x02, 0])
+        .expect("a complete empty PDU");
+    assert_eq!(
+        pool.reset_link_state(
+            &instance,
+            crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
+            crate::bluetooth::engine::LegacyAdvertisingOwnAddress::Public,
+            priority()
+        ),
+        Err(LegacyAdvertisingError::Pdu(
+            crate::bluetooth::engine::LegacyAdvertisingPduError::MissingAdvertiserAddress
+        ))
+    );
+    assert_eq!(pool.pdu(&instance), Some(&[0x02, 0][..]));
+    pool.clear(&instance)
+        .expect("rejection retained CPU custody");
+    pool.release(instance).expect("nothing was listed");
+}

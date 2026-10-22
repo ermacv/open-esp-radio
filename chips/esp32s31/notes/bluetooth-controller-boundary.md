@@ -3,9 +3,9 @@
 This reference separates silicon lifecycle requirements from the vendor
 Controller software architecture. Pinned public glue describes clock, reset,
 PHY, interrupt and platform ordering; it does not make FreeRTOS queues,
-allocators or callback registries hardware requirements. Production hardware
-ownership belongs to the open Bluetooth driver, which this repository does
-not contain.
+allocators or callback registries hardware requirements. Production controller-memory ownership belongs to the HAL Bluetooth engine;
+the Bluetooth driver owns role value builders and initialization sequencing.
+BLE is not linked into a firmware image.
 
 ## Pinned public inputs
 

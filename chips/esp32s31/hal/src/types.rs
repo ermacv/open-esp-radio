@@ -5,11 +5,9 @@
 //! register block, raw accessor, or generic MMIO capability is re-exported.
 
 pub use oer_esp32s31_pac::{
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-    BluetoothMemoryListSelector, BluetoothPhyEnvironmentAddress,
-    BluetoothPhyEnvironmentAddressError, BluetoothPhyRegisterInitInputs, CfrValue,
-    CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource, CoexTimerPtiValue,
-    CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
+    BluetoothMemoryListSelector, CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
+    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
+    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
     ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain, Ieee802154ObservedEventState,
     Ieee802154OperationRxAbortEnableObservation, Ieee802154RxAbortReason,
     Ieee802154RxAbortReasonObservation, Ieee802154ValidationEdDurationState,
@@ -50,3 +48,8 @@ pub use crate::phy::restore::{
 
 pub use crate::ieee80211::station_wake::StaTbttScheduleError;
 pub use oer_esp32s31_pac::WifiRxCsiControlMask;
+
+pub(crate) use oer_esp32s31_pac::{
+    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
+    BluetoothPhyRegisterInitInputs,
+};

@@ -185,7 +185,7 @@ first; the two operations touch disjoint hardware.
 a zeroed `0x48`-byte scheduler context, the scheduler item, the bound RX
 packet and header, the unbound swap header and the bound TX packet and
 header. It returns `-1` for the link state and `2`, `3`, `4`, `5` for the
-later stages, freeing every partial allocation. The open memory crate reserves
+later stages, freeing every partial allocation. The HAL engine reserves
 the graph as one non-movable static allocation retained by a movable CPU
 owner and does not preserve those integers as its API.
 
@@ -257,7 +257,7 @@ wrapping 16-bit receive count. While the test stays active, it builds the next
 event through `sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1` whatever the status.
 
 With capacity one, the two bound RX header slots alternate deterministically
-between packet-bearing tail and packetless predecessor. The memory crate
+between packet-bearing tail and packetless predecessor. The HAL engine
 models that bounded rotation, exposes no raw header words and returns either
 no packet or one typed result projection. The executor's completion walk
 returns every executed item; the radio role then drained its receive graph and

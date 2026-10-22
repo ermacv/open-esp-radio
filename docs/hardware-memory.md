@@ -299,6 +299,31 @@ publishes their addresses without a window check. A buffer lent from outside
 placed storage has no source yet; it returns as a loan type, checked once where
 the loan is made, with the first such buffer.
 
+## Bluetooth controller memory
+
+`oer_esp32s31_hal::bluetooth::engine` retains the component codecs and
+CPU/controller ownership protocol. The BLE driver enables the HAL's
+`bluetooth-engine` feature; Wi-Fi images retain their dependency graph.
+PHY, DF, device table, role pools and receive chains each retain their own
+placed allocation and private bindings. The driver's PHY lifecycle holds
+separate PHY and DF owners through initialization, activation and shutdown.
+
+Driver role builders select profiles, phases, channels and event windows.
+Their detached values contain no layout reference or inspectable pointer.
+HAL encodes physical fields and checks binding anchors before committing a
+value. Raw binding constructors, layout projections and address publication
+primitives are private; PHY/DF, table and RX publication goes through the
+owner of the corresponding graph. Debug output of opaque projections and
+scheduler steps does not reveal address-bearing words.
+
+Generative pool and epoch scopes bind affine leases to one pool installation;
+release consumes the lease. Hardware heads resolve against submitted items
+inside HAL and return logical identities. An acquisition generation prevents
+an old identity from naming a reused slot. The asynchronous scope helpers
+retain these brands across task suspension without allocation. Physical
+scheduler transactions and interrupt-owner lending remain in HAL under the
+Sources exception.
+
 ## Where registers, layouts and the protocol meet
 
 - **One IP block, one description.** A layout belongs to the peripheral that

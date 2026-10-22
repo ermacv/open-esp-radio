@@ -12,13 +12,6 @@ fn one_aggregate_starts_as_one_pristine_bounded_epoch() {
 }
 
 #[test]
-#[should_panic(expected = "at least one modem timer slot")]
-fn zero_modem_timer_capacity_profile_is_rejected() {
-    let cells = ControllerEventCells::host();
-    let _resources = ControllerRuntimeResources::<0, _>::new(&cells);
-}
-
-#[test]
 fn split_shares_one_set_of_cells_between_interrupt_and_task_endpoints() {
     let cells = ControllerEventCells::host();
     let (interrupt, mut task, modem_timer) =

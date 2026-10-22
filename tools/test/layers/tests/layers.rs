@@ -46,7 +46,6 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/esp32s31/pac",
     "chips/esp32c5/hal",
     "chips/esp32s31/hal",
-    "chips/esp32s31/bluetooth/memory",
     "chips/esp32c5/board",
     "chips/esp32s31/board",
     "chips/espressif/staged-bootstrap",

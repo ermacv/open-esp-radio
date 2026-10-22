@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `lease`
+  --> tests/ui/bluetooth_release_once.rs:11:26
+   |
+ 7 |     lease: SchedulerRoleInstance<'pool, 'epoch>,
+   |     ----- move occurs because `lease` has type `SchedulerRoleInstance<'_, '_>`, which does not implement the `Copy` trait
+ 8 | ) {
+ 9 |     let _ = pool.release(lease);
+   |                          ----- value moved here
+10 |     #[cfg(all())]
+11 |     let _ = pool.release(lease); // ui-error: E0382
+   |                          ^^^^^ value used here after move

@@ -33,7 +33,9 @@ use {
     oer_esp32s31_hal::bluetooth::DirectionFindingDisabledBaselineOwner,
     oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
-    oer_esp32s31_hal::bluetooth::{BlePhyHardwareObjects, DirectionFindingDescriptor},
+    oer_esp32s31_hal::bluetooth::engine::{
+        BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned,
+    },
     oer_esp32s31_hal::domain::RadioDomain,
 };
 
@@ -275,10 +277,9 @@ impl TaskResources {
     pub(crate) fn enable_ble_base_stack_hardware<B: PlatformClockBackend, T>(
         &mut self,
         radio: &mut RadioDomain<B, T>,
-        objects: &BlePhyHardwareObjects,
+        storage: &BlePhyEngineCpuOwned,
     ) {
-        self.registers
-            .enable_ble_base_stack_hardware(radio, objects);
+        storage.initialize_registers(&mut self.registers, radio);
     }
 
     /// Publish this epoch's public Controller identity after BLE PHY init.
@@ -300,11 +301,9 @@ impl TaskResources {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn prepare_direction_finding_disabled_baseline(
         &mut self,
-        descriptor: &DirectionFindingDescriptor,
+        workspace: &DirectionFindingWorkspaceCpuOwned,
     ) -> DirectionFindingDisabledBaselineOwner {
-        self.registers
-            .borrow_bluetooth_controller()
-            .prepare_direction_finding_disabled_baseline(descriptor)
+        workspace.publish_disabled_baseline(&mut self.registers.borrow_bluetooth_controller())
     }
 
     /// Reunite a quiescent task owner with its inactive interrupt owner.

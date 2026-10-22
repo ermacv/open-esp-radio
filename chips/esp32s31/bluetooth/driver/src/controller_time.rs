@@ -645,7 +645,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(target_arch = "riscv32")]
     pub(crate) const fn project_le_packet_capture(
         self,
-        captured: oer_esp32s31_bluetooth_memory::LePacketCapturedTime,
+        captured: oer_esp32s31_hal::bluetooth::engine::LePacketCapturedTime,
     ) -> u32 {
         self.project_raw_ticks(captured.wrapping_controller_ticks())
     }
@@ -657,7 +657,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(target_arch = "riscv32")]
     pub(crate) const fn project_peripheral_connection_capture(
         self,
-        captured: oer_esp32s31_bluetooth_memory::PeripheralConnectionCapturedAnchorTime,
+        captured: oer_esp32s31_hal::bluetooth::engine::PeripheralConnectionCapturedAnchorTime,
     ) -> u32 {
         self.project_raw_ticks(captured.wrapping_controller_ticks())
     }
@@ -665,7 +665,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_start(
         self,
-        window: oer_esp32s31_bluetooth_memory::scheduler::SchedulerRawWindow,
+        window: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.start())
     }
@@ -673,7 +673,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_end(
         self,
-        window: oer_esp32s31_bluetooth_memory::scheduler::SchedulerRawWindow,
+        window: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.end())
     }
@@ -681,7 +681,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_receive_time(
         self,
-        time: oer_esp32s31_bluetooth_memory::PeripheralConnectionReceiveTime,
+        time: oer_esp32s31_hal::bluetooth::engine::PeripheralConnectionReceiveTime,
     ) -> u32 {
         self.project_raw_ticks(time.wrapping_controller_ticks())
     }

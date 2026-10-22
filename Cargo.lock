@@ -2733,23 +2733,11 @@ dependencies = [
  "critical-section",
  "oer-bluetooth-hci",
  "oer-bluetooth-le-radio",
- "oer-esp32s31-bluetooth-memory",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-interrupt-table",
+ "oer-test-ui-cases",
  "oer-time",
-]
-
-[[package]]
-name = "oer-esp32s31-bluetooth-memory"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oer-esp32s31-hal",
- "oer-esp32s31-knowledge",
- "oer-time",
- "pin-project",
- "vcell",
 ]
 
 [[package]]
@@ -2768,6 +2756,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "critical-section",
+ "oer-esp32s31-knowledge",
  "oer-esp32s31-pac",
  "oer-espressif-analog",
  "oer-espressif-coex",

@@ -6,7 +6,7 @@ use crate::{
     },
     scheduler::SchedulerInitialized,
 };
-use oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig;
+use oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig;
 use oer_interrupt_table::signal::SignalExecutor;
 
 use oer_esp32s31_hal::bluetooth::{
@@ -148,7 +148,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
 
     /// Hand the task owner and software workers to their endpoints once the
     /// interrupt bank and timer hardware were activated.
-    pub fn split_runtime(self) -> ControllerRuntimeEndpoints<'cells, MODEM_TIMER_CAPACITY, X> {
+    pub(crate) fn split_runtime(
+        self,
+    ) -> ControllerRuntimeEndpoints<'cells, MODEM_TIMER_CAPACITY, X> {
         assert!(
             self.timer_hardware.is_none(),
             "the timer hardware is activated before the runtime splits"

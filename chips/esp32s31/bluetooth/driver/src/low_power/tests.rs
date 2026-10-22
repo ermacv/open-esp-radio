@@ -16,6 +16,7 @@ fn scheduler(
         |_, _| {},
     )
     .initialize_scheduler_for_validation(ControllerRuntimeResources::new(cells))
+    .expect("pristine host runtime")
 }
 
 #[test]
