@@ -1085,6 +1085,10 @@ impl PhyCalibrationTxDcPwdetTransition {
 }
 
 impl PhyCalibrationChannelTransition {
+    pub(crate) const fn is_terminal(&self) -> bool {
+        self.child.is_terminal()
+    }
+
     fn lower(
         parent_action: PhyCalibrationTrackingAction,
         parameters: crate::channel::PhyChipChannelParameters,

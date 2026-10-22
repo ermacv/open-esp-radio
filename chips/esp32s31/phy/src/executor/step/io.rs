@@ -163,14 +163,17 @@ impl Io<'_, '_> {
         *completion = Some(result);
         Ok(waiting)
     }
+    #[inline(never)]
     pub(super) fn rx_gain<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         clock: &C,
-        binding: crate::rx::gain::PhyRxGainInitExternalBinding,
-    ) -> Result<crate::rx::gain::PhyRxGainInitCompletion, Failure> {
+        binding: &mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+        completion: &mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
+    ) -> Result<bool, Failure> {
+        let binding = binding.take().ok_or(Failure::Binding)?;
         #[cfg(not(target_arch = "riscv32"))]
         let _ = clock;
-        match self {
+        let result = match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => {
                 super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
@@ -181,7 +184,10 @@ impl Io<'_, '_> {
             }
             #[cfg(test)]
             Self::Test(io, _) => io.rx_gain::<D>(binding),
-        }
+        }?;
+        let waiting = super::rx_gain::waiting(result);
+        *completion = Some(result);
+        Ok(waiting)
     }
     pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,

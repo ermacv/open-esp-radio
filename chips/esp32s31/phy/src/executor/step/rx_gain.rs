@@ -28,38 +28,67 @@ pub(super) fn waiting(completion: PhyRxGainInitCompletion) -> bool {
     )
 }
 
-pub(crate) async fn complete<
-    D: crate::executor::wait::PhyShortDelay,
+pin_project_lite::pin_project! {
+    struct Complete<F> { #[pin] inner: F }
+}
+impl<F: core::future::Future<Output = Result<PhyRxGainInitCompletion, Failure>>>
+    core::future::Future for Complete<F>
+{
+    type Output = Result<PhyRxGainInitCompletion, Failure>;
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().inner.poll(cx)
+    }
+}
+
+pub(crate) fn complete<
+    'a,
+    D: crate::executor::wait::PhyShortDelay + 'a,
     R: super::Registers,
     T: oer_time::Timer,
 >(
     binding: crate::rx::gain::PhyRxGainInitExternalBinding,
-    registers: &mut R,
-    timer: &T,
-) -> Result<PhyRxGainInitCompletion, Failure> {
-    use crate::{
-        analog::rfpll::RfpllFrequencyExternalBinding as Frequency,
-        rx::gain::PhyRxGainInitExternalBinding as Binding,
-        rx::gain_calibration::PhyRxGainDcExternalBinding as Dc,
-    };
-    // Cold RFPLL retains its counted, timer-delivered I2C policy.
-    if let Binding::Dc(Dc::Rfpll(Frequency::I2c(mut binding))) = binding {
-        let mut job = super::Job::counted_i2c(binding.transaction_mut(), timer.now())?;
-        super::drive::<D, _, _>(&mut job, registers, timer, None, None, None).await?;
-        return binding
-            .into_completion()
-            .map(|done| PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Rfpll(done)))
-            .map_err(|_| Failure::Binding);
+    registers: &'a mut R,
+    timer: &'a T,
+) -> impl core::future::Future<Output = Result<PhyRxGainInitCompletion, Failure>> + 'a {
+    Complete {
+        inner: async move {
+            use crate::{
+                analog::rfpll::RfpllFrequencyExternalBinding as Frequency,
+                rx::gain::PhyRxGainInitExternalBinding as Binding,
+                rx::gain_calibration::PhyRxGainDcExternalBinding as Dc,
+            };
+            // Cold RFPLL retains its counted, timer-delivered I2C policy.
+            if let Binding::Dc(Dc::Rfpll(Frequency::I2c(mut binding))) = binding {
+                let mut job = super::Job::counted_i2c(binding.transaction_mut(), timer.now())?;
+                super::drive::<D, _, _>(&mut job, registers, timer, None, None, None).await?;
+                return binding
+                    .into_completion()
+                    .map(|done| PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Rfpll(done)))
+                    .map_err(|_| Failure::Binding);
+            }
+            let mut binding = Some(binding);
+            let mut completion = None;
+            let mut job = super::Job::rx_gain_atom(&mut binding, &mut completion, timer.now())?;
+            super::drive::<D, _, _>(&mut job, registers, timer, None, None, None).await?;
+            completion.ok_or(Failure::Binding)
+        },
     }
-    let mut binding = Some(binding);
-    let mut completion = None;
-    let mut job = super::Job::rx_gain_atom(&mut binding, &mut completion, timer.now())?;
-    super::drive::<D, _, _>(&mut job, registers, timer, None, None, None).await?;
-    completion.ok_or(Failure::Binding)
+}
+
+/// Command and result storage belongs to the retained RX owner, not a poll frame.
+#[derive(Default)]
+pub(crate) struct Scratch {
+    pub(super) binding: Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+    pub(super) completion: Option<PhyRxGainInitCompletion>,
 }
 
 pub(super) struct Run<'a> {
     pub(super) transition: &'a mut PhyRxGainInitTransition,
+    pub(super) scratch: &'a mut Scratch,
     pub(super) execution: &'a mut RxGainExecution,
     pub(super) phase: Phase,
     pub(super) measured: bool,
@@ -95,11 +124,17 @@ impl Run<'_> {
             return Err(Failure::Binding);
         }
         self.observe(self.transition.action());
-        let binding =
+        self.scratch.binding = Some(
             crate::rx::gain::PhyRxGainInitExternalBinding::lower(self.transition.action())
-                .map_err(|_| Failure::Binding)?;
+                .map_err(|_| Failure::Binding)?,
+        );
         let lowered = self.measured.then(|| clock.now());
-        let completion = io.rx_gain::<D, _>(clock, binding)?;
+        let waiting = io.rx_gain::<D, _>(
+            clock,
+            &mut self.scratch.binding,
+            &mut self.scratch.completion,
+        )?;
+        let completion = self.scratch.completion.take().ok_or(Failure::Binding)?;
         let completed = self.measured.then(|| clock.now());
         if let PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
             PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(completion)),
@@ -117,7 +152,6 @@ impl Run<'_> {
                 _ => {}
             }
         }
-        let waiting = waiting(completion);
         self.transition
             .advance(completion)
             .map_err(|_| Failure::Binding)?;

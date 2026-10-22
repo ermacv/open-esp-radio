@@ -25,12 +25,19 @@ fn complete_entries_cross_real_poll_boundaries_before_the_root_tail() {
     let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
     let mut transition = publisher();
+    let mut scratch = crate::executor::step::rx_gain::Scratch::default();
     let mut execution = crate::tracking::observation::RxGainExecution::default();
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     while transition.phase().is_some() {
-        let mut job =
-            Job::rx_gain(&mut transition, &mut execution, clock.now(), false).expect("clock fits");
+        let mut job = Job::rx_gain(
+            &mut transition,
+            &mut scratch,
+            &mut execution,
+            clock.now(),
+            false,
+        )
+        .expect("clock fits");
         let atoms = io.atoms.clone();
         let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
             &mut job, &mut io, &clock, None, None, None
@@ -68,12 +75,19 @@ fn dropped_publication_does_not_finish_or_run_another_entry() {
     let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
     let mut transition = publisher();
+    let mut scratch = crate::executor::step::rx_gain::Scratch::default();
     let mut execution = crate::tracking::observation::RxGainExecution::default();
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
-        let mut job =
-            Job::rx_gain(&mut transition, &mut execution, clock.now(), false).expect("clock fits");
+        let mut job = Job::rx_gain(
+            &mut transition,
+            &mut scratch,
+            &mut execution,
+            clock.now(),
+            false,
+        )
+        .expect("clock fits");
         let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
             &mut job, &mut io, &clock, None, None, None
         ));

@@ -180,6 +180,7 @@ impl<'a> Job<'a> {
     }
     pub(crate) fn rx_gain(
         transition: &'a mut crate::rx::gain::PhyRxGainInitTransition,
+        scratch: &'a mut rx_gain::Scratch,
         execution: &'a mut crate::tracking::observation::RxGainExecution,
         now: Instant,
         measured: bool,
@@ -188,6 +189,7 @@ impl<'a> Job<'a> {
         let mut job = Self::new(
             Work::RxGain(rx_gain::Run {
                 transition,
+                scratch,
                 execution,
                 phase,
                 measured,
@@ -324,13 +326,11 @@ impl<'a> Job<'a> {
                 binding,
                 completion,
             } => {
-                let Some(binding) = binding.take() else {
+                if binding.is_none() {
                     return Ok(Step::Complete);
-                };
-                let result = io.rx_gain::<D, _>(clock, binding)?;
-                let waiting = rx_gain::waiting(result);
-                **completion = Some(result);
-                return if waiting {
+                }
+                self.ready_started = Some(clock.now());
+                return if io.rx_gain::<D, _>(clock, binding, completion)? {
                     Ok(Step::WaitAt(
                         now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
                     ))

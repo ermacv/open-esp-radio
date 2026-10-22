@@ -1916,11 +1916,12 @@ impl<
                     .borrow_mut()
                     .tracking_operation(Operation::RxGain, Event::PollStarted);
                 let mut timing = crate::tracking::observation::EngineTiming::default();
+                let mut child = transition
+                    .begin_rx_gain_recalibration()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
                 let result = calibration::rx_gain::<D, _, _>(
                     self.timer,
-                    transition
-                        .begin_rx_gain_recalibration()
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                    &mut child,
                     self.platform,
                     self.registers,
                     |operation, event| {
@@ -1940,19 +1941,26 @@ impl<
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::RxGain, Event::PollReady);
-                result?
+                result?;
+                child
+                    .commit()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
             }
             PhyCalibrationTrackingAction::RestoreChipChannel { .. } => {
+                let mut child = transition
+                    .begin_channel_restore()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
                 calibration::channel::<D, _, _, _>(
                     self.timer,
-                    transition
-                        .begin_channel_restore()
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                    &mut child,
                     self.platform,
                     self.registers,
                     &mut *self.observer,
                 )
-                .await?
+                .await?;
+                child
+                    .commit()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
             }
             PhyCalibrationTrackingAction::ForceTxRxOff { .. } => {
                 TargetCompleter::<D, T>::new(self.timer).run_calibration_force_txrx(

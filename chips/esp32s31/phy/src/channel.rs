@@ -603,6 +603,10 @@ impl PhyChipChannelTransition {
         }
     }
 
+    pub(crate) const fn is_terminal(&self) -> bool {
+        matches!(&self.step, Step::Complete(_) | Step::Failed(_))
+    }
+
     pub const fn action(self) -> PhyChipChannelAction {
         match self.step {
             Step::DisableAgc => PhyChipChannelAction::SetAgc { enabled: false },

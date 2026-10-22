@@ -150,13 +150,13 @@ fn dcode_poll<
 /// Run RX-DC calibration and publish both gain banks using the admitted owner.
 pub async fn rx_gain<D: PhyShortDelay, P, T: oer_time::Timer>(
     clock: &T,
-    mut child: PhyCalibrationRxGainTransition,
+    child: &mut PhyCalibrationRxGainTransition,
     platform: &mut P,
     registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     observe: impl FnMut(crate::tracking::observation::Operation, crate::tracking::observation::Event),
     summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
     timing: Option<&mut crate::tracking::observation::EngineTiming>,
-) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
+) -> Result<(), PhyTargetPortError> {
     rx_gain_init::<D, _, _>(
         clock,
         child.transition_mut(),
@@ -166,10 +166,7 @@ pub async fn rx_gain<D: PhyShortDelay, P, T: oer_time::Timer>(
         summarize,
         timing,
     )
-    .await?;
-    child
-        .commit()
-        .map_err(|_| PhyTargetPortError::UnexpectedBinding)
+    .await
 }
 
 /// Advance the retained coefficient owner; only its caller publishes the result.
@@ -250,8 +247,15 @@ fn rx_gain_phase<
     RxGain {
         inner: async move {
             use crate::executor::step::{Job, drive};
-            let mut job = Job::rx_gain(child, execution, clock.now(), timing.is_some())
-                .map_err(super::step::port_error)?;
+            let mut scratch = crate::executor::step::rx_gain::Scratch::default();
+            let mut job = Job::rx_gain(
+                child,
+                &mut scratch,
+                execution,
+                clock.now(),
+                timing.is_some(),
+            )
+            .map_err(super::step::port_error)?;
             drive::<D, _, _>(&mut job, registers, clock, timing, None, None)
                 .await
                 .map_err(super::step::port_error)
@@ -339,11 +343,11 @@ fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
 /// Restore the operating channel without acquiring or releasing physical access.
 pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Timer>(
     clock: &T,
-    mut child: PhyCalibrationChannelTransition,
+    child: &mut PhyCalibrationChannelTransition,
     _platform: &mut P,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     observer: &mut O,
-) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
+) -> Result<(), PhyTargetPortError> {
     use crate::{
         channel::PhyChipChannelCompletion as Done,
         executor::step::{Job, drive},
@@ -351,15 +355,12 @@ pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Tim
     };
     let mut timing = EngineTiming::default();
     for _ in 0..RF_OPERATION_LIMIT {
-        child = match child.commit() {
-            Ok(completion) => {
-                if O::OBSERVE_ENGINE_POLLS {
-                    observer.engine_completed(Operation::ChannelRestore, timing);
-                }
-                return Ok(completion);
+        if child.is_terminal() {
+            if O::OBSERVE_ENGINE_POLLS {
+                observer.engine_completed(Operation::ChannelRestore, timing);
             }
-            Err(child) => child,
-        };
+            return Ok(());
+        }
         let mut binding = Some(
             child
                 .lower_external()
