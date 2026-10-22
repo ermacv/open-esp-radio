@@ -4595,3 +4595,32 @@ fn an_amsdu_with_a_malformed_tail_cannot_start_the_handshake() {
         assert_eq!(world.eapol.len(), before);
     });
 }
+
+#[test]
+fn data_receive_requires_the_live_connection_epoch() {
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        let frame = downlink_amsdu(&[(LOCAL, 0x0800, b"data")]);
+        let mut delivered = 0;
+        world
+            .station
+            .receive(at(40), &frame, meta(), |_| delivered += 1)
+            .unwrap();
+        assert_eq!(delivered, 1);
+        let epoch = world.station.epoch.take();
+        let result = world
+            .station
+            .receive(at(41), &frame, meta(), |_| delivered += 1);
+        assert_eq!(
+            result,
+            Err(oer_ieee80211_upper_mac::receive::RxDropReason::NotConnected.into())
+        );
+        assert_eq!(delivered, 1);
+        world.station.epoch = epoch;
+        world
+            .station
+            .receive(at(42), &frame, meta(), |_| delivered += 1)
+            .unwrap();
+        assert_eq!(delivered, 2);
+    });
+}

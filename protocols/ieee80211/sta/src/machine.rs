@@ -4241,7 +4241,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
         let State::Connected(connected) = state else {
             return false;
         };
-        if connected.confirmation.is_some() || self.absence.is_some() || connected.power.asleep() {
+        if self.epoch.is_none()
+            || connected.confirmation.is_some()
+            || self.absence.is_some()
+            || connected.power.asleep()
+        {
             return false;
         }
         matches!(self.keys.pairwise, KeyCell::Installed(_)) == connected.rsn.as_ref().is_some()
