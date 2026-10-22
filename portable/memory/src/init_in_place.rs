@@ -26,9 +26,9 @@
 macro_rules! init_in_place {
     ($storage:expr, $($ty:ident)::+ { $($field:ident $kind:tt $value:expr),+ $(,)? }) => {{
         let __storage: &mut $crate::__core::mem::MaybeUninit<_> = $storage;
-        // This never runs or captures inputs. Rust checks the complete
+        // This never runs or evaluates field inputs. Rust checks the complete
         // initializer, including field visibility and construction safety.
-        $crate::__InitField::check(__storage, |($($field,)+)| $($ty)::+ { $($field),+ });
+        let _ = || $crate::__InitField::check(__storage, |($($field,)+)| $($ty)::+ { $($field),+ });
         let __pointer = __storage.as_mut_ptr();
         let __fields = ($($crate::init_in_place!(@field __pointer, $field $kind $value),)+);
         // All fields now belong to the complete value, not the cleanup guards.
