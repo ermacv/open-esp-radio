@@ -40,6 +40,8 @@ mod executor;
 mod level;
 #[cfg(feature = "port-slots")]
 pub mod port_slot;
+#[cfg(any(feature = "chip", test))]
+mod ready;
 #[cfg(feature = "chip")]
 #[allow(
     clippy::disallowed_methods,
@@ -52,12 +54,15 @@ mod systimer_ack;
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;
+#[cfg(any(feature = "chip", all(test, feature = "trace-tests")))]
+mod trace;
 
 #[cfg(feature = "chip")]
 pub use doorbell::{Doorbell, DoorbellAcknowledger};
 #[cfg(feature = "chip")]
 pub use executor::{
-    Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, wake_handler,
+    Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,
+    wake_handler,
 };
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};

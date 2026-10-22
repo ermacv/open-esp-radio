@@ -25,11 +25,14 @@ pub(crate) const NO_EXECUTOR: u8 = u8::MAX;
 
 /// One wake flag per software interrupt; zero is "no work pending".
 #[repr(transparent)]
-struct WorkPending([AtomicBool; SOFTWARE_INTERRUPT_COUNT]);
+struct WorkPending([crate::ready::ReadyState; SOFTWARE_INTERRUPT_COUNT]);
 
-#[allow(unsafe_code, reason = "false flags are zero bytes")]
-// SAFETY: `portable_atomic::AtomicBool` has the in-memory representation of
-// `bool` (its documented guarantee), so zero bytes are `false` flags.
+#[allow(
+    unsafe_code,
+    reason = "zero ready counts and wake flags are zero bytes"
+)]
+// SAFETY: ReadyState is transparent over AtomicU8, whose documented
+// representation is u8. Zero means zero ready tokens and a clear wake flag.
 unsafe impl bytemuck::Zeroable for WorkPending {}
 
 oer_memory::zeroed_static! {
@@ -79,6 +82,28 @@ pub(crate) fn running() -> u8 {
 pub(crate) fn executor_of(id: usize) -> Option<u8> {
     (0..SOFTWARE_INTERRUPT_COUNT as u8)
         .find(|&swi| id != 0 && EMBASSY_EXECUTORS[swi as usize].load(Ordering::Acquire) == id)
+}
+
+/// Whether the current executor has another queued run token. A wake of the
+/// running task itself also counts until its next poll, conservatively.
+/// Signal/interrupt facts not yet translated into task wakes are additional
+/// reasons to yield and must be checked by their owner.
+///
+/// # Panics
+/// Outside a started executor's polling context.
+pub fn ready_peers() -> bool {
+    let swi = running();
+    EMBASSY_WORK_PENDING
+        .0
+        .get(swi as usize)
+        .expect("ready peers requires a running executor")
+        .ready()
+}
+
+pub(crate) fn ready_state(executor_id: u32) -> &'static crate::ready::ReadyState {
+    let swi =
+        executor_of(executor_id as usize).expect("trace event requires a registered executor");
+    &EMBASSY_WORK_PENDING.0[swi as usize]
 }
 
 /// Run `poll` as executor `swi`'s context and restore the preempted one.
@@ -351,7 +376,7 @@ impl<const SWI: u8> Executor<SWI> {
         EMBASSY_EXECUTORS[SWI as usize].store(inner.id(), Ordering::Release);
         init(inner.spawner());
         loop {
-            EMBASSY_WORK_PENDING.0[SWI as usize].store(false, Ordering::Release);
+            EMBASSY_WORK_PENDING.0[SWI as usize].clear_work();
             as_running(SWI, || {
                 crate::time_driver::service(SWI);
                 #[allow(
@@ -560,7 +585,7 @@ pub fn interrupt_handler<const SWI: u8>() {
 
 #[inline(always)]
 pub(crate) fn mark_work(swi: u8) {
-    EMBASSY_WORK_PENDING.0[swi as usize].store(true, Ordering::Release);
+    EMBASSY_WORK_PENDING.0[swi as usize].mark_work();
 }
 
 /// Make executor `swi` poll again: a thread-mode executor sees its work flag
@@ -583,7 +608,7 @@ static EMBASSY_EXECUTORS_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
 
 fn wait_for_work<const SWI: u8>() {
     riscv::interrupt::free(|| {
-        if !EMBASSY_WORK_PENDING.0[SWI as usize].load(Ordering::Acquire) {
+        if !EMBASSY_WORK_PENDING.0[SWI as usize].work() {
             #[cfg(oer_profile)]
             crate::idle_accounting::add_wait(SWI as usize);
             #[cfg(not(oer_profile))]
