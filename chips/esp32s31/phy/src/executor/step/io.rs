@@ -140,6 +140,17 @@ impl Io<'_, '_> {
             }
             return Ok(false);
         }
+        self.channel_direct::<D, _>(clock, binding, completion)
+    }
+
+    /// The original channel command/completion body keeps its own poll frame.
+    #[inline(never)]
+    fn channel_direct<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &mut Option<crate::channel::PhyChipChannelCompletion>,
+    ) -> Result<bool, Failure> {
         let binding = binding.take().ok_or(Failure::Binding)?;
         #[cfg(target_arch = "riscv32")]
         fn apply<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
