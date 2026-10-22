@@ -26,14 +26,14 @@ pub fn probe(
         let mut body = String::new();
         let mut entries = BTreeSet::new();
         for symbol in ["runtime_main", "_start_rust", "main", "_start"] {
-            if let Some(address) = image.symbol(symbol) {
-                if entries.insert(address) {
-                    let bound =
-                        image
-                            .analysis
-                            .bound_with(address, &image.resolutions, keep, control)?;
-                    body.push_str(&report.root(&format!("entry:{symbol}"), &bound));
-                }
+            if let Some(address) = image.symbol(symbol)
+                && entries.insert(address)
+            {
+                let bound =
+                    image
+                        .analysis
+                        .bound_with(address, &image.resolutions, keep, control)?;
+                body.push_str(&report.root(&format!("entry:{symbol}"), &bound));
             }
         }
         for (index, (&address, _)) in image

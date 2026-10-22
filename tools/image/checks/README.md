@@ -170,3 +170,50 @@ copying all bundles into `target/size-base` and `target/size-head` respectively.
 Keep compiler/profile/flags/configuration identical. Run
 `cargo fw sizes target/size-base target/size-head` and put the table in the PR;
 a `stop` requires a question to the owner. The build README gives a W3 example.
+
+## Reachability reports
+
+The stack policy's `observed_functions` selects demangled linked function
+names, examining every alias and the analysed ROM companions. `*` matches
+any substring; every other character is literal. An extending image policy
+appends selectors to its chip policy. Empty and duplicate selectors are errors.
+The chip policies select `core::fmt::write`, `Formatter` methods, the runtime
+`Argument::fmt` entry, debug builders, `Write::write_fmt`, and the `fmt`
+implementations of Debug, Display, Binary, Octal, LowerHex, UpperHex, Pointer,
+LowerExp and UpperExp. Selectors are general and may watch other functions.
+
+`runtime-reachability.txt` reports CPU0 and each linked Embassy
+`TaskStorage::poll` as T0, T1, ... in address order.
+`interrupt-reachability.txt` reports each hart/priority and its exception
+context with the same context-specific resolutions as the interrupt bound.
+`bootstrap-reachability.txt` reports the bootstrap root.
+Probe builds write `runtime-reachability.txt` below
+`target/fw/probes/<package>/<binary>/`. They report each present boot entry
+(`runtime_main`, `_start_rust`, `main`, `_start`, deduplicating addresses),
+the task polls and, where a staged interrupt table is linked, IRQ contexts.
+Without that table the report explicitly makes no IRQ completeness claim.
+These files are separate from stack, frame and placement reports and do not
+introduce a formatting gate or change stack limits.
+
+For each root and selected implementation the verdict is:
+
+- `reachable`: the bound's `reached` inventory contains its address. One
+  witness lists the root and each traversed caller, callsite and callee.
+- `proven-unreachable`: the address is absent and the root has no holes.
+- `unknown`: the address is absent and the root has holes. The report lists
+  all those holes once per root, with their sites, owners and reasons.
+
+An unmatched selector is explicit (`linked=0`) and follows the same negative
+verdict rule. Inlined bodies are not separate linked function entries.
+An unknown verdict never claims that a function behind a hole is unreachable.
+Assumptions remain visible, including the executor invariant: absence of holes
+is completeness under the bound's recorded assumptions.
+
+The root summary counts one witness per reached implementation, deduplicating
+aliases and overlapping selectors. It does not count every possible call
+chain. The stack walk retains one predecessor at first discovery; a witness
+follows these parent links and is neither a shortest-path search nor the
+deepest stack path. Reporting does not traverse call edges again. Predecessor
+storage is admitted through `Ledger` beside the retained image analysis,
+using the existing memory limit. The new reports state the accounted peak
+with witnesses and the original image-analysis peak.

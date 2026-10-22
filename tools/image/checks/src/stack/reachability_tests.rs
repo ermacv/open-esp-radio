@@ -131,6 +131,36 @@ fn resolved_edges_get_witnesses_but_supplemental_targets_of_direct_edges_do_not(
 }
 
 #[test]
+fn aliases_and_overlapping_selectors_count_one_implementation_and_missing_entries_stay_explicit() {
+    let mut image = graph(true, false);
+    image
+        .analysis
+        .functions
+        .get_mut(&FORMATTER)
+        .unwrap()
+        .function
+        .names
+        .push("app::render".into());
+    let mut policy = watched();
+    policy
+        .observed_functions
+        .extend(["app::*".into(), "missing::function".into()]);
+    let out = Report::new(&image, &policy).root("CPU0", &bound(&image));
+    assert!(out.contains("verdict=reachable\tpaths=1"), "{out}");
+    assert!(out.contains("app::render | core::fmt::write"), "{out}");
+    assert!(
+        out.contains("proven-unreachable\tlinked=0\tselector=missing::function"),
+        "{out}"
+    );
+    let image = graph(false, true);
+    let out = Report::new(&image, &policy).root("CPU0", &bound(&image));
+    assert!(
+        out.contains("unknown\tlinked=0\tselector=missing::function"),
+        "{out}"
+    );
+}
+
+#[test]
 fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
     use oer_analysis_riscv_stack::{Stacks, TableEntry, TrapEntry};
     let mut image = graph(false, true);

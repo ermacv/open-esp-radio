@@ -127,7 +127,13 @@ fn split_dispatch_unites_every_proved_base_and_closes_the_common_cfg() {
     );
     let analysis = analyze(&elf, &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].complete);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(0));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(0)
+    );
 }
 
 #[test]
@@ -349,7 +355,11 @@ fn the_w0_displaced_shape_proves_a_table_and_closes_the_stack_graph() {
         }]
     );
     assert_eq!(
-        analyze(&elf, &[], &[]).unwrap().bound(TEXT).unwrap().bytes,
+        analyze(&elf, &[], &[])
+            .unwrap()
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
         Some(0)
     );
 }

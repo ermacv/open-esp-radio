@@ -46,6 +46,77 @@ fn fixture() -> Analysis {
 }
 
 #[test]
+fn first_discovery_witnesses_use_only_traversed_edges_and_do_not_cross_a_hole() {
+    let analysis = fixture();
+    let memory = WorkingMemory::new(TEST_MEMORY).unwrap();
+    let mut keep = Ledger::new(&memory, &mut || Ok(())).unwrap();
+    let mut resolutions = Resolutions::new();
+    // The direct shared edge takes precedence over this supplemental target.
+    resolutions.add(TEXT + 4, Fact::FieldType, [TEXT + 20]);
+    let partial = analysis
+        .bound_with(TEXT, &resolutions, &mut keep, &mut || Ok(()))
+        .unwrap();
+    assert_eq!(partial.witness(TEXT + 20), None);
+    assert_eq!(partial.witness(TEXT + 36), None);
+    assert_eq!(
+        partial.reached,
+        BTreeSet::from([TEXT, TEXT + 12, TEXT + 32])
+    );
+    resolutions.add(TEXT + 12, Fact::TaskPolls, [TEXT + 20]);
+    let complete = analysis
+        .bound_with(TEXT, &resolutions, &mut keep, &mut || Ok(()))
+        .unwrap();
+    assert_eq!(complete.witness(TEXT + 36).unwrap().len(), 3);
+    assert_eq!(complete.witness(TEXT + 32).unwrap().len(), 3); // first discovery through task
+    assert_eq!(complete.path, vec![(TEXT, 0)]); // equal-depth branches do not replace the critical path
+    for &target in &complete.reached {
+        let mut caller = TEXT;
+        for (callee, parent) in complete.witness(target).unwrap() {
+            assert_eq!(parent.caller, caller);
+            let transfer = analysis.functions[&caller]
+                .transfers
+                .iter()
+                .find(|transfer| transfer.site == parent.site)
+                .unwrap();
+            match transfer.target {
+                Some(direct) => assert_eq!(callee, direct),
+                None => assert!(
+                    resolutions
+                        .get(parent.site)
+                        .unwrap()
+                        .targets
+                        .contains(&callee)
+                ),
+            }
+            caller = callee;
+        }
+        assert_eq!(caller, target);
+    }
+    let clone = complete.clone();
+    assert!(std::rc::Rc::ptr_eq(
+        &complete.predecessors,
+        &clone.predecessors
+    ));
+    assert!(memory.used() > 0);
+    drop(keep);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn predecessor_storage_is_refused_before_exceeding_working_memory() {
+    let analysis = fixture();
+    let memory = WorkingMemory::new(1).unwrap();
+    let mut keep = Ledger::new(&memory, &mut || Ok(())).unwrap();
+    let error = analysis.bound(TEXT, &mut keep, &mut || Ok(())).unwrap_err();
+    assert_eq!(
+        error.code,
+        oer_analysis_riscv_model::ErrorCode::ResourceLimited
+    );
+    assert!(error.memory.is_some());
+    assert_eq!(memory.peak(), 0);
+}
+
+#[test]
 fn task_poll_cut_keeps_the_dequeue_owner_and_independent_strict_paths() {
     let analysis = fixture();
     let mut resolutions = Resolutions::new();
@@ -53,18 +124,37 @@ fn task_poll_cut_keeps_the_dequeue_owner_and_independent_strict_paths() {
     resolutions.add(TEXT + 24, Fact::FieldType, [TEXT + 36]);
     let cut = task_poll_sites(&resolutions);
     assert_eq!(cut, BTreeSet::from([TEXT + 12]));
-    let full = analysis.bound_with(TEXT, &resolutions).unwrap().reached;
+    let full = analysis
+        .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap()
+        .reached;
     assert_eq!(
         full,
         BTreeSet::from([TEXT, TEXT + 12, TEXT + 20, TEXT + 32, TEXT + 36])
     );
     assert_eq!(
         analysis
-            .reached_cut(TEXT, &resolutions, &BTreeSet::new())
+            .reached_cut(
+                TEXT,
+                &resolutions,
+                &BTreeSet::new(),
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
             .unwrap(),
         full
     );
-    let strict = analysis.reached_cut(TEXT, &resolutions, &cut).unwrap();
+    let strict = analysis
+        .reached_cut(
+            TEXT,
+            &resolutions,
+            &cut,
+            &mut crate::tests::ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
     assert_eq!(strict, BTreeSet::from([TEXT, TEXT + 12, TEXT + 32]));
     assert_eq!(
         full.difference(&strict).copied().collect::<BTreeSet<_>>(),
@@ -74,7 +164,13 @@ fn task_poll_cut_keeps_the_dequeue_owner_and_independent_strict_paths() {
     // the generic cut API can also stop that direct transfer.
     assert_eq!(
         analysis
-            .reached_cut(TEXT, &resolutions, &BTreeSet::from([TEXT]))
+            .reached_cut(
+                TEXT,
+                &resolutions,
+                &BTreeSet::from([TEXT]),
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
             .unwrap(),
         BTreeSet::from([TEXT, TEXT + 32])
     );
@@ -91,13 +187,30 @@ fn no_tasks_is_a_cut_without_a_task_root_and_unrelated_facts_are_not_cuts() {
     assert!(resolutions.get(TEXT + 12).unwrap().targets.is_empty());
     assert_eq!(
         analysis
-            .reached_cut(TEXT, &resolutions, &task_poll_sites(&resolutions))
+            .reached_cut(
+                TEXT,
+                &resolutions,
+                &task_poll_sites(&resolutions),
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
             .unwrap(),
-        analysis.bound_with(TEXT, &resolutions).unwrap().reached
+        analysis
+            .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || Ok(
+                ()
+            ))
+            .unwrap()
+            .reached
     );
     assert!(
         analysis
-            .reached_cut(0, &resolutions, &BTreeSet::new())
+            .reached_cut(
+                0,
+                &resolutions,
+                &BTreeSet::new(),
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
             .is_err()
     );
 }

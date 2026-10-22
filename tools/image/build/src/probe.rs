@@ -192,6 +192,21 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     if let Err(error) = values.borrow_mut().publish(&output) {
         eprintln!("warning: large-values report: {error}");
     }
+    for elf in images.borrow().iter() {
+        let name = elf.file_name().ok_or("probe executable has no file name")?;
+        if let Err(error) = oer_image_checks::stack::reachability::probe(
+            root,
+            &profile,
+            &policy,
+            elf,
+            &output.join(name),
+        ) {
+            eprintln!(
+                "warning: probe reachability report for {}: {error}",
+                elf.display()
+            );
+        }
+    }
     Ok(image(root, package, target))
 }
 

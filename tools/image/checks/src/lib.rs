@@ -333,6 +333,31 @@ impl Gates {
                             if let Some(sizes) = &mut outcome.sizes {
                                 sizes.interrupts(&image, &stacks)?;
                             }
+
+                            let report =
+                                crate::stack::reachability::Report::new(&image, input.policy);
+                            let mut reachability = report.header(stacks.witness_memory_peak);
+                            for hart in &stacks.harts {
+                                for level in &hart.levels {
+                                    reachability.push_str(&report.root(
+                                        &format!("hart{}-P{}", hart.core, level.level),
+                                        &level.bound,
+                                    ));
+                                }
+                                reachability.push_str(&report.root(
+                                    &format!("hart{}-exception", hart.core),
+                                    &hart.exception.bound,
+                                ));
+                            }
+                            std::fs::write(
+                                input
+                                    .output
+                                    .join(crate::stack::reachability::INTERRUPT_REPORT),
+                                reachability,
+                            )?;
+                            outcome
+                                .reports
+                                .push(crate::stack::reachability::INTERRUPT_REPORT.to_owned());
                             let placement = crate::interrupts::InterruptPlacement::of(
                                 &image, &stacks, profile,
                             )?;
@@ -379,11 +404,18 @@ impl Gates {
                                     input.output.join(crate::stack::RUNTIME_REPORT),
                                     audit.render(),
                                 )?;
+                                std::fs::write(
+                                    input.output.join(crate::stack::reachability::RUNTIME_REPORT),
+                                    audit.render_reachability(&image, input.policy),
+                                )?;
                                 audit.check()
                             })();
                             outcome
                                 .reports
                                 .push(crate::stack::RUNTIME_REPORT.to_owned());
+                            outcome
+                                .reports
+                                .push(crate::stack::reachability::RUNTIME_REPORT.to_owned());
                             outcome.warnings.extend(warnings?);
                             Ok(())
                         })());
@@ -497,6 +529,10 @@ impl Gates {
                     input.output.join(crate::stack::BOOTSTRAP_REPORT),
                     audit.render(),
                 )?;
+                std::fs::write(
+                    input.output.join(crate::stack::reachability::BOOTSTRAP_REPORT),
+                    audit.render_reachability(&image, input.policy),
+                )?;
                 audit.check().map(Some)
             })() {
                 Ok(Some(warnings)) => {
@@ -504,6 +540,9 @@ impl Gates {
                     outcome
                         .reports
                         .push(crate::stack::BOOTSTRAP_REPORT.to_owned());
+                    outcome
+                        .reports
+                        .push(crate::stack::reachability::BOOTSTRAP_REPORT.to_owned());
                     CheckResult::Passed
                 }
                 Ok(None) => CheckResult::MissingContract(

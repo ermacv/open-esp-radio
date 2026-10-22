@@ -22,7 +22,7 @@
 //! the image's configuration: the firmware gate checks where its writers run
 //! ([`crate::instances`]).
 use crate::{Analysis, Assumption, Bound, Fact, LevelDrop, Resolutions, TableEntry, TrapEntry};
-use oer_analysis_riscv_model::Result;
+use oer_analysis_riscv_model::{Ledger, Result, RunControl};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// What the stacks of an image are bounded from.
@@ -126,7 +126,12 @@ impl Stacks<'_> {
 }
 
 /// The interrupt stack of each hart.
-pub fn interrupt_stacks(analysis: &Analysis, stacks: &Stacks<'_>) -> Result<Vec<HartStack>> {
+pub fn interrupt_stacks(
+    analysis: &Analysis,
+    stacks: &Stacks<'_>,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
+) -> Result<Vec<HartStack>> {
     let mut harts = Vec::new();
     for &core in stacks.cores {
         let mut levels: BTreeSet<u32> = stacks
@@ -139,9 +144,23 @@ pub fn interrupt_stacks(analysis: &Analysis, stacks: &Stacks<'_>) -> Result<Vec<
         let mut level_stacks = Vec::new();
         for level in levels {
             let resolutions = stacks.resolutions_for(analysis, core, level);
-            level_stacks.push(worst(analysis, level, stacks.vectors, &resolutions)?);
+            level_stacks.push(worst(
+                analysis,
+                level,
+                stacks.vectors,
+                &resolutions,
+                keep,
+                control,
+            )?);
         }
-        let exception = worst(analysis, 0, &[stacks.exception], stacks.resolutions)?;
+        let exception = worst(
+            analysis,
+            0,
+            &[stacks.exception],
+            stacks.resolutions,
+            keep,
+            control,
+        )?;
         let bytes = level_stacks
             .iter()
             .chain([&exception])
@@ -170,6 +189,8 @@ fn worst(
     level: u32,
     entries: &[TrapEntry],
     resolutions: &Resolutions,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
 ) -> Result<LevelStack> {
     let mut worst: Option<LevelStack> = None;
     let mut by_handler: BTreeMap<u32, Bound> = BTreeMap::new();
@@ -177,7 +198,7 @@ fn worst(
         let bound = match by_handler.get(&entry.handler) {
             Some(bound) => bound.clone(),
             None => {
-                let bound = analysis.bound_with(entry.handler, resolutions)?;
+                let bound = analysis.bound_with(entry.handler, resolutions, keep, control)?;
                 by_handler.insert(entry.handler, bound.clone());
                 bound
             }

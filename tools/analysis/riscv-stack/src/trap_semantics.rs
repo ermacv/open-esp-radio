@@ -117,7 +117,15 @@ pub fn prove_traps(
         }
         // Check the conservative swept bound as well as the strict reachable
         // graph: trap returns and CSR writes must never justify noreturn.
-        if !unknown.bound(entry.handler)?.level_drops.is_empty() {
+        if !unknown
+            .bound(
+                entry.handler,
+                &mut Ledger::new(keep.memory(), control)?,
+                control,
+            )?
+            .level_drops
+            .is_empty()
+        {
             fact.failure = Some(TrapFailure::LevelDrop {
                 hart,
                 handler: entry.handler,

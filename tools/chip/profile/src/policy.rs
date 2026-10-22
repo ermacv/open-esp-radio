@@ -33,6 +33,10 @@ pub struct StackPolicy {
     /// Reviewed frames above the move limit, scoped to each ELF of the image.
     #[serde(default)]
     pub frame_exceptions: FrameExceptions,
+    /// Demangled function-name patterns watched by the reachability report.
+    /// `*` matches any substring; all other characters are literal.
+    #[serde(default)]
+    pub observed_functions: Vec<String>,
     /// The runtime's primary task stack.
     #[serde(default)]
     pub cpu0_task_stack: Option<TaskStack>,
@@ -166,6 +170,8 @@ struct Extension {
     extends: PathBuf,
     #[serde(default)]
     frame_exceptions: FrameExceptions,
+    #[serde(default)]
+    observed_functions: Vec<String>,
 }
 
 impl StackPolicy {
@@ -216,6 +222,7 @@ impl StackPolicy {
             base.frame_exceptions
                 .bootstrap
                 .extend(extension.frame_exceptions.bootstrap);
+            base.observed_functions.extend(extension.observed_functions);
             base
         } else {
             Self::parse(path, &source)?
@@ -243,6 +250,14 @@ impl StackPolicy {
         }
         if self.max_move_bytes == 0 {
             return Err("the move limit must be positive".into());
+        }
+        let mut observed = std::collections::BTreeSet::new();
+        for pattern in &self.observed_functions {
+            if pattern.trim().is_empty() || !observed.insert(pattern) {
+                return Err(
+                    format!("empty or duplicate observed function pattern: {pattern:?}").into(),
+                );
+            }
         }
         for exceptions in [
             &self.frame_exceptions.runtime,
@@ -449,6 +464,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn an_image_appends_observed_functions_and_invalid_selectors_are_rejected() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = directory.path().join("base.toml");
+        std::fs::write(
+            &base,
+            "schema=5\nmax_move_bytes=4096\nobserved_functions=['core::fmt::write']",
+        )
+        .unwrap();
+        let extension = directory.path().join("image.toml");
+        std::fs::write(
+            &extension,
+            "schema=5\nextends='base.toml'\nobserved_functions=['app::*']",
+        )
+        .unwrap();
+        let policy = StackPolicy::load(&extension).unwrap();
+        assert_eq!(policy.observed_functions, ["core::fmt::write", "app::*"]);
+        for patterns in ["['']", "['core::fmt::write']"] {
+            std::fs::write(
+                &extension,
+                format!("schema=5\nextends='base.toml'\nobserved_functions={patterns}"),
+            )
+            .unwrap();
+            assert!(StackPolicy::load(&extension).is_err());
+        }
+    }
+
+    #[test]
     fn an_extension_adds_exceptions_without_changing_the_base_contract() {
         let directory = tempfile::tempdir().unwrap();
         let base_path = directory.path().join("base.toml");
@@ -555,6 +597,7 @@ mod tests {
             coverage_policy: Some("own-memory".into()),
             max_move_bytes: 4096,
             frame_exceptions: FrameExceptions::default(),
+            observed_functions: Vec::new(),
             cpu0_task_stack: Some(TaskStack {
                 root: "runtime_main".into(),
                 storage_symbol: Some("task_stack".into()),

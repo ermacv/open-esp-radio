@@ -70,7 +70,9 @@ fn no_task_polls_proves_only_the_dequeue_call_empty_and_the_bound_conditional() 
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (dwarf, types) = debug(&elf);
     let root = entry(&elf);
-    let before = analysis.bound(root).unwrap();
+    let before = analysis
+        .bound(root, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(before.bytes, None);
     assert_eq!(before.unresolved.len(), 1);
     let resolutions = resolve(&elf, &analysis, &dwarf, &types);
@@ -80,7 +82,11 @@ fn no_task_polls_proves_only_the_dequeue_call_empty_and_the_bound_conditional() 
     assert!(resolution.targets.is_empty());
     assert_eq!(resolution.facts, BTreeSet::from([Fact::NoTasks]));
     assert!(resolution.resolves());
-    let bound = analysis.bound_with(root, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(root, &resolutions, &mut crate::tests::ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     assert_eq!(bound.bytes, Some(before.partial));
     assert!(bound.unresolved.is_empty());
     assert_eq!(
@@ -93,7 +99,15 @@ fn no_task_polls_proves_only_the_dequeue_call_empty_and_the_bound_conditional() 
         .unwrap()
         .address as u32;
     assert_eq!(
-        analysis.bound_with(unrelated, &resolutions).unwrap().bytes,
+        analysis
+            .bound_with(
+                unrelated,
+                &resolutions,
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
+            .unwrap()
+            .bytes,
         None
     );
     assert_eq!(
@@ -137,7 +151,12 @@ fn a_task_poll_with_a_lost_symbol_keeps_the_dequeue_call_unresolved() {
     assert!(resolutions.is_empty(), "{resolutions:?}");
     assert_eq!(
         analysis
-            .bound_with(entry(&elf), &resolutions)
+            .bound_with(
+                entry(&elf),
+                &resolutions,
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
             .unwrap()
             .bytes,
         None
@@ -190,7 +209,12 @@ fn an_inlined_task_poll_or_exited_poll_keeps_the_dequeue_call_unresolved() {
         assert!(resolutions.is_empty(), "{resolutions:?}");
         assert_eq!(
             analysis
-                .bound_with(entry(&elf), &resolutions)
+                .bound_with(
+                    entry(&elf),
+                    &resolutions,
+                    &mut crate::tests::ledger(),
+                    &mut || Ok(())
+                )
                 .unwrap()
                 .bytes,
             None
@@ -226,7 +250,12 @@ fn one_task_keeps_its_existing_task_polls_fact_and_candidate() {
     assert!(!Fact::TaskPolls.proves_empty());
     assert!(
         analysis
-            .bound_with(entry(&elf), &resolutions)
+            .bound_with(
+                entry(&elf),
+                &resolutions,
+                &mut crate::tests::ledger(),
+                &mut || Ok(())
+            )
             .unwrap()
             .bytes
             .is_some()

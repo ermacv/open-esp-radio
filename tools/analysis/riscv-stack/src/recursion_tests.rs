@@ -77,7 +77,9 @@ fn a_recursive_stack_byte_selects_a_terminal_branch() {
     let elf = executable(&[byte_phase(1, false)]);
     let analysis = analyze(&elf, &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].terminal_recursive_callees);
-    let bound = analysis.bound(TEXT).unwrap();
+    let bound = analysis
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, Some(64));
     assert_eq!(bound.path, [(TEXT, 32), (TEXT, 32)]);
 }
@@ -86,7 +88,13 @@ fn a_recursive_stack_byte_selects_a_terminal_branch() {
 fn a_recursive_stack_word_selects_a_terminal_jump_table_arm() {
     let analysis = analyze(&tagged_dispatch(2, 2), &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(64));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(64)
+    );
 }
 
 #[test]
@@ -94,7 +102,13 @@ fn a_tag_that_still_recurses_does_not_prove_a_bound() {
     for elf in [executable(&[byte_phase(0, false)]), tagged_dispatch(0, 2)] {
         let analysis = analyze(&elf, &[], &[]).unwrap();
         assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-        assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+        assert_eq!(
+            analysis
+                .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+                .unwrap()
+                .bytes,
+            None
+        );
     }
 }
 
@@ -102,17 +116,35 @@ fn a_tag_that_still_recurses_does_not_prove_a_bound() {
 fn a_partial_payload_write_leaves_the_unwritten_bytes_unknown() {
     let analysis = analyze(&tagged_dispatch(2, 1), &[], &[]).unwrap();
     assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
 }
 
 #[test]
 fn every_unfolded_frame_keeps_its_nonrecursive_callees() {
     let elf = executable(&[byte_phase(1, true), leaf(Some(96))]);
     let analysis = analyze(&elf, &[], &[]).unwrap();
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(160));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(160)
+    );
     // A second root must use the ordinary entry context, not a memoized
     // terminal invocation with only one frame.
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(160));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(160)
+    );
 }
 
 #[test]
@@ -132,7 +164,9 @@ fn a_proven_direct_recursion_does_not_hide_another_cycle() {
     };
     let analysis = analyze(&executable(&[byte_phase(1, true), helper]), &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].terminal_recursive_callees);
-    let bound = analysis.bound(TEXT).unwrap();
+    let bound = analysis
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, None);
     assert!(bound.unresolved.contains(&(TEXT, Reason::Recursion)));
 }
@@ -145,7 +179,11 @@ fn an_indirect_self_call_is_not_a_proven_terminal_edge() {
     assert!(analysis.functions[&TEXT].terminal_recursive_callees);
     let mut resolutions = Resolutions::new();
     resolutions.add(TEXT + 32, Fact::FieldType, [TEXT]);
-    let bound = analysis.bound_with(TEXT, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     assert_eq!(bound.bytes, None);
     assert!(bound.unresolved.contains(&(TEXT, Reason::Recursion)));
 }
@@ -161,7 +199,13 @@ fn an_unknown_alias_store_discards_a_recursive_payload() {
     symbol.words[3] = branch_nonzero(12, 24);
     let analysis = analyze(&executable(&[symbol]), &[], &[]).unwrap();
     assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
 }
 
 #[test]
@@ -172,7 +216,13 @@ fn a_path_bypassing_the_payload_store_cannot_borrow_another_paths_fact() {
     symbol.words[3] = branch_nonzero(12, 24);
     let analysis = analyze(&executable(&[symbol]), &[], &[]).unwrap();
     assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
 }
 
 #[test]
@@ -183,7 +233,13 @@ fn a_later_byte_store_replaces_the_terminal_tag() {
     symbol.words[3] = branch_nonzero(12, 24);
     let analysis = analyze(&executable(&[symbol]), &[], &[]).unwrap();
     assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
 }
 
 #[test]
@@ -192,7 +248,13 @@ fn a_local_cycle_leaves_the_recursive_specialization_unknown() {
     symbol.words[5] = 0x0000_006f; // jal zero, 0
     let analysis = analyze(&executable(&[symbol]), &[], &[]).unwrap();
     assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
 }
 
 #[test]
@@ -201,7 +263,13 @@ fn the_local_instruction_limit_never_turns_into_a_proof() {
     symbol.words.extend([0x0000_0013; 1024]);
     let analysis = analyze(&executable(&[symbol]), &[], &[]).unwrap();
     assert!(!analysis.functions[&TEXT].terminal_recursive_callees);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
 }
 
 #[test]

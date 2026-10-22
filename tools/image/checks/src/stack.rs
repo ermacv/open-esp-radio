@@ -20,6 +20,7 @@ pub mod budget;
 pub mod contract;
 mod coverage;
 pub mod frames;
+pub mod reachability;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -63,6 +64,10 @@ pub fn audit_runtime_stacks(
 ) -> Result<Vec<String>> {
     let stacks = StackAudit::of(image, policy, &policy.runtime_task_stacks())?;
     std::fs::write(output.join(RUNTIME_REPORT), stacks.render())?;
+    std::fs::write(
+        output.join(reachability::RUNTIME_REPORT),
+        stacks.render_reachability(image, policy),
+    )?;
     stacks.check()
 }
 
@@ -79,6 +84,10 @@ pub fn audit_bootstrap_stack(
     };
     let audit = StackAudit::of(image, policy, &[("bootstrap stack", bootstrap)])?;
     std::fs::write(output.join(BOOTSTRAP_REPORT), audit.render())?;
+    std::fs::write(
+        output.join(reachability::BOOTSTRAP_REPORT),
+        audit.render_reachability(image, policy),
+    )?;
     audit.check().map(Some)
 }
 
@@ -100,6 +109,8 @@ pub struct Image {
     pub contract: Option<Contract>,
     /// What the analysis used of its [`budget`].
     pub usage: Usage,
+    /// Retained analysis and ELF allocations, reserved beside bound evidence.
+    pub retained_bytes: u64,
 }
 
 impl Image {
@@ -288,6 +299,7 @@ impl Image {
             resolutions: Resolutions::new(),
             contract,
             usage: Usage::default(),
+            retained_bytes: 0,
         };
         resolutions.extend(image.ipc_resolutions(&taken, &mut keep, &mut control)?);
         image.usage = Usage {
@@ -295,7 +307,22 @@ impl Image {
             work_units: control.used(),
         };
         image.resolutions = resolutions;
+        image.retained_bytes = keep.bytes() + image.elf.len() as u64;
         Ok(image)
+    }
+
+    /// Admit witness allocations beside the retained image facts, using the
+    /// existing limits. Bounds outlive their builder's operation, like Image.
+    pub(crate) fn with_bounds<T>(
+        &self,
+        build: impl FnOnce(&mut Ledger<'_>, &mut Budget) -> Result<T>,
+    ) -> Result<(T, u64)> {
+        let memory = WorkingMemory::new(MEMORY_LIMIT)?;
+        let mut control = Budget::new(WORK_UNITS, TIMEOUT);
+        let _retained = memory.reserve(self.retained_bytes, control.position())?;
+        let mut keep = Ledger::new(&memory, &mut control)?;
+        let value = build(&mut keep, &mut control)?;
+        Ok((value, memory.peak().max(self.usage.memory_bytes)))
     }
 
     /// The image's function that carries the symbol `name`.
@@ -389,6 +416,9 @@ pub struct StackAudit {
     pub stacks: Vec<StackBound>,
     /// What the image's analysis used of its [`budget`].
     pub usage: Usage,
+    pub witness_memory_peak: u64,
+    /// Independent task roots, reported without changing the stack gate.
+    pub task_bounds: Vec<Bound>,
 }
 
 /// One stack's budget and its root's bound.
@@ -409,6 +439,24 @@ pub struct StackBound {
 }
 
 impl StackAudit {
+    pub(crate) fn render_reachability(&self, image: &Image, policy: &StackPolicy) -> String {
+        let report = reachability::Report::new(image, policy);
+        let mut out = report.header(self.witness_memory_peak);
+        for (index, stack) in self.stacks.iter().enumerate() {
+            let label = if stack.name == "bootstrap stack" {
+                "bootstrap".to_owned()
+            } else if index == 0 && policy.cpu0_task_stack.is_some() {
+                "CPU0".to_owned()
+            } else {
+                format!("T{}", index.saturating_sub(1))
+            };
+            out.push_str(&report.root(&label, &stack.linked.1));
+        }
+        for (index, bound) in self.task_bounds.iter().enumerate() {
+            out.push_str(&report.root(&format!("T{index}"), bound));
+        }
+        out
+    }
     pub(crate) fn of(
         image: &Image,
         policy: &StackPolicy,
@@ -416,48 +464,68 @@ impl StackAudit {
     ) -> Result<Self> {
         let coverage = CoveragePolicy::load(policy.stacks()?.coverage_policy)?
             .coverage(&image.functions, &image.stack_sizes)?;
-        let mut bounds = Vec::new();
-        for &(name, stack) in stacks {
-            let storage = match stack.storage() {
-                Storage::Symbol(symbol) => format!("`{symbol}`"),
-                Storage::Range { bottom, top } => format!("`{bottom}`..`{top}`"),
-            };
-            let Some(storage_bounds) = image.storage(stack.storage())? else {
-                return Err(format!("the image links no {name} ({storage})").into());
-            };
-            let root = image.symbol(&stack.root).ok_or_else(|| {
-                format!(
-                    "the image has no `{}`, the root the policy names for its {name}",
-                    stack.root
-                )
-            })?;
-            let walked = image.analysis.bound_with(root, &image.resolutions)?;
-            let path = walked
-                .path
-                .iter()
-                .map(|&(function, frame)| (frame, image.function_at(function)))
-                .collect();
-            let mut unresolved = walked
-                .unresolved
-                .iter()
-                .map(|&(site, reason)| (reason, site, image.function_at(site)))
-                .collect::<Vec<_>>();
-            unresolved.sort();
-            bounds.push(StackBound {
-                name,
-                root: stack.root.clone(),
-                storage,
-                minimum_free_bytes: u64::from(stack.minimum_free_bytes),
-                linked: (storage_bounds.capacity, walked),
-                path,
-                unresolved,
-            });
-        }
+        let ((bounds, task_bounds), witness_memory_peak) = image.with_bounds(|keep, control| {
+            let mut bounds = Vec::new();
+            for &(name, stack) in stacks {
+                let storage = match stack.storage() {
+                    Storage::Symbol(symbol) => format!("`{symbol}`"),
+                    Storage::Range { bottom, top } => format!("`{bottom}`..`{top}`"),
+                };
+                let Some(storage_bounds) = image.storage(stack.storage())? else {
+                    return Err(format!("the image links no {name} ({storage})").into());
+                };
+                let root = image.symbol(&stack.root).ok_or_else(|| {
+                    format!(
+                        "the image has no `{}`, the root the policy names for its {name}",
+                        stack.root
+                    )
+                })?;
+                let walked = image
+                    .analysis
+                    .bound_with(root, &image.resolutions, keep, control)?;
+                let path = walked
+                    .path
+                    .iter()
+                    .map(|&(function, frame)| (frame, image.function_at(function)))
+                    .collect();
+                let mut unresolved = walked
+                    .unresolved
+                    .iter()
+                    .map(|&(site, reason)| (reason, site, image.function_at(site)))
+                    .collect::<Vec<_>>();
+                unresolved.sort();
+                bounds.push(StackBound {
+                    name,
+                    root: stack.root.clone(),
+                    storage,
+                    minimum_free_bytes: u64::from(stack.minimum_free_bytes),
+                    linked: (storage_bounds.capacity, walked),
+                    path,
+                    unresolved,
+                });
+            }
+            let mut task_bounds = Vec::new();
+            if stacks.iter().any(|(name, _)| *name == "CPU0 task stack") {
+                for (&address, name) in &image.names {
+                    if name.contains("TaskStorage<") && name.ends_with("::poll") {
+                        task_bounds.push(image.analysis.bound_with(
+                            address,
+                            &image.resolutions,
+                            keep,
+                            control,
+                        )?);
+                    }
+                }
+            }
+            Ok((bounds, task_bounds))
+        })?;
         Ok(Self {
             traps: image.traps.clone(),
             coverage,
             stacks: bounds,
             usage: image.usage,
+            witness_memory_peak,
+            task_bounds,
         })
     }
 

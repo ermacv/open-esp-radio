@@ -580,7 +580,12 @@ fn no_address_evidence_and_empty_sets_never_prove_unreachability() {
                 .all(|(_, r)| r.targets.is_empty() && !r.resolves())
         );
         let bound = analysis
-            .bound_with(named(&analysis, "_start"), &global)
+            .bound_with(
+                named(&analysis, "_start"),
+                &global,
+                &mut crate::tests::ledger(),
+                &mut || Ok(()),
+            )
             .unwrap();
         assert!(!bound.unresolved.is_empty());
         Ok(())
@@ -630,7 +635,11 @@ fn missing_dwarf_supplies_no_exclusion_or_unreachable_call_proof() {
         );
         assert!(
             !analysis
-                .bound(named(&analysis, "_start"))
+                .bound(
+                    named(&analysis, "_start"),
+                    &mut crate::tests::ledger(),
+                    &mut || Ok(())
+                )
                 .unwrap()
                 .unresolved
                 .is_empty()

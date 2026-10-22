@@ -204,6 +204,8 @@ pub fn derive<'m>(
             sources,
             resolutions: &resolutions,
         },
+        keep,
+        c,
     )?;
     for hart in harts {
         println!(
