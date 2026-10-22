@@ -19,6 +19,7 @@
 pub mod interrupts;
 pub mod linker;
 pub mod placement;
+pub mod sizes;
 pub mod stack;
 
 use std::{collections::BTreeSet, path::Path};
@@ -99,6 +100,8 @@ pub struct CheckInput<'a> {
 /// What the checks passed with.
 #[derive(Clone, Debug, Default)]
 pub struct CheckOutcome {
+    /// Measurements of the same analysis the checks used.
+    pub sizes: Option<sizes::Measurements>,
     /// Every requested check, by name, with its result.
     pub results: Vec<(String, CheckResult)>,
     /// The reports they wrote into the bundle, by file name.
@@ -317,6 +320,7 @@ impl Gates {
             // One analysis serves the frame, task-stack and interrupt checks.
             match crate::stack::Image::read(input.root, profile, input.elf) {
                 Ok(image) => {
+                    outcome.sizes = Some(sizes::Measurements::of(&image, profile)?);
                     outcome
                         .rom_summaries
                         .extend(image.analysis.summaries.iter().cloned());
@@ -326,6 +330,9 @@ impl Gates {
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
                             let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
+                            if let Some(sizes) = &mut outcome.sizes {
+                                sizes.interrupts(&image, &stacks)?;
+                            }
                             let placement = crate::interrupts::InterruptPlacement::of(
                                 &image, &stacks, profile,
                             )?;
@@ -357,11 +364,23 @@ impl Gates {
                     }
                     if stack_runs {
                         let result = ran((|| -> Result<()> {
-                            let warnings = crate::stack::audit_runtime_stacks(
-                                &image,
-                                input.policy,
-                                input.output,
-                            );
+                            let warnings = (|| -> Result<Vec<String>> {
+                                let audit = crate::stack::StackAudit::of(
+                                    &image,
+                                    input.policy,
+                                    &input.policy.runtime_task_stacks(),
+                                )?;
+                                if let Some(sizes) = &mut outcome.sizes {
+                                    for stack in &audit.stacks {
+                                        sizes.task(&image, stack);
+                                    }
+                                }
+                                std::fs::write(
+                                    input.output.join(crate::stack::RUNTIME_REPORT),
+                                    audit.render(),
+                                )?;
+                                audit.check()
+                            })();
                             outcome
                                 .reports
                                 .push(crate::stack::RUNTIME_REPORT.to_owned());
@@ -450,6 +469,7 @@ impl Gates {
                 return Ok(outcome);
             }
         };
+        outcome.sizes = Some(sizes::Measurements::of(&image, input.profile)?);
         if self.frames {
             self.frames_of(&image, input, CheckedElf::Bootstrap, &mut outcome);
         }
@@ -459,7 +479,26 @@ impl Gates {
         let result = if input.policy.stacks().is_err() {
             CheckResult::MissingContract("the image's stack policy names no stacks".to_owned())
         } else {
-            match crate::stack::audit_bootstrap_stack(&image, input.policy, input.output) {
+            match (|| -> Result<Option<Vec<String>>> {
+                let Some(stack) = input.policy.stacks()?.bootstrap_stack else {
+                    return Ok(None);
+                };
+                let audit = crate::stack::StackAudit::of(
+                    &image,
+                    input.policy,
+                    &[("bootstrap stack", stack)],
+                )?;
+                if let Some(sizes) = &mut outcome.sizes {
+                    for stack in &audit.stacks {
+                        sizes.task(&image, stack);
+                    }
+                }
+                std::fs::write(
+                    input.output.join(crate::stack::BOOTSTRAP_REPORT),
+                    audit.render(),
+                )?;
+                audit.check().map(Some)
+            })() {
                 Ok(Some(warnings)) => {
                     outcome.warnings.extend(warnings);
                     outcome

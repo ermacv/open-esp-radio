@@ -41,6 +41,12 @@ enum Command {
         #[arg(long)]
         analysis: bool,
     },
+    /// Compare sizes.json files in two output directories; builds nothing.
+    /// Exit 0 for same/report, 1 for stop or incompatible provenance.
+    Sizes {
+        base: std::path::PathBuf,
+        head: std::path::PathBuf,
+    },
     /// Build a probe image of firmware/probes (a package named
     /// `oer-firmware-probes-<chip>-…`) with `cfg(oer_probe)` into
     /// target/fw-probe/ and print its path.
@@ -140,6 +146,15 @@ fn main() -> ExitCode {
                     },
             } => return w3::check_files(&console, &observations),
             Command::Build { image, analysis } => command::build(&root, &image, analysis)?,
+            Command::Sizes { base, head } => {
+                let result = oer_image_build::sizes::compare_directories(&base, &head)?;
+                print!("{}", result.output);
+                return Ok(if result.verdict == oer_image_build::sizes::Verdict::Stop {
+                    ExitCode::FAILURE
+                } else {
+                    ExitCode::SUCCESS
+                });
+            }
             Command::Probe { package, jobs } => {
                 println!("{}", probe::build(&root, &package, jobs)?.display());
             }

@@ -409,7 +409,7 @@ pub struct StackBound {
 }
 
 impl StackAudit {
-    fn of(
+    pub(crate) fn of(
         image: &Image,
         policy: &StackPolicy,
         stacks: &[(&'static str, &TaskStack)],

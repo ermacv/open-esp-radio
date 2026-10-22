@@ -4,6 +4,7 @@ Builds the staged images of `firmware/apps`, writes them into a stand board's
 flash and runs them to a verdict.
 
 ```console
+cargo fw sizes <base-output-directory> <head-output-directory>
 cargo fw build <image>
 cargo fw build <w0|w1|w2> --analysis
 cargo fw flash <image> --board <id|MAC>
@@ -191,3 +192,7 @@ hold the router's lock, `$XDG_RUNTIME_DIR/open-esp-radio/routers/router-<hash>.l
 the whole run. Only the masked BSSID (`xx:xx:xx:xx:F6:D0`), channel numbers
 and UCI section names are printed; the SSID, the SSH target and the
 interface never are, in no message, lock file or `log.txt`.
+
+`cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
+exit 0, `stop` or incompatible provenance exit 1. See the [summary format and
+owner thresholds](../build/README.md#size-summaries-and-owner-thresholds).
