@@ -103,7 +103,8 @@ grant-protect RFPLL/common/transmit and Wi-Fi baseband-off edges. It retains
 bounded raw intervals, including repeated baseband-off intervals, and committed
 branch bits. A root-future wrapper also counts polls and directly measures Pending-to-resume
 gaps against the same clock; these include observer overhead and interrupts.
-Callbacks buffer engine, gain and RFPLL-command diagnostics. All formatting and
+Callbacks buffer aggregate engine and gain diagnostics. Per-command RFPLL
+tracing is disabled in this quiet observer to keep its cost out of the polls. All formatting and
 UART, including failure reports, follow root return; the same observer is used
 in both policy modes. A started PHY future is driven to completion.
 

@@ -12,7 +12,6 @@ pub struct Observer<'a, C, W> {
     pub tails: Tails,
     engine: &'a mut HoldPolls,
     trace: Option<&'a mut ReadinessTrace>,
-    rfpll: RfpllEngineTrace,
     engines: [HoldPolls; 8],
     gains: [Option<GainTiming>; 2],
     clock: &'a C,
@@ -32,7 +31,6 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
             tails: Tails::default(),
             engine,
             trace,
-            rfpll: RfpllEngineTrace::default(),
             engines: [HoldPolls::default(); 8],
             gains: [None; 2],
             clock,
@@ -56,9 +54,6 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
                 continue;
             }
             report_engine(operation, timing, self.output);
-            if operation == Operation::Rfpll {
-                report_rfpll_commands(&self.rfpll, self.output);
-            }
         }
         for (index, timing) in self.gains.iter().enumerate() {
             if let Some(timing) = timing {
@@ -82,8 +77,9 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
 }
 impl<C: Clock, W: core::fmt::Write> Observer<'_, C, W> {
     pub fn rfpll_engine_trace(&mut self) -> Option<&mut RfpllEngineTrace> {
-        self.rfpll = Default::default();
-        Some(&mut self.rfpll)
+        // Match the quiet hold method: per-command tracing perturbs RFPLL polls.
+        // Aggregate engine timing remains enabled in both policy modes.
+        None
     }
     pub fn power_gain_completed(&mut self, operation: Operation, timing: GainTiming) {
         self.gains[usize::from(operation == Operation::WifiPower)] = Some(timing);
@@ -92,10 +88,7 @@ impl<C: Clock, W: core::fmt::Write> Observer<'_, C, W> {
         self.trace.as_deref_mut()
     }
     #[inline(never)]
-    pub fn engine_completed(&mut self, operation: Operation, mut timing: EngineTiming) {
-        if operation == Operation::Rfpll {
-            timing.invalid |= self.rfpll.invalid;
-        }
+    pub fn engine_completed(&mut self, operation: Operation, timing: EngineTiming) {
         let counters = HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -199,34 +192,6 @@ fn report_engine(operation: Operation, timing: &HoldPolls, output: &mut impl cor
             ),
         );
     }
-}
-
-/// Lossless UART quartet: invalid bit 63, command bits 48..62, then
-/// poll/publication/readiness as three u16 values. One formatter argument
-/// keeps the diagnostic frame/code inside the same application budgets.
-#[inline(never)]
-fn report_rfpll_commands(trace: &RfpllEngineTrace, output: &mut impl core::fmt::Write) {
-    for (command, row) in trace.commands.iter().enumerate() {
-        report_rfpll_command(command, row, trace.invalid, output);
-    }
-}
-
-#[inline(never)]
-fn report_rfpll_command(
-    command: usize,
-    row: &oer_esp32s31_phy::tracking::observation::RfpllCommandMaximum,
-    invalid: bool,
-    output: &mut impl core::fmt::Write,
-) {
-    let packed = (u64::from(invalid) << 63)
-        | ((command as u64) << 48)
-        | (u64::from(row.poll_micros) << 32)
-        | (u64::from(row.publication_micros) << 16)
-        | u64::from(row.readiness_micros);
-    print(
-        output,
-        format_args!("OPEN_RADIO_HIL rfpll-command-packed={}\n", packed),
-    );
 }
 
 fn operation_family(operation: Operation) -> usize {

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub const HOLD_TICKS: usize = 16;
 pub const HOLD_INTERVALS: usize = 8;
 
-/// Diagnostic branch selection; natural policy never changes tracking state.
+/// Diagnostic branch selection; natural policy does not force debug or retained state.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 #[serde(rename_all = "kebab-case")]
 pub enum HoldPolicy {

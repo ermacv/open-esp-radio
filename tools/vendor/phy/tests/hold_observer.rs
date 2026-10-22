@@ -70,9 +70,7 @@ fn check_quiet_root(failed: bool) {
                             .expect("advance clock");
                         observer.tracking_operation(operation, Event::Completed);
                     }
-                    // The trace is written by the engine, never formatted here.
-                    observer.rfpll_engine_trace().expect("RFPLL trace").commands[0].poll_micros =
-                        17;
+                    assert!(observer.rfpll_engine_trace().is_none());
                     assert!(observer.readiness_trace().is_some());
                     for operation in [
                         Operation::Rfpll,
@@ -153,7 +151,6 @@ fn check_quiet_root(failed: bool) {
     assert!(!metrics.borrow().invalid);
     let output = bytes.borrow();
     assert!(output.contains("engine family=7 polls=4 pending=2 ready=2"));
-    assert!(output.contains("rfpll-command-packed="));
     assert!(output.contains("gain-parts family=2 lower-us=2 arithmetic-us=3 publication-us=4"));
     assert!(output.contains("gain-parts family=4 lower-us=2 arithmetic-us=3 publication-us=4"));
     assert!(output.contains("hold-poll tick=1 op=0 polls=2 pending=1 resumes=1"));
