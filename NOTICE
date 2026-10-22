@@ -113,13 +113,17 @@ of chips/esp32s31/hal; each names the ROM function it follows.
 ------------------
 
 Source:    https://github.com/espressif/esp32s31-bt-lib at 10c50778
-License:   none; facts only
+License:   none
 
-The library has no license. The repository records only facts from it:
+The Bluetooth LE hardware engine (the S31 driver, controller memory, the
+PAC's Bluetooth initialization and the HAL's scheduler locks) keeps what it
+takes from this library, under the exception in docs/source-policy.md.
+
+Outside that engine, the repository records only facts from the library:
 values, layouts, addresses, order of operations and names (the HAL and PAC,
 chips/esp32s31/notes/bluetooth, chips/esp32s31/notes and the name maps
 under chips/esp32s31/vendor/facts/names). It records neither code nor
-verbatim data blocks.
+verbatim data blocks outside the exception.
 
 
 6. OpenThread
