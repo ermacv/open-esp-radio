@@ -1,0 +1,136 @@
+schema = 5
+extends = "stack.toml"
+
+# Configured W3 only: the unconfigured image does not link these implementations.
+# Initial ceilings measured on cd9954b7 (#358); only lower them as frames shrink.
+# Remove an entry when its implementation disappears or its frame fits the move limit.
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::send::<2, 8, 2>"
+reason = "Owned transmit packet from io.transmit.try_receive, Msdu admission and ServiceOutput::MsduRefused retain Ethernet payload temporaries in this outlined send frame."
+ceiling_bytes = 4944
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::step::<oer_esp32s31_ieee80211_driver::port::phase::Esp32s31Phase<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, 2, 8, 2>"
+reason = "The outlined action loop owns station/data actions, returned MPDU buffers and submission/follow-up results while dispatching them to the lower MAC."
+ceiling_bytes = 12960
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::event::<2, 8, 2>"
+reason = "The outlined event handler owns LowerMacEvent and terminal/ContractFault values; received EthernetFrame construction and queue delivery add inline payload temporaries."
+ceiling_bytes = 26464
+
+[[frame_exceptions.runtime]]
+function = "oer_radio_port::slot::poll_body::<<oer_radio_port::lifecycle::run_port::BodyAdapter<oer_firmware_apps_w3::station::Body> as oer_radio_port::slot::SlotBody<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_esp32s31_ieee80211_driver::port::Esp32s31Backend<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>>::run::{closure#0}>"
+reason = "Polling BodyAdapter::run inlines the station Body future and its placed service startup/completion values into this P1 poll boundary."
+ceiling_bytes = 7680
+
+[[frame_exceptions.runtime]]
+function = "oer_ieee80211_sta::machine::leave_disabled::<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>"
+reason = "The by-value Connected state is unpacked to build State::Leave, retaining its deferred EAPOL requests until receive-off teardown."
+ceiling_bytes = 4496
+
+[[frame_exceptions.runtime]]
+function = "oer_ieee80211_sta::machine::leave_connected::<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>"
+reason = "The by-value Connected state is unpacked to build Leave with deferred EAPOL and optional protected Deauthentication state."
+ceiling_bytes = 4528
+
+[[frame_exceptions.runtime]]
+function = "oer_ieee80211_sta::machine::finish_connected_install::<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>"
+reason = "The by-value Connected/ConnectedRsn state and Rekey::AwaitInstalled request are rebuilt with the EAPOL response returned by complete_group_key_install."
+ceiling_bytes = 5952
+
+[[frame_exceptions.runtime]]
+function = "oer_ieee80211_sta::machine::finish_handshake_install::<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>"
+reason = "The by-value Handshake and retry-install request are consumed into the completed EAPOL response and the confirming or leaving State."
+ceiling_bytes = 4912
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0}"
+reason = "The disable sink owns a LowerMacTerminal, its converted station terminal and ContractFault/TerminalCustody results while routing or quarantining it."
+ceiling_bytes = 6960
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::run_loop::<2, 8, 2, oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0}"
+reason = "The run_loop disable sink owns a sealed LowerMacTerminal and ContractFault while retaining unexpected terminals in TerminalCustody after EventEnd."
+ceiling_bytes = 6960
+
+[[frame_exceptions.runtime]]
+function = "<<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::disable<oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0} as core::ops::function::FnOnce<(oer_ieee80211_port::phase::LowerMacTerminal<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>,)>>::call_once::{shim:vtable#0}"
+reason = "FnOnce vtable shim for the disable terminal sink passes the owned LowerMacTerminal to the closure; its conversion and ContractFault/TerminalCustody temporaries are inlined here."
+ceiling_bytes = 6960
+
+[[frame_exceptions.runtime]]
+function = "<<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::run_loop<2, 8, 2, oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0} as core::ops::function::FnOnce<(oer_ieee80211_port::phase::LowerMacTerminal<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>,)>>::call_once::{shim:vtable#0}"
+reason = "FnOnce vtable shim for the run_loop terminal sink passes the owned LowerMacTerminal to the closure; its conversion and ContractFault/TerminalCustody temporaries are inlined here."
+ceiling_bytes = 6960
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::input_event"
+reason = "The station takes its State by value and dispatches StaInput into transitions; the State enum includes Connected/Handshake and deferred EAPOL material."
+ceiling_bytes = 11104
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::keys_changed"
+reason = "Key readiness handling takes and rebuilds the by-value station State, including Connected/Handshake RSN state, while advancing installation transitions."
+ceiling_bytes = 10688
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::owe_connected"
+reason = "The by-value Connected state is returned with ActionProgress while resolving link notices, EDCA, lease exchange and pending RSN response work."
+ceiling_bytes = 4880
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::confirming_step"
+reason = "The by-value Confirming/Connected state and StaDone are consumed into the next State, including transmit completion and handshake confirmation paths."
+ceiling_bytes = 7440
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::group_transition"
+reason = "Group-key transition owns PendingGroupKey and updates active replay/RSN state; key readiness transitions take and rebuild the large station State."
+ceiling_bytes = 14704
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::received_management"
+reason = "Management receive takes the station State by value and rebuilds scan/join/connected transitions after parsing beacon, authentication or association data."
+ceiling_bytes = 20128
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::owe"
+reason = "The action dispatcher takes State by value and returns State with ActionProgress; Connected/Handshake variants carry deferred EAPOL and supplicant state."
+ceiling_bytes = 14512
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::step"
+reason = "The transition dispatcher takes State and StaDone by value and returns the rebuilt State, including the Connected and Handshake RSN variants."
+ceiling_bytes = 10672
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::unsent"
+reason = "A refused transmission takes and rebuilds the owned station State while returning pending response work to Connected/Handshake state."
+ceiling_bytes = 7424
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::noticed"
+reason = "Arbiter notice handling takes the owned station State and constructs the next scan/join/connected or leave state."
+ceiling_bytes = 14688
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::answered"
+reason = "Arbiter answer handling takes the owned station State and returns a rebuilt scan/join state or preserves the Connected/Handshake variants."
+ceiling_bytes = 11984
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::owe_rekey"
+reason = "Replacing Rekey owns the install request or EapolResponse while completing group-key installation or encoding the next response."
+ceiling_bytes = 4240
+
+[[frame_exceptions.runtime]]
+function = "<oer_memory::static_place::PlacedFuture<<oer_ieee80211_runtime::station_service::StationService<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::run_placed<2, 8, 2, oer_embassy_time::EmbassyClock>::{closure#0}> as core::future::future::Future>::poll"
+reason = "Polling the statically backed run_placed future inlines service run_loop/serve; owned service-end, terminal custody and event temporaries still occupy the poll frame."
+ceiling_bytes = 33584
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_sta::machine::ConnectedRsn>::advance_deferred"
+reason = "Replacing DeferredEapol owns pending M3/GM1 requests while AES key unwrap and supplicant processing build the next installation/rekey state."
+ceiling_bytes = 4912

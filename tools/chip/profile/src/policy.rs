@@ -2,9 +2,9 @@
 //! the gate bounds, each by the function that runs on it, the compiler move
 //! limit and the runtime headroom the firmware's stack painting enforces.
 //!
-//! A policy that names no stacks sets only the compiler's move limit: the
+//! A policy that names no stacks sets only the compiler move and function-frame limit: the
 //! image is compiled with every image flag (frame records included), and the
-//! stack check has nothing to bound. A policy that names stacks names the
+//! whole-stack check has nothing to bound. A policy that names stacks names the
 //! coverage review and the CPU0 task stack, and the interrupt stacks' and a
 //! bootstrap image's stack where the image has them.
 
@@ -26,10 +26,13 @@ pub struct StackPolicy {
     /// relative to the policy file that names it.
     #[serde(default)]
     pub coverage_policy: Option<PathBuf>,
-    /// The largest implicit copy or move the compiler admits
+    /// The largest recorded function frame and implicit copy or move admitted
     /// (`-Z move-size-limit` with `-D large-assignments`). Larger values live
     /// in placed static storage; futures and task arguments borrow them.
     pub max_move_bytes: u64,
+    /// Reviewed frames above the move limit, scoped to each ELF of the image.
+    #[serde(default)]
+    pub frame_exceptions: FrameExceptions,
     /// The runtime's primary task stack.
     #[serde(default)]
     pub cpu0_task_stack: Option<TaskStack>,
@@ -38,6 +41,27 @@ pub struct StackPolicy {
     /// The bootstrap image's only stack.
     #[serde(default)]
     pub bootstrap_stack: Option<TaskStack>,
+}
+
+/// A frame exception applies to exactly one implementation in its ELF.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FrameExceptions {
+    #[serde(default)]
+    pub runtime: Vec<FrameException>,
+    #[serde(default)]
+    pub bootstrap: Vec<FrameException>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FrameException {
+    /// Exact demangled name without hashes, with concrete generic arguments.
+    pub function: String,
+    /// What in the current implementation occupies the frame.
+    pub reason: String,
+    /// The initial measured frame; subsequent edits may only lower it.
+    pub ceiling_bytes: u64,
 }
 
 /// The stacks of a policy that names them.
@@ -133,12 +157,15 @@ pub struct InterruptStacks {
 }
 
 /// A policy that reuses a base policy (`extends`, relative to this file)
-/// unchanged.
+/// with optional additional frame exceptions. Stack allocations and compiler
+/// limits remain those of the base.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Extension {
     schema: u32,
     extends: PathBuf,
+    #[serde(default)]
+    frame_exceptions: FrameExceptions,
 }
 
 impl StackPolicy {
@@ -173,7 +200,7 @@ impl StackPolicy {
                 )
                 .into());
             }
-            let base = Self::parse(&base_path, &base_source)?;
+            let mut base = Self::parse(&base_path, &base_source)?;
             if extension.schema != base.schema {
                 return Err(format!(
                     "{} has schema {} but its base has schema {}",
@@ -183,6 +210,12 @@ impl StackPolicy {
                 )
                 .into());
             }
+            base.frame_exceptions
+                .runtime
+                .extend(extension.frame_exceptions.runtime);
+            base.frame_exceptions
+                .bootstrap
+                .extend(extension.frame_exceptions.bootstrap);
             base
         } else {
             Self::parse(path, &source)?
@@ -210,6 +243,23 @@ impl StackPolicy {
         }
         if self.max_move_bytes == 0 {
             return Err("the move limit must be positive".into());
+        }
+        for exceptions in [
+            &self.frame_exceptions.runtime,
+            &self.frame_exceptions.bootstrap,
+        ] {
+            let mut names = std::collections::BTreeSet::new();
+            for exception in exceptions {
+                if exception.function.trim().is_empty()
+                    || exception.reason.trim().is_empty()
+                    || exception.ceiling_bytes <= self.max_move_bytes
+                {
+                    return Err("a frame exception needs an exact function, a reason and a ceiling above the move limit".into());
+                }
+                if !names.insert(&exception.function) {
+                    return Err(format!("duplicate frame exception: {}", exception.function).into());
+                }
+            }
         }
         let named = [
             self.coverage_policy.is_some(),
@@ -399,6 +449,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn an_extension_adds_exceptions_without_changing_the_base_contract() {
+        let directory = tempfile::tempdir().unwrap();
+        let base_path = directory.path().join("base.toml");
+        let base_source = include_str!("../../../../chips/esp32s31/platform/stack.toml");
+        std::fs::write(&base_path, base_source).unwrap();
+        let base = StackPolicy::load(&base_path).unwrap();
+        let path = directory.path().join("stack.toml");
+        let extension = "schema = 5\nextends = 'base.toml'\n\
+            [[frame_exceptions.runtime]]\nfunction = 'test::frame::<u8>'\n\
+            reason = 'the local packet buffer'\nceiling_bytes = 8192\n";
+        std::fs::write(&path, extension).unwrap();
+        let mut policy = StackPolicy::load(&path).unwrap();
+        assert_eq!(policy.frame_exceptions.runtime.len(), 1);
+        assert_eq!(policy.frame_exceptions.runtime[0].ceiling_bytes, 8192);
+        policy.frame_exceptions = FrameExceptions::default();
+        assert_eq!(policy, base);
+
+        for invalid in [
+            extension.replace("test::frame::<u8>", " "),
+            extension.replace("the local packet buffer", " "),
+            extension.replace("8192", "4096"),
+            format!(
+                "{extension}[[frame_exceptions.runtime]]{}",
+                extension
+                    .split_once("[[frame_exceptions.runtime]]")
+                    .unwrap()
+                    .1
+            ),
+        ] {
+            std::fs::write(&path, invalid).unwrap();
+            assert!(StackPolicy::load(&path).is_err());
+        }
+    }
+
+    #[test]
     fn tracked_loads_record_the_chip_and_both_policy_files_at_their_reads() {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
@@ -469,6 +554,7 @@ mod tests {
             schema: SCHEMA,
             coverage_policy: Some("own-memory".into()),
             max_move_bytes: 4096,
+            frame_exceptions: FrameExceptions::default(),
             cpu0_task_stack: Some(TaskStack {
                 root: "runtime_main".into(),
                 storage_symbol: Some("task_stack".into()),

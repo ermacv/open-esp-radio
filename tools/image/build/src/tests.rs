@@ -62,6 +62,7 @@ fn an_unchanged_embedded_runtime_keeps_its_timestamp() {
 fn requested(placement: bool) -> Gates {
     Gates {
         enforced: Enforced::All,
+        frames: false,
         stack: true,
         placement,
         interrupts: Some(oer_image_checks::interrupts::Required::Product),
@@ -317,6 +318,33 @@ fn only_interrupts_rejects_failed_missing_and_absent_results() {
         .unwrap();
         assert_eq!(written, bundle.checks);
         assert_eq!(written.len(), 2);
+    }
+}
+
+#[test]
+fn app_frame_enforcement_also_rejects_bootstrap_and_missing_results() {
+    for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
+        for frame_result in [Some(CheckResult::Failed("oversized frame".into())), None] {
+            let directory = tempfile::tempdir().unwrap();
+            let mut bundle = empty_bundle(directory.path());
+            let checks = Gates {
+                enforced: Enforced::Only([Check::Frames, Check::Interrupts].into()),
+                ..Gates::all(oer_image_checks::interrupts::Required::Product)
+            };
+            let mut results = vec![
+                ("stack", CheckResult::Passed),
+                ("interrupts", CheckResult::Passed),
+                ("placement", CheckResult::Passed),
+            ];
+            if let Some(result) = frame_result {
+                results.push(("frames", result));
+            }
+            let error = apply_outcome(&checks, elf, outcome(&results), &mut bundle)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(&format!("frames ({elf:?})")), "{error}");
+            assert!(bundle.path(crate::bundle::files::CHECKS).is_file());
+        }
     }
 }
 

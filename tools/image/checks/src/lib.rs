@@ -7,7 +7,8 @@
 //! assembled here.
 //!
 //! [`Gates`] are the checks an image build runs: `cargo fw build` enforces
-//! interrupt bounds, stand experiments report them, and HIL enforces them all.
+//! interrupt bounds and function frames, stand experiments report them, and
+//! HIL enforces them all.
 //! Every check reads what it needs from the chip profile and the stack
 //! policy, whatever the chip's boot kind. A requested check whose data is
 //! absent is a [`CheckResult::MissingContract`], which fails an enforced check: a
@@ -117,6 +118,8 @@ pub type Audit = Box<dyn Fn(&oer_analysis_elf::Elf<'_>) -> Result<()> + Send + S
 /// One check a developer can request.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Check {
+    /// Every recorded function frame in runtime and bootstrap.
+    Frames,
     /// The task and bootstrap stacks and the frame coverage.
     Stack,
     /// The image's placement in the chip's memory map.
@@ -145,6 +148,7 @@ impl Enforced {
             Self::All => true,
             Self::Only(checks) => {
                 let check = match name {
+                    FRAMES => Check::Frames,
                     STACK => Check::Stack,
                     INTERRUPTS => Check::Interrupts,
                     PLACEMENT => Check::Placement,
@@ -163,6 +167,9 @@ pub struct Gates {
     /// Which requested checks fail the build when they do not pass;
     /// the others are reported as warnings.
     pub enforced: Enforced,
+    /// Every recorded frame, using the interrupt policy's Product/Diagnostic
+    /// severity (Product when no interrupt check is requested).
+    pub frames: bool,
     /// The task and bootstrap stacks.
     pub stack: bool,
     /// The image's placement in the chip's memory map.
@@ -178,6 +185,7 @@ impl Gates {
     pub fn all(interrupts: Required) -> Self {
         Self {
             enforced: Enforced::All,
+            frames: true,
             stack: true,
             placement: true,
             interrupts: Some(interrupts),
@@ -189,6 +197,7 @@ impl Gates {
     pub fn of(checks: &[Check]) -> Self {
         Self {
             enforced: Enforced::All,
+            frames: checks.contains(&Check::Frames),
             stack: checks.contains(&Check::Stack),
             placement: checks.contains(&Check::Placement),
             interrupts: checks
@@ -201,6 +210,7 @@ impl Gates {
 
 /// The names of the checks.
 const STACK: &str = "stack";
+const FRAMES: &str = "frames";
 const INTERRUPTS: &str = "interrupts";
 const PLACEMENT: &str = "placement";
 const AUDIT: &str = "audit";
@@ -242,6 +252,7 @@ impl Gates {
     pub fn requested(&self, elf: CheckedElf) -> Vec<String> {
         match elf {
             CheckedElf::Runtime => [
+                (self.frames, FRAMES),
                 (self.stack, STACK),
                 (self.interrupts.is_some(), INTERRUPTS),
                 (self.placement, PLACEMENT),
@@ -252,7 +263,7 @@ impl Gates {
             .map(|(_, name)| name.to_owned())
             .collect(),
             // A staged boot's bootstrap has its own stack.
-            CheckedElf::Bootstrap => [(self.stack, STACK)]
+            CheckedElf::Bootstrap => [(self.frames, FRAMES), (self.stack, STACK)]
                 .into_iter()
                 .filter(|(requested, _)| *requested)
                 .map(|(_, name)| name.to_owned())
@@ -275,6 +286,7 @@ impl Gates {
         let stacks = input.policy.stacks().is_ok();
         let interrupts = profile.memory.is_some() && profile.interrupts.is_some();
         let stack_runs = self.stack && rom && stacks;
+        let frames_run = self.frames && rom;
         let interrupts_run = self.interrupts.is_some() && rom && interrupts;
         if self.stack && !stack_runs {
             outcome.results.push((
@@ -296,13 +308,21 @@ impl Gates {
                 }),
             ));
         }
-        if stack_runs || interrupts_run {
-            // One analysis of the image serves both stack checks.
+        if self.frames && !frames_run {
+            outcome
+                .results
+                .push((FRAMES.to_owned(), missing(chip("[rom] ELF"))));
+        }
+        if stack_runs || interrupts_run || frames_run {
+            // One analysis serves the frame, task-stack and interrupt checks.
             match crate::stack::Image::read(input.root, profile, input.elf) {
                 Ok(image) => {
                     outcome
                         .rom_summaries
                         .extend(image.analysis.summaries.iter().cloned());
+                    if frames_run {
+                        self.frames_of(&image, input, CheckedElf::Runtime, &mut outcome);
+                    }
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
                             let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
@@ -354,6 +374,9 @@ impl Gates {
                 Err(error) => {
                     // The analysis both checks share did not run.
                     let failed = CheckResult::Failed(format!("the image analysis failed: {error}"));
+                    if frames_run {
+                        outcome.results.push((FRAMES.to_owned(), failed.clone()));
+                    }
                     if stack_runs {
                         outcome.results.push((STACK.to_owned(), failed.clone()));
                     }
@@ -402,26 +425,43 @@ impl Gates {
     /// Check a staged boot's bootstrap ELF.
     pub fn bootstrap(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
+        if !self.stack && !self.frames {
+            return Ok(outcome);
+        }
+        if input.profile.rom.is_none() {
+            let missing = CheckResult::MissingContract(format!(
+                "chips/{}/platform/chip.toml names no [rom] ELF",
+                input.profile.id
+            ));
+            for name in self.requested(CheckedElf::Bootstrap) {
+                outcome.results.push((name, missing.clone()));
+            }
+            return Ok(outcome);
+        }
+        let image = match crate::stack::Image::read(input.root, input.profile, input.elf) {
+            Ok(image) => image,
+            Err(error) => {
+                for name in self.requested(CheckedElf::Bootstrap) {
+                    outcome.results.push((
+                        name,
+                        CheckResult::Failed(format!("the image analysis failed: {error}")),
+                    ));
+                }
+                return Ok(outcome);
+            }
+        };
+        if self.frames {
+            self.frames_of(&image, input, CheckedElf::Bootstrap, &mut outcome);
+        }
         if !self.stack {
             return Ok(outcome);
         }
-        let result = if input.profile.rom.is_none() {
-            CheckResult::MissingContract(format!(
-                "chips/{}/platform/chip.toml names no [rom] ELF",
-                input.profile.id
-            ))
-        } else if input.policy.stacks().is_err() {
+        let result = if input.policy.stacks().is_err() {
             CheckResult::MissingContract("the image's stack policy names no stacks".to_owned())
         } else {
-            match crate::stack::audit_bootstrap_stack(
-                input.root,
-                input.profile,
-                input.elf,
-                input.policy,
-                input.output,
-            ) {
+            match crate::stack::audit_bootstrap_stack(&image, input.policy, input.output) {
                 Ok(Some(warnings)) => {
-                    outcome.warnings = warnings;
+                    outcome.warnings.extend(warnings);
                     outcome
                         .reports
                         .push(crate::stack::BOOTSTRAP_REPORT.to_owned());
@@ -435,6 +475,31 @@ impl Gates {
         };
         outcome.results.push((STACK.to_owned(), result));
         Ok(outcome)
+    }
+
+    fn frames_of(
+        &self,
+        image: &crate::stack::Image,
+        input: &CheckInput<'_>,
+        elf: CheckedElf,
+        outcome: &mut CheckOutcome,
+    ) {
+        let result = ran(crate::stack::frames::audit(
+            image,
+            input.policy,
+            elf,
+            self.interrupts.unwrap_or(Required::Product),
+            input.output,
+        )
+        .map(|warnings| outcome.warnings.extend(warnings)));
+        outcome.results.push((FRAMES.to_owned(), result));
+        outcome.reports.push(
+            match elf {
+                CheckedElf::Runtime => crate::stack::frames::RUNTIME_REPORT,
+                CheckedElf::Bootstrap => crate::stack::frames::BOOTSTRAP_REPORT,
+            }
+            .to_owned(),
+        );
     }
 }
 
@@ -453,17 +518,27 @@ mod enforcement_tests {
         let gates = Gates::default();
         assert_eq!(gates.enforced, Enforced::Reported);
         assert!(gates.requested(CheckedElf::Runtime).is_empty());
+        let frames = Gates::of(&[Check::Frames]);
+        for elf in [CheckedElf::Runtime, CheckedElf::Bootstrap] {
+            assert_eq!(frames.requested(elf), [FRAMES]);
+            assert!(
+                Gates::all(Required::Diagnostic)
+                    .requested(elf)
+                    .contains(&FRAMES.to_owned())
+            );
+        }
     }
 
     #[test]
     fn only_enforces_the_named_checks_and_never_the_audit() {
         for (check, name) in [
+            (Check::Frames, FRAMES),
             (Check::Stack, STACK),
             (Check::Interrupts, INTERRUPTS),
             (Check::Placement, PLACEMENT),
         ] {
             let enforced = Enforced::Only([check].into());
-            for requested in [STACK, INTERRUPTS, PLACEMENT, AUDIT] {
+            for requested in [FRAMES, STACK, INTERRUPTS, PLACEMENT, AUDIT] {
                 assert_eq!(enforced.requires(requested), requested == name);
                 assert!(Enforced::All.requires(requested));
                 assert!(!Enforced::Reported.requires(requested));

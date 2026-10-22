@@ -1,0 +1,9 @@
+schema = 5
+extends = "../../../chips/esp32s31/platform/stack.toml"
+
+# Initial ceiling measured on cd9954b7 (#358); only lower it as the frame shrinks.
+# Remove this entry when the frame fits the move limit.
+[[frame_exceptions.runtime]]
+function = "oer_firmware_apps_w1::run::{closure#0}"
+reason = "Polling run inlines radio cold-start and carries the by-value startup result through materialize_esp32s31_wifi_role before entering the receive phases; these startup/ownership temporaries occupy its poll frame."
+ceiling_bytes = 17376

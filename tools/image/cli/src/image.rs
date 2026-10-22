@@ -152,10 +152,11 @@ pub fn spec(
             features: Vec::new(),
             default_features: true,
         },
-        stack_policy: if image == w3::IMAGE {
-            Path::new("firmware/apps/w3/stack.toml").to_owned()
-        } else {
-            profile.stack_policy()
+        stack_policy: match image {
+            w1::IMAGE => "firmware/apps/w1/stack.toml".into(),
+            w3::IMAGE if stand.is_some() => "firmware/apps/w3/stack-configured.toml".into(),
+            w3::IMAGE => "firmware/apps/w3/stack.toml".into(),
+            _ => profile.stack_policy(),
         },
         layout_seed: None,
         runtime_environment: runtime_env(image, stand),
@@ -243,7 +244,7 @@ mod tests {
                 image,
                 None,
                 true,
-                Enforced::Only([Check::Interrupts].into()),
+                Enforced::Only([Check::Frames, Check::Interrupts].into()),
             )
             .unwrap();
             assert_eq!(spec.runtime_environment, runtime_env(image, Some(stand)));
@@ -270,11 +271,11 @@ mod tests {
     }
 
     #[test]
-    fn build_and_analysis_enforce_interrupts_with_separate_outputs() {
+    fn build_and_analysis_enforce_frames_and_interrupts_with_separate_outputs() {
         let directory = repository();
         for image in ["w0", "w1", "w2", "w3"] {
             for analysis in [false, true] {
-                let enforced = Enforced::Only([Check::Interrupts].into());
+                let enforced = Enforced::Only([Check::Frames, Check::Interrupts].into());
                 let spec = spec(directory.path(), image, None, analysis, enforced.clone()).unwrap();
                 assert_eq!(
                     spec.output,
@@ -294,7 +295,14 @@ mod tests {
                 );
                 let gates = spec.checks.unwrap();
                 assert_eq!(gates.enforced, enforced);
-                assert!(gates.stack && gates.placement);
+                let expected_policy = match (image, analysis) {
+                    ("w1", _) => "firmware/apps/w1/stack.toml",
+                    ("w3", true) => "firmware/apps/w3/stack-configured.toml",
+                    ("w3", false) => "firmware/apps/w3/stack.toml",
+                    _ => "chips/esp32s31/platform/stack.toml",
+                };
+                assert_eq!(spec.stack_policy, Path::new(expected_policy));
+                assert!(gates.frames && gates.stack && gates.placement);
                 assert_eq!(gates.interrupts, Some(Required::Product));
                 if !analysis {
                     assert_eq!(spec.runtime_environment, runtime_env(image, None));
@@ -316,7 +324,7 @@ mod tests {
             let spec = spec(directory.path(), image, stand, false, Enforced::Reported).unwrap();
             let gates = spec.checks.unwrap();
             assert_eq!(gates.enforced, Enforced::Reported);
-            assert!(gates.stack && gates.placement);
+            assert!(gates.frames && gates.stack && gates.placement);
             assert_eq!(gates.interrupts, Some(Required::Product));
             assert_eq!(spec.runtime_environment, runtime_env(image, stand));
         }
@@ -331,7 +339,7 @@ mod tests {
                 "boot-smoke",
                 None,
                 false,
-                Enforced::Only([Check::Interrupts].into())
+                Enforced::Only([Check::Frames, Check::Interrupts].into())
             )
             .is_ok()
         );
@@ -340,7 +348,7 @@ mod tests {
             "boot-smoke",
             None,
             true,
-            Enforced::Only([Check::Interrupts].into()),
+            Enforced::Only([Check::Frames, Check::Interrupts].into()),
         )
         .err()
         .unwrap()

@@ -19,6 +19,7 @@
 pub mod budget;
 pub mod contract;
 mod coverage;
+pub mod frames;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -65,21 +66,18 @@ pub fn audit_runtime_stacks(
     stacks.check()
 }
 
-/// Bound the bootstrap ELF `elf`'s stack, write [`BOOTSTRAP_REPORT`] into
+/// Bound the bootstrap `image`'s stack, write [`BOOTSTRAP_REPORT`] into
 /// `output`, then check it under `policy`. Returns the warnings it passed
 /// with; `None` when the policy names no bootstrap stack.
 pub fn audit_bootstrap_stack(
-    root: &Path,
-    profile: &oer_chip_profile::Profile,
-    elf: &Path,
+    image: &Image,
     policy: &StackPolicy,
     output: &Path,
 ) -> Result<Option<Vec<String>>> {
     let Some(bootstrap) = policy.stacks()?.bootstrap_stack else {
         return Ok(None);
     };
-    let image = Image::read(root, profile, elf)?;
-    let audit = StackAudit::of(&image, policy, &[("bootstrap stack", bootstrap)])?;
+    let audit = StackAudit::of(image, policy, &[("bootstrap stack", bootstrap)])?;
     std::fs::write(output.join(BOOTSTRAP_REPORT), audit.render())?;
     audit.check().map(Some)
 }

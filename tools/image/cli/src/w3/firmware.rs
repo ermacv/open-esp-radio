@@ -132,7 +132,13 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             super::IMAGE,
             Some(&build),
             false,
-            oer_image_checks::Enforced::Only([oer_image_checks::Check::Interrupts].into()),
+            oer_image_checks::Enforced::Only(
+                [
+                    oer_image_checks::Check::Frames,
+                    oer_image_checks::Check::Interrupts,
+                ]
+                .into(),
+            ),
         )?;
         // Start the bounded subscription after compilation, while the old
         // image is still selected. It must cover flash, the workload and
