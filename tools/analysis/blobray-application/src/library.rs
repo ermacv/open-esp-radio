@@ -644,6 +644,26 @@ fn analyze_object(
     }
 }
 
+fn summary_failure(
+    function: &LibraryFunction,
+    outcome: SummaryOutcome<()>,
+    unavailable: &str,
+    audit: bool,
+) -> Option<SignatureAuditIncomplete> {
+    let reason = match outcome {
+        SummaryOutcome::Available(()) => return None,
+        SummaryOutcome::LocalBudgetExceeded(budget) if audit => Error::new(
+            ErrorCode::LocalBudgetExceeded(budget),
+            "read-use function work budget exhausted",
+        ),
+        _ => Error::new(ErrorCode::Unavailable, unavailable),
+    };
+    Some(SignatureAuditIncomplete {
+        function: function.clone(),
+        reason,
+    })
+}
+
 /// Every candidate memory address the functions `inputs` define access,
 /// inside `ranges` when it is nonempty, with blocked functions and gaps.
 pub fn register_accesses(
@@ -714,20 +734,10 @@ pub fn register_accesses(
                     false,
                 ),
             ] {
-                let Some(outcome) = outcome.filter(|s| *s != SummaryOutcome::Available(())) else {
+                let Some(failure) = outcome
+                    .and_then(|outcome| summary_failure(analyzed.function, outcome, reason, audit))
+                else {
                     continue;
-                };
-                let failure = SignatureAuditIncomplete {
-                    function: analyzed.function.clone(),
-                    // Preserve existing diagnostics; the outcome counters carry the typed cause.
-                    reason: if audit && matches!(outcome, SummaryOutcome::LocalBudgetExceeded(_)) {
-                        Error::new(
-                            ErrorCode::ResourceLimited,
-                            "read-use function work budget exhausted",
-                        )
-                    } else {
-                        Error::new(ErrorCode::Unavailable, reason)
-                    },
                 };
                 conflict_memory.admit(
                     serde_json::to_vec(&failure)
@@ -897,6 +907,33 @@ mod tests {
             signature_audit_outcome: None,
         }
         .partial_causes(c)
+    }
+
+    #[test]
+    fn incomplete_audit_record_preserves_the_local_budget_reason() {
+        let function = function();
+        let budget = LocalBudgetExceeded {
+            limit: 123_456,
+            scope: LocalBudgetScope::SignatureAudit,
+        };
+        let failure = summary_failure(
+            &function,
+            SummaryOutcome::LocalBudgetExceeded(budget),
+            "audit unavailable",
+            true,
+        )
+        .expect("incomplete audit record");
+        let encoded = serde_json::to_vec(&failure).expect("serialize report record");
+        let recorded: SignatureAuditIncomplete =
+            serde_json::from_slice(&encoded).expect("deserialize report record");
+        assert_eq!(recorded.function, function);
+        assert_eq!(
+            recorded.reason,
+            Error::new(
+                ErrorCode::LocalBudgetExceeded(budget),
+                "read-use function work budget exhausted",
+            )
+        );
     }
 
     #[test]
