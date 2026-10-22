@@ -39,6 +39,7 @@ use {
 
 use super::*;
 
+mod block_ack;
 mod contracts;
 use oer_ieee80211_model::{
     AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
@@ -401,7 +402,7 @@ struct World<'b> {
     /// The network stack's end of the transmit queue.
     stack: RefCell<MsduSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
-    delivered: RefCell<MsduReceiver<'b, EthernetFrame, 2>>,
+    delivered: RefCell<MsduReceiver<'b, EthernetFrame, 8>>,
 }
 
 /// Observe the operation class supplied by the service, independently of
@@ -782,7 +783,7 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
 struct Body<'w, 'b, S, const GROUPS: usize> {
     world: &'w World<'b>,
     transmit: MsduReceiver<'b, TxMsdu, 2>,
-    receive: MsduSender<'b, EthernetFrame, 2>,
+    receive: MsduSender<'b, EthernetFrame, 8>,
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -818,6 +819,7 @@ where
         {
             let ModelResources {
                 connection_epoch,
+                block_acks,
                 station_commands,
                 terminal_access,
                 tickets,
@@ -897,6 +899,14 @@ where
                     air: &self.world.air,
                 },
                 terminal_access,
+                Box::leak(Box::new(RxBlockAckStorage::<
+                    _,
+                    2,
+                    { oer_ieee80211_model::MODEL_RX_EVENTS },
+                >::new(
+                    block_acks, Duration::from_millis(100)
+                )))
+                .view(),
             );
             let mut command_queue = MsduQueue::<
                 ServiceCommand<'id, ModelCaps24, CommandPath<LocalId<'scope>>>,
@@ -1224,7 +1234,7 @@ where
             clock.clone(),
         );
         let mut transmit = MsduQueue::<TxMsdu, 2>::new();
-        let mut receive = MsduQueue::<EthernetFrame, 2>::new();
+        let mut receive = MsduQueue::<EthernetFrame, 8>::new();
         let (stack, transmit) = transmit.split();
         let (receive, delivered) = receive.split();
         let world = World {

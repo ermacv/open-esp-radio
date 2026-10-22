@@ -199,6 +199,70 @@ fn query_requests_are_protected_and_replays_cannot_create_another_response() {
 }
 
 #[test]
+fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once() {
+    use oer_ieee80211_wire::{
+        block_ack::frame::{BlockAckAction, encode_addba_request, parse_block_ack_action},
+        ccmp::{Ccmp128Key, CcmpHeader, CcmpKeyId, CcmpPacketNumber},
+        sequence::SequenceNumber,
+    };
+    use oer_time::Clock;
+    installed(|mint| {
+        let (mut world, ptk, _) = connected(mint);
+        let clock = oer_time_virtual::VirtualClock::<8>::starting_at(at(40));
+        world.frames.clear();
+        let body = encode_addba_request(17, 15, 16, 0, true, SequenceNumber::ZERO).unwrap();
+        let mut request = plain_disconnect(0xd0, 0);
+        request.truncate(24);
+        request.extend_from_slice(&body);
+        world.receive_verified(clock.now(), &request);
+        assert!(
+            world.frames.is_empty(),
+            "RX integrity metadata cannot authenticate a clear action"
+        );
+
+        request.truncate(24);
+        request[1] = 0x40;
+        request.extend_from_slice(
+            &CcmpHeader::new(
+                CcmpPacketNumber::new(1).unwrap(),
+                CcmpKeyId::new(0).unwrap(),
+            )
+            .encode(),
+        );
+        request.extend_from_slice(&body);
+        request.extend_from_slice(&[0; 8]);
+        oer_ieee80211_cipher::ccmp_mpdu::CcmpAssociation::new(
+            oer_ieee80211_wire::security::Spp::NotNegotiated,
+        )
+        .seal(&Ccmp128Key::new(ptk.temporal_key()), &mut request)
+        .unwrap();
+        let mut damaged = request.clone();
+        *damaged.last_mut().unwrap() ^= 1;
+        world.receive_verified(clock.now(), &damaged);
+        assert!(world.frames.is_empty());
+        world.receive(clock.now(), &request);
+        assert_eq!(world.frames.len(), 1);
+        let response = &world.frames[0];
+        assert_eq!(response[..2], [0xd0, 0x40]);
+        assert!(matches!(
+            parse_block_ack_action(&response[32..]),
+            Some(BlockAckAction::AddbaResponse {
+                dialog_token: 17,
+                status: 37,
+                tid: 15,
+                ..
+            })
+        ));
+        world.receive(clock.now(), &request);
+        assert_eq!(
+            world.frames.len(),
+            1,
+            "a replay cannot allocate another response"
+        );
+    });
+}
+
+#[test]
 fn same_igtk_rekey_keeps_its_ipn_and_a_new_igtk_activates_at_the_terminal() {
     installed(|mint| {
         let (mut world, ptk, _) = connected(mint);

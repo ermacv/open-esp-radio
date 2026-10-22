@@ -129,11 +129,15 @@ use crate::pool::Pool;
 use crate::request::StationListenInterval;
 use oer_ieee80211_port::ConfigurePermission;
 use oer_radio_port::{PoolPath, Root};
+mod block_ack;
 mod commands;
 mod deferred_eapol;
 mod group_keys;
 mod management;
 use crate::power_save::{NullOutcome, PowerSaveDecision, PowerSaveView};
+pub use block_ack::{
+    BlockAckReplyRefusal, BlockAckReplyResult, PendingRxBlockAck, RxBlockAckReply,
+};
 use commands::Commands;
 pub use commands::{
     BackgroundScanEnd, CommandRefusal, ConnectCommand, DisconnectCommand, ScanCommand,
@@ -409,6 +413,8 @@ pub enum StaInput<'id, T: StaTokens, K> {
 /// ```
 #[must_use = "carry out the action or return its owners through a terminal path"]
 pub enum StaAction<'a, 'id, T: StaTokens, K> {
+    /// A validated Block Ack action of the current BSS, for its RX bank owner.
+    BlockAck(PendingRxBlockAck<'id, T::EpochPath>),
     /// Stop the port; the machine retains the incomplete resource bank.
     ContractViolation(StaKeyContractViolation),
     /// Ask the arbiter for a channel, with the station's place; the service
@@ -1597,6 +1603,8 @@ struct Connected<T: StaTokens, K> {
     background: Option<Background>,
     /// The application has yet to hear the station connected.
     connected_notice: bool,
+    /// Parsed management to hand to the service before the next RX input.
+    block_ack: Option<oer_ieee80211_wire::block_ack::frame::BlockAckAction>,
     /// The supplicant of a protected link and its group key's handshake.
     rsn: Option<ConnectedRsn>,
 }
@@ -1616,6 +1624,8 @@ enum Sending {
     DuplicateMessage4,
     /// A protected SA Query Request or Response.
     SaQuery,
+    /// A response to the AP's receive Block Ack negotiation.
+    BlockAck,
 }
 
 /// A protected link's supplicant and its group key's handshake.
@@ -1953,6 +1963,7 @@ type StaDone<T> = Done<<T as StaTokens>::AckEvidence, <T as StaTokens>::AirDenie
 
 /// An action a state owes.
 enum Owed<'id, T: StaTokens, K> {
+    BlockAck(PendingRxBlockAck<'id, T::EpochPath>),
     InstallPairwise {
         association: T::Association,
         pending: PendingPairwiseKey<'id, T::EpochPath>,
@@ -3395,7 +3406,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         rsn.advance_deferred();
                     }
                 }
-                Sending::Probe | Sending::SaQuery => {}
+                Sending::Probe | Sending::SaQuery | Sending::BlockAck => {}
             }
             if let Some(background) = &connected.background
                 && background.step == BackgroundStep::NeedAbsence
@@ -4021,6 +4032,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         management.received_query(query);
                         None
                     }
+                    Some(ManagementEvent::BlockAck(action)) => {
+                        connected.block_ack = Some(action);
+                        None
+                    }
                     None => {
                         if matches!(
                             peer_disconnect(frame, self.config.address, connected.bssid),
@@ -4037,7 +4052,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     }
                 }
             }
-            None => peer_disconnect(frame, self.config.address, connected.bssid),
+            None => {
+                if let Some(action) =
+                    block_ack::unprotected_action(management, self.config.address, connected.bssid)
+                {
+                    connected.block_ack = Some(action);
+                }
+                peer_disconnect(frame, self.config.address, connected.bssid)
+            }
         };
         if let Some(reason_code) = disconnect {
             // The access point ended the link: no Deauthentication back.
@@ -4142,6 +4164,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             }
         };
         Some(match owed {
+            Owed::BlockAck(request) => StaAction::BlockAck(request),
             // Owed only while the station holds its primary lease; without
             // it the place stays, and nothing is asked.
             Owed::Absence(request, place) => match &self.lease {
@@ -4653,6 +4676,20 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     Some(REASON_UNSPECIFIED),
                 ),
                 ActionProgress::Transition,
+            );
+        }
+        if let Some(action) = connected.block_ack.take()
+            && let Some(epoch) = self.epoch
+        {
+            let request = PendingRxBlockAck::new(
+                epoch,
+                connected.bssid,
+                action,
+                connected.qos && connected.peer.associated.phy != PhyMode::Legacy,
+            );
+            return (
+                State::Connected(connected),
+                ActionProgress::Action(Owed::BlockAck(request)),
             );
         }
         if connected.connected_notice {
@@ -5460,6 +5497,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     power: PowerSaveView::Awake,
                     wake: false,
                     sending: false,
+                    block_ack: None,
                     waking: false,
                     background: None,
                     connected_notice: true,
@@ -5962,6 +6000,7 @@ fn confirm<T: StaTokens, K>(
                 power: PowerSaveView::Awake,
                 wake: false,
                 sending: false,
+                block_ack: None,
                 waking: false,
                 background: None,
                 connected_notice: false,

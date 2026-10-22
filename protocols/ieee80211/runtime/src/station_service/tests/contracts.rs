@@ -24,6 +24,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
     {
         let ModelResources {
             connection_epoch,
+            block_acks,
             station_commands,
             access_point_commands,
             terminal_access,
@@ -78,6 +79,14 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             arbiter,
             EspressifRateSelection::<ModelCaps24>::new(),
             terminal_access,
+            Box::leak(Box::new(RxBlockAckStorage::<
+                _,
+                2,
+                { oer_ieee80211_model::MODEL_RX_EVENTS },
+            >::new(
+                block_acks, Duration::from_millis(100)
+            )))
+            .view(),
         );
         let access_point_association =
             <ModelTypes<ModelBackend<Id, ModelCaps24, ServiceContexts>> as PhaseTypes>::AccessPointKeys::begin_association(
