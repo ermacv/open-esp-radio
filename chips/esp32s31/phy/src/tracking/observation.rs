@@ -224,21 +224,15 @@ pub struct GainTiming {
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
-    pub total_micros: u32,
-    pub maximum_micros: u32,
-    pub lateness_micros: u32,
-    pub maximum_lateness_micros: u32,
-    pub maximum_ready_micros: u32,
     pub polls: u16,
     pub pending: u16,
+    pub total_micros: u32,
+    pub maximum_micros: u32,
     pub resumes: u16,
+    pub lateness_micros: u32,
+    pub maximum_lateness_micros: u32,
     pub ready_edges: u16,
-    /// Last hardware-bearing poll, for reporting after its driver completes.
-    pub last_ready_poll_micros: u16,
-    pub last_ready_atom_micros: u16,
-    pub(crate) action: u8,
-    pub maximum_action: u8,
-    pub maximum_ready_action: u8,
+    pub maximum_ready_micros: u32,
     pub invalid: bool,
 }
 impl EngineTiming {
@@ -288,11 +282,7 @@ impl EngineTiming {
             if let Some(elapsed) = ready_elapsed {
                 if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
                     increment(&mut self.ready_edges, &mut self.invalid);
-                    if elapsed > self.maximum_ready_micros {
-                        self.maximum_ready_micros = elapsed;
-                        self.maximum_ready_action = self.action;
-                    }
-                    self.last_ready_atom_micros = u16::try_from(elapsed).unwrap_or(u16::MAX);
+                    self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
                 } else {
                     self.invalid = true;
                 }
@@ -306,13 +296,7 @@ impl EngineTiming {
                 .and_then(|d| u32::try_from(d.as_micros()).ok())
             {
                 add(&mut self.total_micros, elapsed, &mut self.invalid);
-                if elapsed > self.maximum_micros {
-                    self.maximum_micros = elapsed;
-                    self.maximum_action = self.action;
-                }
-                if ready_elapsed.is_some() {
-                    self.last_ready_poll_micros = u16::try_from(elapsed).unwrap_or(u16::MAX);
-                }
+                self.maximum_micros = self.maximum_micros.max(elapsed);
                 if let Some((row, sample)) = command {
                     if let Ok(elapsed) = u16::try_from(elapsed) {
                         row.record(sample, elapsed);
@@ -527,6 +511,8 @@ pub struct RxGainExecution {
     pub maximum_parts_micros: [u32; 3],
     /// Same action/first-entry tags as the engine maxima, correlated per part.
     pub maximum_parts_actions: [u8; 3],
+    pub maximum_engine_micros: [u32; 2],
+    pub maximum_engine_actions: [u8; 2],
     /// Complete RX DC product quality; absent when that child did not complete.
     pub quality: Option<crate::rx::gain_calibration::PhyRxGainDcQuality>,
     pub minimum_searches: u32,
@@ -535,6 +521,49 @@ pub struct RxGainExecution {
     pub settle_1us: u32,
     pub settle_2us: u32,
     pub settle_10us: u32,
+}
+
+impl RxGainExecution {
+    /// Associate an engine maximum with its retained action after the poll stamp.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn observe_engine(&mut self, timing: &EngineTiming, action: u8) {
+        for (index, elapsed) in [timing.maximum_micros, timing.maximum_ready_micros]
+            .into_iter()
+            .enumerate()
+        {
+            if elapsed > self.maximum_engine_micros[index] {
+                self.maximum_engine_micros[index] = elapsed;
+                self.maximum_engine_actions[index] = action;
+            }
+        }
+    }
+}
+
+impl EngineTiming {
+    /// Merge completed action records outside the measured driver.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn merge(&mut self, other: &Self) {
+        self.invalid |= other.invalid;
+        macro_rules! add {
+            ($($field:ident),*) => { $(
+                if let Some(sum) = self.$field.checked_add(other.$field) { self.$field = sum; }
+                else { self.invalid = true; }
+            )* };
+        }
+        add!(
+            polls,
+            pending,
+            total_micros,
+            resumes,
+            lateness_micros,
+            ready_edges
+        );
+        self.maximum_micros = self.maximum_micros.max(other.maximum_micros);
+        self.maximum_lateness_micros = self
+            .maximum_lateness_micros
+            .max(other.maximum_lateness_micros);
+        self.maximum_ready_micros = self.maximum_ready_micros.max(other.maximum_ready_micros);
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

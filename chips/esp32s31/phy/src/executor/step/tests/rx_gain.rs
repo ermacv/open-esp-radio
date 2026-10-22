@@ -46,13 +46,11 @@ fn complete_publisher(measured: bool) {
         )
         .expect("clock fits");
         let atoms = io.atoms.clone();
-        let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
+        let mut future = core::pin::pin!(drive_calibration::<TestDelay, _, _>(
             &mut job,
             &mut io,
             &clock,
-            measured.then_some(&mut timing),
-            None,
-            None
+            measured.then_some(&mut timing)
         ));
         loop {
             let before = atoms.get();
@@ -74,11 +72,7 @@ fn complete_publisher(measured: bool) {
     assert!(outcome.generated_tables);
     if measured {
         assert!(timing.polls > 0);
-        assert_eq!(
-            timing.action & 0x7f,
-            4,
-            "the IQ correction tail retains its identity"
-        );
+        assert!(timing.ready_edges > 0);
     }
     assert_eq!(
         outcome.dc, None,

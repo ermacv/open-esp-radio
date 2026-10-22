@@ -259,7 +259,7 @@ fn rx_gain_phase<
 ) -> impl core::future::Future<Output = Result<(), PhyTargetPortError>> + 'a {
     RxGain {
         inner: async move {
-            use crate::executor::step::{Job, drive};
+            use crate::executor::step::{Job, drive_calibration};
             let mut scratch = crate::executor::step::rx_gain::Scratch::default();
             let mut job = Job::rx_gain(
                 child,
@@ -269,7 +269,7 @@ fn rx_gain_phase<
                 timing.is_some(),
             )
             .map_err(super::step::port_error)?;
-            drive::<D, _, _>(&mut job, registers, clock, timing, None, None)
+            drive_calibration::<D, _, _>(&mut job, registers, clock, timing)
                 .await
                 .map_err(super::step::port_error)
         },
@@ -354,72 +354,94 @@ fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
 }
 
 /// Restore the operating channel without acquiring or releasing physical access.
-pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Timer>(
-    clock: &T,
-    child: &mut PhyCalibrationChannelTransition,
-    _platform: &mut P,
-    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-    observer: &mut O,
-) -> Result<(), PhyTargetPortError> {
-    use crate::{
-        channel::PhyChipChannelCompletion as Done,
-        executor::step::{Job, drive},
-        tracking::observation::{EngineTiming, Operation},
-    };
-    let mut timing = EngineTiming::default();
-    for _ in 0..RF_OPERATION_LIMIT {
-        if child.is_terminal() {
-            if O::OBSERVE_ENGINE_POLLS {
-                observer.engine_completed(Operation::ChannelRestore, timing);
-            }
-            return Ok(());
-        }
-        let action = if O::OBSERVE_ENGINE_POLLS {
-            channel_action_tag(child)
-        } else {
-            0
-        };
-        timing.action = action;
-        let mut binding = Some(
-            child
-                .lower_external()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-        );
-        let mut completion = None;
-        let mut job = Job::channel(&mut binding, &mut completion, clock.now())
-            .map_err(super::step::port_error)?;
-        drive::<D, _, _>(
-            &mut job,
-            registers,
-            clock,
-            O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
-            None,
-            None,
-        )
-        .await
-        .map_err(super::step::port_error)?;
-        if O::OBSERVE_ENGINE_POLLS {
-            observer.channel_action_completed(action, &timing);
-        }
-        let completion = completion.ok_or(PhyTargetPortError::UnexpectedBinding)?;
-        match completion {
-            Done::FrequencyReadyTimedOut => {
-                let crate::channel::PhyChipChannelAction::AwaitFrequencyReadyEdge {
-                    samples, ..
-                } = child.action()
-                else {
-                    return Err(PhyTargetPortError::UnexpectedBinding);
-                };
-                observer.channel_frequency_ready_timed_out(samples);
-            }
-            Done::TxGainCalculated { request, image } => observer.channel_tx_gain(request, image),
-            _ => {}
-        }
-        child
-            .advance(completion)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+pin_project_lite::pin_project! { struct Channel<F> { #[pin] inner: F } }
+impl<F: core::future::Future<Output = Result<(), PhyTargetPortError>>> core::future::Future
+    for Channel<F>
+{
+    type Output = Result<(), PhyTargetPortError>;
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().inner.poll(cx)
     }
-    Err(PhyTargetPortError::RfOperationLimit)
+}
+
+pub fn channel<'a, D: PhyShortDelay + 'a, P: 'a, O: PhyTargetObserver + 'a, T: oer_time::Timer>(
+    clock: &'a T,
+    child: &'a mut PhyCalibrationChannelTransition,
+    _platform: &'a mut P,
+    registers: &'a mut (impl SharedPhyAccess + crate::executor::step::Registers),
+    observer: &'a mut O,
+) -> impl core::future::Future<Output = Result<(), PhyTargetPortError>> + 'a {
+    Channel {
+        inner: async move {
+            use crate::{
+                channel::PhyChipChannelCompletion as Done,
+                executor::step::{Job, drive},
+                tracking::observation::{EngineTiming, Operation},
+            };
+            let mut timing = EngineTiming::default();
+            for _ in 0..RF_OPERATION_LIMIT {
+                if child.is_terminal() {
+                    if O::OBSERVE_ENGINE_POLLS {
+                        observer.engine_completed(Operation::ChannelRestore, timing);
+                    }
+                    return Ok(());
+                }
+                let action = if O::OBSERVE_ENGINE_POLLS {
+                    channel_action_tag(child)
+                } else {
+                    0
+                };
+                let mut atom_timing = EngineTiming::default();
+                let mut binding = Some(
+                    child
+                        .lower_external()
+                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                );
+                let mut completion = None;
+                let mut job = Job::channel(&mut binding, &mut completion, clock.now())
+                    .map_err(super::step::port_error)?;
+                let result = drive::<D, _, _>(
+                    &mut job,
+                    registers,
+                    clock,
+                    O::OBSERVE_ENGINE_POLLS.then_some(&mut atom_timing),
+                    None,
+                    None,
+                )
+                .await;
+                if O::OBSERVE_ENGINE_POLLS {
+                    timing.merge(&atom_timing);
+                    observer.channel_action_completed(action, &atom_timing);
+                }
+                result.map_err(super::step::port_error)?;
+                let completion = completion.ok_or(PhyTargetPortError::UnexpectedBinding)?;
+                match completion {
+                    Done::FrequencyReadyTimedOut => {
+                        let crate::channel::PhyChipChannelAction::AwaitFrequencyReadyEdge {
+                            samples,
+                            ..
+                        } = child.action()
+                        else {
+                            return Err(PhyTargetPortError::UnexpectedBinding);
+                        };
+                        observer.channel_frequency_ready_timed_out(samples);
+                    }
+                    Done::TxGainCalculated { request, image } => {
+                        observer.channel_tx_gain(request, image)
+                    }
+                    _ => {}
+                }
+                child
+                    .advance(completion)
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+            }
+            Err(PhyTargetPortError::RfOperationLimit)
+        },
+    }
 }
 
 #[inline(never)]

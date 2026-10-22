@@ -52,41 +52,57 @@ fn coarse_rx_observation_contains_only_phase_boundaries() {
 
 #[test]
 fn calibration_names_remain_correlated_with_the_poll_and_atom_they_measure() {
-    use oer_time::{Clock, Duration};
-    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let mut execution = RxGainExecution::default();
     let mut timing = EngineTiming::default();
     for (action, poll, atom) in [(0x95, 48, 40), (24, 44, 41), (21, 48, 39)] {
-        timing.action = action;
-        let started = clock.now();
-        clock
-            .advance(Duration::from_micros(poll))
-            .expect("time fits");
-        timing.poll_finished(
-            &clock,
-            started,
-            true,
-            None,
-            Some(Duration::from_micros(atom)),
-            None,
-        );
+        let mut sample = EngineTiming::default();
+        sample.maximum_micros = poll;
+        sample.maximum_ready_micros = atom;
+        timing.merge(&sample);
+        execution.observe_engine(&timing, action);
     }
-    assert_eq!((timing.maximum_micros, timing.maximum_action), (48, 0x95));
+    assert_eq!(execution.maximum_engine_micros, [48, 41]);
+    assert_eq!(execution.maximum_engine_actions, [0x95, 24]);
     assert_eq!(
-        (timing.maximum_ready_micros, timing.maximum_ready_action),
-        (41, 24)
-    );
-    assert_eq!(
-        (timing.last_ready_poll_micros, timing.last_ready_atom_micros),
-        (48, 39)
-    );
-    assert_eq!(
-        calibration::name(false, timing.maximum_action),
+        calibration::name(false, execution.maximum_engine_actions[0]),
         "DcIq.Configure"
     );
     assert_eq!(
-        calibration::name(false, timing.maximum_ready_action),
+        calibration::name(false, execution.maximum_engine_actions[1]),
         "DcIq.AwaitReadinessEdge"
     );
+}
+
+#[test]
+fn action_statistics_merge_preserves_counters_and_marks_overflow() {
+    let mut total = EngineTiming::default();
+    let action = EngineTiming {
+        polls: 3,
+        pending: 2,
+        ready_edges: 1,
+        total_micros: 45,
+        maximum_micros: 25,
+        maximum_ready_micros: 20,
+        ..EngineTiming::default()
+    };
+    total.merge(&action);
+    total.merge(&action);
+    assert_eq!(
+        (
+            total.polls,
+            total.pending,
+            total.ready_edges,
+            total.total_micros
+        ),
+        (6, 4, 2, 90)
+    );
+    assert_eq!((total.maximum_micros, total.maximum_ready_micros), (25, 20));
+    assert!(!total.invalid);
+    total.merge(&EngineTiming {
+        polls: u16::MAX,
+        ..EngineTiming::default()
+    });
+    assert!(total.invalid, "an incomplete aggregate cannot qualify");
 }
 
 #[test]
@@ -94,6 +110,8 @@ fn rx_execution_summary_is_single_and_scoped_to_the_active_child() {
     let execution = RxGainExecution {
         maximum_parts_micros: [0; 3],
         maximum_parts_actions: [0; 3],
+        maximum_engine_micros: [0; 2],
+        maximum_engine_actions: [0; 2],
         quality: None,
         minimum_searches: 121,
         minimum_operations: 191,

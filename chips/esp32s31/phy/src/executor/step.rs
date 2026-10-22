@@ -104,7 +104,6 @@ pub(crate) struct Job<'a> {
     first_wait: bool,
     finished: bool,
     start_pending: bool,
-    calibration_action: u8,
     /// One completed edge, consumed by the poll recorder at its exit.
     ready_started: Option<Instant>,
 }
@@ -118,7 +117,6 @@ impl<'a> Job<'a> {
             first_wait: false,
             finished: false,
             start_pending: temperature,
-            calibration_action: 0,
             ready_started: None,
         })
     }
@@ -343,9 +341,7 @@ impl<'a> Job<'a> {
             }
             Work::RxGain(run) => {
                 self.ready_started = Some(clock.now());
-                let step = run.advance::<D, _>(&mut io, clock, now);
-                self.calibration_action = run.action;
-                return step;
+                return run.advance::<D, _>(&mut io, clock, now);
             }
             Work::Dcode {
                 transition,
@@ -638,6 +634,7 @@ pin_project_lite::pin_project! {
 /// The power adapter only converts the shared engine's terminal result.
 /// Its owner and observations live inside Driver, never in an outer async frame.
 trait Engine: Future<Output = Result<(), Failure>> {
+    fn observe_calibration(self: Pin<&mut Self>);
     fn finish_power(
         self: Pin<&mut Self>,
         result: Result<(), Failure>,
@@ -656,6 +653,18 @@ impl<
     D: super::wait::PhyShortDelay,
 > Engine for Driver<'a, '_, R, T, F, M, D>
 {
+    fn observe_calibration(self: Pin<&mut Self>) {
+        if let RouteProj::Transport {
+            job,
+            stats: Some(timing),
+            ..
+        } = self.project().route.project()
+        {
+            if let Work::RxGain(run) = &mut job.work {
+                run.execution.observe_engine(timing, run.action);
+            }
+        }
+    }
     fn finish_power(
         self: Pin<&mut Self>,
         result: Result<(), Failure>,
@@ -760,10 +769,7 @@ impl<
                                 Err(error) => step = Step::Failure(error),
                             }
                         }
-                        if let Some(stats) = stats.as_deref_mut() {
-                            if job.calibration_action != 0 {
-                                stats.action = job.calibration_action;
-                            }
+                        if stats.is_some() {
                             if let Some(at) = job.ready_started.take() {
                                 ready_elapsed = Some(clock.now().saturating_duration_since(at));
                             }
@@ -918,6 +924,42 @@ pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T:
         trace,
         rfpll,
     )
+}
+
+pin_project_lite::pin_project! {
+    struct CalibrationTrace<F> { #[pin] inner: F }
+}
+impl<F: Engine> Future for CalibrationTrace<F> {
+    type Output = Result<(), Failure>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        let result = this.inner.as_mut().poll(cx);
+        this.inner.observe_calibration();
+        result
+    }
+}
+
+pub(crate) fn drive_calibration<
+    'a,
+    'j,
+    D: super::wait::PhyShortDelay + 'a,
+    R: Registers,
+    T: Timer,
+>(
+    job: &'a mut Job<'j>,
+    registers: &'a mut R,
+    timer: &'a T,
+    stats: Option<&'a mut EngineTiming>,
+) -> impl Future<Output = Result<(), Failure>> + 'a {
+    CalibrationTrace {
+        inner: driver::<D, _, _>(
+            Input::Transport { job, stats },
+            registers,
+            timer,
+            None,
+            None,
+        ),
+    }
 }
 
 #[cfg(test)]
