@@ -4,7 +4,7 @@
 //! domain lives in the radio domain as [`ConcurrentPhy`]. The Controller enable
 //! runs `esp_phy_enable(PHY_MODEM_BT)` and `esp_btbb_enable` after the
 //! controller HAL is initialized and before the BLE base stack is enabled.
-//! [`join_bluetooth`] performs those steps on the task owner, which proves the
+//! The shared radio actor invokes [`join_bluetooth`] on the task owner, which proves the
 //! Bluetooth module clocks, and issues the affine [`BluetoothPhyMembership`];
 //! [`leave_bluetooth`] consumes it again.
 //!
@@ -176,6 +176,21 @@ pub fn leave_bluetooth<B: PlatformClockBackend>(
         });
     }
     let key = membership.key;
+    let valid = radio.attachment().settled().and_then(|domain| {
+        if domain.clients.permission_key() != key {
+            Err(ConcurrentPhyError::EpochMismatch)
+        } else if !domain.clients.snapshot().contains(RadioClient::Bluetooth) {
+            Err(ConcurrentPhyError::ClientAbsent(RadioClient::Bluetooth))
+        } else {
+            Ok(())
+        }
+    });
+    if let Err(error) = valid {
+        return Err(BluetoothPhyLeaveFailure {
+            membership,
+            error: BluetoothPhyClientError::Phy(error),
+        });
+    }
     let last = match release_client(radio, RadioClient::Bluetooth, key) {
         Ok(last) => last,
         Err(error) => {

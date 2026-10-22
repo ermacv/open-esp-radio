@@ -26,8 +26,8 @@
 //!
 //! A hardware failure poisons the domain: the request that saw it and every
 //! later one are answered [`Failure::Poisoned`], handing back what they lent.
-//! The actor is generic over its client `K`; this repository instantiates it
-//! for Wi-Fi.
+//! The primary client is `K`; Wi-Fi-only compositions contain no extra inbox.
+//! The `bluetooth` feature adds its cell to the same run future and shared state.
 
 use core::{convert::Infallible, future::poll_fn};
 

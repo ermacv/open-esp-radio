@@ -2895,6 +2895,7 @@ name = "oer-esp32s31-radio-system"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
+ "oer-bluetooth-le-radio",
  "oer-esp32s31-bluetooth-driver",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",

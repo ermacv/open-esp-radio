@@ -60,6 +60,61 @@ fn bluetooth_is_client(
 }
 
 #[test]
+fn rf_ready_requires_btbb_and_completed_initial_tracking() {
+    let (mut radio, partitions) = radio_domain(false);
+    radio.hold_btbb_for_test(RadioClient::Ieee802154);
+    let task = task(partitions);
+    let (membership, acquired) =
+        join_bluetooth_prepared(&mut radio, &task, &VirtualClock::<8>::new())
+            .expect("prepared join");
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert_eq!(
+        bluetooth_rf_ready(&mut radio, &membership).map(|_| ()),
+        Err(ConcurrentPhyError::TrackingPending)
+    );
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert!(bluetooth_rf_ready(&mut radio, &membership).is_ok());
+    task.release_btbb(&mut radio).expect("held reference");
+    assert_eq!(
+        bluetooth_rf_ready(&mut radio, &membership).map(|_| ()),
+        Err(ConcurrentPhyError::ClientAbsent(RadioClient::Bluetooth))
+    );
+}
+
+#[test]
+fn foreign_completion_cannot_authorize_a_new_registrations_graph() {
+    let (mut old, partitions) = radio_domain(false);
+    old.hold_btbb_for_test(RadioClient::Ieee802154);
+    let task = task(partitions);
+    let (membership, _) =
+        join_bluetooth_prepared(&mut old, &task, &VirtualClock::<8>::new()).expect("old join");
+    assert!(old.attachment_mut().complete_tracking_for_test());
+    let (mut current, partitions) = radio_domain(false);
+    current.hold_btbb_for_test(RadioClient::Ieee802154);
+    let current_task = self::task(partitions);
+    let (current_membership, _) =
+        join_bluetooth_prepared(&mut current, &current_task, &VirtualClock::<8>::new())
+            .expect("current join");
+    assert!(current.attachment_mut().complete_tracking_for_test());
+    assert_eq!(
+        bluetooth_rf_ready(&mut current, &membership).map(|_| ()),
+        Err(ConcurrentPhyError::EpochMismatch)
+    );
+    let before = current.attachment().client_snapshot();
+    let failure = leave_bluetooth(&mut current, &current_task, membership)
+        .expect_err("late old completion cannot leave the current registration");
+    assert_eq!(
+        failure.error(),
+        BluetoothPhyClientError::Phy(ConcurrentPhyError::EpochMismatch)
+    );
+    assert_eq!(current.attachment().client_snapshot(), before);
+    let _old_membership = failure.into_membership();
+    assert!(bluetooth_rf_ready(&mut current, &current_membership).is_ok());
+    assert!(bluetooth_is_client(&old));
+    assert!(bluetooth_is_client(&current));
+}
+
+#[test]
 fn joining_an_unregistered_domain_changes_nothing() {
     let (mut radio, partitions) =
         RadioHardware::for_host_test()

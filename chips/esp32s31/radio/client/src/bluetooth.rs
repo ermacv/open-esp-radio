@@ -167,3 +167,6 @@ pub fn claim_for_host_test(
     )))
     .expect("a fresh Bluetooth cell has its poster")
 }
+
+#[cfg(test)]
+mod tests;

@@ -8,12 +8,11 @@ use oer_esp32s31_hal::{
     domain::{BluetoothClient, CoexAbsent, Coexisting, CommonPower, PlatformClockProvider},
 };
 use oer_esp32s31_phy::{
-    PhyTargetObserver, RomShortDelay,
+    PhyTargetObserver,
     bluetooth_client::{
         BluetoothPhyMembership, bluetooth_rf_ready, join_bluetooth, leave_bluetooth,
     },
-    concurrent::{ConcurrentAcquire, PhyClientAccess, phy_ready},
-    maintain_concurrent_phy,
+    concurrent::{PhyClientAccess, phy_ready},
 };
 use oer_esp32s31_radio_client::{
     DomainHealth, Failed, Failure, LpClock, PhyPreparation, RcSlow,
@@ -39,7 +38,6 @@ pub struct WithBluetooth<C: PlatformClockProvider, T, O, H> {
     membership: Option<BluetoothPhyMembership>,
     installation: Option<Installation>,
     permission: Option<Permission>,
-    tracking_due: bool,
 }
 
 enum Coex {
@@ -65,7 +63,6 @@ impl<C: PlatformClockProvider, T, O, H> WithBluetooth<C, T, O, H> {
             membership: None,
             installation: None,
             permission: None,
-            tracking_due: false,
         }
     }
 
@@ -73,6 +70,34 @@ impl<C: PlatformClockProvider, T, O, H> WithBluetooth<C, T, O, H> {
     /// owner. This exposes no shared-domain registers or PHY membership.
     pub fn controller_mut(&mut self) -> &mut H {
         &mut self.controller
+    }
+
+    /// Detach a stopped installation without replacing the common RF owner.
+    #[allow(clippy::result_large_err, clippy::type_complexity)]
+    pub fn into_stopped(
+        mut self,
+    ) -> Result<
+        (
+            Esp32s31Radio<C, T, O>,
+            ColdOwner,
+            CoexAbsent<BluetoothClient>,
+            H,
+        ),
+        Self,
+    > {
+        if self.installation.is_some()
+            || self.membership.is_some()
+            || self.power.is_some()
+            || self.cold.is_none()
+            || !matches!(self.coex, Some(Coex::Absent(_)))
+        {
+            return Err(self);
+        }
+        let cold = self.cold.take().expect("checked stopped partition");
+        let Some(Coex::Absent(absent)) = self.coex.take() else {
+            unreachable!("checked stopped coexistence")
+        };
+        Ok((self.shared, cold, absent, self.controller))
     }
 
     pub const fn permission(&self) -> Option<Permission> {
@@ -96,7 +121,9 @@ where
         self.shared.tracking_deadline()
     }
     async fn track_tick(&mut self) -> Result<(), Fault> {
-        self.shared.track_tick().await
+        self.shared.track_tick().await?;
+        self.shared.wifi.tracking_due = false;
+        Ok(())
     }
 }
 
@@ -115,6 +142,12 @@ where
         <Wifi as oer_esp32s31_radio_client::Client>::Joined,
         Failed<<Wifi as oer_esp32s31_radio_client::Client>::JoinReturned>,
     > {
+        if self.track_tick().await.is_err() {
+            return Err(Failed {
+                returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
+                cause: Failure::Poisoned,
+            });
+        }
         self.shared.enter(join, phy, lp).await
     }
     async fn track(
@@ -124,6 +157,12 @@ where
         <Wifi as oer_esp32s31_radio_client::Client>::Tracked,
         Failed<<Wifi as oer_esp32s31_radio_client::Client>::TrackReturned>,
     > {
+        if self.track_tick().await.is_err() {
+            return Err(Failed {
+                returned: track.wifi,
+                cause: Failure::Poisoned,
+            });
+        }
         self.shared.track(track).await
     }
     async fn retune(
@@ -164,6 +203,7 @@ where
             returned: join,
             cause: Failure::Poisoned,
         };
+        self.track_tick().await.map_err(|_| failed())?;
         let cold = self.cold.take().ok_or_else(failed)?;
         let (powered, power) = match cold.power_up(&mut self.shared.radio, &self.shared.clocks) {
             Ok(owners) => owners,
@@ -181,7 +221,13 @@ where
             }
         };
         // All later errors retain common power and every controller owner.
-        let installation = Installation(self.controller.prepare(clocked).map_err(|_| failed())?);
+        let installation = match self.controller.prepare(clocked) {
+            Ok(installation) => Installation(installation),
+            Err(error) => {
+                self.clocked = error.returned;
+                return Err(failed());
+            }
+        };
         self.installation = Some(installation);
         let coex = self.coex.take().ok_or_else(failed)?;
         let Coex::Absent(absent) = coex else {
@@ -196,7 +242,6 @@ where
             return Err(failed());
         };
         let joined = join_bluetooth(ready, task, &self.shared.timer).map_err(|_| failed())?;
-        self.tracking_due = joined.acquired == ConcurrentAcquire::TrackingDue;
         self.membership = Some(joined.membership);
         self.permission = Some(join.permission);
         Ok(BluetoothJoined { installation, phy })
@@ -213,19 +258,8 @@ where
         if self.installation != Some(installation) {
             return Err(failed());
         }
-        // An additional client's join can make the common tracking pending.
-        // Complete it before any BLE PHY publication or RF-ready answer.
-        if self.tracking_due || self.shared.radio.attachment().tracking_pending() {
-            maintain_concurrent_phy::<_, (), RomShortDelay, O>(
-                &self.shared.timer,
-                &mut self.shared.radio,
-                &mut (),
-                self.shared.observer.clone(),
-            )
-            .await
-            .map_err(|_| failed())?;
-            self.tracking_due = false;
-        }
+        // Re-evaluate due tracking, including work already serviced for Wi-Fi.
+        self.track_tick().await.map_err(|_| failed())?;
         let member = self.membership.as_ref().ok_or_else(failed)?;
         let ready = bluetooth_rf_ready(&mut self.shared.radio, member).map_err(|_| failed())?;
         self.controller

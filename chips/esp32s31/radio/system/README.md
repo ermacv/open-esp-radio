@@ -2,7 +2,10 @@
 
 The ESP32-S31 radio system: one actor future, tied to no executor, that owns
 the shared RF front-end and serves its clients' cells
-(`oer-esp32s31-radio-client`). It serves Wi-Fi.
+(`oer-esp32s31-radio-client`). It serves Wi-Fi and, with the `bluetooth` feature, one Bluetooth client for
+all roles and connections. `with_bluetooth` adds its inbox to the same actor
+future, shared backend, tracking and poisoning state. Wi-Fi-only compositions
+contain no Bluetooth state.
 
 - `join`: prepare the PHY domain (register it, or wake closed RF), mint a new
   RF epoch when RF opened, enter the client. A first member that fails
@@ -29,3 +32,11 @@ membership cell and returns the measured duration and bounded power profile.
 The role owns the MAC/DMA/IRQ stop and restart. `modem_sleep` holds the domain
 half of modem sleep, which no client request reaches yet. Under `cfg(oer_trace)` it carries the PHY
 registration's diagnostics to the client.
+
+`WithBluetooth` adds Bluetooth shared power/clocks, coexistence and PHY/BTBB
+membership to `Esp32s31Radio`. Its controller adapter keeps generatively scoped
+Engine ownership in P2; it never crosses a static Send cell. Initial and due
+tracking complete before the affine BLE PHY-ready edge. Runtime handover and
+return of a drained, matching-installation retirement occur between separate
+mutable borrows of the actor run. A failed or stale retirement cannot release
+current membership, clocks or arena. Only a completed last-member exit closes RF.

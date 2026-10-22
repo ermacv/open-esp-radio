@@ -5,9 +5,9 @@
 //! then recovers the interrupt output
 //! and the ready timer owner from stable ISR storage.
 //! [`retire`](crate::shutdown::retire) releases the Controller output and
-//! leaves the shared PHY domain and BTBB, as the vendor Controller disable runs
-//! `esp_phy_disable(PHY_MODEM_BT)` before its deinit; the shared radio's owner
-//! then closes RF if Bluetooth was the last client.
+//! returns a drained Controller to the shared actor. The actor leaves the
+//! shared PHY domain and BTBB before reset, releases clocks/coexistence/power,
+//! and closes RF only after the last client leaves.
 //! [`ControllerRetired::shut_down`](crate::shutdown::ControllerRetired::shut_down) finally resets the Controller domains and
 //! returns the clocked client with the complete controller arena, which no hardware
 //! references after the reset.
@@ -97,7 +97,7 @@ impl<X: SignalExecutor, M: ControllerMemory> core::fmt::Debug for ControllerShut
     }
 }
 
-/// A retired Controller outside the shared PHY domain, awaiting its reset.
+/// A retired Controller awaiting the actor's PHY/BTBB leave and reset.
 #[must_use = "the retired Controller must be shut down"]
 pub struct ControllerRetired<M: ControllerMemory> {
     task: TaskResources<M>,
@@ -109,14 +109,12 @@ pub struct ControllerRetired<M: ControllerMemory> {
 pub type ControllerShutDown<M> = EngineShutDown<M>;
 
 /// Retire a stopped epoch: take the task owner from its endpoint, release
-/// the Controller output and leave the shared PHY domain and BTBB. Returns
-/// whether Bluetooth was the last PHY client. The BUSY samples of the output
-/// release settle on `clock`.
+/// the Controller output. The shared actor performs PHY/BTBB leave before
+/// the reset. BUSY samples of the output release settle on `clock`.
 ///
 /// # Errors
 ///
-/// A worker still holds work, the Controller is not idle, or the domain
-/// rejected the release.
+/// A worker still holds work or the Controller is not idle.
 #[allow(
     clippy::result_large_err,
     reason = "the failure retains every owner of the epoch"

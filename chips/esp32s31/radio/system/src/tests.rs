@@ -38,10 +38,27 @@ enum Event {
     Exit,
     CloseRf,
     Tick,
+    #[cfg(feature = "bluetooth")]
+    BleEnter,
+    #[cfg(feature = "bluetooth")]
+    BleTrack,
+    #[cfg(feature = "bluetooth")]
+    BleExit,
 }
 
 #[derive(Default)]
 struct Script {
+    wifi: bool,
+    #[cfg(feature = "bluetooth")]
+    bluetooth: bool,
+    #[cfg(feature = "bluetooth")]
+    ble_installation: u32,
+    #[cfg(feature = "bluetooth")]
+    ble_stopped: bool,
+    #[cfg(feature = "bluetooth")]
+    ble_fault: bool,
+    #[cfg(feature = "bluetooth")]
+    ble_available: bool,
     registered: bool,
     rf_open: bool,
     fail_prepare: bool,
@@ -135,6 +152,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
                 cause,
             });
         }
+        self.0.borrow_mut().wifi = true;
         Ok(WifiJoined {
             wifi: WifiClocked::for_host_test(join.wifi),
             phy,
@@ -189,13 +207,21 @@ impl ClientBackend<Wifi, RcSlow> for Model {
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
         self.push(Event::Exit);
+        self.0.borrow_mut().wifi = false;
         let WifiLeave { wifi } = leave;
         (
             WifiLeft {
                 wifi: WifiReturned::Clocked(wifi),
             },
             Exit {
-                last: !self.0.borrow().not_last,
+                last: {
+                    let script = self.0.borrow();
+                    #[cfg(feature = "bluetooth")]
+                    let bluetooth = script.bluetooth;
+                    #[cfg(not(feature = "bluetooth"))]
+                    let bluetooth = false;
+                    !script.not_last && !bluetooth
+                },
                 health: DomainHealth::Healthy,
             },
         )
@@ -708,3 +734,6 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
         ]
     );
 }
+
+#[cfg(feature = "bluetooth")]
+mod bluetooth;

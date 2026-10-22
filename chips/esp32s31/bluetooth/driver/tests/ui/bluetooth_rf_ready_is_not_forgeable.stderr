@@ -1,0 +1,7 @@
+error[E0451]: fields `radio` and `_membership` of struct `BluetoothRfReady` are private
+ --> tests/ui/bluetooth_rf_ready_is_not_forgeable.rs:8:68
+  |
+8 |     let _ = oer_esp32s31_phy::bluetooth_client::BluetoothRfReady { radio, _membership: member }; // ui-error: E0451
+  |                                                                    ^^^^^  ^^^^^^^^^^^ private field
+  |                                                                    |
+  |                                                                    private field

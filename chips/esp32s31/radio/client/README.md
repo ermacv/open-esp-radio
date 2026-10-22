@@ -21,5 +21,10 @@ PHY domain, without the actor itself.
   `track`, after the initial tracking, the RX enable and the initial channel;
   the driver lends its clocked client for that request and gets it back with
   the MAC up.
+- With `bluetooth`, `bluetooth::claim()` supplies the second cell for the same
+  actor. Its requests carry configuration and installation numbers; the BLE
+  backend retains membership and controller memory. `Permission` derives the
+  ceiling from the exact LE band, rejects transmission under passive-only
+  authority, and rounds permitted TxPower down to a provider level.
 - `ACTOR_STEP_BOUND` is the provisional 50 µs bound of one actor poll; the
   request bounds follow from measurements.

@@ -26,7 +26,7 @@ use crate::{
 /// Narrow controller operations performed only by the shared actor.
 pub trait RadioController<B: PlatformClockBackend> {
     fn can_prepare(&self) -> bool;
-    fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, ControllerFault>;
+    fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, PreparationFailure>;
     fn task_owner(&self) -> Option<&TaskOwner>;
     fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault>;
     fn is_retired(&self, installation: u32) -> bool;
@@ -38,6 +38,12 @@ pub trait RadioController<B: PlatformClockBackend> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ControllerFault;
+
+/// Preflight returns the untouched clocked owner; a started failure retains
+/// the owner inside the controller lifecycle instead.
+pub struct PreparationFailure {
+    pub returned: Option<ClockedOwner>,
+}
 
 /// One generatively scoped installation, from clock setup through reset.
 /// `factory` binds a fresh pool/epoch and the placed arena after clocks exist.
@@ -125,6 +131,19 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
         self.state = State::Retired(retired);
         Ok(())
     }
+
+    /// Reclaim the complete arena only after the actor completed leave and
+    /// the matching Controller reset. Reinstall uses fresh generative scopes.
+    #[allow(clippy::result_large_err)]
+    pub fn into_reset(mut self) -> Result<oer_esp32s31_hal::dma_static::Placed<M::Storage>, Self> {
+        match core::mem::replace(&mut self.state, State::Empty) {
+            State::Reset(arena) => Ok(arena),
+            other => {
+                self.state = other;
+                Err(self)
+            }
+        }
+    }
 }
 
 impl<B, F, E, X, M, const MT: usize> RadioController<B> for ControllerLifecycle<F, E, X, M, MT>
@@ -135,10 +154,20 @@ where
     M: ControllerMemory,
 {
     fn can_prepare(&self) -> bool {
-        matches!(self.state, State::Empty) && self.factory.is_some() && self.runtime.is_some()
+        matches!(self.state, State::Empty)
+            && self.factory.is_some()
+            && self
+                .runtime
+                .as_ref()
+                .is_some_and(|runtime| matches!(runtime.is_pristine(), Ok(true)))
     }
 
-    fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, ControllerFault> {
+    fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, PreparationFailure> {
+        if !<Self as RadioController<B>>::can_prepare(self) {
+            return Err(PreparationFailure {
+                returned: Some(clocked),
+            });
+        }
         let factory = self
             .factory
             .take()
@@ -147,7 +176,7 @@ where
             Ok(owners) => owners,
             Err(error) => {
                 self.state = State::FactoryFailed(error);
-                return Err(ControllerFault);
+                return Err(PreparationFailure { returned: None });
             }
         };
         let installation = engine.installation();
@@ -156,7 +185,7 @@ where
             Ok(hal) => hal,
             Err(error) => {
                 self.state = State::HalFailed(error);
-                return Err(ControllerFault);
+                return Err(PreparationFailure { returned: None });
             }
         };
         let runtime = self
@@ -167,7 +196,7 @@ where
             Ok(scheduler) => scheduler,
             Err(error) => {
                 self.state = State::SchedulerFailed(error);
-                return Err(ControllerFault);
+                return Err(PreparationFailure { returned: None });
             }
         };
         match scheduler.initialize_modem_lp_timer_hardware() {
@@ -177,7 +206,7 @@ where
             }
             Err(error) => {
                 self.state = State::LowPowerFailed(error);
-                Err(ControllerFault)
+                Err(PreparationFailure { returned: None })
             }
         }
     }
@@ -191,8 +220,12 @@ where
     }
 
     fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault> {
-        let State::Prepared(controller) = core::mem::replace(&mut self.state, State::Empty) else {
-            return Err(ControllerFault);
+        let controller = match core::mem::replace(&mut self.state, State::Empty) {
+            State::Prepared(controller) => controller,
+            other => {
+                self.state = other;
+                return Err(ControllerFault);
+            }
         };
         match controller.initialize_ble_phy_engine(ready, self.address) {
             Ok(controller) => {
@@ -214,8 +247,12 @@ where
         &mut self,
         radio: &mut RadioDomain<B, ConcurrentPhy>,
     ) -> Result<ClockedOwner, ControllerFault> {
-        let State::Retired(retired) = core::mem::replace(&mut self.state, State::Empty) else {
-            return Err(ControllerFault);
+        let retired = match core::mem::replace(&mut self.state, State::Empty) {
+            State::Retired(retired) => retired,
+            other => {
+                self.state = other;
+                return Err(ControllerFault);
+            }
         };
         match retired.shut_down(radio, self.cells) {
             Ok(returned) => {
