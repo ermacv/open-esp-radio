@@ -422,8 +422,8 @@ pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
     slot: Slot<'id, C, C::Path<B::Identity>>,
     loan: Option<BodyLoan<'id, B::Identity, B>>,
     memory: ModelMemory,
-    admitted_at: RadioInstant<Ieee80211Radio>,
-    admitted: bool,
+    admitted_at: Option<RadioInstant<Ieee80211Radio>>,
+    admitted: Option<Instant>,
 }
 
 enum ModelMemory {
@@ -536,20 +536,26 @@ impl ModelMemory {
 }
 
 impl<B: ModelComposition, C: ModelClass> ModelBuffer<'_, B, C> {
-    fn admit(&mut self, at: RadioInstant<Ieee80211Radio>) {
-        if !self.admitted {
-            self.admitted_at = at;
-            self.admitted = true;
+    fn admit(&mut self, at: Instant) {
+        self.admitted.get_or_insert(at);
+    }
+    fn project_admission(&mut self, air: &ModelAir) -> Result<(), ClockError> {
+        if self.admitted_at.is_none()
+            && let Some(at) = self.admitted
+        {
+            self.admitted_at = Some(air.project_time(at)?);
         }
+        Ok(())
     }
     fn admission(&self) -> Option<RadioInstant<Ieee80211Radio>> {
-        self.admitted.then_some(self.admitted_at)
+        self.admitted_at
     }
 }
 
 impl<B: ModelComposition, C: ModelClass> TxBufferMemory for ModelBuffer<'_, B, C> {
     fn renew_msdu(&mut self) {
-        self.admitted = false;
+        self.admitted = None;
+        self.admitted_at = None;
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.memory
@@ -911,20 +917,33 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
     }
 }
 impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
-    fn admit(&mut self, at: RadioInstant<Ieee80211Radio>) {
+    fn admit(&mut self, at: Instant) {
         match &mut self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admit(at),
             ModelAnyBuffer::Large(buffer) => buffer.admit(at),
             ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_) => {}
         }
     }
-    fn expired(&self, now: RadioInstant<Ieee80211Radio>, lifetime: Duration) -> bool {
-        self.admitted_at()
-            .and_then(|at| now.checked_duration_since(at))
-            .is_some_and(|elapsed| elapsed.as_micros() >= lifetime.as_micros())
+    fn project_admission(&mut self, air: &ModelAir) -> Result<(), ClockError> {
+        match &mut self.buffer {
+            ModelAnyBuffer::Small(buffer) => buffer.project_admission(air),
+            ModelAnyBuffer::Large(buffer) => buffer.project_admission(air),
+            ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.project_admission(air),
+            ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.project_admission(air),
+        }
     }
-    /// Original admission, retained even when an unpublished member is
-    /// returned for aggregate re-formation.
+    fn expired(&self, now: Instant, lifetime: Duration) -> bool {
+        let admitted = match &self.buffer {
+            ModelAnyBuffer::Small(buffer) => buffer.admitted,
+            ModelAnyBuffer::Large(buffer) => buffer.admitted,
+            ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.admitted,
+            ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.admitted,
+        };
+        admitted.is_some_and(|at| now.saturating_duration_since(at) >= lifetime)
+    }
+    /// Original admission projected by P2 when dequeuing, retained even when
+    /// an unpublished member is returned for aggregate re-formation. MSDU
+    /// age uses its separately retained monotonic instant.
     pub fn admitted_at(&self) -> Option<RadioInstant<Ieee80211Radio>> {
         match &self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admission(),
@@ -1691,7 +1710,7 @@ impl ModelEdca {
 struct ModelTime {
     clock: Rc<dyn Clock>,
     relation: ClockRelation<Instant, RadioInstant<Ieee80211Radio>>,
-    sample: RelationSample<Instant, RadioInstant<Ieee80211Radio>>,
+    sample: Cell<RelationSample<Instant, RadioInstant<Ieee80211Radio>>>,
 }
 impl ModelTime {
     fn new(clock: Rc<dyn Clock>) -> Self {
@@ -1701,12 +1720,12 @@ impl ModelTime {
         Self {
             clock,
             relation: ClockRelation::affine(0),
-            sample: RelationSample {
+            sample: Cell::new(RelationSample {
                 source,
                 target,
                 uncertainty: oer_time::RadioDuration::ZERO,
                 generation: GenerationSource::new(0).current(),
-            },
+            }),
         }
     }
 }
@@ -1825,13 +1844,14 @@ impl ModelAir {
 
     /// Project the image clock into the model radio domain.
     pub fn radio_now(&self) -> Result<RadioInstant<Ieee80211Radio>, ClockError> {
+        self.project_time(self.monotonic_now())
+    }
+
+    fn project_time(&self, at: Instant) -> Result<RadioInstant<Ieee80211Radio>, ClockError> {
+        let sample = self.time.sample.get();
         self.time
             .relation
-            .project(
-                self.time.clock.now(),
-                self.time.sample.generation,
-                &self.time.sample,
-            )
+            .project(at, sample.generation, &sample)
             .map(|p| p.at)
             .map_err(|_| ClockError::EpochExhausted)
     }
@@ -1843,7 +1863,7 @@ impl ModelAir {
         ClockRelation<Instant, RadioInstant<Ieee80211Radio>>,
         RelationSample<Instant, RadioInstant<Ieee80211Radio>>,
     ) {
-        (self.time.relation, self.time.sample)
+        (self.time.relation, self.time.sample.get())
     }
 }
 
@@ -2806,14 +2826,36 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                         OwnedLowerMacTerminal::Configured(permission),
                     ));
                 }
-                Command::Submit(prepared) => {
+                Command::Submit(mut prepared) => {
+                    if prepared
+                        .operation
+                        .execute()
+                        .mpdu
+                        .project_admission(&held.air)
+                        .is_err()
+                    {
+                        let _fault = held.quarantined.push(Work::Single(prepared));
+                        held.poison();
+                        return;
+                    }
                     let queue = prepared.queue;
                     queue
                         .select_mut(&mut self.queues)
                         .waiting
                         .push_back(Work::Single(prepared));
                 }
-                Command::SubmitAmpdu(aggregate) => {
+                Command::SubmitAmpdu(mut aggregate) => {
+                    if aggregate
+                        .operation
+                        .execute()
+                        .subframes
+                        .iter_mut()
+                        .any(|subframe| subframe.mpdu.project_admission(&held.air).is_err())
+                    {
+                        let _fault = held.quarantined.push(Work::Aggregate(aggregate));
+                        held.poison();
+                        return;
+                    }
                     let queue = aggregate.queue;
                     queue
                         .select_mut(&mut self.queues)
@@ -3414,14 +3456,7 @@ fn publish_single<'id, B: ModelComposition>(
     keys: &[RawKeyIdentity],
     mut plan: SinglePlan<'id, B>,
 ) -> Option<Publication<'id, B>> {
-    let now = match held.air.radio_now() {
-        Ok(now) => now,
-        Err(_) => {
-            let _fault = held.quarantined.push(Work::Single(plan.prepared));
-            held.poison();
-            return None;
-        }
-    };
+    let now = held.air.monotonic_now();
     let lifetime = held
         .air
         .edca(plan.prepared.role)
@@ -3522,14 +3557,7 @@ fn publish_aggregate<'id, B: ModelComposition>(
     keys: &[RawKeyIdentity],
     mut aggregate: PreparedAggregate<'id, B>,
 ) -> Option<Publication<'id, B>> {
-    let now = match held.air.radio_now() {
-        Ok(now) => now,
-        Err(_) => {
-            let _fault = held.quarantined.push(Work::Aggregate(aggregate));
-            held.poison();
-            return None;
-        }
-    };
+    let now = held.air.monotonic_now();
     let lifetime = held
         .air
         .edca(aggregate.role)
@@ -4111,10 +4139,11 @@ where
         attempt: oer_ieee80211_port::InterfaceSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>> {
         let mut attempt = attempt.into_parts(&self.loan);
-        match self.held.air.radio_now() {
-            Ok(at) => attempt.operation.execute().mpdu.admit(at),
-            Err(_) => self.held.poison(),
-        }
+        attempt
+            .operation
+            .execute()
+            .mpdu
+            .admit(self.held.air.monotonic_now());
         let ModelTxExecution { plan, key } = attempt.execution;
         self.held.command(Command::Submit(Box::new(Prepared {
             operation: attempt.operation,
@@ -4566,13 +4595,9 @@ where
         'id: 'k,
     {
         let mut attempt = attempt.into_parts(&self.loan);
-        match self.held.air.radio_now() {
-            Ok(at) => {
-                for subframe in attempt.operation.execute().subframes {
-                    subframe.mpdu.admit(at);
-                }
-            }
-            Err(_) => self.held.poison(),
+        let at = self.held.air.monotonic_now();
+        for subframe in attempt.operation.execute().subframes {
+            subframe.mpdu.admit(at);
         }
         let ModelAggregateExecution {
             first,

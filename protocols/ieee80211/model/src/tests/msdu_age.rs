@@ -481,15 +481,18 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
                 9
             );
             let mut buffer = resources.small.remove(0);
-            buffer.admit(initial);
+            let first_admission = self.1.radio_now().unwrap();
+            buffer.admit(self.0.now());
+            buffer.project_admission(&self.1).unwrap();
             self.0.advance(Duration::from_micros(3)).unwrap();
-            buffer.admit(self.1.radio_now().unwrap());
-            assert_eq!(buffer.admission(), Some(initial));
+            buffer.admit(self.0.now());
+            assert_eq!(buffer.admission(), Some(first_admission));
             let mut buffer = oer_ieee80211_port::ReturnedMpdu::<_, ()>::Fresh(buffer)
                 .into_fresh(|()| panic!("fresh renewal consumes no Sent owner"));
             assert_eq!(buffer.admission(), None);
             let next = owner.now().await.unwrap().unwrap();
-            buffer.admit(next);
+            buffer.admit(self.0.now());
+            buffer.project_admission(&self.1).unwrap();
             assert_eq!(buffer.admission(), Some(next));
             Ended::fail_stop(owner.fail_stop(), ())
         }
@@ -497,4 +500,83 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
     let clock = Rc::new(VirtualClock::<8>::new());
     let (backend, air) = backend_on(clock.clone());
     let _end = block_on(run_model(backend, Probe(clock, air)));
+}
+
+#[test]
+fn queued_admission_projects_the_original_monotonic_instant_and_age_survives_offset_changes() {
+    struct OffsetChange {
+        clock: Rc<VirtualClock>,
+        expire: bool,
+    }
+    impl Work for OffsetChange {
+        async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
+            self,
+            phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
+            mut resources: ModelResources<'id, ModelBackend<Id>>,
+        ) {
+            let air = phase.held.air.clone();
+            let category = WmmAccessCategory::BestEffort;
+            let lifetime = Duration::from_micros(100);
+            let table =
+                EdcaParameterSet::new(EdcaParameterSet::STANDARD_DEFAULT.wmm(), [lifetime; 4]);
+            phase.station().set_edca(SupportedEdca::new(table).unwrap());
+            air.hold(category, true);
+            air.answer(AirAnswer::Ack);
+            let admitted = self.clock.now();
+            submit(
+                phase,
+                resources.tickets.remove(0),
+                resources.small.remove(0),
+                None,
+            );
+            // No await has given P2 the queued command yet. A calibration
+            // update must project admission, rather than sampling dequeue.
+            self.clock.advance(Duration::from_micros(7)).unwrap();
+            let (relation, mut sample) = air.clock_relation();
+            sample.source = self.clock.now();
+            sample.target = RadioInstant::from_micros(100_000);
+            air.time.sample.set(sample);
+            let expected = relation
+                .project(admitted, sample.generation, &sample)
+                .unwrap()
+                .at;
+            air.clock_advanced();
+            for _ in 0..4 {
+                yield_now().await;
+            }
+            assert!(air.sent().is_empty());
+            // After dequeue, move the radio relation backwards. Radio age
+            // would become negative; monotonic age still expires at equality.
+            self.clock
+                .advance(Duration::from_micros(if self.expire { 93 } else { 92 }))
+                .unwrap();
+            sample.source = self.clock.now();
+            sample.target = RadioInstant::from_micros(1_000);
+            air.time.sample.set(sample);
+            air.clock_advanced();
+            air.hold(category, false);
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
+                TxCompleted::Single(done),
+            )))) = phase.next_event().await
+            else {
+                panic!("the queued attempt returns its terminal");
+            };
+            let parts = done.into_parts(&mut resources.terminal_access);
+            assert_eq!(parts.payload.admitted_at(), Some(expected));
+            assert_ne!(Some(expected), air.radio_now().ok());
+            assert_eq!(
+                matches!(parts.outcome, TxOutcome::Expired { msdus: 1 }),
+                self.expire
+            );
+            if !self.expire {
+                assert!(parts.outcome.is_delivered());
+            }
+        }
+    }
+    for expire in [false, true] {
+        let clock = Rc::new(VirtualClock::<8>::new());
+        let (backend, _) = backend_on(clock.clone());
+        let end = block_on(run_model(backend, Body(OffsetChange { clock, expire })));
+        assert!(matches!(end, crate::fixture::Report::Joined(())));
+    }
 }
