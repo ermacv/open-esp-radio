@@ -120,7 +120,6 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
         if before != Station::default() {
             return Err("W3 target present before association".into());
         }
-        let departure = Departure::start(&ssh, target)?;
         let build = image::Stand::W3(w1::Config {
             channel: applied.channel,
             bssid: applied.bssid,
@@ -135,6 +134,10 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             false,
             oer_image_checks::Enforced::Only([oer_image_checks::Check::Interrupts].into()),
         )?;
+        // Start the bounded subscription after compilation, while the old
+        // image is still selected. It must cover flash, the workload and
+        // departure, without spending its lifetime on the image build.
+        let departure = Departure::start(&ssh, target)?;
         report.phase = "flash";
         board.flash(
             &oer_lab_board::image::Store::open()?,

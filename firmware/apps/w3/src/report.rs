@@ -24,6 +24,10 @@ pub struct Report {
     pub lease: Option<Lease>,
     pub malformed_ip: u32,
     pub queue_drops: u32,
+    pub service_rx_queue_full: u32,
+    pub service_rx_rejected: u32,
+    pub service_rx_reasons: u16,
+    pub port_events_lost: u32,
     pub cadence_ok: bool,
     pub sent: u32,
     pub received: u32,
@@ -46,6 +50,10 @@ impl Report {
             lease: None,
             malformed_ip: 0,
             queue_drops: 0,
+            service_rx_queue_full: 0,
+            service_rx_rejected: 0,
+            service_rx_reasons: 0,
+            port_events_lost: 0,
             cadence_ok: true,
             sent: 0,
             received: 0,
@@ -71,6 +79,19 @@ impl Report {
 
     /// All twelve body rows are emitted on success and on failure.
     pub fn print(&self, out: &mut impl Write) -> fmt::Result {
+        if self.service_rx_queue_full != 0
+            || self.service_rx_rejected != 0
+            || self.port_events_lost != 0
+        {
+            writeln!(
+                out,
+                "w3.rx queue_full={} rejected={} reasons={} port_events_lost={}\r",
+                self.service_rx_queue_full,
+                self.service_rx_rejected,
+                self.service_rx_reasons,
+                self.port_events_lost
+            )?;
+        }
         if self.malformed_ip != 0 || self.queue_drops != 0 {
             writeln!(
                 out,
@@ -205,5 +226,18 @@ mod tests {
         let mut text = String::new();
         report.print(&mut text).expect("String accepts writes");
         assert!(text.ends_with("OER-RESULT: pass w3\r\n"));
+    }
+
+    #[test]
+    fn service_rx_diagnostics_precede_the_unchanged_console_contract() {
+        let mut report = passed();
+        report.service_rx_queue_full = 1;
+        report.service_rx_rejected = 2;
+        report.service_rx_reasons = 4;
+        report.port_events_lost = 3;
+        let mut text = String::new();
+        report.print(&mut text).expect("String accepts writes");
+        assert!(text.starts_with("w3.rx queue_full=1 rejected=2 reasons=4 port_events_lost=3\r\nOER-W3-BEGIN v=1\r\n"));
+        assert!(text.ends_with("OER-W3-END lines=12\r\nOER-RESULT: pass w3\r\n"));
     }
 }

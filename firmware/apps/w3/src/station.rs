@@ -323,7 +323,16 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let link = core::cell::Cell::new(false);
         let disconnected = core::cell::Cell::new(false);
         let failed = core::cell::Cell::new(false);
+        let rx_reasons = core::cell::Cell::new(0u16);
         let mut output = |event| match event {
+            ServiceOutput::RxFrameDropped(reason) => {
+                let bit = match reason {
+                    machine::StaRxError::Frame(reason) => 1u16 << reason as u16,
+                    machine::StaRxError::Security(_) => 1u16 << 9,
+                };
+                rx_reasons.set(rx_reasons.get() | bit);
+            }
+            ServiceOutput::RxMsduRefused(_) => rx_reasons.set(rx_reasons.get() | (1u16 << 10)),
             ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => link.set(true),
             ServiceOutput::Notice(machine::StaNotice::Disconnected(_)) => {
                 link.set(false);
@@ -351,11 +360,20 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             &disconnected,
             &failed
         ));
-        let (completed, report) = join(
+        let (completed, mut report) = join(
             crate::future::Boundary(running.as_mut()),
             crate::future::Boundary(workload.as_mut()),
         )
         .await;
+        report.service_rx_queue_full = completed.retired.counters.rx_msdus_queue_full.get();
+        report.service_rx_rejected = completed
+            .retired
+            .counters
+            .rx_frames_dropped
+            .get()
+            .saturating_add(completed.retired.counters.rx_msdus_too_long.get());
+        report.service_rx_reasons = rx_reasons.get();
+        report.port_events_lost = completed.retired.counters.events_lost.get();
         let (ended, _retired) = match completed.end {
             ServiceEnd::Stopped(owner) => {
                 (rp::Ended::uninstall(owner, (), report), completed.retired)
