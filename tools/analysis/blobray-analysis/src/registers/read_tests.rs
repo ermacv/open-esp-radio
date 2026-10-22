@@ -197,68 +197,78 @@ fn read_states_and_sink_storage_are_admitted_reused_and_released() {
 }
 
 #[test]
-fn interrupted_or_refused_state_storage_is_unknown_and_cancellation_propagates() {
-    for memory_limit in [4096, 1 << 20] {
-        let memory = WorkingMemory::new(memory_limit).expect("working memory");
-        {
+fn operation_errors_and_refused_state_storage_propagate_unchanged() {
+    for code in [
+        ErrorCode::ResourceLimited,
+        ErrorCode::TimedOut,
+        ErrorCode::Cancelled,
+    ] {
+        for provenance in [false, true] {
+            let memory = WorkingMemory::new(1 << 20).expect("working memory");
             let records = graph(128);
             let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
-            let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
+            let expected = Error::new(code, "fixture parent failure");
             let mut steps = 0;
-            reads
-                .analyze(
+            let mut control = || {
+                steps += 1;
+                if steps > 16 {
+                    Err(expected.clone())
+                } else {
+                    Ok(())
+                }
+            };
+            let result = if provenance {
+                FlowEngine::<provenance::Provenance<'_>>::new(&facts, &memory).analyze(
                     None,
                     &Decoder,
                     &mut |_, _, _| Ok(true),
                     &|_| None,
-                    &mut || {
-                        steps += 1;
-                        if memory_limit > 4096 && steps > 16 {
-                            Err(Error::new(
-                                ErrorCode::ResourceLimited,
-                                "fixture work budget",
-                            ))
-                        } else {
-                            Ok(())
-                        }
-                    },
+                    &mut control,
                 )
-                .expect("bounded read analysis");
-            let result = reads
-                .reads(0, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
-                .expect("limited read uses");
-            assert_eq!(
-                result.unknown,
-                [ReadLimit {
-                    bits: u32::MAX,
-                    limit: ReadLimitKind::WorkLimit
-                }]
-            );
-            assert_eq!(result.unused | result.preserved, 0);
+            } else {
+                FlowEngine::<Reads>::new(&facts, &memory).analyze(
+                    None,
+                    &Decoder,
+                    &mut |_, _, _| Ok(true),
+                    &|_| None,
+                    &mut control,
+                )
+            };
+            assert_eq!(result, Err(expected));
         }
-        assert_eq!(
-            memory.used(),
-            0,
-            "admissions released after interrupted analysis"
-        );
     }
     let memory = WorkingMemory::new(1 << 20).expect("working memory");
-    let records = graph(2);
+    let records = graph(128);
     let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
-    let mut reads = FlowEngine::<Reads>::new(&facts, &memory);
-    assert_eq!(
-        reads
-            .analyze(
+    let blocker = memory
+        .reserve(
+            memory.observation().limit_bytes - memory.used(),
+            RunPosition::default(),
+        )
+        .expect("block memory");
+    for provenance in [false, true] {
+        let result = if provenance {
+            FlowEngine::<provenance::Provenance<'_>>::new(&facts, &memory).analyze(
                 None,
                 &Decoder,
                 &mut |_, _, _| Ok(true),
                 &|_| None,
-                &mut || Err(Error::new(ErrorCode::Cancelled, "cancel fixture"))
+                &mut || Ok(()),
             )
-            .expect_err("cancellation")
-            .code,
-        ErrorCode::Cancelled
-    );
+        } else {
+            FlowEngine::<Reads>::new(&facts, &memory).analyze(
+                None,
+                &Decoder,
+                &mut |_, _, _| Ok(true),
+                &|_| None,
+                &mut || Ok(()),
+            )
+        };
+        let error = result.expect_err("admission failure");
+        assert_eq!(error.code, ErrorCode::ResourceLimited);
+        assert!(error.memory.is_some());
+    }
+    drop(blocker);
 }
 
 #[test]
@@ -545,6 +555,10 @@ fn provenance_work_counts_instruction_visits_and_checks_cancellation_between_the
         let mut work = ReadWork {
             caller: &mut caller,
             remaining: 2,
+            budget: LocalBudgetExceeded {
+                limit: 2,
+                scope: LocalBudgetScope::ReadFlow,
+            },
             instruction_only: true,
         };
         work.checkpoint(1_000_000)
@@ -554,7 +568,10 @@ fn provenance_work_counts_instruction_visits_and_checks_cancellation_between_the
         work.visit().expect("second instruction");
         assert_eq!(
             work.visit().expect_err("instruction budget").code,
-            ErrorCode::ResourceLimited
+            ErrorCode::LocalBudgetExceeded(LocalBudgetExceeded {
+                limit: 2,
+                scope: LocalBudgetScope::ReadFlow
+            })
         );
     }
     assert_eq!(caller.units, 2);
@@ -562,6 +579,10 @@ fn provenance_work_counts_instruction_visits_and_checks_cancellation_between_the
     let mut work = ReadWork {
         caller: &mut cancel,
         remaining: 2,
+        budget: LocalBudgetExceeded {
+            limit: 2,
+            scope: LocalBudgetScope::ReadFlow,
+        },
         instruction_only: true,
     };
     assert_eq!(

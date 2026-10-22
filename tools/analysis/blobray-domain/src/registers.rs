@@ -351,10 +351,51 @@ impl PartialCauses {
     }
 }
 
+/// Functions whose summary is unavailable, separated by the cause of absence.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SummaryUnavailableCounts {
+    pub no_proof: u64,
+    pub local_budget: u64,
+}
+impl SummaryUnavailableCounts {
+    pub fn record(&mut self, outcome: SummaryOutcome<()>) {
+        match outcome {
+            SummaryOutcome::Available(()) => {}
+            SummaryOutcome::NoProof => self.no_proof += 1,
+            SummaryOutcome::LocalBudgetExceeded(_) => self.local_budget += 1,
+        }
+    }
+}
+
+/// Functions in each computed-summary outcome, counted once per final visit.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SummaryOutcomeCounts {
+    pub available: u64,
+    pub no_proof: u64,
+    pub local_budget: u64,
+}
+impl SummaryOutcomeCounts {
+    pub fn record(&mut self, outcome: SummaryOutcome<()>) {
+        match outcome {
+            SummaryOutcome::Available(()) => self.available += 1,
+            SummaryOutcome::NoProof => self.no_proof += 1,
+            SummaryOutcome::LocalBudgetExceeded(_) => self.local_budget += 1,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RegisterAccessSummary {
     pub schema: u32,
+    /// Functions whose read-use or stored-provenance pass exhausted its local budget.
+    pub flow_local_budget_functions: u64,
+    /// Computed summaries, counted only when corpus summary production is enabled.
+    pub summary_outcomes: SummaryOutcomeCounts,
+    pub rom_signature_summary_unavailable_reasons: SummaryUnavailableCounts,
+    pub signature_audit_incomplete_reasons: SummaryUnavailableCounts,
     /// Distinct source bits per selected load with a sink removed directly by a signature.
     pub contract_narrowed_bits: u64,
     /// Distinct source bits per selected load whose computed May argument use was removed.

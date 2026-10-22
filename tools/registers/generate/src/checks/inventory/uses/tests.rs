@@ -151,6 +151,10 @@ fn regions() -> [Region; 1] {
 fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
     let mut summary = RegisterAccessSummary {
         schema: 4,
+        flow_local_budget_functions: 0,
+        summary_outcomes: Default::default(),
+        rom_signature_summary_unavailable_reasons: Default::default(),
+        signature_audit_incomplete_reasons: Default::default(),
         contract_narrowed_bits: 0,
         contract_may_narrowed_bits: 0,
         signature_conflicts: Vec::new(),

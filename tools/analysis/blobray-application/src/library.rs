@@ -24,9 +24,9 @@ pub struct AnalyzedFunction<'a> {
     pub summaries: &'a dyn CallSummaries,
     pub conflicts: &'a [SignatureConflict],
     pub rom_signature_diagnostics: &'a [RomSignatureDiagnostic],
-    pub signature_audit_complete: Option<bool>,
-    pub rom_signature_summary_complete: Option<bool>,
-    pub signature_audit_failure: Option<&'a Error>,
+    pub summary_outcome: Option<SummaryOutcome<()>>,
+    pub rom_signature_summary_outcome: Option<SummaryOutcome<()>>,
+    pub signature_audit_outcome: Option<SummaryOutcome<()>>,
 }
 impl AnalyzedFunction<'_> {
     /// Coverage and value semantics are complete.
@@ -608,9 +608,9 @@ fn analyze_object(
                             summaries: returns,
                             conflicts: &[],
                             rom_signature_diagnostics: &[],
-                            rom_signature_summary_complete: None,
-                            signature_audit_complete: None,
-                            signature_audit_failure: None,
+                            summary_outcome: None,
+                            rom_signature_summary_outcome: None,
+                            signature_audit_outcome: None,
                         }),
                         c,
                     )?,
@@ -659,6 +659,10 @@ pub fn register_accesses(
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut summary = RegisterAccessSummary {
         schema: 4,
+        flow_local_budget_functions: 0,
+        summary_outcomes: SummaryOutcomeCounts::default(),
+        rom_signature_summary_unavailable_reasons: SummaryUnavailableCounts::default(),
+        signature_audit_incomplete_reasons: SummaryUnavailableCounts::default(),
         contract_narrowed_bits: 0,
         contract_may_narrowed_bits: 0,
         signature_conflicts: Vec::new(),
@@ -679,27 +683,51 @@ pub fn register_accesses(
     let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
-            for (complete, failures, reason) in [
+            if let Some(outcome) = analyzed.summary_outcome {
+                summary.summary_outcomes.record(outcome);
+            }
+            for (outcome, counts) in [
                 (
-                    analyzed.signature_audit_complete,
-                    &mut summary.signature_audit_incomplete,
-                    "signature audit did not finish within its per-function budget",
+                    analyzed.rom_signature_summary_outcome,
+                    &mut summary.rom_signature_summary_unavailable_reasons,
                 ),
                 (
-                    analyzed.rom_signature_summary_complete,
-                    &mut summary.rom_signature_summary_unavailable,
-                    "computed ROM summary unavailable within the original per-function budget",
+                    analyzed.signature_audit_outcome,
+                    &mut summary.signature_audit_incomplete_reasons,
                 ),
             ] {
-                if complete != Some(false) {
-                    continue;
+                if let Some(outcome) = outcome {
+                    counts.record(outcome);
                 }
+            }
+            for (outcome, failures, reason, audit) in [
+                (
+                    analyzed.signature_audit_outcome,
+                    &mut summary.signature_audit_incomplete,
+                    "signature audit did not finish within its per-function budget",
+                    true,
+                ),
+                (
+                    analyzed.rom_signature_summary_outcome,
+                    &mut summary.rom_signature_summary_unavailable,
+                    "computed ROM summary unavailable within the original per-function budget",
+                    false,
+                ),
+            ] {
+                let Some(outcome) = outcome.filter(|s| *s != SummaryOutcome::Available(())) else {
+                    continue;
+                };
                 let failure = SignatureAuditIncomplete {
                     function: analyzed.function.clone(),
-                    reason: analyzed
-                        .signature_audit_failure
-                        .cloned()
-                        .unwrap_or_else(|| Error::new(ErrorCode::Unavailable, reason)),
+                    // Preserve existing diagnostics; the outcome counters carry the typed cause.
+                    reason: if audit && matches!(outcome, SummaryOutcome::LocalBudgetExceeded(_)) {
+                        Error::new(
+                            ErrorCode::ResourceLimited,
+                            "read-use function work budget exhausted",
+                        )
+                    } else {
+                        Error::new(ErrorCode::Unavailable, reason)
+                    },
                 };
                 conflict_memory.admit(
                     serde_json::to_vec(&failure)
@@ -775,6 +803,8 @@ pub fn register_accesses(
                     c,
                 )
             })?;
+            let [read_limit, stored_limit] = reads.local_budget_exhaustion();
+            summary.flow_local_budget_functions += u64::from(read_limit || stored_limit);
             let [direct, may] = reads.contract_narrowed_bits();
             summary.contract_narrowed_bits += direct;
             summary.contract_may_narrowed_bits += may;
@@ -862,9 +892,9 @@ mod tests {
             summaries: &NoSummaries,
             conflicts: &[],
             rom_signature_diagnostics: &[],
-            rom_signature_summary_complete: None,
-            signature_audit_complete: None,
-            signature_audit_failure: None,
+            summary_outcome: None,
+            rom_signature_summary_outcome: None,
+            signature_audit_outcome: None,
         }
         .partial_causes(c)
     }

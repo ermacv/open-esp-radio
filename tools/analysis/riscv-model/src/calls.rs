@@ -4,6 +4,38 @@
 //! A missing summary means unknown results and May consumption of every
 //! argument bit. Result constants require a proof at every return; argument
 //! dependencies describe consumed bits and physical result positions.
+use crate::{Deserialize, LocalBudgetExceeded, Serialize};
+
+/// Absence of proof and exhaustion of a local resource are different outcomes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SummaryOutcome<T> {
+    Available(T),
+    NoProof,
+    LocalBudgetExceeded(LocalBudgetExceeded),
+}
+impl<T> SummaryOutcome<T> {
+    pub fn available(&self) -> Option<&T> {
+        match self {
+            Self::Available(value) => Some(value),
+            _ => None,
+        }
+    }
+    pub fn available_mut(&mut self) -> Option<&mut T> {
+        match self {
+            Self::Available(value) => Some(value),
+            _ => None,
+        }
+    }
+    pub fn status(&self) -> SummaryOutcome<()> {
+        match self {
+            Self::Available(_) => SummaryOutcome::Available(()),
+            Self::NoProof => SummaryOutcome::NoProof,
+            Self::LocalBudgetExceeded(reason) => SummaryOutcome::LocalBudgetExceeded(*reason),
+        }
+    }
+}
+
 /// The function a call reaches, as its caller names it: an address in a
 /// linked image, or the global symbol a relocatable object's call names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

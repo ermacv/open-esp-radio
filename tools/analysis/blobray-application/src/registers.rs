@@ -69,6 +69,12 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         }
     }
 
+    pub fn local_budget_exhaustion(&self) -> [bool; 2] {
+        [
+            self.evaluator.work_limited(),
+            self.provenance.work_limited(),
+        ]
+    }
     pub fn contract_narrowed_bits(&self) -> [u64; 2] {
         self.evaluator.contract_narrowed_bits()
     }

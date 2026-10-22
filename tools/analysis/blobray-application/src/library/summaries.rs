@@ -30,7 +30,7 @@ struct Entry<'m> {
     function: Option<LibraryFunction>,
     object: Option<usize>,
     key: Option<CallKey>,
-    summary: Option<OwnedSummary<'m>>,
+    summary: SummaryOutcome<OwnedSummary<'m>>,
     edges: AdmittedVec<'m, usize>,
     discovery: usize,
     low: usize,
@@ -114,7 +114,7 @@ impl Summaries<'_> {
         if group.remaining != 0 || group.conflict {
             return None;
         }
-        self.entries.get(group.representative?)?.summary.as_ref()
+        self.entries.get(group.representative?)?.summary.available()
     }
 }
 impl CallSummaries for Summaries<'_> {
@@ -215,7 +215,7 @@ impl<'m> Summaries<'m> {
                     function,
                     object: None,
                     key,
-                    summary: None,
+                    summary: SummaryOutcome::NoProof,
                     edges: AdmittedVec::new(memory),
                     discovery: usize::MAX,
                     low: 0,
@@ -240,7 +240,7 @@ impl<'m> Summaries<'m> {
     fn entry_mut(&mut self, id: usize) -> Result<&mut Entry<'m>> {
         self.entries.get_mut(id).ok_or_else(integrity)
     }
-    fn finish(&mut self, id: usize, summary: Option<OwnedSummary<'m>>) -> Result<()> {
+    fn finish(&mut self, id: usize, summary: SummaryOutcome<OwnedSummary<'m>>) -> Result<()> {
         self.entry_mut(id)?.summary = summary;
         let Some(key) = self.entries.get(id).ok_or_else(integrity)?.key.as_ref() else {
             return Ok(());
@@ -250,8 +250,8 @@ impl<'m> Summaries<'m> {
         let same = match (
             representative
                 .and_then(|r| self.entries.get(r))
-                .and_then(|r| r.summary.as_ref()),
-            self.entry(id)?.summary.as_ref(),
+                .and_then(|r| r.summary.available()),
+            self.entry(id)?.summary.available(),
         ) {
             (Some(a), Some(b)) => a.value == b.value,
             _ => false,
@@ -261,7 +261,7 @@ impl<'m> Summaries<'m> {
         if self
             .entries
             .get(id)
-            .and_then(|e| e.summary.as_ref())
+            .and_then(|e| e.summary.available())
             .is_none()
             || representative.is_some() && !same
         {
@@ -560,7 +560,7 @@ pub(super) fn analyze<'a>(
             let recursive = component.len() > 1 || table.entry(id)?.edges.contains(&id);
             for member in component.iter().copied() {
                 let object = table.entry(member)?.object;
-                let mut contract = None;
+                let mut contract = SummaryOutcome::NoProof;
                 let mut disable_contract = false;
                 if let (Some(object), Some(function)) =
                     (object, table.entry(member)?.function.as_ref())
@@ -591,10 +591,9 @@ pub(super) fn analyze<'a>(
                             let mut rom_diagnostics = AdmittedVec::new(memory);
                             let mut conflict_names = Ledger::new(memory, c)?;
                             let mut raw_conflicts = AdmittedVec::new(memory);
-                            let mut audit_complete = None;
                             let mut applied_audit = false;
-                            let mut audit_failure = None;
                             let mut entry_complete = None;
+                            let mut audit_outcome = None;
                             let publish = !recursive
                                 && objects.get(object).ok_or_else(integrity)?.safe
                                 && eligible(summary.coverage, summary.semantics, &records, c)?;
@@ -630,11 +629,12 @@ pub(super) fn analyze<'a>(
                                         &mut entry_complete,
                                         c,
                                     )?;
-                                    None
+                                    SummaryOutcome::NoProof
                                 } else {
-                                    None
+                                    SummaryOutcome::NoProof
                                 };
-                                let audit_entries = entry_required && entry_complete != Some(true);
+                                let audit_entries = entry_required
+                                    && entry_complete != Some(SummaryOutcome::Available(()));
                                 if results_required || audit_entries {
                                     let entries = if audit_entries {
                                         (0x3fc00u32)
@@ -654,27 +654,30 @@ pub(super) fn analyze<'a>(
                                         &mut raw_conflicts,
                                         c,
                                     ) {
-                                        Ok(()) => audit_complete = Some(true),
-                                        Err(e)
-                                            if matches!(
-                                                e.code,
-                                                ErrorCode::ResourceLimited | ErrorCode::TimedOut
-                                            ) =>
-                                        {
-                                            audit_complete = Some(false);
-                                            audit_failure = Some(e);
+                                        Ok(SummaryOutcome::Available(())) => {
+                                            audit_outcome = Some(SummaryOutcome::Available(()));
+                                        }
+                                        Ok(SummaryOutcome::LocalBudgetExceeded(reason)) => {
+                                            audit_outcome =
+                                                Some(SummaryOutcome::LocalBudgetExceeded(reason));
+                                        }
+                                        Ok(SummaryOutcome::NoProof) => {
+                                            return Err(Error::new(
+                                                ErrorCode::Unavailable,
+                                                "audit has no fixed point",
+                                            ));
                                         }
                                         Err(e) => return Err(e),
                                     }
                                 } else if entry_required {
-                                    audit_complete = entry_complete;
+                                    audit_outcome = entry_complete;
                                 }
                             }
                             // A failed function cannot publish or observe a signature projection.
                             // All audit recipes and states above have been dropped before this retry.
-                            if audit_complete == Some(false) {
+                            if audit_outcome.is_some_and(|s| s != SummaryOutcome::Available(())) {
                                 disable_contract = true;
-                                contract = None;
+                                contract = SummaryOutcome::NoProof;
                                 scoped.current = None;
                                 scoped.table = &computed;
                                 drop(records);
@@ -792,8 +795,10 @@ pub(super) fn analyze<'a>(
                                 }
                             }
                             if let (Some(signature), Some(summary)) = (
-                                applied_signature.filter(|_| audit_complete != Some(false)),
-                                contract.as_mut(),
+                                applied_signature.filter(|_| {
+                                    audit_outcome.is_none_or(|s| s == SummaryOutcome::Available(()))
+                                }),
+                                contract.available_mut(),
                             ) {
                                 let bytes = summary.value.arguments.returned.capacity()
                                     * std::mem::size_of::<ReturnedArgument>()
@@ -851,9 +856,9 @@ pub(super) fn analyze<'a>(
                                 summaries: &scoped,
                                 conflicts: &conflicts,
                                 rom_signature_diagnostics: &rom_diagnostics,
-                                signature_audit_complete: audit_complete.filter(|_| applied_audit),
-                                rom_signature_summary_complete: rom_signature.and(entry_complete),
-                                signature_audit_failure: audit_failure.as_ref(),
+                                summary_outcome: Some(contract.status()),
+                                rom_signature_summary_outcome: rom_signature.and(entry_complete),
+                                signature_audit_outcome: audit_outcome.filter(|_| applied_audit),
                             };
                             visit(LibraryOutcome::Analyzed(analyzed), c)?;
                         }
@@ -961,12 +966,11 @@ fn produce<'a>(
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
-    audit_complete: &mut Option<bool>,
+    audit_complete: &mut Option<SummaryOutcome<()>>,
     c: &mut dyn RunControl,
-) -> Result<Option<OwnedSummary<'a>>> {
-    match try_produce(
+) -> Result<SummaryOutcome<OwnedSummary<'a>>> {
+    let (arguments, argument_memory) = match argument_summary(
         facts,
-        records,
         summaries,
         rom_signature,
         links,
@@ -975,40 +979,12 @@ fn produce<'a>(
         conflicts,
         audit_complete,
         c,
-    ) {
-        Err(error) if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) => {
-            Ok(None)
+    )? {
+        SummaryOutcome::Available(value) => value,
+        SummaryOutcome::NoProof => return Ok(SummaryOutcome::NoProof),
+        SummaryOutcome::LocalBudgetExceeded(reason) => {
+            return Ok(SummaryOutcome::LocalBudgetExceeded(reason));
         }
-        result => result,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn try_produce<'a>(
-    facts: &Facts<'_, 'a>,
-    records: &[FunctionRecord],
-    summaries: &dyn CallSummaries,
-    rom_signature: Option<&crate::signatures::FunctionSignature>,
-    links: &CallLinks<'_>,
-    decoder: &dyn FunctionSemantics,
-    memory: &'a WorkingMemory,
-    conflicts: &mut AdmittedVec<'a, RawConflict>,
-    audit_complete: &mut Option<bool>,
-    c: &mut dyn RunControl,
-) -> Result<Option<OwnedSummary<'a>>> {
-    let Some((arguments, argument_memory)) = argument_summary(
-        facts,
-        summaries,
-        rom_signature,
-        links,
-        decoder,
-        memory,
-        conflicts,
-        audit_complete,
-        c,
-    )?
-    else {
-        return Ok(None);
     };
     let constants = returned_constants(records, summaries, links, c)?;
     let mut ledger = Ledger::new(memory, c)?;
@@ -1023,7 +999,7 @@ fn try_produce<'a>(
             *slot = Some(output);
         }
     }
-    Ok(Some(OwnedSummary {
+    Ok(SummaryOutcome::Available(OwnedSummary {
         value: CallSummary {
             results,
             arguments,
@@ -1046,16 +1022,16 @@ fn argument_summary<'a>(
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
-    audit_complete: &mut Option<bool>,
+    audit_complete: &mut Option<SummaryOutcome<()>>,
     c: &mut dyn RunControl,
-) -> Result<Option<(ArgumentSummary, MemoryReservation<'a>)>> {
+) -> Result<SummaryOutcome<(ArgumentSummary, MemoryReservation<'a>)>> {
     let audit = rom_signature.is_some()
         || summaries
             .current()
             .and_then(|s| s.contract)
             .is_some_and(|s| s.arguments < 8);
     if audit {
-        *audit_complete = Some(false);
+        *audit_complete = Some(SummaryOutcome::NoProof);
     }
     let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
     let unshaped = UnshapedCurrent(summaries);
@@ -1084,7 +1060,7 @@ fn argument_summary<'a>(
         Ok(())
     };
     let result = program.summarize_observed(&calls, memory, c, &mut observe)?;
-    *audit_complete = Some(result.is_some());
+    *audit_complete = Some(result.status());
     Ok(result)
 }
 #[allow(clippy::too_many_arguments)]
@@ -1097,7 +1073,7 @@ fn audit<'a>(
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
     c: &mut dyn RunControl,
-) -> Result<()> {
+) -> Result<SummaryOutcome<()>> {
     let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
     let calls = Calls { links, summaries };
     let mut observe = |origin, usage: &ReadUse, c: &mut dyn RunControl| {
@@ -1106,10 +1082,9 @@ fn audit<'a>(
         }
         Ok(())
     };
-    program
+    Ok(program
         .audit(&calls, memory, c, &mut observe, entries)?
-        .ok_or_else(|| Error::new(ErrorCode::Unavailable, "audit has no fixed point"))?;
-    Ok(())
+        .status())
 }
 fn record_conflict(
     conflicts: &mut AdmittedVec<'_, RawConflict>,
@@ -1199,6 +1174,204 @@ mod tests {
                 &mut || Ok(())
             )
             .expect("incomplete CFG")
+        );
+    }
+    fn returning_records() -> Vec<FunctionRecord> {
+        vec![FunctionRecord::Instruction {
+            offset: 0,
+            bytes: 0x00008067u32.to_le_bytes().to_vec(),
+            decoded: DecodedOp {
+                length: 4,
+                text: String::new(),
+                flow: InstructionFlow::Return { base: 1 },
+            },
+        }]
+    }
+
+    fn run_producer(
+        records: &[FunctionRecord],
+        memory: &WorkingMemory,
+        c: &mut dyn RunControl,
+        auditing: bool,
+    ) -> Result<SummaryOutcome<()>> {
+        let mut setup = || Ok(());
+        let facts = Facts::new(records, memory, &mut setup)?;
+        let catalog = Callees::capture(&[], memory, &mut setup)?;
+        let function = LibraryFunction {
+            input: 0,
+            symbol: SymbolId {
+                object: ObjectId {
+                    artifact: ArtifactId::of_bytes(b"summary fixture"),
+                    location: ObjectLocation::Standalone,
+                },
+                table: SymbolTableKind::Static,
+                table_section: 1,
+                index: 1,
+            },
+            name: None,
+        };
+        let links = CallLinks::new(&facts, &function, &catalog, memory, &mut setup)?;
+        let mut conflicts = AdmittedVec::new(memory);
+        let decoder = oer_analysis_riscv_lift::RiscvDecoder;
+        if auditing {
+            audit(
+                &facts,
+                &NoSummaries,
+                &links,
+                u32::MAX,
+                &decoder,
+                memory,
+                &mut conflicts,
+                c,
+            )
+        } else {
+            Ok(produce(
+                &facts,
+                records,
+                &NoSummaries,
+                None,
+                &links,
+                &decoder,
+                memory,
+                &mut conflicts,
+                &mut None,
+                c,
+            )?
+            .status())
+        }
+    }
+
+    #[test]
+    fn producer_and_audit_preserve_every_parent_checkpoint_failure() {
+        let records = returning_records();
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        for auditing in [false, true] {
+            let mut checkpoints = 0;
+            assert_eq!(
+                run_producer(
+                    &records,
+                    &memory,
+                    &mut || {
+                        checkpoints += 1;
+                        Ok(())
+                    },
+                    auditing
+                )
+                .expect("complete"),
+                SummaryOutcome::Available(())
+            );
+            for expected in [
+                Error::new(ErrorCode::ResourceLimited, "work units exhausted"),
+                Error::new(ErrorCode::ResourceLimited, "deadline exceeded"),
+                Error::new(ErrorCode::TimedOut, "deadline fixture"),
+                Error::new(ErrorCode::Cancelled, "cancel fixture"),
+            ] {
+                for fail_at in 1..=checkpoints {
+                    let mut count = 0;
+                    let result = run_producer(
+                        &records,
+                        &memory,
+                        &mut || {
+                            count += 1;
+                            if count == fail_at {
+                                Err(expected.clone())
+                            } else {
+                                Ok(())
+                            }
+                        },
+                        auditing,
+                    );
+                    assert_eq!(
+                        result,
+                        Err(expected.clone()),
+                        "audit={auditing}, checkpoint={fail_at}"
+                    );
+                    assert_eq!(memory.used(), 0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn producer_and_audit_refuse_memory_instead_of_degrading() {
+        let records = returning_records();
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        for auditing in [false, true] {
+            let mut blocker = None;
+            let error = run_producer(
+                &records,
+                &memory,
+                &mut || {
+                    if blocker.is_none() {
+                        blocker = Some(memory.reserve(
+                            memory.observation().limit_bytes - memory.used(),
+                            RunPosition::default(),
+                        )?);
+                    }
+                    Ok(())
+                },
+                auditing,
+            )
+            .expect_err("admission failure");
+            assert_eq!(error.code, ErrorCode::ResourceLimited);
+            assert!(error.memory.is_some());
+            drop(blocker);
+            assert_eq!(memory.used(), 0);
+        }
+    }
+
+    #[test]
+    fn catalog_and_counters_keep_all_three_summary_outcomes() {
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        let catalog = Callees::capture(&[], &memory, &mut || Ok(())).expect("catalog");
+        let mut table = Summaries::new(&catalog, None, &memory, &mut || Ok(())).expect("table");
+        let mut counts = SummaryOutcomeCounts::default();
+        let reason = LocalBudgetExceeded {
+            limit: 100_000,
+            scope: LocalBudgetScope::ArgumentSummary,
+        };
+        for outcome in [
+            SummaryOutcome::Available(OwnedSummary {
+                value: CallSummary::default(),
+                raw: None,
+                _arguments: memory
+                    .reserve(0, RunPosition::default())
+                    .expect("arguments"),
+                _results: memory.reserve(0, RunPosition::default()).expect("results"),
+            }),
+            SummaryOutcome::NoProof,
+            SummaryOutcome::LocalBudgetExceeded(reason),
+        ] {
+            let id = table.entries.len();
+            table
+                .entries
+                .push(
+                    Entry {
+                        function: None,
+                        object: None,
+                        key: None,
+                        summary: SummaryOutcome::NoProof,
+                        edges: AdmittedVec::new(&memory),
+                        discovery: 0,
+                        low: 0,
+                        active: false,
+                    },
+                    RunPosition::default(),
+                )
+                .expect("entry");
+            let expected = outcome.status();
+            table.finish(id, outcome).expect("finish");
+            let actual = table.entry(id).expect("stored entry").summary.status();
+            assert_eq!(actual, expected);
+            counts.record(actual);
+        }
+        assert_eq!(
+            counts,
+            SummaryOutcomeCounts {
+                available: 1,
+                no_proof: 1,
+                local_budget: 1
+            }
         );
     }
 }
