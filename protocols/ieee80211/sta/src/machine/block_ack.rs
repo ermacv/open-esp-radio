@@ -160,6 +160,7 @@ pub(super) fn unprotected_action(
 impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// Attempt a response using the station's existing control credits and,
     /// when negotiated, its management protection. Busy returns the owner.
+    #[inline(never)]
     pub fn try_block_ack_reply(
         &mut self,
         reply: RxBlockAckReply<'id, T::EpochPath>,
