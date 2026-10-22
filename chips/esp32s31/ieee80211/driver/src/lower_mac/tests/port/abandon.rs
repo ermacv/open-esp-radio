@@ -1,6 +1,7 @@
 //! The real S31 port adapter with model hardware and owner-driven virtual time.
 use super::*;
 use core::pin::Pin;
+use oer_time::Duration;
 
 fn poll_p1<F: Future>(future: Pin<&mut F>, observed: &RefCell<Observed>) -> Poll<F::Output> {
     observed.borrow_mut().context = 1;
@@ -218,5 +219,95 @@ fn fail_stop_receives_the_actual_p2_answer_before_its_virtual_bound() {
         assert_eq!(observed.borrow().abandon_contexts, [2]);
         assert_eq!(observed.borrow().device_polls, 0);
         drop(p1);
+    }));
+}
+
+struct CancelClock {
+    clock: TestTimer,
+    yielded: Rc<Cell<bool>>,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CancelClock {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        _: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        {
+            let mut first = pin!(owner.now());
+            core::future::poll_fn(|cx| {
+                assert!(first.as_mut().poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+        }
+        assert!(matches!(
+            owner.now().await,
+            Ok(Err(radio::ClockError::Unavailable))
+        ));
+        self.clock
+            .0
+            .advance(Duration::from_micros(3))
+            .expect("first P2 sample");
+        core::future::poll_fn(|cx| {
+            if self.yielded.replace(true) {
+                Poll::Ready(())
+            } else {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+        })
+        .await;
+        self.clock
+            .0
+            .advance(Duration::from_micros(5))
+            .expect("fresh sample after cancelled reply");
+        let fresh = owner
+            .now()
+            .await
+            .expect("live frontend")
+            .expect("P2 clock reply");
+        assert_eq!(
+            fresh,
+            Ieee80211Instant::from_micros(self.clock.now().as_micros() + 1234)
+        );
+        radio::Ended::fail_stop(owner.fail_stop(), ())
+    }
+}
+
+#[test]
+fn cancelled_clock_latch_is_unavailable_until_p2_answers_and_never_reuses_the_stale_sample() {
+    let (parts, observed, clock) = fixture();
+    let yielded = Rc::new(Cell::new(false));
+    block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (front, registration) = slot
+            .register(Backend::new(parts).ok().expect("backend"))
+            .ok()
+            .expect("installation");
+        let mut p2 = Box::pin(registration.run());
+        let mut p1 = Box::pin(radio::run_port(front, CancelClock { clock, yielded }));
+        let mut finished = false;
+        for _ in 0..20 {
+            if let Poll::Ready(radio::PortEnd::FailStopped { .. }) = poll_p1(p1.as_mut(), &observed)
+            {
+                finished = true;
+                break;
+            }
+            let _ = poll_p2(p2.as_mut(), &observed);
+        }
+        assert!(
+            finished,
+            "cancelled and fresh clock calls make bounded progress"
+        );
+        drop(p1);
+        observed.borrow_mut().context = 2;
+        drop(p2);
+        assert_eq!(observed.borrow().abandon_contexts, [2]);
     }));
 }
