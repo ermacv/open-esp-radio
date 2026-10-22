@@ -1053,8 +1053,8 @@ impl PhyChipChannelMmioBinding {
                 oer_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
-            PhyChipChannelAction::PublishTxGain(image) => {
-                crate::hardware::publish_phy_tx_gain_memory(registers, false, &image);
+            PhyChipChannelAction::PublishTxGain(ref image) => {
+                crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
                 PhyChipChannelCompletion::TxGainPublished
             }
             PhyChipChannelAction::PublishTxCapCommandMemory { value } => {
