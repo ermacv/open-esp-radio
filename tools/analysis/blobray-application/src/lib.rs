@@ -12,6 +12,8 @@ use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 use std::path::Path;
 
+pub mod access_groups;
+pub mod call_arguments;
 pub mod captured;
 mod code_coverage;
 mod command_bank;
@@ -23,11 +25,14 @@ mod execution_coverage;
 mod execution_memory;
 mod execution_steps;
 mod external_calls;
+pub mod field;
 pub mod in_process;
 pub mod library;
 pub mod linking;
 pub mod mmio_diff;
+pub mod references;
 mod registers;
+pub mod symbols;
 
 pub use execution::EXECUTION_ENVIRONMENT;
 pub use oer_analysis_blobray_verification::VERIFIER as EXECUTION_VERIFIER;

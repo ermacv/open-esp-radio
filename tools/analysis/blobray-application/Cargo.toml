@@ -9,6 +9,7 @@ publish = false
 description = "Blobray operations over captured executables inside the calling process"
 
 [dependencies]
+oer-analysis-elf = { path = "../elf" }
 rustc-demangle = "=0.1.28"
 oer-analysis-riscv-program = { path = "../riscv-program" }
 oer-analysis-riscv-analysis = { path = "../riscv-analysis" }
@@ -22,6 +23,10 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 
 tempfile = "=3.27.0"
+
+[dev-dependencies]
+oer-analysis-riscv-lift = { path = "../riscv-lift" }
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
 
 [lints]
 workspace = true

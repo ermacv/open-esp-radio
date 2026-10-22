@@ -38,7 +38,7 @@ pub struct RegisterAccessDocument {
     pub records: Vec<RegisterAccess>,
     /// The selected observations grouped as `--group-by` requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub groups: Option<Vec<crate::access_groups::AccessGroup>>,
+    pub groups: Option<Vec<oer_analysis_blobray_application::access_groups::AccessGroup>>,
     /// The whole analysis, independent of the filter.
     pub summary: RegisterAccessSummary,
 }
@@ -50,7 +50,7 @@ pub const FIELD_ACCESSES_SCHEMA: u32 = 5;
 pub const CALLERS_SCHEMA: u32 = 4;
 
 /// Every memory access of the analyzed functions that lands on one field
-/// offset, as a field of its root ([`crate::field`]), and the functions no
+/// offset, as a field of its root ([`oer_analysis_blobray_application::field`]), and the functions no
 /// analysis could read.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -69,7 +69,7 @@ pub struct FieldAccessesDocument {
     pub width: Option<u8>,
     /// The functions with at least one such access, in input, object and
     /// symbol order.
-    pub functions: Vec<FieldAccessFunction>,
+    pub functions: Vec<oer_analysis_blobray_application::field::FieldAccessFunction>,
     /// Functions that cannot be analyzed: their accesses are unknown.
     pub blocked: Vec<LibraryFunction>,
     /// Analyzed functions whose coverage or value semantics is incomplete:
@@ -82,14 +82,6 @@ pub struct FieldAccessesDocument {
     /// Accesses of the analyzed functions whose address is not known at
     /// all, so no field selection sees them.
     pub unknown_addresses: u64,
-}
-
-/// One function's accesses of the requested field.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FieldAccessFunction {
-    pub function: LibraryFunction,
-    pub accesses: Vec<crate::field::FieldAccess>,
 }
 
 /// The complete analysis of every function the request names, in input,
@@ -149,10 +141,10 @@ pub struct CallersDocument {
     /// The requested symbol names.
     pub symbols: Vec<String>,
     /// The referencing functions, in input, object and symbol order.
-    pub callers: Vec<Caller>,
+    pub callers: Vec<oer_analysis_blobray_application::references::Caller>,
     /// Candidates for indirect calls, not proven calls.
-    pub stored: Vec<crate::references::Stored>,
-    pub scan: crate::references::ScanSummary,
+    pub stored: Vec<oer_analysis_blobray_application::references::Stored>,
+    pub scan: oer_analysis_blobray_application::references::ScanSummary,
     pub functions: u64,
     pub partial: u64,
     pub partial_causes: oer_analysis_blobray_domain::PartialCauses,
@@ -160,14 +152,6 @@ pub struct CallersDocument {
     pub blocked: Vec<LibraryFunction>,
     /// Code no function covers.
     pub gaps: u64,
-}
-
-/// One function's references to the requested symbols.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Caller {
-    pub function: LibraryFunction,
-    pub references: Vec<crate::references::Reference>,
 }
 
 /// Schema of the `call-arguments` document
@@ -190,7 +174,7 @@ pub struct CallArgumentsDocument {
     pub symbols: Vec<String>,
     /// The calling functions with their call sites, in input, object and
     /// symbol order.
-    pub callers: Vec<CallingFunction>,
+    pub callers: Vec<oer_analysis_blobray_application::call_arguments::CallingFunction>,
     /// Functions that cannot be analyzed: their calls are unknown.
     pub blocked: Vec<LibraryFunction>,
     /// Analyzed functions whose coverage or value semantics are incomplete:
@@ -200,14 +184,6 @@ pub struct CallArgumentsDocument {
     pub partial_causes: oer_analysis_blobray_domain::PartialCauses,
     /// Code no function covers.
     pub gaps: u64,
-}
-
-/// One function with its call sites of the named functions.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CallingFunction {
-    pub function: LibraryFunction,
-    pub sites: Vec<crate::call_arguments::CallSite>,
 }
 
 /// Schema of the `mmio-diff` document.
@@ -238,7 +214,7 @@ pub const SYMBOLS_SCHEMA: u32 = 1;
 pub struct SymbolsDocument {
     pub schema: u32,
     pub inputs: Vec<RegisterAccessInput>,
-    pub symbols: Vec<crate::symbols::SymbolRow>,
+    pub symbols: Vec<oer_analysis_blobray_application::symbols::SymbolRow>,
 }
 
 /// Schema of the `strings` document (`{"schema":1,"inputs":[...],"strings":[...]}`).
@@ -250,17 +226,5 @@ pub const STRINGS_SCHEMA: u32 = 1;
 pub struct StringsDocument {
     pub schema: u32,
     pub inputs: Vec<RegisterAccessInput>,
-    pub strings: Vec<StringRow>,
-}
-
-/// One string, by input, archive member, section and section offset.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct StringRow {
-    pub input: u64,
-    pub member: Option<String>,
-    pub section: Option<String>,
-    pub offset: u64,
-    /// Escaped text: printable ASCII with `\\n`, `\\t`, `\\r`, `\\\\`, `\\"` and `\\xNN`.
-    pub text: String,
+    pub strings: Vec<oer_analysis_blobray_application::symbols::StringRow>,
 }
