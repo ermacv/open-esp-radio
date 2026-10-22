@@ -2265,25 +2265,26 @@ pub enum PhyRxDcCalibrationExternalBinding {
 }
 
 impl PhyRxDcCalibrationExternalBinding {
+    #[inline]
     pub fn lower(
         action: PhyRxDcCalibrationAction,
     ) -> Result<Self, PhyRxGainCalibrationBindingError> {
-        if let PhyRxDcCalibrationAction::Minimum(action) = action {
-            return crate::rx::dc_offset::PhyRxDcMinimumExternalBinding::lower(action)
-                .map(Self::Minimum)
-                .map_err(|_| PhyRxGainCalibrationBindingError::UnsupportedAction);
+        match action {
+            PhyRxDcCalibrationAction::Minimum(action) => {
+                crate::rx::dc_offset::PhyRxDcMinimumExternalBinding::lower(action)
+                    .map(Self::Minimum)
+                    .map_err(|_| PhyRxGainCalibrationBindingError::UnsupportedAction)
+            }
+            PhyRxDcCalibrationAction::ForcePbus(_) => {
+                PhyRxDcCalibrationPbusBinding::new(action).map(Self::Pbus)
+            }
+            PhyRxDcCalibrationAction::DelayMicros { .. } => {
+                PhyRxDcCalibrationTimerBinding::new(action).map(Self::Timer)
+            }
+            _ => PhyRxDcCalibrationMmioBinding::new(action)
+                .map(Self::Mmio)
+                .map_err(|_| PhyRxGainCalibrationBindingError::UnsupportedAction),
         }
-        if let Ok(binding) = PhyRxDcCalibrationMmioBinding::new(action) {
-            return Ok(Self::Mmio(binding));
-        }
-        if let Ok(binding) = PhyRxDcCalibrationPbusBinding::new(action) {
-            return Ok(Self::Pbus(binding));
-        }
-        if let Ok(binding) = PhyRxDcCalibrationTimerBinding::new(action) {
-            return Ok(Self::Timer(binding));
-        }
-
-        Err(PhyRxGainCalibrationBindingError::UnsupportedAction)
     }
 }
 
@@ -2404,20 +2405,18 @@ pub enum PhyRxGainDcExternalBinding {
 }
 
 impl PhyRxGainDcExternalBinding {
+    #[inline]
     pub fn lower(action: PhyRxGainDcAction) -> Result<Self, PhyRxGainCalibrationBindingError> {
-        if let PhyRxGainDcAction::Calibration(action) = action {
-            return PhyRxDcCalibrationExternalBinding::lower(action).map(Self::Calibration);
-        }
-        if let Ok(binding) = PhyRxGainDcMmioBinding::new(action) {
-            return Ok(Self::Mmio(binding));
-        }
-        if let Ok(binding) = PhyRxGainDcPbusBinding::new(action) {
-            return Ok(Self::Pbus(binding));
-        }
-        if let Ok(binding) = PhyRxGainDcTimerBinding::new(action) {
-            return Ok(Self::Timer(binding));
-        }
         match action {
+            PhyRxGainDcAction::Calibration(action) => {
+                PhyRxDcCalibrationExternalBinding::lower(action).map(Self::Calibration)
+            }
+            PhyRxGainDcAction::ForcePbus { .. } => {
+                PhyRxGainDcPbusBinding::new(action).map(Self::Pbus)
+            }
+            PhyRxGainDcAction::DelayMicros { .. } => {
+                PhyRxGainDcTimerBinding::new(action).map(Self::Timer)
+            }
             PhyRxGainDcAction::Rfpll(action) => {
                 crate::analog::rfpll::RfpllFrequencyExternalBinding::lower(action)
                     .map(Self::Rfpll)
@@ -2429,7 +2428,9 @@ impl PhyRxGainDcExternalBinding {
                     .map_err(|_| PhyRxGainCalibrationBindingError::UnsupportedAction)
             }
 
-            _ => Err(PhyRxGainCalibrationBindingError::UnsupportedAction),
+            _ => PhyRxGainDcMmioBinding::new(action)
+                .map(Self::Mmio)
+                .map_err(|_| PhyRxGainCalibrationBindingError::UnsupportedAction),
         }
     }
 }

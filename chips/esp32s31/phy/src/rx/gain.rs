@@ -683,17 +683,19 @@ pub enum PhyRxGainPublishExternalBinding {
 }
 
 impl PhyRxGainPublishExternalBinding {
+    #[inline]
     pub fn lower(action: PhyRxGainPublishAction) -> Result<Self, PhyRxGainExternalBindingError> {
-        if let Ok(binding) = PhyRxGainPublishMmioBinding::new(action) {
-            return Ok(Self::Mmio(binding));
+        match action {
+            PhyRxGainPublishAction::ForcePbus { .. } => {
+                PhyRxGainPublishPbusBinding::new(action).map(Self::Pbus)
+            }
+            PhyRxGainPublishAction::DelayMicros { .. } => {
+                PhyRxGainPublishTimerBinding::new(action).map(Self::Timer)
+            }
+            _ => PhyRxGainPublishMmioBinding::new(action)
+                .map(Self::Mmio)
+                .map_err(|_| PhyRxGainExternalBindingError::UnsupportedAction),
         }
-        if let Ok(binding) = PhyRxGainPublishPbusBinding::new(action) {
-            return Ok(Self::Pbus(binding));
-        }
-        if let Ok(binding) = PhyRxGainPublishTimerBinding::new(action) {
-            return Ok(Self::Timer(binding));
-        }
-        Err(PhyRxGainExternalBindingError::UnsupportedAction)
     }
 }
 
