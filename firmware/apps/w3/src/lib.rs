@@ -7,4 +7,5 @@ pub mod beacon;
 pub mod echo;
 pub mod icmp;
 pub mod observation;
+pub mod policy;
 pub mod report;

@@ -9,6 +9,8 @@ publish.workspace = true
 description = "W3: open station association, DHCP and bidirectional ICMP acceptance"
 
 [dependencies]
+oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter" }
+oer-time = { path = "../../../portable/time" }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "4868fd9acfd4191173cd6531b537d6009d3ae5d0", features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
@@ -20,7 +22,6 @@ heapless = "0.9.3"
 static_cell = { workspace = true }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "9e0e3293724c30c5892e6af56150c849f5231eb2", features = ["async"] }
 oer-radio-port = { path = "../../../protocols/radio/port" }
-oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter" }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
@@ -32,7 +33,6 @@ oer-espressif-executor = { path = "../../../chips/espressif/executor", features 
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
 oer-embassy-net = { path = "../../../portable/embassy/net" }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-time = { path = "../../../portable/time" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
@@ -47,7 +47,6 @@ oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
 
 [dev-dependencies]
-oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [build-dependencies]

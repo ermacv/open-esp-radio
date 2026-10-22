@@ -267,8 +267,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         )
         .expect("S31 channel");
         let (arbiter, place, absence_place) = PortArbiter::<StationComposition<Id>>::new(
-            oer_ieee80211_arbiter::ArbiterPolicy::DEFAULT
-                .checked(port::PUBLICATION_BOUND)
+            oer_firmware_apps_w3::policy::arbiter(port::PUBLICATION_BOUND)
                 .expect("W3 arbiter bound"),
             channel,
             resources.arbiter_authority,
