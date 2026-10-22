@@ -26,7 +26,6 @@ use oer_esp32s31_hal::{
     },
     domain::RadioDomain,
 };
-use oer_esp32s31_phy::{bluetooth_client::BluetoothPhyClientError, concurrent::ConcurrentPhy};
 use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 use crate::{
@@ -43,8 +42,6 @@ pub enum ControllerShutdownError {
     Task(ControllerTaskRetirementError),
     /// The idle-Controller check before releasing the output failed.
     Output(BluetoothControllerOutputReleaseError),
-    /// The shared PHY domain rejected the release.
-    Phy(BluetoothPhyClientError),
     /// The Controller reset was rejected or did not read back.
     Reset(EngineShutdownError),
     /// The shutdown ran outside the event cells' executor, which alone
@@ -71,21 +68,13 @@ pub struct ControllerShutdownFailure<X: SignalExecutor, M: ControllerMemory> {
 enum Retained<X: SignalExecutor, M: ControllerMemory> {
     Task {
         task: ControllerPoweredTaskRuntime<'static, X, M>,
-        membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
         output: InterruptOutputAfterRoutesOwner,
         timer: ModemLpTimerInterruptReadyOwner,
     },
     Output {
         task: TaskResources<M>,
-        membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
         output: InterruptOutputAfterRoutesOwner,
         timer: ModemLpTimerInterruptReadyOwner,
-    },
-    Phy {
-        task: TaskResources<M>,
-        output: InterruptOutputReleasedOwner,
-        timer: ModemLpTimerInterruptReadyOwner,
-        membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyLeaveFailure,
     },
     Reset {
         failure: EngineShutdownFailure<M>,
@@ -132,14 +121,12 @@ pub type ControllerShutDown<M> = EngineShutDown<M>;
     clippy::result_large_err,
     reason = "the failure retains every owner of the epoch"
 )]
-pub fn retire<X: SignalExecutor, B: PlatformClockBackend, M: ControllerMemory>(
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
+pub fn retire<X: SignalExecutor, M: ControllerMemory>(
     task: ControllerPoweredTaskRuntime<'static, X, M>,
-    membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
     output: InterruptOutputAfterRoutesOwner,
     timer: ModemLpTimerInterruptReadyOwner,
     clock: &dyn oer_time::Clock,
-) -> Result<(ControllerRetired<M>, bool), ControllerShutdownFailure<X, M>> {
+) -> Result<ControllerRetired<M>, ControllerShutdownFailure<X, M>> {
     let mut task = match task.retire() {
         Ok(task) => task,
         Err((error, task)) => {
@@ -147,7 +134,6 @@ pub fn retire<X: SignalExecutor, B: PlatformClockBackend, M: ControllerMemory>(
                 error: ControllerShutdownError::Task(error),
                 _retained: Retained::Task {
                     task,
-                    membership,
                     output,
                     timer,
                 },
@@ -161,35 +147,30 @@ pub fn retire<X: SignalExecutor, B: PlatformClockBackend, M: ControllerMemory>(
                 error: ControllerShutdownError::Output(error),
                 _retained: Retained::Output {
                     task,
-                    membership,
                     output,
                     timer,
                 },
             });
         }
     };
-    match crate::phy::leave_phy(radio, &task, membership) {
-        Ok(last) => Ok((
-            ControllerRetired {
-                task,
-                output,
-                timer,
-            },
-            last,
-        )),
-        Err(failure) => Err(ControllerShutdownFailure {
-            error: ControllerShutdownError::Phy(failure.error()),
-            _retained: Retained::Phy {
-                task,
-                output,
-                timer,
-                membership: failure,
-            },
-        }),
-    }
+    Ok(ControllerRetired {
+        task,
+        output,
+        timer,
+    })
 }
 
 impl<M: ControllerMemory> ControllerRetired<M> {
+    /// Identity checked before a retirement can satisfy an actor leave.
+    pub fn installation(&self) -> u32 {
+        self.task.installation()
+    }
+
+    /// Borrow authority for the actor's PHY/BTBB leave before reset.
+    pub fn task_owner(&self) -> &oer_esp32s31_hal::bluetooth::TaskOwner {
+        self.task.hal()
+    }
+
     /// Reset the Controller domains, reunite the drained timer and return
     /// the clocked client with the complete controller arena.
     ///

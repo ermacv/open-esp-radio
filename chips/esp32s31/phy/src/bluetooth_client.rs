@@ -44,6 +44,43 @@ impl fmt::Debug for BluetoothPhyMembership {
     }
 }
 
+/// Exclusive access to a settled domain for this Bluetooth membership.
+/// Pending initial tracking has no RF-ready transition.
+#[must_use]
+pub struct BluetoothRfReady<'r, B: PlatformClockBackend> {
+    radio: &'r mut RadioDomain<B, ConcurrentPhy>,
+    _membership: &'r BluetoothPhyMembership,
+}
+
+impl<'r, B: PlatformClockBackend> BluetoothRfReady<'r, B> {
+    pub fn into_radio(self) -> &'r mut RadioDomain<B, ConcurrentPhy> {
+        self.radio
+    }
+}
+
+/// Check the exact registration, active client and BTBB reference before a
+/// BLE PHY write. The exclusive borrow prevents tracking or RF close racing it.
+pub fn bluetooth_rf_ready<'r, B: PlatformClockBackend>(
+    radio: &'r mut RadioDomain<B, ConcurrentPhy>,
+    membership: &'r BluetoothPhyMembership,
+) -> Result<BluetoothRfReady<'r, B>, ConcurrentPhyError> {
+    let domain = radio.attachment().settled()?;
+    if !domain.clients.describes_epoch(radio.registration_epoch())
+        || domain.clients.permission_key() != membership.key
+    {
+        return Err(ConcurrentPhyError::EpochMismatch);
+    }
+    if !domain.clients.snapshot().contains(RadioClient::Bluetooth)
+        || !radio.holds_btbb(RadioClient::Bluetooth)
+    {
+        return Err(ConcurrentPhyError::ClientAbsent(RadioClient::Bluetooth));
+    }
+    Ok(BluetoothRfReady {
+        radio,
+        _membership: membership,
+    })
+}
+
 /// Why Bluetooth could not join or leave the shared PHY and BTBB.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BluetoothPhyClientError {

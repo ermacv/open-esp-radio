@@ -58,6 +58,11 @@ pub struct EngineShutDown<M: ControllerMemory> {
 }
 
 impl<M: ControllerMemory> Engine<M> {
+    /// Non-repeating identity of this engine installation, for lifecycle replies.
+    pub const fn installation(&self) -> u32 {
+        self.epoch.0
+    }
+
     /// Bind the unique task request endpoint to this engine's installation.
     /// The returned P3 half lives beside the stable interrupt register owner.
     pub fn install_scheduler_interrupts(

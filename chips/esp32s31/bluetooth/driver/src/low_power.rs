@@ -173,6 +173,12 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
         self.scheduler.task()
     }
 
+    /// Borrow clocked task authority for the shared actor's BTBB join.
+    #[cfg(target_arch = "riscv32")]
+    pub fn phy_task_owner(&self) -> &oer_esp32s31_hal::bluetooth::TaskOwner {
+        self.task().hal()
+    }
+
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn task_mut(&mut self) -> &mut crate::resources::TaskResources<M> {
         self.scheduler.task_mut()

@@ -70,6 +70,10 @@ pub struct TaskResources<M: ControllerMemory> {
 
 #[cfg(any(target_arch = "riscv32", test))]
 impl<M: ControllerMemory> TaskResources<M> {
+    pub const fn installation(&self) -> u32 {
+        self.engine.installation()
+    }
+
     /// The HAL task owner, which proves the Bluetooth module clocks to the
     /// shared PHY domain and BTBB.
     #[cfg(target_arch = "riscv32")]

@@ -615,3 +615,8 @@ fn vacant_wifi<B: PlatformClockBackend>(
         _ => panic!("Wi-Fi join phase owns the unacquired PHY client"),
     }
 }
+
+#[cfg(feature = "bluetooth")]
+mod bluetooth;
+#[cfg(feature = "bluetooth")]
+pub use bluetooth::WithBluetooth;

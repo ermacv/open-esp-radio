@@ -31,6 +31,8 @@
 //!   actor poll; the request bounds follow from measurements and are added
 //!   then.
 
+#[cfg(feature = "bluetooth")]
+pub mod bluetooth;
 mod lp_clock;
 mod member;
 pub mod wifi;
