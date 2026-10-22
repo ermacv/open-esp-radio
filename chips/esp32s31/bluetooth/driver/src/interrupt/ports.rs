@@ -40,7 +40,7 @@ pub trait InterruptOwnerStorage<X: SignalExecutor>: Sized {
 /// Stable platform dispatch over the published shared interrupt owner.
 ///
 /// Implementations must retain the unique primary/NRT register owner in
-/// stable storage across every call. Both methods execute exactly one finite
+/// stable storage across every call. Every method executes one finite
 /// Controller disposition and enable no CPU route themselves.
 pub trait SharedInterruptDispatchStorage {
     /// Exact reason the shared owner could not service an entry.

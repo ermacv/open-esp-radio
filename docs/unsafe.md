@@ -118,8 +118,9 @@ publishes its reply, then P2 consumes that reply exactly once. Neither side
 accesses the other's phase, and no task waker enters P3. The static typed
 signal carries only reply readiness. Installation epochs and command numbers
 that never wrap or reset reject stale replies. Abandoning a pending future
-retains the request seat, quarantines graph publications and prevents retirement. Reusing the slot consumes
-both quiet endpoints after scheduler stop and route removal. Adjacent tests
+retains the request seat, quarantines graph publications and prevents
+retirement. Reusing the slot consumes both quiet endpoints after scheduler
+stop and route removal. Adjacent tests
 cover delayed replies, duplicate entries, stale replies, registration races,
 abandonment and endpoint reunion; a paired UI case rejects repeated retirement.
 The adjacent `engine::owner::tests` cover exact-allocation retry, completion,

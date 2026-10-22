@@ -110,8 +110,8 @@ Start, while retaining the shared radio-domain owner:
    the public address;
 4. enable coexistence for Bluetooth, as `esp_bt_controller_enable` does; a
    later start failure is fail-stop and keeps it enabled;
-5. publish the interrupt owners and the timer into stable
-   storage, then bind the CPU routes.
+5. bind the engine's request channel, publish its P3 half and the timer into
+   stable storage, then bind the CPU routes.
 
 The interrupt sources are `MODEM_BT_MAC` (source 124), `MODEM_LP_TIMER`
 (source 127) and `MODEM_BT_MAC_INT1` (source 133), bound as one same-core set
@@ -129,8 +129,10 @@ another radio shares the antenna, which selects the coexistence priorities
 
 Stop reverses it:
 
-1. settle the modem timer, disable the three routes and clear the
-   dispatcher, then retire the timer and the interrupt register owners;
+1. stop the physical scheduler through P3 while the shared doorbell remains
+   live, drain its finished lists and settle the modem timer; then disable
+   the three BLE routes and remove BLE dispatch, retire the timer and P3
+   half, and reunite both quiet request-channel endpoints;
 2. clear every Bluetooth LE coexistence status bit, retire
    the epoch (Controller output, PHY and BTBB exit), then disable
    coexistence, as `coex_disable` after the stack is disabled; close the PHY
