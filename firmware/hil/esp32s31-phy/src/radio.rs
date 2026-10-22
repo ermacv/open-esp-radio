@@ -425,6 +425,7 @@ impl Radio {
                 (0, true)
             }
         };
+        observer.report();
         // Print only after tracking returns, outside all measured intervals.
         oer_esp32s31_board::rom::print_fmt(format_args!(
             "OPEN_RADIO_HIL sar_tail tick={} {:?}\n",

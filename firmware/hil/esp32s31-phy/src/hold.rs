@@ -66,6 +66,11 @@ pub struct Observer<'a>(
     &'a mut HoldPolls,
     Option<&'a mut oer_esp32s31_phy::tracking::observation::ReadinessTrace>,
     oer_esp32s31_phy::tracking::observation::RfpllEngineTrace,
+    [Option<(
+        Operation,
+        oer_esp32s31_phy::tracking::observation::EngineTiming,
+    )>; 8],
+    [Option<oer_esp32s31_phy::tracking::observation::GainTiming>; 2],
 );
 impl<'a> Observer<'a> {
     pub fn new(
@@ -79,6 +84,8 @@ impl<'a> Observer<'a> {
             engine,
             trace,
             oer_esp32s31_phy::tracking::observation::RfpllEngineTrace::default(),
+            [None; 8],
+            [None; 2],
         )
     }
 }
@@ -95,15 +102,7 @@ impl PhyTargetObserver for &mut Observer<'_> {
         operation: Operation,
         timing: oer_esp32s31_phy::tracking::observation::GainTiming,
     ) {
-        let family = if operation == Operation::WifiPower {
-            4
-        } else {
-            2
-        };
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL gain-parts family={} lower-us={} arithmetic-us={} publication-us={}\n",
-            family, timing.lower_micros, timing.arithmetic_micros, timing.publication_micros,
-        ));
+        self.6[usize::from(operation == Operation::WifiPower)] = Some(timing);
     }
     fn readiness_trace(
         &mut self,
@@ -119,10 +118,7 @@ impl PhyTargetObserver for &mut Observer<'_> {
         if operation == Operation::Rfpll {
             timing.invalid |= self.4.invalid;
         }
-        report_engine(operation, &timing);
-        if operation == Operation::Rfpll {
-            report_rfpll_commands(&self.4);
-        }
+        self.5[operation_family(operation)] = Some((operation, timing));
         self.2.merge(HoldPolls {
             polls: timing.polls,
             pending: timing.pending,
@@ -172,15 +168,7 @@ fn report_engine(
     timing: &oer_esp32s31_phy::tracking::observation::EngineTiming,
 ) {
     use oer_esp32s31_board::rom::print_fmt;
-    let family = match operation {
-        Operation::Rfpll => 1,
-        Operation::BluetoothIeee802154Power => 2,
-        Operation::WifiI2c => 3,
-        Operation::WifiPower => 4,
-        Operation::Dcode => 5,
-        Operation::Temperature => 7,
-        _ => 0,
-    };
+    let family = operation_family(operation);
     print_fmt(format_args!(
         "OPEN_RADIO_HIL engine family={} polls={} pending={} ready={}\n",
         family,
@@ -315,4 +303,40 @@ pub fn report_timer(window: Option<oer_espressif_executor::timer_observation::Wi
         "OPEN_RADIO_HIL t7-timer unmatched-irqs={} unmatched-dispatch={} armed={}\n",
         r.unmatched_interrupts, r.unmatched_dispatches, r.armed_at_end
     ));
+}
+
+fn operation_family(operation: Operation) -> usize {
+    match operation {
+        Operation::Rfpll => 1,
+        Operation::BluetoothIeee802154Power => 2,
+        Operation::WifiI2c => 3,
+        Operation::WifiPower => 4,
+        Operation::Dcode => 5,
+        Operation::Temperature => 7,
+        _ => 0,
+    }
+}
+
+impl Observer<'_> {
+    /// Flush only after the root tracking future returns, including failures.
+    #[inline(never)]
+    pub fn report(&self) {
+        for (operation, timing) in self.5.iter().flatten() {
+            report_engine(*operation, timing);
+            if *operation == Operation::Rfpll {
+                report_rfpll_commands(&self.4);
+            }
+        }
+        for (index, timing) in self.6.iter().enumerate() {
+            if let Some(timing) = timing {
+                oer_esp32s31_board::rom::print_fmt(format_args!(
+                    "OPEN_RADIO_HIL gain-parts family={} lower-us={} arithmetic-us={} publication-us={}\n",
+                    if index == 0 { 2 } else { 4 },
+                    timing.lower_micros,
+                    timing.arithmetic_micros,
+                    timing.publication_micros,
+                ));
+            }
+        }
+    }
 }
