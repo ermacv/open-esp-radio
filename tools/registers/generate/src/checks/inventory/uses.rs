@@ -160,6 +160,30 @@ impl Report {
             "  incomplete signature audits {}\n",
             summary.signature_audit_incomplete.len()
         ));
+        text.push_str(&format!(
+            "  ROM/header diagnostics {} (contracts do not apply to linked bodies; {} incomplete ROM-only audits)\n",
+            summary.rom_signature_diagnostic_count,
+            summary.rom_signature_audit_incomplete.len()
+        ));
+        for failure in &summary.rom_signature_audit_incomplete {
+            text.push_str(&format!(
+                "  INCOMPLETE ROM DIAGNOSTIC {}: {}\n",
+                String::from_utf8_lossy(failure.function.name.as_deref().unwrap_or(b"?")),
+                failure.reason
+            ));
+        }
+        for diagnostic in &summary.rom_signature_diagnostics {
+            text.push_str(&format!(
+                "  ROM/HEADER {}: signature {} ({}), a{} -> {:?}, bits {:#010x}, {:?}\n",
+                String::from_utf8_lossy(diagnostic.function.name.as_deref().unwrap_or(b"?")),
+                diagnostic.signature,
+                diagnostic.declaration,
+                diagnostic.register.saturating_sub(10),
+                diagnostic.usage.sink,
+                diagnostic.usage.bits,
+                diagnostic.usage.precision
+            ));
+        }
         for failure in &summary.signature_audit_incomplete {
             text.push_str(&format!(
                 "  INCOMPLETE SIGNATURE AUDIT {}: {}\n",

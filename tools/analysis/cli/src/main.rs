@@ -1294,6 +1294,25 @@ fn register_accesses(
         }
         writeln!(
             out,
+            "{} ROM/header diagnostics ({} incomplete ROM-only audits)",
+            summary.rom_signature_diagnostic_count,
+            summary.rom_signature_audit_incomplete.len()
+        )
+        .map_err(io_error)?;
+        for diagnostic in &summary.rom_signature_diagnostics {
+            writeln!(
+                out,
+                "ROM/header {}: signature {}, a{} -> {:?}, {:?}",
+                String::from_utf8_lossy(diagnostic.function.name.as_deref().unwrap_or(b"?")),
+                diagnostic.signature,
+                diagnostic.register.saturating_sub(10),
+                diagnostic.usage.sink,
+                diagnostic.usage.precision
+            )
+            .map_err(io_error)?;
+        }
+        writeln!(
+            out,
             "{} functions ({} partial{}, {} blocked), {} gaps, {} observations ({} unresolved, {} indexed)",
             summary.functions,
             summary.partial_functions,

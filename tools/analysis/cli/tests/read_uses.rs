@@ -1809,3 +1809,256 @@ ret
     assert_eq!(document.records, observations);
     assert_eq!(memory.used(), 0);
 }
+
+#[test]
+fn linked_bodies_keep_computed_summaries_and_report_header_diagnostics() {
+    use oer_analysis_blobray_application::{
+        library::{LibraryOutcome, analyze_library},
+        signatures::Signatures,
+    };
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("rom.rs");
+    let image = temp.path().join("rom.elf");
+    std::fs::write(
+        &source,
+        r##"#![no_std]
+#![no_main]
+#[panic_handler] fn panic(_: &core::panic::PanicInfo<'_>) -> ! { loop {} }
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.macro function name
+.section .text.\name,"ax",@progbits
+.globl \name
+.type \name,@function
+\name:
+.endm
+.macro end name
+.size \name, .-\name
+.endm
+function rom_body
+bnez a2, 1f
+1: li a0, 37
+li a1, 5
+ret
+end rom_body
+function rom_may
+add t0, a2, a3
+bnez t0, 1f
+1: li a0, 0
+li a1, 0
+ret
+end rom_may
+function rom_partial
+jr a2
+end rom_partial
+function rom_recursive
+call rom_recursive
+ret
+end rom_recursive
+function rom_return
+lui t0, 0x20107
+lw a0, 0(t0)
+ret
+end rom_return
+"#);
+"##,
+    )
+    .unwrap();
+    let compiled = Command::new("rustc")
+        .args([
+            "--target",
+            "riscv32imac-unknown-none-elf",
+            "--crate-type",
+            "bin",
+            "--edition=2024",
+            "-C",
+            "panic=abort",
+            "-C",
+            "link-arg=--entry=rom_body",
+            "-C",
+            "link-arg=--no-gc-sections",
+            "-C",
+            "link-arg=-Ttext=0x40000000",
+        ])
+        .arg(&source)
+        .arg("-o")
+        .arg(&image)
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let rom = std::fs::read(&image).unwrap();
+    let caller = fixture(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.macro function name
+.section .text.\name,"ax",@progbits
+.globl \name
+.type \name,@function
+\name:
+.endm
+.macro end name
+.size \name, .-\name
+.endm
+function caller
+lui t0, 0x20107
+lw a2, 0(t0)
+call rom_body
+ret
+end caller
+function partial_caller
+call rom_partial
+bnez a0, 1f
+1: ret
+end partial_caller
+function recursive_caller
+call rom_recursive
+bnez a0, 1f
+1: ret
+end recursive_caller
+"#);
+"##,
+    );
+    let signatures = Signatures::parse(
+        &[
+            "rom_body",
+            "rom_may",
+            "rom_partial",
+            "rom_recursive",
+            "rom_return",
+            "rom_alias",
+        ]
+        .map(|name| {
+            format!(
+                "[[function]]\nname='{name}'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n"
+            )
+        })
+        .join("\n"),
+    )
+    .unwrap();
+    use object::{Object, ObjectSymbol};
+    let file = object::File::parse(rom.as_slice()).unwrap();
+    let address = file
+        .symbols()
+        .find(|s| s.name().ok() == Some("rom_body"))
+        .unwrap()
+        .address() as u32;
+    let alias_caller = fixture(&format!(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.globl rom_alias
+.set rom_alias, {address}
+.section .text.alias_caller,"ax",@progbits
+.globl alias_caller
+.type alias_caller,@function
+alias_caller:
+call rom_alias
+bnez a0, 1f
+1: ret
+.size alias_caller, .-alias_caller
+"#);
+"##
+    ));
+    let inputs = [
+        Executable::new(caller),
+        Executable::new(rom),
+        Executable::new(alias_caller),
+    ];
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    let mut before = None;
+    let mut before_returned = None;
+    for signatures in [None, Some(&signatures)] {
+        let assumptions = Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures,
+            ..Default::default()
+        };
+        let mut observations = Vec::new();
+        let summary = register_accesses(
+            &inputs,
+            assumptions,
+            &[],
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |r, _| {
+                observations.push(r.clone());
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(summary.signature_conflicts.is_empty());
+        assert!(summary.signature_audit_incomplete.is_empty());
+        assert_eq!(summary.contract_narrowed_bits, 0);
+        assert_eq!(summary.contract_may_narrowed_bits, 0);
+        assert_eq!(
+            summary.rom_signature_diagnostic_count as usize,
+            summary.rom_signature_diagnostics.len()
+        );
+        if signatures.is_none() {
+            before = Some(observations);
+            assert!(summary.rom_signature_diagnostics.is_empty());
+        } else {
+            assert_eq!(
+                observations,
+                before.clone().unwrap(),
+                "header must not change linked body or its callers"
+            );
+            for (name, precision) in [
+                (b"rom_body".as_slice(), ReadPrecision::Exact),
+                (b"rom_may".as_slice(), ReadPrecision::May),
+            ] {
+                assert!(
+                    summary
+                        .rom_signature_diagnostics
+                        .iter()
+                        .any(|d| d.function.name.as_deref() == Some(name)
+                            && d.register == 12
+                            && d.usage.precision == precision),
+                    "{summary:?}"
+                );
+            }
+        }
+        let mut returned = None;
+        analyze_library(
+            &inputs,
+            assumptions,
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |outcome, _| {
+                if let LibraryOutcome::Analyzed(a) = outcome
+                    && a.function.name.as_deref() == Some(b"caller")
+                {
+                    let computed = a.summaries.summary(Callee::Address(address)).unwrap();
+                    assert_eq!(computed.contract, None);
+                    assert_eq!(computed.results, [Some(vec![37]), Some(vec![5])]);
+                    returned = a.records.iter().find_map(|r| {
+                        if let FunctionRecord::ReturnValue { low, high, .. } = r {
+                            Some((low.clone(), high.clone()))
+                        } else {
+                            None
+                        }
+                    });
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        if signatures.is_none() {
+            before_returned = returned;
+        } else {
+            assert_eq!(returned, before_returned);
+        }
+        assert_eq!(memory.used(), 0);
+    }
+}

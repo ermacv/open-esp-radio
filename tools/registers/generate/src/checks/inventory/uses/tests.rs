@@ -154,6 +154,9 @@ fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
         contract_narrowed_bits: 0,
         contract_may_narrowed_bits: 0,
         signature_conflicts: Vec::new(),
+        rom_signature_diagnostics: Vec::new(),
+        rom_signature_diagnostic_count: 0,
+        rom_signature_audit_incomplete: Vec::new(),
         signature_audit_incomplete: Vec::new(),
         functions: 1,
         partial_functions: 0,
@@ -901,4 +904,60 @@ fn signature_conflicts_fail_only_after_complete_reports_are_written() {
     let text = std::fs::read_to_string(directory.path().join("report.txt")).unwrap();
     assert!(text.contains("SIGNATURE CONFLICT function synthetic"));
     assert!(text.contains("entry a0") && text.contains("entry a1"));
+}
+
+#[test]
+fn rom_header_diagnostics_do_not_fail_the_inventory() {
+    use oer_analysis_blobray_domain::RomSignatureDiagnostic;
+    let mut report = run(vec![constant(0)], None, 0);
+    report.corpus.summary.rom_signature_diagnostic_count = 1;
+    report
+        .corpus
+        .summary
+        .rom_signature_diagnostics
+        .push(RomSignatureDiagnostic {
+            function: LibraryFunction {
+                input: 0,
+                symbol: symbol(b"fixture"),
+                name: Some(b"synthetic_rom".to_vec()),
+            },
+            signature: "synthetic_rom".into(),
+            declaration: "synthetic.h:1".into(),
+            register: 12,
+            usage: ReadUse {
+                bits: 1,
+                precision: ReadPrecision::Exact,
+                sink: ReadSink::Branch { site: 16 },
+            },
+        });
+    report.corpus.summary.rom_signature_audit_incomplete.push(
+        oer_analysis_blobray_domain::SignatureAuditIncomplete {
+            function: LibraryFunction {
+                input: 0,
+                symbol: symbol(b"fixture"),
+                name: Some(b"large_synthetic_rom".to_vec()),
+            },
+            reason: oer_analysis_riscv_model::Error::new(
+                oer_analysis_riscv_model::ErrorCode::ResourceLimited,
+                "synthetic ROM diagnostic limit",
+            ),
+        },
+    );
+    let directory = tempfile::tempdir().unwrap();
+    crate::checks::inventory::run::write_report(directory.path(), "fixture", &report).unwrap();
+    let json: Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        json["check"]["corpus"]["summary"]["rom_signature_diagnostic_count"],
+        1
+    );
+    assert_eq!(
+        json["check"]["corpus"]["summary"]["rom_signature_diagnostics"][0]["register"],
+        12
+    );
+    let text = std::fs::read_to_string(directory.path().join("report.txt")).unwrap();
+    assert!(text.contains("ROM/HEADER synthetic_rom"));
+    assert!(text.contains("Exact"));
+    assert!(text.contains("INCOMPLETE ROM DIAGNOSTIC large_synthetic_rom"));
 }

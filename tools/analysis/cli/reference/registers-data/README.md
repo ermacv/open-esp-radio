@@ -164,7 +164,15 @@ constants to value analysis. Without the flag, no summary narrows argument uses.
 and `result` is `void`, `u32` or `u64`. Unknown results and duplicate names are
 errors. Application owns this parser; the register checker uses it too.
 
-Contracts enter through `CallSummaries`: a callee without a computed summary
+Contracts apply to functions without a captured body and to bodies in ELF
+relocatable objects (`e_type = ET_REL`), including archive members. A body in a
+linked executable (`ET_EXEC`, including every ROM revision) receives no header
+contract: its computed summary remains authoritative, and calls to it from
+libraries use that summary too. An unavailable, recursive or ambiguous linked
+summary never falls back to the header, even when the call names an alias.
+The distinction comes from ELF type, with no additional flag or role convention.
+
+Applicable contracts enter through `CallSummaries`: a callee without a computed summary
 consumes only its declared argument words with May precision. Absent result
 words carry neither dependencies nor constants. A computed summary remains
 in force and is checked against the contract; declared absent return words
@@ -184,7 +192,9 @@ list is nonempty. Failed local audits receive diagnostic retries with 16× and
 256× work allowances; their summaries are discarded, so the production summary
 budget and publication rule stay unchanged. The overall work/memory/deadline
 controls still apply. Larger corpora can use the existing resource flags such as
-`--working-memory-mib` to finish the audit. Audit observes fixed-point sink events before
+`--working-memory-mib` to finish the audit. The inventory checker uses a 1024 MiB
+working-memory bound for its complete corpus audit; the interactive CLI default
+is unchanged. Audit observes fixed-point sink events before
 aggregation, so a separate May use cannot hide Exact evidence. A stack spill and
 reload alone is not a sink; dead arithmetic and May flow are not conflicts.
 May consumption beyond the declared inputs is removed by the ABI contract.
@@ -193,6 +203,16 @@ whose CallArgument or Return sink a fallback signature or result contract remove
 `summary.contract_may_narrowed_bits` separately counts bits whose computed May
 argument consumption the contract removes. Each category counts a bit once per
 load even if several sinks were removed or another sink still consumes it.
+`summary.rom_signature_diagnostics` lists linked-body entry-register uses beyond
+the header's argument count, with the function identity, signature, declaration,
+register, bit mask, sink and Exact or May precision. These are observations of
+the unmodified computed flow, never errors or reasons to narrow it.
+`summary.rom_signature_diagnostic_count` counts those source-register/sink events;
+two precisions at a sink count separately. They appear in both inventory reports
+and do not change the exit status. Resource-limited ROM-only audits appear in
+`summary.rom_signature_audit_incomplete` and are also nonfatal. An audit that
+checks an applicable contract still fails if incomplete. No `noreturn` facts
+are inferred or added.
 The typed summary schema is 4.
 
 The register-access schema is 10.

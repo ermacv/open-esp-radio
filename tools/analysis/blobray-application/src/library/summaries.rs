@@ -160,6 +160,16 @@ impl<'m> Summaries<'m> {
             c.checkpoint(1)?;
             let definition = catalog.definition(id);
             let (function, key) = definition.map_or((None, None), |(f, k)| (Some(f), k));
+            // Only ET_EXEC definitions have address keys. A captured linked body
+            // must never acquire a header fallback, including through a name or alias.
+            if let Some(CallKey::Address(address)) = &key {
+                if let Some(name) = function.as_ref().and_then(|f| f.name.as_deref()) {
+                    out.contracts.remove(name);
+                }
+                if let Some(name) = out.contract_addresses.get_mut(address) {
+                    *name = None;
+                }
+            }
             if let Some(f) = &function {
                 out.ledger.admit(
                     f.symbol.object.artifact.allocated_bytes() as usize
@@ -188,6 +198,14 @@ impl<'m> Summaries<'m> {
                 },
                 c.position(),
             )?;
+        }
+        // Absolute aliases at a captured body's address follow the same rule
+        // when the value consumer names the symbol rather than its address.
+        for (address, name) in catalog.named_addresses() {
+            c.checkpoint(1)?;
+            if out.groups.addresses.contains_key(&address) {
+                out.contracts.remove(name);
+            }
         }
         Ok(out)
     }
@@ -237,6 +255,7 @@ struct Object<'a> {
     payload: ArtifactId,
     input: u64,
     safe: bool,
+    linked: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -375,6 +394,7 @@ pub(super) fn analyze<'a>(
                     payload,
                     input,
                     safe,
+                    linked: elf.as_ref().is_some_and(|e| e.object_type == 2),
                 },
                 c.position(),
             )?;
@@ -513,9 +533,12 @@ pub(super) fn analyze<'a>(
                     let signature = assumptions
                         .signatures
                         .and_then(|s| function.name.as_deref().and_then(|n| s.get(n)));
+                    let linked = objects.get(object).ok_or_else(integrity)?.linked;
+                    let applied_signature = signature.filter(|_| !linked);
+                    let rom_signature = signature.filter(|_| linked);
                     let scoped = Scoped {
                         table: &table,
-                        current: signature.map(|s| s.summary()),
+                        current: applied_signature.map(|s| s.summary()),
                     };
                     match research(
                         &mut objects,
@@ -529,9 +552,11 @@ pub(super) fn analyze<'a>(
                     ) {
                         Ok((records, summary, found)) => {
                             let mut conflicts = AdmittedVec::new(memory);
+                            let mut rom_diagnostics = AdmittedVec::new(memory);
                             let mut conflict_names = Ledger::new(memory, c)?;
                             let mut raw_conflicts = AdmittedVec::new(memory);
                             let mut audit_complete = None;
+                            let mut applied_audit = false;
                             let mut audit_failure = None;
                             let mut analyzed = AnalyzedFunction {
                                 function,
@@ -541,6 +566,8 @@ pub(super) fn analyze<'a>(
                                 jump_tables: &found.tables,
                                 summaries: &scoped,
                                 conflicts: &[],
+                                rom_signature_diagnostics: &[],
+                                rom_signature_audit_complete: None,
                                 signature_audit_complete: None,
                                 signature_audit_failure: None,
                             };
@@ -555,11 +582,13 @@ pub(super) fn analyze<'a>(
                             if publish || assumptions.signatures.is_some() {
                                 let facts = Facts::new(&records, memory, c)?;
                                 let links = CallLinks::new(&facts, function, catalog, memory, c)?;
+                                applied_audit = needs_audit(&scoped, &links, None);
                                 let produced = if publish {
                                     produce(
                                         &facts,
                                         analyzed.records,
                                         &scoped,
+                                        rom_signature,
                                         &links,
                                         decoder,
                                         memory,
@@ -567,10 +596,11 @@ pub(super) fn analyze<'a>(
                                         &mut audit_complete,
                                         c,
                                     )
-                                } else if needs_audit(&scoped, &links) {
+                                } else if needs_audit(&scoped, &links, rom_signature) {
                                     argument_summary(
                                         &facts,
                                         &scoped,
+                                        rom_signature,
                                         &links,
                                         decoder,
                                         memory,
@@ -589,6 +619,7 @@ pub(super) fn analyze<'a>(
                                     match argument_summary(
                                         &facts,
                                         &scoped,
+                                        rom_signature,
                                         &links,
                                         decoder,
                                         memory,
@@ -620,6 +651,7 @@ pub(super) fn analyze<'a>(
                                     match argument_summary(
                                         &facts,
                                         &scoped,
+                                        rom_signature,
                                         &links,
                                         decoder,
                                         memory,
@@ -678,6 +710,29 @@ pub(super) fn analyze<'a>(
                                     {
                                         *callee = sites.at(*site, function, catalog, c)?;
                                     }
+                                    if let (
+                                        Some(signature),
+                                        SignatureOrigin::Argument { register },
+                                    ) = (rom_signature, &origin)
+                                    {
+                                        let diagnostic = RomSignatureDiagnostic {
+                                            function: function.clone(),
+                                            signature: signature.name.clone(),
+                                            declaration: signature.source.clone(),
+                                            register: *register,
+                                            usage,
+                                        };
+                                        conflict_names.admit(
+                                            serde_json::to_vec(&diagnostic)
+                                                .map_err(|e| {
+                                                    Error::new(ErrorCode::Integrity, e.to_string())
+                                                })?
+                                                .len(),
+                                            c,
+                                        )?;
+                                        rom_diagnostics.push(diagnostic, c.position())?;
+                                        continue;
+                                    }
                                     let conflict = SignatureConflict {
                                         function: function.clone(),
                                         signature: selected
@@ -702,7 +757,8 @@ pub(super) fn analyze<'a>(
                                     conflicts.push(conflict, c.position())?;
                                 }
                             }
-                            if let (Some(signature), Some(summary)) = (signature, contract.as_mut())
+                            if let (Some(signature), Some(summary)) =
+                                (applied_signature, contract.as_mut())
                             {
                                 for (word, consumed) in summary
                                     .value
@@ -736,7 +792,11 @@ pub(super) fn analyze<'a>(
                                 });
                             }
                             analyzed.conflicts = &conflicts;
-                            analyzed.signature_audit_complete = audit_complete;
+                            analyzed.rom_signature_diagnostics = &rom_diagnostics;
+                            analyzed.signature_audit_complete =
+                                audit_complete.filter(|_| applied_audit);
+                            analyzed.rom_signature_audit_complete =
+                                rom_signature.and(audit_complete);
                             analyzed.signature_audit_failure = audit_failure.as_ref();
                             visit(LibraryOutcome::Analyzed(analyzed), c)?;
                         }
@@ -829,6 +889,7 @@ fn produce<'a>(
     facts: &Facts<'_, 'a>,
     records: &[FunctionRecord],
     summaries: &dyn CallSummaries,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
     links: &CallLinks<'_>,
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
@@ -840,6 +901,7 @@ fn produce<'a>(
         facts,
         records,
         summaries,
+        rom_signature,
         links,
         decoder,
         memory,
@@ -859,6 +921,7 @@ fn try_produce<'a>(
     facts: &Facts<'_, 'a>,
     records: &[FunctionRecord],
     summaries: &dyn CallSummaries,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
     links: &CallLinks<'_>,
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
@@ -869,6 +932,7 @@ fn try_produce<'a>(
     let Some((arguments, argument_memory)) = argument_summary(
         facts,
         summaries,
+        rom_signature,
         links,
         decoder,
         memory,
@@ -910,6 +974,7 @@ fn try_produce<'a>(
 fn argument_summary<'a>(
     facts: &Facts<'_, 'a>,
     summaries: &dyn CallSummaries,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
     links: &CallLinks<'_>,
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
@@ -918,7 +983,7 @@ fn argument_summary<'a>(
     diagnostic_multiplier: Option<u64>,
     c: &mut dyn RunControl,
 ) -> Result<Option<(ArgumentSummary, MemoryReservation<'a>)>> {
-    let audit = needs_audit(summaries, links);
+    let audit = needs_audit(summaries, links, rom_signature);
     if audit {
         *audit_complete = Some(false);
     }
@@ -928,15 +993,16 @@ fn argument_summary<'a>(
         return program.summarize(&calls, memory, c);
     }
     let mut observe = |origin, usage: &ReadUse, c: &mut dyn RunControl| {
-        if usage.precision != ReadPrecision::Exact {
-            return Ok(());
-        }
         let conflict = match origin {
-            ArgumentSource::Entry(register) => summaries
-                .current()
-                .and_then(|s| s.contract)
-                .is_some_and(|s| register >= 10 + s.arguments),
-            ArgumentSource::MissingResult { .. } => true,
+            ArgumentSource::Entry(register) => {
+                rom_signature.is_some_and(|s| register >= 10 + s.arguments)
+                    || usage.precision == ReadPrecision::Exact
+                        && summaries
+                            .current()
+                            .and_then(|s| s.contract)
+                            .is_some_and(|s| register >= 10 + s.arguments)
+            }
+            ArgumentSource::MissingResult { .. } => usage.precision == ReadPrecision::Exact,
         };
         if conflict {
             conflicts.push(
@@ -957,8 +1023,13 @@ fn argument_summary<'a>(
     *audit_complete = Some(result.is_some());
     Ok(result)
 }
-fn needs_audit(summaries: &dyn CallSummaries, links: &CallLinks<'_>) -> bool {
-    summaries.current().is_some()
+fn needs_audit(
+    summaries: &dyn CallSummaries,
+    links: &CallLinks<'_>,
+    rom_signature: Option<&crate::signatures::FunctionSignature>,
+) -> bool {
+    rom_signature.is_some()
+        || summaries.current().is_some()
         || links.keys().any(|key| {
             summaries
                 .summary(key.borrowed())

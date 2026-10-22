@@ -17,7 +17,9 @@ pub struct AnalyzedFunction<'a> {
     /// The shared callee port used for these final records.
     pub summaries: &'a dyn CallSummaries,
     pub conflicts: &'a [SignatureConflict],
+    pub rom_signature_diagnostics: &'a [RomSignatureDiagnostic],
     pub signature_audit_complete: Option<bool>,
+    pub rom_signature_audit_complete: Option<bool>,
     pub signature_audit_failure: Option<&'a Error>,
 }
 impl AnalyzedFunction<'_> {
@@ -598,6 +600,8 @@ fn analyze_object(
                             jump_tables: &found.tables,
                             summaries: returns,
                             conflicts: &[],
+                            rom_signature_diagnostics: &[],
+                            rom_signature_audit_complete: None,
                             signature_audit_complete: None,
                             signature_audit_failure: None,
                         }),
@@ -651,6 +655,9 @@ pub fn register_accesses(
         contract_narrowed_bits: 0,
         contract_may_narrowed_bits: 0,
         signature_conflicts: Vec::new(),
+        rom_signature_diagnostics: Vec::new(),
+        rom_signature_diagnostic_count: 0,
+        rom_signature_audit_incomplete: Vec::new(),
         signature_audit_incomplete: Vec::new(),
         ranges: ranges.to_vec(),
         functions: 0,
@@ -665,7 +672,19 @@ pub fn register_accesses(
     let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
-            if analyzed.signature_audit_complete == Some(false) {
+            for (complete, failures) in [
+                (
+                    analyzed.signature_audit_complete,
+                    &mut summary.signature_audit_incomplete,
+                ),
+                (
+                    analyzed.rom_signature_audit_complete,
+                    &mut summary.rom_signature_audit_incomplete,
+                ),
+            ] {
+                if complete != Some(false) {
+                    continue;
+                }
                 let failure = SignatureAuditIncomplete {
                     function: analyzed.function.clone(),
                     reason: analyzed
@@ -681,7 +700,7 @@ pub fn register_accesses(
                         .len(),
                     c,
                 )?;
-                conflict_memory.push(&mut summary.signature_audit_incomplete, failure, c)?;
+                conflict_memory.push(failures, failure, c)?;
             }
             for conflict in analyzed.conflicts {
                 conflict_memory.admit(
@@ -691,6 +710,20 @@ pub fn register_accesses(
                     c,
                 )?;
                 conflict_memory.push(&mut summary.signature_conflicts, conflict.clone(), c)?;
+            }
+            for diagnostic in analyzed.rom_signature_diagnostics {
+                conflict_memory.admit(
+                    serde_json::to_vec(diagnostic)
+                        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
+                        .len(),
+                    c,
+                )?;
+                conflict_memory.push(
+                    &mut summary.rom_signature_diagnostics,
+                    diagnostic.clone(),
+                    c,
+                )?;
+                summary.rom_signature_diagnostic_count += 1;
             }
             summary.functions += 1;
             summary.partial_functions += u64::from(!analyzed.complete());
@@ -821,6 +854,8 @@ mod tests {
             jump_tables: &[],
             summaries: &NoSummaries,
             conflicts: &[],
+            rom_signature_diagnostics: &[],
+            rom_signature_audit_complete: None,
             signature_audit_complete: None,
             signature_audit_failure: None,
         }

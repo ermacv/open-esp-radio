@@ -260,6 +260,18 @@ pub struct SignatureAuditIncomplete {
     pub reason: Error,
 }
 
+/// A header disagrees with a linked body's computed argument use. Diagnostic
+/// only: neither the body nor calls to it receive the header contract.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RomSignatureDiagnostic {
+    pub function: LibraryFunction,
+    pub signature: String,
+    pub declaration: String,
+    pub register: u8,
+    pub usage: ReadUse,
+}
+
 /// One Exact source-to-sink contradiction, retained even when other functions conflict.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -348,6 +360,11 @@ pub struct RegisterAccessSummary {
     /// Distinct source bits per selected load whose computed May argument use was removed.
     pub contract_may_narrowed_bits: u64,
     pub signature_conflicts: Vec<SignatureConflict>,
+    /// Source-register/sink events, including both Exact and May precision.
+    pub rom_signature_diagnostics: Vec<RomSignatureDiagnostic>,
+    pub rom_signature_diagnostic_count: u64,
+    /// Resource limits of ROM-only diagnostics never fail the contract check.
+    pub rom_signature_audit_incomplete: Vec<SignatureAuditIncomplete>,
     /// Audits that could not reach a fixed point within the existing resource bounds.
     pub signature_audit_incomplete: Vec<SignatureAuditIncomplete>,
     /// Explicit candidate intervals; empty selects every numeric address.
