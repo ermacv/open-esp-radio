@@ -1,9 +1,53 @@
 # Image checks
 
-`oer-image-checks` owns the image pipeline's interrupt, stack, placement and
+`oer-image-checks` owns the image pipeline's frame, interrupt, stack, placement and
 post-link input checks. The chip profile and stack policy supply their
 contracts; `cargo fw build`, including analysis builds, requires the
-`interrupts` check to pass.
+`frames` and `interrupts` checks to pass.
+
+The `frames` check bounds every compiler frame record in both the runtime
+and bootstrap ELF by the stack policy's `max_move_bytes` (currently 4096).
+It uses the existing `Image::stack_sizes`, including functions no root reaches.
+It does not invent sizes for missing records: the stack coverage check owns
+those. `Required::Product` rejects an unexcepted large frame;
+`Required::Diagnostic` reports it as a warning, as the IRQ guard check does.
+The runtime shares its analysis with the task and interrupt checks; bootstrap
+shares its analysis between the frame and bootstrap-stack checks.
+
+An image's `stack.toml` (schema 5) may name exact exceptions:
+
+```toml
+[[frame_exceptions.runtime]] # or frame_exceptions.bootstrap
+function = "example::receive::<example::Packet, 1664>"
+reason = "The owned receive packet and decode result occupy this frame."
+ceiling_bytes = 8192
+```
+
+`function` is the complete demangled symbol without Rust hashes, as printed
+by `oer_analysis_elf::demangle` and the frame report. Concrete type and const
+arguments, closure identities and compiler shims remain part of the key;
+there are no prefixes or wildcards. Matching examines every alias; aliases
+at one address count as one implementation. A key matching zero or multiple
+implementations fails. Duplicate exceptions, including different aliases of
+one implementation, also fail.
+
+The initial ceiling equals the measured frame. Subsequent policy changes may
+only decrease it; review must reject increases. A frame exceeding its ceiling
+fails, even for Diagnostic. An exception whose frame now fits the move limit
+is stale and fails: remove the entry. An exception cannot supply a missing
+compiler record. These policy errors fail under either severity.
+
+An extending policy can append exceptions while retaining its base's stack
+allocations, reserves and move limit. W1 has its own `stack.toml`; configured
+W3 uses `stack-configured.toml`, extending W3's `stack.toml`. Unconfigured W3
+does not link these implementations, so it uses the base without exceptions.
+The same configured policy serves `--analysis` and stand-configured W3.
+
+`runtime-frames.txt` and `bootstrap-frames.txt` report the limit, recorded
+functions and count above the limit, each large function, and each applied
+exception's current frame, ceiling, spare bytes and reason. Diagnostic
+warnings and failed checks are written into these reports before returning
+the verdict. Frame exceptions do not relax IRQ guards or whole-stack bounds.
 
 Interrupt entries, handlers and the executor code they run must execute from
 SRAM or the analysed mask ROM. The panic path, compiler panic entries and the

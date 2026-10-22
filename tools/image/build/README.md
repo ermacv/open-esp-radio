@@ -16,7 +16,7 @@ policy, the layout seed, the variables the runtime's build sets or removes
 (`cargo fw`'s stand identity of `w1`), the caller's builder packages and
 extra policy files, the bundle directory (every build compiles in the checkout's
 `compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
-run, what the interrupt check requires (`Required::Product`, or
+run, what the frame and interrupt checks require (`Required::Product`, or
 `Diagnostic` for diagnostic images), an optional audit of the runtime ELF (HIL's
 observer placement), and which requested checks must pass (`Enforced`).
 `Enforced::All` enforces every requested check, including the caller's audit;
@@ -27,17 +27,17 @@ and requests no checks.
 
 | Caller | Enforcement | Required checks |
 | --- | --- | --- |
-| `cargo fw build`, including `--analysis` | `Only({Interrupts})` | Interrupt stacks |
+| `cargo fw build`, including `--analysis` | `Only({Frames, Interrupts})` | Function frames in runtime/bootstrap and interrupt stacks |
 | `cargo fw run` | `Reported` | None |
 | HIL image builds | `All` | Every requested check and audit |
 
-App builds still report task stacks, the bootstrap stack and placement.
+App builds still report task-stack bounds, the bootstrap-stack bound and placement.
 `cargo fw flash` uses an existing bundle without rerunning its checks.
 For app `build`, a `partial + ?` interrupt stack, an exceeded budget or an
 unadmitted assumption fails the build and CI; a bound conditional only on
 the admitted executor invariant passes with a warning. HIL retains its
 `Product`/`Diagnostic` interrupt policy according to image class: diagnostic
-images report strict/P2 code placement violations as warnings; other images
+images report large unexcepted frames and strict/P2 code placement violations as warnings; other images
 enforce them.
 
 The chip profile's boot kind selects the pipeline:
@@ -68,6 +68,7 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `otadata.bin` | The OTA selection of the first slot (staged only) |
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
+| `runtime-frames.txt`, `bootstrap-frames.txt` | All recorded frames against the move limit, exceptions with ceilings and spare bytes, Diagnostic warnings |
 | `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
 | `image-linker.toml`, `strict-text.x`, `strict-placement.toml` | Runtime linker analysis inputs, generated strict-code fragment and the functions moved with their input sections |
 | `build.log` | Every step's standard error |
@@ -154,6 +155,27 @@ task-stack gate (`audit_runtime_stacks`) and the bootstrap stack gate
 `oer-analysis-riscv-stack`, the pinned ROM and its summaries, and resolve
 indirect sites with the same facts (waker vtables, IPC posts, function-pointer
 field types). The runtime's task and interrupt gates share that analysis.
+The `frames` gate shares it too, and the bootstrap's frame and stack gates
+share one bootstrap analysis. Every record in `Image::stack_sizes` is checked,
+whether or not the function is reachable, against the same `max_move_bytes`
+that configures the compiler's move limit. `Required::Product` fails on an
+unexcepted large frame; `Required::Diagnostic` warns. Both reject invalid or
+stale exceptions and frames exceeding their exception ceilings.
+Exceptions in `[[frame_exceptions.runtime]]` or `[[frame_exceptions.bootstrap]]`
+name one exact demangled implementation without hashes, with concrete generic
+arguments, its current-code reason and an initial ceiling equal to its
+measured frame. A key matching multiple implementations or none fails; aliases
+at one address count once. A frame at or below the move limit makes its
+exception stale and requires removal. Ceiling changes may only decrease the
+value, enforced in review. An extending policy can append exceptions without
+changing its base's other settings. W1 uses its own policy; W3 keeps the
+unconfigured policy separate from `stack-configured.toml` for analysis and
+stand configurations, since absent functions must not retain exceptions.
+The [checks README](../checks/README.md) specifies the key and policy format.
+The separate frame reports list counts, current frames, ceilings, spare bytes
+and reasons, including warnings or failures. This gate changes no compiler
+flags, frame coverage, IRQ guards, stack allocations or stack bounds.
+
 The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 5), extended
 by the HIL target's policy. Every image runs its tasks on CPU0; none starts
 the second S31 core, and C5 has one hart. Each stack names the function that
@@ -283,8 +305,8 @@ PSRAM/SRAM placement contract of the
 PSRAM trap and interrupt entry first swaps to its SRAM stack; the caller's
 audit runs beside it.
 
-A stack policy that names no stacks sets only the move limit: the image is
-compiled with every image flag and no stack gate runs. Staged S31 and C5
+A stack policy that names no stacks sets the move and per-function frame limit:
+the image is compiled with every image flag and has no whole stack to bound. Staged S31 and C5
 images both name their stacks and pin their ROM inputs. C5 keeps the
 4096-byte move limit; its console pins the large serving and watchdog
 futures separately before joining their references, avoiding a second move
