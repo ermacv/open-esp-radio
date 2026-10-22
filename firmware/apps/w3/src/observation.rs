@@ -80,6 +80,8 @@ impl Observations {
     }
     pub fn report(&self, report: &mut Report) {
         report.lease = self.lease;
+        report.malformed_ip = self.malformed;
+        report.queue_drops = self.queue_drops;
         report.sent = self.station.requests();
         report.received = self.station.replies();
         report.peer_requests = self.peer.requests();
@@ -134,6 +136,11 @@ mod tests {
         assert_eq!(observations.peer.replies(), 100);
         observations.observe(0x800, &[], false, clock.now().as_micros());
         assert_eq!(observations.malformed, 1);
+        observations.queue_drops = 2;
+        let mut report = Report::new(1, [0; 6], [0; 6]);
+        observations.report(&mut report);
+        assert_eq!(report.malformed_ip, 1);
+        assert_eq!(report.queue_drops, 2);
     }
     #[test]
     fn cadence_boundaries_are_inclusive_and_missing_lease_never_counts() {

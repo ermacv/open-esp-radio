@@ -46,6 +46,7 @@ pub fn parse(bytes: &mut [u8]) -> Result<Option<Echo>, Invalid> {
     let reply = match (icmp.msg_type(), icmp.msg_code()) {
         (Icmpv4Message::EchoRequest, 0) => false,
         (Icmpv4Message::EchoReply, 0) => true,
+        (Icmpv4Message::EchoRequest | Icmpv4Message::EchoReply, _) => return Err(Invalid::Icmp),
         _ => return Ok(None),
     };
     Ok(Some(Echo {
@@ -92,6 +93,23 @@ pub fn request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn every_icmp_type_and_code_is_safe_and_echo_requires_code_zero() {
+        for kind in 0..=u8::MAX {
+            for code in 0..=u8::MAX {
+                let mut bytes = request(Ipv4Addr::LOCALHOST, Ipv4Addr::LOCALHOST, 1, 1);
+                bytes[20] = kind;
+                bytes[21] = code;
+                Icmpv4Packet::new_unchecked(&mut bytes[20..]).fill_checksum();
+                let parsed = parse(&mut bytes);
+                if matches!(kind, 0 | 8) {
+                    assert_eq!(parsed.is_ok(), code == 0);
+                } else {
+                    assert_eq!(parsed, Ok(None));
+                }
+            }
+        }
+    }
     #[test]
     fn validates_all_prefixes_checksums_and_echo_identity() {
         let source = Ipv4Addr::new(10, 231, 0, 8);
