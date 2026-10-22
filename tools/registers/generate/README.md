@@ -331,7 +331,8 @@ The host owns temporary files and the `rustfmt` process group. Formatting has a
 60-second timeout and cancellation reaps the child group. Generated Rust is limited
 to 128 MiB before reading it back. These trusted source-generation inputs and
 third-party SVD rendering do not claim allocation-controlled binary analysis.
-Binary investigations are outside this tool.
+Binary decoding and dataflow are owned by the analysis tools. The signature
+producer below consumes their public output.
 
 Publication checks reference validity, selected applicability, reviewed semantics,
 memory ranges, API safety and generated source consistency. They do not qualify
@@ -373,3 +374,58 @@ adds the raw PAC and its API facade, and a publication has a PAC API policy
 (`api`) exactly when it has that table. A publication without one, a chip's
 `platform.toml`, describes registers the host reads through JTAG and that
 no firmware reaches: its binding index names no crate.
+
+## Pinned header function signatures
+
+`cargo registers signatures --chip <esp32s31|esp32c5> --idf <checkout>
+--sdkconfig <build/config/sdkconfig.h> [--libc-include <picolibc/include>]
+[--clang clang] [--check] [--output <ignored-report-directory>]` writes
+`chips/<chip>/vendor/facts/idf-function-signatures.toml` and its companion
+`idf-function-signatures.provenance.toml`. Use the complete ESP-IDF checkout
+at the chip's current pin, with its pinned header submodules initialized.
+`--check` repeats generation and requires byte-for-byte equal facts.
+
+The SDK configuration is an explicit input. For the checked-in facts, use
+the generated configuration from `cargo hil firmware build
+ble-scan-vendor-reference` (S31) or `cargo hil firmware build
+ble-scan-request-counter` (C5). These build SDK reference firmware locally.
+The configuration hash is recorded, and another configuration may expose a
+different set of declarations. The command neither flashes nor captures a
+board. A RISC-V capable Clang and the SDK's C library headers are required.
+
+The ELF facade supplies global name candidates from every pinned binary;
+Blobray `call-arguments --call-summaries --abi riscv-integer` selects actual
+named call targets. This includes externally linked functions implemented
+elsewhere in the corpus. Coverage reports separately identify targets with
+no captured executable code bytes; an absolute import symbol alone does
+not establish a captured implementation. Partial analysis is reported and
+does not prove absence of further calls.
+
+The generator compiles matching open headers as RV32 ILP32 C, follows the
+compiler's resolved type graph and queries sizes in that same translation
+unit. It publishes four fields per `[[function]]`: `name`, `arguments`,
+`result`, `source`. `arguments` counts occupied a0..a7 words, capped at eight:
+`(void *, uint64_t)` consumes three. Named 64-bit scalars occupy consecutive
+words under the [integer psABI](https://riscv-non-isa.github.io/riscv-elf-psabi-doc/#_integer_calling_convention).
+Stack arguments do not allow discarding a register. Results are `void`,
+`u32` (pointers or integers of at most 32 bits), or `u64` (64-bit integers).
+Aggregates by value, variadic functions, floating types, old-style
+declarations and other unsupported types supply no contract. A compiler
+error invalidates the whole header context. Conflicting supported contracts
+or supported/unsupported declaration variants stop publication.
+
+Each record cites a pinned header path and line, followed by a header hash
+comment. The companion provenance records header hashes, SDK configuration
+hash and complete binary input hashes without local cache paths. Published
+headers must match committed bytes, including the parent commit's gitlink
+for a header in a submodule. Facts are Apache-2.0; the generator remains
+under the workspace license. It copies no source declarations or code.
+
+The ignored report directory defaults to `target/register-signatures/<chip>`.
+It contains the raw call capture, compiler diagnostics and `coverage.json`:
+covered names, targets without captured definitions, unsupported prototype
+reasons, failed header contexts, identifiers without qualified declarations
+and names absent from all selected headers. Identifier search selects work;
+only compiler-qualified declarations create facts. Header coverage does not
+establish agreement with binary call behavior: integration with the signature
+consumer must report any contract/summary conflict before using a contract.
