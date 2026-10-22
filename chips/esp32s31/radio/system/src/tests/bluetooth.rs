@@ -238,9 +238,17 @@ fn late_retirement_after_reinstall_never_releases_the_new_graph() {
         ble_available: true,
         ..Script::default()
     });
-    multi(&model, |_, ble| async {
+    multi(&model, |cells, ble| async {
+        let (wifi, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let joined = joined.ok().expect("Wi-Fi holds the common RF epoch");
+        let epoch = joined.epoch;
+        let (_wifi, wifi) = wifi
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let _wifi = wifi.ok().expect("Wi-Fi tracked through BLE reinstall");
         let (ble, first) = ble.join(join()).await;
         let first = first.ok().expect("first installation");
+        assert_eq!(first.epoch, epoch);
         let (ble, first) = ble.track(first.member, first.payload.installation).await;
         let first = first.ok().expect("first tracking");
         let old = first.payload;
@@ -248,6 +256,10 @@ fn late_retirement_after_reinstall_never_releases_the_new_graph() {
         let (ble, _) = ble.leave(Leaving::Tracked(first.member), old).await;
         let (ble, next) = ble.join(join()).await;
         let next = next.ok().expect("reinstall");
+        assert_eq!(
+            next.epoch, epoch,
+            "Controller reinstall does not reopen common RF"
+        );
         assert_ne!(next.payload.installation, old);
         let (ble, next) = ble.track(next.member, next.payload.installation).await;
         let next = next.ok().expect("new tracking");
@@ -255,10 +267,11 @@ fn late_retirement_after_reinstall_never_releases_the_new_graph() {
         assert!(!late.payload.stopped);
         assert_eq!(late.domain, DomainHealth::Poisoned);
         assert!(model.0.borrow().bluetooth);
+        assert!(model.0.borrow().wifi);
     });
     assert_eq!(
         model.log().iter().filter(|e| **e == Event::CloseRf).count(),
-        1
+        0
     );
 }
 
