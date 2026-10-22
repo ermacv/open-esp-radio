@@ -220,3 +220,49 @@ fn dropping_a_vacant_permit_preserves_credit_and_refusal_returns_the_sender() {
         assert_eq!(receiver.try_receive(), Ok(value + 1));
     }
 }
+
+#[test]
+#[allow(
+    unsafe_code,
+    reason = "destroy the one complete queue placed in test-owned storage"
+)]
+fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() {
+    struct Payload {
+        id: usize,
+        dropped: Arc<[AtomicUsize; 2]>,
+    }
+    impl Drop for Payload {
+        fn drop(&mut self) {
+            self.dropped[self.id].fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    let dropped = Arc::new([const { AtomicUsize::new(0) }; 2]);
+    let mut storage = MaybeUninit::<AffineSpscQueue<Payload, 2>>::uninit();
+    let destination = storage.as_mut_ptr();
+    let queue = AffineSpscQueue::init_in_place(&mut storage);
+    assert!(core::ptr::eq(queue, destination));
+    {
+        let (sender, receiver) = queue.split();
+        assert!(receiver.is_empty());
+        for id in 0..2 {
+            assert!(
+                sender
+                    .try_send(Payload {
+                        id,
+                        dropped: dropped.clone()
+                    })
+                    .is_ok()
+            );
+        }
+        let first = receiver.try_receive().ok().expect("first affine owner");
+        assert_eq!(first.id, 0);
+        drop(first);
+        assert_eq!(dropped[0].load(Ordering::SeqCst), 1);
+        assert_eq!(dropped[1].load(Ordering::SeqCst), 0);
+    }
+    // SAFETY: placement returned the complete queue at this address, every
+    // endpoint loan ended, and this scope owns its sole destruction right.
+    unsafe { storage.assume_init_drop() };
+    assert_eq!(dropped[0].load(Ordering::SeqCst), 1);
+    assert_eq!(dropped[1].load(Ordering::SeqCst), 1);
+}

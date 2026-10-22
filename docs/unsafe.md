@@ -143,6 +143,12 @@ structs. The returned loan retains the storage lifetime. Caller expressions
 run outside the macro's unsafe context, and callers keep `forbid(unsafe_code)`.
 The macro resolves storage and pointer operations through its defining crate,
 so a caller cannot replace them by shadowing `core`.
+Nested `field => initializer` placement lends that field as `MaybeUninit` only
+after checking its alignment. The returned valid reference must have exactly
+the destination address before a cleanup guard or the whole struct is exposed.
+Thus a callback cannot substitute another allocation for an unwritten field.
+Cached SPSC placement initializes its cursor words directly and composes with
+this nested form in the Wi-Fi RX arena; compact P1/P2 queues retain their layout.
 
 `AffineSpscQueue` lends short local endpoints without new unsafe operations.
 The original endpoint remains exclusively borrowed. A local producer loan can

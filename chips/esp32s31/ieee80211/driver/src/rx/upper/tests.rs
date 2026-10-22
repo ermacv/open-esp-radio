@@ -40,7 +40,8 @@ fn ends(
         leak(IrqStorage::new(oer_interrupt_table::signal::host::signal())).split();
     let publisher: &'static IrqPublisher<'static, oer_interrupt_table::signal::host::Host> =
         leak(publisher);
-    leak(RxFrameQueue::new()).split(counters, RxReturnNotifier::new(publisher))
+    RxFrameQueue::init_in_place(leak(core::mem::MaybeUninit::uninit()))
+        .split(counters, RxReturnNotifier::new(publisher))
 }
 
 /// Poll the receiver once.

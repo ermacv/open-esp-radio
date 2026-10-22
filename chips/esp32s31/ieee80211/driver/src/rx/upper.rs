@@ -56,11 +56,11 @@ pub(crate) struct RxFrameQueue<'a, const SLOTS: usize, const BUFFER: usize> {
 }
 
 impl<'a, const SLOTS: usize, const BUFFER: usize> RxFrameQueue<'a, SLOTS, BUFFER> {
-    pub(crate) const fn new() -> Self {
-        Self {
-            frames: AffineSpscQueue::new(),
+    pub(crate) fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(storage, Self {
+            frames => AffineSpscQueue::init_in_place,
             waker: AtomicWaker::new(),
-        }
+        })
     }
 
     /// Lend the runner's end and the application's end.

@@ -151,8 +151,10 @@ type Receiver = FrameReceiver<'static, SLOTS, BUFFER, crate::irq::RadioExecutor>
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
-static BOUND: StaticCell<AffineSpscQueue<Bound, 1>> = StaticCell::new();
-static TIMER_LINES: StaticCell<AffineSpscQueue<TimerLine, 2>> = StaticCell::new();
+static BOUND: static_cell::ConstStaticCell<AffineSpscQueue<Bound, 1>> =
+    static_cell::ConstStaticCell::new(AffineSpscQueue::new());
+static TIMER_LINES: static_cell::ConstStaticCell<AffineSpscQueue<TimerLine, 2>> =
+    static_cell::ConstStaticCell::new(AffineSpscQueue::new());
 static SURVEY: StaticCell<Survey<{ report::BSS }>> = StaticCell::new();
 static LAGS: StaticCell<report::LagLog> = StaticCell::new();
 static TSF: StaticCell<report::TsfLog> = StaticCell::new();
@@ -271,7 +273,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             park()
         }
     };
-    let (timer_sender, timer_lines) = TIMER_LINES.init(AffineSpscQueue::new()).split();
+    let (timer_sender, timer_lines) = TIMER_LINES.take().split();
     let radio = RADIO_EXECUTOR
         .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
             peripherals.FROM_CPU_INTR2,
@@ -301,7 +303,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             power: interrupts.wifi_pwr,
         },
         doorbell,
-        bound: BOUND.init(AffineSpscQueue::new()).split(),
+        bound: BOUND.take().split(),
         timer_lines,
     };
     executor.run(interrupts.wake, move |spawner| {

@@ -111,8 +111,29 @@ pub struct AffineSpscQueue<T, const DEPTH: usize, C: SpscCursor = CachedSpscCurs
 // with no reservation that could overlap another local copy's publication.
 unsafe impl<T: Send, const DEPTH: usize, C: SpscCursor> Sync for AffineSpscQueue<T, DEPTH, C> {}
 
+impl<T, const DEPTH: usize> AffineSpscQueue<T, DEPTH> {
+    /// Construct an empty cached queue directly in its final storage.
+    /// Only cursor words are initialized; no queued payload exists yet.
+    #[inline]
+    #[allow(
+        unsafe_code,
+        reason = "the audited placement macro initializes every queue field"
+    )]
+    pub fn init_in_place(storage: &mut MaybeUninit<Self>) -> &mut Self {
+        Self::check_capacity();
+        crate::init_in_place!(
+            storage,
+            Self {
+                values: [const { UnsafeCell::new(MaybeUninit::uninit()) }; DEPTH],
+                producer: CachedSpscCursor(AtomicUsize::new(0)),
+                consumer: CachedSpscCursor(AtomicUsize::new(0)),
+            }
+        )
+    }
+}
+
 impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
-    pub const fn new() -> Self {
+    const fn check_capacity() {
         const {
             assert!(DEPTH != 0, "affine SPSC queue must not be empty");
             assert!(
@@ -120,6 +141,10 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
                 "affine SPSC cursor domain must fit usize"
             );
         }
+    }
+
+    pub const fn new() -> Self {
+        Self::check_capacity();
         Self {
             values: [const { UnsafeCell::new(MaybeUninit::uninit()) }; DEPTH],
             producer: C::NEW,
