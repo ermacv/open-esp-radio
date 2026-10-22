@@ -722,7 +722,7 @@ impl PhyRxDcCalibrationTransition {
             }
             return Ok(());
         }
-        match (self.step, completion) {
+        match (&self.step, completion) {
             (Step::PrepareControlRestore, PhyRxDcCalibrationCompletion::ControlRestorePrepared) => {
                 self.step = Step::ReadPbus;
             }
@@ -754,8 +754,8 @@ impl PhyRxDcCalibrationTransition {
             (
                 Step::ForceRadioLevel { high },
                 PhyRxDcCalibrationCompletion::PbusForceCompleted(transaction),
-            ) if transaction == PhyPbusForceTest::new(1, 2, if high { 0x20 } else { 0 }) => {
-                self.step = Step::Delay { high };
+            ) if transaction == PhyPbusForceTest::new(1, 2, if *high { 0x20 } else { 0 }) => {
+                self.step = Step::Delay { high: *high };
             }
             (
                 Step::Delay { high },
@@ -763,10 +763,10 @@ impl PhyRxDcCalibrationTransition {
                     measurement,
                     micros: 10,
                 },
-            ) if measurement == self.measurement_identity(high) => {
+            ) if measurement == self.measurement_identity(*high) => {
                 self.step = Step::Minimum {
-                    high,
-                    transition: PhyRxDcMinimumTransition::new(self.minimum_request(high)),
+                    high: *high,
+                    transition: PhyRxDcMinimumTransition::new(self.minimum_request(*high)),
                 };
             }
 
@@ -782,10 +782,12 @@ impl PhyRxDcCalibrationTransition {
                 == PhyPbusForceTest::new(
                     2,
                     self.path(),
-                    self.cleanup_configuration(terminal)[0],
+                    self.cleanup_configuration(*terminal)[0],
                 ) =>
             {
-                self.step = Step::CleanupQ { terminal };
+                self.step = Step::CleanupQ {
+                    terminal: *terminal,
+                };
             }
             (
                 Step::CleanupQ { terminal },
@@ -795,13 +797,15 @@ impl PhyRxDcCalibrationTransition {
                 == PhyPbusForceTest::new(
                     3,
                     self.path(),
-                    self.cleanup_configuration(terminal)[1],
+                    self.cleanup_configuration(*terminal)[1],
                 ) =>
             {
-                self.step = Step::Restore { terminal };
+                self.step = Step::Restore {
+                    terminal: *terminal,
+                };
             }
             (Step::Restore { terminal }, PhyRxDcCalibrationCompletion::ControlRestored) => {
-                self.step = match terminal {
+                self.step = match *terminal {
                     Terminal::Complete(outcome) => Step::Complete(outcome),
                     Terminal::Failed(failure) => Step::Failed(failure),
                 };

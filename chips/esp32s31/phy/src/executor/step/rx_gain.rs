@@ -191,6 +191,20 @@ pub(super) struct Run<'a> {
 }
 
 impl Run<'_> {
+    /// Only short PBus leaves may follow another RX atom in the same poll.
+    /// Estimator policy, ten-microsecond settles and outer control preparation
+    /// retain the whole remaining poll allowance.
+    pub(super) fn batch_ready(&self) -> bool {
+        self.scratch.binding.is_none()
+            && matches!(
+                self.transition.calibration_action(),
+                Some(
+                    PhyRxDcCalibrationAction::ForcePbus(_)
+                        | PhyRxDcCalibrationAction::ReadPbus { .. }
+                )
+            )
+    }
+
     #[inline(never)]
     pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: Clock>(
         &mut self,
@@ -240,6 +254,8 @@ impl Run<'_> {
                 return Err(Failure::Binding);
             }
             let split_i2c = matches!(action, PhyRxGainInitAction::Dc(PhyRxGainDcAction::I2c(_)));
+            let split_prepare =
+                split_i2c || matches!(action, PhyRxGainInitAction::PrepareDcControlRestore);
             Self::observe(self.execution, action);
             self.scratch.binding = Some(
                 crate::rx::gain::PhyRxGainInitExternalBinding::lower(*action)
@@ -248,9 +264,11 @@ impl Run<'_> {
             // lower() only constructs a binding (gain::PhyRxGainInitExternalBinding
             // and gain_calibration::PhyRxGainDcExternalBinding). No I2C command has
             // started: the borrowed RF/bus owner can yield before the whole helper.
-            if split_i2c {
+            if split_prepare {
                 if self.measured {
-                    tag = 34 | (tag & 0x80);
+                    if split_i2c {
+                        tag = 34 | (tag & 0x80);
+                    }
                     self.scratch.set_action(tag);
                     self.scratch.poll_sample = tag;
                     Self::record_part(
@@ -264,7 +282,11 @@ impl Run<'_> {
                 return Ok(Step::Runnable);
             }
         } else if self.measured {
-            tag = 11 | (self.scratch.action() & 0x80);
+            tag = if self.scratch.action() & 0x7f == 1 {
+                self.scratch.action()
+            } else {
+                11 | (self.scratch.action() & 0x80)
+            };
             self.scratch.set_action(tag);
             self.scratch.poll_sample = tag;
         }

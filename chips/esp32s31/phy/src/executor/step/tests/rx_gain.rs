@@ -144,16 +144,32 @@ fn dc_parameters() -> PhyRxGainInitParameters {
 }
 
 fn root_at_i2c() -> PhyRxGainInitTransition {
+    root_at_command(false)
+}
+
+fn root_at_command(calibration: bool) -> PhyRxGainInitTransition {
     use crate::analog::rfpll::{RfpllFrequencyAction as R, RfpllFrequencyCompletion as RC};
     use crate::rx::gain_calibration::{PhyRxGainDcAction, PhyRxGainDcCompletion};
     use oer_espressif_analog::Action as I;
     use oer_espressif_analog::Completion as IC;
     let mut root = PhyRxGainInitTransition::new(dc_parameters());
     for _ in 0..100 {
-        if matches!(
-            root.action(),
-            PhyRxGainInitAction::Dc(PhyRxGainDcAction::I2c(_))
-        ) {
+        if !calibration
+            && matches!(
+                root.action(),
+                PhyRxGainInitAction::Dc(PhyRxGainDcAction::I2c(_))
+            )
+        {
+            return root;
+        }
+        if calibration
+            && matches!(
+                root.action(),
+                PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
+                    crate::rx::gain_calibration::PhyRxDcCalibrationAction::ForcePbus(_)
+                ))
+            )
+        {
             return root;
         }
         let before = root;
@@ -207,7 +223,18 @@ fn root_at_i2c() -> PhyRxGainInitTransition {
                     PhyRxGainDcCompletion::DelayElapsed { phase, micros }
                 }
                 PhyRxGainDcAction::Calibration(action) => {
-                    panic!("I2C must precede estimator {action:?}")
+                    use crate::rx::gain_calibration::{
+                        PhyRxDcCalibrationAction as A, PhyRxDcCalibrationCompletion as C,
+                    };
+                    PhyRxGainDcCompletion::Calibration(match action {
+                        A::PrepareControlRestore => C::ControlRestorePrepared,
+                        A::ReadPbus { selector, path } => C::PbusRead {
+                            selector,
+                            path,
+                            value: 0,
+                        },
+                        other => panic!("unexpected calibration prefix {other:?}"),
+                    })
                 }
                 other => panic!("unexpected DC prefix {other:?}"),
             }),
@@ -216,6 +243,103 @@ fn root_at_i2c() -> PhyRxGainInitTransition {
         root.advance(completion).unwrap();
     }
     panic!("prefix did not reach minimum");
+}
+
+#[test]
+fn short_rx_commands_share_a_poll_until_the_entry_budget_or_a_longer_atom() {
+    for (command_micros, expected) in [(9, 3), (15, 2), (20, 1)] {
+        let clock = Rc::new(VirtualClock::<1>::new());
+        let mut io = Io {
+            rx_calibration_clock: Some(clock.clone()),
+            rx_calibration_micros: command_micros,
+            ..Io::default()
+        };
+        let atoms = io.atoms.clone();
+        let started = clock.now();
+        let mut transition = root_at_command(true);
+        let mut scratch = crate::executor::step::rx_gain::Scratch::default();
+        let mut execution = crate::tracking::observation::RxGainExecution::default();
+        let (waker, _) = context();
+        let mut cx = Context::from_waker(&waker);
+        {
+            let mut job = Job::rx_gain(
+                &mut transition,
+                &mut scratch,
+                &mut execution,
+                clock.now(),
+                true,
+            )
+            .expect("clock fits");
+            let mut future = core::pin::pin!(drive_calibration::<TestDelay, _, _>(
+                &mut job,
+                &mut io,
+                clock.as_ref(),
+                None
+            ));
+            assert!(future.as_mut().poll(&mut cx).is_pending());
+        }
+        assert_eq!(atoms.get(), expected);
+        assert_eq!(
+            clock.now().saturating_duration_since(started).as_micros(),
+            command_micros * expected as u64
+        );
+        assert!(
+            transition.terminal().is_none(),
+            "drop retains the live coefficient owner"
+        );
+    }
+}
+
+#[test]
+fn root_control_preparation_yields_before_hardware_and_keeps_the_owner_uncommitted() {
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io::default();
+    let atoms = io.atoms.clone();
+    let mut transition = PhyRxGainInitTransition::new(dc_parameters());
+    let before = transition;
+    let mut scratch = crate::executor::step::rx_gain::Scratch::default();
+    let mut execution = crate::tracking::observation::RxGainExecution::default();
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut job = Job::rx_gain(
+            &mut transition,
+            &mut scratch,
+            &mut execution,
+            clock.now(),
+            true,
+        )
+        .expect("clock fits");
+        let mut future = core::pin::pin!(drive_calibration::<TestDelay, _, _>(
+            &mut job, &mut io, &clock, None
+        ));
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(atoms.get(), 0, "construction performs no hardware access");
+    }
+    assert_eq!(
+        transition, before,
+        "dropping a prepared command cannot commit the model"
+    );
+    assert!(scratch.binding.is_some());
+    {
+        let mut job = Job::rx_gain(
+            &mut transition,
+            &mut scratch,
+            &mut execution,
+            clock.now(),
+            true,
+        )
+        .expect("clock fits");
+        let mut future = core::pin::pin!(drive_calibration::<TestDelay, _, _>(
+            &mut job, &mut io, &clock, None
+        ));
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+    }
+    assert_eq!(atoms.get(), 1);
+    assert_eq!(transition.phase(), Some(crate::rx::gain::Phase::Dc));
+    assert!(transition.terminal().is_none());
+    assert!(scratch.binding.is_none());
+    assert!(scratch.completion.is_none());
 }
 
 #[test]

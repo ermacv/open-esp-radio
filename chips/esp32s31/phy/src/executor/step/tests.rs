@@ -53,6 +53,8 @@ pub(crate) struct Io {
     rx_i2c_failure: bool,
     rx_i2c_clock: Option<Rc<VirtualClock<1>>>,
     rx_i2c_calls: usize,
+    rx_calibration_clock: Option<Rc<VirtualClock<1>>>,
+    rx_calibration_micros: u64,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
     rfpll_times: Vec<Instant>,
     rfpll_write_micros: u64,
@@ -81,6 +83,16 @@ impl Io {
             PhyRxGainInitExternalBinding as Binding, PhyRxGainPublishAction as PubAction,
             PhyRxGainPublishCompletion as PubDone, PhyRxGainPublishExternalBinding as Publish,
         };
+        if matches!(
+            binding,
+            Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::Calibration(_))
+        ) {
+            if let Some(clock) = &self.rx_calibration_clock {
+                clock
+                    .advance(Duration::from_micros(self.rx_calibration_micros))
+                    .expect("test clock fits");
+            }
+        }
         let binding = match binding {
             Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::I2c(
                 mut binding,
@@ -189,6 +201,33 @@ impl Io {
                     .map_err(|_| Failure::Binding)?;
                 let _ = transaction;
                 Done::Publish(binding.into_completion().map_err(|_| Failure::Binding)?)
+            }
+            Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::Calibration(
+                binding,
+            )) => {
+                use crate::rx::gain_calibration::{
+                    PhyRxDcCalibrationCompletion as CalibrationDone,
+                    PhyRxDcCalibrationExternalBinding as Calibration,
+                    PhyRxGainDcCompletion as DcDone,
+                };
+                Done::Dc(DcDone::Calibration(match binding {
+                    Calibration::Pbus(mut binding) => {
+                        binding.started().map_err(|_| Failure::Binding)?;
+                        binding.observe_completed(true).map_err(|_| Failure::Binding)?;
+                        binding.into_completion().map_err(|_| Failure::Binding)?
+                    }
+                    Calibration::Mmio(binding) => match binding.action() {
+                        crate::rx::gain_calibration::PhyRxDcCalibrationAction::PrepareControlRestore => CalibrationDone::ControlRestorePrepared,
+                        crate::rx::gain_calibration::PhyRxDcCalibrationAction::ReadPbus { selector, path } => CalibrationDone::PbusRead { selector, path, value: 0 },
+                        crate::rx::gain_calibration::PhyRxDcCalibrationAction::RestoreControl => CalibrationDone::ControlRestored,
+                        _ => return Err(Failure::Binding),
+                    }
+                    Calibration::Timer(binding) => {
+                        assert!(D::settle_micros(binding.micros()));
+                        binding.into_completion()
+                    }
+                    _ => return Err(Failure::Binding),
+                }))
             }
             _ => return Err(Failure::Binding),
         })
