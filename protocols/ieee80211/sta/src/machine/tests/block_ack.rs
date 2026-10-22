@@ -42,3 +42,47 @@ fn unsupported_addba_receives_an_explicit_decline() {
         assert!(world.station.is_connected());
     });
 }
+
+#[test]
+fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy() {
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        let mut buffers = world.station.buffers.take_all();
+        for buffer in &mut buffers {
+            buffer.1 = 24;
+        }
+        world.station.buffers = crate::pool::Pool::from_collection(buffers);
+        let reply = RxBlockAckReply::for_association(
+            world.station.epoch.unwrap(),
+            Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
+            crate::block_ack::AddbaResponse {
+                dialog_token: 17,
+                status: crate::block_ack::AddbaStatus::RequestDeclined,
+                tid: 0,
+                window: 8,
+                timeout_tu: 0,
+                amsdu: false,
+            },
+        )
+        .unwrap();
+        let (reply, reason) = world.station.try_block_ack_reply(reply).err().unwrap();
+        assert_eq!(reason, BlockAckReplyRefusal::Encode);
+        assert!(world.station.is_connected());
+        assert!(matches!(&world.station.state, State::Connected(connected) if !connected.sending));
+        assert_eq!(world.station.tickets.len(), 2);
+        assert_eq!(world.station.buffers.len(), 2);
+        let mut buffers = world.station.buffers.take_all();
+        for buffer in &mut buffers {
+            buffer.1 = 512;
+        }
+        world.station.buffers = crate::pool::Pool::from_collection(buffers);
+        let Ok(StaAction::Transmit(transmit)) = world.station.try_block_ack_reply(reply) else {
+            panic!("the same reply fits the restored control buffer");
+        };
+        world.transmitted(transmit, false);
+        let clock = VirtualClock::<8>::starting_at(at(40));
+        world.run(clock.now());
+        assert_eq!(world.station.tickets.len(), 2);
+        assert_eq!(world.station.buffers.len(), 2);
+    });
+}
