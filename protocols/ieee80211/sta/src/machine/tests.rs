@@ -1447,9 +1447,9 @@ fn refused_lease_exchange_releases_the_original_lease_and_resources() {
         assert!(matches!(world.station.state, State::Idle));
         assert!(world.station.place.is_some());
         assert!(world.station.poll_action(at(40)).is_none());
-        assert!(world.station.tokens().is_some());
-        assert!(world.station.tokens().is_some());
-        assert!(world.station.tokens().is_none());
+        assert!(world.station.transition().0.tokens().is_some());
+        assert!(world.station.transition().0.tokens().is_some());
+        assert!(world.station.transition().0.tokens().is_none());
     });
 }
 
@@ -1493,9 +1493,9 @@ fn association_advertises_the_configured_listen_interval() {
             world.command(at(40), 2, StaCommand::Disconnect).unwrap();
             world.run(at(40));
             assert!(matches!(world.station.state, State::Idle));
-            assert!(world.station.tokens().is_some());
-            assert!(world.station.tokens().is_some());
-            assert!(world.station.tokens().is_none());
+            assert!(world.station.transition().0.tokens().is_some());
+            assert!(world.station.transition().0.tokens().is_some());
+            assert!(world.station.transition().0.tokens().is_none());
         });
     }
 }
@@ -1586,6 +1586,8 @@ fn a_terminal_of_the_previous_connection_only_returns_its_resources() {
         let mut world = connected_world(mint);
         let old = world
             .station
+            .transition()
+            .0
             .encode_null(
                 oer_ieee80211_wire::address::Bssid::new(
                     oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
@@ -1642,9 +1644,9 @@ fn a_terminal_of_the_previous_connection_only_returns_its_resources() {
             unreachable!()
         };
         assert!(!connected.sending && !connected.waking);
-        assert!(world.station.tokens().is_some());
-        assert!(world.station.tokens().is_some());
-        assert!(world.station.tokens().is_none());
+        assert!(world.station.transition().0.tokens().is_some());
+        assert!(world.station.transition().0.tokens().is_some());
+        assert!(world.station.transition().0.tokens().is_none());
         assert_eq!(world.station.lost_tokens(), 0);
     });
 }
@@ -2626,11 +2628,11 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             }
             world.command(at(34), 2, StaCommand::Disconnect).unwrap();
             world.run(at(34));
-            assert!(world.station.current_epoch().is_none());
+            assert!(current_epoch(&world.station.state, world.station.epoch).is_none());
             assert!(matches!(world.station.state, State::Leave(_)));
             // The original connect retains its credit while keys return.
             assert!(world.command_credits.connect.is_none());
-            assert!(world.station.current_epoch().is_none());
+            assert!(current_epoch(&world.station.state, world.station.epoch).is_none());
             let returned = core::mem::take(&mut world.pending_installs);
             for input in returned {
                 world.station.input(at(35), input);
@@ -2657,7 +2659,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             // M2 was the only EAPOL: the stale installations did not cause M4.
             assert_eq!(world.eapol.len(), 1);
             world.command(at(36), 1, StaCommand::Connect).unwrap();
-            assert!(world.station.current_epoch().is_some());
+            assert!(current_epoch(&world.station.state, world.station.epoch).is_some());
         });
     }
 }
@@ -2843,6 +2845,8 @@ fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission(
             pending.push(
                 world
                     .station
+                    .transition()
+                    .0
                     .encode_null(
                         oer_ieee80211_wire::address::Bssid::new(
                             oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
@@ -3315,6 +3319,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                 ) -> Option<StaTransmit<'id, Tokens<'id>, Caps>> {
                     match encoding {
                         0 => station
+                            .transition()
+                            .0
                             .encode_eapol(
                                 oer_ieee80211_wire::address::Bssid::new(
                                     oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
@@ -3326,6 +3332,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             )
                             .ok(),
                         1 => station
+                            .transition()
+                            .0
                             .encode_null(
                                 oer_ieee80211_wire::address::Bssid::new(
                                     oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
@@ -3336,6 +3344,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             )
                             .ok(),
                         2 => station
+                            .transition()
+                            .0
                             .encode_protected_eapol(
                                 oer_ieee80211_wire::address::Bssid::new(
                                     oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
@@ -3348,6 +3358,8 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             )
                             .ok(),
                         3 => station
+                            .transition()
+                            .0
                             .encode_protected_eapol(
                                 oer_ieee80211_wire::address::Bssid::new(
                                     oer_ieee80211_wire::address::IndividualAddress::new(BSSID)
@@ -3359,8 +3371,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                                 TxPurpose::Connected(Sending::GroupResponse),
                             )
                             .ok(),
-                        4 => station.encode_probe(TxPurpose::Probe).ok(),
+                        4 => station.transition().0.encode_probe(TxPurpose::Probe).ok(),
                         5 | 6 => station
+                            .transition()
+                            .0
                             .encode_management(
                                 StaManagementSubtype::Deauthentication,
                                 oer_ieee80211_wire::address::Bssid::new(
@@ -3496,8 +3510,9 @@ fn a_lease_terminal_during_leave_preserves_deauthentication_and_configuration() 
             world.command(at(50), 2, StaCommand::Disconnect).unwrap();
             // The lease terminal races the existing Leave, before the key
             // removals or the deauthentication have been taken as actions.
-            let leaving = world.station.take_state();
-            world.station.state = world.station.lease_ended(leaving, false);
+            let (mut context, state) = world.station.transition();
+            let change = context.lease_ended(state, false);
+            state.apply(change);
             world.run(at(50));
             let seen = world.take();
             let sent = seen.iter().position(|event| {
@@ -3586,7 +3601,8 @@ fn connected_duplicate_m3_answers_without_reinstalling_or_resetting_replay() {
             CcmpPacketNumber::new(900).unwrap(),
             GroupKeyId::new(1).unwrap().key_id(),
         );
-        if let State::Connected(Connected { rsn: Some(rsn), .. }) = &mut world.station.state {
+        if let State::Connected(connected) = &mut world.station.state {
+            let rsn = connected.rsn.as_mut().unwrap();
             rsn.replay
                 .check(CcmpRxProtection::Group, None, header)
                 .unwrap();
@@ -3605,9 +3621,10 @@ fn connected_duplicate_m3_answers_without_reinstalling_or_resetting_replay() {
                 | Seen::ReplaceGroup(_)
                 | Seen::RemoveKey
         )));
-        let State::Connected(Connected { rsn: Some(rsn), .. }) = &mut world.station.state else {
+        let State::Connected(connected) = &mut world.station.state else {
             panic!()
         };
+        let rsn = connected.rsn.as_mut().unwrap();
         assert_eq!(rsn.supplicant.replay_counter(), 2);
         assert!(
             rsn.replay
@@ -3782,10 +3799,7 @@ fn only_delivered_m4_connects_and_other_terminals_keep_the_original_deadline() {
             if outcome == TxOutcome::Withdrawn(WithdrawCause::Disabled) {
                 assert!(matches!(
                     world.station.state,
-                    State::Leave(Leave {
-                        step: LeaveStep::Disabled,
-                        ..
-                    })
+                    State::Leave(ref leave) if leave.step == LeaveStep::Disabled
                 ));
                 assert!(world.station.poll_action(at(34)).is_none());
                 let (bank, _places) = world.station.finish(StaDisconnectReason::Requested);
@@ -3926,10 +3940,10 @@ fn probe_encoding_failure_returns_credit_and_missing_epoch_reports_link_change()
         assert_eq!(world.station.buffers.len(), 2);
         world.station.epoch = None;
         assert!(matches!(
-            world.station.encode_probe(TxPurpose::Probe),
+            world.station.transition().0.encode_probe(TxPurpose::Probe),
             Err(Unsent::NoConnection)
         ));
-        let state = world.station.take_state();
+        let state = &world.station.state;
         let State::Leave(leave) = state else {
             panic!("permanent encoding failure leaves");
         };
@@ -4084,7 +4098,7 @@ fn take_group_removal<'id>(
         pending,
         key: Key(slot),
         permission,
-    }) = world.station.group_removal(true)
+    }) = world.station.transition().0.group_removal(true)
     else {
         panic!("the ledger lends a non-current installation for explicit removal");
     };
@@ -4284,13 +4298,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
                 ));
                 assert!(matches!(
                     world.station.state,
-                    State::Connected(Connected {
-                        rsn: Some(ConnectedRsn {
-                            rekey: Rekey::None,
-                            ..
-                        }),
-                        ..
-                    })
+                    State::Connected(ref connected) if matches!(connected.rsn.as_ref().unwrap().rekey, Rekey::None)
                 ));
             }
         });
@@ -4424,7 +4432,13 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
         advertised_beacon[55..].copy_from_slice(&advertised_rsn);
         let (mut world, ptk) = wpa2_associated_by::<2>(mint, &advertised_beacon);
         match &world.station.state {
-            State::Handshake(handshake) => assert!(handshake.supplicant.management_protection()),
+            State::Handshake(handshake) => assert!(
+                handshake
+                    .supplicant
+                    .as_ref()
+                    .unwrap()
+                    .management_protection()
+            ),
             _ => panic!("expected handshake"),
         }
         let mut plain = Vec::from(advertised_rsn);

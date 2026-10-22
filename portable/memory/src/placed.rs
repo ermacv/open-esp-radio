@@ -275,3 +275,14 @@ impl<'a, F: Future> Future for PollPlaced<'a, '_, F> {
 
 #[cfg(test)]
 mod tests;
+
+impl<T> Placed<'_, T> {
+    /// Replace an initialized destination directly, dropping its previous
+    /// owner in this loan's storage. No whole-value temporary is constructed.
+    pub fn replace_into(mut self, destination: &mut T) {
+        // SAFETY: the two exclusive loans own distinct initialized T values.
+        // Swapping transfers the destination's old destructor to this loan;
+        // even an unwinding destructor leaves destination fully initialized.
+        unsafe { ptr::swap_nonoverlapping(self.pointer.as_mut(), destination, 1) };
+    }
+}

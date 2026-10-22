@@ -49,6 +49,52 @@ fn projection_and_transfer_retain_one_destruction_right_per_field() {
 }
 
 #[test]
+fn replacement_transfers_the_owner_before_dropping_the_previous_destination() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut storage = MaybeUninit::uninit();
+    let source = Placed::init(&mut storage, |p| p.write(Tracked::new(1, &log)));
+    let mut destination = Tracked::new(2, &log);
+    source.replace_into(&mut destination);
+    assert_eq!(destination.id, 1);
+    assert_eq!(*log.borrow(), vec![2]);
+    drop(destination);
+    assert_eq!(*log.borrow(), vec![2, 1]);
+}
+
+#[test]
+fn an_unwinding_old_destructor_leaves_the_new_destination_owned() {
+    struct Owner {
+        fail: bool,
+        count: Rc<core::cell::Cell<usize>>,
+    }
+    impl Drop for Owner {
+        fn drop(&mut self) {
+            self.count.set(self.count.get() + 1);
+            assert!(!self.fail, "old destructor unwinds");
+        }
+    }
+    let count = Rc::new(core::cell::Cell::new(0));
+    let mut storage = MaybeUninit::uninit();
+    let source = Placed::init(&mut storage, |p| {
+        p.write(Owner {
+            fail: false,
+            count: count.clone(),
+        })
+    });
+    let mut destination = Owner {
+        fail: true,
+        count: count.clone(),
+    };
+    let result =
+        std::panic::catch_unwind(AssertUnwindSafe(|| source.replace_into(&mut destination)));
+    assert!(result.is_err());
+    assert!(!destination.fail);
+    assert_eq!(count.get(), 1);
+    drop(destination);
+    assert_eq!(count.get(), 2);
+}
+
+#[test]
 fn exhaustive_enum_projection_drops_unselected_owners_once() {
     enum Outcome {
         Stopped(Tracked),

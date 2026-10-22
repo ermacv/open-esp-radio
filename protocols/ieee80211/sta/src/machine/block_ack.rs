@@ -189,7 +189,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         let Some(body) = reply.body.get(..length) else {
             return Err((reply, BlockAckReplyRefusal::Encode));
         };
-        let transmit = match self.encode_management(
+        let (mut transition, _) = self.transition();
+        let transmit = match transition.encode_management(
             StaManagementSubtype::Action,
             bssid,
             body,

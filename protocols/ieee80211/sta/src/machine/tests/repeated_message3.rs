@@ -148,11 +148,7 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
 
 fn security_drops(world: &World<'_>) -> u32 {
     match &world.station.state {
-        State::Connected(Connected { rsn: Some(rsn), .. })
-        | State::Confirming(Confirming {
-            connected: Connected { rsn: Some(rsn), .. },
-            ..
-        }) => rsn.dropped.get(),
+        State::Connected(connected) => connected.rsn.as_ref().unwrap().dropped.get(),
         _ => panic!("the security exchange must stay alive after a protocol drop"),
     }
 }
@@ -328,10 +324,7 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
             world.run(at(52));
             assert!(matches!(
                 world.station.state,
-                State::Leave(Leave {
-                    step: LeaveStep::Disabled,
-                    ..
-                })
+                State::Leave(ref leave) if leave.step == LeaveStep::Disabled
             ));
             assert_eq!(world.frames.len(), before);
             let (bank, _places) = world.station.finish(StaDisconnectReason::Requested);
@@ -359,10 +352,10 @@ fn authenticated_higher_m3_keeps_ptk_and_answers_with_matching_mac_protection() 
                     CcmpPacketNumber::new(900).unwrap(),
                     GroupKeyId::new(1).unwrap().key_id(),
                 );
-                let State::Connected(Connected { rsn: Some(rsn), .. }) = &mut world.station.state
-                else {
+                let State::Connected(connected) = &mut world.station.state else {
                     panic!()
                 };
+                let rsn = connected.rsn.as_mut().unwrap();
                 rsn.replay
                     .check(CcmpRxProtection::Group, None, header)
                     .unwrap();
@@ -393,10 +386,10 @@ fn authenticated_higher_m3_keeps_ptk_and_answers_with_matching_mac_protection() 
                         .groups
                         .same_material(GroupKeyId::new(1).unwrap(), &[0x99; 16])
                 );
-                let State::Connected(Connected { rsn: Some(rsn), .. }) = &mut world.station.state
-                else {
+                let State::Connected(connected) = &mut world.station.state else {
                     panic!()
                 };
+                let rsn = connected.rsn.as_mut().unwrap();
                 assert_eq!(rsn.supplicant.replay_counter(), 3);
                 if material == 0x99 {
                     assert!(

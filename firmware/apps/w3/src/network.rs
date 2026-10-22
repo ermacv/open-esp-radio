@@ -88,6 +88,7 @@ static WORKLOAD: ConstStaticCell<oer_memory::StaticPlace<Workload<'static, 'stat
 
 #[allow(clippy::too_many_arguments)]
 #[define_opaque(Workload)]
+#[inline(never)]
 fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
     config: W3Config,
     address: [u8; 6],

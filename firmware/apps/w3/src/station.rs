@@ -305,6 +305,102 @@ where
         .future(|| running_future(service, output, owner, io))
 }
 
+// Keep construction's resource and capability temporaries out of the body poll.
+#[inline(never)]
+fn initialize_service<'id, Id: SlotIdentity + 'id>(
+    body: &Body,
+    resources: <Backend<Id> as PortBackend<Id>>::Resources<'id>,
+) -> (
+    Placed<'id, Service<'id, Id>>,
+    machine::StaCommandCredits<'id, Child<Root<Id>, 8>>,
+) {
+    let _ = TARGET.set(body.address);
+    let domain = oer_radio_regulatory::RegulatoryDomain::of(
+        oer_radio_regulatory::Country::new(body.config.country).expect("validated W3 country"),
+    )
+    .expect("supported W3 domain");
+    let channel = SupportedChannel::<Caps>::new(
+        domain
+            .permit(
+                Channel::ghz2_4(
+                    body.config.channel,
+                    oer_ieee80211_wire::channel::WifiChannelWidth::Mhz20,
+                )
+                .expect("validated channel"),
+            )
+            .expect("W3 permitted channel"),
+    )
+    .expect("S31 channel");
+    let (arbiter, place, absence_place) = PortArbiter::<StationComposition<Id>>::new(
+        oer_firmware_apps_w3::policy::arbiter(port::PUBLICATION_BOUND).expect("W3 arbiter bound"),
+        channel,
+        resources.arbiter_authority,
+        resources.gate,
+    );
+    let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
+    let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
+    let service_storage = SERVICE.take().uninit();
+    let credits = core::cell::Cell::new(None);
+    let receive = RxBlockAckStorage::<Family<Id>, RX_BA_BANKS, RX_BA_FRAMES>::init_in_place(
+        RECEIVE.take().uninit(),
+        resources.block_acks,
+        Duration::from_millis(100),
+    )
+    .view();
+    let service = StationService::<StationComposition<Id>, _, 1>::init_in_place(
+        service_storage,
+        |station_storage| {
+            let (station, granted) = Station::init_open(
+                station_storage,
+                StaConfig {
+                    address: OwnAddress::new(
+                        IndividualAddress::for_interface(body.address)
+                            .expect("eFuse station address"),
+                    ),
+                    ssid: heapless::Vec::from_slice(body.config.ssid)
+                        .expect("validated SSID length"),
+                    channels: heapless::Vec::from_slice(&[channel]).expect("one channel"),
+                    dwell: Duration::from_millis(250),
+                    skipped_absences: 3,
+                    access_point_margin_db: 6,
+                    supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
+                    association: &ASSOCIATION,
+                    listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
+                    phy: PhyMode::Ht20,
+                    nonce: || [0; 32],
+                    he_packet_padding: |_| backend_protection::HePacketPadding::None,
+                },
+                StationResources::<_, 4, 4, 1> {
+                    configure: resources.station_commands.configure,
+                    epochs: LinkEpochSource::new(resources.connection_epoch),
+                    tickets: [t0, t1, t2, t3],
+                    buffers: [b0, b1, b2, b3],
+                    place,
+                    absence_place,
+                    keys: resources.station_association,
+                    group_permission: resources.station_group_permission,
+                },
+            );
+            credits.set(Some(granted));
+            station
+        },
+        |place| {
+            StaData::init_in_place(
+                place,
+                [t4, t5, t6, t7],
+                [b4, b5, b6, b7],
+                Backend::<Id>::TX_QUEUE_DEPTH,
+            )
+        },
+        arbiter,
+        Rates(EspressifRateSelection::<Caps>::new()),
+        resources.terminal_access,
+        receive,
+    );
+    let credits = credits.take().expect("station grants command credits");
+    (service, credits)
+}
+
 impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
     type Output = oer_firmware_apps_w3::report::Report;
     async fn run<'p, 'id>(
@@ -317,88 +413,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         Id: 'id,
         'id: 'p,
     {
-        let _ = TARGET.set(self.address);
-        let domain = oer_radio_regulatory::RegulatoryDomain::of(
-            oer_radio_regulatory::Country::new(self.config.country).expect("validated W3 country"),
-        )
-        .expect("supported W3 domain");
-        let channel = SupportedChannel::<Caps>::new(
-            domain
-                .permit(
-                    Channel::ghz2_4(
-                        self.config.channel,
-                        oer_ieee80211_wire::channel::WifiChannelWidth::Mhz20,
-                    )
-                    .expect("validated channel"),
-                )
-                .expect("W3 permitted channel"),
-        )
-        .expect("S31 channel");
-        let (arbiter, place, absence_place) = PortArbiter::<StationComposition<Id>>::new(
-            oer_firmware_apps_w3::policy::arbiter(port::PUBLICATION_BOUND)
-                .expect("W3 arbiter bound"),
-            channel,
-            resources.arbiter_authority,
-            resources.gate,
-        );
-        let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
-        let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
-        let service_storage = SERVICE.take().uninit();
-        let credits = core::cell::Cell::new(None);
-        let receive = RxBlockAckStorage::<Family<Id>, RX_BA_BANKS, RX_BA_FRAMES>::init_in_place(
-            RECEIVE.take().uninit(), resources.block_acks, Duration::from_millis(100),
-        ).view();
-        let service = StationService::<StationComposition<Id>, _, 1>::init_in_place(
-            service_storage,
-            |station_storage| {
-                let (station, granted) = Station::init_open(
-                    station_storage,
-                    StaConfig {
-                        address: OwnAddress::new(
-                            IndividualAddress::for_interface(self.address)
-                                .expect("eFuse station address"),
-                        ),
-                        ssid: heapless::Vec::from_slice(self.config.ssid)
-                            .expect("validated SSID length"),
-                        channels: heapless::Vec::from_slice(&[channel]).expect("one channel"),
-                        dwell: Duration::from_millis(250),
-                        skipped_absences: 3,
-                        access_point_margin_db: 6,
-                        supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
-                        association: &ASSOCIATION,
-                        listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
-                        phy: PhyMode::Ht20,
-                        nonce: || [0; 32],
-                        he_packet_padding: |_| backend_protection::HePacketPadding::None,
-                    },
-                    StationResources::<_, 4, 4, 1> {
-                        configure: resources.station_commands.configure,
-                        epochs: LinkEpochSource::new(resources.connection_epoch),
-                        tickets: [t0, t1, t2, t3],
-                        buffers: [b0, b1, b2, b3],
-                        place,
-                        absence_place,
-                        keys: resources.station_association,
-                        group_permission: resources.station_group_permission,
-                    },
-                );
-                credits.set(Some(granted));
-                station
-            },
-            |place| {
-                StaData::init_in_place(
-                    place,
-                    [t4, t5, t6, t7],
-                    [b4, b5, b6, b7],
-                    Backend::<Id>::TX_QUEUE_DEPTH,
-                )
-            },
-            arbiter,
-            Rates(EspressifRateSelection::<Caps>::new()),
-            resources.terminal_access,
-            receive,
-        );
-        let credits = credits.take().expect("station grants command credits");
+        let (service, credits) = initialize_service::<Id>(&self, resources);
         let mut commands = MsduQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
         let tx = NETWORK_TX.take();
         let rx = NETWORK_RX.take();
