@@ -14,7 +14,7 @@
 //! interrupt or exception code raises an illegal-instruction exception instead
 //! of silently corrupting the interrupted task's registers (on a core without
 //! the F extension the field reads zero and the writes do nothing). A debug
-//! trigger watches the lowest kibibyte of each hart's interrupt stack, so an
+//! trigger watches the chip contract's guard of each hart's interrupt stack, so an
 //! overflow traps before it reaches the state below the stack.
 //!
 //! The runtime linker script reserves the CPU0 task stack and each hart's
@@ -54,9 +54,6 @@ pub fn interrupted_stack_pointer() -> Option<usize> {
     Some(unsafe { ptr::read_volatile((context.frame + INTERRUPTED_SP_OFFSET) as *const usize) })
 }
 
-/// Aligned bytes at the bottom of each interrupt stack whose stores trap.
-const IRQ_STACK_GUARD_BYTES: usize =
-    oer_espressif_staged_layout::interrupts::IRQ_STACK_GUARD_BYTES as usize;
 /// Debug trigger of the interrupt-stack guard. ESP-HAL owns trigger 0 (task
 /// stack guard) and trigger 1 (trap-section guard).
 const IRQ_STACK_GUARD_TRIGGER: usize = 2;
@@ -65,8 +62,10 @@ unsafe extern "C" {
     static _runtime_psram_mtvt_source: [u32; 48];
     static __runtime_cpu0_irq_stack_bottom: u8;
     static __runtime_cpu0_irq_stack_top: u8;
+    static __runtime_cpu0_irq_stack_guard_bytes: u8;
     static __runtime_cpu1_irq_stack_bottom: u8;
     static __runtime_cpu1_irq_stack_top: u8;
+    static __runtime_cpu1_irq_stack_guard_bytes: u8;
     static __runtime_cpu0_task_stack_bottom: u8;
     static __runtime_cpu0_task_stack_top: u8;
 }
@@ -86,6 +85,16 @@ fn interrupt_stack(hart: usize) -> Option<core::ops::Range<usize>> {
         _ => return None,
     };
     Some(bottom as usize..top as usize)
+}
+
+/// Absolute linker symbols supplied from this chip's per-hart contract.
+#[inline(always)]
+fn interrupt_stack_guard_bytes(hart: usize) -> usize {
+    match hart {
+        0 => ptr::addr_of!(__runtime_cpu0_irq_stack_guard_bytes) as usize,
+        1 if HARTS > 1 => ptr::addr_of!(__runtime_cpu1_irq_stack_guard_bytes) as usize,
+        _ => 0,
+    }
 }
 
 /// Bytes of each hart's interrupt stack, as the runtime linker script reserved
@@ -125,7 +134,7 @@ pub unsafe fn install_current_hart_interrupt_stack() {
     }
     // SAFETY: interrupts are disabled on this hart and the trigger is not
     // one ESP-HAL or the stack sampler uses.
-    unsafe { guard_interrupt_stack(bottom) };
+    unsafe { guard_interrupt_stack(bottom, interrupt_stack_guard_bytes(hart)) };
     let table: *mut u32;
     // SAFETY: reading `mtvt` touches no memory.
     unsafe {
@@ -203,7 +212,7 @@ const fn napot_guard(bottom: usize, bytes: usize) -> usize {
     start | (bytes / 2 - 1)
 }
 
-/// Make every store into the lowest aligned kibibyte of this hart's interrupt
+/// Make every store into the aligned guard of this hart's interrupt
 /// stack raise a breakpoint exception. The exception entry clears
 /// `tcontrol.mte`, so its own frame below the guard does not retrigger.
 ///
@@ -211,7 +220,7 @@ const fn napot_guard(bottom: usize, bytes: usize) -> usize {
 ///
 /// Interrupts must be disabled on the calling hart, and no other code may own
 /// debug trigger [`IRQ_STACK_GUARD_TRIGGER`].
-unsafe fn guard_interrupt_stack(bottom: usize) {
+unsafe fn guard_interrupt_stack(bottom: usize, bytes: usize) {
     // A connected debugger owns the triggers, as for ESP-HAL's stack guard.
     if esp_hal::debugger::debugger_connected() {
         return;
@@ -231,7 +240,7 @@ unsafe fn guard_interrupt_stack(bottom: usize) {
             select = in(reg) IRQ_STACK_GUARD_TRIGGER,
             control = in(reg) TCONTROL_MTE,
             data1 = in(reg) TDATA1_M_STORE_NAPOT,
-            data2 = in(reg) napot_guard(bottom, IRQ_STACK_GUARD_BYTES),
+            data2 = in(reg) napot_guard(bottom, bytes),
             options(nostack),
         )
     };

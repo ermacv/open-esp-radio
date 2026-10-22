@@ -116,6 +116,15 @@ fn link(
     })?;
     let mut inputs = oer_os_durable::inputs::Inputs::tracked();
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
+    // The chip contract is the only source of per-hart guards, including
+    // the absolute symbols the runtime uses to program its debug trigger.
+    let profile = oer_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
+    if let Some(interrupts) = &profile.interrupts {
+        for (hart, bytes) in &interrupts.irq_stack_guard_bytes {
+            arguments
+                .push(format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes={bytes}").into());
+        }
+    }
     let directory = spec_path
         .parent()
         .ok_or("image linker specification has no directory")?;

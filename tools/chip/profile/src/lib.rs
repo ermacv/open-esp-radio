@@ -235,14 +235,36 @@ pub struct InterruptContract {
     pub level_writers: Vec<LevelWriter>,
     /// Each hart's dedicated SRAM interrupt stack.
     pub irq_stack_bytes: u32,
-    pub irq_stack_guard_bytes: u32,
+    /// Guard bytes keyed by hart, with exactly one entry for every `harts` member.
+    pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
     pub irq_stack_margin_percent: u32,
 }
 
 impl InterruptContract {
     /// The bytes an interrupt stack may use: below them lies the guard.
-    pub fn irq_stack_usable_bytes(&self) -> u32 {
-        self.irq_stack_bytes - self.irq_stack_guard_bytes
+    pub fn irq_stack_usable_bytes(&self, hart: u32) -> u32 {
+        self.irq_stack_bytes - self.irq_stack_guard_bytes[&hart]
+    }
+
+    fn validate(&self) -> Result<()> {
+        let harts: std::collections::BTreeSet<_> = self.harts.iter().copied().collect();
+        if harts.len() != self.harts.len()
+            || harts.is_empty()
+            || self
+                .irq_stack_guard_bytes
+                .keys()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+                != harts
+        {
+            return Err("interrupt guards must name every hart exactly once".into());
+        }
+        for (&hart, &bytes) in &self.irq_stack_guard_bytes {
+            if bytes < 16 || !bytes.is_power_of_two() || bytes >= self.irq_stack_bytes {
+                return Err(format!("hart {hart}'s interrupt guard must be a power of two of at least 16 bytes, smaller than its stack").into());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -622,6 +644,11 @@ impl Profile {
             )
             .into());
         }
+        if let Some(interrupts) = &profile.interrupts {
+            interrupts
+                .validate()
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+        }
         Ok(profile)
     }
 
@@ -767,6 +794,55 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn each_hart_has_its_own_guard_and_usable_capacity() {
+        let repository = repository();
+        for (chip, guards) in [
+            ("esp32s31", BTreeMap::from([(0, 4096), (1, 1024)])),
+            ("esp32c5", BTreeMap::from([(0, 4096)])),
+        ] {
+            let contract = Profile::load(repository.path(), chip)
+                .unwrap()
+                .interrupts
+                .unwrap();
+            assert_eq!(contract.irq_stack_guard_bytes, guards);
+            for (hart, guard) in guards {
+                assert_eq!(
+                    contract.irq_stack_usable_bytes(hart),
+                    contract.irq_stack_bytes - guard
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_guard_contract_rejects_missing_extra_and_invalid_harts_or_sizes() {
+        let repository = repository();
+        let path = repository.path().join("chips/esp32s31/platform/chip.toml");
+        let source = std::fs::read_to_string(&path).unwrap();
+        for guards in [
+            "1024", // The old common value is no longer a contract.
+            "{}",
+            "{ \"0\" = 4096 }",
+            "{ \"0\" = 4096, \"1\" = 1024, \"2\" = 1024 }",
+            "{ \"0\" = 0, \"1\" = 1024 }",
+            "{ \"0\" = 4095, \"1\" = 1024 }",
+            "{ \"0\" = 32768, \"1\" = 1024 }",
+        ] {
+            std::fs::write(
+                &path,
+                source.replace("{ \"0\" = 4096, \"1\" = 1024 }", guards),
+            )
+            .unwrap();
+            assert!(
+                Profile::load(repository.path(), "esp32s31").is_err(),
+                "{guards}"
+            );
+        }
+        std::fs::write(&path, source.replace("harts = [0, 1]", "harts = [0, 0]")).unwrap();
+        assert!(Profile::load(repository.path(), "esp32s31").is_err());
     }
 
     #[test]

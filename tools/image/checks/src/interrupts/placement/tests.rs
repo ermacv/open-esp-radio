@@ -46,6 +46,12 @@ fn inventory() -> (InterruptStacks, Analysis) {
     other.levels[0].bound.reached = BTreeSet::from([0x5000_1000]);
     other.exception.bound.reached.clear();
     stacks.harts.push(other);
+    stacks.contract.interrupts.harts.push(1);
+    stacks
+        .contract
+        .interrupts
+        .irq_stack_guard_bytes
+        .insert(1, 1024);
     stacks.names = BTreeMap::from([
         (0x5000_1000, "alpha::small".into()),
         (0x5000_2000, "beta::large".into()),
@@ -60,6 +66,11 @@ fn inventory() -> (InterruptStacks, Analysis) {
         code: Vec::new(),
         summaries: BTreeSet::new(),
     };
+    stacks.frames = analysis
+        .functions
+        .iter()
+        .map(|(&address, facts)| (address, facts.frame))
+        .collect();
     (stacks, analysis)
 }
 

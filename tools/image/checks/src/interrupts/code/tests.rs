@@ -95,6 +95,11 @@ fn fixture(
     stacks.handler_code = handler_code(&analysis, full, &stacks.names, memory);
     stacks.names.insert(shared, "sample::shared".into());
     stacks.names.insert(task, "sample::task".into());
+    stacks.frames = analysis
+        .functions
+        .iter()
+        .map(|(&address, facts)| (address, facts.frame))
+        .collect();
     (stacks, shared, task)
 }
 

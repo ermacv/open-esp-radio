@@ -21,7 +21,7 @@ impl Contract {
     }
 
     /// The bytes an interrupt stack may use: below them lies the guard.
-    pub fn irq_stack_usable_bytes(&self) -> u32 {
-        self.interrupts.irq_stack_usable_bytes()
+    pub fn irq_stack_usable_bytes(&self, hart: u32) -> u32 {
+        self.interrupts.irq_stack_usable_bytes(hart)
     }
 }

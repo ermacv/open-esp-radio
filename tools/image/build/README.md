@@ -207,11 +207,19 @@ in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
 Each hart's exception bound (including its entry frame) plus the largest
 own function frame reached at any of its levels, including the exception
-and P2 tasks, must fit `IRQ_STACK_GUARD_BYTES` (1024 bytes). The debug trigger
+and P2 tasks, must fit that hart's `irq-stack-guard-bytes` in the chip's
+`chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024; C5 has 4096.
+The image linker exports `__runtime_cpu{hart}_irq_stack_guard_bytes` from
+this contract; the runtime reads that absolute symbol to program its trigger.
+There is no shared guard-size constant. Allocated stacks keep their sizes;
+the usable budget is the allocation minus that hart's guard.
+The debug trigger
 catches a write into the guard, not a change of `sp`: a function may lower
 `sp` by its whole frame before writing, or skip the guard with a larger frame.
-The report lists the exception bound, largest frame and function, and their sum
-for each hart. `Required::Product` rejects a guard violation;
+The report lists the guard, exception bound, largest frame and function,
+their sum and the spare bytes for each hart. A frame on a path other than
+the deepest path still counts: reachability is the union of `Bound::reached`
+at every level and the exception. `Required::Product` rejects a guard violation;
 `Required::Diagnostic` warns, also naming any function whose frame is unknown.
 Its placement summary lines separate strict code in cached memory by hart/level
 from P2 task code in PSRAM and name the task roots. The task boundary comes from

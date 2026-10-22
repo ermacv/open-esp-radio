@@ -47,7 +47,8 @@ before its second invocation. An analysis error, an unrepresentable script name
 or insufficient SRAM fails the link. A diagnostic's partial stack still supplies
 its known strict functions. Bootstrap has no analysis specification.
 
-`interrupt-stack.txt` reports strict code in cached memory by hart/level,
+`interrupt-stack.txt` reports each hart's guard, exception entry and path,
+largest reachable own frame and remaining guard bytes, as well as strict code in cached memory by hart/level,
 P2 task code in PSRAM and its task roots, static cached data references and
 sized objects, and usable/placed/free SRAM. `interrupt-placement.txt`, listed
 in the bundle manifest, gives the full cached function inventory with

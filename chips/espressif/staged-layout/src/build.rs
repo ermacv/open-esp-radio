@@ -111,8 +111,8 @@ fn image_irq_stack_bytes(value: &str) -> Result<u32, &'static str> {
     let bytes: u32 = value
         .parse()
         .map_err(|_| "IRQ stack allocation is not a u32")?;
-    if bytes <= crate::interrupts::IRQ_STACK_GUARD_BYTES || bytes % 16 != 0 {
-        return Err("IRQ stack allocation must exceed the guard and be aligned to 16 bytes");
+    if bytes == 0 || bytes % 16 != 0 {
+        return Err("IRQ stack allocation must be positive and aligned to 16 bytes");
     }
     Ok(bytes)
 }
@@ -189,7 +189,9 @@ mod tests {
     #[test]
     fn an_explicit_irq_stack_allocation_never_silently_falls_back() {
         assert_eq!(image_irq_stack_bytes("65536"), Ok(65536));
-        for value in ["", "0", "1024", "65537", "-1", "4294967296"] {
+        // The chip contract's per-hart guards are checked at image link time.
+        assert_eq!(image_irq_stack_bytes("1024"), Ok(1024));
+        for value in ["", "0", "65537", "-1", "4294967296"] {
             assert!(image_irq_stack_bytes(value).is_err(), "{value}");
         }
     }
