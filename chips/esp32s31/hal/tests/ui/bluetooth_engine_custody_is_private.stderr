@@ -1,0 +1,28 @@
+error[E0616]: field `registers` of struct `oer_esp32s31_hal::bluetooth::engine::Engine` is private
+ --> tests/ui/bluetooth_engine_custody_is_private.rs:8:25
+  |
+8 |     let _ = &mut engine.registers; // ui-error: E0616
+  |                         ^^^^^^^^^ private field
+
+error[E0616]: field `memory` of struct `oer_esp32s31_hal::bluetooth::engine::Engine` is private
+  --> tests/ui/bluetooth_engine_custody_is_private.rs:10:25
+   |
+10 |     let _ = &mut engine.memory; // ui-error: E0616
+   |                         ^^^^^^ private field
+
+error[E0624]: method `controller` is private
+  --> tests/ui/bluetooth_engine_custody_is_private.rs:12:20
+   |
+12 |     let _ = engine.controller(); // ui-error: E0624
+   |                    ^^^^^^^^^^ private method
+   |
+  ::: src/bluetooth/engine/owner.rs
+   |
+   |     pub(crate) fn controller(&mut self) -> bluetooth::ControllerHal<'_> {
+   |     ------------------------------------------------------------------- private method defined here
+
+error[E0599]: no method named `into_parts` found for struct `oer_esp32s31_hal::bluetooth::engine::EngineShutdownFailure<M>` in the current scope
+  --> tests/ui/bluetooth_engine_custody_is_private.rs:18:21
+   |
+18 |     let _ = failure.into_parts(); // ui-error: E0599
+   |                     ^^^^^^^^^^ method not found in `oer_esp32s31_hal::bluetooth::engine::EngineShutdownFailure<M>`

@@ -192,7 +192,7 @@ impl BlePhyEngineBinding {
 /// makes the environment and resolving-list addresses visible to the
 /// controller.
 #[must_use = "BLE PHY storage must outlive every controller consumer"]
-pub struct BlePhyEngineCpuOwned {
+pub(crate) struct BlePhyEngineCpuOwned {
     storage: Pin<&'static mut BlePhyEngineStorage>,
     binding: BlePhyEngineBinding,
 }
@@ -870,7 +870,7 @@ impl BlePhyEngineStorage {
     ///     BlePhyEngineStorage::place::<S>(storage);
     /// }
     /// ```
-    pub fn place<S: ControllerDmaSpace>(placed: Placed<Self>) -> BlePhyEngineCpuOwned {
+    pub(crate) fn place<S: ControllerDmaSpace>(placed: Placed<Self>) -> BlePhyEngineCpuOwned {
         let (storage, placement) = Placement::<S>::take(placed);
         Self::from_parts::<S>(storage, &placement)
     }

@@ -166,12 +166,7 @@ impl AdvertisingImageBuilder<'_> {
         let address = legacy_advertising_event_image::own_address_from_pdu(self.pdu)
             .map_err(LegacyAdvertisingError::Pdu)?;
         pool.prepare_packet(lease, self.pdu)?;
-        pool.reset_link_state(
-            lease,
-            self.power,
-            address,
-            SchedulerEventPriority::new(1).expect("reviewed priority fits"),
-        )?;
+        pool.reset_link_state(lease, self.power, address, ROLE_PRIORITY)?;
         pool.prepare_event(
             lease,
             &self.channels.image(self.start, self.item_duration, 0),
@@ -189,19 +184,31 @@ pub struct ScanningImageBuilder {
 }
 
 impl ScanningImageBuilder {
-    pub fn prepare<'pool, 'epoch, const N: usize, const R: usize>(
+    pub fn prepare<
+        'pool,
+        'epoch,
+        const A: usize,
+        const C: usize,
+        const N: usize,
+        const R: usize,
+        const O: usize,
+        const Q: usize,
+    >(
         self,
-        pool: &mut LegacyScanPool<'pool, 'epoch, N>,
-        receive: &LeRxChain<R>,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
-    ) -> Result<LegacyScanEvent, LegacyScanError> {
-        pool.reset(lease, receive, self.reset.image())?;
-        pool.prepare_event(
-            lease,
-            self.start.image(self.channel),
-            self.timing,
-            self.coexistence,
-        )
+    ) -> Result<LegacyScanEvent, EnginePrepareError<LegacyScanError>> {
+        engine.reset_scanning(lease, self.reset.image())?;
+        engine
+            .scanning()
+            .map_err(|_| EnginePrepareError::Quarantined)?
+            .prepare_event(
+                lease,
+                self.start.image(self.channel),
+                self.timing,
+                self.coexistence,
+            )
+            .map_err(EnginePrepareError::Role)
     }
 }
 
@@ -216,26 +223,32 @@ pub struct ConnectableAdvertisingImageBuilder<'pdu> {
 }
 
 impl ConnectableAdvertisingImageBuilder<'_> {
-    pub fn prepare<'pool, 'epoch, const N: usize, const R: usize>(
+    pub fn prepare<
+        'pool,
+        'epoch,
+        const A: usize,
+        const C: usize,
+        const N: usize,
+        const R: usize,
+        const O: usize,
+        const Q: usize,
+    >(
         self,
-        pool: &mut LegacyConnectableAdvertisingPool<'pool, 'epoch, N>,
-        receive: &LeRxChain<R>,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
-    ) -> Result<LegacyAdvertisingEvent, LegacyConnectableAdvertisingError> {
-        pool.prepare(
-            lease,
-            self.packets,
-            receive,
-            self.power,
-            SchedulerEventPriority::new(1).expect("reviewed priority fits"),
-        )?;
-        pool.prepare_event(
-            lease,
-            &self
-                .channels
-                .image(self.start, self.item_duration, self.sequence_lead),
-            self.coexistence,
-        )
+    ) -> Result<LegacyAdvertisingEvent, EnginePrepareError<LegacyConnectableAdvertisingError>> {
+        engine.prepare_connectable_advertising(lease, self.packets, self.power, ROLE_PRIORITY)?;
+        engine
+            .connectable_advertising()
+            .map_err(|_| EnginePrepareError::Quarantined)?
+            .prepare_event(
+                lease,
+                &self
+                    .channels
+                    .image(self.start, self.item_duration, self.sequence_lead),
+                self.coexistence,
+            )
+            .map_err(EnginePrepareError::Role)
     }
 }
 
@@ -245,16 +258,31 @@ pub struct PeripheralConnectionImageBuilder {
 }
 
 impl PeripheralConnectionImageBuilder {
-    pub fn prepare<'pool, 'epoch, const N: usize>(
+    pub fn prepare<
+        'pool,
+        'epoch,
+        const A: usize,
+        const C: usize,
+        const N: usize,
+        const R: usize,
+        const O: usize,
+        const Q: usize,
+    >(
         self,
-        pool: &mut PeripheralConnectionPool<'pool, 'epoch, N>,
-        workspace: DirectionFindingWorkspaceLink,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
-    ) -> Result<PeripheralConnectionEvent, PeripheralConnectionError> {
-        pool.prepare_identity(lease, self.identity)?;
-        pool.prepare_first_event(lease, self.event, workspace)
+    ) -> Result<PeripheralConnectionEvent, EnginePrepareError<PeripheralConnectionError>> {
+        engine
+            .connections()
+            .map_err(|_| EnginePrepareError::Quarantined)?
+            .prepare_identity(lease, self.identity)
+            .map_err(EnginePrepareError::Role)?;
+        engine.prepare_first_connection(lease, self.event)
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+const ROLE_PRIORITY: SchedulerEventPriority =
+    SchedulerEventPriority::new(1).expect("reviewed priority fits");

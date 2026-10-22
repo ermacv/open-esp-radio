@@ -21,7 +21,7 @@ limitations.
 | --- | --- |
 | `controller_hal` | Controller HAL component initialization on the HAL's clocked Bluetooth client of the shared radio |
 | `controller_time` | Event-driven Controller-time latch and scheduler-epoch projection |
-| `ble_phy` | BLE PHY engine initialization, activation into the runtime owners and the retained PHY membership and BLE PHY/DF graph |
+| `ble_phy` | BLE PHY engine initialization, activation into the runtime owners and the retained shared PHY membership |
 | `phy` | Entry into and exit from the shared PHY domain and BTBB |
 | `interrupt` | Chip interrupt state and hardware handling |
 | `modem_timer` | Controller modem low-power timer task over the published timer owner |
@@ -29,7 +29,7 @@ limitations.
 | `timed_preparation` | Controller-time preparation shared by timed scheduler admissions |
 | `resources` | Task and inactive interrupt owners split from the clocked client |
 | `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the task and timer workers of one powered epoch; the HAL owns physical list publications and receive-chain graphs |
-| `shutdown` | Retirement of a stopped epoch (Controller output, PHY and BTBB exit) and the Controller reset that returns the clocked client and the BLE PHY allocations |
+| `shutdown` | Retirement of a stopped epoch (Controller output, PHY and BTBB exit) and the Controller reset that returns the clocked client and the complete arena |
 | `roles` | Detached value builders for DTM, advertising, scanning and connection events, and role-to-list selection |
 | `coexistence` | The vendor's per-lane PTI coexistence priorities of advertising, passive scan and connection events (`coexAdv`, `coexScan`, `coexConn`) |
 | `coex_status` | The vendor's Bluetooth LE coexistence schedule status bits (`coexHook`) and the change between two activities |
@@ -43,12 +43,21 @@ controller layout; HAL checks binding anchors before committing a value.
 Affine pool and epoch scopes prevent foreign and stale leases, and release
 consumes its lease. Hardware heads resolve to logical identities inside HAL.
 
-`initialize_ble_phy_engine` / `activate` / `shut_down` retains separate PHY
-and DF graph owners. Their publication methods use the retained bindings;
-public constructors and getters cannot produce a standalone address proof.
-Device-table and RX publication also goes through the corresponding owner.
-The physical scheduler executor and live publications are HAL modules;
-this crate's task endpoint captures finished-list notifications.
+`Engine::new` consumes the clocked client and one `Placed<BluetoothArena>`
+with composition-selected capacities and fresh pool/epoch scopes. The
+resulting engine and inactive IRQ bank enter `ControllerHalInitialized`;
+HAL initialization rejects repeated use without discarding either owner.
+The engine stays inside `TaskResources<M>` through PHY initialization,
+activation, controller-time and finished-list workers, stop and shutdown.
+PHY and DF storage cannot be extracted or initialized independently.
+
+All graph publications and CPU completion return use that engine. A
+finished-list receipt belongs to its capturing engine installation epoch. Retirement
+requires a stopped and empty physical scheduler and idle workers. Successful
+reset returns the same entire arena, zeroed in place, together with the
+clocked client; constructor refusal returns its untouched inputs. Terminal
+failures retain every hardware partition and the arena in absorbing
+quarantine. There is no reset-failure extraction or late-stop recovery.
 
 The scheduler still lends the stable interrupt owner inside HAL, under the
 Sources exception. Its execution lock is the hardware protocol lock. The
@@ -113,5 +122,5 @@ Stop reverses it:
    the epoch (Controller output, PHY and BTBB exit), then disable
    coexistence, as `coex_disable` after the stack is disabled; close the PHY
    when Bluetooth was its last client;
-3. shut down the Controller (reset returning the clocked client and the BLE
-   PHY allocations), disable the clocks and power the partition down.
+3. shut down the Controller (reset returning the clocked client and the
+   complete arena), disable the clocks and power the partition down.

@@ -13,7 +13,7 @@ pub use core::{
 };
 
 pub use finished_lists::{
-    BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerHardwareListIndex,
+    BluetoothSchedulerHardwareListIndex, EngineFinishedHardwareListObserved,
     SchedulerFinishedListCaptureError, SchedulerFinishedListWorker,
     SchedulerFinishedListWorkerStep,
 };

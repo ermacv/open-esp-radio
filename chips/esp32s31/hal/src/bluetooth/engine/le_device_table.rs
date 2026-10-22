@@ -87,7 +87,7 @@ pub struct LeDeviceTable {
 
 impl LeDeviceTable {
     /// Publish this table's retained extent, without exporting its first link.
-    pub fn publish(&self, controller: &mut crate::bluetooth::ControllerHal<'_>) {
+    pub(crate) fn publish(&self, controller: &mut crate::bluetooth::ControllerHal<'_>) {
         let _ = controller.publish_device_table(&self.publication());
     }
 

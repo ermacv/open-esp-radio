@@ -1,7 +1,56 @@
-error[E0624]: method `publication` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:16:19
+error[E0603]: struct `BlePhyEngineCpuOwned` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:33:42
    |
-16 |     let _ = table.publication(); // ui-error: E0624
+33 | use oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
+   |                                          ^^^^^^^^^^^^^^^^^^^^ private struct
+   |
+note: the struct `BlePhyEngineCpuOwned` is defined here
+  --> src/bluetooth/engine/mod.rs
+   |
+   | pub(crate) use ble_phy_engine::{BlePhyEngineCpuOwned, BlePhyEngineStorage};
+   |                                 ^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: struct `DirectionFindingWorkspaceCpuOwned` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:35:42
+   |
+35 | use oer_esp32s31_hal::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
+   |
+note: the struct `DirectionFindingWorkspaceCpuOwned` is defined here
+  --> src/bluetooth/engine/mod.rs
+   |
+   |     DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceStorage,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0624]: method `publish` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:11:11
+   |
+11 |     table.publish(controller); // ui-error: E0624
+   |           ^^^^^^^ private method
+   |
+  ::: src/bluetooth/engine/le_device_table.rs
+   |
+   |     pub(crate) fn publish(&self, controller: &mut crate::bluetooth::ControllerHal<'_>) {
+   |     ---------------------------------------------------------------------------------- private method defined here
+
+error[E0624]: method `publish_initial_head` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:15:21
+   |
+15 |       let _ = receive.publish_initial_head(controller); // ui-error: E0624
+   |                       ^^^^^^^^^^^^^^^^^^^^ private method
+   |
+  ::: src/bluetooth/engine/le_rx_chain.rs
+   |
+   | /     pub(crate) fn publish_initial_head(
+   | |         &self,
+   | |         controller: &mut crate::bluetooth::ControllerHal<'_>,
+   | |     ) -> crate::bluetooth::RxMemoryListPublished {
+   | |________________________________________________- private method defined here
+
+error[E0624]: method `publication` is private
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:22:19
+   |
+22 |     let _ = table.publication(); // ui-error: E0624
    |                   ^^^^^^^^^^^ private method
    |
   ::: src/bluetooth/engine/le_device_table.rs
@@ -10,9 +59,9 @@ error[E0624]: method `publication` is private
    |     ---------------------------------------------------------- private method defined here
 
 error[E0624]: method `publication_head` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:20:21
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:26:21
    |
-20 |     let _ = receive.publication_head(); // ui-error: E0624
+26 |     let _ = receive.publication_head(); // ui-error: E0624
    |                     ^^^^^^^^^^^^^^^^ private method
    |
   ::: src/bluetooth/engine/le_rx_chain.rs
@@ -21,9 +70,9 @@ error[E0624]: method `publication_head` is private
    |     ---------------------------------------------------------------------- private method defined here
 
 error[E0624]: method `head` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:24:22
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:30:22
    |
-24 |     let _ = scanning.head(); // ui-error: E0624
+30 |     let _ = scanning.head(); // ui-error: E0624
    |                      ^^^^ private method
    |
   ::: src/bluetooth.rs
@@ -31,32 +80,10 @@ error[E0624]: method `head` is private
    |     pub(crate) const fn head(&self) -> crate::layouts::DmaRef<crate::layouts::BleBufferHeader> {
    |     ------------------------------------------------------------------------------------------ private method defined here
 
-error[E0624]: method `hardware_objects` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:28:17
-   |
-28 |     let _ = phy.hardware_objects(); // ui-error: E0624
-   |                 ^^^^^^^^^^^^^^^^ private method
-   |
-  ::: src/bluetooth/engine/ble_phy_engine.rs
-   |
-   |     pub(crate) fn hardware_objects(&self) -> crate::bluetooth::BlePhyHardwareObjects {
-   |     -------------------------------------------------------------------------------- private method defined here
-
-error[E0624]: method `disabled_cte_descriptor` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:32:16
-   |
-32 |     let _ = df.disabled_cte_descriptor(); // ui-error: E0624
-   |                ^^^^^^^^^^^^^^^^^^^^^^^ private method
-   |
-  ::: src/bluetooth/engine/direction_finding_workspace.rs
-   |
-   |     pub(crate) fn disabled_cte_descriptor(&self) -> crate::bluetooth::DirectionFindingDescriptor {
-   |     -------------------------------------------------------------------------------------------- private method defined here
-
 error[E0624]: method `publish_scheduler_hardware_list_head` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:36:24
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:38:24
    |
-36 |       let _ = controller.publish_scheduler_hardware_list_head( // ui-error: E0624
+38 |       let _ = controller.publish_scheduler_hardware_list_head( // ui-error: E0624
    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private method
    |
   ::: src/bluetooth.rs
@@ -69,9 +96,9 @@ error[E0624]: method `publish_scheduler_hardware_list_head` is private
    | |____________________________________________________- private method defined here
 
 error[E0599]: no associated function or constant named `base` found for type parameter `S` in the current scope
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:41:16
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:43:16
    |
-40 | pub fn raw_base<S: ControllerDmaSpace>() {
+42 | pub fn raw_base<S: ControllerDmaSpace>() {
    |                 - associated function or constant `base` not found for this type parameter
-41 |     let _ = S::base(&0); // ui-error: E0599
+43 |     let _ = S::base(&0); // ui-error: E0599
    |                ^^^^ associated function or constant not found in `S`

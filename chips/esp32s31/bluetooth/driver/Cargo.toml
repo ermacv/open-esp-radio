@@ -16,6 +16,7 @@ oer-time = { path = "../../../../portable/time" }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 
 [dev-dependencies]
+bytemuck = { version = "1.25.2", default-features = false }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 

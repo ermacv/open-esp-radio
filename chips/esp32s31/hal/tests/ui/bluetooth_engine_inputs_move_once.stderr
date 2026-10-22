@@ -1,0 +1,23 @@
+error[E0382]: use of moved value: `clocked`
+  --> tests/ui/bluetooth_engine_inputs_move_once.rs:19:10
+   |
+ 9 |     clocked: ClockedOwner,
+   |     ------- move occurs because `clocked` has type `ClockedOwner`, which does not implement the `Copy` trait
+...
+16 |         clocked, arena, pool, epoch, config,
+   |         ------- value moved here
+...
+19 |     drop(clocked); // ui-error: E0382
+   |          ^^^^^^^ value used here after move
+
+error[E0382]: use of moved value: `arena`
+  --> tests/ui/bluetooth_engine_inputs_move_once.rs:21:10
+   |
+10 |     arena: Placed<BluetoothArena<0, 1, 2, 4, 4>>,
+   |     ----- move occurs because `arena` has type `Placed<((oer_esp32s31_hal::bluetooth::engine::ble_phy_engine::BlePhyEngineStorage, (oer_esp32s31_hal::bluetooth::engine::direction_finding_workspace::DirectionFindingWorkspaceStorage, LeDeviceTableStorage)), ((SchedulerRolePoolStorage<DtmStorage, 1>, SchedulerRolePoolStorage<LegacyAdvertisingStorage, 0>), ((SchedulerRolePoolStorage<LegacyConnectableAdvertisingStorage, 1>, SchedulerRolePoolStorage<LegacyScanStorage, 1>), (SchedulerRolePoolStorage<PeripheralConnectionStorage, 2>, (LeRxChainStorage<4>, LeRxChainStorage<4>)))))>`, which does not implement the `Copy` trait
+...
+16 |         clocked, arena, pool, epoch, config,
+   |                  ----- value moved here
+...
+21 |     drop(arena); // ui-error: E0382
+   |          ^^^^^ value used here after move

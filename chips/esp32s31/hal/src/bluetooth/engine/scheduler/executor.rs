@@ -317,6 +317,10 @@ impl<I: Copy + Eq, const CAPACITY: usize> SchedulerExecutor<I, CAPACITY> {
         Ok(())
     }
 
+    pub(crate) fn retirement_ready(&self) -> bool {
+        self.stopped.is_some() && self.transaction.is_none() && self.list.is_empty()
+    }
+
     /// The stopped receipt the executor holds.
     pub const fn stopped(&self) -> Option<&BluetoothSchedulerStopped> {
         self.stopped.as_ref()

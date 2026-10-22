@@ -1,6 +1,6 @@
 use crate::interrupt::{SchedulerWakeCell, SchedulerWorkerWakeClass};
 
-use oer_esp32s31_hal::bluetooth::BluetoothSchedulerFinishedListObservation;
+use oer_esp32s31_hal::bluetooth::engine::EngineFinishedListObservation;
 
 use super::{
     SchedulerFinishedListBackend, SchedulerFinishedListCaptureError, SchedulerFinishedListWorker,
@@ -8,11 +8,11 @@ use super::{
 };
 
 struct Backend {
-    observation: Option<BluetoothSchedulerFinishedListObservation>,
+    observation: Option<EngineFinishedListObservation>,
 }
 
 impl SchedulerFinishedListBackend for Backend {
-    fn transfer_scheduler_finished_lists(&mut self) -> BluetoothSchedulerFinishedListObservation {
+    fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation {
         self.observation.take().expect("one scripted transfer")
     }
 }
@@ -20,7 +20,7 @@ impl SchedulerFinishedListBackend for Backend {
 fn backend(lists: &[u8]) -> Backend {
     Backend {
         observation: Some(
-            BluetoothSchedulerFinishedListObservation::from_lists_for_host_test(lists)
+            EngineFinishedListObservation::from_lists_for_host_test(lists)
                 .expect("semantic list set is valid"),
         ),
     }
@@ -101,4 +101,21 @@ fn sole_list_zero_exhausts_the_capture() {
     assert_list(worker.step(), 0, false);
     assert!(!worker.is_active());
     assert_eq!(worker.step(), SchedulerFinishedListWorkerStep::Idle);
+}
+
+#[test]
+fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_receipt() {
+    use oer_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
+    let (_, partitions) =
+        RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
+    let (mut engine, _interrupts) =
+        crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
+    let mut worker = SchedulerFinishedListWorker::new();
+    assert_eq!(
+        worker.capture_stopped(&mut engine),
+        Err(SchedulerFinishedListCaptureError::SchedulerNotStopped)
+    );
+    assert!(!worker.is_active());
+    engine.stopped_for_host_test();
+    assert!(engine.scheduler_is_stopped());
 }

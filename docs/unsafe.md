@@ -81,15 +81,18 @@ smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
 `oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
-Its component owners retain placed graphs and private bindings. The codecs
+One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
+its private components retain graph bindings. The codecs
 and scheduler lists encode the addresses the controller follows and hold the
 narrow unsafe publication boundary. Driver role builders select detached
 values, never layout references; HAL checks their binding anchors before
 writing them. Pool and epoch brands bind each affine lease to its owner;
 logical item identities also carry an acquisition generation.
-The driver's PHY initialization and shutdown retain separate PHY and DF
-owners. Address publication goes through the corresponding graph owner;
-standalone raw proof constructors and address getters are private. Opaque
+The same engine moves through initialization, activation, scheduler workers,
+stop and reset. PHY/DF owners cannot be detached. Address publication and
+completion return go through the engine; raw proofs and address getters stay
+private. Finished-list receipts carry the capturing engine installation epoch, so a
+fence from before reset cannot authorize a later installation's completion. Opaque
 projections and public scheduler Debug output do not expose physical links.
 `scheduler::hardware::live` publishes list-zero items only after resolving
 each address to a submitted item of the `'static` scheduler pools, in the
@@ -99,7 +102,17 @@ the storage the hardware is pointed at (`BlePhyHardwareObjects`,
 `DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`),
 whose constructor is unsafe; the HAL publications that take them are safe.
 The private placement adapter consumes `Placed`, projects fields within its
-allocation and calls the HAL's typed-address constructors. Its range metadata
+allocation and calls the HAL's typed-address constructors. `engine::arena`
+retains the root pointer, then derives every field borrow from that pointer.
+After a verified reset, consuming all graph owners ends their borrows; the
+backing is dropped in place to end its pin contract and zero-initialized in
+place before returning the original `Placed` allocation. No field reference
+escapes this return. Constructor refusal returns both original inputs before
+mutation. Unconfirmed stop and reset failure retain the whole graph with its
+register partitions in absorbing quarantine; Drop never returns a placement.
+The adjacent `engine::owner::tests` cover exact-allocation retry, completion,
+stop, reset, stale epochs and both terminal failure paths; paired UI cases
+cover moved inputs, private custody and stale leases. Its range metadata
 holds no reference that could alias the retained owner. The RX byte storage's
 `Zeroable` implementation only permits zero initialization of transparent
 volatile byte cells; it grants no concurrent access.

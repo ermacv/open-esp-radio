@@ -496,7 +496,7 @@ pub struct LeRxChain<const PACKETS: usize> {
 impl<const PACKETS: usize> LeRxChain<PACKETS> {
     /// Claim a linker-proven receive arena and initialize its chain.
     /// Publish only this retained chain, with its class-specific opcode policy.
-    pub fn publish_initial_head(
+    pub(crate) fn publish_initial_head(
         &self,
         controller: &mut crate::bluetooth::ControllerHal<'_>,
     ) -> crate::bluetooth::RxMemoryListPublished {

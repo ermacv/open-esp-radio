@@ -1,15 +1,18 @@
 //! Owned BLE PHY engine activation after common PHY and BTBB initialization.
 
 #[cfg(target_arch = "riscv32")]
+use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::power::PlatformClockBackend;
 #[cfg(target_arch = "riscv32")]
 use oer_interrupt_table::signal::SignalExecutor;
 
 #[cfg(target_arch = "riscv32")]
 use crate::{phy::ControllerPhyJoined, resources::InterruptBankOwner};
-#[cfg(any(target_arch = "riscv32", test))]
+#[cfg(target_arch = "riscv32")]
 use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
-#[cfg(any(target_arch = "riscv32", test))]
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ControllerPublicAddress;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
@@ -17,28 +20,8 @@ use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
 use oer_esp32s31_hal::bluetooth::engine::BlePhyLe1MPacketStartCalibration;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::engine::{
-    BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceLink,
     LePacketCapturedTime, PeripheralConnectionCapturedAnchorTime,
 };
-
-/// Controller-global DF storage after its disabled-CTE descriptor is visible to hardware.
-///
-/// The memory and exact PAC publication proof remain joined for the complete
-/// powered epoch. Only an opaque ordinary-role link can be copied out; CPU
-/// access and raw descriptor images remain inaccessible.
-#[must_use = "hardware-owned direction-finding storage must remain retained"]
-#[cfg(target_arch = "riscv32")]
-pub(crate) struct DirectionFindingWorkspaceHardwareOwned {
-    pub(crate) storage: DirectionFindingWorkspaceCpuOwned,
-    pub(crate) _publication: oer_esp32s31_hal::bluetooth::DirectionFindingDisabledBaselineOwner,
-}
-
-#[cfg(target_arch = "riscv32")]
-impl DirectionFindingWorkspaceHardwareOwned {
-    const fn link(&self) -> DirectionFindingWorkspaceLink {
-        self.storage.link()
-    }
-}
 
 /// Observation that the source-owned normal BLE PHY transaction completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -134,9 +117,9 @@ impl BlePhyTimingAuthority {
 
 /// Powered Controller after BLE PHY init and public-address publication.
 ///
-/// The address-bound environment, resolving-list storage and the PHY
-/// membership stay together in [`BlePhyRetainedOwners`] for the whole
-/// hardware epoch, with the affine standalone always-awake profile selection.
+/// The task's owning HAL engine retains the complete address-bound arena;
+/// this state also retains the shared PHY membership for the whole hardware
+/// epoch, with the affine standalone always-awake profile selection.
 /// That selection performs no RF MMIO and is not an RF-ready or
 /// completed-time proof. This state does not claim that an interrupt route,
 /// packet engine, Link Layer role, advertising set, scanner, connection, or
@@ -147,49 +130,34 @@ pub struct ControllerBlePhyEngineInitialized<
     'cells,
     const MODEM_TIMER_CAPACITY: usize,
     X: SignalExecutor,
+    M: ControllerMemory,
 > {
     controller:
-        crate::low_power::ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
-    retained: BlePhyRetainedOwners,
+        crate::low_power::ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
+    membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
     report: BlePhyInitializationReport,
-}
-
-/// PHY membership and the BLE PHY/DF allocation graph still referenced by
-/// the Controller.
-///
-/// The runtime split hands it out by value; the Controller shutdown consumes
-/// it, leaving the domain and returning the allocations only after the
-/// Controller reset.
-#[cfg(target_arch = "riscv32")]
-#[must_use = "the BLE PHY graph must return through the Controller shutdown"]
-pub struct BlePhyRetainedOwners {
-    pub(crate) membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
-    pub(crate) storage: BlePhyEngineCpuOwned,
-    pub(crate) direction_finding: DirectionFindingWorkspaceHardwareOwned,
 }
 
 /// Hardware owners, software endpoints and retained graph of one activated
 /// epoch.
 #[cfg(target_arch = "riscv32")]
 #[must_use = "every activated owner belongs to the running epoch"]
-pub struct BlePhyRuntime<'runtime, const MT: usize, X: SignalExecutor> {
+pub struct BlePhyRuntime<'runtime, const MT: usize, X: SignalExecutor, M: ControllerMemory> {
     /// Task, interrupt and modem-timer endpoints.
-    pub endpoints: crate::low_power::ControllerRuntimeEndpoints<'runtime, MT, X>,
+    pub endpoints: crate::low_power::ControllerRuntimeEndpoints<'runtime, MT, X, M>,
     /// Controller interrupt output, prepared for stable ISR storage.
     pub output: oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     /// Initialized low-power timer hardware, not yet started.
     pub timer: ModemLpTimerLowPowerHardwareInitializedOwner,
     /// Packet-start calibration of this PHY.
     pub timing: BlePhyTimingAuthority,
-    /// PHY membership and BLE PHY/DF storage, for the shutdown.
-    pub retained: BlePhyRetainedOwners,
-    /// The DF workspace link ordinary roles reference.
-    pub direction_finding: DirectionFindingWorkspaceLink,
+    /// Shared PHY membership, returned only through the shutdown.
+    pub membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
 }
 
 #[cfg(target_arch = "riscv32")]
-impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
-    ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X>
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: ControllerMemory>
+    ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>
 {
     /// Observe completion of the source-owned normal BLE PHY transaction.
     pub const fn report(&self) -> BlePhyInitializationReport {
@@ -204,10 +172,10 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
     /// is the matching Controller epoch. The timer is returned unstarted and
     /// only with the prepared output, so it cannot be started before the
     /// output.
-    pub fn activate(self) -> BlePhyRuntime<'cells, MODEM_TIMER_CAPACITY, X> {
+    pub fn activate(self) -> BlePhyRuntime<'cells, MODEM_TIMER_CAPACITY, X, M> {
         let Self {
             mut controller,
-            retained,
+            membership,
             report: _,
         } = self;
         let interrupts: InterruptBankOwner = controller.take_interrupt_owner();
@@ -216,22 +184,25 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
         // the bank has just left its one-shot custody, so all three CPU
         // routes remain inactive.
         let output = interrupts.prepare_controller_output();
-        let timing = BlePhyTimingAuthority::new(retained.storage.le_1m_packet_start_calibration());
-        let direction_finding = retained.direction_finding.link();
+        let timing = BlePhyTimingAuthority::new(
+            controller
+                .task_mut()
+                .engine()
+                .le_1m_packet_start_calibration(),
+        );
         BlePhyRuntime {
             endpoints: controller.split_runtime(),
             output,
             timer,
             timing,
-            retained,
-            direction_finding,
+            membership,
         }
     }
 }
 
 #[cfg(target_arch = "riscv32")]
-impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
-    ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY, X>
+impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: ControllerMemory>
+    ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY, X, M>
 {
     /// Publish the recovered BLE PHY register transaction while consuming and
     /// retaining the complete address-bound allocation graph. The BLE base
@@ -247,77 +218,43 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
     pub fn initialize_ble_phy_engine<B: PlatformClockBackend, T>(
         mut self,
         radio: &mut oer_esp32s31_hal::domain::RadioDomain<B, T>,
-        storage: BlePhyEngineCpuOwned,
-        direction_finding: DirectionFindingWorkspaceCpuOwned,
         public_address: BluetoothPublicDeviceAddress,
-    ) -> ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
-        let controller = &mut self.controller;
-        let report = apply_register_init_then_public_address(
-            &storage,
-            public_address,
-            controller,
-            |controller, objects| {
-                // `self` retains the powered scheduler, low-power owners and
-                // the PHY/BTBB membership; `storage` is moved into the
-                // return state.
-                controller
-                    .task_mut()
-                    .enable_ble_base_stack_hardware(radio, objects);
-            },
-            |controller, address| {
-                controller.task_mut().program_public_device_address(address);
-            },
-        );
-        // The complete powered Controller remains in `self`; the workspace is
-        // consumed into the returned state with the PAC publication proof.
-        let publication = self
-            .controller
-            .task_mut()
-            .prepare_direction_finding_disabled_baseline(&direction_finding);
-
+    ) -> Result<
+        ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
+        ControllerBlePhyInitializationFailure<'cells, MODEM_TIMER_CAPACITY, X, M>,
+    > {
+        if let Err(error) = self.controller.task_mut().engine().initialize_ble_phy(
+            radio,
+            ControllerPublicAddress::from_canonical_bytes(public_address.canonical_bytes()),
+        ) {
+            return Err(ControllerBlePhyInitializationFailure {
+                error,
+                _controller: self,
+            });
+        }
         let ControllerPhyJoined {
             controller,
             membership,
         } = self;
-        ControllerBlePhyEngineInitialized {
+        Ok(ControllerBlePhyEngineInitialized {
             controller,
-            retained: BlePhyRetainedOwners {
-                membership,
-                storage,
-                direction_finding: DirectionFindingWorkspaceHardwareOwned {
-                    storage: direction_finding,
-                    _publication: publication,
-                },
-            },
-            report,
-        }
+            membership,
+            report: BlePhyInitializationReport,
+        })
     }
-}
-
-#[cfg(any(target_arch = "riscv32", test))]
-fn apply_register_init_then_public_address<T>(
-    storage: &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned,
-    public_address: BluetoothPublicDeviceAddress,
-    target: &mut T,
-    initialize: impl FnOnce(&mut T, &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned),
-    publish_address: impl FnOnce(&mut T, ControllerPublicAddress),
-) -> BlePhyInitializationReport {
-    let report = apply_register_init(storage, |objects| initialize(target, objects));
-    publish_address(
-        target,
-        ControllerPublicAddress::from_canonical_bytes(public_address.canonical_bytes()),
-    );
-    report
-}
-
-#[cfg(any(target_arch = "riscv32", test))]
-fn apply_register_init(
-    storage: &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned,
-    initialize: impl FnOnce(&oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned),
-) -> BlePhyInitializationReport {
-    initialize(storage);
-    BlePhyInitializationReport
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(target_arch = "riscv32")]
+#[must_use]
+pub struct ControllerBlePhyInitializationFailure<
+    'cells,
+    const MT: usize,
+    X: SignalExecutor,
+    M: ControllerMemory,
+> {
+    pub error: oer_esp32s31_hal::bluetooth::engine::EngineInitError,
+    _controller: ControllerPhyJoined<'cells, MT, X, M>,
+}
