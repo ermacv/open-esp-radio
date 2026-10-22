@@ -6,17 +6,18 @@
 //! which returns once the scheduler is idle or both command engines report
 //! idle, then publishes command zero and observes it until the scheduler is
 //! idle or command zero reports its result. The vendor polls inside one
-//! critical section; here every step is finite, serialized with interrupt
-//! service, and the caller owns the deadline.
+//! critical section; here every step is finite, sequenced through durable P3 replies, and the caller owns the deadline.
 
 use oer_esp32s31_pac::{
-    BluetoothSchedulerExecutionLockDisposition,
-    BluetoothSchedulerExecutionLockPublished, BluetoothSchedulerExecutionLockRequest,
-    BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
+    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockPublished,
+    BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerInsertionCommand,
+    BluetoothTaskRegisters,
 };
 
 #[cfg(feature = "bluetooth-engine")]
-use super::engine::scheduler::interrupt::{SchedulerDoorbell, SchedulerTaskHalf, SchedulerInterruptError};
+use super::engine::scheduler::interrupt::{
+    SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
+};
 #[cfg(test)]
 use crate::settle::Unsettled;
 
@@ -84,7 +85,9 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     type Published = BluetoothSchedulerExecutionLockPublished;
 
     async fn busy(&mut self) -> Result<bool, SchedulerInterruptError> {
-        self.interrupts.busy(self.bell).await
+        self.interrupts
+            .busy(self.bell)
+            .await
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -98,14 +101,15 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
         // list serialization contract for this exact request.
         unsafe { self.task.publish_scheduler_execution_lock(request) }
     }
-    async fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, SchedulerInterruptError> {
+    async fn observe(
+        &mut self,
+    ) -> Result<BluetoothSchedulerExecutionLockDisposition, SchedulerInterruptError> {
         let busy = self.interrupts.busy(self.bell).await?;
         Ok(self.task.observe_scheduler_execution_lock(busy))
     }
 }
 
-/// Advance one finite execution-lock step while both register owners are
-/// held.
+/// Advance one finite execution-lock step through the unique task request endpoint.
 #[cfg(feature = "bluetooth-engine")]
 pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     task: &mut BluetoothTaskRegisters,
@@ -121,7 +125,8 @@ pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
             interrupts,
             bell,
         },
-    ).await
+    )
+    .await
 }
 
 /// Clear command-zero START of a published execution lock.

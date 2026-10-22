@@ -123,6 +123,7 @@ pub struct Engine<M: ControllerMemory> {
     pub(super) epoch: EngineEpoch,
     pub(super) registers: TaskOwner,
     pub(super) memory: M,
+    pub(super) scheduler_interrupts: Option<scheduler::interrupt::SchedulerTaskHalf>,
     pub(super) direction_finding_publication:
         Option<crate::bluetooth::DirectionFindingDisabledBaselineOwner>,
     pub(super) faulted: bool,
@@ -236,6 +237,7 @@ impl<
         Ok((
             Self {
                 epoch: installation,
+                scheduler_interrupts: None,
                 registers,
                 direction_finding_publication: None,
                 faulted: false,

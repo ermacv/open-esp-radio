@@ -4,7 +4,9 @@
 //! interrupt-handler storage; the driver only publishes, dispatches through
 //! and restores them.
 
-use oer_esp32s31_hal::bluetooth::{InterruptRegistersOwner, ModemLpTimerInterruptReadyOwner};
+use super::ControllerInterruptHalf;
+use oer_esp32s31_hal::bluetooth::ModemLpTimerInterruptReadyOwner;
+use oer_interrupt_table::signal::SignalExecutor;
 
 use super::{NrtDefaultInterruptEpoch, PrimaryInterruptStep};
 
@@ -13,7 +15,7 @@ use super::{NrtDefaultInterruptEpoch, PrimaryInterruptStep};
 /// Implementations must either publish both owners atomically and return one
 /// affine lease, or return the storage value and both unchanged owners. This
 /// transition must not enable a CPU route; routing is a later lifecycle edge.
-pub trait InterruptOwnerStorage: Sized {
+pub trait InterruptOwnerStorage<X: SignalExecutor>: Sized {
     /// Affine proof that both owners remain in the implementation's storage.
     type Published;
     /// Exact pre-publication rejection reason.
@@ -22,14 +24,14 @@ pub trait InterruptOwnerStorage: Sized {
     /// Publish both owners without enabling any interrupt source.
     fn publish(
         self,
-        interrupts: InterruptRegistersOwner,
+        interrupts: ControllerInterruptHalf<X>,
         timer: ModemLpTimerInterruptReadyOwner,
     ) -> Result<
         Self::Published,
         (
             Self::Error,
             Self,
-            InterruptRegistersOwner,
+            ControllerInterruptHalf<X>,
             ModemLpTimerInterruptReadyOwner,
         ),
     >;
@@ -49,22 +51,25 @@ pub trait SharedInterruptDispatchStorage {
 
     /// Capture and acknowledge one default-profile NRT source-133 epoch.
     fn service_nrt_default_interrupt(&self) -> Result<NrtDefaultInterruptEpoch, Self::Error>;
+
+    /// Service one scheduler request after acknowledging the shared doorbell.
+    fn service_scheduler_doorbell(&self) -> Result<bool, Self::Error>;
 }
 
 /// Restore initialized register owners into the same lifetime-long ISR reservation.
 /// Implementations serialize both slots with route binding, reject live routes or
 /// occupied slots without mutation, and never issue another publication lease.
-pub trait InterruptOwnerRestartStorage {
+pub trait InterruptOwnerRestartStorage<X: SignalExecutor> {
     type RestartError;
     fn restore_initialized_interrupt_owners(
         &self,
-        interrupts: InterruptRegistersOwner,
+        interrupts: ControllerInterruptHalf<X>,
         timer: ModemLpTimerInterruptReadyOwner,
     ) -> Result<
         (),
         (
             Self::RestartError,
-            InterruptRegistersOwner,
+            ControllerInterruptHalf<X>,
             ModemLpTimerInterruptReadyOwner,
         ),
     >;

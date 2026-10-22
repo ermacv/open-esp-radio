@@ -120,7 +120,10 @@ fn an_unsettled_busy_sample_fails_the_step_without_publishing() {
         ..Model::default()
     };
     let mut published = None;
-    assert_eq!(crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)), Err(Unsettled));
+    assert_eq!(
+        crate::bluetooth::test_ready(super::step(request(), &mut published, &mut model)),
+        Err(Unsettled)
+    );
     assert_eq!(model.ops, [Op::Busy]);
     assert!(published.is_none());
 }

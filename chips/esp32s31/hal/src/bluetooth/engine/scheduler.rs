@@ -10,8 +10,8 @@ pub mod config;
 pub(crate) mod executor;
 #[cfg(any(target_arch = "riscv32", test))]
 pub(crate) mod hardware;
-pub mod list;
 pub mod interrupt;
+pub mod list;
 pub mod time;
 pub mod timing;
 pub mod window;
@@ -30,32 +30,6 @@ use crate::settle::SettleLimit;
 /// task.
 pub const DIAGNOSTIC_SETTLE: SettleLimit =
     SettleLimit::new(SettleLimit::MAX).expect("the longest settle is a valid limit");
-
-/// Stable task-side access to the shared interrupt owner.
-///
-/// This is deliberately separate from hard-handler dispatch. Implementations
-/// execute each operation synchronously while the owner stays in the same
-/// stable slot, serialized with live interrupt service.
-#[cfg(target_arch = "riscv32")]
-pub trait SchedulerRunInterruptStorage {
-    /// Exact reason the stable owner could not prepare scheduler interrupts.
-    type Error: Copy + ::core::fmt::Debug;
-
-    /// Clear stale dynamic sources and enable the scheduler-run groups.
-    fn prepare_scheduler_run_interrupts(
-        &self,
-    ) -> Result<crate::bluetooth::BluetoothSchedulerRunInterruptsPrepared, Self::Error>;
-
-    /// Run one finite operation on the stored interrupt owner, serialized
-    /// with interrupt service.
-    ///
-    /// When storage does not hold the owner, `value` returns unchanged.
-    fn with_interrupt_registers<T, R>(
-        &self,
-        value: T,
-        operation: impl FnOnce(&mut crate::bluetooth::InterruptRegistersOwner, T) -> R,
-    ) -> Result<R, T>;
-}
 
 #[cfg(any(target_arch = "riscv32", test))]
 pub use hardware::{SchedulerHardwareError, SchedulerStartError, SchedulerStopError};

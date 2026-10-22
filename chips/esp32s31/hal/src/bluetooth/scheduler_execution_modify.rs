@@ -9,16 +9,18 @@
 //! the request is not ready, and until the settle signal differs from 9. A
 //! marked attempt clears START and starts over. The vendor runs the attempts
 //! in one critical section with polling loops; here every step is finite,
-//! serialized with interrupt service, and the caller owns the deadline.
+//! sequenced through durable P3 replies, and the caller owns the deadline.
 
 use oer_esp32s31_pac::{
-    BluetoothSchedulerExecutionModifyDisposition,
-    BluetoothSchedulerExecutionModifyPublished, BluetoothSchedulerHardwareListIndex,
-    BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
+    BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
+    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerInsertionCommand,
+    BluetoothTaskRegisters,
 };
 
 #[cfg(feature = "bluetooth-engine")]
-use super::engine::scheduler::interrupt::{SchedulerDoorbell, SchedulerTaskHalf, SchedulerInterruptError};
+use super::engine::scheduler::interrupt::{
+    SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
+};
 #[cfg(test)]
 use crate::settle::Unsettled;
 
@@ -170,7 +172,9 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     type Published = BluetoothSchedulerExecutionModifyPublished;
 
     async fn busy(&mut self) -> Result<bool, SchedulerInterruptError> {
-        self.interrupts.busy(self.bell).await
+        self.interrupts
+            .busy(self.bell)
+            .await
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -219,8 +223,7 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     }
 }
 
-/// Advance one finite execution-modify step while both register owners are
-/// held.
+/// Advance one finite execution-modify step through the unique task request endpoint.
 #[cfg(feature = "bluetooth-engine")]
 pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     task: &mut BluetoothTaskRegisters,
@@ -241,7 +244,8 @@ pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
             interrupts,
             bell,
         },
-    ).await
+    )
+    .await
 }
 
 #[cfg(test)]

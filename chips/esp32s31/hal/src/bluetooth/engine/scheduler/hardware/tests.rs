@@ -6,7 +6,6 @@ use crate::bluetooth::{
     BluetoothSchedulerLockModifyObservation, BluetoothSchedulerSkipDisposition,
     BluetoothSchedulerSkipResult,
 };
-use crate::settle::Settle;
 
 use super::{
     SchedulerHardware, SchedulerHardwareBackend, SchedulerHardwareError, SchedulerPublications,
@@ -16,22 +15,6 @@ use crate::bluetooth::engine::scheduler::{
     SchedulerAction as Action, SchedulerIdleInsertion, SchedulerObservation,
     SchedulerTransactionFault, SchedulerWait,
 };
-
-/// The scripted backend samples nothing; its settle's clock is never read.
-struct Unread;
-
-impl oer_time::Clock for Unread {
-    fn now(&self) -> oer_time::Instant {
-        unreachable!("the scripted backend takes no diagnostic sample")
-    }
-}
-
-fn settle() -> Settle<'static, Unread> {
-    Settle::new(
-        crate::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE,
-        &Unread,
-    )
-}
 
 enum Units {}
 
@@ -91,13 +74,18 @@ impl SchedulerHardwareBackend for Recorder {
     fn index_cancellation(&mut self) {
         self.calls.push(Call::Action(Action::IndexCancellation));
     }
-    fn acknowledge_cancellation_source(&mut self, (): &()) -> Result<(), SchedulerHardwareError> {
+    async fn acknowledge_cancellation_source(
+        &mut self,
+        (): (),
+    ) -> Result<((), ()), SchedulerHardwareError> {
         if self.interrupts_missing {
-            return Err(SchedulerHardwareError::InterruptOwnerUnavailable);
+            return Err(SchedulerHardwareError::Interrupt(
+                super::super::interrupt::SchedulerInterruptError::NotInstalled,
+            ));
         }
         self.calls
             .push(Call::Action(Action::AcknowledgeCancellationSource));
-        Ok(())
+        Ok(((), ()))
     }
     fn request_cancellation(&mut self, (): (), (): ()) {
         self.calls.push(Call::Action(Action::RequestCancellation));
@@ -111,10 +99,9 @@ impl SchedulerHardwareBackend for Recorder {
     fn clear_skip(&mut self, (): ()) {
         self.calls.push(Call::Action(Action::ClearSkip));
     }
-    fn observe<C: oer_time::Clock + ?Sized>(
+    async fn observe(
         &mut self,
         wait: SchedulerWait,
-        _settle: Settle<'_, C>,
         _lock: Option<&mut ()>,
         _modify: Option<&mut ()>,
         _cancellation: Option<&mut ()>,
@@ -123,7 +110,10 @@ impl SchedulerHardwareBackend for Recorder {
         self.calls.push(Call::Observe(wait));
         Ok(self.observations.remove(0))
     }
-    fn start(&mut self, head: ControllerSramLinkAddress) -> Result<(), SchedulerStartError<()>> {
+    async fn start(
+        &mut self,
+        head: ControllerSramLinkAddress,
+    ) -> Result<(), SchedulerStartError<()>> {
         self.calls.push(Call::Start(head));
         Ok(())
     }
@@ -138,7 +128,7 @@ fn perform(
     backend: &mut Recorder,
     actions: &[Action],
 ) -> Result<(), SchedulerHardwareError> {
-    hardware.perform_actions(backend, actions.iter().copied())
+    crate::bluetooth::test_ready(hardware.perform_actions(backend, actions.iter().copied()))
 }
 
 fn lock_modify(start: bool) -> SchedulerObservation {
@@ -166,8 +156,7 @@ fn live_insertion_holds_each_publication_until_its_release() {
         &[Action::PublishExecutionLock(link(0))],
     )
     .unwrap();
-    hardware
-        .observe(&mut backend, SchedulerWait::ExecutionLock, settle())
+    crate::bluetooth::test_ready(hardware.observe(&mut backend, SchedulerWait::ExecutionLock))
         .unwrap();
     perform(
         &mut hardware,
@@ -180,11 +169,9 @@ fn live_insertion_holds_each_publication_until_its_release() {
         perform(&mut hardware, &mut backend, &[Action::ReleaseExecutionLock]),
         Err(SchedulerHardwareError::OutOfOrder)
     );
-    hardware
-        .observe(&mut backend, SchedulerWait::LockModify, settle())
+    crate::bluetooth::test_ready(hardware.observe(&mut backend, SchedulerWait::LockModify))
         .unwrap();
-    hardware
-        .observe(&mut backend, SchedulerWait::LockModify, settle())
+    crate::bluetooth::test_ready(hardware.observe(&mut backend, SchedulerWait::LockModify))
         .unwrap();
     perform(&mut hardware, &mut backend, &[Action::ReleaseExecutionLock]).unwrap();
     assert!(hardware.is_quiet());
@@ -214,7 +201,9 @@ fn a_step_out_of_order_changes_no_register() {
         Err(SchedulerHardwareError::OutOfOrder)
     );
     assert_eq!(
-        hardware.observe(&mut backend, SchedulerWait::ExecutionModify, settle()),
+        crate::bluetooth::test_ready(
+            hardware.observe(&mut backend, SchedulerWait::ExecutionModify,)
+        ),
         Err(SchedulerHardwareError::NotAwaiting(
             SchedulerWait::ExecutionModify
         ))
@@ -237,8 +226,7 @@ fn cancellation_opens_the_hold_skips_and_closes_it() {
         ..Recorder::default()
     };
     // Cancellation first waits for any earlier lock-modify request.
-    hardware
-        .observe(&mut backend, SchedulerWait::LockModify, settle())
+    crate::bluetooth::test_ready(hardware.observe(&mut backend, SchedulerWait::LockModify))
         .unwrap();
     perform(
         &mut hardware,
@@ -250,8 +238,7 @@ fn cancellation_opens_the_hold_skips_and_closes_it() {
         ],
     )
     .unwrap();
-    hardware
-        .observe(&mut backend, SchedulerWait::Cancellation, settle())
+    crate::bluetooth::test_ready(hardware.observe(&mut backend, SchedulerWait::Cancellation))
         .unwrap();
     perform(
         &mut hardware,
@@ -259,9 +246,7 @@ fn cancellation_opens_the_hold_skips_and_closes_it() {
         &[Action::PublishSkip(link(0x40))],
     )
     .unwrap();
-    hardware
-        .observe(&mut backend, SchedulerWait::Skip, settle())
-        .unwrap();
+    crate::bluetooth::test_ready(hardware.observe(&mut backend, SchedulerWait::Skip)).unwrap();
     assert_eq!(
         perform(&mut hardware, &mut backend, &[Action::ReleaseCancellation]),
         Err(SchedulerHardwareError::OutOfOrder)
@@ -293,7 +278,9 @@ fn a_missing_interrupt_owner_stops_the_step_at_the_acknowledgement() {
                 Action::RequestCancellation,
             ],
         ),
-        Err(SchedulerHardwareError::InterruptOwnerUnavailable)
+        Err(SchedulerHardwareError::Interrupt(
+            super::super::interrupt::SchedulerInterruptError::NotInstalled
+        ))
     );
     assert_eq!(backend.calls, [Call::Action(Action::IndexCancellation)]);
     assert!(!hardware.is_quiet());
@@ -340,7 +327,9 @@ fn the_scheduler_starts_only_without_a_transaction() {
     )
     .unwrap();
     assert_eq!(
-        hardware.start(&mut backend, SchedulerIdleInsertion { head: link(0) }),
+        crate::bluetooth::test_ready(
+            hardware.start(&mut backend, SchedulerIdleInsertion { head: link(0) })
+        ),
         Err(SchedulerStartError::TransactionActive)
     );
     perform(
@@ -350,9 +339,10 @@ fn the_scheduler_starts_only_without_a_transaction() {
     )
     .unwrap();
     assert!(!hardware.has_run());
-    hardware
-        .start(&mut backend, SchedulerIdleInsertion { head: link(0) })
-        .unwrap();
+    crate::bluetooth::test_ready(
+        hardware.start(&mut backend, SchedulerIdleInsertion { head: link(0) }),
+    )
+    .unwrap();
     assert!(hardware.has_run());
     assert_eq!(backend.calls.last(), Some(&Call::Start(link(0))));
 }

@@ -1,16 +1,20 @@
 //! Address publication and completion return by the arena's single owner.
+//!
+//! Scheduler operations await typed P3 replies without lending registers.
+//! The caller bounds the whole operation with its deadline. Dropping an
+//! exchange while it awaits a reply quarantines this engine's publications;
+//! its static request slot and complete arena remain retained.
 
+use super::scheduler::interrupt::{SchedulerDoorbell, SchedulerInterruptError};
 use super::scheduler::{
-    SchedulerCancelError, SchedulerHardwareError, SchedulerNext, SchedulerRunInterruptStorage,
-    SchedulerStartError, SchedulerStep, SchedulerSubmitError, SchedulerTransactionFault,
-    SchedulerWait,
+    SchedulerCancelError, SchedulerHardwareError, SchedulerNext, SchedulerStartError,
+    SchedulerStep, SchedulerSubmitError, SchedulerTransactionFault, SchedulerWait,
 };
 use super::*;
 use crate::bluetooth::ControllerHalBorrow;
-use crate::settle::Settle;
 
 #[derive(Debug)]
-pub enum EngineScheduleError<E> {
+pub enum EngineScheduleError {
     Quarantined,
     NotInitialized,
     Pool(SchedulerPoolError),
@@ -18,7 +22,7 @@ pub enum EngineScheduleError<E> {
     Cancel(SchedulerCancelError<SchedulerItemId>),
     Transaction(SchedulerTransactionFault),
     Hardware(SchedulerHardwareError),
-    Start(SchedulerStartError<E>),
+    Start(SchedulerStartError<SchedulerInterruptError>),
     NotStopped,
 }
 
@@ -43,7 +47,7 @@ impl<
 > Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>
 {
     pub fn publish_receive_chains(&mut self) -> Result<(), ReceivePublicationError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(ReceivePublicationError::Quarantined);
         }
         if !self.phy_initialized {
@@ -67,7 +71,7 @@ impl<
     }
 
     pub fn publish_scan_start(&mut self) -> Result<(), ReceivePublicationError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(ReceivePublicationError::Quarantined);
         }
         let scanning = self
@@ -100,11 +104,11 @@ impl<
         }
     }
 
-    fn perform<E>(
+    async fn perform(
         &mut self,
-        storage: &impl SchedulerRunInterruptStorage,
+        storage: &impl SchedulerDoorbell,
         step: &SchedulerStep<SchedulerItemId, Q>,
-    ) -> Result<SchedulerNext, EngineScheduleError<E>> {
+    ) -> Result<SchedulerNext, EngineScheduleError> {
         let items = SchedulerItemSpace::new()
             .with(&self.memory.dtm)
             .with(&self.memory.advertising)
@@ -115,10 +119,16 @@ impl<
             .hardware
             .perform_live(
                 &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineScheduleError::Hardware(
+                        SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+                    ))?,
                 storage,
                 &items,
                 step,
             )
+            .await
             .map_err(|error| {
                 self.faulted = true;
                 EngineScheduleError::Hardware(error)
@@ -130,15 +140,19 @@ impl<
     }
 
     /// Admit one prepared item. No raw head or physical action escapes HAL.
-    pub fn submit<S: SchedulerRunInterruptStorage>(
+    pub async fn submit<S: SchedulerDoorbell>(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         item: usize,
         storage: &S,
-        clock: &dyn oer_time::Clock,
-    ) -> Result<(SchedulerItemId, SchedulerNext), EngineScheduleError<S::Error>> {
-        if self.faulted {
+    ) -> Result<(SchedulerItemId, SchedulerNext), EngineScheduleError> {
+        if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_none() {
+            return Err(EngineScheduleError::Hardware(
+                SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+            ));
         }
         if !self.phy_initialized {
             return Err(EngineScheduleError::NotInitialized);
@@ -168,12 +182,21 @@ impl<
             .with(&self.memory.connectable)
             .with(&self.memory.scanning)
             .with(&self.memory.connections);
-        let snapshot = match self.memory.hardware.snapshot_live(
-            &mut self.registers.borrow_bluetooth_controller(),
-            storage,
-            &items,
-            Settle::new(super::scheduler::DIAGNOSTIC_SETTLE, clock),
-        ) {
+        let snapshot = match self
+            .memory
+            .hardware
+            .snapshot_live(
+                &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineScheduleError::Hardware(
+                        SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+                    ))?,
+                storage,
+                &items,
+            )
+            .await
+        {
             Ok(snapshot) => snapshot,
             Err(error) => {
                 self.return_item(id).map_err(EngineScheduleError::Pool)?;
@@ -194,7 +217,7 @@ impl<
                         return Err(EngineScheduleError::Submit(error));
                     }
                 };
-            let next = self.perform(storage, &step)?;
+            let next = self.perform(storage, &step).await?;
             Ok((id, next))
         } else {
             let insertion =
@@ -213,10 +236,18 @@ impl<
                 .hardware
                 .start_live(
                     &mut self.registers.borrow_bluetooth_controller(),
+                    self.scheduler_interrupts
+                        .as_mut()
+                        .ok_or(EngineScheduleError::Hardware(
+                            SchedulerHardwareError::Interrupt(
+                                SchedulerInterruptError::NotInstalled,
+                            ),
+                        ))?,
                     storage,
                     &items,
                     insertion,
                 )
+                .await
                 .map_err(|error| {
                     self.faulted = true;
                     EngineScheduleError::Start(error)
@@ -227,24 +258,33 @@ impl<
 
     /// One finite observation and publication step; the caller retains the
     /// deadline and waits on the existing timer/IRQ wake between steps.
-    pub fn advance<S: SchedulerRunInterruptStorage>(
+    pub async fn advance<S: SchedulerDoorbell>(
         &mut self,
         storage: &S,
         wait: SchedulerWait,
-        clock: &dyn oer_time::Clock,
-    ) -> Result<SchedulerNext, EngineScheduleError<S::Error>> {
-        if self.faulted {
+    ) -> Result<SchedulerNext, EngineScheduleError> {
+        if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_none() {
+            return Err(EngineScheduleError::Hardware(
+                SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+            ));
         }
         let observation = self
             .memory
             .hardware
             .observe_live(
                 &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineScheduleError::Hardware(
+                        SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+                    ))?,
                 storage,
                 wait,
-                Settle::new(super::scheduler::DIAGNOSTIC_SETTLE, clock),
             )
+            .await
             .map_err(|error| {
                 self.faulted = true;
                 EngineScheduleError::Hardware(error)
@@ -284,23 +324,34 @@ impl<
                 self.faulted = true;
                 self.memory.hardware.recover_live(
                     &mut self.registers.borrow_bluetooth_controller(),
+                    self.scheduler_interrupts
+                        .as_mut()
+                        .ok_or(EngineScheduleError::Hardware(
+                            SchedulerHardwareError::Interrupt(
+                                SchedulerInterruptError::NotInstalled,
+                            ),
+                        ))?,
                     storage,
                     fault,
                 );
                 return Err(EngineScheduleError::Transaction(fault));
             }
         };
-        self.perform(storage, &step)
+        self.perform(storage, &step).await
     }
 
-    pub fn cancel<S: SchedulerRunInterruptStorage>(
+    pub async fn cancel<S: SchedulerDoorbell>(
         &mut self,
         storage: &S,
         ids: &[SchedulerItemId],
-        clock: &dyn oer_time::Clock,
-    ) -> Result<SchedulerNext, EngineScheduleError<S::Error>> {
-        if self.faulted {
+    ) -> Result<SchedulerNext, EngineScheduleError> {
+        if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_none() {
+            return Err(EngineScheduleError::Hardware(
+                SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+            ));
         }
         let mut items = SchedulerItemSpace::new()
             .with(&self.memory.dtm)
@@ -313,10 +364,15 @@ impl<
             .hardware
             .snapshot_live(
                 &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineScheduleError::Hardware(
+                        SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+                    ))?,
                 storage,
                 &items,
-                Settle::new(super::scheduler::DIAGNOSTIC_SETTLE, clock),
             )
+            .await
             .map_err(|error| {
                 self.faulted = true;
                 EngineScheduleError::Hardware(error)
@@ -326,16 +382,20 @@ impl<
             .scheduler
             .begin_cancel(&mut items, &snapshot.busy, snapshot.head, ids)
             .map_err(EngineScheduleError::Cancel)?;
-        self.perform(storage, &step)
+        self.perform(storage, &step).await
     }
 
-    pub fn flush<S: SchedulerRunInterruptStorage>(
+    pub async fn flush<S: SchedulerDoorbell>(
         &mut self,
         storage: &S,
-        clock: &dyn oer_time::Clock,
-    ) -> Result<SchedulerNext, EngineScheduleError<S::Error>> {
-        if self.faulted {
+    ) -> Result<SchedulerNext, EngineScheduleError> {
+        if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_none() {
+            return Err(EngineScheduleError::Hardware(
+                SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+            ));
         }
         let items = SchedulerItemSpace::new()
             .with(&self.memory.dtm)
@@ -348,10 +408,15 @@ impl<
             .hardware
             .snapshot_live(
                 &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineScheduleError::Hardware(
+                        SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+                    ))?,
                 storage,
                 &items,
-                Settle::new(super::scheduler::DIAGNOSTIC_SETTLE, clock),
             )
+            .await
             .map_err(|error| {
                 self.faulted = true;
                 EngineScheduleError::Hardware(error)
@@ -361,17 +426,16 @@ impl<
             .scheduler
             .begin_flush(&items, &snapshot.busy)
             .map_err(|_| EngineScheduleError::Cancel(SchedulerCancelError::TransactionActive))?;
-        self.perform(storage, &step)
+        self.perform(storage, &step).await
     }
 
     /// Keep the stop receipt inside the engine that produced it.
-    pub fn step_stop<S: SchedulerRunInterruptStorage>(
+    pub async fn step_stop<S: SchedulerDoorbell>(
         &mut self,
         storage: &S,
         stop: crate::bluetooth::BluetoothSchedulerStop,
-        clock: &dyn oer_time::Clock,
     ) -> Result<EngineStopStep, EngineStopError> {
-        if self.faulted {
+        if self.is_quarantined() {
             return Err(EngineStopError::Quarantined);
         }
         let result = self
@@ -379,10 +443,17 @@ impl<
             .hardware
             .step_stop_live(
                 &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineStopError::Hardware(
+                        super::scheduler::SchedulerStopError::Interrupt(
+                            SchedulerInterruptError::NotInstalled,
+                        ),
+                    ))?,
                 storage,
                 stop,
-                Settle::new(super::scheduler::DIAGNOSTIC_SETTLE, clock),
             )
+            .await
             .map_err(|error| {
                 self.faulted = true;
                 EngineStopError::Hardware(error)
@@ -401,13 +472,17 @@ impl<
         }
     }
 
-    pub fn restart_if_idle<S: SchedulerRunInterruptStorage>(
+    pub async fn restart_if_idle<S: SchedulerDoorbell>(
         &mut self,
         storage: &S,
-        clock: &dyn oer_time::Clock,
-    ) -> Result<(), EngineScheduleError<S::Error>> {
-        if self.faulted {
+    ) -> Result<(), EngineScheduleError> {
+        if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_none() {
+            return Err(EngineScheduleError::Hardware(
+                SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+            ));
         }
         let items = SchedulerItemSpace::new()
             .with(&self.memory.dtm)
@@ -420,10 +495,15 @@ impl<
             .hardware
             .snapshot_live(
                 &mut self.registers.borrow_bluetooth_controller(),
+                self.scheduler_interrupts
+                    .as_mut()
+                    .ok_or(EngineScheduleError::Hardware(
+                        SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+                    ))?,
                 storage,
                 &items,
-                Settle::new(super::scheduler::DIAGNOSTIC_SETTLE, clock),
             )
+            .await
             .map_err(|error| {
                 self.faulted = true;
                 EngineScheduleError::Hardware(error)
@@ -437,10 +517,18 @@ impl<
                 .hardware
                 .start_live(
                     &mut self.registers.borrow_bluetooth_controller(),
+                    self.scheduler_interrupts
+                        .as_mut()
+                        .ok_or(EngineScheduleError::Hardware(
+                            SchedulerHardwareError::Interrupt(
+                                SchedulerInterruptError::NotInstalled,
+                            ),
+                        ))?,
                     storage,
                     &items,
                     insertion,
                 )
+                .await
                 .map_err(|error| {
                     self.faulted = true;
                     EngineScheduleError::Start(error)
@@ -449,12 +537,17 @@ impl<
         Ok(())
     }
 
-    pub fn resume<S: SchedulerRunInterruptStorage>(
+    pub async fn resume<S: SchedulerDoorbell>(
         &mut self,
         storage: &S,
-    ) -> Result<(), EngineScheduleError<S::Error>> {
-        if self.faulted {
+    ) -> Result<(), EngineScheduleError> {
+        if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
+        }
+        if self.scheduler_interrupts.is_none() {
+            return Err(EngineScheduleError::Hardware(
+                SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
+            ));
         }
         let items = SchedulerItemSpace::new()
             .with(&self.memory.dtm)
@@ -472,10 +565,18 @@ impl<
                 .hardware
                 .start_live(
                     &mut self.registers.borrow_bluetooth_controller(),
+                    self.scheduler_interrupts
+                        .as_mut()
+                        .ok_or(EngineScheduleError::Hardware(
+                            SchedulerHardwareError::Interrupt(
+                                SchedulerInterruptError::NotInstalled,
+                            ),
+                        ))?,
                     storage,
                     &items,
                     insertion,
                 )
+                .await
                 .map_err(|error| {
                     self.faulted = true;
                     EngineScheduleError::Start(error)

@@ -59,9 +59,22 @@ clocked client; constructor refusal returns its untouched inputs. Terminal
 failures retain every hardware partition and the arena in absorbing
 quarantine. There is no reset-failure extraction or late-stop recovery.
 
-The scheduler still lends the stable interrupt owner inside HAL, under the
-Sources exception. Its execution lock is the hardware protocol lock. The
-scheduler and modem-timer wake cells retain their `IrqSignal` handoff.
+One `ControllerInterruptHalf` holds the IRQ register owner and the HAL's
+request endpoint in stable P3 storage. Primary, NRT and shared radio doorbell
+entries service that same half. The owning task engine at P2 retains the arena
+and every scheduler transaction; it has no access to the IRQ register owner.
+`Engine::install_scheduler_interrupts` binds a static single-request channel
+to its installation epoch. `SchedulerDoorbell` rings the image's shared
+`FROM_CPU` line 3 and waits on a dedicated P2 `IrqSignal`. The shared handler
+acknowledges the software interrupt before visiting the radio halves.
+
+IRQ-bank changes and fresh diagnostic samples return durable, affine replies.
+The installation epoch and a command number that never wraps or resets reject
+stale replies. A dropped pending exchange retains its seat and prevents
+retirement. Stop and route removal return the P3 endpoint; both quiet halves
+reunite before reset and channel reuse. Scheduler hardware locks retain their
+protocol meaning. Scheduler and modem-timer wake cells keep their independent
+`IrqSignal` handoffs.
 
 ## Controller time
 

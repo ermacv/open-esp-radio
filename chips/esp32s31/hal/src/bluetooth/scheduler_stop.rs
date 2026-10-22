@@ -1,16 +1,17 @@
 //! Finite scheduler lifecycle sequence from the reviewed common-library stop.
 //!
 //! Every pending result retains the sequence. The caller owns the absolute
-//! deadline and must serialize each step with interrupt service. Neither an
+//! deadline and waits for each typed P3 acknowledgement. Neither an
 //! idle sample nor this sequence alone releases descriptor/software ownership.
 
 use oer_esp32s31_pac::{
-    BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped,
-    BluetoothTaskRegisters,
+    BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped, BluetoothTaskRegisters,
 };
 
 #[cfg(feature = "bluetooth-engine")]
-use super::engine::scheduler::interrupt::{SchedulerDoorbell, SchedulerTaskHalf, SchedulerInterruptError};
+use super::engine::scheduler::interrupt::{
+    SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
+};
 #[cfg(test)]
 use crate::settle::Unsettled;
 
@@ -99,7 +100,9 @@ struct Hardware<'a, D> {
 
 #[cfg(feature = "bluetooth-engine")]
 impl<D: SchedulerDoorbell> Hardware<'_, D> {
-    async fn sample_busy(&mut self) -> Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError> {
+    async fn sample_busy(
+        &mut self,
+    ) -> Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError> {
         self.interrupts.busy(self.bell).await
     }
 }
@@ -123,13 +126,15 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     fn request(&mut self) {
         self.task.publish_scheduler_lifecycle_request();
     }
-    async fn confirm_stopped(&mut self) -> Result<Option<BluetoothSchedulerStopped>, SchedulerInterruptError> {
+    async fn confirm_stopped(
+        &mut self,
+    ) -> Result<Option<BluetoothSchedulerStopped>, SchedulerInterruptError> {
         let busy = self.sample_busy().await?;
         Ok(self.task.confirm_scheduler_stopped(busy))
     }
 }
 
-/// Advance one finite common-stop step while both register owners are held.
+/// Advance one finite common-stop step through the unique task request endpoint.
 #[cfg(feature = "bluetooth-engine")]
 pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     task: &mut BluetoothTaskRegisters,
@@ -145,7 +150,9 @@ pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
                 interrupts,
                 bell,
             },
-        ).await? {
+        )
+        .await?
+        {
             Progress::Pending(stop) => BluetoothSchedulerStopStep::Pending(stop),
             Progress::Stopped(stopped) => BluetoothSchedulerStopStep::Stopped(stopped),
         },

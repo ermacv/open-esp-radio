@@ -61,7 +61,8 @@ fn model(busy: &[bool], c0: bool, c1: bool) -> Model {
 fn idle_has_no_lifecycle_side_effect() {
     let mut hw = model(&[false], false, false);
     assert!(matches!(
-        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw)).unwrap(),
+        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw))
+            .unwrap(),
         Progress::Stopped(())
     ));
     assert_eq!(hw.trace, ["busy", "fence"]);
@@ -70,7 +71,10 @@ fn idle_has_no_lifecycle_side_effect() {
 #[test]
 fn silence_stop_waits_for_preamble_and_publishes_only_once() {
     let mut hw = model(&[true, true], false, false);
-    let Progress::Pending(stop) = crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw)).unwrap() else {
+    let Progress::Pending(stop) =
+        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw))
+            .unwrap()
+    else {
         panic!()
     };
     assert_eq!(
@@ -81,7 +85,8 @@ fn silence_stop_waits_for_preamble_and_publishes_only_once() {
     hw.c1 = true;
     hw.busy.extend([Some(true), Some(true)]);
     hw.trace.clear();
-    let Progress::Pending(stop) = crate::bluetooth::test_ready(super::step(stop, &mut hw)).unwrap() else {
+    let Progress::Pending(stop) = crate::bluetooth::test_ready(super::step(stop, &mut hw)).unwrap()
+    else {
         panic!()
     };
     assert_eq!(
@@ -101,7 +106,8 @@ fn silence_stop_waits_for_preamble_and_publishes_only_once() {
 fn completion_racing_preamble_skips_command_reads() {
     let mut hw = model(&[true, false, false], false, false);
     assert!(matches!(
-        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw)).unwrap(),
+        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw))
+            .unwrap(),
         Progress::Stopped(())
     ));
     assert_eq!(
@@ -124,7 +130,8 @@ fn completion_racing_preamble_skips_command_reads() {
 fn second_command_not_ready_keeps_owner_without_request() {
     let mut hw = model(&[true, true], true, false);
     assert!(matches!(
-        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw)).unwrap(),
+        crate::bluetooth::test_ready(super::step(BluetoothSchedulerStop::default(), &mut hw))
+            .unwrap(),
         Progress::Pending(_)
     ));
     assert!(!hw.trace.contains(&"request"));

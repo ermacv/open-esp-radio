@@ -41,7 +41,7 @@ fn execute_nrt_default_interrupt_step(
 /// The function is finite and publishes no scheduler, timer, HCI or
 /// Link-Layer event. Supporting a later feature that registers an NRT consumer
 /// requires a different typed policy rather than changing this disposition.
-pub fn step_nrt_default_interrupt(
+pub(crate) fn step_nrt_default_interrupt(
     interrupts: &mut InterruptRegistersOwner,
 ) -> NrtDefaultInterruptEpoch {
     execute_nrt_default_interrupt_step(interrupts)

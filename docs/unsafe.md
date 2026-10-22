@@ -110,6 +110,18 @@ place before returning the original `Placed` allocation. No field reference
 escapes this return. Constructor refusal returns both original inputs before
 mutation. Unconfirmed stop and reset failure retain the whole graph with its
 register partitions in absorbing quarantine; Drop never returns a placement.
+The P2 engine holds only the task endpoint of `scheduler::interrupt`'s static
+request/reply channel. Its unique P3 endpoint stays beside the IRQ register
+owner. Release/Acquire state transitions transfer exclusive access to an
+`UnsafeCell` payload: P2 writes an empty slot, P3 consumes its request and
+publishes its reply, then P2 consumes that reply exactly once. Neither side
+accesses the other's phase, and no task waker enters P3. The static typed
+signal carries only reply readiness. Installation epochs and command numbers
+that never wrap or reset reject stale replies. Abandoning a pending future
+retains the request seat, quarantines graph publications and prevents retirement. Reusing the slot consumes
+both quiet endpoints after scheduler stop and route removal. Adjacent tests
+cover delayed replies, duplicate entries, stale replies, registration races,
+abandonment and endpoint reunion; a paired UI case rejects repeated retirement.
 The adjacent `engine::owner::tests` cover exact-allocation retry, completion,
 stop, reset, stale epochs and both terminal failure paths; paired UI cases
 cover moved inputs, private custody and stale leases. Its range metadata
