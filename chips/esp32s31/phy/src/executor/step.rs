@@ -62,8 +62,6 @@ pub(crate) enum Outcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Step {
     Runnable,
-    TaggedRunnable(u8),
-    TaggedWaitAt { action: u8, at: Instant },
     Rfpll(crate::tracking::observation::RfpllCommandSample),
     WaitAt(Instant),
     Complete,
@@ -106,6 +104,7 @@ pub(crate) struct Job<'a> {
     first_wait: bool,
     finished: bool,
     start_pending: bool,
+    calibration_action: u8,
     /// One completed edge, consumed by the poll recorder at its exit.
     ready_started: Option<Instant>,
 }
@@ -119,6 +118,7 @@ impl<'a> Job<'a> {
             first_wait: false,
             finished: false,
             start_pending: temperature,
+            calibration_action: 0,
             ready_started: None,
         })
     }
@@ -195,6 +195,7 @@ impl<'a> Job<'a> {
                 execution,
                 phase,
                 measured,
+                action: 0,
             }),
             now,
             false,
@@ -342,7 +343,9 @@ impl<'a> Job<'a> {
             }
             Work::RxGain(run) => {
                 self.ready_started = Some(clock.now());
-                return run.advance::<D, _>(&mut io, clock, now);
+                let step = run.advance::<D, _>(&mut io, clock, now);
+                self.calibration_action = run.action;
+                return step;
             }
             Work::Dcode {
                 transition,
@@ -757,7 +760,10 @@ impl<
                                 Err(error) => step = Step::Failure(error),
                             }
                         }
-                        if stats.is_some() {
+                        if let Some(stats) = stats.as_deref_mut() {
+                            if job.calibration_action != 0 {
+                                stats.action = job.calibration_action;
+                            }
                             if let Some(at) = job.ready_started.take() {
                                 ready_elapsed = Some(clock.now().saturating_duration_since(at));
                             }
@@ -783,20 +789,7 @@ impl<
                         (step, Instant::EPOCH)
                     }
                 };
-                let step = match step {
-                    Step::TaggedRunnable(action) | Step::TaggedWaitAt { action, .. } => {
-                        if let RouteProj::Transport { stats: Some(stats), .. } = &mut route {
-                            stats.action = action;
-                        }
-                        match step {
-                            Step::TaggedWaitAt { at, .. } => Step::WaitAt(at),
-                            _ => Step::Runnable,
-                        }
-                    }
-                    step => step,
-                };
                 let at = match step {
-                    Step::TaggedRunnable(_) | Step::TaggedWaitAt { .. } => unreachable!("tagged step was normalized"),
                     Step::Complete => break Poll::Ready(Ok(())),
                     Step::Failure(error) => break Poll::Ready(Err(error)),
                     Step::Rfpll(_) | Step::Runnable => {

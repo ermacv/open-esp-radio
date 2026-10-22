@@ -22,11 +22,18 @@ fn publisher() -> PhyRxGainInitTransition {
 
 #[test]
 fn complete_entries_cross_real_poll_boundaries_before_the_root_tail() {
+    for measured in [false, true] {
+        complete_publisher(measured);
+    }
+}
+
+fn complete_publisher(measured: bool) {
     let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
     let mut transition = publisher();
     let mut scratch = crate::executor::step::rx_gain::Scratch::default();
     let mut execution = crate::tracking::observation::RxGainExecution::default();
+    let mut timing = EngineTiming::default();
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     while transition.phase().is_some() {
@@ -35,12 +42,17 @@ fn complete_entries_cross_real_poll_boundaries_before_the_root_tail() {
             &mut scratch,
             &mut execution,
             clock.now(),
-            false,
+            measured,
         )
         .expect("clock fits");
         let atoms = io.atoms.clone();
         let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
-            &mut job, &mut io, &clock, None, None, None
+            &mut job,
+            &mut io,
+            &clock,
+            measured.then_some(&mut timing),
+            None,
+            None
         ));
         loop {
             let before = atoms.get();
@@ -60,6 +72,14 @@ fn complete_entries_cross_real_poll_boundaries_before_the_root_tail() {
         panic!("both banks and tail must complete");
     };
     assert!(outcome.generated_tables);
+    if measured {
+        assert!(timing.polls > 0);
+        assert_eq!(
+            timing.action & 0x7f,
+            4,
+            "the IQ correction tail retains its identity"
+        );
+    }
     assert_eq!(
         outcome.dc, None,
         "the pre-calibrated path does not measure again"

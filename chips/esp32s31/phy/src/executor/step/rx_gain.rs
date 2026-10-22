@@ -93,6 +93,7 @@ pub(super) struct Run<'a> {
     pub(super) execution: &'a mut RxGainExecution,
     pub(super) phase: Phase,
     pub(super) measured: bool,
+    pub(super) action: u8,
 }
 
 impl Run<'_> {
@@ -116,6 +117,7 @@ impl Run<'_> {
                 tag |= 0x80;
             }
         }
+        self.action = tag;
         if matches!(
             self.transition.action(),
             PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
@@ -185,14 +187,12 @@ impl Run<'_> {
             }
         }
         if waiting {
-            Ok(Step::TaggedWaitAt {
-                action: tag,
-                at: now
-                    .checked_add(super::RETRY)
+            Ok(Step::WaitAt(
+                now.checked_add(super::RETRY)
                     .ok_or(Failure::DeadlineOverflow)?,
-            })
+            ))
         } else {
-            Ok(Step::TaggedRunnable(tag))
+            Ok(Step::Runnable)
         }
     }
 
