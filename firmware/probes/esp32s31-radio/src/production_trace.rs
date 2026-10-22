@@ -568,11 +568,12 @@ oer_probe_macros::probe! {
                 },
             })
         };
-        match oer_esp32s31_phy::target_port::calibration::rx_gain_init::<
+        let timer = TraceTimer::observations();
+        match timer.run(oer_esp32s31_phy::target_port::calibration::rx_gain_init::<
             oer_esp32s31_phy::RomShortDelay,
             _,
             _,
-        >(&TraceTimer::observations(), &mut child, &mut (), &mut phy, |_, _| {}, |_| {})
+        >(&timer, &mut child, &mut (), &mut phy, |_, _| {}, |_| {}, None))
         {
             Ok(()) => {}
             Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => return 2,

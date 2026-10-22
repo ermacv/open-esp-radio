@@ -15,6 +15,7 @@ use core::marker::PhantomData;
 pub mod calibration;
 pub mod rfpll;
 mod step;
+pub(crate) use step::port_error as engine_error;
 
 use crate::{
     HARDWARE_EDGE_LIMIT, PhyParamTrackingRunError, PhyRegisterRunError,
@@ -1194,67 +1195,14 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_rx_gain_dc(
-        &self,
-        binding: PhyRxGainDcExternalBinding,
-        registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
-    ) -> Result<PhyRxGainDcCompletion, PhyTargetPortError> {
-        match binding {
-            PhyRxGainDcExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
-            PhyRxGainDcExternalBinding::Rfpll(binding) => Ok(PhyRxGainDcCompletion::Rfpll(
-                self.complete_rfpll(binding, registers).await?,
-            )),
-            PhyRxGainDcExternalBinding::Pbus(binding) => {
-                complete_rx_gain_dc_pbus(binding, registers, self.timer)
-            }
-            PhyRxGainDcExternalBinding::I2c(binding) => Ok(PhyRxGainDcCompletion::I2c(
-                complete_rx_gain_i2c(binding, registers, self.timer)?,
-            )),
-            PhyRxGainDcExternalBinding::Calibration(binding) => {
-                Ok(PhyRxGainDcCompletion::Calibration(
-                    self.complete_rx_dc_calibration(binding, registers).await?,
-                ))
-            }
-            PhyRxGainDcExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
-                Ok(binding.into_completion())
-            }
-        }
-    }
-
-    async fn complete_rx_gain_publish(
-        &self,
-        binding: PhyRxGainPublishExternalBinding,
-        registers: &mut impl SharedPhyContext,
-    ) -> Result<PhyRxGainPublishCompletion, PhyTargetPortError> {
-        match binding {
-            PhyRxGainPublishExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
-            PhyRxGainPublishExternalBinding::Pbus(binding) => {
-                complete_rx_gain_publish_pbus(binding, registers, self.timer)
-            }
-            PhyRxGainPublishExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
-                Ok(binding.into_completion())
-            }
-        }
-    }
-
     async fn complete_rx_gain(
         &self,
         binding: PhyRxGainInitExternalBinding,
         registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     ) -> Result<PhyRxGainInitCompletion, PhyTargetPortError> {
-        match binding {
-            PhyRxGainInitExternalBinding::Mmio(binding) => binding
-                .execute_target(registers)
-                .map_err(|_| PhyTargetPortError::HardwareInvariant),
-            PhyRxGainInitExternalBinding::Dc(binding) => Ok(PhyRxGainInitCompletion::Dc(
-                self.complete_rx_gain_dc(binding, registers).await?,
-            )),
-            PhyRxGainInitExternalBinding::Publish(binding) => Ok(PhyRxGainInitCompletion::Publish(
-                self.complete_rx_gain_publish(binding, registers).await?,
-            )),
-        }
+        crate::executor::step::rx_gain::complete::<D, _, _>(binding, registers, self.timer)
+            .await
+            .map_err(step::port_error)
     }
 
     async fn complete_channel<P, O: PhyTargetObserver>(
@@ -1974,6 +1922,7 @@ impl<
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::RxGain, Event::PollStarted);
+                let mut timing = crate::tracking::observation::EngineTiming::default();
                 let result = calibration::rx_gain::<D, _, _>(
                     self.timer,
                     transition
@@ -1987,7 +1936,14 @@ impl<
                         }
                     },
                     |execution| observer.borrow_mut().rx_gain_execution(execution),
-                );
+                    O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+                )
+                .await;
+                if O::OBSERVE_ENGINE_POLLS {
+                    observer
+                        .borrow_mut()
+                        .engine_completed(Operation::RxGain, timing);
+                }
                 observer
                     .borrow_mut()
                     .tracking_operation(Operation::RxGain, Event::PollReady);
@@ -2002,7 +1958,8 @@ impl<
                     self.platform,
                     self.registers,
                     &mut *self.observer,
-                )?
+                )
+                .await?
             }
             PhyCalibrationTrackingAction::ForceTxRxOff { .. } => {
                 TargetCompleter::<D, T>::new(self.timer).run_calibration_force_txrx(

@@ -404,3 +404,149 @@ fn target_transaction_timeout_still_executes_the_complete_disable_tail() {
         })
     );
 }
+
+#[derive(Default)]
+struct CaptureIo {
+    pending: u16,
+    events: std::vec::Vec<&'static str>,
+}
+impl CaptureIo {
+    fn configure(&mut self, _: u16) {
+        self.events.push("configure");
+    }
+    fn enable(&mut self, phase: PhyDcIqEnablePhase, enabled: bool) {
+        self.events.push(match (phase, enabled) {
+            (PhyDcIqEnablePhase::Start, true) => "start-on",
+            (PhyDcIqEnablePhase::Start, false) => "start-off",
+            (PhyDcIqEnablePhase::Measurement, true) => "measurement-on",
+            (PhyDcIqEnablePhase::Measurement, false) => "measurement-off",
+        });
+    }
+    fn settle(&mut self, micros: u32) -> Result<(), ()> {
+        assert_eq!(micros, 1);
+        self.events.push("settle");
+        Ok(())
+    }
+    fn ready(&mut self) -> PhyDcIqReadinessSnapshot {
+        self.events.push("ready");
+        let ready = self.pending == 0;
+        self.pending = self.pending.saturating_sub(1);
+        PhyDcIqReadinessSnapshot {
+            ready,
+            activity: !ready,
+        }
+    }
+    fn accumulators(&mut self) -> PhyDcIqAccumulatorSnapshot {
+        self.events.push("accumulators");
+        PhyDcIqAccumulatorSnapshot {
+            i: -187,
+            q: 392,
+            power: 909,
+        }
+    }
+}
+
+#[test]
+fn sliced_capture_matches_complete_estimator_order_arithmetic_and_activity() {
+    for pending in [0, 1, 3] {
+        let mut direct = CaptureIo {
+            pending,
+            ..Default::default()
+        };
+        let expected = PhyDcIqTargetTransaction::new(REQUEST)
+            .execute_with(
+                4,
+                &mut direct,
+                CaptureIo::configure,
+                CaptureIo::enable,
+                CaptureIo::settle,
+                CaptureIo::ready,
+                CaptureIo::accumulators,
+            )
+            .expect("settles succeed")
+            .into_terminal();
+        let mut io = CaptureIo {
+            pending,
+            ..Default::default()
+        };
+        let mut transition = PhyDcIqEstimateTransition::new(REQUEST);
+        let completion = PhyDcIqMmioBinding::new(transition.action())
+            .expect("initial configure")
+            .capture_with(
+                &mut io,
+                CaptureIo::configure,
+                CaptureIo::enable,
+                CaptureIo::settle,
+                CaptureIo::ready,
+                CaptureIo::accumulators,
+            )
+            .expect("settles succeed");
+        transition.advance(completion).expect("same request");
+        while let PhyDcIqAction::AwaitReadinessEdge { .. } = transition.action() {
+            let completion = PhyDcIqReadinessBinding::new(transition.action())
+                .expect("live capture")
+                .capture_with(
+                    4,
+                    &mut io,
+                    CaptureIo::ready,
+                    CaptureIo::accumulators,
+                    CaptureIo::enable,
+                    CaptureIo::settle,
+                )
+                .expect("settle succeeds");
+            transition.advance(completion).expect("same measurement");
+        }
+        let PhyDcIqAction::Complete(outcome) = transition.action() else {
+            panic!("capture must complete");
+        };
+        assert_eq!(Ok(outcome), expected);
+        assert_eq!(io.events, direct.events);
+    }
+}
+
+#[test]
+fn sliced_timeout_keeps_the_same_capture_then_disable_order_and_activity_count() {
+    let mut transition = PhyDcIqEstimateTransition::new(REQUEST);
+    let mut io = CaptureIo {
+        pending: 4,
+        ..Default::default()
+    };
+    let completion = PhyDcIqMmioBinding::new(transition.action())
+        .expect("configure")
+        .capture_with(
+            &mut io,
+            CaptureIo::configure,
+            CaptureIo::enable,
+            CaptureIo::settle,
+            CaptureIo::ready,
+            CaptureIo::accumulators,
+        )
+        .expect("settle succeeds");
+    transition.advance(completion).expect("first observation");
+    for _ in 0..4 {
+        let completion = PhyDcIqReadinessBinding::new(transition.action())
+            .expect("waiting capture")
+            .capture_with(
+                4,
+                &mut io,
+                CaptureIo::ready,
+                CaptureIo::accumulators,
+                CaptureIo::enable,
+                CaptureIo::settle,
+            )
+            .expect("settle succeeds");
+        transition.advance(completion).expect("same capture");
+    }
+    assert_eq!(
+        transition.action(),
+        PhyDcIqAction::Failed(PhyDcIqFailure::ReadinessTimedOut {
+            request: REQUEST,
+            readiness_activity_edges: 4,
+        })
+    );
+    assert_eq!(
+        &io.events[io.events.len() - 3..],
+        ["measurement-off", "settle", "start-off"]
+    );
+    assert!(!io.events.contains(&"accumulators"));
+}

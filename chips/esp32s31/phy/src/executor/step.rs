@@ -3,6 +3,7 @@ mod i2c;
 mod io;
 pub(crate) mod power;
 pub(crate) mod rfpll;
+pub(crate) mod rx_gain;
 pub(crate) mod temperature;
 pub(crate) mod wifi_i2c;
 pub(crate) use io::Registers;
@@ -68,6 +69,19 @@ pub(crate) enum Step {
 }
 
 enum Work<'a> {
+    Channel {
+        binding: &'a mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &'a mut Option<crate::channel::PhyChipChannelCompletion>,
+    },
+    RxGainAtom {
+        binding: &'a mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+        completion: &'a mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
+    },
+    RxGain(rx_gain::Run<'a>),
+    DcIq {
+        binding: &'a mut Option<crate::calibration::estimator::PhyDcIqReadinessBinding>,
+        completion: &'a mut Option<crate::calibration::estimator::PhyDcIqCompletion>,
+    },
     Dcode {
         transition: &'a mut crate::analog::dcode::PhyDcodeTransition,
         lock: &'a mut Option<bool>,
@@ -151,6 +165,73 @@ impl<'a> Job<'a> {
             now,
             false,
         )
+    }
+    pub(crate) fn channel(
+        binding: &'a mut Option<crate::channel::PhyChipChannelExternalBinding>,
+        completion: &'a mut Option<crate::channel::PhyChipChannelCompletion>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::Channel {
+                binding,
+                completion,
+            },
+            now,
+            false,
+        )?;
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
+    }
+    pub(crate) fn dc_iq(
+        binding: &'a mut Option<crate::calibration::estimator::PhyDcIqReadinessBinding>,
+        completion: &'a mut Option<crate::calibration::estimator::PhyDcIqCompletion>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::DcIq {
+                binding,
+                completion,
+            },
+            now,
+            false,
+        )?;
+        // E4 keeps its source observation limit, not a new elapsed deadline.
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
+    }
+    pub(crate) fn rx_gain(
+        transition: &'a mut crate::rx::gain::PhyRxGainInitTransition,
+        execution: &'a mut crate::tracking::observation::RxGainExecution,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let phase = transition.phase().ok_or(Failure::Binding)?;
+        let mut job = Self::new(
+            Work::RxGain(rx_gain::Run {
+                transition,
+                execution,
+                phase,
+            }),
+            now,
+            false,
+        )?;
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
+    }
+    pub(super) fn rx_gain_atom(
+        binding: &'a mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
+        completion: &'a mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        let mut job = Self::new(
+            Work::RxGainAtom {
+                binding,
+                completion,
+            },
+            now,
+            false,
+        )?;
+        job.deadline = Instant::from_micros(u64::MAX);
+        Ok(job)
     }
     pub(crate) fn pbus(
         binding: &'a mut PhyPbusHardwareBinding,
@@ -242,6 +323,80 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::Channel {
+                binding,
+                completion,
+            } => {
+                let Some(binding) = binding.take() else {
+                    return Ok(Step::Complete);
+                };
+                self.ready_started = Some(clock.now());
+                let result = io.channel::<D, _>(clock, binding)?;
+                let waiting = matches!(
+                    result,
+                    crate::channel::PhyChipChannelCompletion::FrequencyReadyObserved {
+                        ready: false
+                    }
+                );
+                **completion = Some(result);
+                return if waiting {
+                    Ok(Step::WaitAt(
+                        now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
+                    ))
+                } else {
+                    Ok(Step::Runnable)
+                };
+            }
+            Work::RxGainAtom {
+                binding,
+                completion,
+            } => {
+                let Some(binding) = binding.take() else {
+                    return Ok(Step::Complete);
+                };
+                let result = io.rx_gain::<D, _>(clock, binding)?;
+                let waiting = rx_gain::waiting(result);
+                **completion = Some(result);
+                return if waiting {
+                    Ok(Step::WaitAt(
+                        now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
+                    ))
+                } else {
+                    Ok(Step::Runnable)
+                };
+            }
+            Work::RxGain(run) => {
+                self.ready_started = Some(clock.now());
+                return run.advance::<D, _>(&mut io, clock, now);
+            }
+            Work::DcIq {
+                binding,
+                completion,
+            } => {
+                let Some(binding) = binding.take() else {
+                    return Ok(Step::Complete);
+                };
+                self.ready_started = Some(clock.now());
+                let result = io.dc_iq::<D>(binding)?;
+                let waiting = matches!(
+                    result,
+                    crate::calibration::estimator::PhyDcIqCompletion::ReadinessObserved {
+                        snapshot: crate::calibration::estimator::PhyDcIqReadinessSnapshot {
+                            ready: false,
+                            ..
+                        },
+                        ..
+                    }
+                );
+                **completion = Some(result);
+                return if waiting {
+                    Ok(Step::WaitAt(
+                        now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
+                    ))
+                } else {
+                    Ok(Step::Runnable)
+                };
+            }
             Work::Dcode {
                 transition,
                 lock,

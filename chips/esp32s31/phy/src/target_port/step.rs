@@ -38,7 +38,7 @@ pub(super) async fn temperature<D: crate::PhyShortDelay, R: Registers, T: Timer>
     };
     (result, timing)
 }
-pub(super) fn port_error(error: Failure) -> PhyTargetPortError {
+pub(crate) fn port_error(error: Failure) -> PhyTargetPortError {
     match error {
         Failure::Target(error) => error,
         Failure::DeadlineOverflow => PhyTargetPortError::DeadlineOverflow,

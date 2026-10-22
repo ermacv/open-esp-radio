@@ -122,6 +122,88 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
 }
 
 impl Io<'_, '_> {
+    #[inline(never)]
+    fn channel_target<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: crate::channel::PhyChipChannelExternalBinding,
+    ) -> Result<crate::channel::PhyChipChannelCompletion, Failure> {
+        #[cfg(target_arch = "riscv32")]
+        fn apply<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+            clock: &C,
+            registers: &mut (impl oer_esp32s31_hal::owner::SharedPhyAccess + Registers),
+            binding: crate::channel::PhyChipChannelExternalBinding,
+        ) -> Result<crate::channel::PhyChipChannelCompletion, Failure> {
+            crate::target_port::calibration::complete_channel_direct::<D, _, _, _>(
+                clock,
+                binding,
+                &mut (),
+                registers,
+                &mut crate::target_port::NoopPhyTargetObserver,
+            )
+            .map_err(Failure::Target)
+        }
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = (clock, binding);
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => apply::<D, _>(clock, *registers, binding),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => apply::<D, _>(clock, *registers, binding),
+            #[cfg(test)]
+            Self::Test(..) => Err(Failure::Binding),
+        }
+    }
+    pub(super) fn channel<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: crate::channel::PhyChipChannelExternalBinding,
+    ) -> Result<crate::channel::PhyChipChannelCompletion, Failure> {
+        self.channel_target::<D, _>(clock, binding)
+    }
+
+    pub(super) fn rx_gain<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: crate::rx::gain::PhyRxGainInitExternalBinding,
+    ) -> Result<crate::rx::gain::PhyRxGainInitCompletion, Failure> {
+        #[cfg(not(target_arch = "riscv32"))]
+        let _ = clock;
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => {
+                super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
+            }
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => {
+                super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
+            }
+            #[cfg(test)]
+            Self::Test(io, _) => io.rx_gain::<D>(binding),
+        }
+    }
+    pub(super) fn dc_iq<D: super::super::wait::PhyShortDelay>(
+        &mut self,
+        binding: crate::calibration::estimator::PhyDcIqReadinessBinding,
+    ) -> Result<crate::calibration::estimator::PhyDcIqCompletion, Failure> {
+        #[cfg(target_arch = "riscv32")]
+        fn capture<D: super::super::wait::PhyShortDelay>(
+            registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+            binding: crate::calibration::estimator::PhyDcIqReadinessBinding,
+        ) -> Result<crate::calibration::estimator::PhyDcIqCompletion, Failure> {
+            binding
+                .capture_target::<D>(registers)
+                .map_err(Failure::Target)
+        }
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(registers) => capture::<D>(*registers, binding),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(registers) => capture::<D>(*registers, binding),
+            #[cfg(test)]
+            Self::Test(io, _) => io.dc_iq::<D>(binding),
+        }
+    }
     pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         clock: &C,

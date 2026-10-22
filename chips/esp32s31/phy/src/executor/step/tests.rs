@@ -1,4 +1,5 @@
 use super::*;
+mod dc_iq;
 mod dcode;
 mod power;
 mod wifi_i2c;
@@ -45,6 +46,8 @@ pub(crate) struct Io {
     rfpll_actions: Vec<crate::tracking::rfpll::Action>,
     frequency_actions: Vec<crate::analog::rfpll::RfpllFrequencyAction>,
     frequency_failure: bool,
+    dc_iq_pending: usize,
+    dc_iq_events: Vec<&'static str>,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
     rfpll_times: Vec<Instant>,
     rfpll_write_micros: u64,
@@ -62,6 +65,106 @@ pub(crate) struct Io {
     pub(crate) atoms: Rc<Cell<usize>>,
 }
 impl Io {
+    pub(super) fn rx_gain<D: crate::executor::wait::PhyShortDelay>(
+        &mut self,
+        binding: crate::rx::gain::PhyRxGainInitExternalBinding,
+    ) -> Result<crate::rx::gain::PhyRxGainInitCompletion, Failure> {
+        use crate::rx::gain::{
+            PhyRxGainInitAction as Action, PhyRxGainInitCompletion as Done,
+            PhyRxGainInitExternalBinding as Binding, PhyRxGainPublishAction as PubAction,
+            PhyRxGainPublishCompletion as PubDone, PhyRxGainPublishExternalBinding as Publish,
+        };
+        self.atom();
+        Ok(match binding {
+            Binding::Mmio(binding) => match binding.action() {
+                Action::PrepareDcControlRestore => Done::DcControlRestorePrepared,
+                Action::RestoreDcControl => Done::DcControlRestored,
+                Action::ConfigureLimits { wifi_last_index } => {
+                    Done::LimitsConfigured { wifi_last_index }
+                }
+                Action::EnableIqCorrection => Done::IqCorrectionEnabled,
+                _ => return Err(Failure::Binding),
+            },
+            Binding::Publish(Publish::Mmio(binding)) => Done::Publish(match binding.action() {
+                PubAction::ConfigurePbusDebugMode { bank } => {
+                    PubDone::PbusDebugModeConfigured { bank }
+                }
+                PubAction::ConfigureClock {
+                    bank,
+                    clock,
+                    enabled,
+                } => PubDone::ClockConfigured {
+                    bank,
+                    clock,
+                    enabled,
+                },
+                PubAction::ProgramEntry { bank, entry } => {
+                    self.power_gain_entries.push(entry);
+                    PubDone::EntryProgrammed { bank, entry }
+                }
+                PubAction::ConfigurePbusWorkMode { bank } => PubDone::PbusWorkModeRestored { bank },
+                _ => return Err(Failure::Binding),
+            }),
+            Binding::Publish(Publish::Pbus(binding)) => {
+                let crate::analog::pbus::PhyPbusHardwareAction::Start(transaction) =
+                    binding.action()
+                else {
+                    return Err(Failure::Binding);
+                };
+                let mut binding = binding;
+                binding.started().map_err(|_| Failure::Binding)?;
+                binding
+                    .observe_completed(true)
+                    .map_err(|_| Failure::Binding)?;
+                let _ = transaction;
+                Done::Publish(binding.into_completion().map_err(|_| Failure::Binding)?)
+            }
+            _ => return Err(Failure::Binding),
+        })
+    }
+    pub(super) fn dc_iq<D: crate::executor::wait::PhyShortDelay>(
+        &mut self,
+        binding: crate::calibration::estimator::PhyDcIqReadinessBinding,
+    ) -> Result<crate::calibration::estimator::PhyDcIqCompletion, Failure> {
+        use crate::calibration::estimator::{
+            PhyDcIqAccumulatorSnapshot, PhyDcIqEnablePhase, PhyDcIqReadinessSnapshot,
+        };
+        self.atom();
+        binding.capture_with(
+            crate::HARDWARE_EDGE_LIMIT,
+            self,
+            |io| {
+                io.dc_iq_events.push("ready");
+                let ready = io.dc_iq_pending == 0;
+                io.dc_iq_pending = io.dc_iq_pending.saturating_sub(1);
+                PhyDcIqReadinessSnapshot {
+                    ready,
+                    activity: !ready,
+                }
+            },
+            |io| {
+                io.dc_iq_events.push("accumulators");
+                PhyDcIqAccumulatorSnapshot {
+                    i: 0,
+                    q: 0,
+                    power: 1,
+                }
+            },
+            |io, phase, enabled| {
+                assert!(!enabled);
+                io.dc_iq_events.push(match phase {
+                    PhyDcIqEnablePhase::Measurement => "measurement-off",
+                    PhyDcIqEnablePhase::Start => "start-off",
+                });
+            },
+            |io, micros| {
+                io.dc_iq_events.push("settle");
+                D::settle_micros(micros)
+                    .then_some(())
+                    .ok_or(Failure::Binding)
+            },
+        )
+    }
     pub(super) fn frequency<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,

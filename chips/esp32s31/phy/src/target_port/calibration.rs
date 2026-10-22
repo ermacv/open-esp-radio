@@ -147,14 +147,15 @@ fn dcode_poll<
     }
 }
 
-/// Run RX-DC calibration and publish both gain banks using the same admitted owner.
-pub fn rx_gain<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
-    clock: &C,
+/// Run RX-DC calibration and publish both gain banks using the admitted owner.
+pub async fn rx_gain<D: PhyShortDelay, P, T: oer_time::Timer>(
+    clock: &T,
     mut child: PhyCalibrationRxGainTransition,
     platform: &mut P,
     registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
     observe: impl FnMut(crate::tracking::observation::Operation, crate::tracking::observation::Event),
     summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
+    timing: Option<&mut crate::tracking::observation::EngineTiming>,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
     rx_gain_init::<D, _, _>(
         clock,
@@ -163,17 +164,17 @@ pub fn rx_gain<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
         registers,
         observe,
         summarize,
-    )?;
+        timing,
+    )
+    .await?;
     child
         .commit()
         .map_err(|_| PhyTargetPortError::UnexpectedBinding)
 }
 
-/// Execute an RX-gain root through its terminal edge. Its caller owns state
-/// publication; success here may still contain a typed calibration failure.
-#[inline(never)]
-pub fn rx_gain_init<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
-    clock: &C,
+/// Advance the retained coefficient owner; only its caller publishes the result.
+pub async fn rx_gain_init<D: PhyShortDelay, P, T: oer_time::Timer>(
+    clock: &T,
     child: &mut crate::rx::gain::PhyRxGainInitTransition,
     _platform: &mut P,
     registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
@@ -182,440 +183,79 @@ pub fn rx_gain_init<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
         crate::tracking::observation::Event,
     ),
     mut summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
+    mut timing: Option<&mut crate::tracking::observation::EngineTiming>,
 ) -> Result<(), PhyTargetPortError> {
-    use crate::tracking::observation::{Event, Operation};
-    let mut execution = crate::tracking::observation::RxGainExecution::default();
-    let mut budget = crate::target_executor::DirectOperationBudget::new(RF_OPERATION_LIMIT);
-    let result = (|| {
-        for _ in 0..4 {
-            if child.terminal().is_some() {
-                return Ok(());
-            }
-            if let Some(parameters) = child.direct_dc_parameters() {
-                observe(Operation::RxGainControlPhase, Event::Started);
-                let prepared = oer_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers)
-                    .map_err(|_| PhyTargetPortError::HardwareInvariant);
-                observe(Operation::RxGainControlPhase, terminal_event(&prepared));
-                prepared?;
-
-                observe(Operation::RxGainDcPhase, Event::Started);
-                let outcome = rx_gain_dc_direct::<D, _>(
-                    clock,
-                    parameters,
-                    registers,
-                    &mut budget,
-                    &mut execution,
-                );
-                observe(Operation::RxGainDcPhase, terminal_event(&outcome));
-                let outcome = outcome?;
-                execution.quality = outcome.as_ref().ok().map(|outcome| outcome.quality);
-
-                observe(Operation::RxGainControlPhase, Event::Started);
-                let restored = oer_esp32s31_hal::phy::rx_dco::restore_control(registers)
-                    .map_err(|_| PhyTargetPortError::HardwareInvariant);
-                observe(Operation::RxGainControlPhase, terminal_event(&restored));
-                restored?;
-                child
-                    .commit_direct_dc(outcome)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                continue;
-            }
-
-            if child.phase() == Some(crate::rx::gain::Phase::Publish) {
-                observe(Operation::RxGainPublishPhase, Event::Started);
-                let published = child.execute_publish_target_direct::<D, _>(clock, registers);
-                observe(Operation::RxGainPublishPhase, terminal_event(&published));
-                if !published? {
-                    return Err(PhyTargetPortError::UnexpectedBinding);
-                }
-                continue;
-            }
-
-            if child.phase() == Some(crate::rx::gain::Phase::Control) {
-                observe(Operation::RxGainControlPhase, Event::Started);
-                if !child.execute_tail_target_direct(registers) {
-                    observe(Operation::RxGainControlPhase, Event::Failed);
-                    return Err(PhyTargetPortError::UnexpectedBinding);
-                }
-                observe(Operation::RxGainControlPhase, Event::Completed);
-                continue;
-            }
-            return Err(PhyTargetPortError::UnexpectedBinding);
-        }
-        Err(PhyTargetPortError::RfOperationLimit)
-    })();
-    if result.is_ok() {
-        summarize(execution);
-    }
-    result
-}
-
-enum DirectRxGainDcError {
-    Target(PhyTargetPortError),
-    Calibration(crate::rx::gain_calibration::PhyRxGainDcFailure),
-}
-
-impl From<PhyTargetPortError> for DirectRxGainDcError {
-    fn from(error: PhyTargetPortError) -> Self {
-        Self::Target(error)
-    }
-}
-
-impl From<crate::rx::gain_calibration::PhyRxGainDcFailure> for DirectRxGainDcError {
-    fn from(error: crate::rx::gain_calibration::PhyRxGainDcFailure) -> Self {
-        Self::Calibration(error)
-    }
-}
-
-fn force_rx_gain_pbus<C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    registers: &mut impl SharedPhyAccess,
-    bank: crate::rx::gain_calibration::PhyRxGainDcBank,
-    transaction: crate::analog::pbus::PhyPbusForceTest,
-) -> Result<(), crate::rx::gain_calibration::PhyRxGainDcFailure> {
-    if crate::target_executor::force_pbus_direct(clock, registers, transaction) {
-        Ok(())
-    } else {
-        Err(crate::rx::gain_calibration::PhyRxGainDcFailure::Pbus { bank, transaction })
-    }
-}
-
-fn rx_gain_rfpll_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    crystal_selector: u8,
-    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-) -> Result<(), DirectRxGainDcError> {
-    use crate::analog::rfpll::{
-        RfpllFrequencyAction, RfpllFrequencyExternalBinding, RfpllFrequencyRequest,
-        RfpllFrequencyTransition,
-    };
-    let mut transition = RfpllFrequencyTransition::channel(RfpllFrequencyRequest {
-        crystal_selector,
-        frequency_code: 0x9b4,
-        offset: 0,
-    });
-    loop {
-        match transition.action() {
-            RfpllFrequencyAction::Complete(_) => return Ok(()),
-            RfpllFrequencyAction::Failed(failure) => {
-                return Err(crate::rx::gain_calibration::PhyRxGainDcFailure::Rfpll(failure).into());
-            }
-            action => {
-                let binding = RfpllFrequencyExternalBinding::lower(action)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                let completion = registers
-                    .rfpll_atom::<D, _>(clock, binding)
-                    .map_err(super::step::port_error)?;
-                transition
-                    .advance(completion)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-            }
-        }
-    }
-}
-
-fn rx_gain_one_step_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    request: crate::rx::gain_calibration::PhyRxDcCalibrationRequest,
-    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
-    budget: &mut crate::target_executor::DirectOperationBudget,
-    execution: &mut crate::tracking::observation::RxGainExecution,
-) -> Result<crate::rx::gain_calibration::PhyRxDcCalibrationOutcome, DirectRxGainDcError> {
-    execution.outer_operations += 1;
-    let mut transition = crate::rx::gain_calibration::PhyRxDcCalibrationTransition::new(request);
-    let stats = transition.execute_target_direct::<D, _>(clock, registers, budget)?;
-    execution.minimum_searches += stats.minimum_searches;
-    execution.minimum_operations += stats.minimum_operations;
-    execution.settle_1us += stats.settle_1us;
-    execution.settle_10us += stats.settle_10us;
-    match transition.terminal() {
-        Some(Ok(outcome)) => Ok(outcome),
-        Some(Err(failure)) => {
-            Err(crate::rx::gain_calibration::PhyRxGainDcFailure::Calibration(failure).into())
-        }
-        None => Err(PhyTargetPortError::UnexpectedBinding.into()),
-    }
-}
-
-fn rx_gain_cleanup_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
-) -> Result<(), PhyTargetPortError> {
-    oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, false);
-    oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, false);
-    for index in 0..3 {
-        let _ = crate::target_executor::force_pbus_direct(
-            clock,
-            registers,
-            crate::rx::gain_calibration::rx_off(index),
-        );
-    }
-    if oer_esp32s31_hal::phy::pbus::configure_work_mode(registers) {
-        short_settle::<D>(1)?;
-        oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
-        short_settle::<D>(2)?;
-        oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
-    }
-    crate::hardware::configure_phy_rx_gain_dc_registers(registers, false);
-    Ok(())
-}
-
-#[inline(never)]
-fn rx_gain_dc_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    parameters: crate::rx::gain_calibration::PhyRxGainDcParameters,
-    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
-    budget: &mut crate::target_executor::DirectOperationBudget,
-    execution: &mut crate::tracking::observation::RxGainExecution,
-) -> Result<
-    Result<
-        crate::rx::gain_calibration::PhyRxGainDcOutcome,
-        crate::rx::gain_calibration::PhyRxGainDcFailure,
-    >,
-    PhyTargetPortError,
-> {
     use crate::{
-        analog::{
-            i2c::{fields, registers},
-            pbus::PhyPbusForceTest,
-        },
-        rx::gain_calibration::{
-            FINE_CODES, PhyRxDcCalibrationRequest, PhyRxDcCalibrationStage, PhyRxGainDcBank,
-            PhyRxGainDcOutcome, SHARED_CALIBRATION_GAIN, WIFI_CALIBRATION_GAIN, fine_code, rx_on,
-            set_rx_gain_transaction, shared_mixer_dgain_transaction,
-        },
+        rx::gain::Phase,
+        tracking::observation::{Event, Operation},
     };
-
-    let mut outcome = PhyRxGainDcOutcome {
-        quality: crate::rx::gain_calibration::PhyRxGainDcQuality::EMPTY,
-        wifi_index_dc: [[0; 2]; 8],
-        wifi_fine_dc: [[0; 2]; FINE_CODES],
-        shared_index_dc: [[0; 2]; 11],
-    };
-    let run = (|| -> Result<(), DirectRxGainDcError> {
-        crate::hardware::configure_phy_rx_gain_dc_registers(registers, true);
-        rx_gain_rfpll_direct::<D, _>(clock, parameters.crystal_selector, registers)?;
-        oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
-        for index in 0..7 {
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Shared,
-                rx_on(index, parameters.pbus_rx_path_value),
-            )?;
-        }
-        oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, true);
-        oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, true);
-        let shared_control = oer_esp32s31_hal::phy::pbus::read_result(registers, 1, 1)
-            .ok_or(PhyTargetPortError::HardwareInvariant)?
-            | 2;
-        force_rx_gain_pbus(
+    let mut execution = crate::tracking::observation::RxGainExecution::default();
+    for _ in 0..RF_OPERATION_LIMIT {
+        let Some(phase) = child.phase() else {
+            execution.quality = child
+                .terminal()
+                .and_then(Result::ok)
+                .and_then(|outcome| outcome.dc)
+                .map(|outcome| outcome.quality);
+            summarize(execution);
+            return Ok(());
+        };
+        let operation = match phase {
+            Phase::Control => Operation::RxGainControlPhase,
+            Phase::Dc => Operation::RxGainDcPhase,
+            Phase::Publish => Operation::RxGainPublishPhase,
+        };
+        observe(operation, Event::Started);
+        let result = rx_gain_phase::<D, _, _>(
             clock,
+            child,
             registers,
-            PhyRxGainDcBank::Shared,
-            PhyPbusForceTest::new(1, 1, shared_control),
-        )?;
-        crate::target_executor::write_i2c_field_direct(
-            clock,
-            registers,
-            fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
-            0,
-        )?;
-        for index in 0..SHARED_CALIBRATION_GAIN.len() as u8 {
-            let previous = if index == 0 {
-                [0x100; 2]
-            } else {
-                outcome.shared_index_dc[0]
-            };
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Shared,
-                PhyPbusForceTest::new(2, 1, 0x100),
-            )?;
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Shared,
-                PhyPbusForceTest::new(3, 1, 0x100),
-            )?;
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Shared,
-                PhyPbusForceTest::new(2, 2, 0x100),
-            )?;
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Shared,
-                PhyPbusForceTest::new(3, 2, 0x100),
-            )?;
-            for transaction in 0..3 {
-                force_rx_gain_pbus(
-                    clock,
-                    registers,
-                    PhyRxGainDcBank::Shared,
-                    set_rx_gain_transaction(
-                        u32::from(SHARED_CALIBRATION_GAIN[index as usize]) << 12,
-                        parameters.pbus_rx_path_value,
-                        transaction,
-                    ),
-                )?;
-            }
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Shared,
-                shared_mixer_dgain_transaction(index, parameters.pbus_rx_path_value),
-            )?;
-            let calibrated = rx_gain_one_step_direct::<D, _>(
-                clock,
-                PhyRxDcCalibrationRequest {
-                    shared_radio: true,
-                    stage: PhyRxDcCalibrationStage::Baseband,
-                    control: 0x800,
-                    initial: previous,
-                    gain_index: index,
-                    rx_saturation_detected: parameters.rx_saturation_detected,
-                },
-                registers,
-                budget,
-                execution,
-            )?;
-            outcome.quality.record_shared(index, calibrated.converged);
-            outcome.shared_index_dc[index as usize] = calibrated.configuration;
-        }
-        crate::target_executor::write_i2c_field_direct(
-            clock,
-            registers,
-            fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
-            1,
-        )?;
-        rx_gain_cleanup_direct::<D, _>(clock, registers)?;
+            &mut execution,
+            timing.as_deref_mut(),
+        )
+        .await;
+        observe(operation, terminal_event(&result));
+        result?;
+    }
+    Err(PhyTargetPortError::RfOperationLimit)
+}
 
-        crate::hardware::configure_phy_rx_gain_dc_registers(registers, true);
-        rx_gain_rfpll_direct::<D, _>(clock, parameters.crystal_selector, registers)?;
-        oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
-        for index in 0..7 {
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Wifi,
-                rx_on(index, parameters.pbus_rx_path_value),
-            )?;
-        }
-        oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, true);
-        oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, true);
-        for index in 0..WIFI_CALIBRATION_GAIN.len() as u8 {
-            let previous = if index == 0 {
-                [0x100; 2]
-            } else {
-                outcome.wifi_index_dc[0]
-            };
-            let baseband = if index == 0 {
-                [0x100; 2]
-            } else {
-                outcome.wifi_fine_dc[0]
-            };
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Wifi,
-                PhyPbusForceTest::new(2, 1, 0x100),
-            )?;
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Wifi,
-                PhyPbusForceTest::new(3, 1, 0x100),
-            )?;
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Wifi,
-                PhyPbusForceTest::new(2, 2, baseband[0]),
-            )?;
-            force_rx_gain_pbus(
-                clock,
-                registers,
-                PhyRxGainDcBank::Wifi,
-                PhyPbusForceTest::new(3, 2, baseband[1]),
-            )?;
-            for transaction in 0..3 {
-                force_rx_gain_pbus(
-                    clock,
-                    registers,
-                    PhyRxGainDcBank::Wifi,
-                    set_rx_gain_transaction(
-                        u32::from(WIFI_CALIBRATION_GAIN[index as usize]) << 12,
-                        parameters.pbus_rx_path_value,
-                        transaction,
-                    ),
-                )?;
-            }
-            let calibrated = rx_gain_one_step_direct::<D, _>(
-                clock,
-                PhyRxDcCalibrationRequest {
-                    shared_radio: false,
-                    stage: PhyRxDcCalibrationStage::Baseband,
-                    control: 0x800,
-                    initial: previous,
-                    gain_index: index,
-                    rx_saturation_detected: parameters.rx_saturation_detected,
-                },
-                registers,
-                budget,
-                execution,
-            )?;
-            outcome
-                .quality
-                .record_wifi_baseband(index, calibrated.converged);
-            outcome.wifi_index_dc[index as usize] = calibrated.configuration;
-            if index == 0 {
-                // `phy_rxdc_fine_cal`: one radio search per fine code, each
-                // starting from the previous search's pair.
-                let mut fine_current = [0x100; 2];
-                for fine in 0..FINE_CODES as u8 {
-                    force_rx_gain_pbus(
-                        clock,
-                        registers,
-                        PhyRxGainDcBank::Wifi,
-                        PhyPbusForceTest::new(1, 2, fine_code(fine)),
-                    )?;
-                    let calibrated = rx_gain_one_step_direct::<D, _>(
-                        clock,
-                        PhyRxDcCalibrationRequest {
-                            shared_radio: false,
-                            stage: PhyRxDcCalibrationStage::Radio,
-                            control: 0x800,
-                            initial: fine_current,
-                            gain_index: 0,
-                            rx_saturation_detected: parameters.rx_saturation_detected,
-                        },
-                        registers,
-                        budget,
-                        execution,
-                    )?;
-                    outcome.quality.record_wifi_fine(fine, calibrated.converged);
-                    fine_current = calibrated.configuration;
-                    outcome.wifi_fine_dc[fine as usize] = fine_current;
-                }
-            }
-        }
-        Ok(())
-    })();
-
-    match run {
-        Ok(()) => {
-            rx_gain_cleanup_direct::<D, _>(clock, registers)?;
-            Ok(Ok(outcome))
-        }
-        Err(DirectRxGainDcError::Target(error)) => Err(error),
-        Err(DirectRxGainDcError::Calibration(failure)) => {
-            rx_gain_cleanup_direct::<D, _>(clock, registers)?;
-            Ok(Err(failure))
-        }
+pin_project_lite::pin_project! {
+    struct RxGain<F> { #[pin] inner: F }
+}
+impl<F: core::future::Future<Output = Result<(), PhyTargetPortError>>> core::future::Future
+    for RxGain<F>
+{
+    type Output = Result<(), PhyTargetPortError>;
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().inner.poll(cx)
+    }
+}
+fn rx_gain_phase<
+    'a,
+    D: PhyShortDelay + 'a,
+    R: crate::executor::step::Registers,
+    T: oer_time::Timer,
+>(
+    clock: &'a T,
+    child: &'a mut crate::rx::gain::PhyRxGainInitTransition,
+    registers: &'a mut R,
+    execution: &'a mut crate::tracking::observation::RxGainExecution,
+    timing: Option<&'a mut crate::tracking::observation::EngineTiming>,
+) -> impl core::future::Future<Output = Result<(), PhyTargetPortError>> + 'a {
+    RxGain {
+        inner: async move {
+            use crate::executor::step::{Job, drive};
+            let mut job =
+                Job::rx_gain(child, execution, clock.now()).map_err(super::step::port_error)?;
+            drive::<D, _, _>(&mut job, registers, clock, timing, None, None)
+                .await
+                .map_err(super::step::port_error)
+        },
     }
 }
 
@@ -697,23 +337,61 @@ fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
 }
 
 /// Restore the operating channel without acquiring or releasing physical access.
-pub fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, C: oer_time::Clock + ?Sized>(
-    clock: &C,
+pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Timer>(
+    clock: &T,
     mut child: PhyCalibrationChannelTransition,
-    platform: &mut P,
+    _platform: &mut P,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     observer: &mut O,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
+    use crate::{
+        channel::PhyChipChannelCompletion as Done,
+        executor::step::{Job, drive},
+        tracking::observation::{EngineTiming, Operation},
+    };
+    let mut timing = EngineTiming::default();
     for _ in 0..RF_OPERATION_LIMIT {
         child = match child.commit() {
-            Ok(completion) => return Ok(completion),
+            Ok(completion) => {
+                if O::OBSERVE_ENGINE_POLLS {
+                    observer.engine_completed(Operation::ChannelRestore, timing);
+                }
+                return Ok(completion);
+            }
             Err(child) => child,
         };
-        let binding = child
-            .lower_external()
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        let completion =
-            complete_channel_direct::<D, _, _, _>(clock, binding, platform, registers, observer)?;
+        let mut binding = Some(
+            child
+                .lower_external()
+                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+        );
+        let mut completion = None;
+        let mut job = Job::channel(&mut binding, &mut completion, clock.now())
+            .map_err(super::step::port_error)?;
+        drive::<D, _, _>(
+            &mut job,
+            registers,
+            clock,
+            O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+            None,
+            None,
+        )
+        .await
+        .map_err(super::step::port_error)?;
+        let completion = completion.ok_or(PhyTargetPortError::UnexpectedBinding)?;
+        match completion {
+            Done::FrequencyReadyTimedOut => {
+                let crate::channel::PhyChipChannelAction::AwaitFrequencyReadyEdge {
+                    samples, ..
+                } = child.action()
+                else {
+                    return Err(PhyTargetPortError::UnexpectedBinding);
+                };
+                observer.channel_frequency_ready_timed_out(samples);
+            }
+            Done::TxGainCalculated { request, image } => observer.channel_tx_gain(request, image),
+            _ => {}
+        }
         child
             .advance(completion)
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
@@ -721,7 +399,7 @@ pub fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, C: oer_time::Clock + ?
     Err(PhyTargetPortError::RfOperationLimit)
 }
 
-fn complete_channel_direct<
+pub(crate) fn complete_channel_direct<
     D: PhyShortDelay,
     P,
     O: PhyTargetObserver,
