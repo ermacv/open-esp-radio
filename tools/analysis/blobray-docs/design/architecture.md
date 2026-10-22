@@ -117,6 +117,17 @@ insufficient reasons.
 
 ### Question owners
 
+Limits have three roles: input validation rejects an invalid request or format;
+resource budgets bound work and admitted memory; precision bounds retain explicit
+unknown evidence instead of claiming a proof. A function or query owns its local
+budget. Exhaustion degrades only that result, with a typed reason and a count.
+The operation's `RunControl` work/deadline/cancellation and `WorkingMemory`
+admission are safeguards: their errors terminate the operation with the original
+code and message, never an unavailable summary or a successful partial result.
+Summary catalogs distinguish a proved summary, absence of proof and local budget
+exhaustion. Register reports count functions in each outcome and split unavailable
+ROM summaries and incomplete signature audits by reason.
+
 Each question about analyzed code has one owning module; a new analysis extends
 that owner. A second implementation of the same question requires an explicit
 reason in this section. The table records the current paths and their limits;
