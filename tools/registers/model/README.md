@@ -54,6 +54,8 @@ reject another register's field or a value exceeding its width. Unknown or
 partial reset never creates a whole-byte reset image. These are pure values;
 no analog bus transaction is generated here. Stage2 compiles this file with
 the PAC's host tests; it adds no production dependency or bus entry point.
+The shared crate's `model` feature is selected only by those dev-dependencies;
+stage3 enables it for production with the complete caller migration.
 
 This is #294 stage2. Stage3 removes the old policy field domain and manual
 map while migrating all callers of both chips in one PR. It adds no aliases
