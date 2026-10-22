@@ -2635,8 +2635,8 @@ version = "0.1.0"
 dependencies = [
  "oer-bluetooth-le-port",
  "oer-bluetooth-le-radio",
- "oer-radio-permit-pool",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -2648,6 +2648,7 @@ version = "0.1.0"
 dependencies = [
  "oer-bluetooth-le-radio",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
 ]

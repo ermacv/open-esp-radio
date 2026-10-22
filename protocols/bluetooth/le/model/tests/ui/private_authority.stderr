@@ -1,0 +1,19 @@
+warning: unused imports: `Command`, `DtmCommand`, `LeOperationId`, `LePhase`, `Receive`, `Request`, `Supported`, `TestChannel`, and `TestPhy`
+ --> tests/ui/private_authority.rs:2:29
+  |
+2 | use oer_bluetooth_le_port::{Command, DtmCommand, LeOperationId, LePhase, Receive, Request, Supported, TestChannel, TestPhy};
+  |                             ^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^  ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PortContext`
+ --> tests/ui/private_authority.rs:3:22
+  |
+3 | use oer_radio_port::{PortContext, SlotIdentity};
+  |                      ^^^^^^^^^^^
+
+error[E0616]: field `view` of struct `ModelPhase` is private
+ --> tests/ui/private_authority.rs:6:23
+  |
+6 |     let _loan = phase.view.loan; // ui-error: E0616
+  |                       ^^^^ private field

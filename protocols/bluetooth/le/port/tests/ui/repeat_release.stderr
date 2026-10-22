@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `capacity`
+ --> tests/ui/repeat_release.rs:8:19
+  |
+5 | pub fn release<'p, P: PoolPath, X>(phase: &impl LePhase<'p, P, X>, capacity: Permit<'p, CommandCapacity, Child<P, 0>>) {
+  |                                                                    -------- move occurs because `capacity` has type `Permit<'_, CommandCapacity, oer_radio_port::Child<P, 0>>`, which does not implement the `Copy` trait
+6 |     phase.release(capacity);
+  |                   -------- value moved here
+7 |     #[cfg(all())]
+8 |     phase.release(capacity); // ui-error: E0382
+  |                   ^^^^^^^^ value used here after move

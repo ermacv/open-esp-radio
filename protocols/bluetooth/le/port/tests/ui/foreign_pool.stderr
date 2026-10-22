@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/foreign_pool.rs:13:25
+   |
+13 |     drop(foreign.submit(request)); // ui-error: E0308
+   |                  ------ ^^^^^^^ expected `1`, found `0`
+   |                  |
+   |                  arguments to this method are incorrect
+   |
+   = note: expected struct `oer_bluetooth_le_port::Request<'p, oer_radio_port::Child<Root<Id>, 1>, X, <A as LePhase<'p, oer_radio_port::Child<Root<Id>, 0>, X>>::Caps>`
+              found struct `oer_bluetooth_le_port::Request<'p, oer_radio_port::Child<Root<Id>, 0>, X, <A as LePhase<'p, oer_radio_port::Child<Root<Id>, 0>, X>>::Caps>`
+note: method defined here
+  --> src/lib.rs
+   |
+   |     fn submit(
+   |        ^^^^^^

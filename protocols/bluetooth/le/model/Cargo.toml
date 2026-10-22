@@ -15,10 +15,10 @@ oer-bluetooth-le-radio = { path = "../radio" }
 oer-radio-port = { path = "../../../radio/port" }
 oer-time = { path = "../../../../portable/time" }
 oer-bluetooth-le-port = { path = "../port" }
-oer-radio-permit-pool = { path = "../../../radio/permit-pool" }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-bluetooth-le-port = { path = "../port", features = ["test-support"] }

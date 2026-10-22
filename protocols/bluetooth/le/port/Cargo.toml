@@ -16,6 +16,7 @@ oer-radio-port = { path = "../../../radio/port" }
 oer-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 
