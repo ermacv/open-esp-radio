@@ -15,8 +15,12 @@ load width. Equal word tags survive joins across distinct load instructions;
 differing tags become unknown. Numeric address forms share one word identity;
 unresolved addresses use their abstract-value identity. All loads, including
 RAM outside the selected ranges, can supply stored provenance. Stack reloads
-retain forwarded word/entry tags; other bits name the reloaded word. Known
-values remain separate from word identity until stored projection.
+retain every forwarded tag, including unknown and constant tags; only bytes
+without a forwarded slot name the reloaded word. Known values remain separate
+from word identity until stored projection.
+Read preservation describes paths carrying that physical load; a stored tag
+describes every incoming path, so different tags at a join can yield unknown
+even for a bit preserved by one of the loads.
 
 `stored` is present for stores in the selected ranges, including selected indexed
 addresses; plain unresolved stores carry none. At those stores, constants and

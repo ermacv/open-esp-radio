@@ -120,7 +120,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
         },
     )
     .expect("register-accesses");
-    stored_property::assert_preserved_stores(&observations);
+    stored_property::assert_preserved_stores(&observations, &[]);
     assert_eq!(summary.blocked_functions, 0);
     assert_eq!(memory.used(), 0, "all evaluator admission is released");
     let read = |name: &str| &by_name.get(name.as_bytes()).expect("fixture load")[0].1;
@@ -600,7 +600,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
             },
         )
         .expect("argument summaries");
-        stored_property::assert_preserved_stores(&observations);
+        stored_property::assert_preserved_stores(&observations, &[]);
         if !call_summaries {
             let reads = &found["stale_a3"];
             assert_eq!(reads.unused, 0);
@@ -780,7 +780,7 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
         },
     )
     .expect("finite RMW analysis");
-    stored_property::assert_preserved_stores(&observations);
+    stored_property::assert_preserved_stores(&observations, &[]);
     assert_eq!(summary.blocked_functions, 0);
     assert_eq!(summary.partial_functions, 0);
     for (name, (a, b, replacement)) in expected {
@@ -814,7 +814,7 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
         assert_eq!(reads.preserved, !replacement, "{name:?}");
         assert_eq!(reads.unused, replacement, "{name:?}");
         assert_eq!(
-            stored_property::missing_preserved_bits(reads, stored),
+            stored_property::missing_preserved_bits(reads, stored, 0),
             0,
             "{name:?}: {stored:?}"
         );
@@ -1061,7 +1061,7 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
         },
     )
     .expect("stored flow analysis");
-    stored_property::assert_preserved_stores(&observations);
+    stored_property::assert_preserved_stores(&observations, &[]);
     for name in [
         "joined", "stacked", "argument", "returned", "inverted", "ram",
     ] {
@@ -1108,7 +1108,7 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
                 && function.name.as_deref() == Some(name.as_bytes())
             {
                 assert_eq!(
-                    stored_property::missing_preserved_bits(reads, stored),
+                    stored_property::missing_preserved_bits(reads, stored, 0),
                     0,
                     "{name}: {reads:?}, {stored:?}"
                 );
@@ -1122,6 +1122,154 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
             ..
         }
     )));
+}
+
+#[test]
+fn a_stack_reload_does_not_invent_an_origin_for_forwarded_unknown() {
+    let memory = WorkingMemory::new(64 << 20).expect("memory");
+    let mut observations = Vec::new();
+    register_accesses(
+        &[Executable::new(fixture(include_str!(
+            "fixtures/unknown_stack.rs"
+        )))],
+        Assumptions::default(),
+        &[ImageRegion {
+            start: 0x2010_7000,
+            length: 4,
+        }],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |o, _| {
+            observations.push(o.clone());
+            Ok(())
+        },
+    )
+    .expect("stack forwarding");
+    let stores: Vec<_> = observations
+        .iter()
+        .filter_map(|o| match o {
+            RegisterAccess::Observation {
+                stored: Some(runs), ..
+            } => Some(runs.as_slice()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        stores,
+        [&[StoredBits {
+            low: 0,
+            width: 32,
+            source: StoredBitsSource::Unknown
+        }][..]]
+    );
+    stored_property::assert_preserved_stores(&observations, &[]);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn preservation_witnesses_allow_only_proved_joins_of_different_tags() {
+    let source = r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.word_constant_join,"ax",@progbits
+.globl word_constant_join
+.type word_constant_join,@function
+word_constant_join:
+lui t0,0x20107
+beqz a0,2f
+lw t1,0(t0)
+ori t1,t1,1
+j 3f
+2:
+lw t1,0(t0)
+ori t1,t1,2
+3:
+sw t1,0(t0)
+ret
+.size word_constant_join,.-word_constant_join
+.section .text.word_word_join,"ax",@progbits
+.globl word_word_join
+.type word_word_join,@function
+word_word_join:
+lui t0,0x20107
+beqz a0,2f
+lw t1,0(t0)
+j 3f
+2:
+lw t1,4(t0)
+3:
+sw t1,0(t0)
+ret
+.size word_word_join,.-word_word_join
+"#);
+"##;
+    let memory = WorkingMemory::new(64 << 20).expect("memory");
+    let mut observations = Vec::new();
+    register_accesses(
+        &[Executable::new(fixture(source))],
+        Assumptions::default(),
+        &[ImageRegion {
+            start: 0x2010_7000,
+            length: 4,
+        }],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |o, _| {
+            observations.push(o.clone());
+            Ok(())
+        },
+    )
+    .expect("joined stores");
+    // The assembly above proves the incoming tag pairs: Word/Const on bits
+    // 0..1, and two different words on all bits. Unknown alone proves nothing.
+    let joins = [
+        stored_property::JoinedBits {
+            function: b"word_constant_join",
+            store: 28,
+            bits: 3,
+        },
+        stored_property::JoinedBits {
+            function: b"word_word_join",
+            store: 20,
+            bits: u32::MAX,
+        },
+    ];
+    stored_property::assert_preserved_stores(&observations, &joins);
+    let mut missing = Vec::new();
+    for join in &joins {
+        let stored = observations
+            .iter()
+            .find_map(|o| match o {
+                RegisterAccess::Observation {
+                    function,
+                    stored: Some(runs),
+                    ..
+                } if function.name.as_deref() == Some(join.function) => Some(runs),
+                _ => None,
+            })
+            .expect("store");
+        for o in &observations {
+            if let RegisterAccess::Observation {
+                function,
+                reads: Some(reads),
+                ..
+            } = o
+                && function.name.as_deref() == Some(join.function)
+            {
+                missing.push(stored_property::missing_preserved_bits(reads, stored, 0));
+                assert_eq!(
+                    stored_property::missing_preserved_bits(reads, stored, join.bits),
+                    0
+                );
+            }
+        }
+    }
+    missing.sort_unstable();
+    assert_eq!(missing, [1, 2, u32::MAX]);
+    assert_eq!(memory.used(), 0);
 }
 
 #[test]

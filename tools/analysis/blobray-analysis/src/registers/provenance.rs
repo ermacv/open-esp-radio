@@ -392,9 +392,9 @@ impl<'m> Domain<'m> for Provenance<'m> {
         forwarded: u32,
         c: &mut dyn RunControl,
     ) -> Result<Self::Flow> {
-        let seed = Self::seed(e, source, width, signed, u32::MAX, c)?;
+        let seed = Self::seed(e, source, width, signed, !forwarded, c)?;
         Ok(ProvenanceValue(std::array::from_fn(|i| {
-            if forwarded & (1 << i) != 0 && flow.bit(i).origin().is_some() {
+            if forwarded & (1 << i) != 0 {
                 flow.bit(i)
             } else {
                 seed.bit(i)
@@ -968,29 +968,46 @@ mod tests {
         }
     }
     #[test]
-    fn a_stack_reload_names_its_word_when_forwarded_provenance_is_unknown() {
+    fn a_stack_reload_keeps_forwarded_tags_including_unknown_and_constants() {
         let memory = WorkingMemory::new(1 << 20).expect("memory");
         let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
         let mut engine = FlowEngine::<Provenance>::new(&facts, &memory);
         let word =
             Provenance::seed(&mut engine, 0, 4, false, u32::MAX, &mut || Ok(())).expect("word");
-        let actual = Provenance::load(
-            &mut engine,
+        let incoming_word = Provenance::seed(&mut engine, 1, 4, false, u32::MAX, &mut || Ok(()))
+            .expect("forwarded word");
+        for flow in [
             ProvenanceValue::default(),
-            0,
-            4,
-            false,
-            u32::MAX,
+            ProvenanceValue::constant(0xa5),
+            incoming_word,
+        ] {
+            for forwarded in [0, 0xff, 0x00ff_00ff, u32::MAX] {
+                let actual =
+                    Provenance::load(&mut engine, flow, 0, 4, false, forwarded, &mut || Ok(()))
+                        .expect("reload");
+                for bit in 0..32 {
+                    assert_eq!(
+                        actual.bit(bit),
+                        if forwarded & (1 << bit) != 0 {
+                            flow.bit(bit)
+                        } else {
+                            word.bit(bit)
+                        }
+                    );
+                }
+            }
+        }
+        let conflict = Provenance::join(
+            &mut engine,
+            incoming_word,
+            ProvenanceValue::constant(0),
             &mut || Ok(()),
         )
-        .expect("reload with unknown incoming value");
-        assert_eq!(actual, word);
-        let known = ProvenanceValue::constant(0xa5);
-        assert_eq!(
-            Provenance::load(&mut engine, known, 0, 4, false, u32::MAX, &mut || Ok(()))
-                .expect("known forwarding"),
-            word
-        );
+        .expect("different incoming tags");
+        let reloaded =
+            Provenance::load(&mut engine, conflict, 0, 4, false, u32::MAX, &mut || Ok(()))
+                .expect("reload joined byte");
+        assert_eq!(reloaded, ProvenanceValue::default());
     }
     #[test]
     fn a_known_loaded_value_retains_its_word_identity_when_value_knowledge_joins_away() {
