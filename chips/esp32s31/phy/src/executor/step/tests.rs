@@ -49,6 +49,8 @@ pub(crate) struct Io {
     frequency_failure: bool,
     i2c_write_publication: Option<(Rc<VirtualClock<1>>, u64)>,
     i2c_busy_after_write: bool,
+    i2c_observation_clock: Option<Rc<VirtualClock<1>>>,
+    i2c_observations: std::collections::VecDeque<(u64, bool)>,
     dc_iq_pending: usize,
     dc_iq_events: Vec<&'static str>,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
@@ -312,20 +314,26 @@ impl Io {
                 .advance(Duration::from_micros(self.rfpll_command_micros))
                 .expect("test command time fits");
         }
+        let busy = if let Some((micros, busy)) = self.i2c_observations.pop_front() {
+            self.i2c_observation_clock
+                .as_ref()
+                .expect("fixture clock")
+                .advance(Duration::from_micros(micros))
+                .expect("observation fits virtual time");
+            busy
+        } else {
+            self.busy.get()
+        };
         match transaction.action() {
             PhyColdI2cAction::AwaitReadCompletionEdge { .. } => {
-                transaction.observe_read_result(if self.busy.get() {
+                transaction.observe_read_result(if busy {
                     Err(PhyI2cError::Busy)
                 } else {
                     Ok(self.byte)
                 })
             }
             PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                transaction.observe_write_result(if self.busy.get() {
-                    Err(PhyI2cError::Busy)
-                } else {
-                    Ok(())
-                })
+                transaction.observe_write_result(if busy { Err(PhyI2cError::Busy) } else { Ok(()) })
             }
             _ => return Err(Failure::Binding),
         }
@@ -1573,6 +1581,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
         direct_binding.transaction_mut(),
         None,
         false,
+        rfpll::I2cBoundary::Transaction,
     )
     .expect("direct command completes");
     let expected = direct_binding

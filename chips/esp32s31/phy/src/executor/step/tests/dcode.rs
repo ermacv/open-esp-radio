@@ -204,6 +204,7 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
             &mut transaction,
             None,
             false,
+            super::super::rfpll::I2cBoundary::Transaction,
         );
         assert_eq!(
             clock.now().saturating_duration_since(started).as_micros(),
@@ -232,4 +233,102 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
             ));
         }
     }
+}
+
+#[test]
+fn runtime_rmw_retains_its_write_and_gives_each_byte_the_existing_settle() {
+    let clock = Rc::new(VirtualClock::<1>::new());
+    let mut io = Io {
+        i2c_observation_clock: Some(clock.clone()),
+        i2c_observations: std::iter::repeat_n([(10, true), (5, false)], 40)
+            .flatten()
+            .collect(),
+        ..Io::default()
+    };
+    let mut transition = PhyDcodeTransition::new(PhyDcodeParameters {
+        crystal_selector: 0,
+    });
+    let mut lock = None;
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut job = Job::dcode(&mut transition, &mut lock, clock.now()).expect("deadline fits");
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job, &mut io, &*clock, None, None, None
+        ));
+        let mut polls = 0;
+        loop {
+            polls += 1;
+            assert!(polls < 200);
+            let at = clock.now();
+            let result = driver.as_mut().poll(&mut cx);
+            assert!(clock.now().saturating_duration_since(at).as_micros() <= 50);
+            if let Poll::Ready(result) = result {
+                result.expect("two fifteen-us bytes are not a twenty-us RMW");
+                break;
+            }
+            clock
+                .advance(Duration::from_micros(100))
+                .expect("suspension fits");
+        }
+    }
+    assert!(io.i2c_observations.is_empty());
+    assert_eq!(
+        io.actions
+            .iter()
+            .filter(|a| matches!(
+                a,
+                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. }
+            ))
+            .count(),
+        40
+    );
+    assert!(matches!(transition.action(), PhyDcodeAction::Complete(_)));
+}
+
+#[test]
+fn a_dcode_byte_that_stays_busy_keeps_the_original_twenty_us_timeout() {
+    let clock = Rc::new(VirtualClock::<1>::new());
+    let mut io = Io {
+        i2c_observation_clock: Some(clock.clone()),
+        i2c_observations: [(10, true), (15, true)].into(),
+        ..Io::default()
+    };
+    let mut transition = PhyDcodeTransition::new(PhyDcodeParameters {
+        crystal_selector: 0,
+    });
+    let mut lock = None;
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    let mut job = Job::dcode(&mut transition, &mut lock, clock.now()).expect("deadline fits");
+    {
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job, &mut io, &*clock, None, None, None
+        ));
+        let mut polls = 0;
+        loop {
+            polls += 1;
+            assert!(polls < 100);
+            if let Poll::Ready(result) = driver.as_mut().poll(&mut cx) {
+                assert_eq!(result, Err(Failure::TimedOut));
+                break;
+            }
+        }
+    }
+    let Work::Dcode {
+        i2c: Some(binding), ..
+    } = &job.work
+    else {
+        panic!("published byte is retained");
+    };
+    assert!(matches!(
+        binding.action(),
+        PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+    ));
+    assert!(
+        !io.actions
+            .iter()
+            .any(|a| matches!(a, PhyColdI2cAction::StartWrite { .. })),
+        "no write after read timeout"
+    );
 }
