@@ -14,6 +14,12 @@ addressOffset = 0x50
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_14_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 15
 [[peripheral-review]]
 entity = "PHY_BRX_RECOVERED_GAPS"
 opaque-entities = [
@@ -29,3 +35,11 @@ completeness = "unknown"
 [peripheral-review.opaque]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
 naming = "opaque"
+
+[[review]]
+entity = "PHY_BRX_RECOVERED_GAPS.WORD_0050_OPAQUE.BITS_0_14_OPAQUE"
+sources = ["S31_MMIO_USE_20108050", "S31_MMIO_DECLARED_20108050"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

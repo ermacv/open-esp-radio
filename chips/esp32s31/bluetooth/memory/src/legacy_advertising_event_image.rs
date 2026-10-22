@@ -182,17 +182,19 @@ impl LegacyAdvertisingLinkStateWords {
             previous_index[2] | next_index[2],
             next_index[3],
         ]);
-        self.word_00 = BleLinkStateTxPath::from_bits(header_index)
+        self.word_00 = self
+            .word_00
+            .with_header_from(BleLinkStateTxPath::from_bits(header_index))
             .with_max_tx_octets(255)
             .with_queue_ready(true)
-            .with_bits_29_30_opaque(self.word_00.bits_29_30_opaque())
-            .expect("retained prefix fits")
             .with_valid(true);
         self.word_04 = self
             .word_04
             .with_header(None)
             .expect("empty link fits")
-            .with_bits_28_31_opaque(0)
+            .with_phy_code_28_29(0)
+            .expect("zero fits")
+            .with_phy_code_30_31(0)
             .expect("zero fits");
         self.word_08 = ADVERTISING_RESET.word_08;
         self.word_0c = self
@@ -223,7 +225,8 @@ impl LegacyAdvertisingLinkStateWords {
                 self.word_40 = self
                     .word_40
                     .with_value(u16::from_le_bytes([address[4], address[5]]))
-                    .with_bits_16_23_opaque(self.word_40.bits_16_23_opaque() | 3);
+                    .with_bits_16_17_opaque(3)
+                    .expect("two set bits fit");
             }
         }
         self.crc_init_word_2c = self
@@ -312,9 +315,9 @@ impl LegacyAdvertisingSchedulerItemWords {
         self.word_04 = self.word_04.with_event_ready(true);
         self.word_14 = self
             .word_14
-            .with_bits_28_29_opaque(0)
+            .with_phy_code_28_29(0)
             .expect("zero fits")
-            .with_bits_30_31_opaque(0)
+            .with_phy_code_30_31(0)
             .expect("zero fits")
             .with_power_index(link_state.power_index());
         self.word_18 = self
@@ -323,7 +326,7 @@ impl LegacyAdvertisingSchedulerItemWords {
             .expect("primary channel fits")
             .with_arbitration_priority(1)
             .expect("priority fits")
-            .with_bits_4_7_opaque(1)
+            .with_priority_copy(1)
             .expect("reviewed image fits");
         self.word_38 = ADVERTISING_ITEM_EVENT.word_38;
         self.raw_start_word_44 = self.raw_start_word_44.with_value(raw_start);
@@ -348,7 +351,9 @@ const ADVERTISING_RESET: LegacyAdvertisingLinkStateWords = LegacyAdvertisingLink
     word_14: BleLinkStatePacketPolicy::ZERO,
     word_18: BleLinkStateReceiveContext::ZERO,
     word_24: BleLinkStateOwnAddressPolicy::ZERO
-        .with_bits_16_27_opaque(0x710)
+        .with_bits_20_22_opaque(1)
+        .expect("reviewed field image fits")
+        .with_bits_24_26_opaque(0x7)
         .expect("reviewed field image fits"),
     crc_init_word_2c: BleLinkStateCrcInitialization::ZERO,
     word_30: BleLinkStateSequencePolicy::ZERO,

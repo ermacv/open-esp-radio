@@ -58,15 +58,9 @@ name = "TYPE_0_ENABLE"
 bitOffset = 29
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_30_31_OPAQUE"
-bitOffset = 30
-bitWidth = 2
-
 [[peripheral-review]]
 entity = "WIFI_MAC_RX_CUSTOM_TYPE"
 opaque-entities = [
-    "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.BITS_30_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

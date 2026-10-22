@@ -101,6 +101,8 @@ impl RadioPartitions {
             phy_radio,
             wifi_mac,
             wifi_interrupts,
+            // Inventory-only word views have no safe runtime owner.
+            unexposed: _,
         } = svd::peripheral_ownership::partition(peripherals);
         Self {
             ieee802154: Ieee802154Partition {

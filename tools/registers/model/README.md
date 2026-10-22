@@ -61,13 +61,14 @@ not by wildcard-matching expanded names.
 
 ## Register bit states
 
-Each register or memory-layout bit has one of three states:
+Each register or memory-layout bit has one of four states:
 
 | State | Meaning | Evidence |
 | --- | --- | --- |
-| Described | Its meaning is known | A cited source establishes the meaning |
-| Opaque | Its meaning is unknown, but a use is observed | A cited source establishes the use |
-| Absent | No use is observed in the examined corpus, or a source marks it reserved | No field is published |
+| Described | Named in an open vendor source, or its meaning is otherwise established | A cited source establishes the name or meaning |
+| Opaque | Absent from open sources; a use is observed, meaning unknown | A cited source establishes the use |
+| Reserved | A source explicitly marks the bit reserved | The register records a cited reserved mask; no field is published |
+| Absent | No use is observed in the examined corpus and no source marks the bit reserved | No field or reserved annotation is published |
 
 A use is a write of a value different from reset, an explicit masked set in
 a read-modify-write, or a read whose value changes behaviour. Carrying bits
@@ -76,11 +77,44 @@ reset value as part of a whole-word store. A whole-word access alone does not
 justify an opaque field. Both described and opaque fields require source
 evidence (`SOURCE` in the implementation, `sources` in the reviewed model).
 Absence is relative to the examined corpus, whose inputs and coverage limits
-must accompany a vendor-use check. A use of an absent bit is an error.
+must accompany a vendor-use check. A use of either a reserved or absent bit
+is an error; the checker reports these two cases separately. A bit named in
+an open vendor source is never opaque.
 
-Code preserves absent bits or writes their reset value, and the PAC exposes
-no field accessor for them. Layouts follow the same rule: CPU operations
+Code preserves reserved and absent bits or writes their reset value, and the
+PAC exposes no field accessor for them. Layouts follow the same rule: CPU operations
 preserve the exact image of unassigned bits, including bits hardware writes.
+An existing layout unit can declare `fields = []`: its cited position, size,
+whole image and storage remain, with no bit accessors. The `fields` property
+is still required. Encoded pointer fields can copy their pointer from another
+word image with `with_<field>_from`, preserving all other bits without naming
+unassigned lanes.
+
+A whole-register initialization image written by the vendor as an exact
+constant remains one cited image operation even where reset is unknown.
+The image alone grants no bit accessor and establishes no reset value or
+absence of hardware use. Independent masked uses or behaviour-dependent
+reads still qualify their own fields. Keep the unresolved lanes in the
+unknown-reset report; callers cannot supply an arbitrary replacement image.
+
+A native schema-2 fragment adds one optional property on a register:
+
+```toml
+[peripherals.registers.register]
+name = "DELAY"
+addressOffset = 0
+size = 32
+reserved = { mask = 0xfffffc00, sources = ["VENDOR_HEADER"] }
+```
+
+The nonzero mask must fit the inherited register width and must not overlap
+any field. Sources are nonempty, distinct and checked against the publication's
+evidence catalogs. Masks above TOML's signed integer range use a hexadecimal
+string (up to 128 bits). Array instances inherit the structural register
+template's annotation. Sparse reviewed overlays retain it by physical identity
+and cannot add an overlapping field. Clean SVD omits these source annotations;
+the native model and expanded geometry retain them for checks. No field or PAC
+accessor is generated for reserved bits.
 
 ## Name origin
 

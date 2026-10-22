@@ -19,8 +19,9 @@ const REARMED_RESULT: BleRxPacketPrefixResult = BleRxPacketPrefixResult::from_bi
     .expect("sentinel fits");
 
 /// SOURCE: pinned `memMgmt_3.o` receive allocator's opaque capacity image.
-const RX_CAPACITY: BleRxPacketPrefixByte0004Opaque =
-    BleRxPacketPrefixByte0004Opaque::from_bits(0).with_bits_0_31_opaque(0x0001_0100);
+const RX_CAPACITY: BleRxPacketPrefixByte0004Opaque = BleRxPacketPrefixByte0004Opaque::from_bits(0)
+    .with_bit_8_opaque(true)
+    .with_bit_16_opaque(true);
 
 pub(crate) const fn result_not_produced(result: BleRxPacketPrefixResult) -> bool {
     result.bit_0_opaque()

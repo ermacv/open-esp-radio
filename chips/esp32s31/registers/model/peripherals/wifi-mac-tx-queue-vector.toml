@@ -137,11 +137,6 @@ bitOffset = 0
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_1_3_OPAQUE"
-bitOffset = 1
-bitWidth = 3
-
-[[peripherals.registers.register.fields]]
 name = "PTI_0"
 bitOffset = 4
 bitWidth = 4
@@ -309,11 +304,6 @@ bitOffset = 0
 bitWidth = 2
 
 [[peripherals.registers.register.fields]]
-name = "BITS_2_3_OPAQUE"
-bitOffset = 2
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "GROUP_ID"
 bitOffset = 4
 bitWidth = 6
@@ -329,11 +319,6 @@ bitOffset = 13
 bitWidth = 9
 
 [[peripherals.registers.register.fields]]
-name = "BITS_22_23_OPAQUE"
-bitOffset = 22
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "SHORT_GI"
 bitOffset = 24
 bitWidth = 1
@@ -346,11 +331,6 @@ bitWidth = 1
 [[peripherals.registers.register.fields]]
 name = "CODING"
 bitOffset = 26
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BIT_27_OPAQUE"
-bitOffset = 27
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
@@ -371,20 +351,15 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_1_OPAQUE"
-bitOffset = 0
-bitWidth = 2
-
-[[peripherals.registers.register.fields]]
 name = "SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LENGTH"
 bitOffset = 2
 bitWidth = 17
 
 [[peripherals.registers.register.fields]]
-name = "BITS_19_31_OPAQUE"
+name = "BITS_19_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 19
-bitWidth = 13
-
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -520,23 +495,14 @@ bitOffset = 2
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_3_7_OPAQUE"
-bitOffset = 3
-bitWidth = 5
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0x1F
-
+name = "BITS_5_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 5
+bitWidth = 3
 [[peripherals.registers.register.fields]]
 name = "CONTROL_REQUIRED_8"
 description = "Bounded HE SU formatter-required low control bit."
 bitOffset = 8
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BIT_9_OPAQUE"
-bitOffset = 9
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
@@ -561,6 +527,12 @@ description = "Copy of frame-state bit 12; set in live HE A-MPDU images and clea
 bitOffset = 28
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -677,10 +649,10 @@ minimum = 0x0
 maximum = 0x7F
 
 [[peripherals.registers.register.fields]]
-name = "BITS_21_31_OPAQUE"
+name = "BIT_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 21
-bitWidth = 11
-
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -701,15 +673,6 @@ bitWidth = 19
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0x0
 maximum = 0x7FFFF
-
-[[peripherals.registers.register.fields]]
-name = "BITS_19_21_OPAQUE"
-bitOffset = 19
-bitWidth = 3
-
-[peripherals.registers.register.fields.writeConstraint.range]
-minimum = 0x0
-maximum = 0x7
 
 [[peripherals.registers.register.fields]]
 name = "HT40_EOF_COUNT"
@@ -849,16 +812,6 @@ bitWidth = 1
 [[peripheral-review]]
 entity = "WIFI_MAC_TX_QUEUE_VECTOR"
 opaque-entities = [
-    "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.BITS_1_3_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_2_3_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_22_23_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BIT_27_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_0_1_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_19_31_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BITS_3_7_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BIT_9_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.BITS_21_31_OPAQUE",
-    "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.BITS_19_21_OPAQUE",
     "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_14_21_OPAQUE",
     "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_28_31_OPAQUE",
 ]
@@ -1158,3 +1111,44 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BIT_27_OPAQUE"
+sources = ["S31_MMIO_USE_201054F8", "S31_MMIO_DECLARED_20105384"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_19_24_OPAQUE"
+sources = ["S31_MMIO_AUDIT_2010537C", "S31_MMIO_DECLARED_2010537C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BITS_5_7_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20105384"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.BIT_21_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20105390"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_14_21_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010539C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_28_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010539C"]
+naming = "opaque"

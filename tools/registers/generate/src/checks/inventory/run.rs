@@ -3,7 +3,7 @@
 //! with the constants callees return taken at their calls, over
 //! every pinned vendor binary inside the publication's owned MMIO ranges,
 //! compared with the register model ([`super`]). Reports are written before
-//! returning an error for used absent bits; unknown bits remain separate.
+//! returning an error for used reserved or absent bits; unknown bits remain separate.
 use super::{self as inventory, Region};
 use crate::Result;
 use oer_os_process::Checkout;
@@ -151,7 +151,7 @@ pub(super) fn write_report(
     println!("report: {}", directory.join("report.txt").display());
     if report.violations() != 0 {
         return Err(format!(
-            "vendor uses absent bits in {} MMIO words; see {}",
+            "vendor uses reserved or absent bits in {} MMIO words; see {}",
             report.violations(),
             directory.join("report.txt").display()
         )

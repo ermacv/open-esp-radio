@@ -164,8 +164,8 @@ pub(crate) struct LeRxBufferHeaderStorage {
 /// SOURCE: pinned `memMgmt_3.o` RX-header allocator, including its opaque PDU-target prefix.
 const RX_HEADER: BufferHeaderImage = BufferHeaderImage {
     pdu_target: BleBufferHeaderPduTarget::ZERO
-        .with_bits_20_31_opaque(0x808)
-        .expect("reviewed prefix fits"),
+        .with_bit_23_opaque(true)
+        .with_bit_31_opaque(true),
     ..BufferHeaderImage::ZERO
 };
 
@@ -232,13 +232,16 @@ impl LeRxBufferHeaderStorage {
             .write(self.layout.allocation().read().with_terminal(marked));
     }
     pub(crate) fn link_successor(&self, successor: Option<ControllerSramLinkAddress>) {
-        self.layout.next().write(
-            BleBufferHeaderNext::from_bits(
-                successor.map_or(0, ControllerSramLinkAddress::compressed_image),
-            )
-            .with_bits_20_31_opaque(self.layout.next().read().bits_20_31_opaque())
-            .expect("retained prefix fits"),
-        );
+        self.layout
+            .next()
+            .write(
+                self.layout
+                    .next()
+                    .read()
+                    .with_address_from(BleBufferHeaderNext::from_bits(
+                        successor.map_or(0, ControllerSramLinkAddress::compressed_image),
+                    )),
+            );
     }
     pub(crate) fn packet_image(&self) -> Option<u32> {
         let image = self.layout.packet_base().read().address();
@@ -408,6 +411,19 @@ impl LeRxNodeStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relinking_preserves_the_unassigned_header_image() {
+        let header = LeRxBufferHeaderStorage::new();
+        header
+            .layout
+            .next()
+            .write(BleBufferHeaderNext::from_bits(0xa5a5_4321));
+        header.link_successor(Some(ControllerSramLinkAddress::new(0x2f00_4000).unwrap()));
+        assert_eq!(header.layout.next().read().bits(), 0xa5a0_1000);
+        header.link_successor(None);
+        assert_eq!(header.layout.next().read().bits(), 0xa5a0_0000);
+    }
 
     #[test]
     fn connection_rejections_are_discarded_and_accepted_pdus_are_copied() {

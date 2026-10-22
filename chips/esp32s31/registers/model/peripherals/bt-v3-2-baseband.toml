@@ -39,6 +39,12 @@ description = "bt_get_channel_pwr_set replaces the field with 3 and bt_get_chann
 bitOffset = 8
 bitWidth = 2
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -96,6 +102,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_11_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -220,6 +232,12 @@ description = "The reset-idle predicate fails when this exact four-bit field is 
 bitOffset = 20
 bitWidth = 4
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -235,6 +253,12 @@ description = "Signed two's-complement RSSI in dBm of the most recent baseband r
 bitOffset = 0
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 24
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -407,6 +431,12 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 20
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -443,6 +473,12 @@ bitOffset = 30
 bitWidth = 1
 access = "read-only"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 21
+bitWidth = 4
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -484,6 +520,12 @@ description = "bt_bb_wdt_init sets this bit before writing both argument fields.
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 13
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -747,6 +789,24 @@ name = "ARGUMENT_1_COPY_1"
 bitOffset = 19
 bitWidth = 6
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_4_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "BITS_11_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1003,7 +1063,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.LE_TX_ON_DELAY.BITS_16_18_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102014"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1035,7 +1095,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.TX_CCA_CONTROL_0.BITS_20_22_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_201020B8"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1043,7 +1103,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.WATCHDOG_CONTROL.BIT_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_201020DC"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1051,7 +1111,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.COEX_CONFIG.BIT_18_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102184"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1059,7 +1119,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.COEX_CONFIG.BIT_20_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102184"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1067,7 +1127,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.RX_DPO_CONTROL.BIT_19_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_201021C4"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1083,7 +1143,7 @@ completeness = "partial"
 [[review]]
 entity = "BT_V3_2_BASEBAND.RX_SETUP_CONTROL_0.BIT_0_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102000"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1115,7 +1175,7 @@ completeness = "partial"
 [[review]]
 entity = "BT_V3_2_BASEBAND.RX_SETUP_CONTROL_1.BIT_2_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_2010204C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1203,7 +1263,7 @@ completeness = "partial"
 [[review]]
 entity = "BT_V3_2_BASEBAND.SOFTWARE_RESET_IDLE_STATUS.BITS_15_16_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "S31_MMIO_DECLARED_2010207C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1211,7 +1271,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.SOFTWARE_RESET_IDLE_STATUS.BITS_20_23_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "S31_MMIO_DECLARED_2010207C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1307,7 +1367,7 @@ completeness = "partial"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_6_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1315,7 +1375,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_7_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1323,7 +1383,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_8_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1331,7 +1391,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_9_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1339,7 +1399,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_10_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1347,7 +1407,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_19_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1355,7 +1415,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_20_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1363,7 +1423,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.AGC_RESTART_CONTROL.BIT_21_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET"]
+sources = ["BLOB_LIBBTBB_BT_AGC_RESTART_SET", "S31_MMIO_DECLARED_20102100"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1379,7 +1439,7 @@ completeness = "complete"
 [[review]]
 entity = "BT_V3_2_BASEBAND.RX_CORRELATOR_CONTROL.BIT_13_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102068"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1399,3 +1459,144 @@ sources = ["BLOB_LIBBTBB_BT_TX_SET"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.CURRENT_RX_INFO.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_USE_201020B0", "S31_MMIO_DECLARED_201020B0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.TX_CCA_FIFO_STATUS.BITS_21_24_OPAQUE"
+sources = ["S31_MMIO_USE_201020D4", "S31_MMIO_DECLARED_201020D4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.CHANNEL_POWER_CONTROL.BITS_10_11_OPAQUE"
+sources = ["S31_MMIO_USE_20102004", "S31_MMIO_DECLARED_20102004"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.SOFTWARE_RESET_IDLE_STATUS.BITS_18_19_OPAQUE"
+sources = ["S31_MMIO_USE_2010207C", "S31_MMIO_DECLARED_2010207C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.LE_TX_ON_DELAY.BITS_11_15_OPAQUE"
+sources = ["S31_MMIO_USE_20102014", "S31_MMIO_DECLARED_20102014"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.RX_SETUP_ARGUMENT.BITS_12_31_OPAQUE"
+sources = ["S31_MMIO_USE_20102170", "S31_MMIO_DECLARED_20102170"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.WATCHDOG_CONTROL.BITS_0_12_OPAQUE"
+sources = ["S31_MMIO_USE_201020DC", "S31_MMIO_DECLARED_201020DC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.LE_CORRELATION_THRESHOLD_2.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_USE_201020F8", "S31_MMIO_DECLARED_201020F8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.LE_CORRELATION_THRESHOLD_2.BITS_11_18_OPAQUE"
+sources = ["S31_MMIO_USE_201020F8", "S31_MMIO_DECLARED_201020F8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.LE_CORRELATION_THRESHOLD_2.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_USE_201020F8", "S31_MMIO_DECLARED_201020F8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_0.BITS_2_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E0"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_0.BITS_10_16_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E0"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_0.BITS_17_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E0"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_0.BITS_23_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E0"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_0.BITS_28_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E0"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_1.BITS_2_12_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E4"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_1.BITS_13_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E4"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_1.BITS_23_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E4"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_2.BITS_10_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E8"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_2.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020E8"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_3.BITS_10_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020EC"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_1M_COEFFICIENT_3.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020EC"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_2M_COEFFICIENT_1.BITS_0_10_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020F4"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_2M_COEFFICIENT_1.BITS_11_21_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020F4"]
+naming = "opaque"
+[[review]]
+entity = "BT_V3_2_BASEBAND.GAUSSIAN_2M_COEFFICIENT_1.BITS_22_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201020F4"]
+naming = "opaque"

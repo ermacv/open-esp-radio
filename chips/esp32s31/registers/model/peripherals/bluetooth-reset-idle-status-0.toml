@@ -23,6 +23,12 @@ description = "The reset-idle predicate fails when this exact field is nonzero."
 bitOffset = 0
 bitWidth = 4
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 28
 [[peripheral-review]]
 entity = "BLUETOOTH_RESET_IDLE_STATUS_0"
 opaque-entities = [
@@ -48,3 +54,16 @@ naming = "opaque"
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS.BITS_4_31_OPAQUE"
+sources = ["S31_MMIO_USE_20101550", "S31_MMIO_DECLARED_20101550"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20101550"]
+naming = "opaque"

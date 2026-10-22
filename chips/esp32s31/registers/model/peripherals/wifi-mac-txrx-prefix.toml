@@ -50,6 +50,12 @@ bitWidth = 5
 minimum = 0x0
 maximum = 0x1F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -69,6 +75,12 @@ name = "BIT_4_OPAQUE"
 bitOffset = 4
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -92,6 +104,18 @@ name = "BIT_31_OPAQUE"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 3
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -137,6 +161,18 @@ name = "BIT_31_OPAQUE"
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_4_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -157,6 +193,12 @@ name = "BIT_3_OPAQUE"
 bitOffset = 3
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -175,6 +217,12 @@ bitWidth = 2
 minimum = 0x0
 maximum = 0x3
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 30
 [[peripheral-review]]
 entity = "WIFI_MAC_TXRX_PREFIX"
 opaque-entities = [
@@ -237,10 +285,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_28_OPAQUE"
 naming = "opaque"
-sources = [
-    "BLOB_LIBPP_MAC_TXRX_INIT_PREFIX",
-    "BLOB_LIBPP_HAL_INIT_TAIL",
-]
+sources = ["BLOB_LIBPP_MAC_TXRX_INIT_PREFIX", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C8C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -259,7 +304,140 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_TXRX_PREFIX.MODE_CONTROL.BIT_2_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "S31_MMIO_DECLARED_20104C98"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_USE_201040FC", "S31_MMIO_USE_20104100", "S31_MMIO_USE_20104108", "S31_MMIO_DECLARED_201040FC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_1_OPAQUE"
+sources = ["S31_MMIO_USE_20104C8C", "S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_4_OPAQUE"
+sources = ["S31_MMIO_USE_20104C8C", "S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104114", "S31_MMIO_DECLARED_20104114"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.MODE_CONTROL.BITS_6_12_OPAQUE"
+sources = ["S31_MMIO_USE_20104C98", "S31_MMIO_DECLARED_20104C98"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BITS_16_19_OPAQUE"
+sources = ["S31_MMIO_USE_20104118", "S31_MMIO_DECLARED_20104118"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BITS_28_30_OPAQUE"
+sources = ["S31_MMIO_USE_20104118", "S31_MMIO_DECLARED_20104118"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.SHARED_ENABLE_CONTROL.BITS_2_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104CA0", "S31_MMIO_DECLARED_20104CA0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040FC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_24_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040FC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040FC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BIT_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040FC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.RX_QUEUE_DEFAULT%s.BITS_27_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201040FC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104114"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.CONTROL_EDGES.BIT_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104114"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BITS_20_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104118"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.TIMING_CONTROL.BIT_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104118"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_12_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.FEATURE_EDGES.BIT_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C8C"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.MODE_CONTROL.BIT_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C98"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_PREFIX.SHARED_ENABLE_CONTROL.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104CA0"]
+naming = "opaque"

@@ -34,10 +34,24 @@ scope = []
 register-method = "tsens_ctrl"
 
 [[registers.fields]]
+svd-name = "BITS_0_21_OPAQUE"
+method = "bits_0_21_opaque"
+bit-offset = 0
+bit-width = 22
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "TSENS_PU"
 method = "tsens_pu"
 bit-offset = 22
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_23_31_OPAQUE"
+method = "bits_23_31_opaque"
+bit-offset = 23
+bit-width = 9
 access = "read-write"
 
 [[registers]]
@@ -77,24 +91,10 @@ bit-width = 6
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_6_7_OPAQUE"
-method = "bits_6_7_opaque"
-bit-offset = 6
-bit-width = 2
-access = "read-write"
-
-[[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "BITS_9_31_OPAQUE"
-method = "bits_9_31_opaque"
-bit-offset = 9
-bit-width = 23
 access = "read-write"
 
 [[registers]]
@@ -202,6 +202,13 @@ scope = []
 register-method = "table_memory_index_source"
 
 [[registers.fields]]
+svd-name = "BITS_0_23_OPAQUE"
+method = "bits_0_23_opaque"
+bit-offset = 0
+bit-width = 24
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BASE_INDEX"
 method = "base_index"
 bit-offset = 24
@@ -218,6 +225,13 @@ peripheral-type = "PhyBasebandConfig"
 peripheral-module = "phy_baseband_config"
 scope = []
 register-method = "front_end_and_tone_stop_control"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "BIT_2_OPAQUE"
@@ -238,6 +252,13 @@ scope = []
 register-method = "rx_dco_control"
 
 [[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_22_23_OPAQUE"
 method = "bits_22_23_opaque"
 bit-offset = 22
@@ -254,6 +275,13 @@ peripheral-type = "PhyBasebandConfig"
 peripheral-module = "phy_baseband_config"
 scope = []
 register-method = "iq_correction_control"
+
+[[registers.fields]]
+svd-name = "BITS_0_28_OPAQUE"
+method = "bits_0_28_opaque"
+bit-offset = 0
+bit-width = 29
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "RX_IQ_CORRECTION_MODE_LOW"
@@ -319,6 +347,20 @@ bit-offset = 8
 bit-width = 1
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BIT_11_OPAQUE"
+method = "bit_11_opaque"
+bit-offset = 11
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_27_OPAQUE"
+method = "bits_26_27_opaque"
+bit-offset = 26
+bit-width = 2
+access = "read-write"
+
 [[registers]]
 address = 1611269192
 width = 32
@@ -358,6 +400,13 @@ bit-offset = 3
 bit-width = 1
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_4_31_OPAQUE"
+method = "bits_4_31_opaque"
+bit-offset = 4
+bit-width = 28
+access = "read-write"
+
 [[registers]]
 address = 1611270144
 width = 32
@@ -376,6 +425,13 @@ bit-offset = 0
 bit-width = 2
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_2_31_OPAQUE"
+method = "bits_2_31_opaque"
+bit-offset = 2
+bit-width = 30
+access = "read-write"
+
 [[registers]]
 address = 1611270152
 width = 32
@@ -388,9 +444,23 @@ scope = []
 register-method = "power_detector_control"
 
 [[registers.fields]]
+svd-name = "BITS_0_3_OPAQUE"
+method = "bits_0_3_opaque"
+bit-offset = 0
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_4_11_OPAQUE"
 method = "bits_4_11_opaque"
 bit-offset = 4
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_12_19_OPAQUE"
+method = "bits_12_19_opaque"
+bit-offset = 12
 bit-width = 8
 access = "read-write"
 
@@ -399,6 +469,13 @@ svd-name = "BITS_20_22_OPAQUE"
 method = "bits_20_22_opaque"
 bit-offset = 20
 bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_23_31_OPAQUE"
+method = "bits_23_31_opaque"
+bit-offset = 23
+bit-width = 9
 access = "read-write"
 
 [[registers]]
@@ -426,6 +503,20 @@ bit-offset = 12
 bit-width = 2
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_14_16_OPAQUE"
+method = "bits_14_16_opaque"
+bit-offset = 14
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_24_30_OPAQUE"
+method = "bits_24_30_opaque"
+bit-offset = 24
+bit-width = 7
+access = "read-write"
+
 [[registers]]
 address = 1611270160
 width = 32
@@ -436,13 +527,7 @@ peripheral-type = "PhyBasebandConfig"
 peripheral-module = "phy_baseband_config"
 scope = []
 register-method = "word_0810_opaque"
-
-[[registers.fields]]
-svd-name = "STATE"
-method = "state"
-bit-offset = 0
-bit-width = 32
-access = "read-write"
+fields = []
 
 [[registers]]
 address = 1611270164
@@ -456,10 +541,10 @@ scope = []
 register-method = "word_0814_opaque"
 
 [[registers.fields]]
-svd-name = "STATE"
-method = "state"
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
 bit-offset = 0
-bit-width = 32
+bit-width = 8
 access = "read-write"
 
 [[registers]]
@@ -498,6 +583,13 @@ bit-offset = 8
 bit-width = 8
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
 [[registers]]
 address = 1611270280
 width = 32
@@ -508,6 +600,27 @@ peripheral-type = "PhyBasebandConfig"
 peripheral-module = "phy_baseband_config"
 scope = []
 register-method = "word_0888_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_2_OPAQUE"
+method = "bit_2_opaque"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_4_OPAQUE"
+method = "bit_4_opaque"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_27_OPAQUE"
+method = "bit_27_opaque"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "BIT_29_OPAQUE"
@@ -528,10 +641,24 @@ scope = []
 register-method = "word_0894_opaque"
 
 [[registers.fields]]
+svd-name = "BITS_0_21_OPAQUE"
+method = "bits_0_21_opaque"
+bit-offset = 0
+bit-width = 22
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BIT_22_OPAQUE"
 method = "bit_22_opaque"
 bit-offset = 22
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_23_31_OPAQUE"
+method = "bits_23_31_opaque"
+bit-offset = 23
+bit-width = 9
 access = "read-write"
 
 [[registers]]
@@ -546,6 +673,13 @@ scope = []
 register-method = "dac_scale"
 
 [[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_8_15_OPAQUE"
 method = "bits_8_15_opaque"
 bit-offset = 8
@@ -556,6 +690,13 @@ access = "read-write"
 svd-name = "BITS_16_23_OPAQUE"
 method = "bits_16_23_opaque"
 bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_24_31_OPAQUE"
+method = "bits_24_31_opaque"
+bit-offset = 24
 bit-width = 8
 access = "read-write"
 
@@ -596,6 +737,13 @@ scope = []
 register-method = "iq_correction_aux"
 
 [[registers.fields]]
+svd-name = "BITS_0_12_OPAQUE"
+method = "bits_0_12_opaque"
+bit-offset = 0
+bit-width = 13
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "TX_IQ_CORRECTION_MODE_LOW"
 method = "tx_iq_correction_mode_low"
 bit-offset = 13
@@ -607,6 +755,13 @@ svd-name = "TX_IQ_CORRECTION_MODE_HIGH"
 method = "tx_iq_correction_mode_high"
 bit-offset = 14
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_15_31_OPAQUE"
+method = "bits_15_31_opaque"
+bit-offset = 15
+bit-width = 17
 access = "read-write"
 
 [[registers]]
@@ -678,6 +833,13 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "IFS_DIS"
+method = "ifs_dis"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "COORDINATOR"
 method = "coordinator"
 bit-offset = 6
@@ -692,9 +854,58 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "VERSION_FILTER_DIS"
+method = "version_filter_dis"
+bit-offset = 11
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "PENDING_ENHANCED"
 method = "pending_enhanced"
 bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FILTER_ENHANCE_DIS"
+method = "filter_enhance_dis"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEX_ARB_DELAY"
+method = "coex_arb_delay"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_ORDER"
+method = "bit_order"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NO_RSSI_TRIGGER_BREAK_EN"
+method = "no_rssi_trigger_break_en"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEX_FORCE_RX"
+method = "coex_force_rx"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_DONE_TRIG_IDLE"
+method = "rx_done_trig_idle"
+bit-offset = 27
 bit-width = 1
 access = "read-write"
 
@@ -1048,13 +1259,6 @@ bit-offset = 0
 bit-width = 7
 access = "read-write"
 
-[[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
-bit-offset = 7
-bit-width = 1
-access = "read-write"
-
 [[registers]]
 address = 1611280460
 width = 32
@@ -1089,6 +1293,13 @@ svd-name = "DURATION"
 method = "duration"
 bit-offset = 0
 bit-width = 24
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DELAY"
+method = "delay"
+bit-offset = 24
+bit-width = 4
 access = "read-write"
 
 [[registers]]
@@ -1223,8 +1434,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
+svd-name = "EVENTS_7"
+method = "events_7"
 bit-offset = 7
 bit-width = 1
 access = "read-write"
@@ -1325,8 +1536,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BIT_7_OPAQUE"
-method = "bit_7_opaque"
+svd-name = "EVENTS_7"
+method = "events_7"
 bit-offset = 7
 bit-width = 1
 access = "read-write"
@@ -1441,8 +1652,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_9_14_OPAQUE"
-method = "bits_9_14_opaque"
+svd-name = "RX_ABORT_EN_9_14"
+method = "rx_abort_en_9_14"
 bit-offset = 9
 bit-width = 6
 access = "read-write"
@@ -1476,8 +1687,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_19_22_OPAQUE"
-method = "bits_19_22_opaque"
+svd-name = "RX_ABORT_EN_19_22"
+method = "rx_abort_en_19_22"
 bit-offset = 19
 bit-width = 4
 access = "read-write"
@@ -1504,8 +1715,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_26_30_OPAQUE"
-method = "bits_26_30_opaque"
+svd-name = "RX_ABORT_EN_26_30"
+method = "rx_abort_en_26_30"
 bit-offset = 26
 bit-width = 5
 access = "read-write"
@@ -1526,6 +1737,13 @@ svd-name = "FRAME_PENDING"
 method = "frame_pending"
 bit-offset = 0
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PENDING_TIMEOUT"
+method = "pending_timeout"
+bit-offset = 16
+bit-width = 16
 access = "read-write"
 
 [[registers]]
@@ -1551,6 +1769,13 @@ svd-name = "ACK_PTI"
 method = "ack_pti"
 bit-offset = 4
 bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLOSE_RF_SEL"
+method = "close_rf_sel"
+bit-offset = 8
+bit-width = 1
 access = "read-write"
 
 [[registers]]
@@ -1628,8 +1853,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_9_14_OPAQUE"
-method = "bits_9_14_opaque"
+svd-name = "TX_ABORT_EN_9_14"
+method = "tx_abort_en_9_14"
 bit-offset = 9
 bit-width = 6
 access = "read-write"
@@ -1663,8 +1888,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_19_22_OPAQUE"
-method = "bits_19_22_opaque"
+svd-name = "TX_ABORT_EN_19_22"
+method = "tx_abort_en_19_22"
 bit-offset = 19
 bit-width = 4
 access = "read-write"
@@ -1684,8 +1909,8 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
-svd-name = "BITS_25_30_OPAQUE"
-method = "bits_25_30_opaque"
+svd-name = "TX_ABORT_EN_25_30"
+method = "tx_abort_en_25_30"
 bit-offset = 25
 bit-width = 6
 access = "read-write"
@@ -1787,6 +2012,24 @@ bit-width = 4
 access = "read-only"
 
 [[registers]]
+address = 1611280536
+width = 32
+access = "read-write"
+identity = "MODEM_IEEE802154_OBSERVED.WORD_0098_OPAQUE"
+peripheral = "MODEM_IEEE802154_OBSERVED"
+peripheral-type = "ModemIeee802154Observed"
+peripheral-module = "modem_ieee802154_observed"
+scope = []
+register-method = "word_0098_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers]]
 address = 1611280552
 width = 32
 access = "write-only"
@@ -1857,6 +2100,24 @@ method = "value"
 bit-offset = 0
 bit-width = 32
 access = "read-only"
+
+[[registers]]
+address = 1611280580
+width = 32
+access = "unspecified"
+identity = "IEEE802154_MAC.SFD_WAIT"
+peripheral = "IEEE802154_MAC"
+peripheral-type = "Ieee802154Mac"
+peripheral-module = "ieee802154_mac"
+scope = []
+register-method = "sfd_wait"
+
+[[registers.fields]]
+svd-name = "SFD_WAIT_SYMBOL_NUM"
+method = "sfd_wait_symbol_num"
+bit-offset = 0
+bit-width = 4
+access = "unspecified"
 
 [[registers]]
 address = 1611280592
@@ -2754,6 +3015,150 @@ bit-width = 1
 access = "read-write"
 
 [[registers]]
+address = 1611284512
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0020_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0020_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284520
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0028_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0028_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611284524
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_002C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_002c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284536
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0038_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0038_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284540
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_003C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_003c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_23_OPAQUE"
+method = "bits_0_23_opaque"
+bit-offset = 0
+bit-width = 24
+access = "read-write"
+
+[[registers]]
+address = 1611284544
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0040_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0040_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284548
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0044_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0044_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284552
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0048_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0048_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
 address = 1611284572
 width = 32
 access = "read-write"
@@ -2962,6 +3367,1082 @@ bit-width = 15
 access = "read-write"
 
 [[registers]]
+address = 1611284604
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_007C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_007c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_28_OPAQUE"
+method = "bit_28_opaque"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611284608
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0080_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0080_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284612
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0084_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0084_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284616
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0088_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0088_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284620
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_008C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_008c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284624
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0090_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0090_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284628
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0094_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0094_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284632
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0098_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0098_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_23_OPAQUE"
+method = "bits_0_23_opaque"
+bit-offset = 0
+bit-width = 24
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_27_OPAQUE"
+method = "bit_27_opaque"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611284636
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_009C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_009c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_2_3_OPAQUE"
+method = "bits_2_3_opaque"
+bit-offset = 2
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611284640
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00A0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00a0_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_16_OPAQUE"
+method = "bit_16_opaque"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_28_OPAQUE"
+method = "bit_28_opaque"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_29_OPAQUE"
+method = "bit_29_opaque"
+bit-offset = 29
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611284644
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00A4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00a4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_12_15_OPAQUE"
+method = "bits_12_15_opaque"
+bit-offset = 12
+bit-width = 4
+access = "read-write"
+
+[[registers]]
+address = 1611284648
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00A8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00a8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611284652
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00AC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00ac_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611284696
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00D8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00d8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_4_OPAQUE"
+method = "bits_0_4_opaque"
+bit-offset = 0
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_5_OPAQUE"
+method = "bit_5_opaque"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_6_OPAQUE"
+method = "bit_6_opaque"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_7_OPAQUE"
+method = "bit_7_opaque"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_8_OPAQUE"
+method = "bit_8_opaque"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_12_OPAQUE"
+method = "bits_9_12_opaque"
+bit-offset = 9
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_13_OPAQUE"
+method = "bit_13_opaque"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_14_OPAQUE"
+method = "bit_14_opaque"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_15_16_OPAQUE"
+method = "bits_15_16_opaque"
+bit-offset = 15
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_17_31_OPAQUE"
+method = "bits_17_31_opaque"
+bit-offset = 17
+bit-width = 15
+access = "read-write"
+
+[[registers]]
+address = 1611284700
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00DC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00dc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_4_OPAQUE"
+method = "bits_0_4_opaque"
+bit-offset = 0
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_5_OPAQUE"
+method = "bit_5_opaque"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_6_OPAQUE"
+method = "bit_6_opaque"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_7_OPAQUE"
+method = "bit_7_opaque"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_8_OPAQUE"
+method = "bit_8_opaque"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_12_OPAQUE"
+method = "bits_9_12_opaque"
+bit-offset = 9
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_13_OPAQUE"
+method = "bit_13_opaque"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_14_OPAQUE"
+method = "bit_14_opaque"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_15_16_OPAQUE"
+method = "bits_15_16_opaque"
+bit-offset = 15
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_17_31_OPAQUE"
+method = "bits_17_31_opaque"
+bit-offset = 17
+bit-width = 15
+access = "read-write"
+
+[[registers]]
+address = 1611284704
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00E0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00e0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_4_OPAQUE"
+method = "bits_0_4_opaque"
+bit-offset = 0
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_5_OPAQUE"
+method = "bit_5_opaque"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_6_OPAQUE"
+method = "bit_6_opaque"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_7_OPAQUE"
+method = "bit_7_opaque"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_8_OPAQUE"
+method = "bit_8_opaque"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_12_OPAQUE"
+method = "bits_9_12_opaque"
+bit-offset = 9
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_13_OPAQUE"
+method = "bit_13_opaque"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_14_OPAQUE"
+method = "bit_14_opaque"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_15_16_OPAQUE"
+method = "bits_15_16_opaque"
+bit-offset = 15
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_17_31_OPAQUE"
+method = "bits_17_31_opaque"
+bit-offset = 17
+bit-width = 15
+access = "read-write"
+
+[[registers]]
+address = 1611284708
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00E4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00e4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_4_OPAQUE"
+method = "bits_0_4_opaque"
+bit-offset = 0
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_5_OPAQUE"
+method = "bit_5_opaque"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_6_9_OPAQUE"
+method = "bits_6_9_opaque"
+bit-offset = 6
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_10_12_OPAQUE"
+method = "bits_10_12_opaque"
+bit-offset = 10
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_13_OPAQUE"
+method = "bit_13_opaque"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_14_OPAQUE"
+method = "bit_14_opaque"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_15_17_OPAQUE"
+method = "bits_15_17_opaque"
+bit-offset = 15
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_18_31_OPAQUE"
+method = "bits_18_31_opaque"
+bit-offset = 18
+bit-width = 14
+access = "read-write"
+
+[[registers]]
+address = 1611284712
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00E8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00e8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_26_OPAQUE"
+method = "bits_16_26_opaque"
+bit-offset = 16
+bit-width = 11
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_27_31_OPAQUE"
+method = "bits_27_31_opaque"
+bit-offset = 27
+bit-width = 5
+access = "read-write"
+
+[[registers]]
+address = 1611284716
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00EC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00ec_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_26_OPAQUE"
+method = "bits_16_26_opaque"
+bit-offset = 16
+bit-width = 11
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_27_31_OPAQUE"
+method = "bits_27_31_opaque"
+bit-offset = 27
+bit-width = 5
+access = "read-write"
+
+[[registers]]
+address = 1611284724
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00F4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00f4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_26_OPAQUE"
+method = "bits_8_26_opaque"
+bit-offset = 8
+bit-width = 19
+access = "read-write"
+
+[[registers]]
+address = 1611284732
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_00FC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_00fc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284736
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0100_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0100_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284740
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0104_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0104_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611284744
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0108_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0108_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611284748
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_010C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_010c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611284752
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0110_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0110_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_18_19_OPAQUE"
+method = "bits_18_19_opaque"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_20_31_OPAQUE"
+method = "bits_20_31_opaque"
+bit-offset = 20
+bit-width = 12
+access = "read-write"
+
+[[registers]]
+address = 1611284756
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0114_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0114_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_4_OPAQUE"
+method = "bit_4_opaque"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611284760
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0118_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0118_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_19_OPAQUE"
+method = "bits_16_19_opaque"
+bit-offset = 16
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_20_27_OPAQUE"
+method = "bits_20_27_opaque"
+bit-offset = 20
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_30_OPAQUE"
+method = "bits_28_30_opaque"
+bit-offset = 28
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611284764
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_011C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_011c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_13_OPAQUE"
+method = "bits_9_13_opaque"
+bit-offset = 9
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611284768
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0120_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0120_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_1_6_OPAQUE"
+method = "bits_1_6_opaque"
+bit-offset = 1
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611285140
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0294_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0294_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285144
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0298_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0298_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285148
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_029C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_029c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285152
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02A0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02a0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285156
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02A4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02a4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285160
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02A8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02a8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285164
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02AC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02ac_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_19_OPAQUE"
+method = "bits_0_19_opaque"
+bit-offset = 0
+bit-width = 20
+access = "read-only"
+
+[[registers]]
+address = 1611285168
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02B0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02b0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
 address = 1611285172
 width = 32
 access = "read-write"
@@ -2977,6 +4458,1873 @@ svd-name = "BITS_0_2_OPAQUE"
 method = "bits_0_2_opaque"
 bit-offset = 0
 bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_3_31_OPAQUE"
+method = "bits_3_31_opaque"
+bit-offset = 3
+bit-width = 29
+access = "read-write"
+
+[[registers]]
+address = 1611285176
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02B8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02b8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611285244
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_02FC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_02fc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285248
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0300_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0300_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285256
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0308_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0308_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611285260
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_030C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_030c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285264
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0310_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0310_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285268
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0314_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0314_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285272
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0318_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0318_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285276
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_031C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_031c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285280
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0320_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0320_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285284
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0324_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0324_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285288
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0328_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0328_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285292
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_032C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_032c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285296
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0330_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0330_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285300
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0334_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0334_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285304
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0338_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0338_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285308
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_033C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_033c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285312
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0340_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0340_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285316
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0344_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0344_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285320
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0348_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0348_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285324
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_034C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_034c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285328
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0350_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0350_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285332
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0354_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0354_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285336
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0358_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0358_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285340
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_035C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_035c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285344
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0360_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0360_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285348
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0364_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0364_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285352
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0368_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0368_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285356
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_036C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_036c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285360
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0370_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0370_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285364
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0374_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0374_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285368
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0378_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0378_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285372
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_037C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_037c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285376
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0380_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0380_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285380
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0384_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0384_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285384
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0388_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0388_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285388
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_038C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_038c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285392
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0390_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0390_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611285396
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0394_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0394_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285400
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0398_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0398_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285404
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_039C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_039c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_24_31_OPAQUE"
+method = "bits_24_31_opaque"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 1611285408
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03A0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03a0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285412
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03A4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03a4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285416
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03A8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03a8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285428
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03B4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03b4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285432
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03B8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03b8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285436
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03BC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03bc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285440
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_03C0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_03c0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611285504
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0400_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0400_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285508
+width = 32
+access = "read-write"
+identity = "WIFI_MAC_ERSU_ACK_RATE.VALUE"
+peripheral = "WIFI_MAC_ERSU_ACK_RATE"
+peripheral-type = "WifiMacErsuAckRate"
+peripheral-module = "wifi_mac_ersu_ack_rate"
+scope = []
+register-method = "value"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_15_OPAQUE"
+method = "bits_8_15_opaque"
+bit-offset = 8
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_24_31_OPAQUE"
+method = "bits_24_31_opaque"
+bit-offset = 24
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285512
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0408_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0408_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285516
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_040C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_040c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285520
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0410_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0410_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285524
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0414_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0414_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285528
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0418_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0418_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285532
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_041C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_041c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285536
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0420_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0420_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285540
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0424_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0424_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285544
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0428_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0428_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285548
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_042C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_042c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_23_OPAQUE"
+method = "bits_16_23_opaque"
+bit-offset = 16
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611285552
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0430_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0430_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_5_OPAQUE"
+method = "bits_0_5_opaque"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_21_OPAQUE"
+method = "bits_16_21_opaque"
+bit-offset = 16
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_24_29_OPAQUE"
+method = "bits_24_29_opaque"
+bit-offset = 24
+bit-width = 6
+access = "read-write"
+
+[[registers]]
+address = 1611285556
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0434_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0434_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_5_OPAQUE"
+method = "bits_0_5_opaque"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_21_OPAQUE"
+method = "bits_16_21_opaque"
+bit-offset = 16
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_24_29_OPAQUE"
+method = "bits_24_29_opaque"
+bit-offset = 24
+bit-width = 6
+access = "read-write"
+
+[[registers]]
+address = 1611285560
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0438_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0438_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_5_OPAQUE"
+method = "bits_0_5_opaque"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_13_OPAQUE"
+method = "bits_8_13_opaque"
+bit-offset = 8
+bit-width = 6
+access = "read-write"
+
+[[registers]]
+address = 1611285564
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_043C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_043c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285568
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0440_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0440_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285572
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0444_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0444_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285576
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0448_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0448_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285580
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_044C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_044c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285592
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0458_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0458_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285604
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0464_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0464_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285628
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_047C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_047c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_12_23_OPAQUE"
+method = "bits_12_23_opaque"
+bit-offset = 12
+bit-width = 12
+access = "read-write"
+
+[[registers]]
+address = 1611285632
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0480_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0480_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611285644
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_048C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_048c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285648
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0490_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0490_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_18_31_OPAQUE"
+method = "bits_18_31_opaque"
+bit-offset = 18
+bit-width = 14
+access = "read-write"
+
+[[registers]]
+address = 1611285652
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0494_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0494_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_15_OPAQUE"
+method = "bit_15_opaque"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611285700
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04C4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04c4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_29_OPAQUE"
+method = "bits_0_29_opaque"
+bit-offset = 0
+bit-width = 30
+access = "read-write"
+
+[[registers]]
+address = 1611285704
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04C8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04c8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_27_OPAQUE"
+method = "bits_0_27_opaque"
+bit-offset = 0
+bit-width = 28
+access = "read-write"
+
+[[registers]]
+address = 1611285708
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04CC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04cc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285712
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04D0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04d0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_30_OPAQUE"
+method = "bits_0_30_opaque"
+bit-offset = 0
+bit-width = 31
+access = "read-write"
+
+[[registers]]
+address = 1611285716
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04D4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04d4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611285740
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04EC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04ec_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_25_OPAQUE"
+method = "bits_16_25_opaque"
+bit-offset = 16
+bit-width = 10
+access = "read-only"
+
+[[registers]]
+address = 1611285744
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_04F0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_04f0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611286528
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0800_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0800_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_17_OPAQUE"
+method = "bit_17_opaque"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611286532
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0804_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0804_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_17_OPAQUE"
+method = "bit_17_opaque"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611286536
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0808_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0808_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611286544
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0810_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0810_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_6_21_OPAQUE"
+method = "bits_6_21_opaque"
+bit-offset = 6
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611286548
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0814_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0814_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287552
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C00_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c00_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_4_7_OPAQUE"
+method = "bits_4_7_opaque"
+bit-offset = 4
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_16_OPAQUE"
+method = "bit_16_opaque"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287580
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C1C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c1c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611287584
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C20_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c20_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
+
+[[registers]]
+address = 1611287588
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C24_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c24_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287596
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C2C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c2c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_12_OPAQUE"
+method = "bit_12_opaque"
+bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287604
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C34_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c34_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_12_OPAQUE"
+method = "bit_12_opaque"
+bit-offset = 12
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1611287608
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C38_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c38_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_12_OPAQUE"
+method = "bit_12_opaque"
+bit-offset = 12
+bit-width = 1
 access = "read-write"
 
 [[registers]]
@@ -3346,6 +6694,60 @@ bit-width = 32
 access = "write-only"
 
 [[registers]]
+address = 1611287632
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C50_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c50_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611287636
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C54_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c54_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_10_31_OPAQUE"
+method = "bits_10_31_opaque"
+bit-offset = 10
+bit-width = 22
+access = "read-write"
+
+[[registers]]
+address = 1611287640
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C58_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c58_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
 address = 1611287644
 width = 32
 access = "read-write"
@@ -3355,13 +6757,6 @@ peripheral-type = "WifiMacTxCommon"
 peripheral-module = "wifi_mac_tx_common"
 scope = []
 register-method = "cca_control"
-
-[[registers.fields]]
-svd-name = "BITS_0_27_OPAQUE"
-method = "bits_0_27_opaque"
-bit-offset = 0
-bit-width = 28
-access = "read-write"
 
 [[registers.fields]]
 svd-name = "PHY_AUX_FORCE"
@@ -3375,6 +6770,410 @@ svd-name = "FORCE"
 method = "force"
 bit-offset = 30
 bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611287648
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C60_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c60_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611287652
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C64_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c64_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611287664
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C70_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c70_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_20_31_OPAQUE"
+method = "bits_20_31_opaque"
+bit-offset = 20
+bit-width = 12
+access = "read-only"
+
+[[registers]]
+address = 1611287668
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C74_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c74_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
+bit-width = 4
+access = "read-only"
+
+[[registers]]
+address = 1611287672
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C78_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c78_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287676
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C7C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c7c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_4_8_OPAQUE"
+method = "bits_4_8_opaque"
+bit-offset = 4
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_10_OPAQUE"
+method = "bit_10_opaque"
+bit-offset = 10
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_12_OPAQUE"
+method = "bit_12_opaque"
+bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_15_OPAQUE"
+method = "bit_15_opaque"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_18_OPAQUE"
+method = "bit_18_opaque"
+bit-offset = 18
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287680
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C80_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c80_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_27_OPAQUE"
+method = "bit_27_opaque"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611287684
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C84_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c84_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_18_31_OPAQUE"
+method = "bits_18_31_opaque"
+bit-offset = 18
+bit-width = 14
+access = "read-write"
+
+[[registers]]
+address = 1611287688
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C88_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c88_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611287692
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C8C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c8c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_1_OPAQUE"
+method = "bit_1_opaque"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_4_OPAQUE"
+method = "bit_4_opaque"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_9_OPAQUE"
+method = "bit_9_opaque"
+bit-offset = 9
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_12_13_OPAQUE"
+method = "bits_12_13_opaque"
+bit-offset = 12
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_15_OPAQUE"
+method = "bit_15_opaque"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_23_OPAQUE"
+method = "bit_23_opaque"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_28_OPAQUE"
+method = "bit_28_opaque"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287696
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C90_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c90_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287700
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C94_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c94_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611287704
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C98_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c98_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_2_3_OPAQUE"
+method = "bits_2_3_opaque"
+bit-offset = 2
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611287708
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0C9C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0c9c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287712
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CA0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ca0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287716
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CA4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ca4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1611287720
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CA8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ca8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
 access = "read-write"
 
 [[registers]]
@@ -3498,10 +7297,10 @@ bit-width = 1
 access = "read-only"
 
 [[registers.fields]]
-svd-name = "BITS_4_15_OPAQUE"
-method = "bits_4_15_opaque"
+svd-name = "BITS_4_7_OPAQUE"
+method = "bits_4_7_opaque"
 bit-offset = 4
-bit-width = 12
+bit-width = 4
 access = "read-only"
 
 [[registers.fields]]
@@ -3659,6 +7458,2265 @@ bit-offset = 3
 bit-width = 1
 access = "read-only"
 
+[[registers.fields]]
+svd-name = "BITS_4_7_OPAQUE"
+method = "bits_4_7_opaque"
+bit-offset = 4
+bit-width = 4
+access = "read-only"
+
+[[registers]]
+address = 1611287740
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CBC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0cbc_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287748
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CC4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0cc4_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_2_OPAQUE"
+method = "bit_2_opaque"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287764
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CD4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0cd4_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_2_OPAQUE"
+method = "bit_2_opaque"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287780
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CE4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ce4_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_2_OPAQUE"
+method = "bit_2_opaque"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287800
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0CF8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0cf8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287816
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D08_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d08_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287832
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D18_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d18_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287848
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D28_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d28_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287856
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D30_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d30_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_29_OPAQUE"
+method = "bits_0_29_opaque"
+bit-offset = 0
+bit-width = 30
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287860
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D34_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d34_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_3_31_OPAQUE"
+method = "bits_3_31_opaque"
+bit-offset = 3
+bit-width = 29
+access = "read-write"
+
+[[registers]]
+address = 1611287864
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D38_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d38_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287872
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D40_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d40_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_29_OPAQUE"
+method = "bits_0_29_opaque"
+bit-offset = 0
+bit-width = 30
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287876
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D44_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d44_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_3_31_OPAQUE"
+method = "bits_3_31_opaque"
+bit-offset = 3
+bit-width = 29
+access = "read-write"
+
+[[registers]]
+address = 1611287880
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D48_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d48_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287888
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D50_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d50_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_29_OPAQUE"
+method = "bits_0_29_opaque"
+bit-offset = 0
+bit-width = 30
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287892
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D54_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d54_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_3_31_OPAQUE"
+method = "bits_3_31_opaque"
+bit-offset = 3
+bit-width = 29
+access = "read-write"
+
+[[registers]]
+address = 1611287896
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D58_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d58_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611287904
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D60_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d60_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_29_OPAQUE"
+method = "bits_0_29_opaque"
+bit-offset = 0
+bit-width = 30
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611287908
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D64_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d64_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_3_31_OPAQUE"
+method = "bits_3_31_opaque"
+bit-offset = 3
+bit-width = 29
+access = "read-write"
+
+[[registers]]
+address = 1611287912
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D68_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d68_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287924
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D74_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d74_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_19_OPAQUE"
+method = "bits_0_19_opaque"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1611287932
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D7C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d7c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_19_OPAQUE"
+method = "bits_0_19_opaque"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1611287940
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D84_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d84_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_19_OPAQUE"
+method = "bits_0_19_opaque"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1611287948
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0D8C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0d8c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_19_OPAQUE"
+method = "bits_0_19_opaque"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1611287988
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DB4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0db4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287992
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DB8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0db8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611287996
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DBC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dbc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288000
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DC0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dc0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288004
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DC4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dc4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288016
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DD0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dd0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288020
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DD4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dd4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288024
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DD8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dd8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_5_OPAQUE"
+method = "bits_0_5_opaque"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers]]
+address = 1611288028
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DDC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ddc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611288032
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DE0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0de0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_20_31_OPAQUE"
+method = "bits_20_31_opaque"
+bit-offset = 20
+bit-width = 12
+access = "read-write"
+
+[[registers]]
+address = 1611288044
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DEC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dec_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611288048
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DF0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0df0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288052
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DF4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0df4_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611288056
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DF8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0df8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288060
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0DFC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0dfc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611288064
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E00_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e00_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_9_OPAQUE"
+method = "bits_0_9_opaque"
+bit-offset = 0
+bit-width = 10
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_14_15_OPAQUE"
+method = "bits_14_15_opaque"
+bit-offset = 14
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 1611288084
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E14_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e14_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288088
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E18_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e18_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288092
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E1C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e1c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288100
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E24_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e24_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_31_OPAQUE"
+method = "bit_31_opaque"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611288108
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E2C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e2c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288112
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E30_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e30_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288120
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E38_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e38_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_8_OPAQUE"
+method = "bits_0_8_opaque"
+bit-offset = 0
+bit-width = 9
+access = "read-write"
+
+[[registers]]
+address = 1611288204
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E8C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e8c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288208
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E90_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e90_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288212
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E94_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e94_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288220
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0E9C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0e9c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_4_8_OPAQUE"
+method = "bits_4_8_opaque"
+bit-offset = 4
+bit-width = 5
+access = "read-write"
+
+[[registers]]
+address = 1611288224
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0EA0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ea0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_5_31_OPAQUE"
+method = "bits_5_31_opaque"
+bit-offset = 5
+bit-width = 27
+access = "read-write"
+
+[[registers]]
+address = 1611288228
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0EA4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ea4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_18_24_OPAQUE"
+method = "bits_18_24_opaque"
+bit-offset = 18
+bit-width = 7
+access = "read-write"
+
+[[registers]]
+address = 1611288236
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0EAC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0eac_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_11_OPAQUE"
+method = "bits_0_11_opaque"
+bit-offset = 0
+bit-width = 12
+access = "read-write"
+
+[[registers]]
+address = 1611288324
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0F04_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0f04_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288328
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0F08_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0f08_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288332
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0F0C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0f0c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288444
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0F7C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0f7c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288448
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0F80_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0f80_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288452
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0F84_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0f84_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288564
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0FF4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ff4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288568
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0FF8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ff8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288572
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_0FFC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_0ffc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288684
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_106C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_106c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288688
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1070_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1070_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288692
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1074_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1074_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288804
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_10E4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_10e4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288808
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_10E8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_10e8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288812
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_10EC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_10ec_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288924
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_115C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_115c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611288928
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1160_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1160_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611288932
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1164_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1164_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289044
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_11D4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_11d4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289048
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_11D8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_11d8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289052
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_11DC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_11dc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289164
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_124C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_124c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289168
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1250_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1250_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289172
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1254_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1254_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289284
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_12C4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_12c4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289288
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_12C8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_12c8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289292
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_12CC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_12cc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289404
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_133C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_133c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289408
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1340_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1340_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289412
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1344_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1344_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289420
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_134C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_134c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_17_OPAQUE"
+method = "bit_17_opaque"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611289524
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_13B4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_13b4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289528
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_13B8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_13b8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289532
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_13BC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_13bc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289540
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_13C4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_13c4_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_17_OPAQUE"
+method = "bit_17_opaque"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611289644
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_142C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_142c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289648
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1430_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1430_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289652
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1434_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1434_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289660
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_143C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_143c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_17_OPAQUE"
+method = "bit_17_opaque"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611289764
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14A4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14a4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289768
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14A8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14a8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289772
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14AC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14ac_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289780
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14B4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14b4_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_17_OPAQUE"
+method = "bit_17_opaque"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611289800
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14C8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14c8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_2_24_OPAQUE"
+method = "bits_2_24_opaque"
+bit-offset = 2
+bit-width = 23
+access = "read-write"
+
+[[registers]]
+address = 1611289808
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14D0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14d0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_11_27_OPAQUE"
+method = "bits_11_27_opaque"
+bit-offset = 11
+bit-width = 17
+access = "read-write"
+
+[[registers]]
+address = 1611289816
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14D8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14d8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611289828
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_14E4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_14e4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_18_OPAQUE"
+method = "bits_0_18_opaque"
+bit-offset = 0
+bit-width = 19
+access = "read-write"
+
+[[registers]]
+address = 1611289876
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1514_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1514_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289884
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_151C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_151c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611289888
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1520_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1520_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_6_OPAQUE"
+method = "bits_0_6_opaque"
+bit-offset = 0
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_7_13_OPAQUE"
+method = "bits_7_13_opaque"
+bit-offset = 7
+bit-width = 7
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_14_31_OPAQUE"
+method = "bits_14_31_opaque"
+bit-offset = 14
+bit-width = 18
+access = "read-only"
+
+[[registers]]
+address = 1611289892
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1524_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1524_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611290668
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_182C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_182c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-only"
+
+[[registers]]
+address = 1611291648
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1C00_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1c00_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 1611292564
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_OBSERVED.WORD_1F94_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_OBSERVED"
+peripheral-type = "ModemWifiMacObserved"
+peripheral-module = "modem_wifi_mac_observed"
+scope = []
+register-method = "word_1f94_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-only"
+
 [[registers]]
 address = 1611299104
 width = 32
@@ -3721,10 +9779,24 @@ scope = []
 register-method = "rx_evm_config"
 
 [[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BITS_2_6_OPAQUE"
 method = "bits_2_6_opaque"
 bit-offset = 2
 bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_7_14_OPAQUE"
+method = "bits_7_14_opaque"
+bit-offset = 7
+bit-width = 8
 access = "read-write"
 
 [[registers.fields]]
@@ -3741,6 +9813,13 @@ bit-offset = 22
 bit-width = 7
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_29_31_OPAQUE"
+method = "bits_29_31_opaque"
+bit-offset = 29
+bit-width = 3
+access = "read-write"
+
 [[registers]]
 address = 1611299920
 width = 32
@@ -3751,6 +9830,13 @@ peripheral-type = "PhyBasebandConfig"
 peripheral-module = "phy_baseband_config"
 scope = []
 register-method = "rx_evm_memory_reset"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "BIT_8_OPAQUE"
@@ -3940,6 +10026,20 @@ scope = []
 register-method = "clk_conf"
 
 [[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_2_21_OPAQUE"
+method = "bits_2_21_opaque"
+bit-offset = 2
+bit-width = 20
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "CLK_ETM_EN"
 method = "clk_etm_en"
 bit-offset = 22
@@ -3961,10 +10061,24 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_25_27_OPAQUE"
+method = "bits_25_27_opaque"
+bit-offset = 25
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "CLK_MODEM_SEC_APB_EN"
 method = "clk_modem_sec_apb_en"
 bit-offset = 28
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_29_31_OPAQUE"
+method = "bits_29_31_opaque"
+bit-offset = 29
+bit-width = 3
 access = "read-write"
 
 [[registers]]
@@ -4004,6 +10118,13 @@ scope = []
 register-method = "clk_conf1"
 
 [[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "CLK_BT_APB_EN"
 method = "clk_bt_apb_en"
 bit-offset = 16
@@ -4015,6 +10136,74 @@ svd-name = "CLK_BTBB_EN"
 method = "clk_btbb_en"
 bit-offset = 17
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_18_31_OPAQUE"
+method = "bits_18_31_opaque"
+bit-offset = 18
+bit-width = 14
+access = "read-write"
+
+[[registers]]
+address = 1611323392
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0000_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0000_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1611323404
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_000C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_000c_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1611323408
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0010_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0010_opaque"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_1_31_OPAQUE"
+method = "bits_1_31_opaque"
+bit-offset = 1
+bit-width = 31
 access = "read-write"
 
 [[registers]]
@@ -4036,6 +10225,13 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_1_3_OPAQUE"
+method = "bits_1_3_opaque"
+bit-offset = 1
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "LOAD_STATION_TSF"
 method = "load_station_tsf"
 bit-offset = 4
@@ -4050,10 +10246,24 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_6_7_OPAQUE"
+method = "bits_6_7_opaque"
+bit-offset = 6
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "LOAD_STATION_TBTT_TARGET"
 method = "load_station_tbtt_target"
 bit-offset = 8
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_31_OPAQUE"
+method = "bits_9_31_opaque"
+bit-offset = 9
+bit-width = 23
 access = "read-write"
 
 [[registers]]
@@ -4154,10 +10364,42 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_17_18_OPAQUE"
+method = "bits_17_18_opaque"
+bit-offset = 17
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "DEVIATION_SYNC_ENABLE"
 method = "deviation_sync_enable"
 bit-offset = 19
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_20_31_OPAQUE"
+method = "bits_20_31_opaque"
+bit-offset = 20
+bit-width = 12
+access = "read-write"
+
+[[registers]]
+address = 1611323436
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_002C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_002c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
 access = "read-write"
 
 [[registers]]
@@ -4172,6 +10414,13 @@ scope = []
 register-method = "control"
 
 [[registers.fields]]
+svd-name = "BITS_0_20_OPAQUE"
+method = "bits_0_20_opaque"
+bit-offset = 0
+bit-width = 21
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "STA_TSF_WAKEUP_ENABLE"
 method = "sta_tsf_wakeup_enable"
 bit-offset = 21
@@ -4179,10 +10428,24 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_22_26_OPAQUE"
+method = "bits_22_26_opaque"
+bit-offset = 22
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BIT_27_OPAQUE"
 method = "bit_27_opaque"
 bit-offset = 27
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
+bit-width = 4
 access = "read-write"
 
 [[registers]]
@@ -4218,10 +10481,24 @@ bit-width = 7
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_18_20_OPAQUE"
+method = "bits_18_20_opaque"
+bit-offset = 18
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "BEACON_FILTER_FORCE_DUMP_ENABLE"
 method = "beacon_filter_force_dump_enable"
 bit-offset = 21
 bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_22_27_OPAQUE"
+method = "bits_22_27_opaque"
+bit-offset = 22
+bit-width = 6
 access = "read-write"
 
 [[registers.fields]]
@@ -4291,6 +10568,31 @@ bit-offset = 15
 bit-width = 1
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 1611323452
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_003C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_003c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
 [[registers]]
 address = 1611323456
 width = 32
@@ -4301,6 +10603,13 @@ peripheral-type = "WifiMacRtcTimerUpdate"
 peripheral-module = "wifi_mac_rtc_timer_update"
 scope = []
 register-method = "sta_light_sleep_wake_ahead"
+
+[[registers.fields]]
+svd-name = "BITS_0_15_OPAQUE"
+method = "bits_0_15_opaque"
+bit-offset = 0
+bit-width = 16
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "TIME"
@@ -4328,6 +10637,49 @@ bit-width = 24
 access = "read-write"
 
 [[registers]]
+address = 1611323464
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0048_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0048_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323472
+width = 32
+access = "read-only"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0050_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0050_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_1_OPAQUE"
+method = "bits_0_1_opaque"
+bit-offset = 0
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BITS_2_31_OPAQUE"
+method = "bits_2_31_opaque"
+bit-offset = 2
+bit-width = 30
+access = "read-only"
+
+[[registers]]
 address = 1611323476
 width = 32
 access = "read-write"
@@ -4342,6 +10694,13 @@ register-method = "rx_beacon_time_low"
 svd-name = "VALUE"
 method = "value"
 bit-offset = 0
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_31_OPAQUE"
+method = "bits_16_31_opaque"
+bit-offset = 16
 bit-width = 16
 access = "read-write"
 
@@ -4364,6 +10723,13 @@ bit-width = 16
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_16_18_OPAQUE"
+method = "bits_16_18_opaque"
+bit-offset = 16
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "STA_TSF_MODE"
 method = "sta_tsf_mode"
 bit-offset = 19
@@ -4371,9 +10737,23 @@ bit-width = 4
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BIT_23_OPAQUE"
+method = "bit_23_opaque"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "MODEM_STATE_WAKEUP_PROTECT_ENABLE"
 method = "modem_state_wakeup_protect_enable"
 bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_25_OPAQUE"
+method = "bit_25_opaque"
+bit-offset = 25
 bit-width = 1
 access = "read-write"
 
@@ -4392,9 +10772,23 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BIT_28_OPAQUE"
+method = "bit_28_opaque"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "STA_TSF_WAKEUP_ENABLE"
 method = "sta_tsf_wakeup_enable"
 bit-offset = 29
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
 bit-width = 1
 access = "read-write"
 
@@ -4423,6 +10817,13 @@ bit-offset = 0
 bit-width = 26
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_26_31_OPAQUE"
+method = "bits_26_31_opaque"
+bit-offset = 26
+bit-width = 6
+access = "read-write"
+
 [[registers]]
 address = 1611323488
 width = 32
@@ -4433,6 +10834,34 @@ peripheral-type = "WifiMacAuxTsfControl"
 peripheral-module = "wifi_mac_aux_tsf_control"
 scope = []
 register-method = "softap_control"
+
+[[registers.fields]]
+svd-name = "BITS_0_24_OPAQUE"
+method = "bits_0_24_opaque"
+bit-offset = 0
+bit-width = 25
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_25_OPAQUE"
+method = "bit_25_opaque"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_27_OPAQUE"
+method = "bits_26_27_opaque"
+bit-offset = 26
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "BIT_30_OPAQUE"
@@ -4449,6 +10878,38 @@ bit-width = 1
 access = "read-write"
 
 [[registers]]
+address = 1611323492
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0064_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0064_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_21_OPAQUE"
+method = "bits_0_21_opaque"
+bit-offset = 0
+bit-width = 22
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_22_25_OPAQUE"
+method = "bits_22_25_opaque"
+bit-offset = 22
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_31_OPAQUE"
+method = "bits_26_31_opaque"
+bit-offset = 26
+bit-width = 6
+access = "read-write"
+
+[[registers]]
 address = 1611323496
 width = 32
 access = "read-write"
@@ -4460,10 +10921,38 @@ scope = []
 register-method = "nan_control"
 
 [[registers.fields]]
+svd-name = "BITS_0_18_OPAQUE"
+method = "bits_0_18_opaque"
+bit-offset = 0
+bit-width = 19
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "TSF_MODE"
 method = "tsf_mode"
 bit-offset = 19
 bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_23_24_OPAQUE"
+method = "bits_23_24_opaque"
+bit-offset = 23
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_25_OPAQUE"
+method = "bit_25_opaque"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
@@ -4474,10 +10963,56 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "TSF_ENABLE_HIGH"
 method = "tsf_enable_high"
 bit-offset = 31
 bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611323500
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_006C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_006c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_21_OPAQUE"
+method = "bits_0_21_opaque"
+bit-offset = 0
+bit-width = 22
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_22_25_OPAQUE"
+method = "bits_22_25_opaque"
+bit-offset = 22
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_31_OPAQUE"
+method = "bits_26_31_opaque"
+bit-offset = 26
+bit-width = 6
 access = "read-write"
 
 [[registers]]
@@ -4492,10 +11027,38 @@ scope = []
 register-method = "btwt_control"
 
 [[registers.fields]]
+svd-name = "BITS_0_18_OPAQUE"
+method = "bits_0_18_opaque"
+bit-offset = 0
+bit-width = 19
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "TSF_MODE"
 method = "tsf_mode"
 bit-offset = 19
 bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_23_24_OPAQUE"
+method = "bits_23_24_opaque"
+bit-offset = 23
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_25_OPAQUE"
+method = "bit_25_opaque"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
@@ -4506,10 +11069,56 @@ bit-width = 1
 access = "read-write"
 
 [[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_30_OPAQUE"
+method = "bit_30_opaque"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "TSF_ENABLE_HIGH"
 method = "tsf_enable_high"
 bit-offset = 31
 bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611323508
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0074_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0074_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_21_OPAQUE"
+method = "bits_0_21_opaque"
+bit-offset = 0
+bit-width = 22
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_22_25_OPAQUE"
+method = "bits_22_25_opaque"
+bit-offset = 22
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_31_OPAQUE"
+method = "bits_26_31_opaque"
+bit-offset = 26
+bit-width = 6
 access = "read-write"
 
 [[registers]]
@@ -4528,6 +11137,289 @@ svd-name = "VALUE"
 method = "value"
 bit-offset = 0
 bit-width = 18
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_18_31_OPAQUE"
+method = "bits_18_31_opaque"
+bit-offset = 18
+bit-width = 14
+access = "read-write"
+
+[[registers]]
+address = 1611323516
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_007C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_007c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_27_OPAQUE"
+method = "bits_0_27_opaque"
+bit-offset = 0
+bit-width = 28
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
+bit-width = 4
+access = "read-write"
+
+[[registers]]
+address = 1611323520
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0080_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0080_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323524
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0084_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0084_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_27_OPAQUE"
+method = "bits_0_27_opaque"
+bit-offset = 0
+bit-width = 28
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
+bit-width = 4
+access = "read-write"
+
+[[registers]]
+address = 1611323528
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0088_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0088_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323532
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_008C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_008c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_27_OPAQUE"
+method = "bits_0_27_opaque"
+bit-offset = 0
+bit-width = 28
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
+bit-width = 4
+access = "read-write"
+
+[[registers]]
+address = 1611323536
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0090_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0090_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323540
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0094_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0094_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_27_OPAQUE"
+method = "bits_0_27_opaque"
+bit-offset = 0
+bit-width = 28
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
+bit-width = 4
+access = "read-write"
+
+[[registers]]
+address = 1611323544
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_0098_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_0098_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323548
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_009C_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_009c_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323552
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_00A0_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_00a0_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1611323556
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_00A4_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_00a4_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_7_OPAQUE"
+method = "bits_0_7_opaque"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_8_31_OPAQUE"
+method = "bits_8_31_opaque"
+bit-offset = 8
+bit-width = 24
+access = "read-write"
+
+[[registers]]
+address = 1611323560
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_00A8_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_00a8_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_3_OPAQUE"
+method = "bits_0_3_opaque"
+bit-offset = 0
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_4_31_OPAQUE"
+method = "bits_4_31_opaque"
+bit-offset = 4
+bit-width = 28
+access = "read-write"
+
+[[registers]]
+address = 1611323564
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_00AC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_00ac_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_31_OPAQUE"
+method = "bits_0_31_opaque"
+bit-offset = 0
+bit-width = 32
 access = "read-write"
 
 [[registers]]
@@ -4827,6 +11719,31 @@ bit-width = 24
 access = "read-write"
 
 [[registers]]
+address = 1611323596
+width = 32
+access = "read-write"
+identity = "MODEM_WIFI_MAC_POWER_OBSERVED.WORD_00CC_OPAQUE"
+peripheral = "MODEM_WIFI_MAC_POWER_OBSERVED"
+peripheral-type = "ModemWifiMacPowerObserved"
+peripheral-module = "modem_wifi_mac_power_observed"
+scope = []
+register-method = "word_00cc_opaque"
+
+[[registers.fields]]
+svd-name = "BITS_0_25_OPAQUE"
+method = "bits_0_25_opaque"
+bit-offset = 0
+bit-width = 26
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_30_31_OPAQUE"
+method = "bits_30_31_opaque"
+bit-offset = 30
+bit-width = 2
+access = "read-write"
+
+[[registers]]
 address = 1611329560
 width = 32
 access = "read-write"
@@ -4836,6 +11753,13 @@ peripheral-type = "ModemLpconSharedClock"
 peripheral-module = "modem_lpcon_shared_clock"
 scope = []
 register-method = "clk_conf"
+
+[[registers.fields]]
+svd-name = "BIT_0_OPAQUE"
+method = "bit_0_opaque"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "CLK_COEX_EN"
@@ -4851,6 +11775,13 @@ bit-offset = 2
 bit-width = 1
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_3_31_OPAQUE"
+method = "bits_3_31_opaque"
+bit-offset = 3
+bit-width = 29
+access = "read-write"
+
 [[registers]]
 address = 1611329568
 width = 32
@@ -4863,9 +11794,23 @@ scope = []
 register-method = "clk_conf_power_st"
 
 [[registers.fields]]
+svd-name = "BITS_0_23_OPAQUE"
+method = "bits_0_23_opaque"
+bit-offset = 0
+bit-width = 24
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "CLK_I2C_MST_ST_MAP"
 method = "clk_i2c_mst_st_map"
 bit-offset = 24
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_31_OPAQUE"
+method = "bits_28_31_opaque"
+bit-offset = 28
 bit-width = 4
 access = "read-write"
 
@@ -4975,6 +11920,13 @@ bit-offset = 26
 bit-width = 1
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_27_31_OPAQUE"
+method = "bits_27_31_opaque"
+bit-offset = 27
+bit-width = 5
+access = "read-write"
+
 [[registers]]
 address = 1611331608
 width = 32
@@ -5037,10 +11989,24 @@ scope = []
 register-method = "ana_conf2"
 
 [[registers.fields]]
+svd-name = "BITS_0_3_OPAQUE"
+method = "bits_0_3_opaque"
+bit-offset = 0
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
 svd-name = "PHY_HOST_MAP"
 method = "phy_host_map"
 bit-offset = 4
 bit-width = 13
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_17_31_OPAQUE"
+method = "bits_17_31_opaque"
+bit-offset = 17
+bit-width = 15
 access = "read-write"
 
 [[registers]]
@@ -5118,6 +12084,13 @@ bit-offset = 6
 bit-width = 5
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BITS_11_31_OPAQUE"
+method = "bits_11_31_opaque"
+bit-offset = 11
+bit-width = 21
+access = "read-write"
+
 [[registers]]
 address = 1611333836
 width = 32
@@ -5146,6 +12119,13 @@ peripheral-type = "PmuRadio"
 peripheral-module = "pmu_radio"
 scope = []
 register-method = "rf_pwc"
+
+[[registers.fields]]
+svd-name = "BITS_0_22_OPAQUE"
+method = "bits_0_22_opaque"
+bit-offset = 0
+bit-width = 23
+access = "read-write"
 
 [[registers.fields]]
 svd-name = "XPD_CKGEN5G"

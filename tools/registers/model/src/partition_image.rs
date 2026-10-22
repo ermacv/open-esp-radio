@@ -22,6 +22,8 @@ pub struct PartitionRegister {
     /// Element of a register array.
     pub element: Option<usize>,
     pub address: u32,
+    /// Declared field bits; reserved and unassigned lanes are not compared.
+    pub mask: u32,
 }
 
 impl PacApiPack {
@@ -72,6 +74,20 @@ impl PacApiPack {
                 if !properties.access.unwrap_or(Access::ReadWrite).can_read() {
                     continue;
                 }
+                let mut mask = 0u32;
+                for field in register.fields.iter().flatten() {
+                    let fields = match field {
+                        MaybeArray::Single(info) => vec![info.clone()],
+                        MaybeArray::Array(info, dim) => svd_rs::field::expand(info, dim).collect(),
+                    };
+                    for field in fields {
+                        let (offset, width) = (field.bit_offset(), field.bit_width());
+                        if width == 0 || width > 32 || offset > 32 - width {
+                            return Err(Error::message("partition image field exceeds a word"));
+                        }
+                        mask |= (u32::MAX >> (32 - width)) << offset;
+                    }
+                }
                 let elements: Vec<(Option<usize>, u32)> = match register {
                     MaybeArray::Single(info) => vec![(None, info.address_offset)],
                     MaybeArray::Array(info, dimension) => (0..dimension.dim)
@@ -86,11 +102,13 @@ impl PacApiPack {
                 for (element, offset) in elements {
                     registers
                         .entry(base + offset)
+                        .and_modify(|entry: &mut PartitionRegister| entry.mask |= mask)
                         .or_insert_with(|| PartitionRegister {
                             peripheral: name.clone(),
                             register: register.name.clone(),
                             element,
                             address: base + offset,
+                            mask,
                         });
                 }
             }
@@ -181,7 +199,7 @@ mod tests {
 <peripheral><name>A</name><baseAddress>0x1000</baseAddress><registers>
 <register><name>RO</name><addressOffset>0x8</addressOffset><access>read-only</access></register>
 <register><name>WO</name><addressOffset>0x4</addressOffset><access>write-only</access></register>
-<register><name>RW</name><addressOffset>0x0</addressOffset></register>
+<register><name>RW</name><addressOffset>0x0</addressOffset><fields><field><name>LOW</name><bitOffset>3</bitOffset><bitWidth>3</bitWidth></field><field><name>HIGH</name><bitOffset>31</bitOffset><bitWidth>1</bitWidth></field></fields></register>
 <register><dim>2</dim><dimIncrement>0x4</dimIncrement><name>ARR%s</name><addressOffset>0x10</addressOffset></register>
 </registers></peripheral>
 <peripheral><name>B</name><baseAddress>0x1000</baseAddress><registers>
@@ -222,6 +240,13 @@ mod tests {
                 ("ARR%s", Some(1), 0x1014),
             ]
         );
+    }
+
+    #[test]
+    fn image_masks_cover_fields_without_filling_unassigned_lanes() {
+        let registers = pack().partition_readable_registers(SVD, "Owned").unwrap();
+        assert_eq!(registers[0].mask, 0x8000_0038);
+        assert_eq!(registers[1].mask, 0);
     }
 
     #[test]

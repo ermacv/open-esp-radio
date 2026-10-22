@@ -20,15 +20,9 @@ description = "Unsigned raw code. Values other than 0x7f convert to quarter-dB u
 bitOffset = 0
 bitWidth = 8
 
-[[peripherals.registers.register.fields]]
-name = "BITS_8_31_OPAQUE"
-bitOffset = 8
-bitWidth = 24
-
 [[peripheral-review]]
 entity = "WIFI_MAC_BEAMFORMING_REPORT"
 opaque-entities = [
-    "WIFI_MAC_BEAMFORMING_REPORT.AVERAGE_SNR.BITS_8_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]

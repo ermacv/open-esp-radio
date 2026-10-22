@@ -26,6 +26,24 @@ description = "Set when the leaf's enable argument is nonzero."
 bitOffset = 27
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 21
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -82,6 +100,18 @@ description = "Dedicated clear leaf sets bit 31."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -123,6 +153,12 @@ description = "Dedicated enable/disable leaves set or clear bit fifteen."
 bitOffset = 15
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -141,6 +177,12 @@ bitWidth = 16
 minimum = 0x0
 maximum = 0xFFFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -173,6 +215,12 @@ bitWidth = 16
 minimum = 0x0
 maximum = 0xFFFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -243,6 +291,36 @@ description = "hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears i
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -262,6 +340,12 @@ bitWidth = 26
 minimum = 0x0
 maximum = 0x3FFFFFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -281,6 +365,12 @@ bitWidth = 18
 minimum = 0x0
 maximum = 0x3FFFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 14
 [[peripheral-review]]
 entity = "WIFI_MAC_RTC_TIMER_UPDATE"
 opaque-entities = [
@@ -503,3 +593,128 @@ naming = "descriptive"
 [[review]]
 entity = "WIFI_MAC_RTC_TIMER_UPDATE.RX_BEACON_TIME_LOW.VALUE"
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.BITS_16_18_OPAQUE"
+sources = ["C5_MMIO_USE_600AD858", "C5_MMIO_DECLARED_600AD858"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.BIT_23_OPAQUE"
+sources = ["C5_MMIO_USE_600AD858", "C5_MMIO_DECLARED_600AD858"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.BIT_25_OPAQUE"
+sources = ["C5_MMIO_USE_600AD858", "C5_MMIO_DECLARED_600AD858"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.BIT_28_OPAQUE"
+sources = ["C5_MMIO_USE_600AD858", "C5_MMIO_DECLARED_600AD858"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.BIT_30_OPAQUE"
+sources = ["C5_MMIO_USE_600AD858", "C5_MMIO_DECLARED_600AD858"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.RX_BEACON_TIME_LOW.BITS_16_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD854", "C5_MMIO_DECLARED_600AD854"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BITS_18_20_OPAQUE"
+sources = ["C5_MMIO_USE_600AD834", "C5_MMIO_DECLARED_600AD834"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BITS_22_27_OPAQUE"
+sources = ["C5_MMIO_USE_600AD834", "C5_MMIO_DECLARED_600AD834"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.BITS_16_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD838", "C5_MMIO_DECLARED_600AD838"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BITS_0_20_OPAQUE"
+sources = ["C5_MMIO_USE_600AD830", "C5_MMIO_DECLARED_600AD830"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BITS_22_26_OPAQUE"
+sources = ["C5_MMIO_USE_600AD830", "C5_MMIO_DECLARED_600AD830"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD830", "C5_MMIO_DECLARED_600AD830"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_LIGHT_SLEEP_WAKE_AHEAD.BITS_0_15_OPAQUE"
+sources = ["C5_MMIO_USE_600AD840", "C5_MMIO_DECLARED_600AD840"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SLOW_CLOCK_CALIBRATION.BITS_18_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD878_RUN", "C5_MMIO_DECLARED_600AD878"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.BIT_27_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600AD830"]
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TBTT_INTERVAL.BITS_26_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AD85C_TWO_DOMAIN_RUN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

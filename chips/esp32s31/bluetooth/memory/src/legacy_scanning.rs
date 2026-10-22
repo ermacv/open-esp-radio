@@ -54,7 +54,7 @@ const SCHEDULER_ITEM_ALLOCATION_PREFIX: BleSchedulerItemHardwareNext =
         .expect("reviewed field image fits");
 /// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
-    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xfdfffff);
+    BleSchedulerItemWord001cOpaque::from_bits(0xfdfffff);
 /// SOURCE: chips/esp32s31/notes/bluetooth-passive-scanning.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_EVENT_CLASS_IMAGE: BleSchedulerItemReceiveWait =
     BleSchedulerItemReceiveWait::ZERO.with_value(0x1);
@@ -156,7 +156,7 @@ impl ItemStorage {
             ));
         self.layout.link_state().write(
             BleSchedulerItemLinkState::from_bits(link_state.compressed_image())
-                .with_bits_20_23_opaque(LegacyScanType::Passive.item_kind())
+                .with_kind(LegacyScanType::Passive.item_kind())
                 .expect("reviewed role kind fits"),
         );
         self.layout
@@ -177,7 +177,7 @@ impl ItemStorage {
         let word = self.layout.link_state();
         word.write(
             word.read()
-                .with_bits_20_23_opaque(scan_type.item_kind())
+                .with_kind(scan_type.item_kind())
                 .expect("reviewed role kind fits"),
         );
     }
@@ -410,12 +410,10 @@ impl<const N: usize> LegacyScanPool<N> {
             let header = cpu.binding.scan_request_header;
             let layout = &cpu.graph.link_state.layout;
             layout.tx_path().write(
-                BleLinkStateTxPath::from_bits(header.compressed_image())
-                    .with_max_tx_octets(layout.tx_path().read().max_tx_octets())
-                    .with_queue_ready(layout.tx_path().read().queue_ready())
-                    .with_bits_29_30_opaque(layout.tx_path().read().bits_29_30_opaque())
-                    .expect("retained image fits")
-                    .with_valid(layout.tx_path().read().valid()),
+                layout
+                    .tx_path()
+                    .read()
+                    .with_header_from(BleLinkStateTxPath::from_bits(header.compressed_image())),
             );
             layout.tx_head().write(BleLinkStateTxHead::from_bits(
                 header.controller_address().address(),

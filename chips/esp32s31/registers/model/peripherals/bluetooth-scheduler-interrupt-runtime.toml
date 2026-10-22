@@ -25,11 +25,6 @@ access = "read-write"
 name = "VALUE_LOW_20"
 bitOffset = 0
 bitWidth = 20
-[[peripherals.registers.register.fields]]
-name = "BITS_20_31_OPAQUE"
-bitOffset = 20
-bitWidth = 12
-
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "SCHEDULER_STATE"
@@ -137,7 +132,6 @@ bitWidth = 8
 [[peripheral-review]]
 entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME"
 opaque-entities = [
-    "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_REFERENCE.BITS_20_31_OPAQUE",
     "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BITS_24_28_OPAQUE",
     "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BIT_30_OPAQUE",
 ]
@@ -228,3 +222,12 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC", "BLOB_LIBBLE_DIAGNOSTIC_S
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BITS_24_28_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010107C"]
+naming = "opaque"
+[[review]]
+entity = "BLUETOOTH_SCHEDULER_INTERRUPT_RUNTIME.SCHEDULER_STATE.BIT_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010107C"]
+naming = "opaque"

@@ -16,6 +16,7 @@ name = "CORE0_ROUTE"
 description = "Core-zero destination and privilege routing for MODEM_ZB_MAC."
 addressOffset = 0x000
 size = 32
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"] }
 access = "read-write"
 resetValue = 0
 
@@ -25,11 +26,6 @@ description = "CPU-interrupt destination selected for the peripheral source."
 bitOffset = 0
 bitWidth = 6
 
-[[peripherals.registers.register.fields]]
-name = "BITS_6_7_OPAQUE"
-description = "Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."
-bitOffset = 6
-bitWidth = 2
 
 [[peripherals.registers.register.fields]]
 name = "PASS_LEVEL"
@@ -37,11 +33,6 @@ description = "Privilege pass/remap level selected for the peripheral source."
 bitOffset = 8
 bitWidth = 2
 
-[[peripherals.registers.register.fields]]
-name = "BITS_10_31_OPAQUE"
-description = "Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."
-bitOffset = 10
-bitWidth = 22
 
 [[peripherals.registers]]
 
@@ -50,6 +41,7 @@ name = "CORE1_ROUTE"
 description = "Core-one destination and privilege routing for MODEM_ZB_MAC."
 addressOffset = 0x800
 size = 32
+reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"] }
 access = "read-write"
 resetValue = 0
 
@@ -59,11 +51,6 @@ description = "CPU-interrupt destination selected for the peripheral source."
 bitOffset = 0
 bitWidth = 6
 
-[[peripherals.registers.register.fields]]
-name = "BITS_6_7_OPAQUE"
-description = "Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."
-bitOffset = 6
-bitWidth = 2
 
 [[peripherals.registers.register.fields]]
 name = "PASS_LEVEL"
@@ -71,20 +58,9 @@ description = "Privilege pass/remap level selected for the peripheral source."
 bitOffset = 8
 bitWidth = 2
 
-[[peripherals.registers.register.fields]]
-name = "BITS_10_31_OPAQUE"
-description = "Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value."
-bitOffset = 10
-bitWidth = 22
 
 [[peripheral-review]]
 entity = "IEEE802154_INTERRUPT_ROUTE"
-opaque-entities = [
-    "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_6_7_OPAQUE",
-    "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE.BITS_10_31_OPAQUE",
-    "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.BITS_6_7_OPAQUE",
-    "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE.BITS_10_31_OPAQUE",
-]
 
 [peripheral-review.peripheral]
 sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX", "ESP_IDF_S31_INTERRUPT_SOURCES"]
@@ -105,7 +81,3 @@ naming = "descriptive"
 provenance = "imported"
 accuracy = "exact"
 completeness = "complete"
-
-[peripheral-review.opaque]
-sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
-naming = "opaque"

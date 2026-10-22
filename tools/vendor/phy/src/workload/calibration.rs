@@ -666,6 +666,7 @@ fn window_registers(windows: &[crate::scenario::Window]) -> Result<Vec<Register>
                 .checked_add(index * 4)
                 .ok_or("vendor window overflows")?;
             registers.entry(address).or_insert_with(|| Register {
+                mask: u32::MAX,
                 address,
                 name: format!("window-{address:08x}"),
             });
@@ -886,6 +887,7 @@ mod reference_boot_tests {
     }
     fn register(address: u32) -> Register {
         Register {
+            mask: u32::MAX,
             address,
             name: format!("r{address}"),
         }

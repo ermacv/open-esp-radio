@@ -50,6 +50,12 @@ description = "A nonzero enable argument sets this bit; zero clears it."
 bitOffset = 23
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 8
 [[peripheral-review]]
 entity = "WIFI_MAC_BEAMFORMING_FEEDBACK_TEST"
 
@@ -68,3 +74,11 @@ completeness = "partial"
 
 [peripheral-review.field]
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_BEAMFORMING_FEEDBACK_TEST.CONFIGURATION.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_USE_20104E00", "S31_MMIO_DECLARED_20104E00"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

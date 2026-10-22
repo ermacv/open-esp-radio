@@ -84,6 +84,18 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 5
 [[peripheral-review]]
 entity = "WIFI_MAC_TXRX_SUFFIX"
 opaque-entities = [
@@ -131,3 +143,40 @@ sources = ["BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.FIELD_CONTROL.BIT_3_OPAQUE"
+sources = ["S31_MMIO_USE_20104CA8", "S31_MMIO_DECLARED_20104CA8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.FIELD_CONTROL.BITS_8_12_OPAQUE"
+sources = ["S31_MMIO_USE_20104CA8", "S31_MMIO_DECLARED_20104CA8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.AUX_ENABLE.BIT_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104308"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.DEFAULT_IMAGE_A.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C20"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL.BITS_16_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C60"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.GATE_CONTROL.BIT_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C60"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_TXRX_SUFFIX.FIELD_CONTROL.BITS_4_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104CA8"]
+naming = "opaque"

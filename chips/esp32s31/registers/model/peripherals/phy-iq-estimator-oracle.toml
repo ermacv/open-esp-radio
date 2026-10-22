@@ -185,6 +185,12 @@ name = "READY"
 bitOffset = 16
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 16
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -266,10 +272,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_ACTIVITY_STATUS.BITS_20_21_OPAQUE"
 naming = "opaque"
-sources = [
-    "ROM_REV0_PHY_IQ_ESTIMATOR",
-    "BLOB_LIBPHY_PHY_CHECK_RX_SAT",
-]
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR", "BLOB_LIBPHY_PHY_CHECK_RX_SAT", "S31_MMIO_DECLARED_201008D0"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -285,3 +288,24 @@ naming = "descriptive"
 [[review]]
 entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_READY_STATUS.READY"
 naming = "descriptive"
+
+[[review]]
+entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_READY_STATUS.BITS_0_15_OPAQUE"
+sources = ["S31_MMIO_USE_2010047C", "S31_MMIO_DECLARED_2010047C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONFIG.BITS_26_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010044C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL.BITS_2_16_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100450"]
+naming = "opaque"
+[[review]]
+entity = "PHY_IQ_ESTIMATOR_ORACLE.ESTIMATOR_CONTROL.BITS_19_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20100450"]
+naming = "opaque"

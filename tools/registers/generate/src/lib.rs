@@ -215,6 +215,7 @@ impl ChipPublication {
                         .flat_map(|a| a.metadata.evidence.iter().map(|e| e.source.as_str())),
                 ),
         )?;
+        evidence.validate_references("reserved register bits", model.reserved_sources())?;
         evidence.validate_references(
             "memory layout review",
             model

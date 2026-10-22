@@ -48,13 +48,6 @@ writer = "cpu"
 description = "Connection transmit queue ready lane."
 
 [[layout.words.fields]]
-name = "BITS_29_30_OPAQUE"
-opaque = true
-bits = "30:29"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "VALID"
 bits = "31"
 writer = "cpu"
@@ -75,18 +68,16 @@ points-to = "BLE_BUFFER_HEADER"
 encoding = "ble-compressed"
 
 [[layout.words.fields]]
-name = "BITS_20_27_OPAQUE"
-opaque = true
-bits = "27:20"
+name = "PHY_CODE_28_29"
+bits = "29:28"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "First two-bit PHY code supplied by the advertising reset's mode-to-rate conversion; no TX/RX direction is assigned."
 
 [[layout.words.fields]]
-name = "BITS_28_31_OPAQUE"
-opaque = true
-bits = "31:28"
+name = "PHY_CODE_30_31"
+bits = "31:30"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Second two-bit PHY code supplied by the advertising reset's mode-to-rate conversion; no TX/RX direction is assigned."
 
 [[layout.words]]
 name = "RX_PATH"
@@ -122,13 +113,6 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_19_OPAQUE"
-opaque = true
-bits = "19:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "BITS_20_23_OPAQUE"
 opaque = true
 bits = "23:20"
@@ -143,23 +127,9 @@ writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
-name = "BIT_28_OPAQUE"
-opaque = true
-bits = "28"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "BIT_29_OPAQUE"
 opaque = true
 bits = "29"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
-name = "BIT_30_OPAQUE"
-opaque = true
-bits = "30"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -178,9 +148,9 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_20_30_OPAQUE"
 opaque = true
-bits = "31:0"
+bits = "30:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -191,23 +161,9 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_25_OPAQUE"
-opaque = true
-bits = "25:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "BITS_26_27_OPAQUE"
 opaque = true
 bits = "27:26"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
-name = "BITS_28_31_OPAQUE"
-opaque = true
-bits = "31:28"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -272,18 +228,12 @@ phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardw
 description = "Scanner start flag. Connection mode preserves the complete receive-time image in this same physical word."
 
 [[layout.words]]
+fields = []
 name = "WORD_001C_OPAQUE"
 opaque = true
 offset = 0x1c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "RX_LIST"
@@ -292,9 +242,9 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_27_OPAQUE"
+name = "BITS_0_6_OPAQUE"
 opaque = true
-bits = "27:0"
+bits = "6:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -304,13 +254,6 @@ bits = "30:28"
 writer = "cpu"
 description = "Global RX memory-list class: one for scanner, two for admitted non-scanners, zero for private connection RX."
 
-[[layout.words.fields]]
-name = "BIT_31_OPAQUE"
-opaque = true
-bits = "31"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
 name = "OWN_ADDRESS_POLICY"
 offset = 0x24
@@ -318,16 +261,24 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_15_OPAQUE"
+name = "RESOLVING_ENTRY"
+bits = "19:0"
+writer = "cpu"
+description = "Compressed resolving-list entry address, or zero when no entry is selected. The entry's internal layout is not established here."
+placement = ["dma-window"]
+encoding = "ble-compressed"
+
+[[layout.words.fields]]
+name = "BITS_20_22_OPAQUE"
 opaque = true
-bits = "15:0"
+bits = "22:20"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
-name = "BITS_16_27_OPAQUE"
+name = "BITS_24_26_OPAQUE"
 opaque = true
-bits = "27:16"
+bits = "26:24"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -345,18 +296,12 @@ writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
+fields = []
 name = "WORD_0028_OPAQUE"
 opaque = true
 offset = 0x28
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "CRC_INITIALIZATION"
@@ -377,13 +322,6 @@ writer = "cpu"
 description = "Host scanner filter-policy image; the advertising reset clears these lanes."
 
 [[layout.words.fields]]
-name = "BITS_26_30_OPAQUE"
-opaque = true
-bits = "30:26"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "READY"
 bits = "31"
 writer = "cpu"
@@ -399,13 +337,6 @@ description = "Observed word position; unassigned bits retain their exact image.
 name = "BITS_0_7_OPAQUE"
 opaque = true
 bits = "7:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
-name = "BIT_8_OPAQUE"
-opaque = true
-bits = "8"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -433,13 +364,6 @@ description = "Connection coexistence protection value."
 name = "BITS_20_21_OPAQUE"
 opaque = true
 bits = "21:20"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
-name = "BITS_22_31_OPAQUE"
-opaque = true
-bits = "31:22"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -492,16 +416,9 @@ writer = "cpu"
 description = "Last two own-address bytes."
 
 [[layout.words.fields]]
-name = "BITS_16_23_OPAQUE"
+name = "BITS_16_17_OPAQUE"
 opaque = true
-bits = "23:16"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
-name = "BITS_24_31_OPAQUE"
-opaque = true
-bits = "31:24"
+bits = "17:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -541,9 +458,9 @@ writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
-name = "BITS_10_31_OPAQUE"
+name = "BITS_16_31_OPAQUE"
 opaque = true
-bits = "31:10"
+bits = "31:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -555,9 +472,9 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_15_OPAQUE"
 opaque = true
-bits = "31:0"
+bits = "15:0"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -608,13 +525,6 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_18_OPAQUE"
-opaque = true
-bits = "18:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "BITS_19_20_OPAQUE"
 opaque = true
 bits = "20:19"
@@ -628,40 +538,21 @@ bits = "30:21"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
-[[layout.words.fields]]
-name = "BIT_31_OPAQUE"
-opaque = true
-bits = "31"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_0058_OPAQUE"
 opaque = true
 offset = 0x58
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_005C_OPAQUE"
 opaque = true
 offset = 0x5c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "EVENT"
@@ -680,13 +571,6 @@ name = "POWER_INDEX"
 bits = "15:8"
 writer = "cpu"
 description = "Rounded transmit-power table index copied into the scheduler item."
-
-[[layout.words.fields]]
-name = "BITS_16_31_OPAQUE"
-opaque = true
-bits = "31:16"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "SCHEDULER_HEAD"
@@ -767,32 +651,24 @@ description = "Full CPU address of the software buffer-header anchor; not a comp
 points-to = "BLE_BUFFER_HEADER"
 
 [[layout.words]]
-name = "WORD_007C_OPAQUE"
-opaque = true
+name = "RX_QUEUE_CONFIGURATION"
 offset = 0x7c
 access = "shared"
-description = "Observed word position; unassigned bits retain their exact image."
+description = "CPU pointer to the receive-queue configuration supplied to link-state allocation; it is not a compressed hardware link."
 
 [[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
+name = "ADDRESS"
 bits = "31:0"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Full CPU address of the software receive-queue configuration. The memory manager dereferences its enable and queue-index bytes before refreshing the link-state RX anchors. The pointed-to object has no published layout."
 
 [[layout.words]]
+fields = []
 name = "WORD_0080_OPAQUE"
 opaque = true
 offset = 0x80
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[review]]
 entity = "BLE_LINK_STATE"

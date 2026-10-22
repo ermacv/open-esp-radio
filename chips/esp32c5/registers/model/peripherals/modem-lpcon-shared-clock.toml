@@ -30,6 +30,18 @@ description = "Enable the analog register I2C master clock; the platform keeps i
 bitOffset = 2
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_3_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 29
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "CLK_CONF_POWER_ST"
@@ -50,6 +62,18 @@ ESP32-C5 rev 1.0 USB Serial/JTAG reset erratum)."""
 bitOffset = 24
 bitWidth = 4
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 24
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
 [[peripheral-review]]
 entity = "MODEM_LPCON_SHARED_CLOCK"
 
@@ -62,3 +86,35 @@ naming = "vendor"
 [peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
 naming = "vendor"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF.BIT_0_OPAQUE"
+sources = ["C5_MMIO_USE_600AF018", "C5_MMIO_DECLARED_600AF018"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF.BITS_3_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AF018", "C5_MMIO_DECLARED_600AF018"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BITS_0_23_OPAQUE"
+sources = ["C5_MMIO_USE_600AF020", "C5_MMIO_DECLARED_600AF020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.BITS_28_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AF020", "C5_MMIO_DECLARED_600AF020"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

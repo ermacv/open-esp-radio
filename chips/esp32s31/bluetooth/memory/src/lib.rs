@@ -97,8 +97,9 @@ pub use direction_finding_workspace::{
 
 pub use dtm_event_image::{
     DtmLinkStateReviewedWords, DtmPositionalEventWords, DtmReceiverEventPhase, DtmRole,
-    DtmRxHeaderTailProjection, DtmSchedulerItemEventType, DtmSchedulerItemReviewedWords,
-    DtmSchedulerReceiverPhy, DtmSchedulerTransmitterPhy, DtmTxHeaderHeadProjection,
+    DtmRxHeaderTailProjection, DtmSchedulerFrequency, DtmSchedulerItemEventType,
+    DtmSchedulerItemReviewedWords, DtmSchedulerReceiverPhy, DtmSchedulerTransmitterPhy,
+    DtmTxHeaderHeadProjection,
 };
 
 pub use dtm_rx_result::{DtmRxResultProjection, DtmRxResultProjectionError, DtmRxRssi};

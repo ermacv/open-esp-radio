@@ -18,6 +18,7 @@ name = "COMMAND"
 description = "Write-only IEEE 802.15.4 MAC command opcode. The public common LL constrains commands to the listed values."
 addressOffset = 0x000
 size = 32
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "write-only"
 
 [[peripherals.registers.register.fields]]
@@ -86,6 +87,7 @@ name = "CONTROL"
 description = "Selected MAC policy bits mutated by public common LL accessors. Unused control bits remain absent."
 addressOffset = 0x004
 size = 32
+reserved = { mask = 0x0000a714, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -143,6 +145,62 @@ description = "Enable public multipan context three."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "IFS_DIS"
+description = "Open vendor conf.ifs_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 5
+bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "VERSION_FILTER_DIS"
+description = "Open vendor conf.version_filter_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 11
+bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "FILTER_ENHANCE_DIS"
+description = "Open vendor conf.filter_enhance_dis field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 14
+bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "COEX_ARB_DELAY"
+description = "Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 16
+bitWidth = 8
+
+
+[[peripherals.registers.register.fields]]
+name = "BIT_ORDER"
+description = "Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 24
+bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "NO_RSSI_TRIGGER_BREAK_EN"
+description = "Open vendor conf.no_rssi_trigger_break_en field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 25
+bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "COEX_FORCE_RX"
+description = "Open vendor conf.coex_force_rx field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 26
+bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "RX_DONE_TRIG_IDLE"
+description = "Open vendor conf.rx_done_trig_idle field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 27
+bitWidth = 1
+
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -153,6 +211,7 @@ name = "MULTIPAN%s_SHORT_ADDRESS"
 description = "Sixteen-bit short address for one public multipan context."
 addressOffset = 0x008
 size = 32
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -174,6 +233,7 @@ name = "MULTIPAN%s_PAN_ID"
 description = "Sixteen-bit PAN identifier for one public multipan context."
 addressOffset = 0x00c
 size = 32
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -234,6 +294,7 @@ name = "CHANNEL"
 description = "Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent."
 addressOffset = 0x048
 size = 32
+reserved = { mask = 0xffffff80, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -246,12 +307,6 @@ bitWidth = 7
 minimum = 0
 maximum = 0x7f
 
-[[peripherals.registers.register.fields]]
-name = "BIT_7_OPAQUE"
-description = "Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it."
-bitOffset = 7
-bitWidth = 1
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -259,6 +314,7 @@ name = "TX_POWER"
 description = "Five-bit transmit-power code written through a preserving bitfield update by the public common LL."
 addressOffset = 0x04c
 size = 32
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -274,6 +330,7 @@ name = "ED_DURATION"
 description = "Energy-detection duration field written by the public common LL. The adjacent delay field is not used there and remains absent."
 addressOffset = 0x050
 size = 32
+reserved = { mask = 0xf0000000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -282,6 +339,13 @@ description = "Twenty-four-bit physical field. The current public setter accepts
 bitOffset = 0
 bitWidth = 24
 
+
+[[peripherals.registers.register.fields]]
+name = "DELAY"
+description = "Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 24
+bitWidth = 4
+
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -289,6 +353,7 @@ name = "ED_CONFIG"
 description = "Energy-detection and clear-channel-assessment configuration plus read-only result fields used by the public common LL. The pinned reg macros call bits 12:11 ED_SAMPLE_MODE and bit 13 DIS_ED_POWER_SEL, while the pinned struct/common LL operate them as ED_SAMPLE_RATE and ED_SAMPLE_MODE respectively; this model follows the operational struct/common-LL pair and leaves the naming conflict explicit."
 addressOffset = 0x054
 size = 32
+reserved = { mask = 0xfe000700, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -394,6 +459,7 @@ name = "ACK_TIMEOUT"
 description = "Sixteen-bit acknowledgment timeout read and written by the public common LL. Units are not assigned by this register model."
 addressOffset = 0x05c
 size = 32
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -409,9 +475,10 @@ maximum = 0xffff
 
 [peripherals.registers.register]
 name = "EVENT_ENABLE"
-description = "Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics."
+description = "Individual event enables mutated by the public common LL. All fourteen lanes belong to the open vendor events field; individual unnamed events remain descriptive partitions."
 addressOffset = 0x060
 size = 32
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -450,8 +517,8 @@ bitOffset = 6
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BIT_7_OPAQUE"
-description = "Physically present event-enable bit without an assigned public vendor event."
+name = "EVENTS_7"
+description = "Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 7
 bitWidth = 1
 
@@ -489,6 +556,7 @@ name = "WORD_064_BASE"
 description = "Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-C5 revision; bit seven has no assigned vendor event semantics."
 addressOffset = 0x064
 size = 32
+reserved = { mask = 0xffffe000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
@@ -527,8 +595,8 @@ bitOffset = 6
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BIT_7_OPAQUE"
-description = "Physically present event-status bit without an assigned public vendor event."
+name = "EVENTS_7"
+description = "Partition of the open vendor events field, bits 7:7; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 7
 bitWidth = 1
 
@@ -564,6 +632,7 @@ name = "RX_ABORT_ENABLE"
 description = "Low thirty-one receive-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified."
 addressOffset = 0x068
 size = 32
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -621,8 +690,8 @@ bitOffset = 8
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_9_14_OPAQUE"
-description = "Abort-reason enable bits without a public vendor reason."
+name = "RX_ABORT_EN_9_14"
+description = "Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 9
 bitWidth = 6
 
@@ -655,8 +724,8 @@ bitOffset = 18
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_19_22_OPAQUE"
-description = "Abort-reason enable bits without a public vendor reason."
+name = "RX_ABORT_EN_19_22"
+description = "Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 19
 bitWidth = 4
 
@@ -683,8 +752,8 @@ bitOffset = 25
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_26_30_OPAQUE"
-description = "Abort-reason enable bits without a public vendor reason."
+name = "RX_ABORT_EN_26_30"
+description = "Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 26
 bitWidth = 5
 
@@ -699,12 +768,20 @@ name = "PENDING_CONFIG"
 description = "Selected outgoing acknowledgment frame-pending bit. The untouched timeout field remains absent."
 addressOffset = 0x06c
 size = 32
+reserved = { mask = 0x0000fffe, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
 name = "FRAME_PENDING"
 bitOffset = 0
 bitWidth = 1
+
+
+[[peripherals.registers.register.fields]]
+name = "PENDING_TIMEOUT"
+description = "Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 16
+bitWidth = 16
 
 [[peripherals.registers]]
 
@@ -713,6 +790,7 @@ name = "COEX_PTI"
 description = "Selected coexistence priority fields. The public disable-coexistence helper writes value three to each through two preserving field updates. Other antenna and RF controls remain absent."
 addressOffset = 0x070
 size = 32
+reserved = { mask = 0xfffffe00, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -733,6 +811,13 @@ bitWidth = 4
 minimum = 0
 maximum = 0xf
 
+
+[[peripherals.registers.register.fields]]
+name = "CLOSE_RF_SEL"
+description = "Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred."
+bitOffset = 8
+bitWidth = 1
+
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -740,6 +825,7 @@ name = "TX_ABORT_ENABLE"
 description = "Low thirty-one transmit-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified."
 addressOffset = 0x078
 size = 32
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -797,8 +883,8 @@ bitOffset = 8
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_9_14_OPAQUE"
-description = "Abort-reason enable bits without a public vendor reason."
+name = "TX_ABORT_EN_9_14"
+description = "Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 9
 bitWidth = 6
 
@@ -831,8 +917,8 @@ bitOffset = 18
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_19_22_OPAQUE"
-description = "Abort-reason enable bits without a public vendor reason."
+name = "TX_ABORT_EN_19_22"
+description = "Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 19
 bitWidth = 4
 
@@ -853,8 +939,8 @@ bitOffset = 24
 bitWidth = 1
 
 [[peripherals.registers.register.fields]]
-name = "BITS_25_30_OPAQUE"
-description = "Abort-reason enable bits without a public vendor reason."
+name = "TX_ABORT_EN_25_30"
+description = "Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT."
 bitOffset = 25
 bitWidth = 6
 
@@ -883,6 +969,7 @@ name = "RX_STATUS"
 description = "Receive status snapshot returned whole by the public common LL; selected subfields are independently named by the struct and accessor set."
 addressOffset = 0x080
 size = 32
+reserved = { mask = 0xffc8fe00, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
@@ -985,6 +1072,7 @@ name = "TX_STATUS"
 description = "Transmit status snapshot returned whole by the public common LL; abort and security-error subfields have public finite reason enums."
 addressOffset = 0x084
 size = 32
+reserved = { mask = 0xfff0fe00, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
@@ -1199,6 +1287,7 @@ name = "TXON_DELAY"
 description = "Transmit-on delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 40 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x104
 size = 32
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1218,6 +1307,7 @@ name = "TXOFF_DELAY"
 description = "Transmit-off delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 0 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x10c
 size = 32
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1237,6 +1327,7 @@ name = "RXON_DELAY"
 description = "Receive-on delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 50 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x110
 size = 32
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1256,6 +1347,7 @@ name = "TXRX_SWITCH_DELAY"
 description = "Transmit/receive turnaround delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 122 is reviewed; Physical units remain outside the PAC."
 addressOffset = 0x114
 size = 32
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1275,6 +1367,7 @@ name = "SECURITY_CONTROL"
 description = "Transmit-security enable and payload-offset fields used by the public common LL."
 addressOffset = 0x128
 size = 32
+reserved = { mask = 0xffff80fe, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
@@ -1351,6 +1444,7 @@ name = "SFD_TIMEOUT_COUNTER"
 description = "Read-only diagnostic counter read by the common LL; the upper half is reserved."
 addressOffset = 0x144
 size = 32
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
@@ -1365,6 +1459,7 @@ name = "CRC_ERROR_COUNTER"
 description = "Read-only diagnostic counter read by the common LL; the upper half is reserved."
 addressOffset = 0x148
 size = 32
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "read-only"
 
 [[peripherals.registers.register.fields]]
@@ -1548,6 +1643,7 @@ name = "DIAGNOSTIC_COUNTER_CLEAR"
 description = "Write-only clear bitmap for the seventeen named diagnostic counters. The public common LL writes a complete caller-supplied image; no self-clearing timing is inferred."
 addressOffset = 0x180
 size = 32
+reserved = { mask = 0xffff8000, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
 access = "write-only"
 
 [[peripherals.registers.register.fields]]
@@ -1625,18 +1721,24 @@ name = "SFD_TIMEOUT"
 bitOffset = 14
 bitWidth = 1
 
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SFD_WAIT"
+description = "Open vendor sfd_wait word. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset value is claimed."
+addressOffset = 0x0c4
+size = 32
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D59230D_C5_IEEE802154_STRUCT"] }
+
+[[peripherals.registers.register.fields]]
+name = "SFD_WAIT_SYMBOL_NUM"
+bitOffset = 0
+bitWidth = 4
+
 [[peripheral-review]]
 entity = "IEEE802154_MAC"
 opaque-entities = [
-    "IEEE802154_MAC.CHANNEL.BIT_7_OPAQUE",
-    "IEEE802154_MAC.EVENT_ENABLE.BIT_7_OPAQUE",
-    "IEEE802154_MAC.WORD_064_BASE.BIT_7_OPAQUE",
-    "IEEE802154_MAC.RX_ABORT_ENABLE.BITS_9_14_OPAQUE",
-    "IEEE802154_MAC.RX_ABORT_ENABLE.BITS_19_22_OPAQUE",
-    "IEEE802154_MAC.RX_ABORT_ENABLE.BITS_26_30_OPAQUE",
-    "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_9_14_OPAQUE",
-    "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_19_22_OPAQUE",
-    "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_25_30_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -1654,9 +1756,6 @@ completeness = "complete"
 
 [peripheral-review.field]
 naming = "descriptive"
-
-[peripheral-review.opaque]
-naming = "opaque"
 
 [[review]]
 entity = "IEEE802154_MAC.COMMAND"
@@ -1705,14 +1804,6 @@ provenance = "imported"
 accuracy = "exact"
 completeness = "partial"
 naming = "vendor"
-
-[[review]]
-entity = "IEEE802154_MAC.CHANNEL.BIT_7_OPAQUE"
-sources = ["HIL_OPEN_C5_REGISTER_PROBE_2026_09_27"]
-provenance = "observed"
-accuracy = "exact"
-completeness = "complete"
-naming = "opaque"
 
 [[review]]
 entity = "IEEE802154_MAC.TX_POWER"

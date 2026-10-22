@@ -232,43 +232,34 @@ pub enum Ieee802154MacCommand {
 
 /// Semantic state of the chip's IEEE 802.15.4 CPU interrupt route.
 ///
-/// Register words and field geometry remain private to this PAC domain. Every
-/// non-reset state is distinct from [`ResetDetached`](Self::ResetDetached), so
-/// callers can fail closed without receiving register images.
+/// Register words and field geometry remain private to this PAC domain.
+/// Reset state refers only to the named destination and pass fields;
+/// reserved and absent bits are not observed or classified.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Ieee802154RouteState {
-    /// Every CPU route retains the complete reset-detached state.
+    /// Every CPU route's named destination and pass fields retain reset values.
     ResetDetached,
     /// A route has a CPU-interrupt destination assigned.
     DestinationAssigned,
     /// No destination is assigned, but a pass-through or pass-level field is
     /// configured.
     PassLevelConfigured,
-    /// A non-reset bit outside the reviewed destination and pass fields
-    /// was observed.
-    UnclassifiedNonReset,
 }
 
 impl Ieee802154RouteState {
     /// Classify one route observation of the chip.
     #[doc(hidden)]
-    pub const fn from_observation(
-        both_reset: bool,
-        destination_assigned: bool,
-        pass_level_configured: bool,
-    ) -> Self {
-        if both_reset {
-            Self::ResetDetached
-        } else if destination_assigned {
+    pub const fn from_observation(destination_assigned: bool, pass_level_configured: bool) -> Self {
+        if destination_assigned {
             Self::DestinationAssigned
         } else if pass_level_configured {
             Self::PassLevelConfigured
         } else {
-            Self::UnclassifiedNonReset
+            Self::ResetDetached
         }
     }
 
-    /// Return whether every CPU route retains the complete reset-detached state.
+    /// Whether every route's named destination and pass fields retain reset values.
     pub const fn is_reset_detached(self) -> bool {
         matches!(self, Self::ResetDetached)
     }

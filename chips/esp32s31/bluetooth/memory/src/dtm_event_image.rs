@@ -32,12 +32,7 @@ impl DtmTxHeaderHeadProjection {
         Self(BleLinkStateTxPath::from_bits(word.header()))
     }
     const fn apply_to_link_state_word(self, word: BleLinkStateTxPath) -> BleLinkStateTxPath {
-        self.0
-            .with_max_tx_octets(word.max_tx_octets())
-            .with_queue_ready(word.queue_ready())
-            .with_bits_29_30_opaque(word.bits_29_30_opaque())
-            .expect("retained prefix fits")
-            .with_valid(word.valid())
+        word.with_header_from(self.0)
     }
 }
 
@@ -57,10 +52,7 @@ impl DtmRxHeaderTailProjection {
         Self(BleLinkStateRxPath::from_bits(word.header()))
     }
     const fn apply_to_link_state_word(self, word: BleLinkStateRxPath) -> BleLinkStateRxPath {
-        self.0
-            .with_unconsumed_limit(word.unconsumed_limit())
-            .with_bits_28_31_opaque(word.bits_28_31_opaque())
-            .expect("retained prefix fits")
+        word.with_header_from(self.0)
     }
 }
 
@@ -84,6 +76,27 @@ pub enum DtmReceiverEventPhase {
     Initial,
     /// Receiver event prepared from a recycled active-session graph.
     Recurring,
+}
+
+/// A seven-bit controller frequency image for a DTM scheduler item.
+///
+/// SOURCE: pinned initial and recurring DTM event bodies preserve bits
+/// 31:15 of item word `+0x18` while replacing bits 14:8. This type checks
+/// that boundary before an event transform can change the word.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DtmSchedulerFrequency(u8);
+
+impl DtmSchedulerFrequency {
+    /// Accept a controller image in `0..=127`, or reject it without masking.
+    /// This checks the field domain; DTM channel validation belongs to the
+    /// command owner.
+    pub const fn from_controller_image(image: u8) -> Option<Self> {
+        if image <= 127 {
+            Some(Self(image))
+        } else {
+            None
+        }
+    }
 }
 
 /// PHY choice admitted by a transmitter DTM scheduler item.
@@ -365,13 +378,13 @@ impl DtmSchedulerItemReviewedWords {
 
     /// Apply every complete reviewed DTM event transform before insertion.
     ///
-    /// `frequency` and `rate` are already validated controller images;
+    /// `frequency` carries a validated seven-bit controller image;
     /// `event_type` carries the role and the receiver's initial/recurring
     /// configuration choice; scheduler times are raw values derived from the
     /// owned epoch.
     pub const fn apply_event(
         self,
-        frequency: u8,
+        frequency: DtmSchedulerFrequency,
         event_type: DtmSchedulerItemEventType,
         scheduler_start: u32,
         scheduler_end: u32,
@@ -390,20 +403,18 @@ impl DtmSchedulerItemReviewedWords {
                 .expect("role image fits")
                 .with_flexible_start(!transmitter),
             word_04: self.word_04.with_event_ready(true),
-            word_08: self.word_08.with_bits_20_23_opaque(0).expect("zero fits"),
+            word_08: self.word_08.with_kind(0).expect("zero fits"),
             word_0c: self.word_0c,
             word_14: self
                 .word_14
-                .with_bits_28_29_opaque(rate)
+                .with_phy_code_28_29(rate)
                 .expect("validated PHY fits")
-                .with_bits_30_31_opaque(rate)
+                .with_phy_code_30_31(rate)
                 .expect("validated PHY fits"),
             word_18: self
                 .word_18
-                .with_frequency(frequency % 128)
-                .expect("projected frequency fits")
-                .with_bits_15_31_opaque(self.word_18.bits_15_31_opaque() | (frequency / 128) as u32)
-                .expect("retained prefix fits")
+                .with_frequency(frequency.0)
+                .expect("validated frequency fits")
                 .with_arbitration_priority(3)
                 .expect("reviewed priority fits"),
             word_2c: match event_type {

@@ -59,6 +59,8 @@ impl LibraryPublication {
             &m.evidence.iter().map(|p| base.join(p)).collect::<Vec<_>>(),
         )?;
         evidence.validate_references("library PAC API", api.source_ids())?;
+        evidence
+            .validate_references("library reserved register bits", library.reserved_sources())?;
         api.validate_against_svd(&library.render_layout_svd()?)?;
         let mut outputs = m.outputs;
         if !matches!(outputs.target.as_str(), "none" | "riscv")

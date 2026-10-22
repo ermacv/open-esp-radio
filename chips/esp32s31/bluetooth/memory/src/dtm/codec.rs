@@ -56,7 +56,7 @@ const SCHEDULER_ITEM_ALLOCATION_PREFIX_IMAGE: BleSchedulerItemHardwareNext =
         .expect("reviewed field image fits");
 /// SOURCE: chips/esp32s31/notes/bluetooth-direct-test-mode.md, allocation/reset profile (bt-lib pin 10c50778).
 const SCHEDULER_ITEM_ALLOCATION_FLAGS_IMAGE: BleSchedulerItemWord001cOpaque =
-    BleSchedulerItemWord001cOpaque::ZERO.with_bits_0_31_opaque(0xffdfffff);
+    BleSchedulerItemWord001cOpaque::from_bits(0xffdfffff);
 /// SOURCE: pinned `libble_app.a[dtm_4.o]::sym_dtm_qzyGhbH1fEoUEmtalnva`
 /// (`r_ble_lll_dtm_alloc_memory`) stores `0x8421` in the low twenty bits,
 /// four five-bit coexistence priority lanes of one each.
@@ -240,8 +240,8 @@ pub(super) struct DtmRxBufferHeaderStorage {
 const DTM_RX_HEADER: crate::shared_layout::BufferHeaderImage =
     crate::shared_layout::BufferHeaderImage {
         pdu_target: BleBufferHeaderPduTarget::ZERO
-            .with_bits_20_31_opaque(0x808)
-            .expect("reviewed prefix fits"),
+            .with_bit_23_opaque(true)
+            .with_bit_31_opaque(true),
         ..crate::shared_layout::BufferHeaderImage::ZERO
     };
 
@@ -266,11 +266,16 @@ impl DtmRxBufferHeaderStorage {
         DtmRxHeaderSuccessorLink::from_image(self.layout.next().read().address())
     }
     fn set_rx_successor_link(&self, link: Option<DtmRxHeaderSuccessorLink>) {
-        self.layout.next().write(
-            BleBufferHeaderNext::from_bits(link.map_or(0, DtmRxHeaderSuccessorLink::image))
-                .with_bits_20_31_opaque(self.layout.next().read().bits_20_31_opaque())
-                .expect("retained prefix fits"),
-        );
+        self.layout
+            .next()
+            .write(
+                self.layout
+                    .next()
+                    .read()
+                    .with_address_from(BleBufferHeaderNext::from_bits(
+                        link.map_or(0, DtmRxHeaderSuccessorLink::image),
+                    )),
+            );
     }
     fn rx_packet_link(&self) -> Option<DtmRxPacketLink> {
         DtmRxPacketLink::from_image(self.layout.packet_base().read().address())

@@ -39,6 +39,7 @@ pub fn partition(root: &Path, partition: &str) -> Result<Vec<Register>> {
                 None => format!("{}.{}", register.peripheral, register.register),
             },
             address: register.address,
+            mask: register.mask,
         })
         .collect())
 }
@@ -58,6 +59,13 @@ pub fn analog(root: &Path, domain: &str) -> Result<Vec<Register>> {
         .map(|(block, register)| Register {
             name: format!("{}.{block:02x}.{register:02x}", domain.name),
             address: analog_address(block, register),
+            mask: domain
+                .fields
+                .iter()
+                .filter(|field| field.bank == block && field.register == register)
+                .fold(0, |mask, field| {
+                    mask | (((1u32 << field.bit_width) - 1) << field.bit_offset)
+                }),
         })
         .collect())
 }

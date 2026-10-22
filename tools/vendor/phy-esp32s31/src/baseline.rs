@@ -280,12 +280,16 @@ fn metadata(lifecycle: Lifecycle, images: &RegisterImages) -> Result<BTreeMap<St
                         count: 1,
                         address: Some(reg.address),
                         signed: false,
-                        mask: None,
-                        excluded: reviews
-                            .registers
-                            .get(&reg.name)
-                            .filter(|r| r.excluded)
-                            .map(|r| r.reason.clone()),
+                        mask: Some(vec![u64::from(reg.mask)]),
+                        excluded: if reg.mask == 0 {
+                            Some(compare::NO_MODELED_BITS.into())
+                        } else {
+                            reviews
+                                .registers
+                                .get(&reg.name)
+                                .filter(|r| r.excluded)
+                                .map(|r| r.reason.clone())
+                        },
                         shared: None,
                         boards: BTreeMap::new(),
                     },
@@ -413,12 +417,21 @@ pub fn generate(
                     if unreadable {
                         Sample::Unreadable
                     } else {
+                        let mask = entry
+                            .mask
+                            .as_deref()
+                            .and_then(|mask| mask.first())
+                            .copied()
+                            .ok_or("missing register mask")?;
+                        let mask =
+                            u32::try_from(mask).map_err(|_| "register mask exceeds a word")?;
                         let values = reads
                             .iter()
                             .map(|r| {
                                 r.values
                                     .get(&address)
                                     .copied()
+                                    .map(|value| value & mask)
                                     .map(i64::from)
                                     .ok_or("missing primary register")
                             })

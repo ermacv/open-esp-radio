@@ -235,6 +235,7 @@ pub struct RegisterLibrary {
     manifest: RegisterLibraryManifest,
     loaded_inputs: BTreeMap<PathBuf, String>,
     device: svd_rs::Device,
+    reserved: BTreeMap<(u64, u32), crate::ReservedBits>,
 }
 
 /// Spacing of placeholder bases; larger than any layout.
@@ -246,6 +247,7 @@ impl RegisterLibrary {
         let manifest = RegisterLibraryManifest::load(path, &mut loaded_inputs)?;
         let base = path.parent().unwrap_or_else(|| Path::new("."));
         let mut placed = Vec::new();
+        let mut reserved_templates = BTreeMap::new();
         let mut index = 0;
         for fragment in &manifest.fragments {
             let input = fs::read_to_string(base.join(fragment))?;
@@ -266,6 +268,7 @@ impl RegisterLibrary {
                 })
                 .collect();
             let layout = manifest.place(path, fragment, &placement, &mut loaded_inputs)?;
+            reserved_templates.extend(layout.reserved);
             placed.extend(layout.peripherals);
         }
         crate::validate_peripheral_names(&placed)
@@ -274,10 +277,13 @@ impl RegisterLibrary {
             .map_err(|error| Error::manifest("register library", path, error))?;
         crate::model_validation::validate_device(&device)
             .map_err(|error| Error::manifest("register library", path, error))?;
+        let reserved = crate::reserved::expand(&device, &reserved_templates)
+            .map_err(|error| Error::manifest("register library", path, error))?;
         Ok(Self {
             manifest,
             loaded_inputs,
             device,
+            reserved,
         })
     }
 
@@ -287,6 +293,13 @@ impl RegisterLibrary {
 
     pub fn crate_name(&self) -> &str {
         &self.manifest.crate_name
+    }
+
+    /// Reserved masks in a library retain their cited evidence at publication.
+    pub fn reserved_sources(&self) -> impl Iterator<Item = &str> {
+        self.reserved
+            .values()
+            .flat_map(|reserved| reserved.sources.iter().map(String::as_str))
     }
 
     /// Names of every peripheral layout of the library.

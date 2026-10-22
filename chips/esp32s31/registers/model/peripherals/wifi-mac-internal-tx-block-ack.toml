@@ -42,6 +42,12 @@ addressOffset = 0x8
 size = 32
 access = "read-only"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -51,6 +57,12 @@ addressOffset = 0xC
 size = 32
 access = "read-only"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -88,3 +100,19 @@ naming = "descriptive"
 
 [peripheral-review.field]
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.TRANSMITTER_ADDRESS_WORD_1.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_201042A8", "S31_MMIO_DECLARED_201042A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.TRANSMITTER_ADDRESS_WORD_0.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_201042A4", "S31_MMIO_DECLARED_201042A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

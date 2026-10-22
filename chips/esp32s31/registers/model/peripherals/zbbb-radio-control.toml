@@ -293,7 +293,7 @@ naming = "descriptive"
 
 [[review]]
 entity = "ZBBB_RADIO_CONTROL.RX_SETUP_IMAGE.BITS_12_31_OPAQUE"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_BB_V2_INIT", "S31_MMIO_DECLARED_20102C00"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -309,7 +309,7 @@ naming = "descriptive"
 
 [[review]]
 entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_0_1_OPAQUE"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102C0C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -317,7 +317,7 @@ naming = "opaque"
 
 [[review]]
 entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BIT_8_OPAQUE"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102C0C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -330,3 +330,52 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_10_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C0C"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_13_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C10"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_21_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C10"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_0.BIT_1_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C14"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_1.BITS_0_10_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C18"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_1.BIT_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C28"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C2C"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C2C"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_3.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C30"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BIT_0_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C34"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_9_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C34"]
+naming = "opaque"
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_20_30_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102C34"]
+naming = "opaque"

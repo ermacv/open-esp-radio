@@ -38,6 +38,8 @@ mod partition_image;
 mod peripherals;
 mod register_evidence;
 mod register_lints;
+mod reserved;
+pub use reserved::ReservedBits;
 mod review_defaults;
 mod shared;
 
@@ -186,7 +188,7 @@ pub struct ModelDevice {
     pub svd_schema_location: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 #[serde(try_from = "peripherals::FragmentSource")]
 pub struct RegisterModelFragment {
@@ -194,6 +196,9 @@ pub struct RegisterModelFragment {
     pub peripherals: Vec<Peripheral>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewAnnotation>,
+    /// Source-only annotations, keyed by structural register template.
+    /// Serialized as the single `reserved` property on each register.
+    pub reserved: BTreeMap<String, ReservedBits>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -230,6 +235,7 @@ pub struct RegisterModel {
     reviewed_register_facts: Vec<EffectiveAssertion>,
     shared_peripherals: BTreeMap<String, SharedPeripheral>,
     layouts: Vec<MemoryLayout>,
+    reserved: BTreeMap<(u64, u32), ReservedBits>,
 }
 
 /// The link's check of DMA storage against a known DMA window, which the
@@ -559,6 +565,11 @@ impl RegisterModel {
         }
         validate_review_annotations(&fragments, naming)
             .map_err(|error| Error::manifest("register model", path, error))?;
+        let reserved_templates = fragments
+            .iter()
+            .flat_map(|fragment| &fragment.reserved)
+            .map(|(name, reserved)| (name.clone(), reserved.clone()))
+            .collect();
         let review = fragments
             .into_iter()
             .flat_map(|fragment| fragment.review)
@@ -566,6 +577,8 @@ impl RegisterModel {
         let device = build_device(&manifest.device, peripherals)
             .map_err(|error| Error::manifest("register model", path, error))?;
         model_validation::validate_device(&device)
+            .map_err(|error| Error::manifest("register model", path, error))?;
+        let reserved = reserved::expand(&device, &reserved_templates)
             .map_err(|error| Error::manifest("register model", path, error))?;
         let model = Self {
             loaded_inputs,
@@ -576,6 +589,7 @@ impl RegisterModel {
             reviewed_register_facts: Vec::new(),
             shared_peripherals,
             layouts,
+            reserved,
         };
         model
             .register_identities()
@@ -608,6 +622,7 @@ impl RegisterModel {
             output,
             SvdExportSummary {
                 projection_omissions: vec![
+                    format!("{} cited reserved masks remain in the rich model; SVD/PAC publish no fields for these bits", self.reserved.len()),
                     "SVD does not encode explicit unknown/conflicted property states; omitted side effects do not prove ordinary hardware semantics".to_owned(),
                     "Observations, candidate fields, bit dataflow, source coverage and address gaps remain in the register inventory".to_owned(),
                     format!("{} review annotations and {} effective assertions retain provenance/applicability in the rich model, outside SVD", self.review.len(), self.reviewed_register_facts.len()),
@@ -865,6 +880,7 @@ impl RegisterModel {
             }
         }
         model_validation::validate_device(&self.device)?;
+        reserved::validate(&self.register_geometry()?)?;
         self.register_identities()?;
         Ok(summary)
     }

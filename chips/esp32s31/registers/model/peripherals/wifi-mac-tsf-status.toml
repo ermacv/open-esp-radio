@@ -33,6 +33,12 @@ name = "CLEAR"
 bitOffset = 0
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 1
+bitWidth = 31
 [[peripheral-review]]
 entity = "WIFI_MAC_TSF_STATUS"
 
@@ -59,3 +65,11 @@ sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TSF_STATUS.WAKEUP_SIGNAL_CLEAR.BITS_1_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D810_RUN", "S31_MMIO_DECLARED_2010D810"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

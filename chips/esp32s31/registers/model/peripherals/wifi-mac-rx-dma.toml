@@ -26,6 +26,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -54,6 +60,18 @@ description = "Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 2
 bitOffset = 27
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 1
+bitWidth = 26
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 3
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -106,6 +124,12 @@ name = "ADDRESS_LOW"
 bitOffset = 0
 bitWidth = 20
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -221,7 +245,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_RX_DMA.RX_CONTROL.BIT_27_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104080"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -275,15 +299,47 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_RX_DMA.WORD_007C_OPAQUE.BITS_0_7_OPAQUE"
 naming = "opaque"
-
+sources = ["S31_MMIO_DECLARED_2010407C"]
 [[review]]
 entity = "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.BITS_20_31_OPAQUE"
 naming = "opaque"
-
+sources = ["S31_MMIO_DECLARED_20104088"]
 [[review]]
 entity = "WIFI_MAC_RX_DMA.WORD_0C68_OPAQUE.BITS_0_19_OPAQUE"
 naming = "opaque"
-
+sources = ["S31_MMIO_DECLARED_20104C68"]
 [[review]]
 entity = "WIFI_MAC_RX_DMA.WORD_0C6C_OPAQUE.BITS_0_19_OPAQUE"
 naming = "opaque"
+sources = ["S31_MMIO_DECLARED_20104C6C"]
+[[review]]
+entity = "WIFI_MAC_RX_DMA.RX_CONTROL.BITS_1_26_OPAQUE"
+sources = ["S31_MMIO_USE_20104080", "S31_MMIO_DECLARED_20104080"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_DMA.RX_CONTROL.BITS_28_30_OPAQUE"
+sources = ["S31_MMIO_USE_20104080", "S31_MMIO_DECLARED_20104080"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_DMA.WORD_007C_OPAQUE.BIT_28_OPAQUE"
+sources = ["S31_MMIO_USE_2010407C", "S31_MMIO_DECLARED_2010407C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_DMA.RX_LAST_DESCRIPTOR.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010408C", "S31_MMIO_DECLARED_2010408C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

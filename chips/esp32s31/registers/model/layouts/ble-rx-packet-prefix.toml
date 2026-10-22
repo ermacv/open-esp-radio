@@ -21,20 +21,13 @@ completeness = "unknown"
 naming = "opaque"
 
 [[layout.bytes]]
+fields = []
 name = "BYTE_0000_OPAQUE"
 opaque = true
 offset = 0x00
 size = 4
 access = "owned"
 description = "Observed byte range; decoded only after ownership passes to the CPU."
-
-[[layout.bytes.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "phased"
-phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]
 name = "BYTE_0004_OPAQUE"
@@ -45,27 +38,27 @@ access = "owned"
 description = "Observed byte range; decoded only after ownership passes to the CPU."
 
 [[layout.bytes.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BIT_8_OPAQUE"
 opaque = true
-bits = "31:0"
+bits = "8"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown."
+
+[[layout.bytes.fields]]
+name = "BIT_16_OPAQUE"
+opaque = true
+bits = "16"
+writer = "cpu"
+description = "Cited allocation profile sets this bit relative to the defined zero allocation image; meaning remains unknown."
 
 [[layout.bytes]]
+fields = []
 name = "BYTE_0008_OPAQUE"
 opaque = true
 offset = 0x08
 size = 4
 access = "owned"
 description = "Observed byte range; decoded only after ownership passes to the CPU."
-
-[[layout.bytes.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "phased"
-phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]
 name = "RESULT"
@@ -169,19 +162,13 @@ writer = "hardware"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]
+fields = []
 name = "BYTE_0014_OPAQUE"
 opaque = true
 offset = 0x14
 size = 4
 access = "owned"
 description = "Observed byte range; decoded only after ownership passes to the CPU."
-
-[[layout.bytes.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "hardware"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]
 name = "AUXILIARY"
@@ -196,13 +183,6 @@ opaque = true
 bits = "15:0"
 writer = "phased"
 phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardware" }]
-description = "Observed position; the physical meaning is not established."
-
-[[layout.bytes.fields]]
-name = "BITS_16_31_OPAQUE"
-opaque = true
-bits = "31:16"
-writer = "hardware"
 description = "Observed position; the physical meaning is not established."
 
 [[layout.bytes]]

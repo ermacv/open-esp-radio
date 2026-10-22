@@ -125,6 +125,12 @@ description = "Set by every libphy command publication, above the public 25-bit 
 bitOffset = 26
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 5
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "ANA_CONF1"
@@ -169,6 +175,18 @@ value = 0x19C1
 name = "PARALLEL_INITIALIZATION_MAP"
 value = 0x206
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_17_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 17
+bitWidth = 15
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "I2C0_CTRL1"
@@ -256,6 +274,12 @@ bitWidth = 5
 minimum = 0
 maximum = 0x1F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_11_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 21
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "ANA_CONF0"
@@ -309,3 +333,35 @@ sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
 entity = "I2C_ANA_MST.HW_I2C_CTRL.SDA_SIDE_GUARD"
 naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.BITS_27_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AF804", "C5_MMIO_DECLARED_600AF804"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.BITS_0_3_OPAQUE"
+sources = ["C5_MMIO_USE_600AF820", "C5_MMIO_DECLARED_600AF820"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.BITS_17_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AF820", "C5_MMIO_DECLARED_600AF820"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.BITS_11_31_OPAQUE"
+sources = ["C5_MMIO_USE_600AF82C", "C5_MMIO_DECLARED_600AF82C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

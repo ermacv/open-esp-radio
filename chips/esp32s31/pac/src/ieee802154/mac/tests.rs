@@ -26,7 +26,6 @@ fn power_sequence_fields_keep_their_identity() {
             dcdc_down_delay: 0x5a,
             dcdc_ctrl_enabled: true,
             tx_dcdc_up: false,
-            reserved: [1, 2, 3, 4, 5, 6, 7, 8],
         });
     assert_eq!(sequence.pa_on_delay(), 0x3a5);
     assert_eq!(sequence.tx_on_delay(), 0x2d);
@@ -39,5 +38,4 @@ fn power_sequence_fields_keep_their_identity() {
     assert_eq!(sequence.dcdc_drop_delay(), 0x5a);
     assert!(sequence.dcdc_control_enabled());
     assert!(!sequence.dcdc_raise_for_tx());
-    assert_eq!(sequence.vendor_reserved_bits(), [1, 2, 3, 4, 5, 6, 7, 8]);
 }

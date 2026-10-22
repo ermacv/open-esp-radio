@@ -1,0 +1,79 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_ERSU_ACK_RATE"
+description = "Four byte lanes independently replaced by hal_he_set_ersu_ack_rate; no bit-level rate encoding is assigned. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."
+baseAddress = 0x600a4404
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "VALUE"
+description = "Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes."
+addressOffset = 0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+description = "Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."
+bitOffset = 8
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_23_OPAQUE"
+description = "Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."
+bitOffset = 16
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE."
+bitOffset = 24
+bitWidth = 8
+
+[[peripheral-review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE"
+opaque-entities = [
+    "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_0_7_OPAQUE",
+    "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_8_15_OPAQUE",
+    "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_16_23_OPAQUE",
+    "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_24_31_OPAQUE",
+]
+
+[peripheral-review.peripheral]
+sources = ["C5_LIBPP_ROM_ERSU_ACK_RATE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.register]
+naming = "descriptive"
+
+[peripheral-review.field]
+naming = "descriptive"
+
+[peripheral-review.opaque]
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_8_15_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_16_23_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_ERSU_ACK_RATE.VALUE.BITS_24_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A4404"]
+naming = "opaque"

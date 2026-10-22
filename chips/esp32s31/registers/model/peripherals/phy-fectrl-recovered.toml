@@ -14,6 +14,12 @@ addressOffset = 0x34
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -23,6 +29,12 @@ addressOffset = 0x38
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -32,6 +44,12 @@ addressOffset = 0x3C
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -41,6 +59,12 @@ addressOffset = 0x40
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripheral-review]]
 entity = "PHY_FECTRL_RECOVERED"
 opaque-entities = [
@@ -59,3 +83,35 @@ completeness = "unknown"
 [peripheral-review.opaque]
 sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
 naming = "opaque"
+
+[[review]]
+entity = "PHY_FECTRL_RECOVERED.WORD_0034_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100834", "S31_MMIO_DECLARED_20100834"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FECTRL_RECOVERED.WORD_0038_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100838", "S31_MMIO_DECLARED_20100838"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FECTRL_RECOVERED.WORD_003C_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010083C", "S31_MMIO_DECLARED_2010083C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FECTRL_RECOVERED.WORD_0040_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100840", "S31_MMIO_DECLARED_20100840"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

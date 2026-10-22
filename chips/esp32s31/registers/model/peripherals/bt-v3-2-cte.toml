@@ -73,6 +73,12 @@ description = "Complete ble_bb_cte_set_cte_en replaces bit 31 with the caller's 
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -221,6 +227,12 @@ bitWidth = 7
 minimum = 0
 maximum = 0x7F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_14_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 15
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -319,6 +331,18 @@ name = "FSTEP_CTE"
 bitOffset = 12
 bitWidth = 20
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 10
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -377,6 +401,18 @@ name = "SQI_DELAY"
 bitOffset = 26
 bitWidth = 6
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_13_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 10
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_25_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 6
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -402,6 +438,12 @@ name = "SQI_DPHI_MIN"
 bitOffset = 24
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -526,3 +568,59 @@ sources = ["BLOB_LIBBTBB_BT_CTE_ACCESSORS"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "BT_V3_2_CTE.CONTROL.BIT_0_OPAQUE"
+sources = ["S31_MMIO_USE_20102124", "S31_MMIO_DECLARED_20102124"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_CTE.FREQUENCY_STEP_CONTROL.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_USE_2010215C", "S31_MMIO_DECLARED_2010215C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_CTE.FREQUENCY_STEP_CONTROL.BITS_10_11_OPAQUE"
+sources = ["S31_MMIO_USE_2010215C", "S31_MMIO_DECLARED_2010215C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_CTE.SQI_CONTROL.BITS_4_13_OPAQUE"
+sources = ["S31_MMIO_USE_20102164", "S31_MMIO_DECLARED_20102164"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_CTE.SQI_CONTROL.BITS_20_25_OPAQUE"
+sources = ["S31_MMIO_USE_20102164", "S31_MMIO_DECLARED_20102164"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_CTE.SQI_DPHI.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_USE_20102168", "S31_MMIO_DECLARED_20102168"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BT_V3_2_CTE.SAMPLE_LIMIT.BITS_0_14_OPAQUE"
+sources = ["S31_MMIO_USE_20102150", "S31_MMIO_DECLARED_20102150"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

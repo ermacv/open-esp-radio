@@ -67,3 +67,8 @@ naming = "descriptive"
 
 [peripheral-review.opaque]
 naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201043A0"]
+naming = "opaque"

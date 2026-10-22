@@ -23,6 +23,12 @@ bitWidth = 3
 minimum = 0
 maximum = 7
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_3_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 3
+bitWidth = 29
 [[peripheral-review]]
 entity = "WIFI_MAC_STA_BEACON_FILTER"
 opaque-entities = [
@@ -43,4 +49,17 @@ accuracy = "exact"
 completeness = "unknown"
 
 [peripheral-review.opaque]
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_STA_BEACON_FILTER.CONTROL.BITS_3_31_OPAQUE"
+sources = ["S31_MMIO_USE_201042B4", "S31_MMIO_DECLARED_201042B4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_STA_BEACON_FILTER.CONTROL.BITS_0_2_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201042B4"]
 naming = "opaque"

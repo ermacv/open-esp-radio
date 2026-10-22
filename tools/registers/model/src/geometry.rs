@@ -19,12 +19,21 @@ pub struct RegisterGeometry {
     pub template: String,
     pub declaration: RegisterInfo,
     pub fields: Vec<FieldGeometry>,
+    /// Cited reserved bits have no field in this register's SVD declaration.
+    pub reserved: Option<ReservedBits>,
 }
 
 impl RegisterModel {
     /// Expanded declarations with inherited properties and every field.
     pub fn register_geometry(&self) -> Result<Vec<RegisterGeometry>> {
-        device_geometry(&self.device)
+        let mut geometry = device_geometry(&self.device)?;
+        for register in &mut geometry {
+            register.reserved = register
+                .width
+                .and_then(|width| self.reserved.get(&(register.address, width)))
+                .cloned();
+        }
+        Ok(geometry)
     }
 }
 
@@ -36,7 +45,7 @@ pub fn svd_geometry(xml: &str) -> Result<Vec<RegisterGeometry>> {
     device_geometry(&device)
 }
 
-fn device_geometry(device: &Device) -> Result<Vec<RegisterGeometry>> {
+pub(crate) fn device_geometry(device: &Device) -> Result<Vec<RegisterGeometry>> {
     let mut output = Vec::new();
     for peripheral in &device.peripherals {
         let template = peripheral.name.clone();
@@ -107,6 +116,7 @@ fn collect(
                         template: format!("{template}.{}", register.name),
                         declaration: instance,
                         fields,
+                        reserved: None,
                     });
                 }
             }

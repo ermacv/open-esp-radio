@@ -33,6 +33,24 @@ bitWidth = 3
 minimum = 0x0
 maximum = 0x7
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_9_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 10
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 13
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -98,6 +116,18 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 7
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "BIT_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 1
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -258,6 +288,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -326,6 +362,18 @@ bitWidth = 9
 minimum = 0x0
 maximum = 0x1FF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_20_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 9
+bitWidth = 12
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 30
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -614,6 +662,12 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 28
+bitWidth = 4
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -659,6 +713,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 7
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -760,6 +820,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -858,6 +924,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_4_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 5
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1220,6 +1292,12 @@ bitWidth = 6
 minimum = 0x0
 maximum = 0x3F
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -1466,7 +1544,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.CCA_CONFIG.BIT_23_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_ACCESSORS", "S31_MMIO_DECLARED_20102894"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1531,7 +1609,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_26_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1547,7 +1625,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_18_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102888"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1555,7 +1633,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_29_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_20102888"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1571,7 +1649,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE.BIT_29_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_2010288C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1587,7 +1665,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00D0_OPAQUE.CONFIG_VALUE_LOW"
 naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_201028D0"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1595,7 +1673,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00D0_OPAQUE.CONFIG_VALUE_HIGH"
 naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_201028D0"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1611,7 +1689,7 @@ completeness = "partial"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_00D4_OPAQUE.CONFIG_VALUE"
 naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "S31_MMIO_DECLARED_201028D4"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1774,7 +1852,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.GAIN_OFFSET_0"
 naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102848"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1782,7 +1860,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.GAIN_OFFSET_1"
 naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102848"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1790,7 +1868,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.GAIN_OFFSET_0"
 naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102868"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1798,7 +1876,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.GAIN_OFFSET_1"
 naming = "descriptive"
-sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"]
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS", "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "S31_MMIO_DECLARED_20102868"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1806,7 +1884,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_0088_OPAQUE.BIT_30_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE", "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_20102888"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1814,7 +1892,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.SAT_GAIN_BITS_0_18"
 naming = "descriptive"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1822,7 +1900,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_19_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1830,7 +1908,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_24_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1838,7 +1916,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_28_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1846,7 +1924,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_30_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1854,7 +1932,7 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.WORD_004C_OPAQUE.BIT_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_2010284C"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -1862,7 +1940,396 @@ completeness = "complete"
 [[review]]
 entity = "PHY_BTAGC_RECOVERED.CTE_RE_GAIN.BIT_3_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"]
+sources = ["BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME", "S31_MMIO_DECLARED_20102820"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.RX_GAIN_FORCE.BITS_7_12_OPAQUE"
+sources = ["S31_MMIO_USE_20102840", "S31_MMIO_DECLARED_20102840"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.RX_GAIN_FORCE.BIT_22_OPAQUE"
+sources = ["S31_MMIO_USE_20102840", "S31_MMIO_DECLARED_20102840"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_25_31_OPAQUE"
+sources = ["S31_MMIO_USE_201028A8", "S31_MMIO_DECLARED_201028A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.CTE_DC_SHIFT.BITS_0_9_OPAQUE"
+sources = ["S31_MMIO_USE_20102800", "S31_MMIO_DECLARED_20102800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.CTE_DC_SHIFT.BITS_13_16_OPAQUE"
+sources = ["S31_MMIO_USE_20102800", "S31_MMIO_DECLARED_20102800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.CTE_DC_SHIFT.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_20102800", "S31_MMIO_DECLARED_20102800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_14_15_OPAQUE"
+sources = ["S31_MMIO_USE_20102868", "S31_MMIO_DECLARED_20102868"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.CTE_AGC_TARGET.BITS_9_20_OPAQUE"
+sources = ["S31_MMIO_USE_20102898", "S31_MMIO_DECLARED_20102898"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.CTE_AGC_TARGET.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_USE_20102898", "S31_MMIO_DECLARED_20102898"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["S31_MMIO_USE_201028A0", "S31_MMIO_DECLARED_201028A0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_201028B8", "S31_MMIO_DECLARED_201028B8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_USE_201028C0", "S31_MMIO_DECLARED_201028C0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_0_1_OPAQUE"
+sources = ["S31_MMIO_USE_201028F8", "S31_MMIO_DECLARED_201028F8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102848"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0048_OPAQUE.BITS_5_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102848"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102868"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BIT_5_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102868"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_6_10_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102868"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BITS_11_12_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102868"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0068_OPAQUE.BIT_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102868"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE.TARGET_BITS_0_8"
+sources = ["S31_MMIO_DECLARED_2010288C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_008C_OPAQUE.TARGET_BITS_9_17"
+sources = ["S31_MMIO_DECLARED_2010288C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_006C_OPAQUE.FINITE_BITS_24_31"
+sources = ["S31_MMIO_DECLARED_2010286C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0084_OPAQUE.FINITE_BITS_24_31"
+sources = ["S31_MMIO_DECLARED_20102884"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028A0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A0_OPAQUE.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028A0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_0_3_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028A8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_4_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028A8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_12_16_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028A8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00A8_OPAQUE.BITS_17_24_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028A8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE.RECORRECT_BITS_13_17"
+sources = ["S31_MMIO_DECLARED_201028B0"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE.RECORRECT_BITS_18_22"
+sources = ["S31_MMIO_DECLARED_201028B0"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B0_OPAQUE.TARGET_BITS_23_31"
+sources = ["S31_MMIO_DECLARED_201028B0"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE.RECORRECT_BIT_8"
+sources = ["S31_MMIO_DECLARED_201028B4"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE.RECORRECT_BITS_9_13"
+sources = ["S31_MMIO_DECLARED_201028B4"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B4_OPAQUE.TARGET_BITS_23_31"
+sources = ["S31_MMIO_DECLARED_201028B4"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_8_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028B8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00B8_OPAQUE.BITS_12_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028B8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_5"
+sources = ["S31_MMIO_DECLARED_201028BC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_6"
+sources = ["S31_MMIO_DECLARED_201028BC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_7"
+sources = ["S31_MMIO_DECLARED_201028BC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RECORRECT_BIT_8"
+sources = ["S31_MMIO_DECLARED_201028BC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00BC_OPAQUE.RESTART_BIT_31"
+sources = ["S31_MMIO_DECLARED_201028BC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_5_9_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_10_14_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_15_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_20_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C0_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_10_14_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_15_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_20_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00C4_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028C4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_27"
+sources = ["S31_MMIO_DECLARED_201028DC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_28"
+sources = ["S31_MMIO_DECLARED_201028DC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_29"
+sources = ["S31_MMIO_DECLARED_201028DC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_30"
+sources = ["S31_MMIO_DECLARED_201028DC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00DC_OPAQUE.RESTART_BIT_31"
+sources = ["S31_MMIO_DECLARED_201028DC"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E0_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E4_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E4"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_10_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00E8_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028E8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028EC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_8_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028EC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028EC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00EC_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028EC"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE.BITS_16_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F0_OPAQUE.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F0"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_2_7_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_8_13_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_14_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_20_25_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_00F8_OPAQUE.BITS_26_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_201028F8"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_12_15_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102900"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_16_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102900"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_20_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102900"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102900"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BTAGC_RECOVERED.WORD_0100_OPAQUE.BITS_28_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20102900"]
+naming = "opaque"

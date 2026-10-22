@@ -2,6 +2,7 @@ schema = 3
 chip = "esp32s31"
 address-space = "cpu"
 fragments = [
+    "peripherals/observed-mmio-words.toml",
     "peripherals/wifi-mac-internal-tx-block-ack.toml",
     "peripherals/wifi-mac-he-color-collision.toml",
     "peripherals/wifi-mac-rx-power-save.toml",

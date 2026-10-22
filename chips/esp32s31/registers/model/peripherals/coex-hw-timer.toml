@@ -92,11 +92,6 @@ name = "ENABLE"
 bitOffset = 0
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_1_31_OPAQUE"
-bitOffset = 1
-bitWidth = 31
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -114,18 +109,11 @@ name = "DISABLE"
 bitOffset = 0
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_1_31_OPAQUE"
-bitOffset = 1
-bitWidth = 31
-
 [[peripheral-review]]
 entity = "COEX_HW_TIMER"
 opaque-entities = [
     "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE",
     "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE",
-    "COEX_HW_TIMER.ENABLE_CONTROL%s.BITS_1_31_OPAQUE",
-    "COEX_HW_TIMER.DISABLE_CONTROL%s.BITS_1_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -154,3 +142,12 @@ sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F400"]
+naming = "opaque"
+[[review]]
+entity = "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F404"]
+naming = "opaque"

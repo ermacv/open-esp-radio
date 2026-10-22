@@ -44,6 +44,24 @@ description = "Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf se
 bitOffset = 8
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 6
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 9
+bitWidth = 23
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -132,6 +150,18 @@ name = "DEVIATION_SYNC_ENABLE"
 bitOffset = 19
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_17_18_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 17
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 20
+bitWidth = 12
 [[peripheral-review]]
 entity = "WIFI_MAC_TSF_LOAD"
 
@@ -250,3 +280,43 @@ naming = "descriptive"
 [[review]]
 entity = "WIFI_MAC_TSF_LOAD.SNAPSHOT_HIGH.VALUE"
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TSF_LOAD.CONTROL.BITS_2_3_OPAQUE"
+sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TSF_LOAD.CONTROL.BITS_6_7_OPAQUE"
+sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TSF_LOAD.CONTROL.BITS_9_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D814", "S31_MMIO_DECLARED_2010D814"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TSF_LOAD.TSF_DEVIATION_CONTROL.BITS_17_18_OPAQUE"
+sources = ["S31_MMIO_USE_2010D828", "S31_MMIO_DECLARED_2010D828"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TSF_LOAD.TSF_DEVIATION_CONTROL.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D828_RUN", "S31_MMIO_DECLARED_2010D828"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

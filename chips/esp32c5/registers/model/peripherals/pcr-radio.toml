@@ -56,10 +56,11 @@ bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_014C_OPAQUE"
-description = "Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A."
+description = "The public struct reserves the whole word between PCR_SAR_CLK_DIV and PCR_BS_CONF, but pinned phy_rf_init and phy_wakeup_init explicitly replace its low byte with 0x0A; that direct use overrides the reserved claim on low8 only."
 addressOffset = 0x14c
 size = 32
 access = "read-write"
+reserved = { mask = 0xffffff00, sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"] }
 
 [[peripherals.registers.register.fields]]
 name = "BITS_0_7_OPAQUE"
@@ -86,3 +87,19 @@ naming = "vendor"
 
 [peripheral-review.opaque]
 naming = "opaque"
+
+[[review]]
+entity = "PCR_RADIO.WORD_014C_OPAQUE"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS", "C5_BLOB_LIBPHY_RF_INIT_LEAVES_4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PCR_RADIO.WORD_014C_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS", "C5_BLOB_LIBPHY_RF_INIT_LEAVES_4", "C5_MMIO_DECLARED_6009614C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

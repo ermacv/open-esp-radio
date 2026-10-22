@@ -66,4 +66,6 @@ pub fn analog_parts(address: u32) -> (u8, u8) {
 pub struct Register {
     pub name: String,
     pub address: u32,
+    /// Bits declared by the source model; applied before computing ranges.
+    pub mask: u32,
 }

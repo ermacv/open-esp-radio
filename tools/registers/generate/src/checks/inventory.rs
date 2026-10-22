@@ -34,6 +34,7 @@ pub struct DeclaredRegister {
     pub template: String,
     pub reset_value: Option<u64>,
     pub reset_mask: Option<u64>,
+    pub reserved: Option<oer_registers_model::ReservedBits>,
     pub fields: Vec<DeclaredField>,
 }
 
@@ -53,6 +54,8 @@ pub struct DeclaredWord {
     pub fields: u32,
     /// Declared bits whose name, or whose register's name, is opaque.
     pub opaque: u32,
+    /// Each cited source's reserved mask in this hardware word.
+    pub reserved: BTreeMap<String, u32>,
     /// Reset bits established by the inherited model properties.
     pub reset_value: u32,
     pub reset_known: u32,
@@ -106,6 +109,21 @@ pub fn declared_words(registers: &[DeclaredRegister]) -> BTreeMap<u32, DeclaredW
                 word.fields |= 1 << (bit % WORD_BITS);
                 if opaque(&register.name) || opaque(&field.name) {
                     word.opaque |= 1 << (bit % WORD_BITS);
+                }
+            }
+        }
+        if let Some(reserved) = &register.reserved {
+            for bit in 0..register.width_bits.min(128) {
+                if reserved.mask & (1u128 << bit) == 0 {
+                    continue;
+                }
+                let position = lane + bit;
+                let word = words
+                    .entry(base + position / WORD_BITS * WORD_BYTES)
+                    .or_default();
+                for source in &reserved.sources {
+                    *word.reserved.entry(source.clone()).or_default() |=
+                        1 << (position % WORD_BITS);
                 }
             }
         }
@@ -270,6 +288,7 @@ impl From<oer_registers_model::RegisterGeometry> for DeclaredRegister {
             template: r.template,
             reset_value: r.declaration.properties.reset_value,
             reset_mask: r.declaration.properties.reset_mask,
+            reserved: r.reserved,
             fields: r
                 .fields
                 .into_iter()

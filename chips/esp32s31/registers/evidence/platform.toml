@@ -2,6 +2,10 @@
 schema = 1
 
 [[sources]]
+id = "ESP_IDF_4D59230D_S31_TSENS_STRUCT"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7, https://github.com/espressif/esp-idf/blob/4d59230ddff16327812782151ef0afef202dc6d7/components/soc/esp32s31/register/soc/tsens_struct.h, sha256 f8db221ea3afe8c6022f599615d10afe0a1578fc3e6bc67e6c1cad474e4e6483. tsens_clk_conf_reg_t at line158 has clk_en bit0 and reserved_1 bits31:1. Pinned phy_tsens_read_init explicitly sets bits9/23, contradicting the reserved claim for those two bits; the remaining declared reserved lanes keep their source annotation."
+
+[[sources]]
 id = "S31_MODEM_SYSCON_STRUCT"
 description = "esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, c/include/esp32s31/modem/modem_syscon_struct.h, sha256 1d37b7f4748e9b665ed1bf4f25dc85cd20d25fa5ab2726db82766dd0b506f69e"
 
@@ -43,7 +47,7 @@ description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125
 
 [[sources]]
 id = "BLOB_LIBPHY_PHY_TSENS_READ_INIT"
-description = "Pinned ESP32-S31 libphy.a member phy_tsens.o, complete phy_tsens_read_init body size 0x36; exact five preserving MMIO updates are independently projected by the source-owned HAL test"
+description = "Pinned ESP32-S31 libphy.a member phy_tsens.o, complete phy_tsens_read_init body size 0x36; exact five preserving MMIO updates are independently projected by the source-owned HAL test esp-phy-lib 20f1db053a0e6cb9f1c09d255c43bf42483041d0, libphy.a sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2: phy_tsens_read_init +0x1c..+0x2c separately fresh-load/OR/store bits23 and9 of 0x20818018. These direct writes contradict the public tsens_clk_conf_reg_t reserved_1 declaration on exactly those two bits; no hardware meaning beyond their observed role is assigned."
 
 [[sources]]
 id = "S31_REG_BASE"
@@ -111,7 +115,7 @@ description = "Official ESP-IDF commit 25fe69f946311abdaf9ad56591f25fedbc20ac98.
 
 [[sources]]
 id = "S31_PMU_HEADERS"
-description = "ESP-IDF master commit 102122904ade11fd1ae373848f34ffd7dfb18aeb, components/soc/esp32s31/register/soc/pmu_reg.h; local esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, pmu_reg.h sha256 b1a04a306b9d7ee908e2f7b083d42b7a634f8687b6ee034cfe6f54f385e0d816 and pmu_struct.h sha256 5fc84c7569f9f24e193b0205728a647768c7c289b39d5ce679c50db7d8352e28"
+description = "ESP-IDF master commit 102122904ade11fd1ae373848f34ffd7dfb18aeb, components/soc/esp32s31/register/soc/pmu_reg.h; local esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, pmu_reg.h sha256 b1a04a306b9d7ee908e2f7b083d42b7a634f8687b6ee034cfe6f54f385e0d816 and pmu_struct.h sha256 5fc84c7569f9f24e193b0205728a647768c7c289b39d5ce679c50db7d8352e28 The same pmu_struct.h bytes at current IDF 4d59230ddff16327812782151ef0afef202dc6d7, components/soc/esp32s31/register/soc/pmu_struct.h line58, declare pmu_hp_clk_power_reg_t low19 and bit31 reserved. Current ROM phy_open_fe_bb_clk at 0x2f823eea..0x2f823ef4 reads, ORs 0x0040000f and stores 0x2070401c: low4 are observed use despite that reserved declaration; low4 remain opaque and only other reserved lanes retain the source annotation."
 
 [[sources]]
 id = "ESP_IDF_ESP32S31_MODEM_REG_BASE"

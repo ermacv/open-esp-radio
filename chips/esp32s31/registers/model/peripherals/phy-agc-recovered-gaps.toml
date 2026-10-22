@@ -20,6 +20,12 @@ description = "Receive-sensitivity setting complete phy_rx_sense_set publishes."
 bitOffset = 23
 bitWidth = 9
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 23
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -35,6 +41,12 @@ description = "Receive-sensitivity setting complete phy_rx_sense_set publishes."
 bitOffset = 23
 bitWidth = 9
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_22_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 23
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -50,6 +62,12 @@ description = "Signed clear-channel-assessment threshold that complete phy_set_c
 bitOffset = 0
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 24
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -87,6 +105,12 @@ addressOffset = 0x74
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -96,6 +120,12 @@ addressOffset = 0xCC
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -120,6 +150,12 @@ addressOffset = 0x108
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 32
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -134,6 +170,12 @@ name = "BIT_27_OPAQUE"
 bitOffset = 27
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 27
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -143,6 +185,12 @@ addressOffset = 0x434
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 27
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -152,6 +200,12 @@ addressOffset = 0x438
 size = 32
 access = "read-write"
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 12
 [[peripheral-review]]
 entity = "PHY_AGC_RECOVERED_GAPS"
 opaque-entities = [
@@ -205,3 +259,100 @@ sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
 [[review]]
 entity = "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE.BIT_27_OPAQUE"
 naming = "opaque"
+sources = ["S31_MMIO_DECLARED_20107430"]
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_001C_OPAQUE.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010701C", "S31_MMIO_DECLARED_2010701C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE.BITS_0_22_OPAQUE"
+sources = ["S31_MMIO_USE_20107010", "S31_MMIO_DECLARED_20107010"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0014_OPAQUE.BITS_0_22_OPAQUE"
+sources = ["S31_MMIO_USE_20107014", "S31_MMIO_DECLARED_20107014"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0074_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107074", "S31_MMIO_DECLARED_20107074"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_00CC_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_201070CC", "S31_MMIO_DECLARED_201070CC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0108_OPAQUE.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_USE_20107108", "S31_MMIO_DECLARED_20107108"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE.RX_SENSE"
+sources = ["S31_MMIO_DECLARED_20107010"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0014_OPAQUE.RX_SENSE"
+sources = ["S31_MMIO_DECLARED_20107014"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_001C_OPAQUE.CCA_THRESHOLD"
+sources = ["S31_MMIO_DECLARED_2010701C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0050_OPAQUE.NOISE_FLOOR"
+sources = ["S31_MMIO_DECLARED_20107050"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_006C_OPAQUE.RSSI_ABOVE_NOISE_FLOOR"
+sources = ["S31_MMIO_DECLARED_2010706C"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_00F4_OPAQUE.RIFS_MODE_ENABLE"
+sources = ["S31_MMIO_DECLARED_201070F4"]
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0430_OPAQUE.BITS_0_26_OPAQUE"
+sources = ["S31_MMIO_USE_20107430_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0434_OPAQUE.BITS_0_26_OPAQUE"
+sources = ["S31_MMIO_USE_20107434_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_AGC_RECOVERED_GAPS.WORD_0438_OPAQUE.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_USE_20107438_TWO_DOMAIN"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

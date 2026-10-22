@@ -27,11 +27,6 @@ description = "Set before the READY polling loop."
 bitOffset = 1
 bitWidth = 1
 
-[[peripherals.registers.register.fields]]
-name = "BITS_2_31_OPAQUE"
-bitOffset = 2
-bitWidth = 30
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -74,6 +69,24 @@ name = "ENABLE"
 bitOffset = 0
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_24_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 1
+bitWidth = 23
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_26_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 2
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -91,7 +104,6 @@ bitWidth = 32
 [[peripheral-review]]
 entity = "WIFI_MAC_COLD_HANDSHAKE"
 opaque-entities = [
-    "WIFI_MAC_COLD_HANDSHAKE.CONTROL.BITS_2_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -140,3 +152,27 @@ naming = "descriptive"
 [[review]]
 entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_1_VALUE.VALUE"
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_1_CONTROL.BIT_24_OPAQUE"
+sources = ["S31_MMIO_USE_20104DF8", "S31_MMIO_DECLARED_20104DF8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_1_CONTROL.BITS_1_23_OPAQUE"
+sources = ["S31_MMIO_USE_20104DF8_RUN", "S31_MMIO_DECLARED_20104DF8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COLD_HANDSHAKE.WDEV_TIMER_TARGET_1_CONTROL.BITS_25_26_OPAQUE"
+sources = ["S31_MMIO_USE_20104DF8_RUN", "S31_MMIO_DECLARED_20104DF8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

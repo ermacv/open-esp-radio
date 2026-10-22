@@ -272,7 +272,7 @@ fn every_item_carries_the_kind_of_its_scan_type() {
         let (graph, binding, _) = pool.shared(&instance).unwrap();
         for item in &graph.items {
             let word = item.layout.link_state().read();
-            assert_eq!(word.bits_20_23_opaque(), scan_type.item_kind());
+            assert_eq!(word.kind(), scan_type.item_kind());
             // The link-state pointer beside the kind is unchanged.
             assert_eq!(word.address(), binding.link_state.compressed_image());
         }

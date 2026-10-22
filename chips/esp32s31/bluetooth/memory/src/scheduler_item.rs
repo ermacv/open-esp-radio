@@ -63,17 +63,9 @@ impl<'item> SchedulerItemHeader<'item> {
         let pointer = BleSchedulerItemHardwareNext::from_bits(
             next.map_or(0, ControllerSramLinkAddress::compressed_image),
         );
-        self.layout.hardware_next().write(
-            pointer
-                .with_bits_20_21_opaque(original.bits_20_21_opaque())
-                .expect("retained field fits")
-                .with_flexible_start(original.flexible_start())
-                .with_bit_23_opaque(original.bit_23_opaque())
-                .with_merge_marked(original.merge_marked())
-                .with_skip(original.skip())
-                .with_bits_26_31_opaque(original.bits_26_31_opaque())
-                .expect("retained field fits"),
-        );
+        self.layout
+            .hardware_next()
+            .write(original.with_address_from(pointer));
     }
 
     #[cfg(test)]

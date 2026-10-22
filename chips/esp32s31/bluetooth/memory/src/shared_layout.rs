@@ -75,8 +75,8 @@ pub(crate) fn clear_link_state(layout: &BleLinkState) {
     layout.tx_tail().write(BleLinkStateTxTail::ZERO);
     layout.rx_reserve().write(BleLinkStateRxReserve::ZERO);
     layout
-        .word_007c_opaque()
-        .write(BleLinkStateWord007cOpaque::ZERO);
+        .rx_queue_configuration()
+        .write(BleLinkStateRxQueueConfiguration::ZERO);
     layout
         .word_0080_opaque()
         .write(BleLinkStateWord0080Opaque::ZERO);
@@ -137,8 +137,8 @@ pub(crate) fn clear_scheduler_item(layout: &BleSchedulerItem) {
         .recycle_callback()
         .write(BleSchedulerItemRecycleCallback::ZERO);
     layout
-        .word_005c_opaque()
-        .write(BleSchedulerItemWord005cOpaque::ZERO);
+        .buffer_recycle_callback()
+        .write(BleSchedulerItemBufferRecycleCallback::ZERO);
 }
 
 pub(crate) fn copy_buffer_header(layout: &BleBufferHeader, source: &BleBufferHeader) {
@@ -417,7 +417,7 @@ pub(crate) struct LinkStateImage {
     pub(crate) rx_tail: BleLinkStateRxTail,
     pub(crate) tx_tail: BleLinkStateTxTail,
     pub(crate) rx_reserve: BleLinkStateRxReserve,
-    pub(crate) word_007c_opaque: BleLinkStateWord007cOpaque,
+    pub(crate) rx_queue_configuration: BleLinkStateRxQueueConfiguration,
     pub(crate) word_0080_opaque: BleLinkStateWord0080Opaque,
 }
 
@@ -454,7 +454,7 @@ impl LinkStateImage {
         rx_tail: BleLinkStateRxTail::ZERO,
         tx_tail: BleLinkStateTxTail::ZERO,
         rx_reserve: BleLinkStateRxReserve::ZERO,
-        word_007c_opaque: BleLinkStateWord007cOpaque::ZERO,
+        rx_queue_configuration: BleLinkStateRxQueueConfiguration::ZERO,
         word_0080_opaque: BleLinkStateWord0080Opaque::ZERO,
     };
 
@@ -491,7 +491,7 @@ impl LinkStateImage {
             rx_tail: layout.rx_tail().read(),
             tx_tail: layout.tx_tail().read(),
             rx_reserve: layout.rx_reserve().read(),
-            word_007c_opaque: layout.word_007c_opaque().read(),
+            rx_queue_configuration: layout.rx_queue_configuration().read(),
             word_0080_opaque: layout.word_0080_opaque().read(),
         }
     }
@@ -530,7 +530,9 @@ impl LinkStateImage {
         layout.rx_tail().write(self.rx_tail);
         layout.tx_tail().write(self.tx_tail);
         layout.rx_reserve().write(self.rx_reserve);
-        layout.word_007c_opaque().write(self.word_007c_opaque);
+        layout
+            .rx_queue_configuration()
+            .write(self.rx_queue_configuration);
         layout.word_0080_opaque().write(self.word_0080_opaque);
     }
 }
@@ -600,7 +602,7 @@ pub(crate) struct SchedulerItemImage {
     previous: BleSchedulerItemPrevious,
     completion_next: BleSchedulerItemCompletionNext,
     recycle_callback: BleSchedulerItemRecycleCallback,
-    word_005c_opaque: BleSchedulerItemWord005cOpaque,
+    buffer_recycle_callback: BleSchedulerItemBufferRecycleCallback,
 }
 #[cfg(test)]
 impl SchedulerItemImage {
@@ -629,7 +631,7 @@ impl SchedulerItemImage {
             previous: layout.previous().read(),
             completion_next: layout.completion_next().read(),
             recycle_callback: layout.recycle_callback().read(),
-            word_005c_opaque: layout.word_005c_opaque().read(),
+            buffer_recycle_callback: layout.buffer_recycle_callback().read(),
         }
     }
 }

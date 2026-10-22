@@ -236,3 +236,16 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_BUFFER_STATUS.HARDWARE_BSR%s.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104D74"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_BUFFER_STATUS.SOFTWARE_BSR%s.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104D78"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_HE_BUFFER_STATUS.CONTROL.BITS_23_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104DB8"]
+naming = "opaque"

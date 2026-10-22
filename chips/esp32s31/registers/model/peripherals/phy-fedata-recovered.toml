@@ -24,6 +24,18 @@ bitWidth = 4
 minimum = 0x0
 maximum = 0xF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_17_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 18
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 10
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -72,7 +84,32 @@ naming = "opaque"
 [[review]]
 entity = "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE.FILTER_MODE"
 naming = "descriptive"
-sources = ["ROM_REV0_PHY_RX_FILTER_MODE"]
+sources = ["ROM_REV0_PHY_RX_FILTER_MODE", "S31_MMIO_DECLARED_20100430"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE.BITS_0_17_OPAQUE"
+sources = ["S31_MMIO_USE_20100430", "S31_MMIO_DECLARED_20100430"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FEDATA_RECOVERED.WORD_0030_OPAQUE.BITS_22_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100430", "S31_MMIO_DECLARED_20100430"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE.TX_RX_RESET_BIT_25"
+sources = ["S31_MMIO_DECLARED_20100440"]
+naming = "descriptive"
+[[review]]
+entity = "PHY_FEDATA_RECOVERED.WORD_0040_OPAQUE.TX_RX_RESET_BIT_26"
+sources = ["S31_MMIO_DECLARED_20100440"]
+naming = "descriptive"

@@ -40,6 +40,12 @@ description = "Bit 3, cleared by libphy[phy_i2c.o]::phy_dac_rate_set."
 bitOffset = 3
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 28
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "FE_CLOCK_GATE"
@@ -68,6 +74,12 @@ description = "Base index byte."
 bitOffset = 24
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_23_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 24
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "FRONT_END_AND_TONE_STOP_CONTROL"
@@ -82,6 +94,12 @@ description = "Front-end initialization enable; meaning unknown."
 bitOffset = 2
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "RX_DCO_CONTROL"
@@ -96,6 +114,12 @@ description = "Two-bit calibration control; meaning unknown."
 bitOffset = 22
 bitWidth = 2
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "IQ_CORRECTION_CONTROL"
@@ -122,6 +146,12 @@ description = "Front-end initialization bit; meaning unknown."
 bitOffset = 31
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_28_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 29
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "RX_IQ_SCALE"
@@ -156,6 +186,18 @@ description = "Front-end initialization clear bit; meaning unknown."
 bitOffset = 8
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 26
+bitWidth = 2
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "FE_BB_CLOCK_CONTROL"
@@ -170,6 +212,12 @@ description = "Two-bit front-end and baseband clock enable; individual meanings 
 bitOffset = 0
 bitWidth = 2
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 30
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "POWER_DETECTOR_CONTROL"
@@ -190,6 +238,24 @@ description = "Three-bit mode libphy[phy_pwdet.o]::phy_pwdet_reg_init sets to 2 
 bitOffset = 20
 bitWidth = 3
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_19_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 12
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 9
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "POWER_DETECTOR_SAR_CONTROL_STATUS"
@@ -210,6 +276,18 @@ description = "Two bits libphy[phy_pwdet.o]::phy_pwdet_sar2_init sets."
 bitOffset = 12
 bitWidth = 2
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_16_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 14
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_30_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 7
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0810_OPAQUE"
@@ -217,12 +295,6 @@ description = "Word libphy[phy_pwdet.o]::phy_pwdet_reg_init writes 0x0F0F0FFF."
 addressOffset = 0x810
 size = 32
 access = "read-write"
-
-[[peripherals.registers.register.fields]]
-name = "STATE"
-description = "Complete image; meaning unknown."
-bitOffset = 0
-bitWidth = 32
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -233,10 +305,10 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "STATE"
-description = "Complete image; meaning unknown."
+name = "BITS_0_7_OPAQUE"
+description = "Low byte explicitly replaced by phy_txdc_cal_pwdet_init; high24 have only whole-image initialization evidence and unknown reset."
 bitOffset = 0
-bitWidth = 32
+bitWidth = 8
 
 [[peripherals.registers]]
 [peripherals.registers.register]
@@ -266,6 +338,12 @@ description = "PA-on delay byte."
 bitOffset = 8
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0888_OPAQUE"
@@ -280,6 +358,24 @@ description = "Band-dependent bit that libphy[phy_reg.o]::phy_fe_reg_init sets i
 bitOffset = 29
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_4_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 27
+bitWidth = 1
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0894_OPAQUE"
@@ -294,6 +390,18 @@ description = "Front-end initialization enable; meaning unknown."
 bitOffset = 22
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 22
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 23
+bitWidth = 9
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "DAC_SCALE"
@@ -314,6 +422,18 @@ description = "First DAC scale byte."
 bitOffset = 16
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 24
+bitWidth = 8
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0C08_OPAQUE"
@@ -354,6 +474,18 @@ description = "TX IQ correction mode, high bit."
 bitOffset = 14
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_12_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 13
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 15
+bitWidth = 17
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "WORD_0C20_OPAQUE"
@@ -448,6 +580,24 @@ description = "The third argument of phy_rxevm_init_cfg."
 bitOffset = 22
 bitWidth = 7
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_14_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 7
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 3
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "RX_EVM_MEMORY_RESET"
@@ -462,6 +612,12 @@ description = "Pulsed by phy_rxevm_reset_mem."
 bitOffset = 8
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
 [[peripheral-review]]
 entity = "PHY_BASEBAND_CONFIG"
 opaque-entities = [
@@ -511,4 +667,341 @@ naming = "descriptive"
 naming = "descriptive"
 
 [peripheral-review.opaque]
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX.BITS_0_12_OPAQUE"
+sources = ["C5_MMIO_USE_600A0C0C", "C5_MMIO_DECLARED_600A0C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX.BITS_15_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0C0C", "C5_MMIO_DECLARED_600A0C0C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.TABLE_MEMORY_INDEX_SOURCE.BITS_0_23_OPAQUE"
+sources = ["C5_MMIO_USE_600A0408", "C5_MMIO_DECLARED_600A0408"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL.BITS_0_1_OPAQUE"
+sources = ["C5_MMIO_USE_600A040C", "C5_MMIO_DECLARED_600A040C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL.BITS_0_28_OPAQUE"
+sources = ["C5_MMIO_USE_600A0438", "C5_MMIO_DECLARED_600A0438"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BITS_4_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0448", "C5_MMIO_DECLARED_600A0448"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.BITS_0_1_OPAQUE"
+sources = ["C5_MMIO_USE_600A7A38", "C5_MMIO_DECLARED_600A7A38"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.BITS_7_14_OPAQUE"
+sources = ["C5_MMIO_USE_600A7A38", "C5_MMIO_DECLARED_600A7A38"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.BITS_29_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A7A38", "C5_MMIO_DECLARED_600A7A38"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_0_3_OPAQUE"
+sources = ["C5_MMIO_USE_600A0808", "C5_MMIO_DECLARED_600A0808"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_12_19_OPAQUE"
+sources = ["C5_MMIO_USE_600A0808", "C5_MMIO_DECLARED_600A0808"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_23_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0808", "C5_MMIO_DECLARED_600A0808"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_14_16_OPAQUE"
+sources = ["C5_MMIO_USE_600A080C", "C5_MMIO_DECLARED_600A080C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_24_30_OPAQUE"
+sources = ["C5_MMIO_USE_600A080C", "C5_MMIO_DECLARED_600A080C"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.TX_PA_CONTROL_1.BITS_16_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0870", "C5_MMIO_DECLARED_600A0870"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL.BITS_2_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0800", "C5_MMIO_DECLARED_600A0800"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE.BIT_2_OPAQUE"
+sources = ["C5_MMIO_USE_600A0888", "C5_MMIO_DECLARED_600A0888"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE.BIT_4_OPAQUE"
+sources = ["C5_MMIO_USE_600A0888", "C5_MMIO_DECLARED_600A0888"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE.BIT_27_OPAQUE"
+sources = ["C5_MMIO_USE_600A0888", "C5_MMIO_DECLARED_600A0888"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET.BIT_0_OPAQUE"
+sources = ["C5_MMIO_USE_600A7C50", "C5_MMIO_DECLARED_600A7C50"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_DCO_CONTROL.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_USE_600A0434", "C5_MMIO_DECLARED_600A0434"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FRONT_END_CLEAR_CONTROL.BIT_11_OPAQUE"
+sources = ["C5_MMIO_USE_600A0444", "C5_MMIO_DECLARED_600A0444"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FRONT_END_CLEAR_CONTROL.BITS_26_27_OPAQUE"
+sources = ["C5_MMIO_USE_600A0444", "C5_MMIO_DECLARED_600A0444"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE.BITS_0_21_OPAQUE"
+sources = ["C5_MMIO_USE_600A0894", "C5_MMIO_DECLARED_600A0894"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE.BITS_23_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0894", "C5_MMIO_DECLARED_600A0894"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_USE_600A0C04", "C5_MMIO_DECLARED_600A0C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_24_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A0C04", "C5_MMIO_DECLARED_600A0C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0814_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_POWER_DETECTOR_CALIBRATION", "C5_MMIO_DECLARED_600A0814"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0448"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_1_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0448"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_2_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0448"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.ADC_RATE_AND_FRONT_END_CONTROL.BIT_3_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0448"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL.BIT_2_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A040C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_DCO_CONTROL.BITS_22_23_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0434"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL.BIT_31_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0438"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_IQ_SCALE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A043C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_IQ_SCALE.BITS_8_15_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A043C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FRONT_END_CLEAR_CONTROL.BIT_8_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0444"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL.BITS_0_1_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0800"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0808"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A080C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A080C"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE.BIT_29_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0888"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE.BIT_22_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0894"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_8_15_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0C04"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.DAC_SCALE.BITS_16_23_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0C04"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE.BIT_25_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0C08"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE.BIT_26_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0C08"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_0C20_OPAQUE.BITS_0_7_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A0C20"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.WORD_7920_OPAQUE.BITS_12_15_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A7920"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_0_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A7A34"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_1_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A7A34"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONTROL.BIT_2_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A7A34"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_CONFIG.BITS_2_6_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A7A38"]
+naming = "opaque"
+[[review]]
+entity = "PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET.BIT_8_OPAQUE"
+sources = ["C5_MMIO_DECLARED_600A7C50"]
 naming = "opaque"

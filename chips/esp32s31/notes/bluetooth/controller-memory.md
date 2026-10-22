@@ -6,7 +6,7 @@ handover facts come from `esp32s31-bt-lib` pin
 `10c507788e9da0993709cf82e405c896561172d8`, `libble_app.a` SHA-256
 `e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723`.
 The evidence catalog is `registers/evidence/ble-memory.toml`. Unknown
-physical meanings remain `_OPAQUE`, with `accuracy = "positional"`.
+physical meanings remain `_OPAQUE`, with `accuracy = "positional"`, only where a cited use is observed. Preserved lanes and zero-only allocation positions keep their exact storage image without field accessors.
 
 ## Buffer headers and packet views
 
@@ -84,5 +84,5 @@ The open memory owner retains `0x20` bytes. Its last word is retained
 padding; this does not assert a `0x20`-byte allocation in the pinned
 initializer. The generated workspace preserves that extent. Separate
 configuration and descriptor layouts describe the referenced members at
-`+8` and `+0x0c`. Their unassigned words remain opaque. The six hardware
+`+8` and `+0x0c`. Their unassigned words retain storage without bit accessors. The six hardware
 slots do not make this workspace a software CTE ring.

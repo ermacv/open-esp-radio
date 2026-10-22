@@ -143,14 +143,7 @@ fn transmit(
     if acknowledged {
         header.model_complete_transmission();
         let old = path.read();
-        path.write(
-            BleLinkStateTxPath::from_bits(address.compressed_image())
-                .with_max_tx_octets(old.max_tx_octets())
-                .with_queue_ready(old.queue_ready())
-                .with_bits_29_30_opaque(old.bits_29_30_opaque())
-                .expect("retained prefix fits")
-                .with_valid(old.valid()),
-        );
+        path.write(old.with_header_from(BleLinkStateTxPath::from_bits(address.compressed_image())));
     }
     Some(pdu)
 }

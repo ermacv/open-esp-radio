@@ -11,8 +11,6 @@ use crate::{SharedRadioRegisters, WifiRadioRegisters};
 pub struct MacHeTxMpduLengthLink {
     pub mpdu_length: u16,
     pub next_link: u8,
-    /// Bits 31:21 are read by the blob but not assigned a field name.
-    pub high_opaque: u16,
 }
 
 impl WifiRadioRegisters {
@@ -44,7 +42,6 @@ impl WifiRadioRegisters {
         Some(MacHeTxMpduLengthLink {
             mpdu_length: value.mpdu_length().bits(),
             next_link: value.next_link().bits(),
-            high_opaque: value.bits_21_31_opaque().bits(),
         })
     }
 

@@ -7,10 +7,10 @@
   "signature": {
     "idf-revision": "4d59230ddff16327812782151ef0afef202dc6d7",
     "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
-    "model-sha256": "fcd53e5da514bad5d5a7b299202af81269737f84a4acf86fae5d63e08485ef43",
+    "model-sha256": "f36313a8cc13bbd1ba2a3e2ee073bd2d996a8243f5a6b70e06244a21a291e05d",
     "relation-sha256": "9cfaa367b51c6fecf0bf37a8bffe7a97fb8c2f221bcc4aa5c840437f1ee94dc2",
     "review-sha256": "3f3af92decee5d0205110e81879b09b7bb63517d7a4608b2d0237e4b3638f93c",
-    "recipe-sha256": "eb261e51b765489cc5f61912ef78d479be7c34e229e4be78bd84a9885884d6cf"
+    "recipe-sha256": "fe681c2e2f8321e6423bf983ee1e920f8c743284b0128d050421836f97b8a888"
   },
   "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
   "channel": 1,
@@ -86,6 +86,9 @@
       "count": 1,
       "address": 542667232,
       "signed": false,
+      "mask": [
+        63
+      ],
       "excluded": "clock policy: the modem XTAL clock enable follows the active radio modules",
       "shared": 29,
       "boards": {}
@@ -96,6 +99,9 @@
       "count": 1,
       "address": 542666816,
       "signed": false,
+      "mask": [
+        1
+      ],
       "shared": 1,
       "boards": {}
     },
@@ -105,7 +111,10 @@
       "count": 1,
       "address": 537983000,
       "signed": false,
-      "shared": 687924292,
+      "mask": [
+        4278191692
+      ],
+      "shared": 687866948,
       "boards": {}
     },
     "I2C_ANA_MST.ANA_CONF1": {
@@ -114,6 +123,9 @@
       "count": 1,
       "address": 537983004,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the read mask of the analog I2C block last addressed",
       "shared": 16777183,
       "boards": {}
@@ -124,6 +136,9 @@
       "count": 1,
       "address": 537983008,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 260612,
       "boards": {}
     },
@@ -133,6 +148,9 @@
       "count": 1,
       "address": 537983020,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 132,
       "boards": {}
     },
@@ -142,6 +160,9 @@
       "count": 1,
       "address": 537982976,
       "signed": false,
+      "mask": [
+        134217727
+      ],
       "excluded": "live state: the last analog I2C command of its host",
       "shared": 24117862,
       "boards": {}
@@ -152,6 +173,9 @@
       "count": 1,
       "address": 537983012,
       "signed": false,
+      "mask": [
+        2047
+      ],
       "shared": 132,
       "boards": {}
     },
@@ -161,6 +185,9 @@
       "count": 1,
       "address": 537982980,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the last analog I2C command of its host",
       "shared": 27788386,
       "boards": {}
@@ -171,6 +198,9 @@
       "count": 1,
       "address": 537983016,
       "signed": false,
+      "mask": [
+        2047
+      ],
       "shared": 132,
       "boards": {}
     },
@@ -180,6 +210,9 @@
       "count": 1,
       "address": 544215040,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -189,6 +222,9 @@
       "count": 1,
       "address": 544215144,
       "signed": false,
+      "mask": [
+        7
+      ],
       "shared": 4,
       "boards": {}
     },
@@ -198,6 +234,9 @@
       "count": 1,
       "address": 544276528,
       "signed": false,
+      "mask": [
+        3221225472
+      ],
       "shared": 1073741824,
       "boards": {}
     },
@@ -207,6 +246,9 @@
       "count": 1,
       "address": 545357848,
       "signed": false,
+      "mask": [
+        8389121
+      ],
       "excluded": "clock policy: the temperature sensor clock follows the tracking client",
       "shared": 0,
       "boards": {}
@@ -217,6 +259,9 @@
       "count": 1,
       "address": 545357824,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the temperature sensor reading",
       "boards": {
         "s31-a": {
@@ -247,6 +292,9 @@
       "count": 1,
       "address": 537980968,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 39,
       "boards": {}
     },
@@ -256,6 +304,9 @@
       "count": 1,
       "address": 537980960,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1717960704,
       "boards": {}
     },
@@ -265,6 +316,9 @@
       "count": 1,
       "address": 537980936,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -274,6 +328,9 @@
       "count": 1,
       "address": 537980932,
       "signed": false,
+      "mask": [
+        65535
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -283,6 +340,9 @@
       "count": 1,
       "address": 537980948,
       "signed": false,
+      "mask": [
+        3
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -292,6 +352,9 @@
       "count": 1,
       "address": 537980940,
       "signed": false,
+      "mask": [
+        65535
+      ],
       "shared": 1,
       "boards": {}
     },
@@ -301,6 +364,9 @@
       "count": 1,
       "address": 537959428,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2101250,
       "boards": {}
     },
@@ -310,6 +376,9 @@
       "count": 1,
       "address": 537959444,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "clock policy: modem clock enables follow the active radio clients and leases, not calibration",
       "shared": 3729407,
       "boards": {}
@@ -320,6 +389,9 @@
       "count": 1,
       "address": 537959436,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1684300800,
       "boards": {}
     },
@@ -329,6 +401,9 @@
       "count": 1,
       "address": 537959440,
       "signed": false,
+      "mask": [
+        1870758656
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -338,6 +413,9 @@
       "count": 1,
       "address": 537959448,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 268449794,
       "boards": {}
     },
@@ -347,6 +425,9 @@
       "count": 1,
       "address": 537956360,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -356,7 +437,10 @@
       "count": 1,
       "address": 537956356,
       "signed": false,
-      "shared": 62914560,
+      "mask": [
+        2151677951
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT": {
@@ -365,6 +449,9 @@
       "count": 1,
       "address": 537956376,
       "signed": false,
+      "mask": [
+        33554431
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -374,7 +461,10 @@
       "count": 1,
       "address": 537921740,
       "signed": false,
-      "shared": 230,
+      "mask": [
+        7864320
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE": {
@@ -383,6 +473,9 @@
       "count": 1,
       "address": 537927860,
       "signed": false,
+      "mask": [
+        1
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -398,6 +491,9 @@
       "count": 1,
       "address": 537948344,
       "signed": false,
+      "mask": [
+        7
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -407,7 +503,10 @@
       "count": 1,
       "address": 537948208,
       "signed": false,
-      "shared": 3284510453,
+      "mask": [
+        4294967264
+      ],
+      "shared": 3284510432,
       "boards": {}
     },
     "PHY_AGC_ORACLE.AGC_GAIN_LIMIT_LOW": {
@@ -416,6 +515,9 @@
       "count": 1,
       "address": 537948308,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 3669537051,
       "boards": {}
     },
@@ -425,29 +527,12 @@
       "count": 1,
       "address": 537948456,
       "signed": false,
+      "mask": [
+        4278190080
+      ],
       "excluded": "live state: varies between production boots with the running AGC",
-      "boards": {
-        "s31-a": {
-          "status": "read",
-          "ranges": [
-            [
-              3523267176,
-              3525188268
-            ]
-          ],
-          "margin": 1921092
-        },
-        "s31-b": {
-          "status": "read",
-          "ranges": [
-            [
-              3523234452,
-              3525180084
-            ]
-          ],
-          "margin": 1945632
-        }
-      }
+      "shared": 3523215360,
+      "boards": {}
     },
     "PHY_AGC_ORACLE.AGC_PARAMETER_CONTROL": {
       "space": "mmio",
@@ -455,6 +540,9 @@
       "count": 1,
       "address": 537921724,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 636016,
       "boards": {}
     },
@@ -464,7 +552,10 @@
       "count": 1,
       "address": 537948252,
       "signed": false,
-      "shared": 4118285240,
+      "mask": [
+        3574595583
+      ],
+      "shared": 3574074296,
       "boards": {}
     },
     "PHY_AGC_ORACLE.AGC_SHARED_CONTROL": {
@@ -473,6 +564,9 @@
       "count": 1,
       "address": 537948204,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 843073517,
       "boards": {}
     },
@@ -482,7 +576,10 @@
       "count": 1,
       "address": 537952376,
       "signed": false,
-      "shared": 7613890,
+      "mask": [
+        7340032
+      ],
+      "shared": 7340032,
       "boards": {}
     },
     "PHY_AGC_ORACLE.ANTENNA_CONTROL_0": {
@@ -491,6 +588,9 @@
       "count": 1,
       "address": 537948444,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1105920,
       "boards": {}
     },
@@ -500,7 +600,10 @@
       "count": 1,
       "address": 537948448,
       "signed": false,
-      "shared": 1056284,
+      "mask": [
+        4278255360
+      ],
+      "shared": 7680,
       "boards": {}
     },
     "PHY_AGC_ORACLE.CSI_DUMP_FORCE_CONTROL": {
@@ -509,6 +612,9 @@
       "count": 1,
       "address": 537948324,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 7740,
       "boards": {}
     },
@@ -518,7 +624,10 @@
       "count": 1,
       "address": 537948220,
       "signed": false,
-      "shared": 65551,
+      "mask": [
+        1048576
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_AGC_ORACLE.FTM_CONTROL": {
@@ -527,7 +636,10 @@
       "count": 1,
       "address": 537951564,
       "signed": false,
-      "shared": 4,
+      "mask": [
+        1
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_AGC_ORACLE.POST_INIT_RX_CONTROL": {
@@ -536,7 +648,10 @@
       "count": 1,
       "address": 537950408,
       "signed": false,
-      "shared": 1679412119,
+      "mask": [
+        16383
+      ],
+      "shared": 2967,
       "boards": {}
     },
     "PHY_AGC_ORACLE.RX_11B_MODE_CONTROL": {
@@ -545,7 +660,10 @@
       "count": 1,
       "address": 537952260,
       "signed": false,
-      "shared": 20746640,
+      "mask": [
+        67170304
+      ],
+      "shared": 36864,
       "boards": {}
     },
     "PHY_AGC_ORACLE.RX_11B_PATH_CONTROL_0": {
@@ -554,6 +672,9 @@
       "count": 1,
       "address": 537948228,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 4265599486,
       "boards": {}
     },
@@ -563,6 +684,9 @@
       "count": 1,
       "address": 537948452,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2988475731,
       "boards": {}
     },
@@ -572,8 +696,11 @@
       "count": 1,
       "address": 537948420,
       "signed": false,
+      "mask": [
+        511
+      ],
       "excluded": "lifecycle: the last writer is phy_reg_update_new after cold registration and phy_bb_agc_reg_update after an RF wake or RX table init; the vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration, and production's wake keeps the vendor order",
-      "shared": 111986632,
+      "shared": 456,
       "boards": {}
     },
     "PHY_AGC_ORACLE.RX_COMPENSATION_HIGH_CONTROL": {
@@ -582,7 +709,10 @@
       "count": 1,
       "address": 537948320,
       "signed": false,
-      "shared": 3976251826,
+      "mask": [
+        4278190080
+      ],
+      "shared": 3976200192,
       "boards": {}
     },
     "PHY_AGC_ORACLE.RX_GAIN_LIMIT_CONTROL": {
@@ -591,7 +721,10 @@
       "count": 1,
       "address": 537948476,
       "signed": false,
-      "shared": 85719548,
+      "mask": [
+        66846720
+      ],
+      "shared": 18350080,
       "boards": {}
     },
     "PHY_AGC_RECOVERED_GAPS.WORD_0010_OPAQUE": {
@@ -600,6 +733,9 @@
       "count": 1,
       "address": 537948176,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 106037563,
       "boards": {}
     },
@@ -609,6 +745,9 @@
       "count": 1,
       "address": 537948180,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 22037115,
       "boards": {}
     },
@@ -618,6 +757,9 @@
       "count": 1,
       "address": 537948188,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 3457289919,
       "boards": {}
     },
@@ -627,26 +769,29 @@
       "count": 1,
       "address": 537948240,
       "signed": false,
+      "mask": [
+        1023
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
           "ranges": [
             [
-              1076895386,
-              4286574249
+              659,
+              681
             ]
           ],
-          "margin": 3209678863
+          "margin": 22
         },
         "s31-b": {
           "status": "read",
           "ranges": [
             [
-              2093019808,
-              4282407590
+              672,
+              679
             ]
           ],
-          "margin": 2189387782
+          "margin": 7
         }
       }
     },
@@ -656,27 +801,30 @@
       "count": 1,
       "address": 537948268,
       "signed": false,
+      "mask": [
+        65280
+      ],
       "excluded": "live state: AGC RSSI status",
       "boards": {
         "s31-a": {
           "status": "read",
           "ranges": [
             [
-              4261412864,
-              4266069575
+              0,
+              20224
             ]
           ],
-          "margin": 4656711
+          "margin": 20224
         },
         "s31-b": {
           "status": "read",
           "ranges": [
             [
-              4261412864,
-              4266070599
+              0,
+              8448
             ]
           ],
-          "margin": 4657735
+          "margin": 8448
         }
       }
     },
@@ -686,6 +834,9 @@
       "count": 1,
       "address": 537948276,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 838983809,
       "boards": {}
     },
@@ -695,6 +846,9 @@
       "count": 1,
       "address": 537948364,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 713702056,
       "boards": {}
     },
@@ -704,7 +858,10 @@
       "count": 1,
       "address": 537948404,
       "signed": false,
-      "shared": 4189249937,
+      "mask": [
+        1
+      ],
+      "shared": 1,
       "boards": {}
     },
     "PHY_AGC_RECOVERED_GAPS.WORD_0108_OPAQUE": {
@@ -713,6 +870,9 @@
       "count": 1,
       "address": 537948424,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2014862093,
       "boards": {}
     },
@@ -722,6 +882,9 @@
       "count": 1,
       "address": 537949232,
       "signed": false,
+      "mask": [
+        268435455
+      ],
       "shared": 127768985,
       "boards": {}
     },
@@ -731,7 +894,10 @@
       "count": 1,
       "address": 537949236,
       "signed": false,
-      "shared": 261986713,
+      "mask": [
+        134217727
+      ],
+      "shared": 127768985,
       "boards": {}
     },
     "PHY_AGC_RECOVERED_GAPS.WORD_0438_OPAQUE": {
@@ -740,6 +906,9 @@
       "count": 1,
       "address": 537949240,
       "signed": false,
+      "mask": [
+        4095
+      ],
       "shared": 2151,
       "boards": {}
     },
@@ -749,6 +918,9 @@
       "count": 1,
       "address": 537920584,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 370147331,
       "boards": {}
     },
@@ -758,6 +930,9 @@
       "count": 1,
       "address": 537951232,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1205904897,
       "boards": {}
     },
@@ -767,7 +942,10 @@
       "count": 1,
       "address": 537951280,
       "signed": false,
-      "shared": 1051678,
+      "mask": [
+        1045503
+      ],
+      "shared": 30,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL": {
@@ -776,6 +954,9 @@
       "count": 1,
       "address": 537951292,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1075314858,
       "boards": {}
     },
@@ -785,6 +966,9 @@
       "count": 1,
       "address": 537951296,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2147483648,
       "boards": {}
     },
@@ -794,6 +978,9 @@
       "count": 1,
       "address": 537951240,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: baseband watchdog status",
       "boards": {
         "s31-a": {
@@ -824,6 +1011,9 @@
       "count": 1,
       "address": 537922564,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 16776960,
       "boards": {}
     },
@@ -833,6 +1023,9 @@
       "count": 1,
       "address": 537920524,
       "signed": false,
+      "mask": [
+        7
+      ],
       "shared": 7,
       "boards": {}
     },
@@ -842,6 +1035,9 @@
       "count": 1,
       "address": 537920580,
       "signed": false,
+      "mask": [
+        2304
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -851,6 +1047,9 @@
       "count": 1,
       "address": 537949288,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 788484,
       "boards": {}
     },
@@ -860,6 +1059,9 @@
       "count": 1,
       "address": 537949292,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 4535379,
       "boards": {}
     },
@@ -869,6 +1071,9 @@
       "count": 1,
       "address": 537937036,
       "signed": false,
+      "mask": [
+        66846723
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -878,7 +1083,10 @@
       "count": 1,
       "address": 537949308,
       "signed": false,
-      "shared": 1048832,
+      "mask": [
+        100663296
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL": {
@@ -887,6 +1095,9 @@
       "count": 1,
       "address": 537949304,
       "signed": false,
+      "mask": [
+        65535
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -896,6 +1107,9 @@
       "count": 1,
       "address": 537922572,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -925,6 +1139,9 @@
       "count": 1,
       "address": 537920568,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -954,6 +1171,9 @@
       "count": 1,
       "address": 537948184,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -983,6 +1203,9 @@
       "count": 1,
       "address": 537951300,
       "signed": false,
+      "mask": [
+        1
+      ],
       "shared": 1,
       "boards": {}
     },
@@ -992,6 +1215,9 @@
       "count": 1,
       "address": 537951312,
       "signed": false,
+      "mask": [
+        1
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1001,7 +1227,10 @@
       "count": 1,
       "address": 537921544,
       "signed": false,
-      "shared": 2704641,
+      "mask": [
+        7409663
+      ],
+      "shared": 2163969,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS": {
@@ -1010,7 +1239,10 @@
       "count": 1,
       "address": 537921548,
       "signed": false,
-      "shared": 520192,
+      "mask": [
+        2130833920
+      ],
+      "shared": 126976,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT": {
@@ -1019,6 +1251,9 @@
       "count": 1,
       "address": 537921564,
       "signed": false,
+      "mask": [
+        1073627134
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -1048,6 +1283,9 @@
       "count": 1,
       "address": 537921568,
       "signed": false,
+      "mask": [
+        1073627134
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -1077,6 +1315,9 @@
       "count": 1,
       "address": 537921572,
       "signed": false,
+      "mask": [
+        1073627134
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1086,6 +1327,9 @@
       "count": 1,
       "address": 537921576,
       "signed": false,
+      "mask": [
+        1073627134
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1095,7 +1339,10 @@
       "count": 1,
       "address": 537921556,
       "signed": false,
-      "shared": 16715620,
+      "mask": [
+        255
+      ],
+      "shared": 100,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.RX_GAIN_DC_CONTROL": {
@@ -1104,7 +1351,10 @@
       "count": 1,
       "address": 537920548,
       "signed": false,
-      "shared": 1,
+      "mask": [
+        96
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL": {
@@ -1113,6 +1363,9 @@
       "count": 1,
       "address": 537920540,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 213024,
       "boards": {}
     },
@@ -1122,6 +1375,9 @@
       "count": 1,
       "address": 537920544,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1131,6 +1387,9 @@
       "count": 1,
       "address": 537920552,
       "signed": false,
+      "mask": [
+        4294934543
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1140,6 +1399,9 @@
       "count": 1,
       "address": 537920536,
       "signed": false,
+      "mask": [
+        1073741823
+      ],
       "shared": 4476732,
       "boards": {}
     },
@@ -1149,6 +1411,9 @@
       "count": 1,
       "address": 537920528,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 260864,
       "boards": {}
     },
@@ -1158,6 +1423,9 @@
       "count": 1,
       "address": 537949248,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 22675577,
       "boards": {}
     },
@@ -1167,7 +1435,10 @@
       "count": 1,
       "address": 537921644,
       "signed": false,
-      "shared": 639924228,
+      "mask": [
+        65535
+      ],
+      "shared": 30724,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1": {
@@ -1176,6 +1447,9 @@
       "count": 1,
       "address": 537921648,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 168740872,
       "boards": {}
     },
@@ -1185,7 +1459,10 @@
       "count": 1,
       "address": 537949268,
       "signed": false,
-      "shared": 1692579809,
+      "mask": [
+        1023
+      ],
+      "shared": 993,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1": {
@@ -1194,7 +1471,10 @@
       "count": 1,
       "address": 537949272,
       "signed": false,
-      "shared": 1600746256,
+      "mask": [
+        2147483523
+      ],
+      "shared": 1600746240,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2": {
@@ -1203,6 +1483,9 @@
       "count": 1,
       "address": 537949276,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2375458993,
       "boards": {}
     },
@@ -1212,7 +1495,10 @@
       "count": 1,
       "address": 537949280,
       "signed": false,
-      "shared": 1988131203,
+      "mask": [
+        65535
+      ],
+      "shared": 31107,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE": {
@@ -1221,6 +1507,9 @@
       "count": 1,
       "address": 537922568,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 234881024,
       "boards": {}
     },
@@ -1230,6 +1519,9 @@
       "count": 1,
       "address": 537922592,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 87,
       "boards": {}
     },
@@ -1239,6 +1531,9 @@
       "count": 1,
       "address": 537949184,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 68739328,
       "boards": {}
     },
@@ -1248,7 +1543,10 @@
       "count": 1,
       "address": 537949224,
       "signed": false,
-      "shared": 54528,
+      "mask": [
+        32512
+      ],
+      "shared": 21760,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE": {
@@ -1257,7 +1555,10 @@
       "count": 1,
       "address": 537949244,
       "signed": false,
-      "shared": 5,
+      "mask": [
+        448
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_7808_OPAQUE": {
@@ -1266,7 +1567,10 @@
       "count": 1,
       "address": 537950216,
       "signed": false,
-      "shared": 1342730344,
+      "mask": [
+        16256
+      ],
+      "shared": 12288,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE": {
@@ -1275,7 +1579,10 @@
       "count": 1,
       "address": 537950352,
       "signed": false,
-      "shared": 23413537,
+      "mask": [
+        50331648
+      ],
+      "shared": 16777216,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_78DC_OPAQUE": {
@@ -1284,7 +1591,10 @@
       "count": 1,
       "address": 537950428,
       "signed": false,
-      "shared": 26591596,
+      "mask": [
+        16256
+      ],
+      "shared": 256,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_78E4_OPAQUE": {
@@ -1293,6 +1603,9 @@
       "count": 1,
       "address": 537950436,
       "signed": false,
+      "mask": [
+        4194304
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1302,6 +1615,9 @@
       "count": 1,
       "address": 537950476,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1308,
       "boards": {}
     },
@@ -1311,7 +1627,10 @@
       "count": 1,
       "address": 537950592,
       "signed": false,
-      "shared": 524416,
+      "mask": [
+        33554432
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_7A28_OPAQUE": {
@@ -1320,7 +1639,10 @@
       "count": 1,
       "address": 537950760,
       "signed": false,
-      "shared": 732272,
+      "mask": [
+        4194304
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CA8_OPAQUE": {
@@ -1329,7 +1651,10 @@
       "count": 1,
       "address": 537951400,
       "signed": false,
-      "shared": 3145745,
+      "mask": [
+        1048576
+      ],
+      "shared": 1048576,
       "boards": {}
     },
     "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE": {
@@ -1338,6 +1663,9 @@
       "count": 1,
       "address": 537951440,
       "signed": false,
+      "mask": [
+        983055
+      ],
       "shared": 983055,
       "boards": {}
     },
@@ -1347,7 +1675,10 @@
       "count": 1,
       "address": 537951320,
       "signed": false,
-      "shared": 2147549184,
+      "mask": [
+        536870911
+      ],
+      "shared": 65536,
       "boards": {}
     },
     "PHY_BB_RECOVERED_GAPS.CCA_COUNTER_RESULT_0": {
@@ -1356,6 +1687,9 @@
       "count": 1,
       "address": 537951324,
       "signed": false,
+      "mask": [
+        268435455
+      ],
       "excluded": "hardware measurement result over a window, not calibration",
       "shared": 134283264,
       "boards": {}
@@ -1366,6 +1700,9 @@
       "count": 1,
       "address": 537951328,
       "signed": false,
+      "mask": [
+        134217727
+      ],
       "excluded": "hardware measurement result over a window, not calibration",
       "boards": {
         "s31-a": {
@@ -1396,6 +1733,9 @@
       "count": 1,
       "address": 537951252,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1837121536,
       "boards": {}
     },
@@ -1405,6 +1745,9 @@
       "count": 1,
       "address": 537951464,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 530422170,
       "boards": {}
     },
@@ -1414,6 +1757,9 @@
       "count": 1,
       "address": 537951468,
       "signed": false,
+      "mask": [
+        8191
+      ],
       "shared": 2151,
       "boards": {}
     },
@@ -1423,6 +1769,9 @@
       "count": 1,
       "address": 537952336,
       "signed": false,
+      "mask": [
+        32767
+      ],
       "shared": 16384,
       "boards": {}
     },
@@ -1432,6 +1781,9 @@
       "count": 1,
       "address": 537929812,
       "signed": false,
+      "mask": [
+        508
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1447,6 +1799,9 @@
       "count": 1,
       "address": 537929808,
       "signed": false,
+      "mask": [
+        2080768
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1462,6 +1817,9 @@
       "count": 1,
       "address": 537929876,
       "signed": false,
+      "mask": [
+        16777215
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1477,6 +1835,9 @@
       "count": 1,
       "address": 537929880,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1492,6 +1853,9 @@
       "count": 1,
       "address": 537929728,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1507,6 +1871,9 @@
       "count": 1,
       "address": 537929760,
       "signed": false,
+      "mask": [
+        10
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1522,6 +1889,9 @@
       "count": 1,
       "address": 537929796,
       "signed": false,
+      "mask": [
+        536870911
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1537,6 +1907,9 @@
       "count": 1,
       "address": 537929792,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1552,6 +1925,9 @@
       "count": 1,
       "address": 537929800,
       "signed": false,
+      "mask": [
+        4294902783
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1567,6 +1943,9 @@
       "count": 1,
       "address": 537929804,
       "signed": false,
+      "mask": [
+        3574595583
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1582,6 +1961,9 @@
       "count": 1,
       "address": 537929832,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1597,6 +1979,9 @@
       "count": 1,
       "address": 537929836,
       "signed": false,
+      "mask": [
+        4278190080
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1612,6 +1997,9 @@
       "count": 1,
       "address": 537929860,
       "signed": false,
+      "mask": [
+        4278190080
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1627,6 +2015,9 @@
       "count": 1,
       "address": 537929864,
       "signed": false,
+      "mask": [
+        1610874880
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1642,6 +2033,9 @@
       "count": 1,
       "address": 537929868,
       "signed": false,
+      "mask": [
+        537133055
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1657,6 +2051,9 @@
       "count": 1,
       "address": 537929888,
       "signed": false,
+      "mask": [
+        4294901760
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1672,6 +2069,9 @@
       "count": 1,
       "address": 537929896,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1687,6 +2087,9 @@
       "count": 1,
       "address": 537929904,
       "signed": false,
+      "mask": [
+        4294959104
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1702,6 +2105,9 @@
       "count": 1,
       "address": 537929908,
       "signed": false,
+      "mask": [
+        4286594816
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1717,6 +2123,9 @@
       "count": 1,
       "address": 537929912,
       "signed": false,
+      "mask": [
+        4294967040
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1732,6 +2141,9 @@
       "count": 1,
       "address": 537929916,
       "signed": false,
+      "mask": [
+        2147484128
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1747,6 +2159,9 @@
       "count": 1,
       "address": 537929920,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1762,6 +2177,9 @@
       "count": 1,
       "address": 537929924,
       "signed": false,
+      "mask": [
+        4294966272
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1777,6 +2195,9 @@
       "count": 1,
       "address": 537929936,
       "signed": false,
+      "mask": [
+        33552384
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1792,6 +2213,9 @@
       "count": 1,
       "address": 537929940,
       "signed": false,
+      "mask": [
+        33554368
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1807,6 +2231,9 @@
       "count": 1,
       "address": 537929948,
       "signed": false,
+      "mask": [
+        4160749568
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1822,6 +2249,9 @@
       "count": 1,
       "address": 537929952,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1837,6 +2267,9 @@
       "count": 1,
       "address": 537929956,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1852,6 +2285,9 @@
       "count": 1,
       "address": 537929960,
       "signed": false,
+      "mask": [
+        4294966272
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1867,6 +2303,9 @@
       "count": 1,
       "address": 537929964,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1882,6 +2321,9 @@
       "count": 1,
       "address": 537929968,
       "signed": false,
+      "mask": [
+        4294901760
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1897,6 +2339,9 @@
       "count": 1,
       "address": 537929976,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1912,6 +2357,9 @@
       "count": 1,
       "address": 537929984,
       "signed": false,
+      "mask": [
+        4294963200
+      ],
       "boards": {
         "s31-a": {
           "status": "unreadable"
@@ -1927,6 +2375,9 @@
       "count": 1,
       "address": 537920520,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2684389512,
       "boards": {}
     },
@@ -1936,6 +2387,9 @@
       "count": 1,
       "address": 537921536,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 3,
       "boards": {}
     },
@@ -1945,6 +2399,9 @@
       "count": 1,
       "address": 537921588,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1954,6 +2411,9 @@
       "count": 1,
       "address": 537921592,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1963,6 +2423,9 @@
       "count": 1,
       "address": 537921596,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1972,6 +2435,9 @@
       "count": 1,
       "address": 537921600,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -1981,6 +2447,9 @@
       "count": 1,
       "address": 537920560,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 262143,
       "boards": {}
     },
@@ -1990,6 +2459,9 @@
       "count": 1,
       "address": 537920576,
       "signed": false,
+      "mask": [
+        100663296
+      ],
       "shared": 100663296,
       "boards": {}
     },
@@ -1999,7 +2471,10 @@
       "count": 1,
       "address": 537922580,
       "signed": false,
-      "shared": 3275620352,
+      "mask": [
+        2146959360
+      ],
+      "shared": 1127743488,
       "boards": {}
     },
     "PHY_FEDATA_WIFI_RECOVERED.WORD_0018_OPAQUE": {
@@ -2008,6 +2483,9 @@
       "count": 1,
       "address": 537922584,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 127768986,
       "boards": {}
     },
@@ -2017,6 +2495,9 @@
       "count": 1,
       "address": 537922588,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 127768986,
       "boards": {}
     },
@@ -2026,6 +2507,9 @@
       "count": 1,
       "address": 537951456,
       "signed": false,
+      "mask": [
+        3
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2035,6 +2519,9 @@
       "count": 1,
       "address": 537951460,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 458880,
       "boards": {}
     },
@@ -2044,6 +2531,9 @@
       "count": 1,
       "address": 537936896,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 3251320656,
       "boards": {}
     },
@@ -2053,7 +2543,10 @@
       "count": 1,
       "address": 537921652,
       "signed": false,
-      "shared": 33555460,
+      "mask": [
+        67043328
+      ],
+      "shared": 33554432,
       "boards": {}
     },
     "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL": {
@@ -2062,6 +2555,9 @@
       "count": 1,
       "address": 537919516,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1350567436,
       "boards": {}
     },
@@ -2071,7 +2567,10 @@
       "count": 1,
       "address": 537919520,
       "signed": false,
-      "shared": 262144,
+      "mask": [
+        65536
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_RESULT": {
@@ -2080,6 +2579,9 @@
       "count": 1,
       "address": 537919552,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2089,7 +2591,10 @@
       "count": 1,
       "address": 537919528,
       "signed": false,
-      "shared": 629296984,
+      "mask": [
+        4288675587
+      ],
+      "shared": 629296896,
       "boards": {}
     },
     "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL": {
@@ -2098,7 +2603,10 @@
       "count": 1,
       "address": 537919536,
       "signed": false,
-      "shared": 8430592,
+      "mask": [
+        261891
+      ],
+      "shared": 41984,
       "boards": {}
     },
     "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL": {
@@ -2107,6 +2615,9 @@
       "count": 1,
       "address": 537950280,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 386154197,
       "boards": {}
     },
@@ -2116,6 +2627,9 @@
       "count": 1,
       "address": 537920612,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2125,6 +2639,9 @@
       "count": 1,
       "address": 537920616,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2134,6 +2651,9 @@
       "count": 1,
       "address": 537921744,
       "signed": false,
+      "mask": [
+        3145728
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2143,6 +2663,9 @@
       "count": 1,
       "address": 537920588,
       "signed": false,
+      "mask": [
+        201326592
+      ],
       "shared": 67108864,
       "boards": {}
     },
@@ -2152,6 +2675,9 @@
       "count": 1,
       "address": 537920592,
       "signed": false,
+      "mask": [
+        1703935
+      ],
       "shared": 1056768,
       "boards": {}
     },
@@ -2161,6 +2687,9 @@
       "count": 1,
       "address": 537920636,
       "signed": false,
+      "mask": [
+        131071
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2170,6 +2699,9 @@
       "count": 1,
       "address": 537920620,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2179,6 +2711,9 @@
       "count": 1,
       "address": 537920600,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2188,6 +2723,9 @@
       "count": 1,
       "address": 537920604,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2197,6 +2735,9 @@
       "count": 1,
       "address": 537920596,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2206,6 +2747,9 @@
       "count": 1,
       "address": 537920608,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2215,6 +2759,9 @@
       "count": 1,
       "address": 537921604,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 391168,
       "boards": {}
     },
@@ -2224,6 +2771,9 @@
       "count": 1,
       "address": 537921620,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 201852672,
       "boards": {}
     },
@@ -2233,6 +2783,9 @@
       "count": 1,
       "address": 537921624,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 420811789,
       "boards": {}
     },
@@ -2242,6 +2795,9 @@
       "count": 1,
       "address": 537921628,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 488447002,
       "boards": {}
     },
@@ -2251,6 +2807,9 @@
       "count": 1,
       "address": 537921632,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 707142942,
       "boards": {}
     },
@@ -2260,6 +2819,9 @@
       "count": 1,
       "address": 537921636,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 926102059,
       "boards": {}
     },
@@ -2269,6 +2831,9 @@
       "count": 1,
       "address": 537921640,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 993737272,
       "boards": {}
     },
@@ -2278,6 +2843,9 @@
       "count": 1,
       "address": 537950208,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 252158680,
       "boards": {}
     },
@@ -2287,6 +2855,9 @@
       "count": 1,
       "address": 537950220,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 17973757,
       "boards": {}
     },
@@ -2296,6 +2867,9 @@
       "count": 1,
       "address": 537950256,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2504523776,
       "boards": {}
     },
@@ -2305,7 +2879,10 @@
       "count": 1,
       "address": 537950360,
       "signed": false,
-      "shared": 469815296,
+      "mask": [
+        1023
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE": {
@@ -2314,29 +2891,12 @@
       "count": 1,
       "address": 537950392,
       "signed": false,
+      "mask": [
+        3758096384
+      ],
       "excluded": "live state: carrier frequency offset estimation",
-      "boards": {
-        "s31-a": {
-          "status": "read",
-          "ranges": [
-            [
-              1073741824,
-              1274065400
-            ]
-          ],
-          "margin": 200323576
-        },
-        "s31-b": {
-          "status": "read",
-          "ranges": [
-            [
-              1073741824,
-              1240635129
-            ]
-          ],
-          "margin": 166893305
-        }
-      }
+      "shared": 1073741824,
+      "boards": {}
     },
     "PHY_NRX_RECOVERED_GAPS.WORD_0104_OPAQUE": {
       "space": "mmio",
@@ -2344,6 +2904,9 @@
       "count": 1,
       "address": 537950468,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 2134382,
       "boards": {}
     },
@@ -2353,8 +2916,11 @@
       "count": 1,
       "address": 537921668,
       "signed": false,
+      "mask": [
+        131071
+      ],
       "excluded": "live state: the last PBus command word",
-      "shared": 1610301452,
+      "shared": 81932,
       "boards": {}
     },
     "PHY_PBUS.MODE": {
@@ -2363,7 +2929,10 @@
       "count": 1,
       "address": 537921676,
       "signed": false,
-      "shared": 1073250303,
+      "mask": [
+        67108884
+      ],
+      "shared": 67108884,
       "boards": {}
     },
     "PHY_PBUS.READ_RESULT_0": {
@@ -2372,6 +2941,9 @@
       "count": 1,
       "address": 537921684,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
@@ -2402,6 +2974,9 @@
       "count": 1,
       "address": 537921688,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
@@ -2432,6 +3007,9 @@
       "count": 1,
       "address": 537921692,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
@@ -2462,6 +3040,9 @@
       "count": 1,
       "address": 537921696,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "boards": {
         "s31-a": {
@@ -2492,6 +3073,9 @@
       "count": 1,
       "address": 537921700,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "excluded": "live state: the last PBus read result, set by whichever transaction ran last",
       "shared": 262144,
       "boards": {}
@@ -2502,6 +3086,9 @@
       "count": 1,
       "address": 537921680,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 8388688,
       "boards": {}
     },
@@ -2511,6 +3098,9 @@
       "count": 1,
       "address": 537920564,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 1196616,
       "boards": {}
     },
@@ -2520,6 +3110,9 @@
       "count": 1,
       "address": 544227848,
       "signed": false,
+      "mask": [
+        4294967295
+      ],
       "shared": 3221225472,
       "boards": {}
     },
@@ -2529,8 +3122,11 @@
       "count": 1,
       "address": 544227356,
       "signed": false,
+      "mask": [
+        4194319
+      ],
       "excluded": "clock policy: active-state clock power follows the active radio clients",
-      "shared": 432013312,
+      "shared": 4194304,
       "boards": {}
     },
     "PMU_RADIO.HP_ACTIVE_ICG_MODEM": {
@@ -2539,6 +3135,9 @@
       "count": 1,
       "address": 544227348,
       "signed": false,
+      "mask": [
+        3221225472
+      ],
       "shared": 2147483648,
       "boards": {}
     },
@@ -2548,6 +3147,9 @@
       "count": 1,
       "address": 544227568,
       "signed": false,
+      "mask": [
+        3489660928
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2557,6 +3159,9 @@
       "count": 1,
       "address": 544227716,
       "signed": false,
+      "mask": [
+        4294901760
+      ],
       "shared": 4294901760,
       "boards": {}
     },
@@ -2566,7 +3171,10 @@
       "count": 1,
       "address": 24839,
       "signed": false,
-      "shared": 15,
+      "mask": [
+        32
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PhyI2cField.61.08": {
@@ -2575,7 +3183,10 @@
       "count": 1,
       "address": 24840,
       "signed": false,
-      "shared": 51,
+      "mask": [
+        4
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PhyI2cField.61.09": {
@@ -2584,6 +3195,9 @@
       "count": 1,
       "address": 24841,
       "signed": false,
+      "mask": [
+        255
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2613,6 +3227,9 @@
       "count": 1,
       "address": 24842,
       "signed": false,
+      "mask": [
+        255
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2642,7 +3259,10 @@
       "count": 1,
       "address": 25088,
       "signed": false,
-      "shared": 104,
+      "mask": [
+        96
+      ],
+      "shared": 96,
       "boards": {}
     },
     "PhyI2cField.62.01": {
@@ -2651,6 +3271,9 @@
       "count": 1,
       "address": 25089,
       "signed": false,
+      "mask": [
+        255
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2680,6 +3303,9 @@
       "count": 1,
       "address": 25090,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 255,
       "boards": {}
     },
@@ -2689,7 +3315,10 @@
       "count": 1,
       "address": 25092,
       "signed": false,
-      "shared": 168,
+      "mask": [
+        128
+      ],
+      "shared": 128,
       "boards": {}
     },
     "PhyI2cField.62.05": {
@@ -2698,6 +3327,9 @@
       "count": 1,
       "address": 25093,
       "signed": false,
+      "mask": [
+        255
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2727,7 +3359,10 @@
       "count": 1,
       "address": 25095,
       "signed": false,
-      "shared": 7,
+      "mask": [
+        6
+      ],
+      "shared": 6,
       "boards": {}
     },
     "PhyI2cField.62.0b": {
@@ -2736,7 +3371,10 @@
       "count": 1,
       "address": 25099,
       "signed": false,
-      "shared": 68,
+      "mask": [
+        64
+      ],
+      "shared": 64,
       "boards": {}
     },
     "PhyI2cField.62.0c": {
@@ -2745,7 +3383,10 @@
       "count": 1,
       "address": 25100,
       "signed": false,
-      "shared": 2,
+      "mask": [
+        12
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PhyI2cField.62.0e": {
@@ -2754,6 +3395,9 @@
       "count": 1,
       "address": 25102,
       "signed": false,
+      "mask": [
+        159
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2783,6 +3427,9 @@
       "count": 1,
       "address": 25103,
       "signed": false,
+      "mask": [
+        127
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2812,6 +3459,9 @@
       "count": 1,
       "address": 25105,
       "signed": false,
+      "mask": [
+        63
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2841,7 +3491,10 @@
       "count": 1,
       "address": 25106,
       "signed": false,
-      "shared": 64,
+      "mask": [
+        63
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PhyI2cField.62.13": {
@@ -2850,6 +3503,9 @@
       "count": 1,
       "address": 25107,
       "signed": false,
+      "mask": [
+        127
+      ],
       "shared": 31,
       "boards": {}
     },
@@ -2859,6 +3515,9 @@
       "count": 1,
       "address": 25108,
       "signed": false,
+      "mask": [
+        127
+      ],
       "shared": 31,
       "boards": {}
     },
@@ -2868,7 +3527,10 @@
       "count": 1,
       "address": 25344,
       "signed": false,
-      "shared": 91,
+      "mask": [
+        8
+      ],
+      "shared": 8,
       "boards": {}
     },
     "PhyI2cField.63.03": {
@@ -2877,6 +3539,9 @@
       "count": 1,
       "address": 25347,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 48,
       "boards": {}
     },
@@ -2886,6 +3551,9 @@
       "count": 1,
       "address": 25348,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 102,
       "boards": {}
     },
@@ -2895,6 +3563,9 @@
       "count": 1,
       "address": 25349,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 102,
       "boards": {}
     },
@@ -2904,6 +3575,9 @@
       "count": 1,
       "address": 25350,
       "signed": false,
+      "mask": [
+        7
+      ],
       "shared": 3,
       "boards": {}
     },
@@ -2913,7 +3587,10 @@
       "count": 1,
       "address": 26116,
       "signed": false,
-      "shared": 99,
+      "mask": [
+        12
+      ],
+      "shared": 0,
       "boards": {}
     },
     "PhyI2cField.67.00": {
@@ -2922,6 +3599,9 @@
       "count": 1,
       "address": 26368,
       "signed": false,
+      "mask": [
+        64
+      ],
       "shared": 0,
       "boards": {}
     },
@@ -2931,6 +3611,9 @@
       "count": 1,
       "address": 26370,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 39,
       "boards": {}
     },
@@ -2940,7 +3623,10 @@
       "count": 1,
       "address": 26371,
       "signed": false,
-      "shared": 244,
+      "mask": [
+        4
+      ],
+      "shared": 4,
       "boards": {}
     },
     "PhyI2cField.67.1e": {
@@ -2949,6 +3635,9 @@
       "count": 1,
       "address": 26398,
       "signed": false,
+      "mask": [
+        127
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -2978,6 +3667,9 @@
       "count": 1,
       "address": 26399,
       "signed": false,
+      "mask": [
+        63
+      ],
       "boards": {
         "s31-a": {
           "status": "read",
@@ -3007,8 +3699,11 @@
       "count": 1,
       "address": 26884,
       "signed": false,
+      "mask": [
+        15
+      ],
       "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
-      "shared": 96,
+      "shared": 0,
       "boards": {}
     },
     "PhyI2cField.69.06": {
@@ -3017,7 +3712,10 @@
       "count": 1,
       "address": 26886,
       "signed": false,
-      "shared": 47,
+      "mask": [
+        15
+      ],
+      "shared": 15,
       "boards": {}
     },
     "PhyI2cField.6a.00": {
@@ -3026,6 +3724,9 @@
       "count": 1,
       "address": 27136,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 175,
       "boards": {}
     },
@@ -3035,6 +3736,9 @@
       "count": 1,
       "address": 27137,
       "signed": false,
+      "mask": [
+        255
+      ],
       "shared": 127,
       "boards": {}
     },
@@ -3044,6 +3748,9 @@
       "count": 1,
       "address": 27394,
       "signed": false,
+      "mask": [
+        255
+      ],
       "excluded": "live state: the I2C command memory holds both TX capacitor-bank images (0xc2 and 0x73), and the hardware sequencer publishes one on each RF event, so the byte shows the last event",
       "boards": {
         "s31-a": {
@@ -3074,7 +3781,10 @@
       "count": 1,
       "address": 27395,
       "signed": false,
-      "shared": 186,
+      "mask": [
+        15
+      ],
+      "shared": 10,
       "boards": {}
     },
     "PhyI2cField.6b.07": {
@@ -3083,7 +3793,10 @@
       "count": 1,
       "address": 27399,
       "signed": false,
-      "shared": 253,
+      "mask": [
+        15
+      ],
+      "shared": 13,
       "boards": {}
     },
     "PhyI2cField.6b.0f": {
@@ -3092,7 +3805,10 @@
       "count": 1,
       "address": 27407,
       "signed": false,
-      "shared": 129,
+      "mask": [
+        248
+      ],
+      "shared": 128,
       "boards": {}
     },
     "PhyI2cField.6b.11": {
@@ -3101,8 +3817,11 @@
       "count": 1,
       "address": 27409,
       "signed": false,
+      "mask": [
+        48
+      ],
       "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
-      "shared": 41,
+      "shared": 32,
       "boards": {}
     },
     "PhyI2cField.6b.13": {
@@ -3111,6 +3830,9 @@
       "count": 1,
       "address": 27411,
       "signed": false,
+      "mask": [
+        63
+      ],
       "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
       "shared": 6,
       "boards": {}
@@ -3121,6 +3843,9 @@
       "count": 1,
       "address": 27412,
       "signed": false,
+      "mask": [
+        63
+      ],
       "excluded": "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken",
       "boards": {
         "s31-a": {

@@ -21,8 +21,22 @@ fn register(
         template: name.trim_end_matches(|c: char| c.is_ascii_digit()).into(),
         reset_value: None,
         reset_mask: None,
+        reserved: None,
         fields,
     }
+}
+
+#[test]
+fn reserved_sources_follow_byte_lanes_across_word_boundaries() {
+    let mut declaration = register(0x100e, 64, "WIDE", vec![]);
+    declaration.reserved = Some(oer_registers_model::ReservedBits {
+        mask: 0x10002,
+        sources: vec!["vendor-header".into()],
+    });
+    let words = declared_words(&[declaration]);
+    assert_eq!(words[&0x100c].reserved["vendor-header"], 0x20000);
+    assert_eq!(words[&0x1010].reserved["vendor-header"], 1);
+    assert_eq!(words[&0x100c].fields | words[&0x1010].fields, 0);
 }
 
 #[test]

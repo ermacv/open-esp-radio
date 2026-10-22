@@ -36,6 +36,8 @@ pub struct Word {
     pub registers: Vec<String>,
     pub declared_bits: u32,
     pub opaque_bits: u32,
+    pub reserved_bits: u32,
+    pub reserved_sources: BTreeMap<String, u32>,
     pub loads: usize,
     pub stores: usize,
     pub indexed: usize,
@@ -49,6 +51,8 @@ pub struct Word {
     pub may_only_bits: u32,
     pub diagnostic_bits: u32,
     pub violation_bits: u32,
+    pub reserved_violation_bits: u32,
+    pub absent_violation_bits: u32,
     pub unknown_bits: u32,
     /// Observed only as preserved, unused, diagnostic or equal to known reset.
     /// These are relative to this corpus; coverage gaps still apply.
@@ -112,7 +116,7 @@ impl Report {
     pub fn render(&self, chip: &str) -> String {
         let summary = &self.corpus.summary;
         let mut text = format!(
-            "Vendor bit-use check of {chip}: {} words with used absent bits\n  {} compared words; {} words with unknown bits\n  functions {} partial {} blocked {} gaps {} unresolved {} indexed {}\n  register-accesses schema {}; ABI {:?}; call_returns {}\n",
+            "Vendor bit-use check of {chip}: {} words with used reserved or absent bits\n  {} compared words; {} words with unknown bits\n  functions {} partial {} blocked {} gaps {} unresolved {} indexed {}\n  register-accesses schema {}; ABI {:?}; call_returns {}\n",
             self.violations(),
             self.words.len(),
             self.words
@@ -129,6 +133,25 @@ impl Report {
             self.corpus.abi,
             self.corpus.call_returns,
         );
+        text.push_str(&format!(
+            "  reserved-used {} words / {} bits; absent-used {} words / {} bits\n",
+            self.words
+                .iter()
+                .filter(|word| word.reserved_violation_bits != 0)
+                .count(),
+            self.words
+                .iter()
+                .map(|word| word.reserved_violation_bits.count_ones())
+                .sum::<u32>(),
+            self.words
+                .iter()
+                .filter(|word| word.absent_violation_bits != 0)
+                .count(),
+            self.words
+                .iter()
+                .map(|word| word.absent_violation_bits.count_ones())
+                .sum::<u32>(),
+        ));
         text.push_str("  Corpus: every function of the listed pinned vendor binaries; static may-accesses in owned MMIO ranges.\n  Excludes firmware outputs, non-binary sources, accesses outside these ranges, and RAM layouts.\n  Blocked/gap code and unresolved addresses cannot establish absence; large/unbounded indexed accesses compare only declared arrays/runs.\n  Named diagnostic calls in the cited fixed list do not count as use; all other sinks and Exact/May do. Read-selection does not. Unknown is neither use nor absence.\n");
         self.resolved_indexed_reads
             .render(&mut text, "resolved/indexed MMIO");
@@ -143,10 +166,18 @@ impl Report {
         text.push_str(&format!("  partial causes: {}\n", summary.partial_causes));
         for word in self.words.iter().filter(|word| word.violation_bits != 0) {
             text.push_str(&format!(
-                "\nVIOLATION 0x{:08x} {} [{}] absent-used 0x{:08x}; used 0x{:08x} declared 0x{:08x}{}\n",
+                "\nVIOLATION 0x{:08x} {} [{}] reserved-used 0x{:08x}; absent-used 0x{:08x}; used 0x{:08x} declared 0x{:08x}{}\n",
                 word.address, word.region, word.registers.join(", "),
-                word.violation_bits, word.used_bits, word.declared_bits, if word.cited { " cited" } else { "" },
+                word.reserved_violation_bits, word.absent_violation_bits, word.used_bits, word.declared_bits, if word.cited { " cited" } else { "" },
             ));
+            for (source, mask) in &word.reserved_sources {
+                if mask & word.reserved_violation_bits != 0 {
+                    text.push_str(&format!(
+                        "  RESERVED SOURCE {source} bits {:#010x}\n",
+                        mask & word.reserved_violation_bits
+                    ));
+                }
+            }
             for evidence in word
                 .uses
                 .iter()
@@ -207,7 +238,7 @@ fn render_evidence(text: &mut String, evidence: &Evidence) {
     ));
 }
 
-/// Compare a complete schema-9 document with the unchanged source model.
+/// Compare a complete schema-9 document with the declared source model.
 /// A missing load classification is a contract error, never an unused read.
 pub fn check(
     chip: &str,
@@ -218,6 +249,12 @@ pub fn check(
     arrays: &[Vec<u32>],
 ) -> Result<Report> {
     let policy = read_policy::Policy::for_chip(chip)?;
+    if declared
+        .values()
+        .any(|word| word.reserved.values().any(|mask| mask & word.fields != 0))
+    {
+        return Err("declared field overlaps cited reserved bits".into());
+    }
     let document = Document::parse(accesses, inputs)?;
     let mut words = BTreeMap::<u32, Word>::new();
     let mut address_limits = Vec::new();
@@ -305,6 +342,11 @@ pub fn check(
                     registers: declaration.registers.into_iter().collect(),
                     declared_bits: declaration.fields,
                     opaque_bits: declaration.opaque,
+                    reserved_bits: declaration
+                        .reserved
+                        .values()
+                        .fold(0, |mask, bits| mask | bits),
+                    reserved_sources: declaration.reserved,
                     loads: 0,
                     stores: 0,
                     indexed: 0,
@@ -318,6 +360,8 @@ pub fn check(
                     may_only_bits: 0,
                     diagnostic_bits: 0,
                     violation_bits: 0,
+                    reserved_violation_bits: 0,
+                    absent_violation_bits: 0,
                     unknown_bits: 0,
                     inactive_bits: 0,
                     uses: Vec::new(),
@@ -376,7 +420,9 @@ pub fn check(
     for word in words.values_mut() {
         word.may_only_bits = word.may_bits & !word.exact_bits;
         merge_evidence(&mut word.diagnostics);
-        word.violation_bits = word.used_bits & !word.declared_bits;
+        word.reserved_violation_bits = word.used_bits & word.reserved_bits;
+        word.absent_violation_bits = word.used_bits & !(word.declared_bits | word.reserved_bits);
+        word.violation_bits = word.reserved_violation_bits | word.absent_violation_bits;
         word.inactive_bits = word.observed_bits & !(word.used_bits | word.unknown_bits);
         merge_evidence(&mut word.uses);
         merge_evidence(&mut word.unknown);

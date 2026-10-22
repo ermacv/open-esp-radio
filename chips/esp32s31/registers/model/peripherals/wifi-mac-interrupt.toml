@@ -400,7 +400,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_6_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -424,7 +424,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_12_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -432,7 +432,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_13_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -448,7 +448,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_21_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -456,7 +456,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_23_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -472,7 +472,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_27_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -480,7 +480,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_28_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C40"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -507,7 +507,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BITS_0_4_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -527,7 +527,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_6_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -554,7 +554,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BITS_9_10_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -570,7 +570,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_12_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -578,7 +578,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_13_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -602,7 +602,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BITS_16_18_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -618,7 +618,7 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_20_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -626,7 +626,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_21_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -634,7 +634,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_22_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -642,7 +642,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_23_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -662,7 +662,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BITS_25_26_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -670,7 +670,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_27_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -678,7 +678,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BIT_28_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_INIT_TAIL", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -686,7 +686,7 @@ completeness = "unknown"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.STATUS.BITS_29_31_OPAQUE"
 naming = "opaque"
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
@@ -713,3 +713,32 @@ completeness = "complete"
 [[review]]
 entity = "WIFI_MAC_INTERRUPT.RAW.EVENTS"
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_0_4_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_9_10_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_16_18_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_20_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BIT_22_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_25_26_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_INTERRUPT.ENABLE.BITS_29_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104C40"]
+naming = "opaque"

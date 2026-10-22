@@ -124,3 +124,12 @@ sources = ["BLOB_LIBPP_MAC_CHANNEL_SWITCH", "BLOB_LIBPP_PM_TX_BLOCK_20260927"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CONTROL.CONTROL.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104CAC"]
+naming = "opaque"
+[[review]]
+entity = "WIFI_MAC_CONTROL.CONTROL.BITS_24_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_20104CAC"]
+naming = "opaque"

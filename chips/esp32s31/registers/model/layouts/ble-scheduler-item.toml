@@ -67,13 +67,6 @@ bits = "25"
 writer = "cpu"
 description = "Skip marker set for deletion and preemption."
 
-[[layout.words.fields]]
-name = "BITS_26_31_OPAQUE"
-opaque = true
-bits = "31:26"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
 name = "CONTEXT"
 offset = 0x04
@@ -87,13 +80,6 @@ writer = "cpu"
 description = "A graph link; zero denotes no link."
 points-to = "BLE_SCHEDULER_CONTEXT"
 encoding = "ble-compressed"
-
-[[layout.words.fields]]
-name = "BITS_20_30_OPAQUE"
-opaque = true
-bits = "30:20"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "EVENT_READY"
@@ -116,18 +102,10 @@ points-to = "BLE_LINK_STATE"
 encoding = "ble-compressed"
 
 [[layout.words.fields]]
-name = "BITS_20_23_OPAQUE"
-opaque = true
+name = "KIND"
 bits = "23:20"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
-name = "BITS_24_31_OPAQUE"
-opaque = true
-bits = "31:24"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Role kind supplied by the scanner type or the advertising, connection and DTM item producers."
 
 [[layout.words]]
 name = "SEQUENCE_START"
@@ -160,31 +138,22 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_19_OPAQUE"
-opaque = true
-bits = "19:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
-[[layout.words.fields]]
 name = "POWER_INDEX"
 bits = "27:20"
 writer = "cpu"
 description = "Index copied from the link-state transmit-power byte."
 
 [[layout.words.fields]]
-name = "BITS_28_29_OPAQUE"
-opaque = true
+name = "PHY_CODE_28_29"
 bits = "29:28"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "First two-bit PHY code supplied by the role's mode-to-rate conversion; no TX/RX direction is assigned."
 
 [[layout.words.fields]]
-name = "BITS_30_31_OPAQUE"
-opaque = true
+name = "PHY_CODE_30_31"
 bits = "31:30"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Second two-bit PHY code supplied by the role's mode-to-rate conversion; no TX/RX direction is assigned."
 
 [[layout.words]]
 name = "CHANNEL_AND_PRIORITY"
@@ -199,24 +168,16 @@ writer = "cpu"
 description = "Ordinary scheduler arbitration priority nibble."
 
 [[layout.words.fields]]
-name = "BITS_4_7_OPAQUE"
-opaque = true
+name = "PRIORITY_COPY"
 bits = "7:4"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "Second priority nibble supplied by the role producer beside the arbitration priority. Its effect relative to the first nibble is not established."
 
 [[layout.words.fields]]
 name = "FREQUENCY"
 bits = "14:8"
 writer = "cpu"
 description = "Controller frequency image, relative to the BLE channel mapping."
-
-[[layout.words.fields]]
-name = "BITS_15_31_OPAQUE"
-opaque = true
-bits = "31:15"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "WORD_001C_OPAQUE"
@@ -226,9 +187,16 @@ access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
 [[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
+name = "BITS_0_20_OPAQUE"
 opaque = true
-bits = "31:0"
+bits = "20:0"
+writer = "cpu"
+description = "Observed position; the physical meaning is not established."
+
+[[layout.words.fields]]
+name = "BITS_22_31_OPAQUE"
+opaque = true
+bits = "31:22"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
@@ -243,13 +211,6 @@ name = "VALUE"
 bits = "11:0"
 writer = "cpu"
 description = "Number identifying the role allocation."
-
-[[layout.words.fields]]
-name = "BITS_12_31_OPAQUE"
-opaque = true
-bits = "31:12"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "COEXISTENCE_PRIORITY"
@@ -281,26 +242,13 @@ bits = "19:15"
 writer = "cpu"
 description = "Five-bit coexistence priority lane 3; lane use is selected by the role."
 
-[[layout.words.fields]]
-name = "BITS_20_31_OPAQUE"
-opaque = true
-bits = "31:20"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_0028_OPAQUE"
 opaque = true
 offset = 0x28
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "RECEIVE_WAIT"
@@ -321,25 +269,11 @@ bits = "20:16"
 writer = "cpu"
 description = "Observed position; the physical meaning is not established."
 
-[[layout.words.fields]]
-name = "BITS_21_31_OPAQUE"
-opaque = true
-bits = "31:21"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
 name = "LIST_POLICY"
 offset = 0x30
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_30_OPAQUE"
-opaque = true
-bits = "30:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words.fields]]
 name = "DEVICE_LIST"
@@ -390,32 +324,20 @@ phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardw
 description = "Unassigned execution-result lanes. CPU arms all ones; CPU preemption may write zero."
 
 [[layout.words]]
+fields = []
 name = "WORD_003C_OPAQUE"
 opaque = true
 offset = 0x3c
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
 
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
+fields = []
 name = "WORD_0040_OPAQUE"
 opaque = true
 offset = 0x40
 access = "shared"
 description = "Observed word position; unassigned bits retain their exact image."
-
-[[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
-bits = "31:0"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
 
 [[layout.words]]
 name = "RAW_START"
@@ -498,13 +420,6 @@ bits = "27"
 writer = "cpu"
 description = "Insert by time without removing overlapping entries."
 
-[[layout.words.fields]]
-name = "BITS_28_31_OPAQUE"
-opaque = true
-bits = "31:28"
-writer = "cpu"
-description = "Observed position; the physical meaning is not established."
-
 [[layout.words]]
 name = "PREVIOUS"
 offset = 0x50
@@ -544,18 +459,16 @@ writer = "cpu"
 description = "CPU callback identity retained by the role allocation; it is not a controller-SRAM data pointer."
 
 [[layout.words]]
-name = "WORD_005C_OPAQUE"
-opaque = true
+name = "BUFFER_RECYCLE_CALLBACK"
 offset = 0x5c
 access = "shared"
-description = "Observed word position; unassigned bits retain their exact image."
+description = "Role callback stored beside the item recycle callback."
 
 [[layout.words.fields]]
-name = "BITS_0_31_OPAQUE"
-opaque = true
+name = "VALUE"
 bits = "31:0"
 writer = "cpu"
-description = "Observed position; the physical meaning is not established."
+description = "CPU callback identity; the scanner installs its receive-buffer recycling function here. This is not a controller-SRAM data pointer."
 
 [[review]]
 entity = "BLE_SCHEDULER_ITEM"

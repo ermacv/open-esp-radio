@@ -123,21 +123,9 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "BITS_0_13_OPAQUE"
-description = "Bits no external-coexistence leaf writes."
-bitOffset = 0
-bitWidth = 14
-
-[[peripherals.registers.register.fields]]
 name = "ENABLE"
 bitOffset = 14
 bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "BITS_15_31_OPAQUE"
-description = "Bits no external-coexistence leaf writes."
-bitOffset = 15
-bitWidth = 17
 
 [[peripherals.registers]]
 
@@ -153,12 +141,6 @@ name = "MASK"
 bitOffset = 0
 bitWidth = 4
 
-[[peripherals.registers.register.fields]]
-name = "BITS_4_31_OPAQUE"
-description = "Bits no external-coexistence leaf writes."
-bitOffset = 4
-bitWidth = 28
-
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -173,12 +155,6 @@ name = "MASK"
 bitOffset = 0
 bitWidth = 4
 
-[[peripherals.registers.register.fields]]
-name = "BITS_4_31_OPAQUE"
-description = "Bits no external-coexistence leaf writes."
-bitOffset = 4
-bitWidth = 28
-
 [[peripheral-review]]
 entity = "COEX_EXTERNAL"
 opaque-entities = [
@@ -187,10 +163,6 @@ opaque-entities = [
     "COEX_EXTERNAL.PTI.BITS_24_27_OPAQUE",
     "COEX_EXTERNAL.PTI.BITS_30_31_OPAQUE",
     "COEX_EXTERNAL.CONTROL.BITS_20_31_OPAQUE",
-    "COEX_EXTERNAL.ENABLE_1.BITS_0_13_OPAQUE",
-    "COEX_EXTERNAL.ENABLE_1.BITS_15_31_OPAQUE",
-    "COEX_EXTERNAL.ENABLE_MASK_0.BITS_4_31_OPAQUE",
-    "COEX_EXTERNAL.ENABLE_MASK_1.BITS_4_31_OPAQUE",
 ]
 
 [peripheral-review.peripheral]
@@ -206,4 +178,25 @@ naming = "descriptive"
 naming = "descriptive"
 
 [peripheral-review.opaque]
+naming = "opaque"
+
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_16_19_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_20_23_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_24_27_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.PTI.BITS_30_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F49C"]
+naming = "opaque"
+[[review]]
+entity = "COEX_EXTERNAL.CONTROL.BITS_20_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010F4A0"]
 naming = "opaque"

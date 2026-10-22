@@ -2,6 +2,7 @@ schema = 3
 chip = "esp32c5"
 address-space = "cpu"
 fragments = [
+    "peripherals/observed-mmio-words.toml",
     "peripherals/ieee802154-mac.toml",
     "peripherals/ieee802154-interrupt-route.toml",
     "peripherals/modem-etm.toml",
@@ -21,6 +22,7 @@ fragments = [
     "peripherals/wifi-mac-sta-beacon-filter.toml",
     "peripherals/wifi-mac-sta-tsf-load.toml",
     "peripherals/wifi-mac-tx-common.toml",
+    "peripherals/wifi-mac-ersu-ack-rate.toml",
 ]
 
 layouts = ["layouts/phy-i2c-command.toml"]

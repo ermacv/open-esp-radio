@@ -58,6 +58,12 @@ description = "TX-CFR entry commit pulse."
 bitOffset = 21
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 22
+bitWidth = 10
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -274,3 +280,19 @@ naming = "descriptive"
 [[review]]
 entity = "PHY_MEMORY.GROUP_BOUNDARY%s.ODD_GROUP_LAST_ENTRY"
 naming = "descriptive"
+
+[[review]]
+entity = "PHY_MEMORY.COMMAND.BITS_22_31_OPAQUE"
+sources = ["S31_MMIO_USE_20100844", "S31_MMIO_DECLARED_20100844"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_MEMORY.COMMAND.BITS_0_10_OPAQUE"
+sources = ["S31_MMIO_MANUAL_20100844"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

@@ -109,3 +109,8 @@ sources = [
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.BIT_16_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D83C"]
+naming = "opaque"

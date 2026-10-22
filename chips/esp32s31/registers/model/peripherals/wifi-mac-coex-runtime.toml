@@ -40,6 +40,12 @@ bitWidth = 8
 minimum = 0x0
 maximum = 0xFF
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 24
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -54,6 +60,12 @@ name = "BITS_0_7_OPAQUE"
 bitOffset = 0
 bitWidth = 8
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 24
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -68,6 +80,12 @@ name = "PTI"
 bitOffset = 0
 bitWidth = 4
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 4
+bitWidth = 28
 [[peripherals.registers]]
 
 [peripherals.registers.register]
@@ -82,6 +100,18 @@ name = "PTI"
 bitOffset = 12
 bitWidth = 4
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_11_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 12
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 16
+bitWidth = 16
 [[peripheral-review]]
 entity = "WIFI_MAC_COEX_RUNTIME"
 opaque-entities = [
@@ -123,3 +153,56 @@ sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D8A4", "S31_MMIO_DECLARED_2010D8A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI.BITS_4_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D8A8", "S31_MMIO_DECLARED_2010D8A8"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_TIME_HIGH.BITS_8_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D8A0", "S31_MMIO_DECLARED_2010D8A0"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI.BITS_0_11_OPAQUE"
+sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI.BITS_16_31_OPAQUE"
+sources = ["S31_MMIO_USE_2010D8AC", "S31_MMIO_DECLARED_2010D8AC"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL.BITS_0_7_OPAQUE"
+sources = ["S31_MMIO_MANUAL_2010D8A4", "S31_MMIO_DECLARED_2010D8A4"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.CLEAR_REQUEST.BITS_0_31_OPAQUE"
+sources = ["S31_MMIO_DECLARED_2010D89C"]
+naming = "opaque"

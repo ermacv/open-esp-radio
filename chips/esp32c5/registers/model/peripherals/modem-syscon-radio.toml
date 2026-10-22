@@ -42,6 +42,30 @@ description = "Enable the modem-security APB clock."
 bitOffset = 28
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_21_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 2
+bitWidth = 20
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_27_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 25
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 29
+bitWidth = 3
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "MODEM_RST_CONF"
@@ -84,6 +108,18 @@ description = "Enable the baseband clock shared by Bluetooth LE and IEEE 802.15.
 bitOffset = 17
 bitWidth = 1
 
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 0
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_31_OPAQUE"
+description = "Observed source use; the individual hardware meaning is unknown."
+bitOffset = 18
+bitWidth = 14
 [[peripheral-review]]
 entity = "MODEM_SYSCON_RADIO"
 
@@ -96,3 +132,51 @@ naming = "vendor"
 [peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
 naming = "vendor"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.BITS_0_15_OPAQUE"
+sources = ["C5_MMIO_USE_600A9C14", "C5_MMIO_DECLARED_600A9C14"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.BITS_18_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A9C14", "C5_MMIO_DECLARED_600A9C14"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BIT_0_OPAQUE"
+sources = ["C5_MMIO_USE_600A9C04", "C5_MMIO_DECLARED_600A9C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BITS_2_21_OPAQUE"
+sources = ["C5_MMIO_USE_600A9C04", "C5_MMIO_DECLARED_600A9C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BITS_25_27_OPAQUE"
+sources = ["C5_MMIO_USE_600A9C04", "C5_MMIO_DECLARED_600A9C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.BITS_29_31_OPAQUE"
+sources = ["C5_MMIO_USE_600A9C04", "C5_MMIO_DECLARED_600A9C04"]
+naming = "opaque"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
