@@ -899,9 +899,12 @@ where
                     air: &self.world.air,
                 },
                 terminal_access,
-                Box::leak(Box::new(RxBlockAckStorage::<_, 2, 8>::new(
-                    block_acks,
-                    Duration::from_millis(100),
+                Box::leak(Box::new(RxBlockAckStorage::<
+                    _,
+                    2,
+                    { oer_ieee80211_model::MODEL_RX_EVENTS },
+                >::new(
+                    block_acks, Duration::from_millis(100)
                 )))
                 .view(),
             );

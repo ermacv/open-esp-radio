@@ -120,7 +120,7 @@ fn addba_programs_an_owned_bank_before_response_and_reorders_downlink() {
                     dialog_token: 7,
                     status: 0,
                     tid: 0,
-                    window: 8,
+                    window: 4,
                     amsdu: true,
                     ..
                 }
@@ -422,14 +422,14 @@ fn response_pressure_defers_management_without_overtaking_older_requests() {
             let mut seen = 0;
             connected(world, &mut seen).await;
             world.air.hold(WmmAccessCategory::Voice, true);
-            // One in-flight reply, eight pending refusals and three raw RX
+            // One in-flight reply, eight pending refusals and four raw RX
             // owners exercise both queues without exceeding model RX credits.
-            for dialog in 1..=12 {
+            for dialog in 1..=13 {
                 world.air.receive(&addba(dialog, 15, 10, 0), meta());
                 assert!(world.delivered().await.is_empty());
             }
             world.air.hold(WmmAccessCategory::Voice, false);
-            for expected in 1..=12 {
+            for expected in 1..=13 {
                 assert!(matches!(response(&world.sent(&mut seen, 0xd0).await),
                 BlockAckAction::AddbaResponse { dialog_token, status: 37, .. } if dialog_token == expected));
             }
