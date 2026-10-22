@@ -5,7 +5,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerHardwareListIndex,
 };
 
-use super::{Control, Phase, State, Unsettled, step};
+use super::{Control, Phase, State, Unsettled};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
@@ -46,8 +46,9 @@ impl Model {
 
 impl Control for Model {
     type Published = ();
+    type Error = Unsettled;
 
-    fn busy(&mut self) -> Result<bool, Unsettled> {
+    async fn busy(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Busy);
         self.sample(|model| model.busy.pop_front().unwrap_or(false))
     }
@@ -55,13 +56,14 @@ impl Control for Model {
         self.ops.push(Op::EnginesIdle);
         self.engines_idle.pop_front().unwrap_or(true)
     }
-    fn select_progress(&mut self) {
+    async fn select_progress(&mut self) -> Result<(), Unsettled> {
         self.ops.push(Op::SelectProgress);
+        Ok(())
     }
     fn publish(&mut self, _: BluetoothSchedulerHardwareListIndex, list_deletion: bool) {
         self.ops.push(Op::Publish(list_deletion));
     }
-    fn repeats(&mut self) -> Result<bool, Unsettled> {
+    async fn repeats(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Repeats);
         self.sample(|model| model.repeats.pop_front().unwrap_or(false))
     }
@@ -69,10 +71,11 @@ impl Control for Model {
         self.ops.push(Op::Ready);
         self.ready.pop_front().unwrap_or(true)
     }
-    fn select_settle(&mut self) {
+    async fn select_settle(&mut self) -> Result<(), Unsettled> {
         self.ops.push(Op::SelectSettle);
+        Ok(())
     }
-    fn settled(&mut self) -> Result<bool, Unsettled> {
+    async fn settled(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Settled);
         self.sample(|model| model.settled.pop_front().unwrap_or(true))
     }
@@ -109,7 +112,7 @@ impl Request {
         model: &mut Model,
         list_deletion: bool,
     ) -> Result<Disposition, Unsettled> {
-        step(
+        crate::bluetooth::test_ready(super::step(
             State {
                 index: BluetoothSchedulerHardwareListIndex::ZERO,
                 list_deletion,
@@ -118,7 +121,7 @@ impl Request {
                 published: &mut self.published,
             },
             model,
-        )
+        ))
     }
 }
 

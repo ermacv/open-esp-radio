@@ -11,6 +11,7 @@ pub(crate) mod executor;
 #[cfg(any(target_arch = "riscv32", test))]
 pub(crate) mod hardware;
 pub mod list;
+pub mod interrupt;
 pub mod time;
 pub mod timing;
 pub mod window;

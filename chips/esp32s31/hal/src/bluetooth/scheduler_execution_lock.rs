@@ -10,12 +10,15 @@
 //! service, and the caller owns the deadline.
 
 use oer_esp32s31_pac::{
-    BluetoothInterruptRegisters, BluetoothSchedulerExecutionLockDisposition,
+    BluetoothSchedulerExecutionLockDisposition,
     BluetoothSchedulerExecutionLockPublished, BluetoothSchedulerExecutionLockRequest,
     BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
 };
 
-use crate::settle::{self, Settle, Unsettled};
+#[cfg(feature = "bluetooth-engine")]
+use super::engine::scheduler::interrupt::{SchedulerDoorbell, SchedulerTaskHalf, SchedulerInterruptError};
+#[cfg(test)]
+use crate::settle::Unsettled;
 
 /// One execution-lock request and its progress.
 #[must_use = "an admitted execution lock must be stepped and its START cleared"]
@@ -39,45 +42,49 @@ impl BluetoothSchedulerExecutionLock {
 }
 
 trait Control {
+    type Error;
     type Published;
 
-    fn busy(&mut self) -> Result<bool, Unsettled>;
+    async fn busy(&mut self) -> Result<bool, Self::Error>;
     /// Command-zero status 26 then, only if set, command-one status 18.
     fn engines_idle(&mut self) -> bool;
     fn publish(&mut self, request: BluetoothSchedulerExecutionLockRequest) -> Self::Published;
     /// One observation of the published command after a fresh BUSY sample.
-    fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled>;
+    async fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, Self::Error>;
 }
 
-fn step<C: Control>(
+async fn step<C: Control>(
     request: BluetoothSchedulerExecutionLockRequest,
     published: &mut Option<C::Published>,
     hw: &mut C,
-) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
+) -> Result<BluetoothSchedulerExecutionLockDisposition, C::Error> {
     if published.is_none() {
-        if hw.busy()? && !hw.engines_idle() {
+        if hw.busy().await? && !hw.engines_idle() {
             return Ok(BluetoothSchedulerExecutionLockDisposition::Pending);
         }
         *published = Some(hw.publish(request));
     }
-    hw.observe()
+    hw.observe().await
 }
 
-struct Hardware<'a, C: oer_time::Clock + ?Sized> {
+#[cfg(feature = "bluetooth-engine")]
+struct Hardware<'a, D> {
     task: &'a mut BluetoothTaskRegisters,
-    interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: Settle<'a, C>,
+    interrupts: &'a mut SchedulerTaskHalf,
+    bell: &'a D,
 }
 
 #[allow(
     unsafe_code,
     reason = "the admitted request carries the caller's item and list serialization"
 )]
-impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
+#[cfg(feature = "bluetooth-engine")]
+impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
+    type Error = SchedulerInterruptError;
     type Published = BluetoothSchedulerExecutionLockPublished;
 
-    fn busy(&mut self) -> Result<bool, Unsettled> {
-        settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
+    async fn busy(&mut self) -> Result<bool, SchedulerInterruptError> {
+        self.interrupts.busy(self.bell).await
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -91,29 +98,30 @@ impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
         // list serialization contract for this exact request.
         unsafe { self.task.publish_scheduler_execution_lock(request) }
     }
-    fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
-        let busy = settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())?;
+    async fn observe(&mut self) -> Result<BluetoothSchedulerExecutionLockDisposition, SchedulerInterruptError> {
+        let busy = self.interrupts.busy(self.bell).await?;
         Ok(self.task.observe_scheduler_execution_lock(busy))
     }
 }
 
 /// Advance one finite execution-lock step while both register owners are
 /// held.
-pub(crate) fn step_hardware<C: oer_time::Clock + ?Sized>(
+#[cfg(feature = "bluetooth-engine")]
+pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     task: &mut BluetoothTaskRegisters,
-    interrupts: &mut BluetoothInterruptRegisters,
+    interrupts: &mut SchedulerTaskHalf,
     lock: &mut BluetoothSchedulerExecutionLock,
-    settle: Settle<'_, C>,
-) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
+    bell: &D,
+) -> Result<BluetoothSchedulerExecutionLockDisposition, SchedulerInterruptError> {
     step(
         lock.request,
         &mut lock.published,
         &mut Hardware {
             task,
             interrupts,
-            settle,
+            bell,
         },
-    )
+    ).await
 }
 
 /// Clear command-zero START of a published execution lock.

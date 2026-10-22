@@ -5,11 +5,14 @@
 //! idle sample nor this sequence alone releases descriptor/software ownership.
 
 use oer_esp32s31_pac::{
-    BluetoothInterruptRegisters, BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped,
+    BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped,
     BluetoothTaskRegisters,
 };
 
-use crate::settle::{self, Settle, Unsettled};
+#[cfg(feature = "bluetooth-engine")]
+use super::engine::scheduler::interrupt::{SchedulerDoorbell, SchedulerTaskHalf, SchedulerInterruptError};
+#[cfg(test)]
+use crate::settle::Unsettled;
 
 #[derive(Debug)]
 enum Phase {
@@ -47,65 +50,72 @@ enum Progress<Stopped> {
 }
 
 trait Control {
+    type Error;
     type Stopped;
 
-    fn busy(&mut self) -> Result<bool, Unsettled>;
+    async fn busy(&mut self) -> Result<bool, Self::Error>;
     /// Mask dynamic run interrupts, disable RUN, then fence.
-    fn preamble(&mut self);
+    async fn preamble(&mut self) -> Result<(), Self::Error>;
     /// Command-zero then, only if ready, command-one status.
     fn commands_ready(&mut self) -> bool;
     /// Publish the lifecycle request, then fence.
     fn request(&mut self);
     /// Observe BUSY once; when clear, fence and return the receipt.
-    fn confirm_stopped(&mut self) -> Result<Option<Self::Stopped>, Unsettled>;
+    async fn confirm_stopped(&mut self) -> Result<Option<Self::Stopped>, Self::Error>;
 }
 
-fn step<C: Control>(
+async fn step<C: Control>(
     mut stop: BluetoothSchedulerStop,
     hw: &mut C,
-) -> Result<Progress<C::Stopped>, Unsettled> {
+) -> Result<Progress<C::Stopped>, C::Error> {
     if matches!(stop.phase, Phase::Initial) {
-        if let Some(stopped) = hw.confirm_stopped()? {
+        if let Some(stopped) = hw.confirm_stopped().await? {
             return Ok(Progress::Stopped(stopped));
         }
-        hw.preamble();
+        hw.preamble().await?;
         stop.phase = Phase::Preamble;
     }
     if matches!(stop.phase, Phase::Preamble) {
         // B8f: an idle scheduler bypasses command reads; while busy both
         // positional statuses are required, in this short-circuit order.
-        if hw.busy()? && !hw.commands_ready() {
+        if hw.busy().await? && !hw.commands_ready() {
             return Ok(Progress::Pending(stop));
         }
         hw.request();
         stop.phase = Phase::Requested;
     }
-    Ok(match hw.confirm_stopped()? {
+    Ok(match hw.confirm_stopped().await? {
         Some(stopped) => Progress::Stopped(stopped),
         None => Progress::Pending(stop),
     })
 }
 
-struct Hardware<'a, C: oer_time::Clock + ?Sized> {
+#[cfg(feature = "bluetooth-engine")]
+struct Hardware<'a, D> {
     task: &'a mut BluetoothTaskRegisters,
-    interrupts: &'a mut BluetoothInterruptRegisters,
-    settle: Settle<'a, C>,
+    interrupts: &'a mut SchedulerTaskHalf,
+    bell: &'a D,
 }
 
-impl<C: oer_time::Clock + ?Sized> Hardware<'_, C> {
-    fn sample_busy(&mut self) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
-        settle::settle(self.settle, || self.interrupts.capture_scheduler_busy())
+#[cfg(feature = "bluetooth-engine")]
+impl<D: SchedulerDoorbell> Hardware<'_, D> {
+    async fn sample_busy(&mut self) -> Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError> {
+        self.interrupts.busy(self.bell).await
     }
 }
 
-impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
+#[cfg(feature = "bluetooth-engine")]
+impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
+    type Error = SchedulerInterruptError;
     type Stopped = BluetoothSchedulerStopped;
 
-    fn busy(&mut self) -> Result<bool, Unsettled> {
-        Ok(self.sample_busy()?.is_busy())
+    async fn busy(&mut self) -> Result<bool, SchedulerInterruptError> {
+        Ok(self.sample_busy().await?.is_busy())
     }
-    fn preamble(&mut self) {
-        self.task.publish_scheduler_stop_preamble(self.interrupts);
+    async fn preamble(&mut self) -> Result<(), Self::Error> {
+        self.interrupts.mask_run(self.bell).await?;
+        self.task.disable_scheduler_run_event();
+        Ok(())
     }
     fn commands_ready(&mut self) -> bool {
         self.task.scheduler_stop_commands_ready()
@@ -113,28 +123,29 @@ impl<C: oer_time::Clock + ?Sized> Control for Hardware<'_, C> {
     fn request(&mut self) {
         self.task.publish_scheduler_lifecycle_request();
     }
-    fn confirm_stopped(&mut self) -> Result<Option<BluetoothSchedulerStopped>, Unsettled> {
-        let busy = self.sample_busy()?;
+    async fn confirm_stopped(&mut self) -> Result<Option<BluetoothSchedulerStopped>, SchedulerInterruptError> {
+        let busy = self.sample_busy().await?;
         Ok(self.task.confirm_scheduler_stopped(busy))
     }
 }
 
 /// Advance one finite common-stop step while both register owners are held.
-pub(crate) fn step_hardware<C: oer_time::Clock + ?Sized>(
+#[cfg(feature = "bluetooth-engine")]
+pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     task: &mut BluetoothTaskRegisters,
-    interrupts: &mut BluetoothInterruptRegisters,
+    interrupts: &mut SchedulerTaskHalf,
     stop: BluetoothSchedulerStop,
-    settle: Settle<'_, C>,
-) -> Result<BluetoothSchedulerStopStep, Unsettled> {
+    bell: &D,
+) -> Result<BluetoothSchedulerStopStep, SchedulerInterruptError> {
     Ok(
         match step(
             stop,
             &mut Hardware {
                 task,
                 interrupts,
-                settle,
+                bell,
             },
-        )? {
+        ).await? {
             Progress::Pending(stop) => BluetoothSchedulerStopStep::Pending(stop),
             Progress::Stopped(stopped) => BluetoothSchedulerStopStep::Stopped(stopped),
         },
