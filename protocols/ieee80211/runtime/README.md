@@ -13,6 +13,16 @@ This permits a composition to select station buffers and resource types without
 implementing a foreign trait for a foreign backend or replacing its body-loan
 identity. The radio and lower-MAC port contracts remain the common boundary.
 
+The image lends `StationService` a placed `RxBlockAckStorage`. Its const generic
+bank count selects existing shared RX BA slot owners; retained frames borrow
+the port's RX buffers without copying payloads. Negotiation bounds each window
+by the remaining frame credits and reserves one credit to close a reorder gap.
+The service keeps pending responses while control TX is busy, reorders QoS data,
+advances a window on a matching compressed BAR, and releases frames and bank
+owners on peer DELBA, inactivity, disconnection or healthy Stop. ADDBA refusal
+uses an explicit status when the parameters or available resources cannot admit
+an agreement. The image supplies the reorder gap duration.
+
 ## Known defects
 
 - **`station_service.rs::serve` steps once per loop**, then handles the

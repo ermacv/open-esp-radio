@@ -146,6 +146,17 @@ fn a_hole_expires_even_with_continuous_out_of_order_rx() {
     clock.advance(Duration::from_millis(99)).unwrap();
     receiver.ingest(clock.now(), frame(0, 2), gap).unwrap();
     assert_eq!(receiver.deadline(), Some(deadline));
+    assert!(
+        receiver
+            .block_ack_request(clock.now(), SequenceNumber::new(4094).unwrap(), gap)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        receiver.deadline(),
+        Some(deadline),
+        "a stale BAR cannot postpone the hole"
+    );
     assert!(receiver.expire_gap(clock.now(), gap).unwrap().is_none());
     clock.advance_to(deadline);
     let release = receiver.expire_gap(clock.now(), gap).unwrap().unwrap();
@@ -177,4 +188,22 @@ fn overflowing_deadline_refuses_negotiation_without_creating_a_session() {
         .err()
         .unwrap();
     assert_eq!(response.status, AddbaStatus::RequestDeclined);
+}
+
+#[test]
+fn invalid_timer_inputs_leave_the_reorder_owner_unchanged() {
+    let clock = VirtualClock::new();
+    let mut receiver = session(&clock, 0);
+    assert_eq!(
+        receiver.ingest(clock.now(), frame(4095, 1), Duration::ZERO),
+        Err(RxBlockAckError::ZeroGapTimeout)
+    );
+    clock.advance_to(Instant::from_micros(u64::MAX));
+    assert_eq!(
+        receiver.ingest(clock.now(), frame(4095, 1), Duration::from_micros(1)),
+        Err(RxBlockAckError::DeadlineOverflow)
+    );
+    let (bank, release) = receiver.stop();
+    assert_eq!(bank, Bank(3));
+    assert!(released(&release).is_empty());
 }

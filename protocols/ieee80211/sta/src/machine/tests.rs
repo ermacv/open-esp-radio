@@ -571,6 +571,26 @@ impl<'id, const G: usize> World<'id, G> {
                         let answer = self.arbiter.request_absence(now, request, home, place);
                         self.station.input(now, StaInput::AbsenceAnswer(answer));
                     }
+                    StaAction::BlockAck(request) => {
+                        if matches!(
+                            request.action(),
+                            oer_ieee80211_wire::block_ack::frame::BlockAckAction::AddbaRequest { .. }
+                        ) {
+                            let reply = request.decline().map_err(|_| "valid request").unwrap();
+                            let action = self
+                                .station
+                                .try_block_ack_reply(reply)
+                                .map_err(|(_, reason)| reason)
+                                .unwrap();
+                            match action {
+                                StaAction::Transmit(transmit) => self.transmitted(transmit, false),
+                                StaAction::TransmitProtected { transmit, .. } => {
+                                    self.transmitted(transmit, true)
+                                }
+                                _ => panic!("a Block Ack response is a control transmission"),
+                            }
+                        }
+                    }
                     StaAction::ContractViolation(reason) => {
                         panic!("unexpected contract violation: {reason:?}")
                     }

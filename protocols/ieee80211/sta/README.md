@@ -116,6 +116,10 @@ Module map:
 
 - `machine`: the station, its tokens (`StaTokens`) and its host slice tests
   beside the real arbiter;
+- `block_ack`: recipient ADDBA parameters, typed refusals, inactivity and
+  reorder lifetime. The service supplies affine bank and retained-frame
+  owners. The machine validates association addresses and PMF before handing
+  over Block Ack management, and uses its control TX credits for replies;
 - `data`: the connected station's data machine beside it: MSDUs into QoS or
   non-QoS Data MPDUs in its own tickets and buffers, under the pairwise key
   the station's `LinkView` lends, and the BSS's data MPDUs into MSDUs; no

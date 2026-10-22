@@ -256,6 +256,18 @@ type Running<'s, 'c: 's, 'p: 's, 'id: 'p, Id: SlotIdentity + 'id> =
 // StaticPlace lends each allocation with the actual body/input lifetimes.
 static SERVICE: ConstStaticCell<StaticPlace<Service<'static, radio::slot::Id>>> =
     ConstStaticCell::new(StaticPlace::new());
+// Station agreements use the installation's shared eight-bank pool. The
+// independent frame budget is the port's eight outstanding RX credits.
+const RX_BA_BANKS: usize = 8;
+const RX_BA_FRAMES: usize = port::TX_TICKETS;
+const _: () = assert!(
+    core::mem::size_of::<RxBlockAckStorage<'static, Family<radio::slot::Id>, RX_BA_BANKS, RX_BA_FRAMES>>() <= 2048,
+    "the station RX BA owner including pending responses fits its 2 KiB PSRAM budget",
+);
+static RECEIVE: ConstStaticCell<StaticPlace<
+    RxBlockAckStorage<'static, Family<radio::slot::Id>, RX_BA_BANKS, RX_BA_FRAMES>,
+>> = ConstStaticCell::new(StaticPlace::new());
+
 static COMPLETED: ConstStaticCell<StaticPlace<Completed<'static, 'static, radio::slot::Id>>> =
     ConstStaticCell::new(StaticPlace::new());
 static RUNNING: ConstStaticCell<
@@ -333,6 +345,9 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
         let service_storage = SERVICE.take().uninit();
         let credits = core::cell::Cell::new(None);
+        let receive = RxBlockAckStorage::<Family<Id>, RX_BA_BANKS, RX_BA_FRAMES>::init_in_place(
+            RECEIVE.take().uninit(), resources.block_acks, Duration::from_millis(100),
+        ).view();
         let service = StationService::<StationComposition<Id>, _, 1>::init_in_place(
             service_storage,
             |station_storage| {
@@ -381,6 +396,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             arbiter,
             Rates(EspressifRateSelection::<Caps>::new()),
             resources.terminal_access,
+            receive,
         );
         let credits = credits.take().expect("station grants command credits");
         let mut commands = MsduQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();

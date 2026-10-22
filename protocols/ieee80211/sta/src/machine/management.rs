@@ -18,6 +18,7 @@ use crate::sa_query::{SaQueryStep, StationSaQuery};
 pub(super) enum ManagementEvent {
     Disconnect(u16),
     Query(SaQuery),
+    BlockAck(oer_ieee80211_wire::block_ack::frame::BlockAckAction),
 }
 
 pub(super) struct ManagementProtection {
@@ -70,7 +71,8 @@ impl ManagementProtection {
         }
         let group = header.receiver() == [0xff; 6];
         // All management events this machine handles fit in this bounded copy:
-        // disconnect (26 + protection), SA Query (28 + protection).
+        // disconnect (26 + protection), SA Query (28 + protection),
+        // ADDBA (33 + protection) and DELBA (30 + protection).
         let mut copied = [0; 96];
         let body = if group {
             // BIP has a clear Protected bit and leaves the body in plaintext.
@@ -91,7 +93,12 @@ impl ManagementProtection {
                 };
                 Some(ManagementEvent::Disconnect(u16::from_le_bytes([lo, hi])))
             }
-            0x00d0 if !group => SaQuery::parse(body).map(ManagementEvent::Query),
+            0x00d0 if !group => SaQuery::parse(body)
+                .map(ManagementEvent::Query)
+                .or_else(|| {
+                    oer_ieee80211_wire::block_ack::frame::parse_block_ack_action(body)
+                        .map(ManagementEvent::BlockAck)
+                }),
             _ => None,
         }
     }

@@ -481,8 +481,10 @@ impl<K: Ieee80211Capabilities> Levels<K> {
 }
 
 mod admissions;
+mod rx_block_ack;
 use admissions::Admissions;
 pub use admissions::{ControlTerminal, PendingTerminal};
+pub use rx_block_ack::{RxBlockAckStorage, RxBlockAckView};
 
 mod custody;
 use custody::{ContractFault, StepFailure};
@@ -593,6 +595,9 @@ pub enum BackendContractViolation {
 /// The original failure that ended this service. A poisoned disabled owner
 /// additionally retains the backend's disable failure through `cause()`.
 pub enum ServiceFault<B: StationPort> {
+    /// A checked management request exceeded its retained response domain.
+    RxBlockAckCapacity,
+
     EnableRefused(<B::Backend as PortBackend<B::SlotId>>::Refusal),
     Backend(<B::Backend as PortBackend<B::SlotId>>::Fault),
     Submission(<B::Backend as PortBackend<B::SlotId>>::Fault),
@@ -964,6 +969,7 @@ struct ServiceState<
 }
 
 struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
+    receive: RxBlockAckView<'id, B::Types<'id>>,
     admissions: Admissions,
     /// A retune whose disable/enable failed remains owned until retirement.
     retune: Option<
@@ -1023,6 +1029,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
+        receive: RxBlockAckView<'id, B::Types<'id>>,
     ) -> Self {
         // The port's values, checked as the type is built.
         const {
@@ -1047,6 +1054,7 @@ impl<
                 terminal_access,
                 counters: ServiceCounters::default(),
                 pending: PendingActions {
+                    receive,
                     admissions: Admissions::default(),
                     retune: None,
                     group: None,
@@ -1075,6 +1083,7 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
+        receive: RxBlockAckView<'id, B::Types<'id>>,
     ) -> oer_memory::Placed<'s, Self> {
         const {
             let _power = Levels::<B::Caps>::POWER;
@@ -1098,7 +1107,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     counters: ServiceCounters::default(),
-                    pending: PendingActions { admissions: Admissions::default(), retune: None, group: None },
+                    pending: PendingActions { receive, admissions: Admissions::default(), retune: None, group: None },
                 }),
             })
         })
@@ -1607,10 +1616,21 @@ impl<
                 }
                 Next::Failed(fault) => return Served::Failed(fault),
             }
-            let deadline = [arbiter.poll_deadline(), self.station.poll_deadline()]
-                .into_iter()
-                .flatten()
-                .min();
+            // Releasing RX owners is a separate input source. Its receive
+            // transition must not nest inside the control-action step frame.
+            match self.receive_pending(arbiter, timer.now(), phase, io) {
+                Ok(true) => continue,
+                Ok(false) => {}
+                Err(fault) => return Served::Failed(fault),
+            }
+            let deadline = [
+                arbiter.poll_deadline(),
+                self.station.poll_deadline(),
+                self.pending.receive.deadline(),
+            ]
+            .into_iter()
+            .flatten()
+            .min();
             let sending = self.data.accepts() && self.station.link().is_some();
             let accepting_commands = !self.station.is_reclaiming();
             let (event, command_ready, tick, transmit) = {
@@ -1645,7 +1665,7 @@ impl<
             };
             let now = timer.now();
             match event {
-                Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), io) {
+                Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
                     Ok(Some(buffer)) => phase.recycle(buffer),
                     Ok(None) => {}
                     Err(fault) => return Served::Failed(fault.into()),
@@ -1676,7 +1696,10 @@ impl<
                     }
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact),
                     ServiceCommand::WantAccessPoint => arbiter.want_access_point(),
-                    ServiceCommand::Stop => return Served::Stop,
+                    ServiceCommand::Stop => {
+                        self.pending.receive.clear(phase);
+                        return Served::Stop;
+                    }
                 }
             }
             if transmit && self.data.accepts() && self.station.link().is_some() {
@@ -1801,6 +1824,12 @@ impl<
     {
         loop {
             let mut progress = false;
+            if self.pending.receive.failed() {
+                return Next::Failed(ServiceFault::RxBlockAckCapacity.into());
+            }
+            if !self.station.is_connected() && self.pending.receive.association().is_some() {
+                self.pending.receive.clear(phase);
+            }
             while let Some(action) = arbiter.poll_action(now) {
                 progress = true;
                 match action {
@@ -1838,6 +1867,34 @@ impl<
                 .and_then(|follow| self.follow(now, follow, io).map_err(StepFailure::from));
                 if let Err(fault) = submitted {
                     return Next::Failed(fault);
+                }
+            }
+            self.pending.receive.tick(now, phase);
+            if let Some((place, reply)) = self.pending.receive.next_reply() {
+                match self.station.try_block_ack_reply(reply) {
+                    Ok(action) => {
+                        self.pending.receive.sent(place);
+                        progress = true;
+                        let submitted = station_action(
+                            now,
+                            phase,
+                            io,
+                            arbiter,
+                            &self.rates,
+                            &mut self.pending,
+                            action,
+                        )
+                        .map_err(StepFailure::from)
+                        .and_then(|follow| self.follow(now, follow, io).map_err(StepFailure::from));
+                        if let Err(fault) = submitted {
+                            return Next::Failed(fault);
+                        }
+                    }
+                    Err((_, oer_ieee80211_sta::machine::BlockAckReplyRefusal::Busy)) => {}
+                    Err((_, _)) => {
+                        self.pending.receive.sent(place);
+                        progress = true;
+                    }
                 }
             }
             // Data goes only while the link is up: otherwise its MPDUs wait
@@ -2036,15 +2093,18 @@ impl<
         }
     }
 
-    /// Take one event of the port; a received frame's buffer comes back
-    /// for its recycle.
-    // Keep source-specific temporaries out of the service poll frame.
     #[inline(never)]
-    fn event<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+    fn receive_pending<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
         now: Instant,
-        event: LowerMacEvent<'id, B::Types<'id>>,
+        phase: &mut P,
         io: &mut ServiceIo<
             '_,
             'id,
@@ -2054,31 +2114,85 @@ impl<
             COMMAND_DEPTH,
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
-    ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, ContractFault<'id, B>> {
+    ) -> Result<bool, StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        if let Some((frame, meta)) = self.pending.receive.pop_ready() {
+            self.deliver_received(now, &frame, meta, io);
+            phase.recycle(frame);
+            return Ok(true);
+        }
+        if let Some((frame, meta)) = self.pending.receive.pop_deferred() {
+            if let Some(frame) = self.event(
+                arbiter,
+                now,
+                LowerMacEvent::Received { frame, meta },
+                phase,
+                io,
+            )? {
+                phase.recycle(frame);
+            }
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Take one event of the port; a received frame's buffer comes back
+    /// for its recycle.
+    // Keep source-specific temporaries out of the service poll frame.
+    #[inline(never)]
+    fn event<'p, P, const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+        &mut self,
+        arbiter: &mut PortArbiter<'id, B>,
+        now: Instant,
+        event: LowerMacEvent<'id, B::Types<'id>>,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
+        >,
+    ) -> Result<Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
         match event {
             LowerMacEvent::Received { frame, meta } => {
-                let bytes = frame.bytes();
-                let result =
-                    self.station.receive(
-                        now,
-                        bytes,
-                        meta,
-                        |parts| match EthernetFrame::from_parts(parts) {
-                            Ok(frame) => {
-                                if io.receive.try_send(frame).is_err() {
-                                    self.counters.rx_msdus_queue_full.increment();
-                                }
-                            }
-                            Err(reason) => {
-                                self.counters.rx_msdus_too_long.increment();
-                                (io.output)(ServiceOutput::RxMsduRefused(reason));
-                            }
-                        },
-                    );
-                if let Err(reason) = result {
-                    self.counters.rx_frames_dropped.increment();
-                    (io.output)(ServiceOutput::RxFrameDropped(reason));
+                let management = oer_ieee80211_wire::frame::DecodedHeader::decode(frame.bytes())
+                    .is_some_and(|header| {
+                        !header.control().is_data() && header.control().subtype() == 13
+                    });
+                if management && !self.pending.receive.can_receive_management() {
+                    return match self.pending.receive.defer(frame, meta) {
+                        Ok(()) => Ok(None),
+                        Err((frame, _)) => {
+                            phase.recycle(frame);
+                            Err(ServiceFault::RxBlockAckCapacity.into())
+                        }
+                    };
                 }
+                let local = self.station.link().map(|link| link.address.get());
+                let received = match local {
+                    Some(local) => self.pending.receive.ingest(now, local, frame, meta),
+                    None => rx_block_ack::RxDisposition::Deliver((frame, meta)),
+                };
+                let (frame, meta) = match received {
+                    rx_block_ack::RxDisposition::Deliver(received) => received,
+                    rx_block_ack::RxDisposition::Retained => return Ok(None),
+                    rx_block_ack::RxDisposition::Recycle(frame) => return Ok(Some(frame)),
+                    rx_block_ack::RxDisposition::Capacity(frame) => {
+                        phase.recycle(frame);
+                        return Err(ServiceFault::RxBlockAckCapacity.into());
+                    }
+                };
+                self.deliver_received(now, &frame, meta, io);
                 Ok(Some(frame))
             }
             LowerMacEvent::Tbtt(_) => Ok(None),
@@ -2086,6 +2200,46 @@ impl<
                 self.terminal(arbiter, now, terminal)?;
                 Ok(None)
             }
+        }
+    }
+
+    fn deliver_received<
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        &mut self,
+        now: Instant,
+        frame: &<B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
+        meta: <B::Types<'id> as PhaseTypes<'id>>::RxMeta,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
+        >,
+    ) {
+        let bytes = frame.bytes();
+        let result =
+            self.station.receive(now, bytes, meta, |parts| {
+                match EthernetFrame::from_parts(parts) {
+                    Ok(frame) => {
+                        if io.receive.try_send(frame).is_err() {
+                            self.counters.rx_msdus_queue_full.increment();
+                        }
+                    }
+                    Err(reason) => {
+                        self.counters.rx_msdus_too_long.increment();
+                        (io.output)(ServiceOutput::RxMsduRefused(reason));
+                    }
+                }
+            });
+        if let Err(reason) = result {
+            self.counters.rx_frames_dropped.increment();
+            (io.output)(ServiceOutput::RxFrameDropped(reason));
         }
     }
 
@@ -2574,6 +2728,13 @@ where
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
 {
     let input = match action {
+        StaAction::BlockAck(request) => {
+            pending_actions
+                .receive
+                .offer(now, request, phase)
+                .map_err(|_| ServiceFault::RxBlockAckCapacity)?;
+            return Ok(Follow::Nothing);
+        }
         StaAction::RequestChannel(request, place) => {
             StaInput::Answer(arbiter.request(now, request, place))
         }
