@@ -138,7 +138,12 @@ impl<'a> Report<'a> {
         let mut targets = BTreeMap::<u32, BTreeSet<String>>::new();
         let mut unmatched = Vec::new();
         // Inspect aliases as well as the display name, including ROM companions.
-        for pattern in &policy.observed_functions {
+        let patterns: BTreeSet<_> = image
+            .observed_functions
+            .iter()
+            .chain(&policy.observed_functions)
+            .collect();
+        for pattern in patterns {
             let mut found = false;
             for (&address, facts) in &image.analysis.functions {
                 let names: BTreeSet<_> = facts
@@ -169,7 +174,10 @@ impl<'a> Report<'a> {
             "Reachability over the existing resolved stack bounds (report only)\n\
             Witnesses follow first-discovery parents; they are not shortest paths.\n\
             Unmatched selectors have no linked function entry; inlined bodies are not separate entries.\n\
+            observed linked implementations: {}; unmatched selectors: {}\n\
             analysis working-memory peak: {memory_peak} bytes (before witnesses: {} bytes)\n\n",
+            self.targets.len(),
+            self.unmatched.len(),
             self.image.usage.memory_bytes
         )
     }

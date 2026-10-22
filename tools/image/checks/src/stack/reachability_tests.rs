@@ -46,6 +46,21 @@ fn watched() -> StackPolicy {
         .unwrap()
 }
 
+#[test]
+fn an_independent_image_layout_keeps_chip_observers_and_can_add_its_own() {
+    let mut image = graph(true, false);
+    image.observed_functions = vec!["core::fmt::write".into()];
+    let mut policy = watched();
+    policy.observed_functions = vec!["deeper".into()];
+    let out = Report::new(&image, &policy).root("CPU0", &bound(&image));
+    assert!(out.contains("verdict=reachable\tpaths=2"), "{out}");
+    assert!(out.contains("core::fmt::write"), "{out}");
+    assert!(out.contains("deeper"), "{out}");
+    policy.observed_functions.push("core::fmt::write".into());
+    let out = Report::new(&image, &policy).root("CPU0", &bound(&image));
+    assert!(out.contains("verdict=reachable\tpaths=2"), "{out}");
+}
+
 fn bound(image: &Image) -> Bound {
     image
         .with_bounds(|keep, control| {

@@ -111,6 +111,8 @@ pub struct Image {
     pub usage: Usage,
     /// Retained analysis and ELF allocations, reserved beside bound evidence.
     pub retained_bytes: u64,
+    /// Chip selectors apply even when an image supplies its own stack layout.
+    pub observed_functions: Vec<String>,
 }
 
 impl Image {
@@ -169,7 +171,11 @@ impl Image {
             Some(path) => parse_summaries(&inputs.read_to_string(&root.join(path))?)?,
             None => Vec::new(),
         };
-        Self::new(elf, &[&rom_elf], &summaries, Contract::of(profile))
+        let mut image = Self::new(elf, &[&rom_elf], &summaries, Contract::of(profile))?;
+        image.observed_functions =
+            StackPolicy::load_with_inputs(&root.join(profile.stack_policy()), inputs)?
+                .observed_functions;
+        Ok(image)
     }
 
     /// The analysis of `elf` with its `companions` and their `summaries`,
@@ -300,6 +306,7 @@ impl Image {
             contract,
             usage: Usage::default(),
             retained_bytes: 0,
+            observed_functions: Vec::new(),
         };
         resolutions.extend(image.ipc_resolutions(&taken, &mut keep, &mut control)?);
         image.usage = Usage {
