@@ -4,7 +4,7 @@ use super::{
     RfpllFrequencyCompletion, RfpllFrequencyExternalBinding, RfpllFrequencyI2cBinding,
     RfpllFrequencyOutcome, RfpllFrequencyRequest, RfpllFrequencyTransition, calculate_rfpll_sdm,
 };
-use crate::analog::i2c::analog_registers;
+use crate::analog::i2c::fields;
 
 fn complete_write(action: RfpllFrequencyAction) -> RfpllFrequencyCompletion {
     match action {
@@ -249,13 +249,13 @@ fn external_lowering_covers_rfpll_mmio_i2c_and_timer_actions() {
     ));
     assert!(matches!(
         RfpllFrequencyExternalBinding::lower(RfpllFrequencyAction::ReadMasked {
-            field: super::analog_registers::RFPLL_LOCK_STATUS,
+            field: super::fields::RFPLL_LOCK_STATUS,
         }),
         Ok(RfpllFrequencyExternalBinding::I2c(_))
     ));
     assert!(matches!(
         RfpllFrequencyExternalBinding::lower(RfpllFrequencyAction::WriteByte {
-            address: analog_registers::RFPLL_LOCK_STATUS.address(),
+            address: fields::RFPLL_LOCK_STATUS.address(),
             value: 3,
         }),
         Ok(RfpllFrequencyExternalBinding::I2c(_))
@@ -285,7 +285,7 @@ fn external_lowering_covers_rfpll_mmio_i2c_and_timer_actions() {
 
 #[test]
 fn rfpll_i2c_binding_preserves_the_masked_read_identity() {
-    let field = super::analog_registers::RFPLL_CAPACITOR_CORRECTION_DIRECTION;
+    let field = super::fields::RFPLL_CAPACITOR_SEARCH_STATUS;
     let mut binding =
         RfpllFrequencyI2cBinding::new(RfpllFrequencyAction::ReadMasked { field }).unwrap();
     binding.read_started().unwrap();
@@ -408,7 +408,7 @@ fn upward_cap_search_ends_at_the_nine_bit_bound_without_touching_bit_seven() {
         let RfpllFrequencyAction::WriteMasked { field, value } = transition.action() else {
             panic!("expected cap high write");
         };
-        assert_eq!(field, analog_registers::RFPLL_CAPACITOR_HIGH);
+        assert_eq!(field, fields::RFPLL_CAPACITOR_HIGH);
         assert!(
             value <= 1,
             "the high write never reaches the neighboring bit"

@@ -34,7 +34,7 @@ use oer_esp32s31_hal::owner::SharedPhyAccess;
 
 use oer_esp32s31_hal::phy::i2c::PhyAdcRate;
 
-pub(crate) use oer_esp32s31_hal::phy::i2c::{PhyI2cAddress, PhyI2cField, analog_registers};
+pub(crate) use oer_esp32s31_hal::phy::i2c::{Address, Field, fields, registers};
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::phy::{analog_i2c, i2c as hal_phy_i2c};
 
@@ -88,7 +88,7 @@ pub fn configure_i2c_initialization_stage_two(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn try_start_read(
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: PhyI2cAddress,
+    address: Address,
 ) -> Result<(), PhyI2cError> {
     hal_phy_i2c::try_start_read(registers, address).map_err(|_| PhyI2cError::Busy)
 }
@@ -105,7 +105,7 @@ pub(crate) fn try_start_read(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn try_finish_read(
     registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: PhyI2cAddress,
+    address: Address,
 ) -> Result<u8, PhyI2cError> {
     hal_phy_i2c::try_finish_read(registers, address).map_err(|_| PhyI2cError::Busy)
 }
@@ -119,7 +119,7 @@ pub(crate) fn try_finish_read(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn try_start_write(
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: PhyI2cAddress,
+    address: Address,
     value: u8,
 ) -> Result<(), PhyI2cError> {
     hal_phy_i2c::try_start_write(registers, address, value).map_err(|_| PhyI2cError::Busy)
@@ -136,7 +136,7 @@ pub(crate) fn try_start_write(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn try_finish_write(
     registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    address: PhyI2cAddress,
+    address: Address,
 ) -> Result<(), PhyI2cError> {
     hal_phy_i2c::try_finish_write(registers, address).map_err(|_| PhyI2cError::Busy)
 }
@@ -178,7 +178,7 @@ pub enum OpenI2cXpdAction {
         maximum_cycles: u32,
     },
     ReadSdmSample {
-        address: PhyI2cAddress,
+        address: Address,
     },
     Complete(OpenI2cXpdOutcome),
 }
@@ -235,7 +235,7 @@ impl OpenI2cXpdTransition {
     }
 
     pub const fn action(self) -> OpenI2cXpdAction {
-        const SDM_SAMPLE: PhyI2cAddress = analog_registers::RFPLL_SDM_UPDATE_ENABLE.address();
+        const SDM_SAMPLE: Address = fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address();
 
         match self.step {
             OpenI2cXpdStep::PreDelayConfiguration => OpenI2cXpdAction::ConfigurePreDelay,
@@ -379,13 +379,9 @@ impl AdcRateTransition {
 /// Every production value fits its field; a wider value would leak into the
 /// neighboring bits of the vendor leaf and is a programming error here.
 pub const fn field_write(
-    field: PhyI2cField,
+    field: Field,
     value: u8,
-) -> oer_espressif_analog::FieldWriteTransition<PhyI2cAddress> {
-    let (msb, lsb) = field.bit_range();
-    let Some(field) = oer_espressif_analog::AnalogField::new(field.address(), msb, lsb) else {
-        panic!("a reviewed analog field lies within its byte");
-    };
+) -> oer_espressif_analog::FieldWriteTransition<Address> {
     match oer_espressif_analog::FieldWriteTransition::new(field, value) {
         Ok(write) => write,
         Err(_) => panic!("a production value fits its analog field"),
@@ -400,10 +396,10 @@ pub enum MaskedI2cWriteBindingError {
 }
 
 /// Non-cloneable lowering for one explicit read or write emitted by
-/// [`oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>`].
+/// [`oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>`].
 #[derive(Debug, Eq, PartialEq)]
 pub struct MaskedI2cWriteBinding {
-    outer_action: oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
+    outer_action: oer_espressif_analog::Action<crate::analog::i2c::Address, ()>,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 
@@ -415,7 +411,7 @@ impl MaskedI2cWriteBinding {
     }
 
     pub fn new(
-        action: oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
+        action: oer_espressif_analog::Action<crate::analog::i2c::Address, ()>,
     ) -> Result<Self, MaskedI2cWriteBindingError> {
         let request = match action {
             oer_espressif_analog::Action::Read { address } => {
@@ -492,7 +488,7 @@ impl MaskedI2cWriteBinding {
     pub fn into_completion(
         self,
     ) -> Result<
-        oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>,
+        oer_espressif_analog::Completion<crate::analog::i2c::Address>,
         MaskedI2cWriteBindingError,
     > {
         match (self.outer_action, self.transaction.action()) {
@@ -745,10 +741,10 @@ pub struct RfpllChargePumpOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RfpllChargePumpAction {
-    WriteMasked { field: PhyI2cField, value: u8 },
+    WriteMasked { field: Field, value: u8 },
     DelayMicros(u32),
-    ReadMasked { field: PhyI2cField },
-    ReadByte { address: PhyI2cAddress },
+    ReadMasked { field: Field },
+    ReadByte { address: Address },
     Complete(RfpllChargePumpOutcome),
 }
 
@@ -757,7 +753,7 @@ pub enum RfpllChargePumpCompletion {
     Write,
     Delay,
     ReadMasked(u8),
-    ReadByte { address: PhyI2cAddress, value: u8 },
+    ReadByte { address: Address, value: u8 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -798,9 +794,9 @@ impl RfpllChargePumpTransition {
 
     const fn initial_write(index: u8) -> RfpllChargePumpAction {
         let (field, value) = match index {
-            0 => (analog_registers::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE, 0),
-            1 => (analog_registers::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 0),
-            _ => (analog_registers::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 1),
+            0 => (fields::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE, 0),
+            1 => (fields::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 0),
+            _ => (fields::RFPLL_CHARGE_PUMP_CALIBRATION_PULSE, 1),
         };
         RfpllChargePumpAction::WriteMasked { field, value }
     }
@@ -810,23 +806,23 @@ impl RfpllChargePumpTransition {
             RfpllChargePumpStep::InitialWrite(index) => Self::initial_write(index),
             RfpllChargePumpStep::Delay { .. } => RfpllChargePumpAction::DelayMicros(20),
             RfpllChargePumpStep::LockRead { .. } => RfpllChargePumpAction::ReadMasked {
-                field: analog_registers::RFPLL_CHARGE_PUMP_LOCK_STATUS,
+                field: fields::RFPLL_CHARGE_PUMP_LOCK_STATUS,
             },
             RfpllChargePumpStep::CapRead { .. } => RfpllChargePumpAction::ReadMasked {
-                field: analog_registers::RFPLL_CHARGE_PUMP_RESULT,
+                field: fields::RFPLL_CHARGE_PUMP_RESULT,
             },
             RfpllChargePumpStep::EnableAdjustedValue { .. } => RfpllChargePumpAction::WriteMasked {
-                field: analog_registers::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE,
+                field: fields::RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE,
                 value: 1,
             },
             RfpllChargePumpStep::WriteAdjustedValue { value, .. } => {
                 RfpllChargePumpAction::WriteMasked {
-                    field: analog_registers::RFPLL_CHARGE_PUMP_VALUE,
+                    field: fields::RFPLL_CHARGE_PUMP_VALUE,
                     value,
                 }
             }
             RfpllChargePumpStep::FinalRead { .. } => RfpllChargePumpAction::ReadByte {
-                address: analog_registers::RFPLL_CHARGE_PUMP_VALUE.address(),
+                address: fields::RFPLL_CHARGE_PUMP_VALUE.address(),
             },
             RfpllChargePumpStep::Complete(outcome) => RfpllChargePumpAction::Complete(outcome),
         }
@@ -892,7 +888,7 @@ impl RfpllChargePumpTransition {
             (
                 RfpllChargePumpStep::FinalRead { lock_observed },
                 RfpllChargePumpCompletion::ReadByte { address, value },
-            ) if address == analog_registers::RFPLL_CHARGE_PUMP_VALUE.address() => {
+            ) if address == fields::RFPLL_CHARGE_PUMP_VALUE.address() => {
                 RfpllChargePumpStep::Complete(RfpllChargePumpOutcome {
                     parameter_18e: value,
                     lock_observed,
@@ -951,7 +947,7 @@ pub enum PhyRfInitPrefixAction {
     CaptureFilterDcapParameters,
     FilterDcap(FilterDcapAction),
     ReadParameter18e {
-        address: PhyI2cAddress,
+        address: Address,
     },
     I2cInit1(I2cInit1Action),
     RfpllChargePump(RfpllChargePumpAction),
@@ -959,7 +955,7 @@ pub enum PhyRfInitPrefixAction {
         parameter: PhyRfInitParameterSnapshot,
     },
     ReadMasked69 {
-        field: PhyI2cField,
+        field: Field,
     },
     ConfigureSar2,
     CaptureXtalDutyParameters,
@@ -991,7 +987,7 @@ pub enum PhyRfInitPrefixCompletion {
     RcCalibration(RcCalibrationCompletion),
     FilterDcapParametersCaptured(FilterDcapParameters),
     FilterDcap(FilterDcapCompletion),
-    Parameter18eRead { address: PhyI2cAddress, value: u8 },
+    Parameter18eRead { address: Address, value: u8 },
     I2cInit1(I2cInit1Completion),
     RfpllChargePump(RfpllChargePumpCompletion),
     I2cMasterCommandMemoryConfigured,
@@ -1174,13 +1170,13 @@ impl PhyRfInitPrefixTransition {
             }
             PhyRfInitPrefixStep::FilterDcap(transition) => match transition.action() {
                 FilterDcapAction::Complete => PhyRfInitPrefixAction::ReadParameter18e {
-                    address: analog_registers::RFPLL_CHARGE_PUMP_VALUE.address(),
+                    address: fields::RFPLL_CHARGE_PUMP_VALUE.address(),
                 },
                 action => PhyRfInitPrefixAction::FilterDcap(action),
             },
             PhyRfInitPrefixStep::Parameter18eRead { .. } => {
                 PhyRfInitPrefixAction::ReadParameter18e {
-                    address: analog_registers::RFPLL_CHARGE_PUMP_VALUE.address(),
+                    address: fields::RFPLL_CHARGE_PUMP_VALUE.address(),
                 }
             }
             PhyRfInitPrefixStep::I2cInit1 {
@@ -1207,7 +1203,7 @@ impl PhyRfInitPrefixTransition {
                 PhyRfInitPrefixAction::ConfigureI2cMasterCommandMemory { parameter }
             }
             PhyRfInitPrefixStep::Masked69Read { .. } => PhyRfInitPrefixAction::ReadMasked69 {
-                field: analog_registers::TEMPERATURE_SENSOR_SAR2_STATUS,
+                field: fields::SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR,
             },
             PhyRfInitPrefixStep::Sar2Configuration { .. } => PhyRfInitPrefixAction::ConfigureSar2,
             PhyRfInitPrefixStep::XtalDutyParameters { .. } => {
@@ -1379,7 +1375,7 @@ impl PhyRfInitPrefixTransition {
             (
                 PhyRfInitPrefixStep::Parameter18eRead { filter_dcap },
                 PhyRfInitPrefixCompletion::Parameter18eRead { address, value },
-            ) if address == analog_registers::RFPLL_CHARGE_PUMP_VALUE.address() => {
+            ) if address == fields::RFPLL_CHARGE_PUMP_VALUE.address() => {
                 let parameter = PhyRfInitParameterSnapshot::new(filter_dcap, value);
                 PhyRfInitPrefixStep::I2cInit1 {
                     transition: I2cInit1Transition::new(parameter),
@@ -1615,9 +1611,9 @@ impl Default for PhyRfInitPrefixTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RcCalibrationAction {
-    WriteMasked { field: PhyI2cField, value: u8 },
+    WriteMasked { field: Field, value: u8 },
     DelayMicros(u32),
-    ReadMasked { field: PhyI2cField },
+    ReadMasked { field: Field },
     ApplyResult(u8),
     Complete,
 }
@@ -1655,11 +1651,11 @@ impl RcCalibrationTransition {
     pub const fn action(self) -> RcCalibrationAction {
         match self.step {
             0 => RcCalibrationAction::WriteMasked {
-                field: analog_registers::RC_CALIBRATION_DOUT_PATH_ENABLE,
+                field: fields::ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE,
                 value: 1,
             },
             1 => RcCalibrationAction::WriteMasked {
-                field: analog_registers::RC_CALIBRATION_ENABLE,
+                field: fields::TXRF_RC_CALIBRATION_ENABLE,
                 // ROM `phy_get_rc_dout` asserts the RC-calibration enable
                 // before pulsing bit 1. Leaving this clear makes the result
                 // register stay at zero and poisons every derived RX filter
@@ -1667,23 +1663,23 @@ impl RcCalibrationTransition {
                 value: 1,
             },
             2 => RcCalibrationAction::WriteMasked {
-                field: analog_registers::RC_CALIBRATION_PULSE,
+                field: fields::TXRF_RC_CALIBRATION_PULSE,
                 value: 0,
             },
             3 => RcCalibrationAction::WriteMasked {
-                field: analog_registers::RC_CALIBRATION_PULSE,
+                field: fields::TXRF_RC_CALIBRATION_PULSE,
                 value: 1,
             },
             4 => RcCalibrationAction::DelayMicros(100),
             5 => RcCalibrationAction::ReadMasked {
-                field: analog_registers::RC_CALIBRATION_RESULT,
+                field: fields::TXRF_RC_CALIBRATION_RESULT,
             },
             6 => RcCalibrationAction::WriteMasked {
-                field: analog_registers::RC_CALIBRATION_DOUT_PATH_ENABLE,
+                field: fields::ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE,
                 value: 0,
             },
             7 => RcCalibrationAction::WriteMasked {
-                field: analog_registers::RC_CALIBRATION_ENABLE,
+                field: fields::TXRF_RC_CALIBRATION_ENABLE,
                 value: 0,
             },
             8 => RcCalibrationAction::ApplyResult(self.result),
@@ -1777,6 +1773,3 @@ pub fn phy_i2c_master_command_mem_cfg(configuration: &mut [u8; 8], mode: &mut u3
     configuration[6] = 0x2c;
     *mode = 2;
 }
-
-#[cfg(all(oer_probe, target_arch = "riscv32"))]
-pub(crate) use oer_esp32s31_hal::phy::i2c::PhyI2cBlock;

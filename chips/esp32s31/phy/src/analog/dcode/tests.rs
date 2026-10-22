@@ -178,14 +178,14 @@ fn external_lowering_covers_every_dcode_operation_class() {
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::WriteMasked {
-            field: analog_registers::RFPLL_DCODE_0_SOURCE_SELECT,
+            field: fields::RFPLL_DCODE_0_SOURCE_SELECT,
             value: 0,
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::ReadMasked {
-            field: analog_registers::RFPLL_INTERNAL_DCODE_0,
+            field: fields::RFPLL_INTERNAL_DCODE_0,
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));

@@ -20,6 +20,17 @@ fn variant(profile: &str) -> String {
         .collect()
 }
 
+fn field_name(block: &str, register: &str, field: &str) -> String {
+    if field.ends_with(crate::OPAQUE_SUFFIX) {
+        format!("{block}_{register}_{field}")
+    } else {
+        format!(
+            "{block}_{}",
+            field.strip_prefix(&format!("{block}_")).unwrap_or(field)
+        )
+    }
+}
+
 impl RegisterModel {
     /// Generated facts and field composition for the separate transport
     /// space. Access policy and hardware sequencing stay with the owner.
@@ -28,7 +39,7 @@ impl RegisterModel {
             return Ok(String::new());
         };
         let mut output = String::from(
-            "/// Native analog-I2C knowledge; these values perform no hardware access.\npub mod analog_i2c {\n pub use oer_espressif_analog::model::{BlockCode as Block, ByteAddress as Address, Host, KnownReset, RegisterFacts, Route, SampledByte};\n pub type Field = oer_espressif_analog::AnalogField<Address>;\npub mod blocks { use super::Block;\n",
+            "/// Native analog-I2C knowledge; these values perform no hardware access.\npub mod analog_i2c {\n pub use oer_espressif_analog::model::{BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset, RegisterFacts, Route, SampledByte};\n pub type Field = oer_espressif_analog::AnalogField<Address>;\npub mod blocks { use super::Block;\n",
         );
         for block in &space.blocks {
             writeln!(
@@ -75,12 +86,48 @@ impl RegisterModel {
                 writeln!(output, "// SOURCE: {}\n(Profile::{variant}, {:#x}) => Some(Route {{ request_code: {:#x}, command_code: {:#x}, host: Host::Host{}, read_select: {:#x}, read_mask_bits: {} }}),", route.sources.join(", "), route.request_code, route.request_code, block.code, route.host, route.read_select, route.read_mask_bits).ok();
             }
         }
-        output.push_str("_ => None, } }\n pub mod registers { use super::Address;\n");
+        output.push_str("_ => None, } }\n");
+        output.push_str(r#"
+/// A validated transport request. Its original code is retained independently
+/// of the physical byte identity, including aliases with another host.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Request { profile: Profile, code: u8, index: u8 }
+impl Request {
+    pub const fn new(profile: Profile, code: u8, index: u8) -> Option<Self> {
+        match route(profile, code) {
+            Some(_) => Some(Self { profile, code, index }),
+            None => None,
+        }
+    }
+    pub const fn from_address(profile: Profile, address: Address) -> Option<Self> {
+        match route(profile, address.block()) {
+            Some(r) if r.command_code == address.block() => Self::new(profile, address.block(), address.index()),
+            _ => None,
+        }
+    }
+    pub const fn route(self) -> Route {
+        match route(self.profile, self.code) {
+            Some(route) => route,
+            None => panic!("validated analog request"),
+        }
+    }
+    pub const fn address(self) -> Address { self.route().address(self.index) }
+    pub const fn index(self) -> u8 { self.index }
+}
+"#);
+        output.push_str("pub mod registers { use super::Address;\n");
         let mut register_names = BTreeSet::new();
         let mut field_names = BTreeSet::new();
         for block in &space.blocks {
             for register in &block.registers {
-                let name = format!("{}_{}", block.name, register.name);
+                let name = format!(
+                    "{}_{}",
+                    block.name,
+                    register
+                        .name
+                        .strip_prefix(&format!("{}_", block.name))
+                        .unwrap_or(&register.name)
+                );
                 if !register_names.insert(name.clone()) {
                     return Err(Error::message("analog register Rust identifier collision"));
                 }
@@ -98,7 +145,7 @@ impl RegisterModel {
         for block in &space.blocks {
             for register in &block.registers {
                 for field in &register.fields {
-                    let name = format!("{}_{}", block.name, field.name);
+                    let name = field_name(&block.name, &register.name, &field.name);
                     if !field_names.insert(name.clone()) {
                         return Err(Error::message("analog field Rust identifier collision"));
                     }
@@ -110,6 +157,15 @@ impl RegisterModel {
                         .map(|r| r.sources.join(", "))
                         .unwrap_or_default();
                     writeln!(output, "/// SOURCE: {sources}\npub const {name}: Field = match Field::new(Address::new({:#x}, {:#x}), {}, {}) {{ Some(field) => field, None => panic!(\"validated analog field\") }};", block.code, register.index, field.bit_offset() + field.bit_width() - 1, field.bit_offset()).ok();
+                }
+                for view in &register.views {
+                    let name = field_name(&block.name, &register.name, &view.name);
+                    if !field_names.insert(name.clone()) {
+                        return Err(Error::message(
+                            "analog field view Rust identifier collision",
+                        ));
+                    }
+                    writeln!(output, "/// Subrange of {}; SOURCE: {}\npub const {name}: Field = match Field::new(Address::new({:#x}, {:#x}), {}, {}) {{ Some(field) => field, None => panic!(\"validated analog field view\") }};", view.field, view.sources.join(", "), block.code, register.index, view.bit_offset + view.bit_width - 1, view.bit_offset).ok();
                 }
             }
         }
@@ -137,6 +193,13 @@ impl RegisterModel {
                     register.address.block, register.address.index, epoch
                 )
                 .ok();
+            }
+        }
+        output.push_str("];\n/// The qualified comparison image, ordered by physical transport identity.\npub const CAPTURE: &[CaptureRegister] = &[\n");
+        for register in &geometry {
+            if let (Some(epoch), Some(mask)) = (&register.read_safe_epoch, register.comparison_mask)
+            {
+                writeln!(output, "CaptureRegister {{ address: Address::new({:#x}, {:#x}), mask: {mask:#x}, epoch: {epoch:?} }},", register.address.block, register.address.index).ok();
             }
         }
         output.push_str("];\n}\n");

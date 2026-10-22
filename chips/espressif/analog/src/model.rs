@@ -105,6 +105,15 @@ pub struct RegisterFacts {
     pub read_safe_epoch: Option<&'static str>,
 }
 
+/// One byte admitted by a finite diagnostic epoch, with independently
+/// reviewed comparison lanes. The mask supplies no reset or bit semantics.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CaptureRegister {
+    pub address: ByteAddress,
+    pub mask: u8,
+    pub epoch: &'static str,
+}
+
 impl RegisterFacts {
     pub const fn absent(self) -> u8 {
         !(self.described | self.opaque | self.reserved)
@@ -152,6 +161,26 @@ impl SampledByte {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_truncation_preserves_the_existing_byte_input_contract() {
+        for lsb in 0..8 {
+            for msb in lsb..8 {
+                let field = AnalogField::new((), msb, lsb).unwrap();
+                let mask = (((1_u16 << (msb - lsb + 1)) - 1) << lsb) as u8;
+                for sample in 0..=255_u8 {
+                    for value in 0..=255_u8 {
+                        let result = field.insert_truncated(sample, value);
+                        assert_eq!(result & !mask, sample & !mask);
+                        assert_eq!(u16::from(field.extract(result)), u16::from(value) % (1 << (msb - lsb + 1)));
+                        if let Some(checked) = field.insert(sample, value) {
+                            assert_eq!(checked, result);
+                        }
+                    }
+                }
+            }
+        }
+    }
     #[test]
     fn sampled_values_preserve_other_lanes_and_reject_another_register_or_overflow() {
         let address = ByteAddress::new(0x66, 1);

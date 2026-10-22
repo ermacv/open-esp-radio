@@ -12,7 +12,7 @@ impl crate::executor::wait::PhyShortDelay for TestDelay {
 
 use crate::{
     analog::{
-        i2c::{PhyI2cError, analog_registers},
+        i2c::{PhyI2cError, fields},
         temperature::{
             PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureI2cBinding,
             PhyTemperatureOutcome, PhyTemperatureTransition,
@@ -109,13 +109,14 @@ impl Io {
         kind: crate::tracking::observation::RfpllCommand,
     ) {
         use crate::{
-            analog::i2c::analog_registers as reg, tracking::observation::RfpllCommand as Kind,
+            analog::i2c::{fields, registers},
+            tracking::observation::RfpllCommand as Kind,
         };
         self.byte = match kind {
             Kind::InitialLow => self.rfpll_initial as u8,
-            Kind::InitialHigh => {
-                reg::RFPLL_CALIBRATED_CAPACITOR_HIGH.replace(0, (self.rfpll_initial >> 8) as u8)
-            }
+            Kind::InitialHigh => fields::RFPLL_CALIBRATED_CAPACITOR_HIGH
+                .insert(0, (self.rfpll_initial >> 8) as u8)
+                .unwrap(),
             Kind::EnableRead | Kind::CapHighRead => 0xa5,
             Kind::Status => {
                 use crate::tracking::rfpll::search::Status;
@@ -130,7 +131,9 @@ impl Io {
                     Status::Decrease => 2,
                     Status::Other => 3,
                 };
-                reg::RFPLL_CAPACITOR_SEARCH_STATUS.replace(0, value)
+                fields::RFPLL_CAPACITOR_SEARCH_STATUS
+                    .insert(0, value)
+                    .unwrap()
             }
             _ => self.byte,
         };
@@ -331,7 +334,7 @@ fn context() -> (Waker, Arc<WakeCount>) {
 }
 fn read() -> PhyColdI2cTransaction {
     PhyColdI2cTransaction::new(PhyColdI2cRequest::read_field(
-        analog_registers::TEMPERATURE_SENSOR_DAC_STATUS,
+        fields::SARADC_I2C_SARADC_TSENS_DAC,
     ))
 }
 #[test]
@@ -340,7 +343,7 @@ fn every_hardware_atom_yields_even_when_the_timer_is_already_ready() {
     let mut io = Io::default();
     let atoms = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-        analog_registers::TEMPERATURE_SENSOR_DAC,
+        fields::SARADC_I2C_SARADC_TSENS_DAC,
         15,
     ));
     let mut job =
@@ -835,7 +838,7 @@ fn a_voluntary_yield_between_rmw_commands_is_not_a_hardware_timeout() {
     let mut io = Io::default();
     let atoms = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-        analog_registers::TEMPERATURE_SENSOR_DAC,
+        fields::SARADC_I2C_SARADC_TSENS_DAC,
         15,
     ));
     let mut job =
@@ -1125,7 +1128,7 @@ fn rfpll_rmw_keeps_the_captured_byte_and_model_owner_across_the_checkpoint() {
             io.rfpll_actions,
             [Action::Search(search::Action::ReadInitialCap)]
         );
-        let captured = analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE.replace(0xa5, 1);
+        let captured = fields::RFPLL_CAPACITOR_SEARCH_ENABLE.insert_truncated(0xa5, 1);
         io.byte = 0;
         let before = io.actions.len();
         assert_eq!(
@@ -1431,7 +1434,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
     use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyI2cBinding};
     let clock = VirtualClock::<1>::new();
     let action = RfpllFrequencyAction::WriteMasked {
-        field: analog_registers::RFPLL_CAPACITOR_HIGH,
+        field: fields::RFPLL_CAPACITOR_HIGH,
         value: 1,
     };
     let mut direct = Io {

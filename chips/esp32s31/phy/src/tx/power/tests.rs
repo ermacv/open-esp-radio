@@ -346,7 +346,7 @@ fn already_calibrated_root_emits_no_hardware_action() {
 
 #[test]
 fn external_lowering_covers_every_tx_power_operation_class() {
-    let i2c = analog_registers::RFPLL_CAPACITOR_LOW;
+    let i2c = registers::RFPLL_CAPACITOR_LOW;
     assert!(matches!(
         PhyTxPowerExternalBinding::lower(PhyTxPowerAction::Environment(
             PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector

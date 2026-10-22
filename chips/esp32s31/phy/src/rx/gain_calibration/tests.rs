@@ -409,8 +409,7 @@ fn every_fallible_dc_child_rejects_without_changing_accumulated_results() {
         crystal_selector,
     });
     let pll_invalid = PhyRxGainDcCompletion::Rfpll(RfpllFrequencyCompletion::DelayElapsed(0));
-    let i2c =
-        crate::analog::i2c::field_write(analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE, 0);
+    let i2c = crate::analog::i2c::field_write(fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE, 0);
     let oer_espressif_analog::Action::Read { address } = i2c.action() else {
         panic!("I2C read");
     };

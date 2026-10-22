@@ -10,7 +10,11 @@
 //! entry points.
 
 use oer_esp32c5_hal::analog::AnalogI2c;
-use oer_esp32c5_pac::{PhyI2cAddress, PhyI2cBlock, PhyI2cHost, RadioPartitions};
+use oer_esp32c5_pac::analog_i2c::{self, Address, Host, Profile, Request};
+fn normal_route(code: u8) -> Option<analog_i2c::Route> {
+    analog_i2c::route(Profile::LibphyNormal, code)
+}
+use oer_esp32c5_pac::RadioPartitions;
 use oer_espressif_analog::{AnalogField, AnalogRegisterBus, FieldRead, FieldWrite, Step};
 
 /// Bus actions (one start or completion observation each) a probe performs
@@ -28,9 +32,12 @@ fn with_bus<R>(call: impl FnOnce(&mut AnalogI2c) -> R) -> R {
     call(&mut AnalogI2c::new(phy_i2c))
 }
 
-fn address(block: u32, register: u32) -> Option<PhyI2cAddress> {
-    let block = PhyI2cBlock::from_vendor_abi(u8::try_from(block).ok()?)?;
-    Some(PhyI2cAddress::new(block, register as u8))
+fn address(block: u32, register: u32) -> Option<Request> {
+    let block = normal_route(u8::try_from(block).ok()?)?;
+    Some(
+        Request::new(Profile::LibphyNormal, block.request_code, register as u8)
+            .expect("validated request"),
+    )
 }
 
 fn drive<T>(mut poll: impl FnMut() -> Step<T>) -> Option<T> {
@@ -56,13 +63,13 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 oer_probe_macros::probe! {
     /// `phy_get_i2c_hostid_(block)`: rewrite the host map, return the host.
     pub fn open_phy_i2c_trace_phy_get_i2c_hostid_(block: u32) -> u32 {
-        let Some(block) = u8::try_from(block).ok().and_then(PhyI2cBlock::from_vendor_abi) else {
+        let Some(block) = u8::try_from(block).ok().and_then(normal_route) else {
             return INVALID_ARGUMENT;
         };
         let RadioPartitions { mut phy_i2c, .. } = RadioPartitions::for_validation();
         match phy_i2c.configure_and_select_host(block) {
-            PhyI2cHost::Host0 => 0,
-            PhyI2cHost::Host1 => 1,
+            Host::Host0 => 0,
+            Host::Host1 => 1,
         }
     }
 }
@@ -71,8 +78,8 @@ oer_probe_macros::probe! {
     /// `phy_get_i2c_read_mask_(block)`: the one-hot read mask; zero outside
     /// the table, as the vendor leaf returns.
     pub fn open_phy_i2c_trace_phy_get_i2c_read_mask_(block: u32) -> u32 {
-        match u8::try_from(block).ok().and_then(PhyI2cBlock::from_vendor_abi) {
-            Some(block) => !block.read_mask().bits(),
+        match u8::try_from(block).ok().and_then(normal_route) {
+            Some(block) => !block.complemented_read_select(),
             None => 0,
         }
     }
@@ -181,7 +188,7 @@ oer_probe_macros::probe! {
         }
         with_bus(|bus| {
             use oer_espressif_analog::{ParallelAnalogBus, ParallelHost};
-            bus.start_pair(oer_esp32c5_pac::PhyI2cParallelWrite::new((b0, r0, d0), (b1, r1, d1)));
+            bus.start_pair(oer_esp32c5_pac::PhyI2cParallelWrite::new((Address::new(b0, r0), d0), (Address::new(b1, r1), d1)));
             for host in [ParallelHost::First, ParallelHost::Second] {
                 let mut polls = 0;
                 while bus.is_busy(host) {

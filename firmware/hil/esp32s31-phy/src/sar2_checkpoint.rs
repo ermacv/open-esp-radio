@@ -2,7 +2,7 @@
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
-    phy::i2c::{self, analog_registers::TEMPERATURE_SENSOR_SAR2_STATUS},
+    phy::i2c::{self, fields::SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR},
     power::PlatformClockBackend,
 };
 use oer_hil_protocol::base::RejectReason;

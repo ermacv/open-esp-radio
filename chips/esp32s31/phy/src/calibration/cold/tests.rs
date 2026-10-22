@@ -15,7 +15,7 @@ use crate::analog::frequency::{PhyChannelFrequencyInitAction, PhyChannelFrequenc
 use crate::analog::i2c::{
     FilterDcapAction, FilterDcapParameters, I2cInit1Action, OpenI2cXpdAction, OpenI2cXpdCompletion,
     PhyI2cError, PhyRfInitParameterSnapshot, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
-    RcCalibrationAction, RcCalibrationCompletion, analog_registers,
+    RcCalibrationAction, RcCalibrationCompletion, fields, registers,
 };
 use crate::analog::pbus::{PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusForceTest};
 use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion};
@@ -30,7 +30,7 @@ use crate::rx::signal_power::{
 };
 #[test]
 fn busy_observation_preserves_await_state_without_self_progress() {
-    let address = analog_registers::RFPLL_CAPACITOR_LOW;
+    let address = registers::RFPLL_CAPACITOR_LOW;
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::read_byte(address));
     assert_eq!(
         transaction.action(),
@@ -61,7 +61,7 @@ fn busy_observation_preserves_await_state_without_self_progress() {
 
 #[test]
 fn masked_write_needs_two_distinct_external_edges() {
-    let field = crate::analog::i2c::analog_registers::RC_CALIBRATION_ENABLE;
+    let field = crate::analog::i2c::fields::TXRF_RC_CALIBRATION_ENABLE;
     let address = field.address();
     let request = PhyColdI2cRequest::write_field(field, 1);
     let mut transaction = PhyColdI2cTransaction::new(request);
@@ -94,7 +94,7 @@ fn masked_write_needs_two_distinct_external_edges() {
 
 #[test]
 fn masked_outer_write_is_two_edges_but_one_identity_bound_completion() {
-    let field = crate::analog::i2c::analog_registers::RC_CALIBRATION_ENABLE;
+    let field = crate::analog::i2c::fields::TXRF_RC_CALIBRATION_ENABLE;
     let address = field.address();
     let outer_action =
         PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::WriteMasked { field, value: 1 });
@@ -770,7 +770,7 @@ fn external_lowering_has_no_vendor_or_synchronous_fallback_variant() {
         Ok(PhyColdExternalBinding::I2cConfiguration(_))
     ));
 
-    let address = analog_registers::RFPLL_CAPACITOR_LOW;
+    let address = registers::RFPLL_CAPACITOR_LOW;
     assert!(matches!(
         PhyColdExternalBinding::lower(PhyRfInitPrefixAction::ReadParameter18e { address }),
         Ok(PhyColdExternalBinding::I2c(_))
@@ -826,7 +826,7 @@ fn i2c_configuration_binding_requires_the_complete_pac_transaction() {
 
 #[test]
 fn channel_frequency_i2c_completion_keeps_its_field_identity() {
-    let field = crate::analog::i2c::analog_registers::RFPLL_SDM_LOW;
+    let field = crate::analog::i2c::fields::SDM_RFPLL_SDM_LOW;
     let outer_action =
         PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::WriteMasked {
             field,
@@ -847,7 +847,7 @@ fn channel_frequency_i2c_completion_keeps_its_field_identity() {
 
 #[test]
 fn xtal_and_rfpll_i2c_edges_keep_nested_identity() {
-    let initial_field = crate::analog::i2c::analog_registers::XTAL_DUTY_INITIAL;
+    let initial_field = crate::analog::i2c::fields::ULP_BOD_XTAL_DUTY_INITIAL;
     let initial_action =
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::ReadInitialDuty {
             field: initial_field,
@@ -865,7 +865,7 @@ fn xtal_and_rfpll_i2c_edges_keep_nested_identity() {
         ))
     );
 
-    let rfpll_field = crate::analog::i2c::analog_registers::RFPLL_SDM_LOW;
+    let rfpll_field = crate::analog::i2c::fields::SDM_RFPLL_SDM_LOW;
     let rfpll_action = PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
         XtalDutyPassAction::Prepare(XtalDutyPrepareAction::Rfpll(
             RfpllFrequencyAction::WriteMasked {
@@ -890,7 +890,7 @@ fn xtal_and_rfpll_i2c_edges_keep_nested_identity() {
         ))
     );
 
-    let candidate_address = analog_registers::XTAL_DUTY_CANDIDATE;
+    let candidate_address = registers::ULP_BOD_XTAL_DUTY_CANDIDATE;
     let candidate_action = PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
         XtalDutyPassAction::Search(XtalDutySearchAction::WriteCandidate {
             address: candidate_address,

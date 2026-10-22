@@ -84,6 +84,10 @@ impl<Address: Copy> AnalogField<Address> {
         }
     }
 
+    pub const fn bit_range(self) -> (u8, u8) {
+        (self.msb, self.lsb)
+    }
+
     pub const fn address(self) -> Address {
         self.address
     }
@@ -110,6 +114,13 @@ impl<Address: Copy> AnalogField<Address> {
             return None;
         }
         Some((byte & !self.mask()) | (value << self.lsb))
+    }
+
+    /// Replace the field with the low bits of `value`, preserving every
+    /// other lane. Callers that explicitly truncate a byte input use this;
+    /// checked transactions and sampled-byte builders use [`Self::insert`].
+    pub const fn insert_truncated(self, byte: u8, value: u8) -> u8 {
+        (byte & !self.mask()) | ((value << self.lsb) & self.mask())
     }
 }
 
@@ -809,5 +820,4 @@ where
 mod tests;
 
 /// Pure transport and sampled-value vocabulary of generated analog models.
-#[cfg(any(test, feature = "model"))]
 pub mod model;

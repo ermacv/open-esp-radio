@@ -7,9 +7,6 @@ license.workspace = true
 repository.workspace = true
 description = "Chip-neutral non-blocking analog register bus contract and field transactions of the Espressif PHY"
 
-[features]
-# Native analog-I2C vocabulary for the PAC host tests.
-model = []
 
 [lints]
 workspace = true

@@ -534,7 +534,7 @@ fn init_skip_does_not_emit_any_hardware_action() {
 
 #[test]
 fn external_lowering_covers_every_txiq_operation_layer() {
-    let i2c = analog_registers::RFPLL_CAPACITOR_LOW;
+    let i2c = registers::RFPLL_CAPACITOR_LOW;
     assert!(matches!(
         PhyTxIqInitExternalBinding::lower(PhyTxIqInitAction::Rfpll(
             RfpllFrequencyAction::DelayMicros(5)
@@ -579,7 +579,7 @@ fn external_lowering_covers_every_txiq_operation_layer() {
     assert!(matches!(
         PhyTxIqCalibrationExternalBinding::lower(PhyTxIqCalibrationAction::Loopback(
             PhyTxIqLoopbackAction::I2c(oer_espressif_analog::Action::Read {
-                address: analog_registers::TX_IQ_LOOPBACK_ENABLE.address(),
+                address: fields::BBTOP_TX_IQ_LOOPBACK_ENABLE.address(),
             })
         )),
         Ok(PhyTxIqCalibrationExternalBinding::Loopback(

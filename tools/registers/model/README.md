@@ -34,7 +34,9 @@ of both reset properties; a partial reset supplies only its nonempty known
 mask, with zeroes outside that mask carrying no knowledge. Readable access
 does not qualify a dump: `read-safe` additionally needs a finite epoch and
 sources, and rejects destructive/modified reads. The current real models
-claim neither known reset nor a read-safe epoch.
+claim no known reset. The S31 model qualifies only the existing 40-byte R1
+image in its calibrated-radio epoch, with explicit comparison masks. These
+masks do not promote unknown data lanes to described or OPAQUE.
 
 `AnalogAddress { block, index }` is a separate host type. Semantic IDs retain
 the existing grammar: `register:<chip>/analog-i2c/0xBBII/8`, where BB/II encode
@@ -52,10 +54,14 @@ and a separately qualified `READ_SAFE` list. Shared value types live in
 `chips/espressif/analog::model`. Sampled values preserve all other bits and
 reject another register's field or a value exceeding its width. Unknown or
 partial reset never creates a whole-byte reset image. These are pure values;
-no analog bus transaction is generated here. The PAC's host tests compile
-this file and compare its routes with the bus transport. The shared crate's
-`model` feature is selected only by those dev-dependencies. Production bus
-callers use the policy field domain and manual map.
+no analog bus transaction is generated here. Both production PACs compile
+this vocabulary; PAC/HAL/PHY and probes consume its fields, physical byte
+identities and routes. `Request` retains an original request code separately
+from its physical address, preserving C5 alias routing. Configuration payloads
+remain algorithms in PAC code and do not assert a hardware reset. Sourced
+`views` select strict subranges of declared hardware fields without overlapping
+field declarations or changing their bit states. `CAPTURE` contains only
+read-safe bytes with an explicit comparison mask, in physical address order.
 
 ## Direct register model
 

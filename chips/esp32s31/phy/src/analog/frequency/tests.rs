@@ -1,4 +1,4 @@
-use crate::analog::i2c::analog_registers;
+use crate::analog::i2c::{fields, registers};
 
 use super::{
     PHY_FREQUENCY_TABLE_ENTRY_COUNT, PhyChannelFrequencyInitAction,
@@ -297,26 +297,26 @@ fn complete_i2c_snapshot(
     assert_eq!(
         transition.action(),
         PhyFrequencyI2cAction::WriteMasked {
-            field: analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE,
+            field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
             value: 1,
         }
     );
     transition
         .advance(PhyFrequencyI2cCompletion::MaskedWrite {
-            field: analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE,
+            field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
         })
         .unwrap();
     for (address, value) in [
         (
-            analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE.address(),
+            fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address(),
             rfpll_register_0b,
         ),
         (
-            analog_registers::RFPLL_SDM_UPDATE_ENABLE.address(),
+            fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address(),
             sdm_register_0,
         ),
         (
-            analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE.address(),
+            fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE.address(),
             front_end_register_3,
         ),
     ] {
@@ -444,7 +444,7 @@ fn i2c_transition_rejects_a_completion_for_another_snapshot_register() {
     let mut transition = PhyFrequencyI2cTransition::new(PhyFrequencyI2cRequest::cold(false));
     assert_eq!(
         transition.advance(PhyFrequencyI2cCompletion::MaskedWrite {
-            field: analog_registers::RFPLL_CAPACITOR_HIGH,
+            field: fields::RFPLL_CAPACITOR_HIGH,
         }),
         Err(PhyFrequencyI2cTransitionError::WrongCompletion)
     );
@@ -482,9 +482,9 @@ fn rfpll_completion(
             RfpllFrequencyCompletion::ByteWrite { address }
         }
         RfpllFrequencyAction::ReadMasked { field } => {
-            let value = if field == crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS {
+            let value = if field == crate::analog::i2c::fields::RFPLL_LOCK_STATUS {
                 1
-            } else if field == crate::analog::i2c::analog_registers::RFPLL_CAPACITOR_SEARCH_STATUS {
+            } else if field == crate::analog::i2c::fields::RFPLL_CAPACITOR_SEARCH_STATUS {
                 let index = point_index(point);
                 // Accept the first candidate of each direction, then end the
                 // direction with its two boundary statuses.
@@ -497,7 +497,7 @@ fn rfpll_completion(
             RfpllFrequencyCompletion::MaskedRead { field, value }
         }
         RfpllFrequencyAction::ReadByte { address }
-            if address == analog_registers::RFPLL_CALIBRATED_CAPACITOR_LOW =>
+            if address == registers::RFPLL_CALIBRATED_CAPACITOR_LOW =>
         {
             RfpllFrequencyCompletion::ByteRead {
                 address,
@@ -522,9 +522,9 @@ fn i2c_completion(action: PhyFrequencyI2cAction) -> PhyFrequencyI2cCompletion {
             PhyFrequencyI2cCompletion::MaskedWrite { field }
         }
         PhyFrequencyI2cAction::ReadByte { address } => {
-            let value = if address == analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE.address() {
+            let value = if address == fields::RFPLL_CAPACITOR_SEARCH_ENABLE.address() {
                 0x5a
-            } else if address == analog_registers::RFPLL_SDM_UPDATE_ENABLE.address() {
+            } else if address == fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address() {
                 0x8f
             } else {
                 0x10
@@ -572,7 +572,7 @@ fn channel_frequency_init_composes_the_complete_cold_graph() {
                 PhyChannelFrequencyInitCompletion::ByteWrite { address }
             }
             PhyChannelFrequencyInitAction::ReadByte { address } => {
-                assert_eq!(address, analog_registers::RFPLL_SDM_LOW.address());
+                assert_eq!(address, fields::SDM_RFPLL_SDM_LOW.address());
                 PhyChannelFrequencyInitCompletion::ByteRead {
                     address,
                     value: 0xab,
@@ -743,7 +743,7 @@ fn modeled_frequency_i2c_commands_match_old_bytes_and_field_updates() {
                 for copy in 0..descriptor.memory_write_count() {
                     let (_, word, _) = descriptor.memory_write(copy);
                     let register_block =
-                        u32::from(descriptor.block) | (u32::from(descriptor.register) << 8);
+                        u32::from(descriptor.address.block()) | (u32::from(descriptor.address.index()) << 8);
                     let old = if descriptor.kind() >= 2 {
                         register_block
                     } else {

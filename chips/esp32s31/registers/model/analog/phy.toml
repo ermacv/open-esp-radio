@@ -313,6 +313,48 @@ name = "I2C_BOD_THRESHOLD"
 bitOffset = 0
 bitWidth = 3
 
+
+[[blocks.registers]]
+name = "XTAL_DUTY_CALIBRATION_PATH_ENABLE"
+index = 0x07
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x20, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "XTAL_DUTY_CALIBRATION_PATH_ENABLE"
+description = "Crystal-duty calibration path enable bit."
+bitOffset = 5
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RC_CALIBRATION_DOUT_PATH_ENABLE"
+index = 0x08
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x04, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_DOUT_PATH_ENABLE"
+description = "RC-calibration digital-output path enable bit."
+bitOffset = 2
+bitWidth = 1
+
+[[blocks.registers]]
+name = "XTAL_DUTY_INITIAL"
+index = 0x09
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "XTAL_DUTY_INITIAL"
+description = "Initial crystal-duty calibration field."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "XTAL_DUTY_CANDIDATE"
+index = 0x0a
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
 [[blocks]]
 name = "RFPLL"
 code = 0x62
@@ -326,6 +368,224 @@ read-select = 0x0020
 read-mask-bits = 24
 sources = ["BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "RFPLL_RESTART_HIGH"
+index = 0x00
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x60, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_RESTART_HIGH"
+description = "First RFPLL restart control bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_RESTART_LOW"
+description = "Second RFPLL restart control bit."
+bitOffset = 5
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RFPLL_CAPACITOR_LOW"
+index = 0x01
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers]]
+name = "RFPLL_CAPACITOR_HIGH"
+index = 0x02
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_CAPACITOR_HIGH"
+description = "High RFPLL capacitor-selection bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_INITIAL_CONFIGURATION_HIGH"
+description = "High bit of the initial RFPLL configuration."
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_INITIAL_CONFIGURATION_LOW"
+description = "Low six bits of the initial RFPLL configuration."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "RFPLL_DCODE_CKGEN_RESET"
+index = 0x04
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x80, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_DCODE_CKGEN_RESET"
+description = "RFPLL DCODE clock-generator reset bit."
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RFPLL_CALIBRATED_CAPACITOR_LOW"
+index = 0x05
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers]]
+name = "RFPLL_LOCK_STATUS"
+index = 0x07
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x06, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_LOCK_STATUS"
+description = "RFPLL lock-status bit."
+bitOffset = 1
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_CALIBRATED_CAPACITOR_HIGH"
+description = "High bit of the calibrated RFPLL capacitor value."
+bitOffset = 2
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RFPLL_CAPACITOR_SEARCH_ENABLE"
+index = 0x0b
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x40, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_CAPACITOR_SEARCH_ENABLE"
+description = "RFPLL capacitor-search enable bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RFPLL_CAPACITOR_SEARCH_STATUS"
+index = 0x0c
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x0c, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_CAPACITOR_SEARCH_STATUS"
+description = "RFPLL capacitor-search status field."
+bitOffset = 2
+bitWidth = 2
+
+[[blocks.registers]]
+name = "RFPLL_CHARGE_PUMP_LOCK_STATUS"
+index = 0x0e
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x9f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_CHARGE_PUMP_LOCK_STATUS"
+description = "RFPLL charge-pump lock-status bit."
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_CHARGE_PUMP_RESULT"
+description = "RFPLL charge-pump calibration result."
+bitOffset = 0
+bitWidth = 5
+
+[[blocks.registers]]
+name = "RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE"
+index = 0x0f
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE"
+description = "RFPLL charge-pump calibration enable bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_CHARGE_PUMP_CALIBRATION_PULSE"
+description = "RFPLL charge-pump calibration pulse bit."
+bitOffset = 5
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_CHARGE_PUMP_VALUE"
+description = "RFPLL charge-pump control value."
+bitOffset = 0
+bitWidth = 5
+
+[[blocks.registers]]
+name = "RFPLL_INTERNAL_DCODE_0"
+index = 0x11
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_INTERNAL_DCODE_0"
+description = "First internal RFPLL DCODE field."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "RFPLL_INTERNAL_DCODE_1"
+index = 0x12
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_INTERNAL_DCODE_1"
+description = "Second internal RFPLL DCODE field."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "RFPLL_DCODE_0_SOURCE_SELECT"
+index = 0x13
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_DCODE_0_SOURCE_SELECT"
+description = "First RFPLL DCODE source-select bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_EXTERNAL_DCODE_0"
+description = "First external RFPLL DCODE field."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "RFPLL_DCODE_1_SOURCE_SELECT"
+index = 0x14
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_DCODE_1_SOURCE_SELECT"
+description = "Second RFPLL DCODE source-select bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RFPLL_EXTERNAL_DCODE_1"
+description = "Second external RFPLL DCODE field."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "BYTE_0D_OPAQUE"
+index = 0x0d
+
+[[blocks.registers]]
+name = "BYTE_15_OPAQUE"
+index = 0x15
 [[blocks]]
 name = "SDM"
 code = 0x63
@@ -339,6 +599,48 @@ read-select = 0x0010
 read-mask-bits = 24
 sources = ["BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "RFPLL_SDM_UPDATE_ENABLE"
+index = 0x00
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x08, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_SDM_UPDATE_ENABLE"
+description = "RFPLL sigma-delta update enable bit."
+bitOffset = 3
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RFPLL_SDM_MOST_SIGNIFICANT_BYTE"
+index = 0x03
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers]]
+name = "RFPLL_SDM_UPPER_MIDDLE_BYTE"
+index = 0x04
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers]]
+name = "RFPLL_SDM_LOWER_MIDDLE_BYTE"
+index = 0x05
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers]]
+name = "RFPLL_SDM_LOW"
+index = 0x06
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x07, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RFPLL_SDM_LOW"
+description = "Low three bits of the RFPLL sigma-delta value."
+bitOffset = 0
+bitWidth = 3
 [[blocks]]
 name = "BLOCK_64"
 code = 0x64
@@ -464,6 +766,8 @@ bitWidth = 8
 [[blocks.registers]]
 name = "I2C_BBPLL_RSTB_DIV_ADC"
 index = 0x04
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x0c, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
 
 # SOURCE: components/soc/esp32s31/include/soc/regi2c_bbpll.h:61
 [[blocks.registers.fields]]
@@ -489,6 +793,12 @@ name = "I2C_BBPLL_DIV_CPU"
 bitOffset = 5
 bitWidth = 1
 
+
+[[blocks.registers.fields]]
+name = "ADC_RATE_CONFIGURATION"
+description = "Two-bit ADC-rate analog configuration field."
+bitOffset = 2
+bitWidth = 2
 [[blocks.registers]]
 name = "I2C_BBPLL_OC_DR1"
 index = 0x05
@@ -594,6 +904,130 @@ read-select = 0x0004
 read-mask-bits = 24
 sources = ["BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "TX_IQ_LOOPBACK_ENABLE"
+index = 0x00
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x40, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "TX_IQ_LOOPBACK_ENABLE"
+description = "Transmit-IQ calibration loopback enable bit."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers]]
+name = "RF_CLOSE_CONTROL"
+index = 0x02
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers]]
+name = "SHARED_RX_GAIN_CALIBRATION_ENABLE"
+index = 0x03
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x04, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "SHARED_RX_GAIN_CALIBRATION_ENABLE"
+description = "Shared receive-gain calibration enable bit."
+bitOffset = 2
+bitWidth = 1
+
+[[blocks.registers]]
+name = "BLUETOOTH_TX_POWER_HIGH_0"
+index = 0x1e
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x7f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "BLUETOOTH_TX_POWER_HIGH_0"
+description = "Six-bit field in the first high Bluetooth transmit-power analog register."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers.fields]]
+name = "BIT_6_OPAQUE"
+description = "Bit six forced in the high filter-DCAP command-memory and initialization value."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers]]
+name = "BLUETOOTH_TX_POWER_HIGH_1"
+index = 0x1f
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "BLUETOOTH_TX_POWER_HIGH_1"
+description = "Six-bit field in the second high Bluetooth transmit-power analog register."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "BYTE_04_OPAQUE"
+index = 0x04
+
+[[blocks.registers]]
+name = "BYTE_05_OPAQUE"
+index = 0x05
+
+[[blocks.registers]]
+name = "BYTE_06_OPAQUE"
+index = 0x06
+
+[[blocks.registers]]
+name = "BYTE_07_OPAQUE"
+index = 0x07
+
+[[blocks.registers]]
+name = "BYTE_0C_OPAQUE"
+index = 0x0c
+
+[[blocks.registers]]
+name = "BYTE_0D_OPAQUE"
+index = 0x0d
+
+[[blocks.registers]]
+name = "BYTE_0E_OPAQUE"
+index = 0x0e
+
+[[blocks.registers]]
+name = "BYTE_0F_OPAQUE"
+index = 0x0f
+
+[[blocks.registers]]
+name = "BYTE_14_OPAQUE"
+index = 0x14
+
+[[blocks.registers]]
+name = "BYTE_15_OPAQUE"
+index = 0x15
+
+[[blocks.registers]]
+name = "BYTE_16_OPAQUE"
+index = 0x16
+
+[[blocks.registers]]
+name = "BYTE_17_OPAQUE"
+index = 0x17
+
+[[blocks.registers]]
+name = "BYTE_18_OPAQUE"
+index = 0x18
+
+[[blocks.registers]]
+name = "BYTE_19_OPAQUE"
+index = 0x19
+
+[[blocks.registers]]
+name = "BYTE_1C_OPAQUE"
+index = 0x1c
+
+[[blocks.registers]]
+name = "BYTE_1D_OPAQUE"
+index = 0x1d
 [[blocks]]
 name = "BLOCK_68"
 code = 0x68
@@ -676,6 +1110,8 @@ bitWidth = 8
 [[blocks.registers]]
 name = "ADC_SAR2_INITIAL_CODE_HIGH_ADDR"
 index = 0x04
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x0f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
 
 # SOURCE: components/soc/esp32s31/include/soc/regi2c_saradc.h:41
 [[blocks.registers.fields]]
@@ -702,6 +1138,8 @@ bitWidth = 3
 [[blocks.registers]]
 name = "I2C_SARADC_TSENS_DAC"
 index = 0x06
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x0f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
 
 # SOURCE: components/soc/esp32s31/include/soc/regi2c_saradc.h:53
 [[blocks.registers.fields]]
@@ -832,6 +1270,8 @@ sources = ["BLOB_LIBPHY_PHY_I2C"]
 [[blocks.registers]]
 name = "I2C_BIAS_DREG_1P6"
 index = 0x00
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
 
 # SOURCE: components/soc/esp32s31/include/soc/regi2c_bias.h:20
 [[blocks.registers.fields]]
@@ -848,6 +1288,8 @@ bitWidth = 4
 [[blocks.registers]]
 name = "I2C_BIAS_DREG_1P1_PVT"
 index = 0x01
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
 
 # SOURCE: components/soc/esp32s31/include/soc/regi2c_bias.h:28
 [[blocks.registers.fields]]
@@ -874,6 +1316,152 @@ read-select = 0x0008
 read-mask-bits = 24
 sources = ["BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "TX_CAPACITOR_LOW"
+index = 0x02
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xff, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "TX_CAPACITOR_LOW"
+description = "Low transmit-capacitor bank field."
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers.fields]]
+name = "TX_CAPACITOR_HIGH"
+description = "High transmit-capacitor bank field."
+bitOffset = 4
+bitWidth = 4
+
+[[blocks.registers]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_0"
+index = 0x03
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x0f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_0"
+description = "First Wi-Fi transmit temperature-tracking field."
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_1"
+index = 0x07
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x0f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "WIFI_TX_TEMPERATURE_TRACKING_1"
+description = "Second Wi-Fi transmit temperature-tracking field."
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers]]
+name = "RC_CONFIGURATION_1"
+index = 0x0f
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0xf8, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RC_CONFIGURATION_1"
+description = "Second RC-calibration setup field."
+bitOffset = 3
+bitWidth = 5
+
+[[blocks.registers]]
+name = "RC_CONFIGURATION_0"
+index = 0x11
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x30, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RC_CONFIGURATION_0"
+description = "First RC-calibration setup field."
+bitOffset = 4
+bitWidth = 2
+
+[[blocks.registers]]
+name = "RC_CALIBRATION_ENABLE"
+index = 0x13
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_ENABLE"
+description = "RC-calibration enable bit."
+bitOffset = 0
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_PULSE"
+description = "RC-calibration pulse bit."
+bitOffset = 1
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "RC_CONFIGURATION_2"
+description = "Third RC-calibration setup field."
+bitOffset = 2
+bitWidth = 4
+
+[[blocks.registers]]
+name = "RC_CALIBRATION_RESULT"
+index = 0x14
+access = "read-write"
+read-safe = { epoch = "r1-calibrated-radio", comparison-mask = 0x3f, sources = ["HIL_S31_R1_ANALOG_CAPTURE"] }
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_RESULT"
+description = "RC-calibration result field."
+bitOffset = 0
+bitWidth = 6
+
+[[blocks.registers]]
+name = "BYTE_01_OPAQUE"
+index = 0x01
+
+[[blocks.registers]]
+name = "BYTE_04_OPAQUE"
+index = 0x04
+
+[[blocks.registers]]
+name = "BYTE_05_OPAQUE"
+index = 0x05
+
+[[blocks.registers]]
+name = "BYTE_06_OPAQUE"
+index = 0x06
+
+[[blocks.registers]]
+name = "BYTE_08_OPAQUE"
+index = 0x08
+
+[[blocks.registers]]
+name = "BYTE_09_OPAQUE"
+index = 0x09
+
+[[blocks.registers]]
+name = "BYTE_0A_OPAQUE"
+index = 0x0a
+
+[[blocks.registers]]
+name = "BYTE_0B_OPAQUE"
+index = 0x0b
+
+[[blocks.registers]]
+name = "BYTE_0C_OPAQUE"
+index = 0x0c
+
+[[blocks.registers]]
+name = "BYTE_0D_OPAQUE"
+index = 0x0d
+
+[[blocks.registers]]
+name = "BYTE_0E_OPAQUE"
+index = 0x0e
 [[blocks]]
 name = "BLOCK_6C"
 code = 0x6c
@@ -1006,3 +1594,851 @@ index = 0x0e
 name = "I2C_DIG_REG_SCK_DCAP"
 bitOffset = 0
 bitWidth = 8
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_HIGH.RFPLL_CAPACITOR_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_SEARCH_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_SEARCH_ENABLE.RFPLL_CAPACITOR_SEARCH_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_SEARCH_STATUS"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_SEARCH_STATUS.RFPLL_CAPACITOR_SEARCH_STATUS"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_HIGH.RFPLL_INITIAL_CONFIGURATION_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_HIGH.RFPLL_INITIAL_CONFIGURATION_LOW"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_RESTART_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_RESTART_HIGH.RFPLL_RESTART_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_RESTART_HIGH.RFPLL_RESTART_LOW"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_LOCK_STATUS"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_LOCK_STATUS.RFPLL_LOCK_STATUS"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_LOCK_STATUS.RFPLL_CALIBRATED_CAPACITOR_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_LOW"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_LOW.RFPLL_SDM_LOW"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_UPDATE_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_UPDATE_ENABLE.RFPLL_SDM_UPDATE_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE.RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE.RFPLL_CHARGE_PUMP_CALIBRATION_PULSE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE.RFPLL_CHARGE_PUMP_VALUE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_LOCK_STATUS"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_LOCK_STATUS.RFPLL_CHARGE_PUMP_LOCK_STATUS"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CHARGE_PUMP_LOCK_STATUS.RFPLL_CHARGE_PUMP_RESULT"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.RC_CALIBRATION_DOUT_PATH_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.RC_CALIBRATION_DOUT_PATH_ENABLE.RC_CALIBRATION_DOUT_PATH_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_ENABLE.RC_CALIBRATION_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_ENABLE.RC_CALIBRATION_PULSE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_RESULT"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_RESULT.RC_CALIBRATION_RESULT"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.TX_CAPACITOR_LOW"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.TX_CAPACITOR_LOW.TX_CAPACITOR_LOW"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.TX_CAPACITOR_LOW.TX_CAPACITOR_HIGH"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.WIFI_TX_TEMPERATURE_TRACKING_0"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.WIFI_TX_TEMPERATURE_TRACKING_0.WIFI_TX_TEMPERATURE_TRACKING_0"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.WIFI_TX_TEMPERATURE_TRACKING_1"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.WIFI_TX_TEMPERATURE_TRACKING_1.WIFI_TX_TEMPERATURE_TRACKING_1"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.TX_IQ_LOOPBACK_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.TX_IQ_LOOPBACK_ENABLE.TX_IQ_LOOPBACK_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.SHARED_RX_GAIN_CALIBRATION_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.SHARED_RX_GAIN_CALIBRATION_ENABLE.SHARED_RX_GAIN_CALIBRATION_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_0_SOURCE_SELECT"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_0_SOURCE_SELECT.RFPLL_DCODE_0_SOURCE_SELECT"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_1_SOURCE_SELECT"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_1_SOURCE_SELECT.RFPLL_DCODE_1_SOURCE_SELECT"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_CKGEN_RESET"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_CKGEN_RESET.RFPLL_DCODE_CKGEN_RESET"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_INTERNAL_DCODE_0"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_INTERNAL_DCODE_0.RFPLL_INTERNAL_DCODE_0"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_INTERNAL_DCODE_1"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_INTERNAL_DCODE_1.RFPLL_INTERNAL_DCODE_1"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_0_SOURCE_SELECT.RFPLL_EXTERNAL_DCODE_0"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_DCODE_1_SOURCE_SELECT.RFPLL_EXTERNAL_DCODE_1"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.XTAL_DUTY_INITIAL"
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.XTAL_DUTY_INITIAL.XTAL_DUTY_INITIAL"
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.XTAL_DUTY_CALIBRATION_PATH_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.XTAL_DUTY_CALIBRATION_PATH_ENABLE.XTAL_DUTY_CALIBRATION_PATH_ENABLE"
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBPLL.I2C_BBPLL_RSTB_DIV_ADC.ADC_RATE_CONFIGURATION"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CONFIGURATION_0"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CONFIGURATION_0.RC_CONFIGURATION_0"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CONFIGURATION_1"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CONFIGURATION_1.RC_CONFIGURATION_1"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_ENABLE.RC_CONFIGURATION_2"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.BLUETOOTH_TX_POWER_HIGH_0"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.BLUETOOTH_TX_POWER_HIGH_0.BLUETOOTH_TX_POWER_HIGH_0"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.BLUETOOTH_TX_POWER_HIGH_0.BIT_6_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BLUETOOTH_TX_POWER_HIGH_1"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.BLUETOOTH_TX_POWER_HIGH_1.BLUETOOTH_TX_POWER_HIGH_1"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "ULP_BOD.XTAL_DUTY_CANDIDATE"
+sources = ["BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CAPACITOR_LOW"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.RFPLL_CALIBRATED_CAPACITOR_LOW"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_MOST_SIGNIFICANT_BYTE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_UPPER_MIDDLE_BYTE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "SDM.RFPLL_SDM_LOWER_MIDDLE_BYTE"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.RF_CLOSE_CONTROL"
+sources = ["BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "RFPLL.BYTE_0D_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "RFPLL.BYTE_15_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_04_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_05_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_06_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_07_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0C_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0D_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0E_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0F_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_14_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_15_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_16_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_17_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_18_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_19_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_1C_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_1D_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_01_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_04_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_05_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_06_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_08_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_09_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0A_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0B_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0C_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0D_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0E_OPAQUE"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

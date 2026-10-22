@@ -165,6 +165,50 @@ fn aliases_are_routes_to_one_physical_block_and_ambiguous_requests_fail() {
 }
 
 #[test]
+fn byte_identities_and_capture_masks_do_not_invent_data_semantics_or_reset() {
+    let mut text = fixture()
+        .split("[[blocks.registers.fields]]")
+        .next()
+        .unwrap()
+        .to_owned();
+    text = text.replace("reserved = { mask = 4, sources = [\"RESERVED\"] }", "access = \"read-only\"\nread-safe = { epoch = \"qualified-idle\", comparison-mask = 255, sources = [\"CAPTURE\"] }");
+    let geometry = parse(&text).unwrap().geometry("synthetic").unwrap();
+    let byte = &geometry[0];
+    assert_eq!(
+        (
+            byte.states.described,
+            byte.states.opaque,
+            byte.states.reserved
+        ),
+        (0, 0, 0)
+    );
+    assert_eq!(byte.states.absent, 255);
+    assert_eq!(byte.reset_value, None);
+    assert_eq!(byte.comparison_mask, Some(255));
+    assert!(parse(&text.replace("comparison-mask = 255", "comparison-mask = 0")).is_err());
+}
+
+#[test]
+fn access_views_preserve_the_hardware_field_and_require_a_sourced_strict_subrange() {
+    let text = fixture().replace("name = \"ENABLE\"\nbitOffset = 0\nbitWidth = 1", "name = \"ENABLE\"\nbitOffset = 0\nbitWidth = 2")
+        .replace("[[blocks.registers.fields]]\nname = \"BIT_1_OPAQUE\"\nbitOffset = 1\nbitWidth = 1", "[[blocks.registers.views]]\nname = \"LOW_ENABLE\"\nfield = \"ENABLE\"\nbit-offset = 0\nbit-width = 1\nsources = [\"MASKED_USE\"]")
+        .replace("PLL.CONTROL.BIT_1_OPAQUE", "PLL.CONTROL.LOW_ENABLE")
+        .replace("naming = \"opaque\"", "naming = \"descriptive\"");
+    let geometry = parse(&text).unwrap().geometry("synthetic").unwrap();
+    assert_eq!(geometry[0].fields.len(), 1);
+    assert_eq!(geometry[0].views.len(), 1);
+    assert_eq!(geometry[0].states.described, 3);
+    for (from, to) in [
+        ("field = \"ENABLE\"", "field = \"MISSING\""),
+        ("bit-width = 1", "bit-width = 2"),
+        ("bit-offset = 0", "bit-offset = 2"),
+        ("sources = [\"MASKED_USE\"]", "sources = []"),
+    ] {
+        assert!(parse(&text.replace(from, to)).is_err(), "{from} -> {to}");
+    }
+}
+
+#[test]
 fn review_and_source_failures_never_publish_uncited_fields() {
     for (from, to) in [
         ("sources = [\"HEADER\"]", "sources = []"),

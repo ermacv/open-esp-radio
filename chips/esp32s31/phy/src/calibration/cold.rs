@@ -18,12 +18,12 @@ use crate::{
             PhyFrequencyTableCompletion,
         },
         i2c::{
-            AdcRateAction, AdcRateCompletion, FilterDcapAction, FilterDcapCompletion,
-            I2cInit1Action, I2cInit1Completion, OpenI2cXpdAction, OpenI2cXpdCompletion,
-            PhyI2cAddress, PhyI2cError, PhyI2cField, PhyRfInitPrefixAction,
-            PhyRfInitPrefixCompletion, PhyRfInitPrefixOutcome, PhyRfInitPrefixTransition,
-            PhyRfInitPrefixTransitionError, RcCalibrationAction, RcCalibrationCompletion,
-            RfpllChargePumpAction, RfpllChargePumpCompletion,
+            AdcRateAction, AdcRateCompletion, Address, Field, FilterDcapAction,
+            FilterDcapCompletion, I2cInit1Action, I2cInit1Completion, OpenI2cXpdAction,
+            OpenI2cXpdCompletion, PhyI2cError, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
+            PhyRfInitPrefixOutcome, PhyRfInitPrefixTransition, PhyRfInitPrefixTransitionError,
+            RcCalibrationAction, RcCalibrationCompletion, RfpllChargePumpAction,
+            RfpllChargePumpCompletion,
         },
         pbus::{PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusForceTest},
         rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion},
@@ -47,30 +47,30 @@ pub use crate::state::{PhyRegisterTemperatureControl, PhyState};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyColdI2cRequest {
-    ReadByte { address: PhyI2cAddress },
-    ReadField { field: PhyI2cField },
-    WriteByte { address: PhyI2cAddress, value: u8 },
-    WriteField { field: PhyI2cField, value: u8 },
+    ReadByte { address: Address },
+    ReadField { field: Field },
+    WriteByte { address: Address, value: u8 },
+    WriteField { field: Field, value: u8 },
 }
 
 impl PhyColdI2cRequest {
-    pub const fn read_byte(address: PhyI2cAddress) -> Self {
+    pub const fn read_byte(address: Address) -> Self {
         Self::ReadByte { address }
     }
 
-    pub const fn read_field(field: PhyI2cField) -> Self {
+    pub const fn read_field(field: Field) -> Self {
         Self::ReadField { field }
     }
 
-    pub const fn write_byte(address: PhyI2cAddress, value: u8) -> Self {
+    pub const fn write_byte(address: Address, value: u8) -> Self {
         Self::WriteByte { address, value }
     }
 
-    pub const fn write_field(field: PhyI2cField, value: u8) -> Self {
+    pub const fn write_field(field: Field, value: u8) -> Self {
         Self::WriteField { field, value }
     }
 
-    pub const fn address(self) -> PhyI2cAddress {
+    pub const fn address(self) -> Address {
         match self {
             Self::ReadByte { address } | Self::WriteByte { address, .. } => address,
             Self::ReadField { field } | Self::WriteField { field, .. } => field.address(),
@@ -80,17 +80,17 @@ impl PhyColdI2cRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyColdI2cAction {
-    StartRead { address: PhyI2cAddress },
-    AwaitReadCompletionEdge { address: PhyI2cAddress },
-    StartWrite { address: PhyI2cAddress, value: u8 },
-    AwaitWriteCompletionEdge { address: PhyI2cAddress },
+    StartRead { address: Address },
+    AwaitReadCompletionEdge { address: Address },
+    StartWrite { address: Address, value: u8 },
+    AwaitWriteCompletionEdge { address: Address },
     Complete(PhyColdI2cOutcome),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyColdI2cOutcome {
-    Read { address: PhyI2cAddress, value: u8 },
-    Written { address: PhyI2cAddress },
+    Read { address: Address, value: u8 },
+    Written { address: Address },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -198,7 +198,7 @@ impl PhyColdI2cTransaction {
             PhyColdI2cRequest::WriteField {
                 field,
                 value: field_value,
-            } => PhyColdI2cPhase::StartWrite(field.replace(value, field_value)),
+            } => PhyColdI2cPhase::StartWrite(field.insert_truncated(value, field_value)),
             PhyColdI2cRequest::WriteByte { .. } => return Err(PhyColdI2cError::WrongEdge),
         };
         Ok(PhyColdI2cObservation::EdgeConsumed)

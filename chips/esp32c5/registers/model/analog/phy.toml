@@ -104,6 +104,26 @@ name = "I2C_ULP_EXT_CODE"
 bitOffset = 0
 bitWidth = 8
 
+
+[[blocks.registers]]
+name = "BYTE_07_OPAQUE"
+index = 0x07
+
+[[blocks.registers.fields]]
+name = "BIT_5_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 5
+bitWidth = 1
+
+[[blocks.registers]]
+name = "BYTE_08_OPAQUE"
+index = 0x08
+
+[[blocks.registers.fields]]
+name = "BIT_4_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 4
+bitWidth = 1
 [[blocks]]
 name = "SDM"
 code = 0x63
@@ -117,6 +137,66 @@ read-select = 0x0010
 read-mask-bits = 32
 sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "BYTE_00_OPAQUE"
+index = 0x00
+
+[[blocks.registers]]
+name = "BYTE_01_OPAQUE"
+index = 0x01
+
+[[blocks.registers]]
+name = "BYTE_06_OPAQUE"
+index = 0x06
+
+[[blocks.registers]]
+name = "BYTE_07_OPAQUE"
+index = 0x07
+
+[[blocks.registers]]
+name = "BYTE_08_OPAQUE"
+index = 0x08
+
+[[blocks.registers]]
+name = "BYTE_0E_OPAQUE"
+index = 0x0e
+
+[[blocks.registers]]
+name = "BYTE_0F_OPAQUE"
+index = 0x0f
+
+[[blocks.registers]]
+name = "BYTE_11_OPAQUE"
+index = 0x11
+
+[[blocks.registers]]
+name = "BYTE_12_OPAQUE"
+index = 0x12
+
+[[blocks.registers]]
+name = "BYTE_13_OPAQUE"
+index = 0x13
+
+[[blocks.registers]]
+name = "BYTE_14_OPAQUE"
+index = 0x14
+
+[[blocks.registers]]
+name = "BYTE_15_OPAQUE"
+index = 0x15
+
+[[blocks.registers]]
+name = "BYTE_18_OPAQUE"
+index = 0x18
+
+[[blocks.registers]]
+name = "BYTE_19_OPAQUE"
+index = 0x19
+
+[[blocks.registers]]
+name = "BYTE_1A_OPAQUE"
+index = 0x1a
 [[blocks]]
 name = "BLOCK_64"
 code = 0x64
@@ -299,6 +379,13 @@ name = "I2C_BBPLL_OC_TSCHGP"
 bitOffset = 7
 bitWidth = 1
 
+
+[[blocks.registers.views]]
+name = "ADC_RATE"
+field = "I2C_BBPLL_DIV_ADC"
+bit-offset = 2
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
 [[blocks.registers]]
 name = "I2C_BBPLL_OC_DR1"
 index = 0x05
@@ -458,6 +545,132 @@ read-select = 0x0004
 read-mask-bits = 32
 sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "BYTE_03_OPAQUE"
+index = 0x03
+
+[[blocks.registers.fields]]
+name = "BITS_4_6_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 4
+bitWidth = 3
+
+[[blocks.registers]]
+name = "BYTE_05_OPAQUE"
+index = 0x05
+
+[[blocks.registers.fields]]
+name = "BIT_6_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 6
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "BIT_3_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 3
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "BIT_5_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 5
+bitWidth = 1
+
+[[blocks.registers]]
+name = "BYTE_1D_OPAQUE"
+index = 0x1d
+
+[[blocks.registers.fields]]
+name = "BITS_2_3_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 2
+bitWidth = 2
+
+[[blocks.registers.fields]]
+name = "BIT_7_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 7
+bitWidth = 1
+
+[[blocks.registers.fields]]
+name = "BITS_4_6_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 4
+bitWidth = 3
+
+[[blocks.registers]]
+name = "BYTE_01_OPAQUE"
+index = 0x01
+
+[[blocks.registers]]
+name = "BYTE_02_OPAQUE"
+index = 0x02
+
+[[blocks.registers]]
+name = "BYTE_06_OPAQUE"
+index = 0x06
+
+[[blocks.registers]]
+name = "BYTE_07_OPAQUE"
+index = 0x07
+
+[[blocks.registers]]
+name = "BYTE_08_OPAQUE"
+index = 0x08
+
+[[blocks.registers]]
+name = "BYTE_09_OPAQUE"
+index = 0x09
+
+[[blocks.registers]]
+name = "BYTE_0A_OPAQUE"
+index = 0x0a
+
+[[blocks.registers]]
+name = "BYTE_0B_OPAQUE"
+index = 0x0b
+
+[[blocks.registers]]
+name = "BYTE_0C_OPAQUE"
+index = 0x0c
+
+[[blocks.registers]]
+name = "BYTE_0D_OPAQUE"
+index = 0x0d
+
+[[blocks.registers]]
+name = "BYTE_0E_OPAQUE"
+index = 0x0e
+
+[[blocks.registers]]
+name = "BYTE_0F_OPAQUE"
+index = 0x0f
+
+[[blocks.registers]]
+name = "BYTE_10_OPAQUE"
+index = 0x10
+
+[[blocks.registers]]
+name = "BYTE_11_OPAQUE"
+index = 0x11
+
+[[blocks.registers]]
+name = "BYTE_12_OPAQUE"
+index = 0x12
+
+[[blocks.registers]]
+name = "BYTE_13_OPAQUE"
+index = 0x13
+
+[[blocks.registers]]
+name = "BYTE_14_OPAQUE"
+index = 0x14
+
+[[blocks.registers]]
+name = "BYTE_15_OPAQUE"
+index = 0x15
 [[blocks]]
 name = "CKGEN"
 code = 0x68
@@ -708,6 +921,42 @@ read-select = 0x0040
 read-mask-bits = 32
 sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "BYTE_00_OPAQUE"
+index = 0x00
+
+[[blocks.registers.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers.fields]]
+name = "BITS_4_7_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 4
+bitWidth = 4
+
+[[blocks.registers]]
+name = "BYTE_01_OPAQUE"
+index = 0x01
+
+[[blocks.registers.fields]]
+name = "BITS_4_7_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 4
+bitWidth = 4
+
+[[blocks.registers.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 0
+bitWidth = 4
+
+[[blocks.registers]]
+name = "BYTE_03_OPAQUE"
+index = 0x03
 [[blocks]]
 name = "TXRF"
 code = 0x6b
@@ -721,6 +970,84 @@ read-select = 0x0008
 read-mask-bits = 32
 sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "RC_CALIBRATION_SECOND"
+index = 0x0f
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_SECOND"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 3
+bitWidth = 5
+
+[[blocks.registers]]
+name = "RC_CALIBRATION_FIRST"
+index = 0x11
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_FIRST"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 4
+bitWidth = 2
+
+[[blocks.registers]]
+name = "RC_CALIBRATION_THIRD"
+index = 0x13
+
+[[blocks.registers.fields]]
+name = "RC_CALIBRATION_THIRD"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bitOffset = 2
+bitWidth = 4
+
+[[blocks.registers]]
+name = "BYTE_02_OPAQUE"
+index = 0x02
+
+[[blocks.registers]]
+name = "BYTE_03_OPAQUE"
+index = 0x03
+
+[[blocks.registers]]
+name = "BYTE_04_OPAQUE"
+index = 0x04
+
+[[blocks.registers]]
+name = "BYTE_05_OPAQUE"
+index = 0x05
+
+[[blocks.registers]]
+name = "BYTE_06_OPAQUE"
+index = 0x06
+
+[[blocks.registers]]
+name = "BYTE_07_OPAQUE"
+index = 0x07
+
+[[blocks.registers]]
+name = "BYTE_08_OPAQUE"
+index = 0x08
+
+[[blocks.registers]]
+name = "BYTE_09_OPAQUE"
+index = 0x09
+
+[[blocks.registers]]
+name = "BYTE_0A_OPAQUE"
+index = 0x0a
+
+[[blocks.registers]]
+name = "BYTE_0C_OPAQUE"
+index = 0x0c
+
+[[blocks.registers]]
+name = "BYTE_0D_OPAQUE"
+index = 0x0d
+
+[[blocks.registers]]
+name = "BYTE_0E_OPAQUE"
+index = 0x0e
 [[blocks]]
 name = "BLOCK_6C"
 code = 0x6c
@@ -867,6 +1194,70 @@ read-select = 0x0800
 read-mask-bits = 32
 sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
 
+
+[[blocks.registers]]
+name = "BYTE_01_OPAQUE"
+index = 0x01
+
+[[blocks.registers]]
+name = "BYTE_04_OPAQUE"
+index = 0x04
+
+[[blocks.registers]]
+name = "BYTE_05_OPAQUE"
+index = 0x05
+
+[[blocks.registers]]
+name = "BYTE_07_OPAQUE"
+index = 0x07
+
+[[blocks.registers]]
+name = "BYTE_08_OPAQUE"
+index = 0x08
+
+[[blocks.registers]]
+name = "BYTE_09_OPAQUE"
+index = 0x09
+
+[[blocks.registers]]
+name = "BYTE_0A_OPAQUE"
+index = 0x0a
+
+[[blocks.registers]]
+name = "BYTE_0B_OPAQUE"
+index = 0x0b
+
+[[blocks.registers]]
+name = "BYTE_0C_OPAQUE"
+index = 0x0c
+
+[[blocks.registers]]
+name = "BYTE_0D_OPAQUE"
+index = 0x0d
+
+[[blocks.registers]]
+name = "BYTE_0F_OPAQUE"
+index = 0x0f
+
+[[blocks.registers]]
+name = "BYTE_10_OPAQUE"
+index = 0x10
+
+[[blocks.registers]]
+name = "BYTE_11_OPAQUE"
+index = 0x11
+
+[[blocks.registers]]
+name = "BYTE_12_OPAQUE"
+index = 0x12
+
+[[blocks.registers]]
+name = "BYTE_13_OPAQUE"
+index = 0x13
+
+[[blocks.registers]]
+name = "BYTE_14_OPAQUE"
+index = 0x14
 [[blocks]]
 name = "BLOCK_6F"
 code = 0x6f
@@ -879,3 +1270,715 @@ host = 0
 read-select = 0x4000
 read-mask-bits = 32
 sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[review]]
+entity = "ULP_BOD.BYTE_08_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "ULP_BOD.BYTE_08_OPAQUE.BIT_4_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "ULP_BOD.BYTE_07_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "ULP_BOD.BYTE_07_OPAQUE.BIT_5_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBPLL.I2C_BBPLL_RSTB_DIV_ADC.ADC_RATE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BIAS.BYTE_00_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BIAS.BYTE_00_OPAQUE.BITS_0_3_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BIAS.BYTE_01_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BIAS.BYTE_01_OPAQUE.BITS_4_7_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BIAS.BYTE_00_OPAQUE.BITS_4_7_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BIAS.BYTE_01_OPAQUE.BITS_0_3_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_FIRST"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_FIRST.RC_CALIBRATION_FIRST"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_SECOND"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_SECOND.RC_CALIBRATION_SECOND"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_THIRD"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "TXRF.RC_CALIBRATION_THIRD.RC_CALIBRATION_THIRD"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "unknown"
+naming = "descriptive"
+
+[[review]]
+entity = "BBTOP.BYTE_1D_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_1D_OPAQUE.BITS_2_3_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_05_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_05_OPAQUE.BIT_6_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_05_OPAQUE.BIT_3_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_05_OPAQUE.BIT_5_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_1D_OPAQUE.BIT_7_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_1D_OPAQUE.BITS_4_6_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_03_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_03_OPAQUE.BITS_4_6_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_00_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_01_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_06_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_07_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_08_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_0E_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_0F_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_11_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_12_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_13_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_14_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_15_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_18_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_19_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "SDM.BYTE_1A_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_01_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_02_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_06_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_07_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_08_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_09_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0A_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0B_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0C_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0D_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0E_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_0F_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_10_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_11_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_12_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_13_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_14_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BBTOP.BYTE_15_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "BIAS.BYTE_03_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_02_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_03_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_04_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_05_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_06_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_07_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_08_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_09_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0A_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0C_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0D_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXRF.BYTE_0E_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_01_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_04_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_05_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_07_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_08_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_09_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_0A_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_0B_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_0C_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_0D_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_0F_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_10_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_11_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_12_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_13_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "TXTOP.BYTE_14_OPAQUE"
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+provenance = "reviewed"
+accuracy = "positional"
+completeness = "unknown"
+naming = "opaque"

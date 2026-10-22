@@ -206,26 +206,26 @@ excluded = true
 lifecycle = "cold"
 reason = "lifecycle: the last writer is phy_reg_update_new after cold registration and phy_bb_agc_reg_update after an RF wake or RX table init; the vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration, and production's wake keeps the vendor order"
 
-[registers."PhyI2cField.6b.11"]
+[registers."analog-i2c.6b.11"]
 excluded = true
 lifecycle = "cold"
 reason = "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken"
 
-[registers."PhyI2cField.6b.13"]
+[registers."analog-i2c.6b.13"]
 excluded = true
 lifecycle = "cold"
 reason = "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken"
 
-[registers."PhyI2cField.6b.14"]
+[registers."analog-i2c.6b.14"]
 excluded = true
 lifecycle = "cold"
 reason = "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken"
 
-[[registers."PhyI2cField.69.04"]]
+[[registers."analog-i2c.69.04"]]
 excluded = true
 lifecycle = "cold"
 reason = "lifecycle: cold phy_rf_init runs rc_cal_set(3, 1, 9), phy_rc_cal and sar2_init_code(1400); phy_wakeup_init repeats none of them, and the RF close powers the 0x6b and 0x69 blocks down to their defaults. The vendor read follows the RF wake of its Wi-Fi start, production's read its cold registration; after a restart both sides are woken"
 
-[registers."PhyI2cField.6b.02"]
+[registers."analog-i2c.6b.02"]
 excluded = true
 reason = "live state: the I2C command memory holds both TX capacitor-bank images (0xc2 and 0x73), and the hardware sequencer publishes one on each RF event, so the byte shows the last event"

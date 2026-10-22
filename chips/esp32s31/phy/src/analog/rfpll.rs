@@ -21,7 +21,7 @@ pub const fn phy_get_rf_cal_version() -> u32 {
     102
 }
 
-use crate::analog::i2c::{PhyI2cAddress, PhyI2cField, analog_registers};
+use crate::analog::i2c::{Address, Field, fields, registers};
 use oer_esp32s31_hal::layouts::{PhyRfpllCapacitorCodeCode, PhyRfpllSdmCodeEncoded};
 
 const LOCK_ATTEMPTS: u8 = 100;
@@ -199,18 +199,18 @@ pub enum RfpllFrequencyAction {
         frequency_mhz: u16,
     },
     WriteMasked {
-        field: PhyI2cField,
+        field: Field,
         value: u8,
     },
     WriteByte {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     ReadMasked {
-        field: PhyI2cField,
+        field: Field,
     },
     ReadByte {
-        address: PhyI2cAddress,
+        address: Address,
     },
     DelayMicros(u32),
     Complete(RfpllFrequencyOutcome),
@@ -232,17 +232,17 @@ pub enum RfpllFrequencyCompletion {
         frequency_mhz: u16,
     },
     MaskedWrite {
-        field: PhyI2cField,
+        field: Field,
     },
     ByteWrite {
-        address: PhyI2cAddress,
+        address: Address,
     },
     MaskedRead {
-        field: PhyI2cField,
+        field: Field,
         value: u8,
     },
     ByteRead {
-        address: PhyI2cAddress,
+        address: Address,
         value: u8,
     },
     DelayElapsed(u32),
@@ -402,9 +402,9 @@ impl RfpllFrequencyTransition {
 
     const fn initial_write(index: u8) -> RfpllFrequencyAction {
         let (field, value) = match index {
-            0 => (analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE, 0),
-            1 => (analog_registers::RFPLL_INITIAL_CONFIGURATION_HIGH, 1),
-            _ => (analog_registers::RFPLL_INITIAL_CONFIGURATION_LOW, 0x3f),
+            0 => (fields::RFPLL_CAPACITOR_SEARCH_ENABLE, 0),
+            1 => (fields::RFPLL_INITIAL_CONFIGURATION_HIGH, 1),
+            _ => (fields::RFPLL_INITIAL_CONFIGURATION_LOW, 0x3f),
         };
         RfpllFrequencyAction::WriteMasked { field, value }
     }
@@ -413,27 +413,27 @@ impl RfpllFrequencyTransition {
         let bytes = sdm.bytes;
         match index {
             0 => RfpllFrequencyAction::WriteMasked {
-                field: analog_registers::RFPLL_SDM_UPDATE_ENABLE,
+                field: fields::SDM_RFPLL_SDM_UPDATE_ENABLE,
                 value: 0,
             },
             1 => RfpllFrequencyAction::WriteByte {
-                address: analog_registers::RFPLL_SDM_MOST_SIGNIFICANT_BYTE,
+                address: registers::SDM_RFPLL_SDM_MOST_SIGNIFICANT_BYTE,
                 value: bytes[3],
             },
             2 => RfpllFrequencyAction::WriteByte {
-                address: analog_registers::RFPLL_SDM_UPPER_MIDDLE_BYTE,
+                address: registers::SDM_RFPLL_SDM_UPPER_MIDDLE_BYTE,
                 value: bytes[2],
             },
             3 => RfpllFrequencyAction::WriteByte {
-                address: analog_registers::RFPLL_SDM_LOWER_MIDDLE_BYTE,
+                address: registers::SDM_RFPLL_SDM_LOWER_MIDDLE_BYTE,
                 value: bytes[1],
             },
             4 => RfpllFrequencyAction::WriteMasked {
-                field: analog_registers::RFPLL_SDM_LOW,
+                field: fields::SDM_RFPLL_SDM_LOW,
                 value: bytes[0],
             },
             _ => RfpllFrequencyAction::WriteMasked {
-                field: analog_registers::RFPLL_SDM_UPDATE_ENABLE,
+                field: fields::SDM_RFPLL_SDM_UPDATE_ENABLE,
                 value: 1,
             },
         }
@@ -441,10 +441,10 @@ impl RfpllFrequencyTransition {
 
     const fn restart_write(index: u8) -> RfpllFrequencyAction {
         let (field, value) = match index {
-            0 => (analog_registers::RFPLL_RESTART_HIGH, 0),
-            1 => (analog_registers::RFPLL_RESTART_LOW, 0),
-            2 => (analog_registers::RFPLL_RESTART_LOW, 1),
-            _ => (analog_registers::RFPLL_RESTART_HIGH, 1),
+            0 => (fields::RFPLL_RESTART_HIGH, 0),
+            1 => (fields::RFPLL_RESTART_LOW, 0),
+            2 => (fields::RFPLL_RESTART_LOW, 1),
+            _ => (fields::RFPLL_RESTART_HIGH, 1),
         };
         RfpllFrequencyAction::WriteMasked { field, value }
     }
@@ -469,29 +469,29 @@ impl RfpllFrequencyTransition {
             RfpllFrequencyStep::RestartWrite(index) => Self::restart_write(index),
             RfpllFrequencyStep::LockDelay { .. } => RfpllFrequencyAction::DelayMicros(20),
             RfpllFrequencyStep::LockRead { .. } => RfpllFrequencyAction::ReadMasked {
-                field: analog_registers::RFPLL_LOCK_STATUS,
+                field: fields::RFPLL_LOCK_STATUS,
             },
             RfpllFrequencyStep::CapLowRead { .. } => RfpllFrequencyAction::ReadByte {
-                address: analog_registers::RFPLL_CALIBRATED_CAPACITOR_LOW,
+                address: registers::RFPLL_CALIBRATED_CAPACITOR_LOW,
             },
             RfpllFrequencyStep::CapHighRead { .. } => RfpllFrequencyAction::ReadMasked {
-                field: analog_registers::RFPLL_CALIBRATED_CAPACITOR_HIGH,
+                field: fields::RFPLL_CALIBRATED_CAPACITOR_HIGH,
             },
             RfpllFrequencyStep::EnableCapSearch { .. } => RfpllFrequencyAction::WriteMasked {
-                field: analog_registers::RFPLL_CAPACITOR_SEARCH_ENABLE,
+                field: fields::RFPLL_CAPACITOR_SEARCH_ENABLE,
                 value: 1,
             },
             RfpllFrequencyStep::CapWriteLow(continuation) => RfpllFrequencyAction::WriteByte {
-                address: analog_registers::RFPLL_CAPACITOR_LOW,
+                address: registers::RFPLL_CAPACITOR_LOW,
                 value: continuation.programmed_value().low_byte(),
             },
             RfpllFrequencyStep::CapWriteHigh(continuation) => RfpllFrequencyAction::WriteMasked {
-                field: analog_registers::RFPLL_CAPACITOR_HIGH,
+                field: fields::RFPLL_CAPACITOR_HIGH,
                 value: continuation.programmed_value().high_bit(),
             },
             RfpllFrequencyStep::CapDelay(_) => RfpllFrequencyAction::DelayMicros(5),
             RfpllFrequencyStep::CapStatusRead(_) => RfpllFrequencyAction::ReadMasked {
-                field: analog_registers::RFPLL_CAPACITOR_SEARCH_STATUS,
+                field: fields::RFPLL_CAPACITOR_SEARCH_STATUS,
             },
             RfpllFrequencyStep::Complete(outcome) => RfpllFrequencyAction::Complete(outcome),
             RfpllFrequencyStep::Failed(failure) => RfpllFrequencyAction::Failed(failure),
@@ -644,7 +644,7 @@ impl RfpllFrequencyTransition {
             (
                 RfpllFrequencyStep::LockRead { attempt },
                 RfpllFrequencyCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_LOCK_STATUS,
+                    field: fields::RFPLL_LOCK_STATUS,
                     value,
                 },
             ) => {
@@ -668,7 +668,7 @@ impl RfpllFrequencyTransition {
                     address: completed,
                     value,
                 },
-            ) if completed == analog_registers::RFPLL_CALIBRATED_CAPACITOR_LOW => {
+            ) if completed == registers::RFPLL_CALIBRATED_CAPACITOR_LOW => {
                 RfpllFrequencyStep::CapHighRead {
                     low: value,
                     lock_observed,
@@ -677,7 +677,7 @@ impl RfpllFrequencyTransition {
             (
                 RfpllFrequencyStep::CapHighRead { low, lock_observed },
                 RfpllFrequencyCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_CALIBRATED_CAPACITOR_HIGH,
+                    field: fields::RFPLL_CALIBRATED_CAPACITOR_HIGH,
                     value,
                 },
             ) => RfpllFrequencyStep::EnableCapSearch {
@@ -731,7 +731,7 @@ impl RfpllFrequencyTransition {
             (
                 RfpllFrequencyStep::CapStatusRead(mut search),
                 RfpllFrequencyCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_CAPACITOR_SEARCH_STATUS,
+                    field: fields::RFPLL_CAPACITOR_SEARCH_STATUS,
                     value,
                 },
             ) => {

@@ -375,7 +375,10 @@ fn rx_gain_dc_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     PhyTargetPortError,
 > {
     use crate::{
-        analog::{i2c::analog_registers, pbus::PhyPbusForceTest},
+        analog::{
+            i2c::{fields, registers},
+            pbus::PhyPbusForceTest,
+        },
         rx::gain_calibration::{
             FINE_CODES, PhyRxDcCalibrationRequest, PhyRxDcCalibrationStage, PhyRxGainDcBank,
             PhyRxGainDcOutcome, SHARED_CALIBRATION_GAIN, WIFI_CALIBRATION_GAIN, fine_code, rx_on,
@@ -415,7 +418,7 @@ fn rx_gain_dc_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
         crate::target_executor::write_i2c_field_direct(
             clock,
             registers,
-            analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE,
+            fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
             0,
         )?;
         for index in 0..SHARED_CALIBRATION_GAIN.len() as u8 {
@@ -486,7 +489,7 @@ fn rx_gain_dc_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
         crate::target_executor::write_i2c_field_direct(
             clock,
             registers,
-            analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE,
+            fields::BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE,
             1,
         )?;
         rx_gain_cleanup_direct::<D, _>(clock, registers)?;

@@ -7,7 +7,7 @@ use super::{
     XtalDutyRestoreTransition, XtalDutySearchAction, XtalDutySearchCompletion,
     XtalDutySearchOutcome, XtalDutySearchTransition, XtalDutySearchTransitionError,
 };
-use crate::analog::i2c::analog_registers;
+use crate::analog::i2c::{fields, registers};
 use crate::analog::pbus::PhyPbusForceTest;
 use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion};
 use crate::calibration::estimator::{
@@ -198,9 +198,9 @@ fn complete_rfpll_action(
             RfpllFrequencyCompletion::ByteWrite { address }
         }
         RfpllFrequencyAction::ReadMasked { field } => {
-            let value = if field == crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS {
+            let value = if field == crate::analog::i2c::fields::RFPLL_LOCK_STATUS {
                 1
-            } else if field == crate::analog::i2c::analog_registers::RFPLL_CAPACITOR_SEARCH_STATUS {
+            } else if field == crate::analog::i2c::fields::RFPLL_CAPACITOR_SEARCH_STATUS {
                 let value = if (*cap_status_reads).is_multiple_of(3) {
                     0
                 } else {
@@ -214,8 +214,7 @@ fn complete_rfpll_action(
             RfpllFrequencyCompletion::MaskedRead { field, value }
         }
         RfpllFrequencyAction::ReadByte { address } => {
-            let value = if address
-                == crate::analog::i2c::analog_registers::RFPLL_CALIBRATED_CAPACITOR_LOW
+            let value = if address == crate::analog::i2c::registers::RFPLL_CALIBRATED_CAPACITOR_LOW
             {
                 100
             } else {
@@ -454,7 +453,7 @@ fn evaluates_all_24_candidates_only_after_timer_and_measurement_edges() {
 #[test]
 fn each_outlier_uses_at_most_two_identity_bound_replacements() {
     let mut transition = XtalDutySearchTransition::new();
-    let duty_address = analog_registers::XTAL_DUTY_CANDIDATE;
+    let duty_address = registers::ULP_BOD_XTAL_DUTY_CANDIDATE;
     transition
         .advance(XtalDutySearchCompletion::CandidateWritten {
             address: duty_address,
@@ -694,7 +693,7 @@ fn pass_rejects_wrong_field_and_stale_parameter_completion() {
     };
     assert_eq!(
         transition.advance(XtalDutyPassCompletion::MaskedWrite {
-            field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
+            field: crate::analog::i2c::fields::RFPLL_LOCK_STATUS,
         }),
         Err(XtalDutyPassTransitionError::WrongCompletion)
     );

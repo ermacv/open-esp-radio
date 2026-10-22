@@ -10,8 +10,8 @@
 
 pub const PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT: u16 = 1_000;
 
-const PHY_REGISTER_FINAL_I2C_ADDRESS: crate::analog::i2c::PhyI2cAddress =
-    crate::analog::i2c::analog_registers::RFPLL_SDM_UPDATE_ENABLE.address();
+const PHY_REGISTER_FINAL_I2C_ADDRESS: crate::analog::i2c::Address =
+    crate::analog::i2c::fields::SDM_RFPLL_SDM_UPDATE_ENABLE.address();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterDelayPhase {
@@ -52,7 +52,7 @@ pub enum PhyRegisterAction {
     Baseband(crate::calibration::baseband::PhyBbInitAction),
     Temperature(crate::analog::temperature::PhyTemperatureAction),
     ReadFinalI2c {
-        address: crate::analog::i2c::PhyI2cAddress,
+        address: crate::analog::i2c::Address,
     },
 }
 
@@ -102,11 +102,11 @@ pub enum PhyRegisterCompletion {
     Baseband(crate::calibration::baseband::PhyBbInitCompletion),
     Temperature(crate::analog::temperature::PhyTemperatureCompletion),
     FinalI2cRead {
-        address: crate::analog::i2c::PhyI2cAddress,
+        address: crate::analog::i2c::Address,
         value: u8,
     },
     FinalI2cDeadlineExceeded {
-        address: crate::analog::i2c::PhyI2cAddress,
+        address: crate::analog::i2c::Address,
     },
 }
 
@@ -1371,9 +1371,9 @@ impl PhyRegisterMmioBinding {
             }
             PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
                 let host = if index == 0 {
-                    oer_esp32s31_hal::phy::i2c::PhyI2cHost::Host0
+                    oer_esp32s31_hal::phy::i2c::Host::Host0
                 } else {
-                    oer_esp32s31_hal::phy::i2c::PhyI2cHost::Host1
+                    oer_esp32s31_hal::phy::i2c::Host::Host1
                 };
                 oer_esp32s31_hal::phy::i2c::pulse_master_reset(registers, host)
             }
@@ -1415,9 +1415,9 @@ impl PhyRegisterResetSampleBinding {
         registers: &mut P,
     ) -> PhyRegisterCompletion {
         let host = if self.index == 0 {
-            oer_esp32s31_hal::phy::i2c::PhyI2cHost::Host0
+            oer_esp32s31_hal::phy::i2c::Host::Host0
         } else {
-            oer_esp32s31_hal::phy::i2c::PhyI2cHost::Host1
+            oer_esp32s31_hal::phy::i2c::Host::Host1
         };
         PhyRegisterCompletion::I2cMasterResetSampled {
             index: self.index,
@@ -1467,7 +1467,7 @@ impl PhyRegisterTimerBinding {
 /// Non-cloneable owner of the final one-byte PHY-I2C read.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRegisterFinalI2cBinding {
-    address: crate::analog::i2c::PhyI2cAddress,
+    address: crate::analog::i2c::Address,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 

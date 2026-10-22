@@ -1,8 +1,8 @@
 /// Native analog-I2C knowledge; these values perform no hardware access.
 pub mod analog_i2c {
     pub use oer_espressif_analog::model::{
-        BlockCode as Block, ByteAddress as Address, Host, KnownReset, RegisterFacts, Route,
-        SampledByte,
+        BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset,
+        RegisterFacts, Route, SampledByte,
     };
     pub type Field = oer_espressif_analog::AnalogField<Address>;
     pub mod blocks {
@@ -158,6 +158,47 @@ pub mod analog_i2c {
             _ => None,
         }
     }
+
+    /// A validated transport request. Its original code is retained independently
+    /// of the physical byte identity, including aliases with another host.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Request {
+        profile: Profile,
+        code: u8,
+        index: u8,
+    }
+    impl Request {
+        pub const fn new(profile: Profile, code: u8, index: u8) -> Option<Self> {
+            match route(profile, code) {
+                Some(_) => Some(Self {
+                    profile,
+                    code,
+                    index,
+                }),
+                None => None,
+            }
+        }
+        pub const fn from_address(profile: Profile, address: Address) -> Option<Self> {
+            match route(profile, address.block()) {
+                Some(r) if r.command_code == address.block() => {
+                    Self::new(profile, address.block(), address.index())
+                }
+                _ => None,
+            }
+        }
+        pub const fn route(self) -> Route {
+            match route(self.profile, self.code) {
+                Some(route) => route,
+                None => panic!("validated analog request"),
+            }
+        }
+        pub const fn address(self) -> Address {
+            self.route().address(self.index)
+        }
+        pub const fn index(self) -> u8 {
+            self.index
+        }
+    }
     pub mod registers {
         use super::Address;
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_MPLL
@@ -186,6 +227,56 @@ pub mod analog_i2c {
         pub const APLL_I2C_APLL_DSDM0: Address = Address::new(0xc, 0x9);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
         pub const ULP_BOD_I2C_BOD_THRESHOLD: Address = Address::new(0x61, 0x5);
+        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        pub const ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE: Address = Address::new(0x61, 0x7);
+        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        pub const ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE: Address = Address::new(0x61, 0x8);
+        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        pub const ULP_BOD_XTAL_DUTY_INITIAL: Address = Address::new(0x61, 0x9);
+        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        pub const ULP_BOD_XTAL_DUTY_CANDIDATE: Address = Address::new(0x61, 0xa);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_RESTART_HIGH: Address = Address::new(0x62, 0x0);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CAPACITOR_LOW: Address = Address::new(0x62, 0x1);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CAPACITOR_HIGH: Address = Address::new(0x62, 0x2);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_DCODE_CKGEN_RESET: Address = Address::new(0x62, 0x4);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CALIBRATED_CAPACITOR_LOW: Address = Address::new(0x62, 0x5);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_LOCK_STATUS: Address = Address::new(0x62, 0x7);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CAPACITOR_SEARCH_ENABLE: Address = Address::new(0x62, 0xb);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CAPACITOR_SEARCH_STATUS: Address = Address::new(0x62, 0xc);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CHARGE_PUMP_LOCK_STATUS: Address = Address::new(0x62, 0xe);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE: Address = Address::new(0x62, 0xf);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_INTERNAL_DCODE_0: Address = Address::new(0x62, 0x11);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_INTERNAL_DCODE_1: Address = Address::new(0x62, 0x12);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_DCODE_0_SOURCE_SELECT: Address = Address::new(0x62, 0x13);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_DCODE_1_SOURCE_SELECT: Address = Address::new(0x62, 0x14);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_BYTE_0D_OPAQUE: Address = Address::new(0x62, 0xd);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const RFPLL_BYTE_15_OPAQUE: Address = Address::new(0x62, 0x15);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const SDM_RFPLL_SDM_UPDATE_ENABLE: Address = Address::new(0x63, 0x0);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const SDM_RFPLL_SDM_MOST_SIGNIFICANT_BYTE: Address = Address::new(0x63, 0x3);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const SDM_RFPLL_SDM_UPPER_MIDDLE_BYTE: Address = Address::new(0x63, 0x4);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const SDM_RFPLL_SDM_LOWER_MIDDLE_BYTE: Address = Address::new(0x63, 0x5);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const SDM_RFPLL_SDM_LOW: Address = Address::new(0x63, 0x6);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_IR_CAL_DELAY: Address = Address::new(0x66, 0x0);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
@@ -206,6 +297,48 @@ pub mod analog_i2c {
         pub const BBPLL_I2C_BBPLL_OC_VCO_DBIAS: Address = Address::new(0x66, 0x9);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_ENT_PLL: Address = Address::new(0x66, 0xa);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_TX_IQ_LOOPBACK_ENABLE: Address = Address::new(0x67, 0x0);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_RF_CLOSE_CONTROL: Address = Address::new(0x67, 0x2);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE: Address = Address::new(0x67, 0x3);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_0: Address = Address::new(0x67, 0x1e);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_1: Address = Address::new(0x67, 0x1f);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_04_OPAQUE: Address = Address::new(0x67, 0x4);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_05_OPAQUE: Address = Address::new(0x67, 0x5);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_06_OPAQUE: Address = Address::new(0x67, 0x6);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_07_OPAQUE: Address = Address::new(0x67, 0x7);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_0C_OPAQUE: Address = Address::new(0x67, 0xc);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_0D_OPAQUE: Address = Address::new(0x67, 0xd);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_0E_OPAQUE: Address = Address::new(0x67, 0xe);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_0F_OPAQUE: Address = Address::new(0x67, 0xf);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_14_OPAQUE: Address = Address::new(0x67, 0x14);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_15_OPAQUE: Address = Address::new(0x67, 0x15);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_16_OPAQUE: Address = Address::new(0x67, 0x16);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_17_OPAQUE: Address = Address::new(0x67, 0x17);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_18_OPAQUE: Address = Address::new(0x67, 0x18);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_19_OPAQUE: Address = Address::new(0x67, 0x19);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_1C_OPAQUE: Address = Address::new(0x67, 0x1c);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BYTE_1D_OPAQUE: Address = Address::new(0x67, 0x1d);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_SARADC
         pub const SARADC_I2C_SARADC_SAR1_INIT_CODE_LSB: Address = Address::new(0x69, 0x0);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_SARADC
@@ -232,6 +365,42 @@ pub mod analog_i2c {
         pub const BIAS_I2C_BIAS_DREG_1P6: Address = Address::new(0x6a, 0x0);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BIAS
         pub const BIAS_I2C_BIAS_DREG_1P1_PVT: Address = Address::new(0x6a, 0x1);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_TX_CAPACITOR_LOW: Address = Address::new(0x6b, 0x2);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_WIFI_TX_TEMPERATURE_TRACKING_0: Address = Address::new(0x6b, 0x3);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_WIFI_TX_TEMPERATURE_TRACKING_1: Address = Address::new(0x6b, 0x7);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CONFIGURATION_1: Address = Address::new(0x6b, 0xf);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CONFIGURATION_0: Address = Address::new(0x6b, 0x11);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CALIBRATION_ENABLE: Address = Address::new(0x6b, 0x13);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CALIBRATION_RESULT: Address = Address::new(0x6b, 0x14);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_01_OPAQUE: Address = Address::new(0x6b, 0x1);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_04_OPAQUE: Address = Address::new(0x6b, 0x4);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_05_OPAQUE: Address = Address::new(0x6b, 0x5);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_06_OPAQUE: Address = Address::new(0x6b, 0x6);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_08_OPAQUE: Address = Address::new(0x6b, 0x8);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_09_OPAQUE: Address = Address::new(0x6b, 0x9);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_0A_OPAQUE: Address = Address::new(0x6b, 0xa);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_0B_OPAQUE: Address = Address::new(0x6b, 0xb);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_0C_OPAQUE: Address = Address::new(0x6b, 0xc);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_0D_OPAQUE: Address = Address::new(0x6b, 0xd);
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_BYTE_0E_OPAQUE: Address = Address::new(0x6b, 0xe);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_EXT_RTC_DREG: Address = Address::new(0x6d, 0x4);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_DIG_REG
@@ -431,6 +600,151 @@ pub mod analog_i2c {
             Some(field) => field,
             None => panic!("validated analog field"),
         };
+        /// SOURCE: BLOB_LIBPHY_PHY_XTAL_DUTY_CAL
+        pub const ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE: Field =
+            match Field::new(Address::new(0x61, 0x7), 5, 5) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE: Field =
+            match Field::new(Address::new(0x61, 0x8), 2, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_XTAL_DUTY_CAL
+        pub const ULP_BOD_XTAL_DUTY_INITIAL: Field = match Field::new(Address::new(0x61, 0x9), 5, 0)
+        {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_RESTART_HIGH: Field = match Field::new(Address::new(0x62, 0x0), 6, 6) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_RESTART_LOW: Field = match Field::new(Address::new(0x62, 0x0), 5, 5) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CAPACITOR_HIGH: Field = match Field::new(Address::new(0x62, 0x2), 6, 6) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_INITIAL_CONFIGURATION_HIGH: Field =
+            match Field::new(Address::new(0x62, 0x2), 7, 7) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_INITIAL_CONFIGURATION_LOW: Field =
+            match Field::new(Address::new(0x62, 0x2), 5, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_DCODE_CKGEN_RESET: Field = match Field::new(Address::new(0x62, 0x4), 7, 7) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_LOCK_STATUS: Field = match Field::new(Address::new(0x62, 0x7), 1, 1) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CALIBRATED_CAPACITOR_HIGH: Field =
+            match Field::new(Address::new(0x62, 0x7), 2, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CAPACITOR_SEARCH_ENABLE: Field =
+            match Field::new(Address::new(0x62, 0xb), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CAPACITOR_SEARCH_STATUS: Field =
+            match Field::new(Address::new(0x62, 0xc), 3, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CHARGE_PUMP_LOCK_STATUS: Field =
+            match Field::new(Address::new(0x62, 0xe), 7, 7) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CHARGE_PUMP_RESULT: Field = match Field::new(Address::new(0x62, 0xe), 4, 0)
+        {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE: Field =
+            match Field::new(Address::new(0x62, 0xf), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CHARGE_PUMP_CALIBRATION_PULSE: Field =
+            match Field::new(Address::new(0x62, 0xf), 5, 5) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_CHARGE_PUMP_VALUE: Field = match Field::new(Address::new(0x62, 0xf), 4, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_INTERNAL_DCODE_0: Field = match Field::new(Address::new(0x62, 0x11), 5, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_INTERNAL_DCODE_1: Field = match Field::new(Address::new(0x62, 0x12), 5, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_DCODE_0_SOURCE_SELECT: Field =
+            match Field::new(Address::new(0x62, 0x13), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_EXTERNAL_DCODE_0: Field = match Field::new(Address::new(0x62, 0x13), 5, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_DCODE_1_SOURCE_SELECT: Field =
+            match Field::new(Address::new(0x62, 0x14), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const RFPLL_EXTERNAL_DCODE_1: Field = match Field::new(Address::new(0x62, 0x14), 5, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const SDM_RFPLL_SDM_UPDATE_ENABLE: Field =
+            match Field::new(Address::new(0x63, 0x0), 3, 3) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
+        pub const SDM_RFPLL_SDM_LOW: Field = match Field::new(Address::new(0x63, 0x6), 2, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_IR_CAL_DELAY: Field =
             match Field::new(Address::new(0x66, 0x0), 3, 0) {
@@ -512,6 +826,12 @@ pub mod analog_i2c {
             Some(field) => field,
             None => panic!("validated analog field"),
         };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBPLL_ADC_RATE_CONFIGURATION: Field =
+            match Field::new(Address::new(0x66, 0x4), 3, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_OC_DR1: Field = match Field::new(Address::new(0x66, 0x5), 2, 0) {
             Some(field) => field,
@@ -578,6 +898,36 @@ pub mod analog_i2c {
             Some(field) => field,
             None => panic!("validated analog field"),
         };
+        /// SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT
+        pub const BBTOP_TX_IQ_LOOPBACK_ENABLE: Field =
+            match Field::new(Address::new(0x67, 0x0), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE: Field =
+            match Field::new(Address::new(0x67, 0x3), 2, 2) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS
+        pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_0: Field =
+            match Field::new(Address::new(0x67, 0x1e), 5, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_0_BIT_6_OPAQUE: Field =
+            match Field::new(Address::new(0x67, 0x1e), 6, 6) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS
+        pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_1: Field =
+            match Field::new(Address::new(0x67, 0x1f), 5, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_SARADC
         pub const SARADC_I2C_SARADC_SAR1_INIT_CODE_LSB: Field =
             match Field::new(Address::new(0x69, 0x0), 7, 0) {
@@ -738,6 +1088,63 @@ pub mod analog_i2c {
                 Some(field) => field,
                 None => panic!("validated analog field"),
             };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_TX_CAPACITOR_LOW: Field = match Field::new(Address::new(0x6b, 0x2), 3, 0) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_TX_CAPACITOR_HIGH: Field = match Field::new(Address::new(0x6b, 0x2), 7, 4) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_WIFI_TX_TEMPERATURE_TRACKING_0: Field =
+            match Field::new(Address::new(0x6b, 0x3), 3, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_WIFI_TX_TEMPERATURE_TRACKING_1: Field =
+            match Field::new(Address::new(0x6b, 0x7), 3, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CONFIGURATION_1: Field = match Field::new(Address::new(0x6b, 0xf), 7, 3) {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CONFIGURATION_0: Field = match Field::new(Address::new(0x6b, 0x11), 5, 4)
+        {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CALIBRATION_ENABLE: Field =
+            match Field::new(Address::new(0x6b, 0x13), 0, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CALIBRATION_PULSE: Field =
+            match Field::new(Address::new(0x6b, 0x13), 1, 1) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CONFIGURATION_2: Field = match Field::new(Address::new(0x6b, 0x13), 5, 2)
+        {
+            Some(field) => field,
+            None => panic!("validated analog field"),
+        };
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        pub const TXRF_RC_CALIBRATION_RESULT: Field =
+            match Field::new(Address::new(0x6b, 0x14), 5, 0) {
+                Some(field) => field,
+                None => panic!("validated analog field"),
+            };
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_EXT_RTC_DREG: Field =
             match Field::new(Address::new(0x6d, 0x4), 4, 0) {
@@ -811,7 +1218,7 @@ pub mod analog_i2c {
                 None => panic!("validated analog field"),
             };
     }
-    pub const REGISTERS: [RegisterFacts; 43] = [
+    pub const REGISTERS: [RegisterFacts; 107] = [
         RegisterFacts {
             address: Address::new(0xb, 0x1),
             described: 0x27,
@@ -917,6 +1324,206 @@ pub mod analog_i2c {
             read_safe_epoch: None,
         },
         RegisterFacts {
+            address: Address::new(0x61, 0x7),
+            described: 0x20,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x61, 0x8),
+            described: 0x4,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x61, 0x9),
+            described: 0x3f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x61, 0xa),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x0),
+            described: 0x60,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x1),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x2),
+            described: 0xff,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x4),
+            described: 0x80,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x5),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x7),
+            described: 0x6,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0xb),
+            described: 0x40,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0xc),
+            described: 0xc,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0xd),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0xe),
+            described: 0x9f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0xf),
+            described: 0x7f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x11),
+            described: 0x3f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x12),
+            described: 0x3f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x13),
+            described: 0x7f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x14),
+            described: 0x7f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x62, 0x15),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x0),
+            described: 0x8,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x3),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x4),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x5),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x63, 0x6),
+            described: 0x7,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
             address: Address::new(0x66, 0x0),
             described: 0xff,
             opaque: 0x0,
@@ -950,11 +1557,11 @@ pub mod analog_i2c {
         },
         RegisterFacts {
             address: Address::new(0x66, 0x4),
-            described: 0x33,
+            described: 0x3f,
             opaque: 0x0,
             reserved: 0x0,
             reset: None,
-            read_safe_epoch: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
         },
         RegisterFacts {
             address: Address::new(0x66, 0x5),
@@ -997,6 +1604,174 @@ pub mod analog_i2c {
             read_safe_epoch: None,
         },
         RegisterFacts {
+            address: Address::new(0x67, 0x0),
+            described: 0x40,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x2),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x3),
+            described: 0x4,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x4),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x5),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x6),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x7),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xc),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xd),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xe),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0xf),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x14),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x15),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x16),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x17),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x18),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x19),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x1c),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x1d),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x1e),
+            described: 0x3f,
+            opaque: 0x40,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x67, 0x1f),
+            described: 0x3f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
             address: Address::new(0x69, 0x0),
             described: 0xff,
             opaque: 0x0,
@@ -1034,7 +1809,7 @@ pub mod analog_i2c {
             opaque: 0x0,
             reserved: 0x0,
             reset: None,
-            read_safe_epoch: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
         },
         RegisterFacts {
             address: Address::new(0x69, 0x5),
@@ -1050,7 +1825,7 @@ pub mod analog_i2c {
             opaque: 0x0,
             reserved: 0x0,
             reset: None,
-            read_safe_epoch: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
         },
         RegisterFacts {
             address: Address::new(0x69, 0x7),
@@ -1090,7 +1865,7 @@ pub mod analog_i2c {
             opaque: 0x0,
             reserved: 0x0,
             reset: None,
-            read_safe_epoch: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
         },
         RegisterFacts {
             address: Address::new(0x6a, 0x1),
@@ -1098,7 +1873,151 @@ pub mod analog_i2c {
             opaque: 0x0,
             reserved: 0x0,
             reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x1),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
             read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x2),
+            described: 0xff,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x3),
+            described: 0xf,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x4),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x5),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x6),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x7),
+            described: 0xf,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x8),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x9),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xa),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xb),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xc),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xd),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xe),
+            described: 0x0,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: None,
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0xf),
+            described: 0xf8,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x11),
+            described: 0x30,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x13),
+            described: 0x3f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
+        },
+        RegisterFacts {
+            address: Address::new(0x6b, 0x14),
+            described: 0x3f,
+            opaque: 0x0,
+            reserved: 0x0,
+            reset: None,
+            read_safe_epoch: Some("r1-calibrated-radio"),
         },
         RegisterFacts {
             address: Address::new(0x6d, 0x4),
@@ -1158,5 +2077,249 @@ pub mod analog_i2c {
         },
     ];
     /// Registers with an independently reviewed finite read-safe epoch.
-    pub const READ_SAFE: &[(Address, &str)] = &[];
+    pub const READ_SAFE: &[(Address, &str)] = &[
+        (Address::new(0x61, 0x7), "r1-calibrated-radio"),
+        (Address::new(0x61, 0x8), "r1-calibrated-radio"),
+        (Address::new(0x61, 0x9), "r1-calibrated-radio"),
+        (Address::new(0x61, 0xa), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x0), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x1), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x2), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x4), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x5), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x7), "r1-calibrated-radio"),
+        (Address::new(0x62, 0xb), "r1-calibrated-radio"),
+        (Address::new(0x62, 0xc), "r1-calibrated-radio"),
+        (Address::new(0x62, 0xe), "r1-calibrated-radio"),
+        (Address::new(0x62, 0xf), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x11), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x12), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x13), "r1-calibrated-radio"),
+        (Address::new(0x62, 0x14), "r1-calibrated-radio"),
+        (Address::new(0x63, 0x0), "r1-calibrated-radio"),
+        (Address::new(0x63, 0x3), "r1-calibrated-radio"),
+        (Address::new(0x63, 0x4), "r1-calibrated-radio"),
+        (Address::new(0x63, 0x5), "r1-calibrated-radio"),
+        (Address::new(0x63, 0x6), "r1-calibrated-radio"),
+        (Address::new(0x66, 0x4), "r1-calibrated-radio"),
+        (Address::new(0x67, 0x0), "r1-calibrated-radio"),
+        (Address::new(0x67, 0x2), "r1-calibrated-radio"),
+        (Address::new(0x67, 0x3), "r1-calibrated-radio"),
+        (Address::new(0x67, 0x1e), "r1-calibrated-radio"),
+        (Address::new(0x67, 0x1f), "r1-calibrated-radio"),
+        (Address::new(0x69, 0x4), "r1-calibrated-radio"),
+        (Address::new(0x69, 0x6), "r1-calibrated-radio"),
+        (Address::new(0x6a, 0x0), "r1-calibrated-radio"),
+        (Address::new(0x6a, 0x1), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0x2), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0x3), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0x7), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0xf), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0x11), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0x13), "r1-calibrated-radio"),
+        (Address::new(0x6b, 0x14), "r1-calibrated-radio"),
+    ];
+    /// The qualified comparison image, ordered by physical transport identity.
+    pub const CAPTURE: &[CaptureRegister] = &[
+        CaptureRegister {
+            address: Address::new(0x61, 0x7),
+            mask: 0x20,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x61, 0x8),
+            mask: 0x4,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x61, 0x9),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x61, 0xa),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x0),
+            mask: 0x60,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x1),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x2),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x4),
+            mask: 0x80,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x5),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x7),
+            mask: 0x6,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0xb),
+            mask: 0x40,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0xc),
+            mask: 0xc,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0xe),
+            mask: 0x9f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0xf),
+            mask: 0x7f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x11),
+            mask: 0x3f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x12),
+            mask: 0x3f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x13),
+            mask: 0x7f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x62, 0x14),
+            mask: 0x7f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x63, 0x0),
+            mask: 0x8,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x63, 0x3),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x63, 0x4),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x63, 0x5),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x63, 0x6),
+            mask: 0x7,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x66, 0x4),
+            mask: 0xc,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x67, 0x0),
+            mask: 0x40,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x67, 0x2),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x67, 0x3),
+            mask: 0x4,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x67, 0x1e),
+            mask: 0x7f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x67, 0x1f),
+            mask: 0x3f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x69, 0x4),
+            mask: 0xf,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x69, 0x6),
+            mask: 0xf,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6a, 0x0),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6a, 0x1),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0x2),
+            mask: 0xff,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0x3),
+            mask: 0xf,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0x7),
+            mask: 0xf,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0xf),
+            mask: 0xf8,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0x11),
+            mask: 0x30,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0x13),
+            mask: 0x3f,
+            epoch: "r1-calibrated-radio",
+        },
+        CaptureRegister {
+            address: Address::new(0x6b, 0x14),
+            mask: 0x3f,
+            epoch: "r1-calibrated-radio",
+        },
+    ];
 }

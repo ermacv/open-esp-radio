@@ -17,7 +17,7 @@
 //! vendor-oracle handoff primes the same field to the first ROM range (DAC 5)
 //! before entering the open channel graph.
 
-use crate::analog::i2c::{PhyI2cField, analog_registers};
+use crate::analog::i2c::{Field, fields};
 
 const RESET_DAC: u8 = 0;
 const DEFAULT_DAC: u8 = 5;
@@ -79,18 +79,18 @@ pub enum PhyTemperatureFailure {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTemperatureAction {
-    ReadMasked { field: PhyI2cField },
+    ReadMasked { field: Field },
     SampleCode,
-    WriteMasked { field: PhyI2cField, value: u8 },
+    WriteMasked { field: Field, value: u8 },
     Complete(PhyTemperatureOutcome),
     Failed(PhyTemperatureFailure),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTemperatureCompletion {
-    MaskedRead { field: PhyI2cField, value: u8 },
+    MaskedRead { field: Field, value: u8 },
     CodeSampled { value: u8 },
-    MaskedWrite { field: PhyI2cField, value: u8 },
+    MaskedWrite { field: Field, value: u8 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -176,15 +176,15 @@ impl PhyTemperatureTransition {
     pub const fn action(self) -> PhyTemperatureAction {
         match self.step {
             PhyTemperatureStep::ReadDac => PhyTemperatureAction::ReadMasked {
-                field: analog_registers::TEMPERATURE_SENSOR_DAC_STATUS,
+                field: fields::SARADC_I2C_SARADC_TSENS_DAC,
             },
             PhyTemperatureStep::PrimeDefaultDac => PhyTemperatureAction::WriteMasked {
-                field: analog_registers::TEMPERATURE_SENSOR_DAC,
+                field: fields::SARADC_I2C_SARADC_TSENS_DAC,
                 value: DEFAULT_DAC,
             },
             PhyTemperatureStep::SampleCode { .. } => PhyTemperatureAction::SampleCode,
             PhyTemperatureStep::WriteDac { outcome } => PhyTemperatureAction::WriteMasked {
-                field: analog_registers::TEMPERATURE_SENSOR_DAC,
+                field: fields::SARADC_I2C_SARADC_TSENS_DAC,
                 value: outcome.next_dac,
             },
             PhyTemperatureStep::Complete(outcome) => PhyTemperatureAction::Complete(outcome),
@@ -200,11 +200,11 @@ impl PhyTemperatureTransition {
             (
                 PhyTemperatureStep::ReadDac,
                 PhyTemperatureCompletion::MaskedRead {
-                    field: analog_registers::TEMPERATURE_SENSOR_DAC_STATUS,
+                    field: fields::SARADC_I2C_SARADC_TSENS_DAC,
                     value,
                 },
             ) => {
-                let dac = analog_registers::TEMPERATURE_SENSOR_DAC_STATUS.extract(value);
+                let dac = fields::SARADC_I2C_SARADC_TSENS_DAC.extract(value);
                 if dac == RESET_DAC {
                     // SOURCE[HIL_OPEN_PHY_COLD_2026_07_28]: rev0 cold start
                     // reaches the first baseband temperature pass with DAC 0.
@@ -225,7 +225,7 @@ impl PhyTemperatureTransition {
             (
                 PhyTemperatureStep::PrimeDefaultDac,
                 PhyTemperatureCompletion::MaskedWrite {
-                    field: analog_registers::TEMPERATURE_SENSOR_DAC,
+                    field: fields::SARADC_I2C_SARADC_TSENS_DAC,
                     value: DEFAULT_DAC,
                 },
             ) => PhyTemperatureStep::SampleCode {
@@ -255,7 +255,7 @@ impl PhyTemperatureTransition {
             (
                 PhyTemperatureStep::WriteDac { outcome },
                 PhyTemperatureCompletion::MaskedWrite {
-                    field: analog_registers::TEMPERATURE_SENSOR_DAC,
+                    field: fields::SARADC_I2C_SARADC_TSENS_DAC,
                     value,
                 },
             ) if value == outcome.next_dac => PhyTemperatureStep::Complete(outcome),

@@ -7,10 +7,10 @@
   "signature": {
     "idf-revision": "4d59230ddff16327812782151ef0afef202dc6d7",
     "scenario-sha256": "d76e60adfd4a483617184b1e0effdbf4264a8a67a6087c336e889f2b99b4c1f4",
-    "model-sha256": "f36313a8cc13bbd1ba2a3e2ee073bd2d996a8243f5a6b70e06244a21a291e05d",
+    "model-sha256": "3a97ac5d2f70cc244b9c9604053214bd2194667ac351de895935c2f7a0c355c9",
     "relation-sha256": "9cfaa367b51c6fecf0bf37a8bffe7a97fb8c2f221bcc4aa5c840437f1ee94dc2",
-    "review-sha256": "3f3af92decee5d0205110e81879b09b7bb63517d7a4608b2d0237e4b3638f93c",
-    "recipe-sha256": "fe681c2e2f8321e6423bf983ee1e920f8c743284b0128d050421836f97b8a888"
+    "review-sha256": "1657a2553dbc6ec4e3caf3fb47801ffd572a623120a086c283acb616e0f8b52b",
+    "recipe-sha256": "14dda62c87ae14084a7cc5f0296e45ab1c9d748891f2481130ae41c79a562704"
   },
   "vendor-application-sha256": "e7c115dedfdb1fbf65372ef18655855b2f7d5b415f00de5a2d8347fc0940272a",
   "channel": 1,
@@ -3165,7 +3165,7 @@
       "shared": 4294901760,
       "boards": {}
     },
-    "PhyI2cField.61.07": {
+    "analog-i2c.61.07": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3177,7 +3177,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.61.08": {
+    "analog-i2c.61.08": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3189,7 +3189,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.61.09": {
+    "analog-i2c.61.09": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3221,7 +3221,7 @@
         }
       }
     },
-    "PhyI2cField.61.0a": {
+    "analog-i2c.61.0a": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3253,7 +3253,7 @@
         }
       }
     },
-    "PhyI2cField.62.00": {
+    "analog-i2c.62.00": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3265,7 +3265,7 @@
       "shared": 96,
       "boards": {}
     },
-    "PhyI2cField.62.01": {
+    "analog-i2c.62.01": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3297,7 +3297,7 @@
         }
       }
     },
-    "PhyI2cField.62.02": {
+    "analog-i2c.62.02": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3309,7 +3309,7 @@
       "shared": 255,
       "boards": {}
     },
-    "PhyI2cField.62.04": {
+    "analog-i2c.62.04": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3321,7 +3321,7 @@
       "shared": 128,
       "boards": {}
     },
-    "PhyI2cField.62.05": {
+    "analog-i2c.62.05": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3353,7 +3353,7 @@
         }
       }
     },
-    "PhyI2cField.62.07": {
+    "analog-i2c.62.07": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3365,7 +3365,7 @@
       "shared": 6,
       "boards": {}
     },
-    "PhyI2cField.62.0b": {
+    "analog-i2c.62.0b": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3377,7 +3377,7 @@
       "shared": 64,
       "boards": {}
     },
-    "PhyI2cField.62.0c": {
+    "analog-i2c.62.0c": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3389,7 +3389,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.62.0e": {
+    "analog-i2c.62.0e": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3421,7 +3421,7 @@
         }
       }
     },
-    "PhyI2cField.62.0f": {
+    "analog-i2c.62.0f": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3453,7 +3453,7 @@
         }
       }
     },
-    "PhyI2cField.62.11": {
+    "analog-i2c.62.11": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3485,7 +3485,7 @@
         }
       }
     },
-    "PhyI2cField.62.12": {
+    "analog-i2c.62.12": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3497,7 +3497,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.62.13": {
+    "analog-i2c.62.13": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3509,7 +3509,7 @@
       "shared": 31,
       "boards": {}
     },
-    "PhyI2cField.62.14": {
+    "analog-i2c.62.14": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3521,7 +3521,7 @@
       "shared": 31,
       "boards": {}
     },
-    "PhyI2cField.63.00": {
+    "analog-i2c.63.00": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3533,7 +3533,7 @@
       "shared": 8,
       "boards": {}
     },
-    "PhyI2cField.63.03": {
+    "analog-i2c.63.03": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3545,7 +3545,7 @@
       "shared": 48,
       "boards": {}
     },
-    "PhyI2cField.63.04": {
+    "analog-i2c.63.04": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3557,7 +3557,7 @@
       "shared": 102,
       "boards": {}
     },
-    "PhyI2cField.63.05": {
+    "analog-i2c.63.05": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3569,7 +3569,7 @@
       "shared": 102,
       "boards": {}
     },
-    "PhyI2cField.63.06": {
+    "analog-i2c.63.06": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3581,7 +3581,7 @@
       "shared": 3,
       "boards": {}
     },
-    "PhyI2cField.66.04": {
+    "analog-i2c.66.04": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3593,7 +3593,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.67.00": {
+    "analog-i2c.67.00": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3605,7 +3605,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.67.02": {
+    "analog-i2c.67.02": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3617,7 +3617,7 @@
       "shared": 39,
       "boards": {}
     },
-    "PhyI2cField.67.03": {
+    "analog-i2c.67.03": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3629,7 +3629,7 @@
       "shared": 4,
       "boards": {}
     },
-    "PhyI2cField.67.1e": {
+    "analog-i2c.67.1e": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3661,7 +3661,7 @@
         }
       }
     },
-    "PhyI2cField.67.1f": {
+    "analog-i2c.67.1f": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3693,7 +3693,7 @@
         }
       }
     },
-    "PhyI2cField.69.04": {
+    "analog-i2c.69.04": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3706,7 +3706,7 @@
       "shared": 0,
       "boards": {}
     },
-    "PhyI2cField.69.06": {
+    "analog-i2c.69.06": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3718,7 +3718,7 @@
       "shared": 15,
       "boards": {}
     },
-    "PhyI2cField.6a.00": {
+    "analog-i2c.6a.00": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3730,7 +3730,7 @@
       "shared": 175,
       "boards": {}
     },
-    "PhyI2cField.6a.01": {
+    "analog-i2c.6a.01": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3742,7 +3742,7 @@
       "shared": 127,
       "boards": {}
     },
-    "PhyI2cField.6b.02": {
+    "analog-i2c.6b.02": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3775,7 +3775,7 @@
         }
       }
     },
-    "PhyI2cField.6b.03": {
+    "analog-i2c.6b.03": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3787,7 +3787,7 @@
       "shared": 10,
       "boards": {}
     },
-    "PhyI2cField.6b.07": {
+    "analog-i2c.6b.07": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3799,7 +3799,7 @@
       "shared": 13,
       "boards": {}
     },
-    "PhyI2cField.6b.0f": {
+    "analog-i2c.6b.0f": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3811,7 +3811,7 @@
       "shared": 128,
       "boards": {}
     },
-    "PhyI2cField.6b.11": {
+    "analog-i2c.6b.11": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3824,7 +3824,7 @@
       "shared": 32,
       "boards": {}
     },
-    "PhyI2cField.6b.13": {
+    "analog-i2c.6b.13": {
       "space": "analog",
       "width": 1,
       "count": 1,
@@ -3837,7 +3837,7 @@
       "shared": 6,
       "boards": {}
     },
-    "PhyI2cField.6b.14": {
+    "analog-i2c.6b.14": {
       "space": "analog",
       "width": 1,
       "count": 1,

@@ -155,9 +155,9 @@ pub(crate) fn reset_wake_i2c_master<C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::i2c::{PhyI2cHost, pulse_master_reset, sample_master_reset_busy};
+    use oer_esp32s31_hal::phy::i2c::{Host, pulse_master_reset, sample_master_reset_busy};
 
-    for host in [PhyI2cHost::Host0, PhyI2cHost::Host1] {
+    for host in [Host::Host0, Host::Host1] {
         if !sample_master_reset_busy(registers, host) {
             continue;
         }
@@ -502,7 +502,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     write_i2c_direct(
                         timer,
                         registers,
-                        crate::analog::i2c::analog_registers::TX_CAPACITOR_BANKS,
+                        crate::analog::i2c::registers::TXRF_TX_CAPACITOR_LOW,
                         tx_cap,
                     )?;
                     oer_esp32s31_hal::phy::frequency::configure_nrx_frequency(
@@ -514,7 +514,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     write_i2c_direct(
                         timer,
                         registers,
-                        crate::analog::i2c::analog_registers::TX_CAPACITOR_BANKS,
+                        crate::analog::i2c::registers::TXRF_TX_CAPACITOR_LOW,
                         tx_cap,
                     )?;
                 }

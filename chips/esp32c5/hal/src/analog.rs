@@ -5,17 +5,16 @@
 //! owner, whose addresses carry the libphy host map, host set, read masks and
 //! block alias.
 
-use oer_esp32c5_pac::{
-    PhyI2cAccessError, PhyI2cAddress, PhyI2cConfigurationCommand, PhyI2cRegisters,
-};
+use oer_esp32c5_pac::analog_i2c::{Host, Profile, Request};
+use oer_esp32c5_pac::{PhyI2cAccessError, PhyI2cConfigurationCommand, PhyI2cRegisters};
 use oer_espressif_analog::{
     AnalogField, AnalogRegisterBus, Busy, Configuration, ConfigurationCommand, ParallelAnalogBus,
     ParallelHost, ParallelWrites,
 };
 
 pub use oer_esp32c5_pac::{
-    PhyI2cBlock, PhyI2cClockSelection, PhyI2cConfiguration, PhyI2cHost, PhyI2cInitializationInputs,
-    PhyI2cParallelWrite, PhyI2cRcCalibration, PhyI2cSar2Code,
+    PhyI2cClockSelection, PhyI2cConfiguration, PhyI2cInitializationInputs, PhyI2cParallelWrite,
+    PhyI2cRcCalibration, PhyI2cSar2Code,
 };
 
 /// Unique owner of the ESP32-C5 analog register bus.
@@ -39,21 +38,21 @@ const fn busy(_: PhyI2cAccessError) -> Busy {
 }
 
 impl AnalogRegisterBus for AnalogI2c {
-    type Address = PhyI2cAddress;
+    type Address = Request;
 
-    fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), Busy> {
+    fn try_start_read(&mut self, address: Request) -> Result<(), Busy> {
         self.registers.try_start_read(address).map_err(busy)
     }
 
-    fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, Busy> {
+    fn try_finish_read(&self, address: Request) -> Result<u8, Busy> {
         self.registers.try_finish_read(address).map_err(busy)
     }
 
-    fn try_start_write(&mut self, address: PhyI2cAddress, value: u8) -> Result<(), Busy> {
+    fn try_start_write(&mut self, address: Request, value: u8) -> Result<(), Busy> {
         self.registers.try_start_write(address, value).map_err(busy)
     }
 
-    fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), Busy> {
+    fn try_finish_write(&self, address: Request) -> Result<(), Busy> {
         self.registers.try_finish_write(address).map_err(busy)
     }
 }
@@ -75,8 +74,8 @@ impl ParallelAnalogBus for AnalogI2c {
 
     fn is_busy(&self, host: ParallelHost) -> bool {
         self.registers.is_busy(match host {
-            ParallelHost::First => PhyI2cHost::Host0,
-            ParallelHost::Second => PhyI2cHost::Host1,
+            ParallelHost::First => Host::Host0,
+            ParallelHost::Second => Host::Host1,
         })
     }
 }
@@ -92,17 +91,17 @@ pub fn initialization(
 
 fn configuration_command(
     command: PhyI2cConfigurationCommand,
-) -> Option<ConfigurationCommand<PhyI2cAddress>> {
+) -> Option<ConfigurationCommand<Request>> {
     Some(match command {
-        PhyI2cConfigurationCommand::Write(address, value) => {
-            ConfigurationCommand::Write(address, value)
-        }
-        PhyI2cConfigurationCommand::Modify {
-            address,
-            msb,
-            lsb,
+        PhyI2cConfigurationCommand::Write(address, value) => ConfigurationCommand::Write(
+            Request::from_address(Profile::LibphyNormal, address)?,
             value,
-        } => ConfigurationCommand::Modify(AnalogField::new(address, msb, lsb)?, value),
+        ),
+        PhyI2cConfigurationCommand::Modify { field, value } => {
+            let (msb, lsb) = field.bit_range();
+            let request = Request::from_address(Profile::LibphyNormal, field.address())?;
+            ConfigurationCommand::Modify(AnalogField::new(request, msb, lsb)?, value)
+        }
     })
 }
 
@@ -110,7 +109,7 @@ fn configuration_command(
 pub fn configuration(
     bus: &mut AnalogI2c,
     leaf: PhyI2cConfiguration,
-) -> Configuration<'_, AnalogI2c, impl Fn(usize) -> Option<ConfigurationCommand<PhyI2cAddress>>> {
+) -> Configuration<'_, AnalogI2c, impl Fn(usize) -> Option<ConfigurationCommand<Request>>> {
     Configuration::new(bus, move |index| {
         leaf.command(index).and_then(configuration_command)
     })

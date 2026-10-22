@@ -6,7 +6,7 @@
 //! body is 330 bytes at `0x1000_0140`; no vendor table or ABI image is needed
 //! by this source-owned replacement.
 
-use crate::analog::i2c::{MaskedI2cWriteBinding, MaskedI2cWriteBindingError, analog_registers};
+use crate::analog::i2c::{MaskedI2cWriteBinding, MaskedI2cWriteBindingError, fields};
 
 /// Semantic replacement for the vendor range byte at `phy_param + 0x4d`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,13 +66,13 @@ pub struct PhyWifiI2cTrackingOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingAction {
-    MaskedWrite(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    MaskedWrite(oer_espressif_analog::Action<crate::analog::i2c::Address, ()>),
     Complete(PhyWifiI2cTrackingOutcome),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingCompletion {
-    MaskedWrite(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    MaskedWrite(oer_espressif_analog::Completion<crate::analog::i2c::Address>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,7 +88,7 @@ pub struct PhyWifiI2cTrackingTransition {
     target_band: PhyWifiI2cTrackingBand,
     changed: bool,
     write_index: u8,
-    write: Option<oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>>,
+    write: Option<oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>>,
 }
 
 impl PhyWifiI2cTrackingTransition {
@@ -106,12 +106,12 @@ impl PhyWifiI2cTrackingTransition {
     fn write(
         band: PhyWifiI2cTrackingBand,
         index: u8,
-    ) -> oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress> {
+    ) -> oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address> {
         let (first, second) = band.values();
         let (field, value) = if index == 0 {
-            (analog_registers::WIFI_TX_TEMPERATURE_TRACKING_0, first)
+            (fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_0, first)
         } else {
-            (analog_registers::WIFI_TX_TEMPERATURE_TRACKING_1, second)
+            (fields::TXRF_WIFI_TX_TEMPERATURE_TRACKING_1, second)
         };
         crate::analog::i2c::field_write(field, value)
     }
