@@ -227,6 +227,7 @@ impl Run<'_> {
                 #[cfg(not(target_arch = "riscv32"))]
                 return Err(Failure::Binding);
             }
+            let split_i2c = matches!(action, PhyRxGainInitAction::Dc(PhyRxGainDcAction::I2c(_)));
             Self::observe(self.execution, action);
             self.scratch.binding = Some(
                 crate::rx::gain::PhyRxGainInitExternalBinding::lower(*action)
@@ -235,7 +236,7 @@ impl Run<'_> {
             // lower() only constructs a binding (gain::PhyRxGainInitExternalBinding
             // and gain_calibration::PhyRxGainDcExternalBinding). No I2C command has
             // started: the borrowed RF/bus owner can yield before the whole helper.
-            if matches!(action, PhyRxGainInitAction::Dc(PhyRxGainDcAction::I2c(_))) {
+            if split_i2c {
                 if self.measured {
                     tag = 34 | (tag & 0x80);
                     self.scratch.set_action(tag);
