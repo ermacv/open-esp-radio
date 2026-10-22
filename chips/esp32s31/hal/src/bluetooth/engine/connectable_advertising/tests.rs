@@ -1,3 +1,4 @@
+use crate::bluetooth::engine::test_images::{ChannelFixture, image, priority};
 use bytemuck::Zeroable;
 use std::boxed::Box;
 
@@ -9,8 +10,7 @@ use super::{
     LegacyConnectableScanResponsePacketInput,
 };
 use crate::bluetooth::engine::{
-    AdvertisingCoexistencePriorities, LegacyAdvertisingPrimaryChannelPlan,
-    SchedulerItemCoexistencePriority,
+    AdvertisingCoexistencePriorities, SchedulerItemCoexistencePriority,
     le_rx_chain::{LeRxChain, LeRxChainStorage},
     le_rx_packet::LeRxOutcome,
     rx_memory_list::RxMemoryListClass,
@@ -78,6 +78,7 @@ fn prepared(pool: &mut Pool, chain: &LeRxChain<2>) -> SchedulerRoleInstance<'sta
         input(),
         chain,
         crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
+        priority(),
     )
     .unwrap();
     instance
@@ -146,7 +147,7 @@ fn a_set_without_scan_response_transmits_one_node_and_still_receives() {
         LegacyConnectableAdvertisingOwnAddress::Random(ADVERTISER),
     );
     let power = crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level");
-    pool.prepare(&instance, only_receiving, &chain, power)
+    pool.prepare(&instance, only_receiving, &chain, power, priority())
         .unwrap();
     assert_eq!(pool.adv_ind_pdu(&instance), Some(&ADV_IND_PDU[..]));
     assert_eq!(pool.scan_response_pdu(&instance), None);
@@ -165,7 +166,8 @@ fn a_set_without_scan_response_transmits_one_node_and_still_receives() {
 
     // Clearing restores the two-node chain for the next set.
     pool.clear(&instance).unwrap();
-    pool.prepare(&instance, input(), &chain, power).unwrap();
+    pool.prepare(&instance, input(), &chain, power, priority())
+        .unwrap();
     let (graph, binding, _) = pool.shared(&instance).unwrap();
     assert_eq!(
         graph.adv_ind_header.successor_image(),
@@ -188,9 +190,9 @@ fn the_item_carries_its_number_and_each_event_its_coexistence_lanes() {
             assert_eq!(item.layout.allocation_number().read().bits(), 3);
         }
     }
-    let plan = LegacyAdvertisingPrimaryChannelPlan::new(true, true, true).unwrap();
+    let plan = ChannelFixture::new(true, true, true).unwrap();
     let lanes = priorities([9, 0, 13, 13]);
-    pool.prepare_event(&instance, plan, 6_000, 200, 214, lanes)
+    pool.prepare_event(&instance, &image(plan, 6_000, 200, 214), lanes)
         .unwrap();
     let (graph, _, _) = pool.shared(&instance).unwrap();
     for item in &graph.items {
@@ -218,9 +220,13 @@ fn an_event_lowers_one_item_per_channel_and_finishing_restores_them() {
         pool.submit(&instance, 0),
         Err(SchedulerPoolError::NotPrepared)
     );
-    let plan = LegacyAdvertisingPrimaryChannelPlan::new(true, false, true).unwrap();
+    let plan = ChannelFixture::new(true, false, true).unwrap();
     let event = pool
-        .prepare_event(&instance, plan, 6_000, 200, 214, priorities([15; 4]))
+        .prepare_event(
+            &instance,
+            &image(plan, 6_000, 200, 214),
+            priorities([15; 4]),
+        )
         .unwrap();
     assert_eq!(
         event.items().collect::<std::vec::Vec<_>>(),
@@ -287,17 +293,15 @@ fn a_scanning_chain_and_early_events_are_refused() {
             &instance,
             input(),
             &chain(RxMemoryListClass::Scanning),
-            crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level")
+            crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
+            priority()
         ),
         Err(LegacyConnectableAdvertisingError::ForeignReceiveClass)
     );
     assert_eq!(
         pool.prepare_event(
             &instance,
-            LegacyAdvertisingPrimaryChannelPlan::new(true, false, false).unwrap(),
-            0,
-            1,
-            0,
+            &image(ChannelFixture::new(true, false, false).unwrap(), 0, 1, 0),
             priorities([15; 4])
         )
         .err(),

@@ -1,10 +1,10 @@
 //! ESP32-S31 Bluetooth hardware engine.
 //!
 //! The HAL owns MMIO, controller-SRAM layouts and CPU/hardware ownership.
-//! Its Bluetooth engine retains the register token and one placed arena. This crate joins those contracts into
+//! Component owners retain the placed graphs and private bindings. This crate joins those contracts into
 //! the radio engine: clocks, controller HAL and time, BLE PHY, interrupts,
 //! the modem low-power timer, and the hardware scheduler with its timeline,
-//! finished lists and single-item primitives. It knows no Link Layer role.
+//! finished lists and single-item primitives, with detached role value builders.
 //!
 //! The shared single-item completion and timed preparation engines
 //! implement the common hardware protocol; RX/recycle and packet policy

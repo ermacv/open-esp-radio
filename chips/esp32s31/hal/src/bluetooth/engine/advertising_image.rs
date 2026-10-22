@@ -14,18 +14,6 @@ use crate::bluetooth::engine::{
     sram_link::ControllerSramLinkAddress,
 };
 
-const ADV_NONCONN_IND_TYPE: u8 = 0x02;
-const TX_ADD_RANDOM: u8 = 1 << 6;
-const RESERVED_HEADER_BITS: u8 = (1 << 4) | (1 << 5) | (1 << 7);
-const DEVICE_ADDRESS_BYTES: usize = 6;
-
-/// Scheduling priority `r_sym_ble_Ok6PLzc6qsIOuEzma5oM` returns for the
-/// first event at the default low advertising level.
-const DEFAULT_ADVERTISING_PRIORITY: u8 = 1;
-
-/// Item `+0x00` bit 22, which the scanner's earliest-available start also
-/// selects: the item may start as soon as its predecessor ends.
-
 /// Semantic primary channel selected by one legacy advertising event.
 ///
 /// The private descriptor codec, rather than the portable Link Layer or chip
@@ -47,83 +35,11 @@ impl LegacyAdvertisingPrimaryChannel {
     }
 }
 
-/// Canonical non-empty primary-channel plan for one hardware event.
-///
-/// The plan is semantic: it contains no frequency, whitening or SRAM image.
-/// Selected channels are always ordered 37, 38, 39.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LegacyAdvertisingPrimaryChannelPlan {
-    channels: [LegacyAdvertisingPrimaryChannel; 3],
-    len: u8,
-}
-
-impl LegacyAdvertisingPrimaryChannelPlan {
-    pub const fn new(channel_37: bool, channel_38: bool, channel_39: bool) -> Option<Self> {
-        let mut channels = [LegacyAdvertisingPrimaryChannel::Channel37; 3];
-        let mut len = 0;
-        if channel_37 {
-            channels[len] = LegacyAdvertisingPrimaryChannel::Channel37;
-            len += 1;
-        }
-        if channel_38 {
-            channels[len] = LegacyAdvertisingPrimaryChannel::Channel38;
-            len += 1;
-        }
-        if channel_39 {
-            channels[len] = LegacyAdvertisingPrimaryChannel::Channel39;
-            len += 1;
-        }
-        if len == 0 {
-            None
-        } else {
-            Some(Self {
-                channels,
-                len: len as u8,
-            })
-        }
-    }
-
-    pub const fn channel_count(self) -> usize {
-        self.len as usize
-    }
-
-    pub const fn channel(self, position: usize) -> Option<LegacyAdvertisingPrimaryChannel> {
-        if position < self.channel_count() {
-            Some(self.channels[position])
-        } else {
-            None
-        }
-    }
-}
-
 /// Address behavior selected by the TxAdd bit of the prepared PDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum LegacyAdvertisingOwnAddress {
+pub enum LegacyAdvertisingOwnAddress {
     Public,
-    Random([u8; DEVICE_ADDRESS_BYTES]),
-}
-
-impl LegacyAdvertisingOwnAddress {
-    pub(super) fn from_pdu(pdu: &[u8]) -> Result<Self, LegacyAdvertisingPduError> {
-        if pdu.len() < 2 + DEVICE_ADDRESS_BYTES {
-            return Err(LegacyAdvertisingPduError::MissingAdvertiserAddress);
-        }
-        let header = pdu[0];
-        if header & 0x0f != ADV_NONCONN_IND_TYPE {
-            return Err(LegacyAdvertisingPduError::UnsupportedPduType);
-        }
-        if header & RESERVED_HEADER_BITS != 0 {
-            return Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags);
-        }
-
-        if header & TX_ADD_RANDOM == 0 {
-            Ok(Self::Public)
-        } else {
-            let mut address = [0; DEVICE_ADDRESS_BYTES];
-            address.copy_from_slice(&pdu[2..2 + DEVICE_ADDRESS_BYTES]);
-            Ok(Self::Random(address))
-        }
-    }
+    Random([u8; 6]),
 }
 
 /// Why an encoded packet cannot select the restricted reset profile.
@@ -170,6 +86,7 @@ impl LegacyAdvertisingLinkStateWords {
         tx_header: ControllerSramLinkAddress,
         own_address: LegacyAdvertisingOwnAddress,
         default_tx_power: LeTxPower,
+        priority: SchedulerEventPriority,
     ) -> Self {
         // SOURCE: the reset's high-halfword transform retains the previous
         // pointer index's upper byte and ORs the bound header into it.
@@ -249,7 +166,7 @@ impl LegacyAdvertisingLinkStateWords {
             .expect("reviewed radio policy fits");
         self.word_60 = self
             .word_60
-            .with_priority(DEFAULT_ADVERTISING_PRIORITY)
+            .with_priority(priority.value())
             .with_power_index(default_tx_power.index());
         self
     }
@@ -274,24 +191,6 @@ pub(super) struct LegacyAdvertisingSchedulerItemWords {
 }
 
 /// Position of one channel item within its advertising event.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum LegacyAdvertisingItemPosition {
-    /// The first selected channel, which starts at its programmed anchor.
-    First,
-    /// A later selected channel, which may start once its predecessor ends.
-    Follower,
-}
-
-impl LegacyAdvertisingItemPosition {
-    pub(super) const fn of(index: usize) -> Self {
-        if index == 0 {
-            Self::First
-        } else {
-            Self::Follower
-        }
-    }
-}
-
 impl LegacyAdvertisingSchedulerItemWords {
     /// Lower one accepted LE 1M channel item into the private layout.
     ///
@@ -302,16 +201,13 @@ impl LegacyAdvertisingSchedulerItemWords {
     pub(super) const fn prepare_event_item(
         mut self,
         link_state: LegacyAdvertisingLinkStateWords,
-        channel: LegacyAdvertisingPrimaryChannel,
-        position: LegacyAdvertisingItemPosition,
-        raw_start: u32,
-        raw_end: u32,
+        image: AdvertisingItemImage,
     ) -> Self {
         self.word_00 = self
             .word_00
             .with_address(None)
             .expect("empty link fits")
-            .with_flexible_start(matches!(position, LegacyAdvertisingItemPosition::Follower));
+            .with_flexible_start(image.flexible_start);
         self.word_04 = self.word_04.with_event_ready(true);
         self.word_14 = self
             .word_14
@@ -322,15 +218,15 @@ impl LegacyAdvertisingSchedulerItemWords {
             .with_power_index(link_state.power_index());
         self.word_18 = self
             .word_18
-            .with_frequency(channel.frequency_image())
+            .with_frequency(image.channel.frequency_image())
             .expect("primary channel fits")
-            .with_arbitration_priority(1)
+            .with_arbitration_priority(image.priority.value())
             .expect("priority fits")
-            .with_priority_copy(1)
+            .with_priority_copy(image.priority_copy.value())
             .expect("reviewed image fits");
         self.word_38 = ADVERTISING_ITEM_EVENT.word_38;
-        self.raw_start_word_44 = self.raw_start_word_44.with_value(raw_start);
-        self.raw_end_word_48 = self.raw_end_word_48.with_value(raw_end);
+        self.raw_start_word_44 = self.raw_start_word_44.with_value(image.start);
+        self.raw_end_word_48 = self.raw_end_word_48.with_value(image.end);
         self.word_4c = self.word_4c.with_event(0);
         self
     }
@@ -378,3 +274,48 @@ const ADVERTISING_ITEM_EVENT: LegacyAdvertisingSchedulerItemWords =
         raw_end_word_48: BleSchedulerItemRawEnd::ZERO,
         word_4c: BleSchedulerItemControl::ZERO,
     };
+
+/// Four-bit scheduler arbitration priority; not a coexistence lane.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SchedulerEventPriority(u8);
+impl SchedulerEventPriority {
+    pub const fn new(value: u8) -> Option<Self> {
+        if value <= 15 { Some(Self(value)) } else { None }
+    }
+    pub const fn value(self) -> u8 {
+        self.0
+    }
+}
+/// Detached input to one closed physical item projection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdvertisingItemImage {
+    pub channel: LegacyAdvertisingPrimaryChannel,
+    pub flexible_start: bool,
+    pub priority: SchedulerEventPriority,
+    pub priority_copy: SchedulerEventPriority,
+    pub start: u32,
+    pub end: u32,
+    pub sequence_lead: u32,
+}
+/// One to three item values. This contains no SRAM view or publication proof.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdvertisingEventImage {
+    items: [AdvertisingItemImage; 3],
+    len: u8,
+}
+impl AdvertisingEventImage {
+    pub fn new(items: &[AdvertisingItemImage]) -> Option<Self> {
+        if items.is_empty() || items.len() > 3 {
+            return None;
+        }
+        let mut image = Self {
+            items: [items[0]; 3],
+            len: items.len() as u8,
+        };
+        image.items[..items.len()].copy_from_slice(items);
+        Some(image)
+    }
+    pub fn items(&self) -> &[AdvertisingItemImage] {
+        &self.items[..usize::from(self.len)]
+    }
+}

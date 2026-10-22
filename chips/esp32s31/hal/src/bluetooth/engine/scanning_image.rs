@@ -58,110 +58,6 @@ impl LegacyScanSchedulerWindow {
     }
 }
 
-/// Result of applying the scanner's earliest-start constraint.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LegacyScanStartSelection {
-    Requested,
-    EarliestAvailable,
-}
-
-/// Dynamic inputs to the single supported passive-scanning reset profile.
-///
-/// Construction fixes LE 1M, public own address, disabled privacy and
-/// disabled periodic synchronization. Callers cannot supply positional
-/// descriptor words or vendor option images.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LegacyScanResetConfig {
-    default_tx_power: LeTxPower,
-    scan_type: LegacyScanType,
-    filter_policy: LegacyScanFilterPolicy,
-}
-
-/// Which advertisers the scanner reports.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LegacyScanFilterPolicy {
-    /// Every advertiser.
-    AcceptAll,
-    /// Only the devices of the filter accept list; hardware drops the others
-    /// by the published device table.
-    AcceptListOnly,
-}
-
-impl LegacyScanFilterPolicy {
-    /// The link-state writes of this policy: `+0x18` bit 25 and the Host's
-    /// filter policy in `+0x2c` bits 25:24.
-    ///
-    /// SOURCE: the pinned vendor Controller's scanner link state with scan
-    /// filter policy 1 on the stand (`HIL_VENDOR_ACCEPT_LIST_2026_09_29`):
-    /// `+0x18` becomes `0xc200_0000` instead of `0xc000_0000` and `+0x2c`
-    /// `0x0155_5555` instead of `0x0055_5555`.
-    const fn apply(
-        self,
-        context: BleLinkStateReceiveContext,
-        crc: BleLinkStateCrcInitialization,
-    ) -> (BleLinkStateReceiveContext, BleLinkStateCrcInitialization) {
-        match self {
-            Self::AcceptAll => (context, crc),
-            Self::AcceptListOnly => (
-                context.with_scan_accept_list_filter(true),
-                crc.with_scan_filter_policy(1)
-                    .expect("reviewed filter fits"),
-            ),
-        }
-    }
-}
-
-/// Whether the scanner requests scan responses.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LegacyScanType {
-    /// Only listen.
-    Passive,
-    /// Answer scannable advertising with `SCAN_REQ`.
-    Active,
-}
-
-impl LegacyScanType {
-    /// Scheduler item `+0x08` bits 23:20 the vendor scanner allocator
-    /// (`r_ble_lll_scan_alloc_memory`) writes for this scan type.
-    pub(crate) const fn item_kind(self) -> u8 {
-        match self {
-            Self::Passive => 12,
-            Self::Active => 4,
-        }
-    }
-}
-
-impl LegacyScanResetConfig {
-    /// Construct the restricted LE 1M profile of `scan_type` and
-    /// `filter_policy`.
-    pub const fn le_1m_public(
-        default_tx_power: LeTxPower,
-        scan_type: LegacyScanType,
-        filter_policy: LegacyScanFilterPolicy,
-    ) -> Self {
-        Self {
-            default_tx_power,
-            scan_type,
-            filter_policy,
-        }
-    }
-
-    pub(super) const fn default_tx_power(self) -> LeTxPower {
-        self.default_tx_power
-    }
-
-    pub(super) const fn scan_type(self) -> LegacyScanType {
-        self.scan_type
-    }
-}
-
-/// Raw controller-tick length of one scan window from its anchor to its end.
-///
-/// SOURCE: pinned `libble_app.a[ble_6.o]::r_sym_ble_M0sTWGzdUqAUyXoK849F`
-/// (`r_ble_lll_scan_restart`) stores
-/// `r_sched_timer_convertDiffToTicks(window end - start)` at link state
-/// `+0x34` for a finite window. The open scanner always schedules finite
-/// windows, so its events take that branch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LegacyScanWindowTicks(u32);
 
@@ -232,18 +128,18 @@ pub(super) struct LegacyScanLinkStateImage(pub(super) LinkStateImage);
 impl LegacyScanLinkStateImage {
     pub(super) const fn restricted_le_1m(
         rx_head: LegacyScanRxHeadProjection,
-        config: LegacyScanResetConfig,
+        config: ScanResetImage,
     ) -> Self {
         let mut image = SCAN_RESET;
         image.rx_path = image.rx_path.with_header_from(rx_head.0);
-        let (context, crc) = config
-            .filter_policy
-            .apply(image.receive_context, image.crc_initialization);
-        image.receive_context = context;
-        image.crc_initialization = crc;
-        image.event = image
-            .event
-            .with_power_index(config.default_tx_power().index());
+        image.receive_context = image
+            .receive_context
+            .with_scan_accept_list_filter(config.accept_list);
+        image.crc_initialization = image
+            .crc_initialization
+            .with_scan_filter_policy(config.accept_list as u8)
+            .expect("a boolean fits the filter field");
+        image.event = image.event.with_power_index(config.power.index());
         Self(image)
     }
 
@@ -299,16 +195,12 @@ impl LegacyScanSchedulerItemWords {
     pub(super) const fn prepare_first_event(
         mut self,
         link_state: LegacyScanLinkStateImage,
-        channel: LegacyScanPrimaryChannel,
+        value: ScanItemImage,
         window: LegacyScanSchedulerWindow,
-        start_selection: LegacyScanStartSelection,
     ) -> Self {
         self.word_00 = self
             .word_00
-            .with_flexible_start(matches!(
-                start_selection,
-                LegacyScanStartSelection::EarliestAvailable
-            ))
+            .with_flexible_start(value.flexible_start)
             .with_bit_23_opaque(true);
         self.word_04 = self.word_04.with_event_ready(true);
         self.word_14 = self
@@ -320,11 +212,11 @@ impl LegacyScanSchedulerItemWords {
             .expect("zero fits");
         self.word_18 = self
             .word_18
-            .with_arbitration_priority(1)
+            .with_arbitration_priority(value.priority.value())
             .expect("reviewed priority fits")
-            .with_priority_copy(0)
+            .with_priority_copy(value.priority_copy.value())
             .expect("zero fits")
-            .with_frequency(channel.frequency_image())
+            .with_frequency(value.channel.frequency_image())
             .expect("primary channel fits");
         self.word_38 = BleSchedulerItemStatus::ZERO;
         self.raw_start_word_44 = self.raw_start_word_44.with_value(window.start());
@@ -335,3 +227,42 @@ impl LegacyScanSchedulerItemWords {
 
 #[cfg(test)]
 mod tests;
+
+/// Hardware scanner item kinds admitted by this physical graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanItemKind {
+    Listen,
+    RequestResponse,
+}
+impl ScanItemKind {
+    pub(crate) const fn item_kind(self) -> u8 {
+        match self {
+            Self::Listen => 12,
+            Self::RequestResponse => 4,
+        }
+    }
+}
+/// Detached physical reset inputs, selected by the driver's role policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScanResetImage {
+    pub power: LeTxPower,
+    pub kind: ScanItemKind,
+    pub accept_list: bool,
+}
+impl ScanResetImage {
+    pub const fn new(power: LeTxPower, kind: ScanItemKind, accept_list: bool) -> Self {
+        Self {
+            power,
+            kind,
+            accept_list,
+        }
+    }
+}
+/// Detached scanner item fields; no CPU layout view or pointer image.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScanItemImage {
+    pub channel: LegacyScanPrimaryChannel,
+    pub flexible_start: bool,
+    pub priority: super::SchedulerEventPriority,
+    pub priority_copy: super::SchedulerEventPriority,
+}

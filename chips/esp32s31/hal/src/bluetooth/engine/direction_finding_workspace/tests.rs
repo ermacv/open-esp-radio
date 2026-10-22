@@ -30,3 +30,18 @@ fn a_controller_reset_restores_the_disabled_cte_workspace() {
 
     assert!(owner.is_disabled_baseline_initialized());
 }
+
+#[test]
+fn workspace_link_debug_does_not_identify_its_storage() {
+    let first = DirectionFindingWorkspaceStorage::place::<
+        crate::bluetooth::engine::HostDma<0x2f00_1000>,
+    >(crate::dma_static::Placed::host(storage()));
+    let second = DirectionFindingWorkspaceStorage::place::<
+        crate::bluetooth::engine::HostDma<0x2f00_2000>,
+    >(crate::dma_static::Placed::host(storage()));
+    assert_ne!(first.link(), second.link());
+    assert_eq!(
+        std::format!("{:?}", first.link()),
+        std::format!("{:?}", second.link())
+    );
+}

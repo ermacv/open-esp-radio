@@ -1,36 +1,28 @@
-//! Controller registers, placed arena and the CPU/controller handover protocol.
+//! Controller-SRAM codecs and the CPU/controller handover protocol.
 //!
-//! `Engine` retains both the register token and `BluetoothArena`. Physical
-//! links, phased layout access, list publications and completion return stay
-//! here. Driver role builders supply detached values through typed operations.
-//! Generative pool/epoch scopes bind affine instance leases; item identities
-//! additionally distinguish acquisitions of a reused slot.
+//! Each placed component retains its static graph and private bindings.
+//! The driver selects role profiles, phases, channels and timing as detached
+//! values; HAL alone encodes fields and checks graph binding anchors.
+//! Generative pool/epoch scopes bind affine leases; logical item identities
+//! distinguish repeated acquisitions of a slot. Address publication goes
+//! through the graph owner and never exports a controller address.
 //!
-//! The scheduler's hardware protocol lock and vendor transaction order are
-//! retained. Stable interrupt-owner lending is internal to HAL under the
-//! current Sources exception.
+//! The driver lifecycle retains separate PHY and DF owners. The scheduler's
+//! physical protocol and vendor transaction order live here; stable
+//! interrupt-owner lending is internal to HAL under the Sources exception.
 
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-#![cfg_attr(
-    not(target_arch = "riscv32"),
-    allow(
-        dead_code,
-        reason = "native builds exercise the physical protocol through its test backends"
-    )
+#![allow(
+    dead_code,
+    reason = "private controller-memory protocols are exercised by graph and hardware-backend tests"
 )]
 
-mod arena;
 mod ble_phy_engine;
-pub use arena::{ArenaError, BluetoothArena, Engine, EngineBindFailure, EngineRegisters};
-#[cfg(target_arch = "riscv32")]
-mod live;
-#[cfg(target_arch = "riscv32")]
-pub use live::{CompletionError, EngineScheduleError, ReceivePublicationError};
 mod coexistence;
 mod connectable_advertising;
 mod direction_finding_workspace;
 mod dtm;
-mod dtm_event_image;
+mod dtm_image;
 mod dtm_rx_result;
 mod le_device_table;
 mod le_phy_packet;
@@ -42,15 +34,15 @@ pub use le_tx_power::LeTxPower;
 mod layout_reference;
 mod lease;
 pub use lease::{EpochScope, PoolScope, with_epoch, with_epoch_async, with_pool, with_pool_async};
+mod advertising_image;
 mod legacy_advertising;
-mod legacy_advertising_event_image;
 mod legacy_advertising_tx_packet;
 mod legacy_scanning;
-mod legacy_scanning_event_image;
 mod peripheral_connection;
 mod placement;
 mod rx_memory_list;
 mod rx_packet_bytes;
+mod scanning_image;
 pub mod scheduler;
 mod scheduler_context;
 mod scheduler_item;
@@ -59,9 +51,10 @@ mod shared_layout;
 mod sram_link;
 #[cfg(target_arch = "riscv32")]
 pub use placement::ChipDma;
+pub use placement::ControllerDmaSpace;
 #[cfg(not(target_arch = "riscv32"))]
 pub use placement::HostDma;
-pub use placement::{ControllerDmaSpace, Placement};
+pub(crate) use placement::Placement;
 
 pub use coexistence::{
     AdvertisingCoexistencePriorities, ConnectionCoexistencePriorities,
@@ -93,10 +86,9 @@ pub use direction_finding_workspace::{
     DirectionFindingWorkspaceLink, DirectionFindingWorkspaceStorage,
 };
 
-pub use dtm_event_image::{
-    DtmLinkStateReviewedWords, DtmPositionalEventWords, DtmReceiverEventPhase, DtmRole,
-    DtmRxHeaderTailProjection, DtmSchedulerFrequency, DtmSchedulerItemEventType,
-    DtmSchedulerItemReviewedWords, DtmSchedulerReceiverPhy, DtmSchedulerTransmitterPhy,
+pub use dtm_image::{
+    DtmItemConfiguration, DtmLinkStateReviewedWords, DtmPositionalEventWords, DtmReceiveWait,
+    DtmRxHeaderTailProjection, DtmSchedulerFrequency, DtmSchedulerItemReviewedWords,
     DtmTxHeaderHeadProjection,
 };
 
@@ -127,8 +119,9 @@ pub use le_tx_packet::{
     LeTxPacketPreparedLength, LeTxPacketStorage,
 };
 
-pub use legacy_advertising_event_image::{
-    LegacyAdvertisingPduError, LegacyAdvertisingPrimaryChannel, LegacyAdvertisingPrimaryChannelPlan,
+pub use advertising_image::{
+    AdvertisingEventImage, AdvertisingItemImage, LegacyAdvertisingOwnAddress,
+    LegacyAdvertisingPduError, LegacyAdvertisingPrimaryChannel, SchedulerEventPriority,
 };
 
 pub use legacy_advertising::{
@@ -139,9 +132,9 @@ pub use legacy_advertising::{
     LegacyAdvertisingPool, LegacyAdvertisingStorage,
 };
 
-pub use legacy_scanning_event_image::{
-    LegacyScanFilterPolicy, LegacyScanPrimaryChannel, LegacyScanResetConfig,
-    LegacyScanSchedulerWindow, LegacyScanStartSelection, LegacyScanType, LegacyScanWindowTicks,
+pub use scanning_image::{
+    LegacyScanPrimaryChannel, LegacyScanSchedulerWindow, LegacyScanWindowTicks, ScanItemImage,
+    ScanItemKind, ScanResetImage,
 };
 
 pub use legacy_scanning::{
@@ -171,4 +164,4 @@ pub use scheduler_context::{BLUETOOTH_SCHEDULER_CONTEXT_BYTES, SchedulerContextS
 pub(crate) use sram_link::ControllerSramLinkAddress;
 
 #[cfg(test)]
-pub(crate) use scheduler_pool::SchedulerRoleStorage;
+mod test_images;

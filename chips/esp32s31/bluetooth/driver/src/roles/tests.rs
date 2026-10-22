@@ -40,3 +40,155 @@ fn a_role_recipe_cannot_overwrite_an_already_prepared_event() {
         })
     });
 }
+
+#[test]
+fn advertising_policy_orders_selected_channels_and_marks_only_followers_flexible() {
+    assert_eq!(
+        LegacyAdvertisingPrimaryChannelPlan::new(false, false, false),
+        None
+    );
+    let plan = LegacyAdvertisingPrimaryChannelPlan::new(true, false, true).expect("two channels");
+    let image = plan.image(u32::MAX - 4, 10, 7);
+    let items = image.items();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].channel, LegacyAdvertisingPrimaryChannel::Channel37);
+    assert_eq!(items[1].channel, LegacyAdvertisingPrimaryChannel::Channel39);
+    assert!(!items[0].flexible_start);
+    assert!(items[1].flexible_start);
+    assert_eq!((items[0].start, items[0].end), (u32::MAX - 4, 5));
+    assert_eq!((items[1].start, items[1].end), (5, 15));
+    assert!(items.iter().all(|item| item.sequence_lead == 7));
+}
+
+#[test]
+fn advertising_pdu_policy_selects_the_host_address_and_rejects_unsupported_headers() {
+    use super::legacy_advertising_event_image::own_address_from_pdu;
+    assert_eq!(
+        own_address_from_pdu(&[2, 0]),
+        Err(LegacyAdvertisingPduError::MissingAdvertiserAddress)
+    );
+    assert_eq!(
+        own_address_from_pdu(&[0, 6, 1, 2, 3, 4, 5, 6]),
+        Err(LegacyAdvertisingPduError::UnsupportedPduType)
+    );
+    assert_eq!(
+        own_address_from_pdu(&[0x12, 6, 1, 2, 3, 4, 5, 6]),
+        Err(LegacyAdvertisingPduError::UnsupportedHeaderFlags)
+    );
+    assert_eq!(
+        own_address_from_pdu(&[2, 6, 1, 2, 3, 4, 5, 6]),
+        Ok(LegacyAdvertisingOwnAddress::Public)
+    );
+    assert_eq!(
+        own_address_from_pdu(&[0x42, 6, 1, 2, 3, 4, 5, 6]),
+        Ok(LegacyAdvertisingOwnAddress::Random([1, 2, 3, 4, 5, 6]))
+    );
+}
+
+#[test]
+fn scanner_policy_keeps_active_filter_and_start_choices_independent() {
+    let power = LeTxPower::from_dbm(9).expect("provider level");
+    for (scan_type, kind) in [
+        (LegacyScanType::Passive, ScanItemKind::Listen),
+        (LegacyScanType::Active, ScanItemKind::RequestResponse),
+    ] {
+        for (filter, accept_list) in [
+            (LegacyScanFilterPolicy::AcceptAll, false),
+            (LegacyScanFilterPolicy::AcceptListOnly, true),
+        ] {
+            let image = LegacyScanResetConfig::le_1m_public(power, scan_type, filter).image();
+            assert_eq!(
+                (image.power, image.kind, image.accept_list),
+                (power, kind, accept_list)
+            );
+        }
+    }
+    assert!(
+        !LegacyScanStartSelection::Requested
+            .image(LegacyScanPrimaryChannel::Channel38)
+            .flexible_start
+    );
+    assert!(
+        LegacyScanStartSelection::EarliestAvailable
+            .image(LegacyScanPrimaryChannel::Channel38)
+            .flexible_start
+    );
+}
+
+#[test]
+fn only_recurring_dtm_events_copy_the_link_power_into_the_item() {
+    let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<DtmStorage, 1>::new()));
+    let numbers = SchedulerAllocationConfig::new(0, 0, 0)
+        .expect("numbers fit")
+        .direct_test_mode();
+    with_pool(|scope| {
+        with_epoch(|epoch| {
+            let mut pool = scope
+                .place::<HostDma<0x2f00_1000>, _, 1>(epoch, Placed::host(storage), numbers)
+                .expect("one pool");
+            let lease = pool.acquire().expect("one slot");
+            let power = LeTxPower::from_dbm(9).expect("provider level");
+            let make = |phase| {
+                DtmImageBuilder::transmitter(
+                    phase,
+                    DtmSchedulerTransmitterPhy::Le1M,
+                    power,
+                    0,
+                    DtmSchedulerFrequency::from_controller_image(24).expect("frequency fits"),
+                    SchedulerRawWindow::from_projected_scheduler_window(100, 200)
+                        .expect("window fits"),
+                    101,
+                )
+            };
+            make(DtmEventPhase::Initial)
+                .prepare(&mut pool, &lease)
+                .expect("initial image");
+            let initial = pool.words(&lease).expect("CPU snapshot");
+            assert_eq!(initial.link_state().power(), Some(power));
+            assert_eq!(
+                initial.scheduler_item().power(),
+                LeTxPower::from_dbm(LeTxPower::LOWEST_DBM)
+            );
+            assert_eq!(initial.scheduler_item().sequence_start(), 101);
+            assert_eq!(initial.scheduler_item().raw_window(), (100, 200));
+            pool.finish_event(&lease, false)
+                .expect("unpublished event recycles");
+            make(DtmEventPhase::Recurring)
+                .prepare(&mut pool, &lease)
+                .expect("recurring image");
+            assert_eq!(
+                pool.words(&lease)
+                    .expect("CPU snapshot")
+                    .scheduler_item()
+                    .power(),
+                Some(power)
+            );
+            pool.release(lease).expect("nothing was listed");
+        })
+    });
+}
+
+#[test]
+fn receiver_dtm_phases_choose_their_distinct_wait_profiles_and_valid_phy() {
+    let priority = SchedulerEventPriority::new(3).expect("priority fits");
+    for (phy, code) in [
+        (DtmSchedulerReceiverPhy::Le1M, 0),
+        (DtmSchedulerReceiverPhy::Le2M, 1),
+        (DtmSchedulerReceiverPhy::LeCoded, 3),
+    ] {
+        for (phase, extension) in [
+            (DtmReceiverEventPhase::Initial, 15),
+            (DtmReceiverEventPhase::Recurring, 0),
+        ] {
+            let actual = DtmSchedulerItemEventType::Receiver { phy, phase }.configuration();
+            let expected = DtmItemConfiguration::new(
+                false,
+                code,
+                Some(DtmReceiveWait::new(1, extension).expect("timing fits")),
+                priority,
+            )
+            .expect("PHY fits");
+            assert_eq!(actual, expected);
+        }
+    }
+}

@@ -1,7 +1,8 @@
 use super::{
-    LegacyAdvertisingItemPosition, LegacyAdvertisingLinkStateWords, LegacyAdvertisingOwnAddress,
-    LegacyAdvertisingPrimaryChannel, LegacyAdvertisingSchedulerItemWords,
+    LegacyAdvertisingLinkStateWords, LegacyAdvertisingOwnAddress, LegacyAdvertisingPrimaryChannel,
+    LegacyAdvertisingSchedulerItemWords,
 };
+use crate::bluetooth::engine::test_images::{advertising_item, priority};
 use crate::bluetooth::engine::{ControllerSramLinkAddress, LeTxPower};
 use crate::layouts::*;
 
@@ -43,6 +44,7 @@ fn reset(dbm: i8) -> LegacyAdvertisingLinkStateWords {
         ControllerSramLinkAddress::new(0x2f00_1000).expect("controller SRAM"),
         LegacyAdvertisingOwnAddress::Public,
         LeTxPower::from_dbm(dbm).expect("provider level"),
+        priority(),
     )
 }
 
@@ -56,10 +58,7 @@ fn an_item_carries_the_power_its_link_state_was_reset_with() {
         );
         let item = zero_item().prepare_event_item(
             link_state,
-            LegacyAdvertisingPrimaryChannel::Channel37,
-            LegacyAdvertisingItemPosition::First,
-            10,
-            20,
+            advertising_item(LegacyAdvertisingPrimaryChannel::Channel37, false, 10, 20),
         );
         assert_eq!(
             u32::from(item.word_14.power_index()),
@@ -79,39 +78,6 @@ fn the_power_leaves_the_rate_word_untouched() {
 }
 
 #[test]
-fn only_a_follower_may_start_as_soon_as_its_predecessor_ends() {
-    let link_state = reset(0);
-    let prepare = |position| {
-        LegacyAdvertisingSchedulerItemWords {
-            word_00: BleSchedulerItemHardwareNext::from_bits(0xffff_ffff),
-            ..zero_item()
-        }
-        .prepare_event_item(
-            link_state,
-            LegacyAdvertisingPrimaryChannel::Channel38,
-            position,
-            10,
-            20,
-        )
-        .word_00
-    };
-    let first = prepare(LegacyAdvertisingItemPosition::First);
-    let follower = prepare(LegacyAdvertisingItemPosition::Follower);
-    // From an item that carried every flag, one flag separates them: the
-    // first item clears it and the follower keeps it.
-    assert_eq!((first.bits() ^ follower.bits()).count_ones(), 1);
-    assert_eq!(follower.flexible_start(), !first.flexible_start());
-    assert_eq!(
-        LegacyAdvertisingItemPosition::of(0),
-        LegacyAdvertisingItemPosition::First
-    );
-    assert_eq!(
-        LegacyAdvertisingItemPosition::of(2),
-        LegacyAdvertisingItemPosition::Follower
-    );
-}
-
-#[test]
 fn reset_retains_the_previous_upper_pointer_lane_and_opaque_event_lanes() {
     let mut initial = zero_link_state();
     initial.word_00 = BleLinkStateTxPath::from_bits(
@@ -125,6 +91,7 @@ fn reset_retains_the_previous_upper_pointer_lane_and_opaque_event_lanes() {
         ControllerSramLinkAddress::new(0x2f00_1000).expect("reset TX header"),
         LegacyAdvertisingOwnAddress::Public,
         LeTxPower::from_dbm(9).expect("provider power"),
+        priority(),
     );
     assert_eq!(result.word_00.header_address(), Some(0x2f04_1000));
     assert_eq!(result.word_00.bits() & 0x6000_0000, 0x6000_0000);
@@ -133,4 +100,13 @@ fn reset_retains_the_previous_upper_pointer_lane_and_opaque_event_lanes() {
         result.word_60.power_index(),
         LeTxPower::from_dbm(9).expect("provider power").index()
     );
+}
+
+#[test]
+fn a_detached_event_image_checks_its_complete_item_capacity() {
+    let item = advertising_item(LegacyAdvertisingPrimaryChannel::Channel37, false, 10, 20);
+    assert_eq!(super::AdvertisingEventImage::new(&[]), None);
+    assert_eq!(super::AdvertisingEventImage::new(&[item; 4]), None);
+    let accepted = super::AdvertisingEventImage::new(&[item; 3]).expect("three physical items fit");
+    assert_eq!(accepted.items(), &[item; 3]);
 }

@@ -21,7 +21,7 @@ use crate::bluetooth::engine::{
 /// The memory graph creates this value only while producing a positional
 /// event seed. It carries neither a general SRAM address nor publication
 /// authority, so it cannot be substituted for the RX-header tail projection.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct DtmTxHeaderHeadProjection(BleLinkStateTxPath);
 
 impl DtmTxHeaderHeadProjection {
@@ -41,7 +41,7 @@ impl DtmTxHeaderHeadProjection {
 /// The memory graph creates this value only while producing a positional
 /// event seed. It carries neither a general SRAM address nor publication
 /// authority, so it cannot be substituted for the TX-header head projection.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct DtmRxHeaderTailProjection(BleLinkStateRxPath);
 
 impl DtmRxHeaderTailProjection {
@@ -54,28 +54,6 @@ impl DtmRxHeaderTailProjection {
     const fn apply_to_link_state_word(self, word: BleLinkStateRxPath) -> BleLinkStateRxPath {
         word.with_header_from(self.0)
     }
-}
-
-/// DTM role shared by the CPU-owned link-state and scheduler-item formats.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DtmRole {
-    /// Repeated transmitter-test events use role image one.
-    Transmitter,
-    /// Repeated receiver-test events use role image two.
-    Receiver,
-}
-
-/// Phase selecting the role-private receiver configuration for one DTM event.
-///
-/// The initial event establishes the complete receiver configuration. After
-/// one completion has returned the private graph, the recurring vendor path
-/// deliberately replaces it with the narrower re-use configuration.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DtmReceiverEventPhase {
-    /// First receiver event in one active test session.
-    Initial,
-    /// Receiver event prepared from a recycled active-session graph.
-    Recurring,
 }
 
 /// A seven-bit controller frequency image for a DTM scheduler item.
@@ -96,64 +74,6 @@ impl DtmSchedulerFrequency {
         } else {
             None
         }
-    }
-}
-
-/// PHY choice admitted by a transmitter DTM scheduler item.
-///
-/// These variants retain the role-specific meaning established by the DTM
-/// command validator. They deliberately do not expose the controller field
-/// image used by the private SRAM codec.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DtmSchedulerTransmitterPhy {
-    /// LE 1M transmitter.
-    Le1M,
-    /// LE 2M transmitter.
-    Le2M,
-    /// LE Coded transmitter using S=8 coding.
-    LeCodedS8,
-    /// LE Coded transmitter using S=2 coding.
-    LeCodedS2,
-}
-
-/// PHY choice admitted by a receiver DTM scheduler item.
-///
-/// The receiver command has no S=2 selector. Encoding that restriction in the
-/// type prevents a transmitter-only choice from reaching the SRAM codec.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DtmSchedulerReceiverPhy {
-    /// LE 1M receiver.
-    Le1M,
-    /// LE 2M receiver.
-    Le2M,
-    /// Generic LE Coded receiver.
-    LeCoded,
-}
-
-/// Private encoding applied to both replicated scheduler PHY lanes.
-///
-/// Current vendor bodies prove that both lanes receive the same two-bit code,
-/// but do not establish independent names for the lanes. Keeping the code in
-/// this private value avoids inventing that missing hardware semantic.
-#[derive(Clone, Copy)]
-struct DtmSchedulerPhyEncoding(u32);
-
-impl DtmSchedulerPhyEncoding {
-    const fn for_transmitter(phy: DtmSchedulerTransmitterPhy) -> Self {
-        Self(match phy {
-            DtmSchedulerTransmitterPhy::Le1M => 0,
-            DtmSchedulerTransmitterPhy::Le2M => 1,
-            DtmSchedulerTransmitterPhy::LeCodedS8 => 2,
-            DtmSchedulerTransmitterPhy::LeCodedS2 => 3,
-        })
-    }
-
-    const fn for_receiver(phy: DtmSchedulerReceiverPhy) -> Self {
-        Self(match phy {
-            DtmSchedulerReceiverPhy::Le1M => 0,
-            DtmSchedulerReceiverPhy::Le2M => 1,
-            DtmSchedulerReceiverPhy::LeCoded => 3,
-        })
     }
 }
 
@@ -189,54 +109,11 @@ impl DtmLinkStateProfileWord {
     }
 }
 
-/// Role and phase selecting one reviewed scheduler-item event transform.
-///
-/// Transmitter events have no phase-dependent scheduler-item configuration.
-/// Nesting the receiver phase in the receiver variant prevents a caller from
-/// attaching receiver-only phase semantics to a transmitter descriptor.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DtmSchedulerItemEventType {
-    /// One transmitter-test scheduler item.
-    Transmitter(DtmSchedulerTransmitterPhy),
-    /// One receiver-test scheduler item in its explicit session phase.
-    Receiver {
-        /// Initial or recurring receiver configuration.
-        phase: DtmReceiverEventPhase,
-        /// Receiver-valid PHY retained without exposing its field image.
-        phy: DtmSchedulerReceiverPhy,
-    },
-}
-
-impl DtmSchedulerItemEventType {
-    /// Return the DTM role selected by this event type.
-    pub const fn role(self) -> DtmRole {
-        match self {
-            Self::Transmitter(_) => DtmRole::Transmitter,
-            Self::Receiver { .. } => DtmRole::Receiver,
-        }
-    }
-
-    /// Return the receiver phase, or `None` for a transmitter event.
-    pub const fn receiver_phase(self) -> Option<DtmReceiverEventPhase> {
-        match self {
-            Self::Transmitter(_) => None,
-            Self::Receiver { phase, .. } => Some(phase),
-        }
-    }
-
-    const fn phy_encoding(self) -> DtmSchedulerPhyEncoding {
-        match self {
-            Self::Transmitter(phy) => DtmSchedulerPhyEncoding::for_transmitter(phy),
-            Self::Receiver { phy, .. } => DtmSchedulerPhyEncoding::for_receiver(phy),
-        }
-    }
-}
-
 /// The nine link-state words whose reset behavior is complete.
 ///
 /// Names are byte offsets, not semantic descriptor fields. The omitted bytes
 /// and the hardware consumer remain unresolved.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct DtmLinkStateReviewedWords {
     /// Complete word at byte offset `+0x00`; low 20 bits carry the TX head.
     pub(crate) word_00: BleLinkStateTxPath,
@@ -264,6 +141,13 @@ pub struct DtmLinkStateReviewedWords {
 }
 
 impl DtmLinkStateReviewedWords {
+    pub const fn power(self) -> Option<LeTxPower> {
+        LeTxPower::from_index(self.word_60.power_index())
+    }
+    pub const fn event_span(self) -> u32 {
+        self.word_34.value()
+    }
+
     /// Apply the complete reviewed DTM reset to this CPU-owned word subset.
     ///
     /// SOURCE: pinned `libble_app.a[dtm_4.o]::sym_dtm_7gOGApwmDG1TxZOfQhrh`
@@ -280,7 +164,7 @@ impl DtmLinkStateReviewedWords {
         rx_tail: Option<DtmRxHeaderTailProjection>,
         default_tx_power: LeTxPower,
         config: u8,
-        role: DtmRole,
+        clear_event_span: bool,
     ) -> Self {
         self.word_00 = match tx_head {
             Some(head) => head.apply_to_link_state_word(self.word_00),
@@ -302,7 +186,7 @@ impl DtmLinkStateReviewedWords {
             .expect("reviewed sequence fits")
             .with_bit_13_opaque(false);
         self.word_60 = self.word_60.with_power_index(default_tx_power.index());
-        if matches!(role, DtmRole::Receiver) {
+        if clear_event_span {
             self.word_34 = self.word_34.with_value(0);
         }
         // Preserve the public positional config's full byte, including its upper flags.
@@ -345,7 +229,7 @@ impl DtmLinkStateReviewedWords {
 ///
 /// Names are byte offsets. This is not the complete scheduler object and has
 /// no list-linkage or hardware-ownership authority.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct DtmSchedulerItemReviewedWords {
     /// Complete word at byte offset `+0x00`; only byte `+0x02` is transformed.
     pub(crate) word_00: BleSchedulerItemHardwareNext,
@@ -370,8 +254,20 @@ pub struct DtmSchedulerItemReviewedWords {
 }
 
 impl DtmSchedulerItemReviewedWords {
+    pub const fn power(self) -> Option<LeTxPower> {
+        LeTxPower::from_index(self.word_14.power_index())
+    }
+    pub const fn sequence_start(self) -> u32 {
+        self.word_0c.value()
+    }
+    pub const fn raw_window(self) -> (u32, u32) {
+        (self.word_44.value(), self.word_48.value())
+    }
+    pub const fn receive_wait(self) -> (u16, u8) {
+        (self.word_2c.value(), self.word_2c.bits_16_20_opaque())
+    }
+
     /// The power index the item carries.
-    #[cfg(test)]
     const fn power_index(self) -> u8 {
         self.word_14.power_index()
     }
@@ -385,12 +281,12 @@ impl DtmSchedulerItemReviewedWords {
     pub const fn apply_event(
         self,
         frequency: DtmSchedulerFrequency,
-        event_type: DtmSchedulerItemEventType,
+        configuration: DtmItemConfiguration,
         scheduler_start: u32,
         scheduler_end: u32,
     ) -> Self {
-        let transmitter = matches!(event_type.role(), DtmRole::Transmitter);
-        let rate = event_type.phy_encoding().0 as u8;
+        let transmitter = configuration.transmitter;
+        let rate = configuration.phy_code;
         let allocation = self.word_00.bits_20_21_opaque();
         Self {
             word_00: self
@@ -415,18 +311,14 @@ impl DtmSchedulerItemReviewedWords {
                 .word_18
                 .with_frequency(frequency.0)
                 .expect("validated frequency fits")
-                .with_arbitration_priority(3)
+                .with_arbitration_priority(configuration.priority.value())
                 .expect("reviewed priority fits"),
-            word_2c: match event_type {
-                DtmSchedulerItemEventType::Transmitter(_) => self.word_2c,
-                DtmSchedulerItemEventType::Receiver {
-                    phase: DtmReceiverEventPhase::Initial,
-                    ..
-                } => DTM_RECEIVER_INITIAL,
-                DtmSchedulerItemEventType::Receiver {
-                    phase: DtmReceiverEventPhase::Recurring,
-                    ..
-                } => DTM_RECEIVER_RECURRING,
+            word_2c: match configuration.receive_wait {
+                None => self.word_2c,
+                Some(wait) => BleSchedulerItemReceiveWait::ZERO
+                    .with_value(wait.value)
+                    .with_bits_16_20_opaque(wait.extension)
+                    .expect("validated receive field fits"),
             },
             word_44: self.word_44.with_value(scheduler_start),
             word_48: self.word_48.with_value(scheduler_end),
@@ -542,15 +434,6 @@ impl DtmSchedulerHardwareChainWord {
 #[cfg(test)]
 mod tests;
 
-/// SOURCE: pinned `dtm_4.o` initial receiver event configuration.
-const DTM_RECEIVER_INITIAL: BleSchedulerItemReceiveWait = BleSchedulerItemReceiveWait::ZERO
-    .with_value(0x1)
-    .with_bits_16_20_opaque(0xf)
-    .expect("reviewed field image fits");
-/// SOURCE: pinned `dtm_4.o` recurring receiver event configuration.
-const DTM_RECEIVER_RECURRING: BleSchedulerItemReceiveWait =
-    BleSchedulerItemReceiveWait::ZERO.with_value(0x1);
-
 /// SOURCE: pinned `dtm_4.o::sym_dtm_7gOGApwmDG1TxZOfQhrh`, reset profile before dynamic links, power and radio policy.
 const DTM_RESET: DtmLinkStateReviewedWords = DtmLinkStateReviewedWords {
     word_00: BleLinkStateTxPath::ZERO
@@ -571,3 +454,68 @@ const DTM_RESET: DtmLinkStateReviewedWords = DtmLinkStateReviewedWords {
     crc_init: LeCrcInit::LE_PRESET,
     access_address: LeAccessAddress::DIRECT_TEST_MODE,
 };
+
+impl core::fmt::Debug for DtmTxHeaderHeadProjection {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DtmTxHeaderHeadProjection")
+    }
+}
+
+impl core::fmt::Debug for DtmRxHeaderTailProjection {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DtmRxHeaderTailProjection")
+    }
+}
+
+impl core::fmt::Debug for DtmLinkStateReviewedWords {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DtmLinkStateReviewedWords")
+    }
+}
+
+impl core::fmt::Debug for DtmSchedulerItemReviewedWords {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DtmSchedulerItemReviewedWords")
+    }
+}
+
+/// Checked physical lanes selected by a detached role value builder.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DtmItemConfiguration {
+    transmitter: bool,
+    phy_code: u8,
+    receive_wait: Option<DtmReceiveWait>,
+    priority: super::SchedulerEventPriority,
+}
+impl DtmItemConfiguration {
+    pub const fn new(
+        transmitter: bool,
+        phy_code: u8,
+        receive_wait: Option<DtmReceiveWait>,
+        priority: super::SchedulerEventPriority,
+    ) -> Option<Self> {
+        if phy_code > 3 {
+            return None;
+        }
+        Some(Self {
+            transmitter,
+            phy_code,
+            receive_wait,
+            priority,
+        })
+    }
+}
+/// Checked receiver timing fields, without descriptor or pointer access.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DtmReceiveWait {
+    value: u16,
+    extension: u8,
+}
+impl DtmReceiveWait {
+    pub const fn new(value: u16, extension: u8) -> Option<Self> {
+        if extension > 31 {
+            return None;
+        }
+        Some(Self { value, extension })
+    }
+}

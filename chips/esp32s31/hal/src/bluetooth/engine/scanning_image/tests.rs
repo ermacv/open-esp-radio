@@ -1,3 +1,4 @@
+use crate::bluetooth::engine::test_images::scan_item;
 use crate::bluetooth::engine::{
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     sram_link::ControllerSramLinkAddress,
@@ -5,9 +6,8 @@ use crate::bluetooth::engine::{
 use crate::layouts::*;
 
 use super::{
-    LegacyScanLinkStateImage, LegacyScanPrimaryChannel, LegacyScanResetConfig,
-    LegacyScanRxHeadProjection, LegacyScanSchedulerItemWords, LegacyScanSchedulerWindow,
-    LegacyScanStartSelection, LegacyScanWindowTicks,
+    LegacyScanLinkStateImage, LegacyScanPrimaryChannel, LegacyScanRxHeadProjection,
+    LegacyScanSchedulerItemWords, LegacyScanSchedulerWindow, LegacyScanWindowTicks, ScanResetImage,
 };
 
 #[test]
@@ -16,10 +16,10 @@ fn restricted_profile_retains_only_semantic_dynamic_inputs() {
         ControllerSramLinkAddress::new(0x2f00_0100)
             .expect("the model header is a nonzero controller link"),
     );
-    let config = LegacyScanResetConfig::le_1m_public(
+    let config = ScanResetImage::new(
         crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
-        crate::bluetooth::engine::LegacyScanType::Passive,
-        crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptAll,
+        crate::bluetooth::engine::ScanItemKind::Listen,
+        false,
     );
 
     let image = LegacyScanLinkStateImage::restricted_le_1m(head, config);
@@ -44,11 +44,7 @@ fn an_event_records_the_window_and_copies_the_reset_power() {
         let power = crate::bluetooth::engine::LeTxPower::from_dbm(dbm).expect("provider level");
         let image = LegacyScanLinkStateImage::restricted_le_1m(
             head(),
-            LegacyScanResetConfig::le_1m_public(
-                power,
-                crate::bluetooth::engine::LegacyScanType::Passive,
-                crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptAll,
-            ),
+            ScanResetImage::new(power, crate::bluetooth::engine::ScanItemKind::Listen, false),
         )
         .with_window(LegacyScanWindowTicks::new(20_000).unwrap());
         assert_eq!(image.window_ticks(), 20_000);
@@ -63,9 +59,8 @@ fn an_event_records_the_window_and_copies_the_reset_power() {
         }
         .prepare_first_event(
             image,
-            LegacyScanPrimaryChannel::Channel37,
+            scan_item(LegacyScanPrimaryChannel::Channel37, false),
             LegacyScanSchedulerWindow::from_controller_ticks(100, 200).unwrap(),
-            LegacyScanStartSelection::Requested,
         );
         assert_eq!(item.word_14.power_index(), power.index());
     }

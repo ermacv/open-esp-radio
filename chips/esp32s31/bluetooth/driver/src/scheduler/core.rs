@@ -125,7 +125,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
     /// The task endpoint owns the task-side HAL owner and the scheduler
     /// workers; the interrupt endpoint borrows only the shared event cells.
     /// The interrupt bank must already have left this owner.
-    pub fn split_runtime(
+    pub(crate) fn split_runtime(
         self,
     ) -> (
         ControllerInterruptRuntime<'cells, X>,
@@ -237,6 +237,29 @@ impl<'cells, X: SignalExecutor> ControllerPoweredTaskRuntime<'cells, X> {
     }
 }
 
+/// Rejection before any scheduler hardware mutation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SchedulerInitializationError {
+    RuntimeNotPristine,
+    ForeignContext,
+}
+/// Exact input owners retained when scheduler initialization is refused.
+#[must_use = "a refused initialization retains both input owners"]
+pub struct SchedulerInitializationFailure<'cells, const MT: usize, X: SignalExecutor> {
+    pub error: SchedulerInitializationError,
+    pub controller: ControllerHalInitialized,
+    pub runtime: ControllerRuntimeResources<'cells, MT, X>,
+}
+impl<const MT: usize, X: SignalExecutor> core::fmt::Debug
+    for SchedulerInitializationFailure<'_, MT, X>
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SchedulerInitializationFailure")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
 impl ControllerHalInitialized {
     /// Initialize scheduler hardware and bind one static no-RTOS runtime.
     ///
@@ -249,7 +272,10 @@ impl ControllerHalInitialized {
     pub fn initialize_scheduler<'cells, X: SignalExecutor, const MODEM_TIMER_CAPACITY: usize>(
         self,
         runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
-    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
+    ) -> Result<
+        SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
+        SchedulerInitializationFailure<'cells, MODEM_TIMER_CAPACITY, X>,
+    > {
         self.initialize_scheduler_with(runtime, |task| task.clear_scheduler_hardware_list_heads())
     }
 
@@ -261,7 +287,10 @@ impl ControllerHalInitialized {
     >(
         self,
         runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
-    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
+    ) -> Result<
+        SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
+        SchedulerInitializationFailure<'cells, MODEM_TIMER_CAPACITY, X>,
+    > {
         self.initialize_scheduler_with(runtime, |_| {
             BluetoothSchedulerHardwareListsCleared::for_host_test()
         })
@@ -271,12 +300,22 @@ impl ControllerHalInitialized {
         self,
         runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY, X>,
         initialize_hardware: impl FnOnce(&mut TaskResources) -> BluetoothSchedulerHardwareListsCleared,
-    ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X> {
-        assert!(
-            runtime.is_pristine() == Ok(true),
-            "only a pristine Controller runtime, observed in its event cells' executor, can \
-             initialize a scheduler epoch"
-        );
+    ) -> Result<
+        SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X>,
+        SchedulerInitializationFailure<'cells, MODEM_TIMER_CAPACITY, X>,
+    > {
+        let error = match runtime.is_pristine() {
+            Ok(true) => None,
+            Ok(false) => Some(SchedulerInitializationError::RuntimeNotPristine),
+            Err(_) => Some(SchedulerInitializationError::ForeignContext),
+        };
+        if let Some(error) = error {
+            return Err(SchedulerInitializationFailure {
+                error,
+                controller: self,
+                runtime,
+            });
+        }
         let Self {
             mut task,
             interrupts,
@@ -284,7 +323,7 @@ impl ControllerHalInitialized {
             standalone_dtm_profile,
         } = self;
         let hardware_lists_cleared = initialize_hardware(&mut task);
-        SchedulerInitialized {
+        Ok(SchedulerInitialized {
             task,
             interrupts: Some(interrupts),
             time_scale,
@@ -292,7 +331,7 @@ impl ControllerHalInitialized {
             config: SchedulerSoftwareConfig::reviewed_standalone(),
             _hardware_lists_cleared: hardware_lists_cleared,
             runtime,
-        }
+        })
     }
 }
 

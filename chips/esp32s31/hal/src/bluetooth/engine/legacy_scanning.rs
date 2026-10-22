@@ -19,12 +19,12 @@ use crate::bluetooth::engine::{
         BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
         LeTxPacketStorage,
     },
-    legacy_scanning_event_image::{
-        LegacyScanLinkStateImage, LegacyScanPrimaryChannel, LegacyScanResetConfig,
-        LegacyScanRxHeadProjection, LegacyScanSchedulerItemWords, LegacyScanSchedulerWindow,
-        LegacyScanStartSelection, LegacyScanType, LegacyScanWindowTicks,
-    },
     rx_memory_list::RxMemoryListClass,
+    scanning_image::{
+        LegacyScanLinkStateImage, LegacyScanRxHeadProjection, LegacyScanSchedulerItemWords,
+        LegacyScanSchedulerWindow, LegacyScanWindowTicks, ScanItemImage, ScanItemKind,
+        ScanResetImage,
+    },
     scheduler_context::SchedulerContextStorage,
     scheduler_item::SchedulerItemHeader,
     scheduler_pool::{
@@ -158,7 +158,7 @@ impl ItemStorage {
             ));
         self.layout.link_state().write(
             BleSchedulerItemLinkState::from_bits(link_state.compressed_image())
-                .with_kind(LegacyScanType::Passive.item_kind())
+                .with_kind(ScanItemKind::Listen.item_kind())
                 .expect("reviewed role kind fits"),
         );
         self.layout
@@ -175,7 +175,7 @@ impl ItemStorage {
     }
 
     /// Mark the item as the kind of scanner item `scan_type` runs.
-    fn set_kind(&self, scan_type: LegacyScanType) {
+    fn set_kind(&self, scan_type: ScanItemKind) {
         let word = self.layout.link_state();
         word.write(
             word.read()
@@ -375,7 +375,7 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         chain: &LeRxChain<PACKETS>,
-        config: LegacyScanResetConfig,
+        config: ScanResetImage,
     ) -> Result<(), LegacyScanError> {
         if chain.class() != RxMemoryListClass::Scanning {
             return Err(LegacyScanError::ForeignReceiveClass);
@@ -401,9 +401,9 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
         // The vendor scanner allocator marks every item with the scan type's
         // kind; hardware sends SCAN_REQ only from an active item.
         for item in &cpu.graph.items {
-            item.set_kind(config.scan_type());
+            item.set_kind(config.kind);
         }
-        if config.scan_type() == LegacyScanType::Active {
+        if config.kind == ScanItemKind::RequestResponse {
             // The vendor reset copies the software TX head into the
             // hardware TX link; SCAN_REQ is then the one queued packet.
             cpu.graph
@@ -429,14 +429,13 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
         Ok(())
     }
 
-    /// Lower one passive window into the free head item with its
+    /// Lower one selected window into the free head item with its
     /// coexistence lanes.
     pub fn prepare_event(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
-        channel: LegacyScanPrimaryChannel,
+        image: ScanItemImage,
         timing: LegacyScanEventTiming,
-        start_selection: LegacyScanStartSelection,
         coexistence: LegacyScanCoexistencePriorities,
     ) -> Result<LegacyScanEvent, LegacyScanError> {
         let LegacyScanEventTiming {
@@ -469,9 +468,8 @@ impl<'pool, 'epoch, const N: usize> LegacyScanPool<'pool, 'epoch, N> {
         link_state.install(link_state.image().with_window(window_ticks));
         item.write_reviewed_words(item.reviewed_words().prepare_first_event(
             link_state.image(),
-            channel,
+            image,
             window,
-            start_selection,
         ));
         // Common r_btdm_sched_calc_seq_time projection, as for every other
         // role's item: hardware ends an item without a sequence at once.

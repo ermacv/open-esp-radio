@@ -165,8 +165,6 @@ pub(super) fn shut_down<B: PlatformClockBackend, T>(
         time_latch: _,
         reunitable: _,
         epoch: _,
-        #[cfg(feature = "bluetooth-engine")]
-            arena_state: _,
     } = task;
     Ok((
         ClockedOwner {

@@ -13,6 +13,10 @@
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{
+    advertising_image::{
+        AdvertisingEventImage, LegacyAdvertisingLinkStateWords, LegacyAdvertisingOwnAddress,
+        LegacyAdvertisingSchedulerItemWords,
+    },
     coexistence::{AdvertisingCoexistencePriorities, with_priorities},
     le_rx_chain::{LeRxChain, LeRxSource, LeRxTag},
     le_tx_packet::{
@@ -21,11 +25,6 @@ use crate::bluetooth::engine::{
     },
     legacy_advertising::{
         BLUETOOTH_LEGACY_ADVERTISING_SCHEDULER_ITEM_CAPACITY, LegacyAdvertisingEvent,
-    },
-    legacy_advertising_event_image::{
-        LegacyAdvertisingItemPosition, LegacyAdvertisingLinkStateWords,
-        LegacyAdvertisingOwnAddress, LegacyAdvertisingPrimaryChannelPlan,
-        LegacyAdvertisingSchedulerItemWords,
     },
     legacy_advertising_tx_packet::LegacyAdvertisingTxPacketStorage,
     rx_memory_list::RxMemoryListClass,
@@ -273,10 +272,14 @@ impl LinkStateStorage {
         own_address: LegacyAdvertisingOwnAddress,
         default_tx_power: crate::bluetooth::engine::LeTxPower,
         scan_response: bool,
+        priority: super::SchedulerEventPriority,
     ) {
-        let mut words =
-            self.reviewed_words()
-                .reset(binding.adv_ind_header, own_address, default_tx_power);
+        let mut words = self.reviewed_words().reset(
+            binding.adv_ind_header,
+            own_address,
+            default_tx_power,
+            priority,
+        );
         // The common no-response projection clears this consumer. Advertising
         // reset installs the primary TX header's successor for SCAN_RSP; a
         // set without one keeps it empty.
@@ -542,6 +545,7 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
         input: LegacyConnectableAdvertisingMemoryInput<'_>,
         chain: &LeRxChain<PACKETS>,
         default_tx_power: crate::bluetooth::engine::LeTxPower,
+        priority: super::SchedulerEventPriority,
     ) -> Result<(), LegacyConnectableAdvertisingError> {
         if chain.class() != RxMemoryListClass::NonScanning {
             return Err(LegacyConnectableAdvertisingError::ForeignReceiveClass);
@@ -583,6 +587,7 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
             input.own_address.codec(),
             default_tx_power,
             scan_response.is_some(),
+            priority,
         );
         *cpu.state =
             LegacyConnectableAdvertisingState::Prepared(LegacyConnectableAdvertisingPrepared {
@@ -592,16 +597,12 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
         Ok(())
     }
 
-    /// Lower one event into one item per selected channel, each lasting
-    /// `raw_item_duration` from `raw_start` on. `raw_sequence_lead` is the
-    /// scheduler's accepted preparation lead.
+    /// Commit the driver's ordered item values after checking CPU custody
+    /// and this graph's scheduler-head binding.
     pub fn prepare_event(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
-        channels: LegacyAdvertisingPrimaryChannelPlan,
-        raw_start: u32,
-        raw_item_duration: u32,
-        raw_sequence_lead: u32,
+        image: &AdvertisingEventImage,
         coexistence: AdvertisingCoexistencePriorities,
     ) -> Result<LegacyAdvertisingEvent, LegacyConnectableAdvertisingError> {
         let cpu = self
@@ -615,24 +616,15 @@ impl<'pool, 'epoch, const N: usize> LegacyConnectableAdvertisingPool<'pool, 'epo
         {
             return Err(LegacyConnectableAdvertisingError::SchedulerHeadMismatch);
         }
-        let mut event = LegacyAdvertisingEvent::empty(channels.channel_count() as u8);
+        let mut event = LegacyAdvertisingEvent::empty(image.items().len() as u8);
         let link_state = graph.link_state.reviewed_words();
-        for index in 0..channels.channel_count() {
-            let start = raw_start.wrapping_add(raw_item_duration.wrapping_mul(index as u32));
-            let end = start.wrapping_add(raw_item_duration);
-            let channel = channels
-                .channel(index)
-                .expect("a validated channel plan contains every active position");
+        for (index, value) in image.items().iter().copied().enumerate() {
+            let start = value.start;
+            let end = value.end;
             let item = &graph.items[index];
-            item.write_reviewed_words(item.reviewed_words().prepare_event_item(
-                link_state,
-                channel,
-                LegacyAdvertisingItemPosition::of(index),
-                start,
-                end,
-            ));
+            item.write_reviewed_words(item.reviewed_words().prepare_event_item(link_state, value));
             // Common r_btdm_sched_calc_seq_time projection.
-            item.header().set_sequence(start, end, raw_sequence_lead);
+            item.header().set_sequence(start, end, value.sequence_lead);
             item.layout.coexistence_priority().write(with_priorities(
                 item.layout.coexistence_priority().read(),
                 &coexistence.lanes,

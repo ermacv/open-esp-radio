@@ -28,25 +28,27 @@ limitations.
 | `scheduler` | The scheduler core over controller time and the finished-list worker; the physical list protocol and publications belong to the HAL Bluetooth engine |
 | `timed_preparation` | Controller-time preparation shared by timed scheduler admissions |
 | `resources` | Task and inactive interrupt owners split from the clocked client |
-| `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the task and timer workers of one powered epoch; the HAL engine owns list-zero publications and the global receive chains |
+| `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the task and timer workers of one powered epoch; the HAL owns physical list publications and receive-chain graphs |
 | `shutdown` | Retirement of a stopped epoch (Controller output, PHY and BTBB exit) and the Controller reset that returns the clocked client and the BLE PHY allocations |
 | `roles` | Detached value builders for DTM, advertising, scanning and connection events, and role-to-list selection |
 | `coexistence` | The vendor's per-lane PTI coexistence priorities of advertising, passive scan and connection events (`coexAdv`, `coexScan`, `coexConn`) |
 | `coex_status` | The vendor's Bluetooth LE coexistence schedule status bits (`coexHook`) and the change between two activities |
 | `connection_policy` | Connection-event allowances and span (`ble_28.o`, `ble_3.o`) and the vendor Direct Test Mode notes |
 
-`TaskResources::bind_engine` joins the unique controller-register borrow to
-one `Placed<BluetoothArena>` after HAL initialization. This crate enables
-the HAL's `bluetooth-engine` feature. That engine owns its physical graph,
-list transactions, address publication and completion return. Hardware heads
-resolve to logical identities inside HAL. A role builder receives a
-detached value seed; it never borrows a controller layout. Affine pool and
-epoch scopes prevent foreign and stale leases, and release consumes a lease.
+The driver enables the HAL's `bluetooth-engine` feature. Its
+`*_event_image` modules select DTM role/PHY/phase, advertising channel order
+and windows, and scanner filter, active/passive and start policy. They pass
+detached values through closed HAL operations. A builder never borrows a
+controller layout; HAL checks binding anchors before committing a value.
+Affine pool and epoch scopes prevent foreign and stale leases, and release
+consumes its lease. Hardware heads resolve to logical identities inside HAL.
 
-The existing `initialize_ble_phy_engine` / `activate` / `shut_down` lifecycle
-retains separate PHY and DF storage owners. It does not bind the aggregate
-engine; `bind_engine` borrows the task resources for the engine's lifetime.
-Standalone HAL component placement and publication APIs remain public.
+`initialize_ble_phy_engine` / `activate` / `shut_down` retains separate PHY
+and DF graph owners. Their publication methods use the retained bindings;
+public constructors and getters cannot produce a standalone address proof.
+Device-table and RX publication also goes through the corresponding owner.
+The physical scheduler executor and live publications are HAL modules;
+this crate's task endpoint captures finished-list notifications.
 
 The scheduler still lends the stable interrupt owner inside HAL, under the
 Sources exception. Its execution lock is the hardware protocol lock. The

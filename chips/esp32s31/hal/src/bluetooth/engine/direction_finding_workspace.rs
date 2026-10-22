@@ -39,7 +39,7 @@ const _: () = {
 ///
 /// This value carries reviewed address geometry only. It grants neither CPU
 /// access to the allocation nor CTE-register publication authority.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct DirectionFindingWorkspaceLink {
     link_state_configuration: ControllerSramLinkAddress,
 }
@@ -110,6 +110,14 @@ pub struct DirectionFindingWorkspaceCpuOwned {
 }
 
 impl DirectionFindingWorkspaceCpuOwned {
+    /// Publish the disabled-CTE descriptor retained by this owner.
+    pub fn publish_disabled_baseline(
+        &self,
+        controller: &mut crate::bluetooth::ControllerHal<'_>,
+    ) -> crate::bluetooth::DirectionFindingDisabledBaselineOwner {
+        controller.prepare_direction_finding_disabled_baseline(&self.disabled_cte_descriptor())
+    }
+
     /// Borrow the validated address geometry without changing ownership.
     pub(crate) const fn binding(&self) -> &DirectionFindingWorkspaceBinding {
         &self.binding
@@ -122,7 +130,7 @@ impl DirectionFindingWorkspaceCpuOwned {
 
     /// The disabled-CTE descriptor of this workspace, as the
     /// direction-finding baseline points the hardware at it.
-    pub fn disabled_cte_descriptor(&self) -> crate::bluetooth::DirectionFindingDescriptor {
+    pub(crate) fn disabled_cte_descriptor(&self) -> crate::bluetooth::DirectionFindingDescriptor {
         #[allow(unsafe_code, reason = "the owner of the workspace vouches for it")]
         // SAFETY: this owner holds the workspace `Pin<&'static mut>` for as
         // long as it lives, its binding names that workspace's disabled-CTE
@@ -212,3 +220,9 @@ const DF_CONFIGURATION: BleDirectionFindingWorkspaceWord0008Opaque =
 /// SOURCE: the same complete initializer stores word one in the disabled descriptor.
 const DF_DESCRIPTOR: BleDirectionFindingWorkspaceWord000cOpaque =
     BleDirectionFindingWorkspaceWord000cOpaque::ZERO.with_bits_0_31_opaque(0x1);
+
+impl core::fmt::Debug for DirectionFindingWorkspaceLink {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DirectionFindingWorkspaceLink")
+    }
+}

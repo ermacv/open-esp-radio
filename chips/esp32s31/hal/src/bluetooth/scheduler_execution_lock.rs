@@ -18,7 +18,6 @@ use oer_esp32s31_pac::{
 use crate::settle::{self, Settle, Unsettled};
 
 /// One execution-lock request and its progress.
-#[derive(Debug)]
 #[must_use = "an admitted execution lock must be stepped and its START cleared"]
 pub struct BluetoothSchedulerExecutionLock {
     request: BluetoothSchedulerExecutionLockRequest,
@@ -134,3 +133,9 @@ pub(crate) fn clear_start(
 
 #[cfg(test)]
 mod tests;
+
+impl core::fmt::Debug for BluetoothSchedulerExecutionLock {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("BluetoothSchedulerExecutionLock")
+    }
+}

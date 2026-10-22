@@ -86,6 +86,11 @@ pub struct LeDeviceTable {
 }
 
 impl LeDeviceTable {
+    /// Publish this table's retained extent, without exporting its first link.
+    pub fn publish(&self, controller: &mut crate::bluetooth::ControllerHal<'_>) {
+        let _ = controller.publish_device_table(&self.publication());
+    }
+
     /// Claim and initialize a linker-proven device-table allocation.
     pub fn place<S: ControllerDmaSpace>(placed: Placed<LeDeviceTableStorage>) -> Self {
         let (storage, placement) = Placement::<S>::take(placed);
@@ -108,7 +113,7 @@ impl LeDeviceTable {
 
     /// Hardware's view of the table after the last change: its first entry
     /// and the number of entries.
-    pub fn publication(&self) -> DeviceTablePublication {
+    pub(crate) fn publication(&self) -> DeviceTablePublication {
         let count = BluetoothDeviceTableEntryCount::new(self.members as u32)
             .expect("the capacity fits the count field");
         #[allow(unsafe_code, reason = "the table vouches for its storage")]

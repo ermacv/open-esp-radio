@@ -9,52 +9,40 @@ use crate::{
 use core::marker::PhantomData;
 
 mod sealed {
-    pub trait Sealed {}
+    pub trait Sealed {
+        const HOST_BASE: Option<u32>;
+    }
 }
 
 /// Address space of placed controller storage. Implementations belong to this crate.
-pub trait ControllerDmaSpace: sealed::Sealed {
-    #[doc(hidden)]
-    fn base<T>(storage: &T) -> u32;
-}
+pub trait ControllerDmaSpace: sealed::Sealed {}
 
 /// Controller storage uses its own CPU address on the chip.
 #[cfg(target_arch = "riscv32")]
 pub enum ChipDma {}
 #[cfg(target_arch = "riscv32")]
-impl sealed::Sealed for ChipDma {}
-#[cfg(target_arch = "riscv32")]
-impl ControllerDmaSpace for ChipDma {
-    fn base<T>(storage: &T) -> u32 {
-        // ESP32-S31 has 32-bit pointers. Placed proves the complete allocation.
-        core::ptr::from_ref(storage).addr() as u32
-    }
+impl sealed::Sealed for ChipDma {
+    const HOST_BASE: Option<u32> = None;
 }
+#[cfg(target_arch = "riscv32")]
+impl ControllerDmaSpace for ChipDma {}
 
 /// A native model maps a placed arena to a distinct compile-time base.
 #[cfg(not(target_arch = "riscv32"))]
 pub enum HostDma<const BASE: u32> {}
 #[cfg(not(target_arch = "riscv32"))]
-impl<const BASE: u32> sealed::Sealed for HostDma<BASE> {}
-#[cfg(not(target_arch = "riscv32"))]
-impl<const BASE: u32> ControllerDmaSpace for HostDma<BASE> {
-    fn base<T>(_storage: &T) -> u32 {
-        const {
-            let window = crate::layouts::DMA_WINDOW;
-            assert!(BASE > window.start && BASE < window.end);
-            assert!(BASE.is_multiple_of(align_of::<u32>() as u32));
-            assert!(size_of::<T>() <= (window.end - BASE) as usize);
-        }
-        BASE
-    }
+impl<const BASE: u32> sealed::Sealed for HostDma<BASE> {
+    const HOST_BASE: Option<u32> = Some(BASE);
 }
+#[cfg(not(target_arch = "riscv32"))]
+impl<const BASE: u32> ControllerDmaSpace for HostDma<BASE> {}
 
 /// Geometry of one consumed Placed allocation; only its owner creates it.
 ///
 /// It holds addresses, without a Rust borrow that could alias the retained
 /// owner's mutable storage. Field checks are against this allocation.
 #[doc(hidden)]
-pub struct Placement<S> {
+pub(crate) struct Placement<S> {
     root: usize,
     bytes: usize,
     base: u32,
@@ -63,11 +51,19 @@ pub struct Placement<S> {
 
 impl<S: ControllerDmaSpace> Placement<S> {
     pub(crate) fn take<T>(placed: Placed<T>) -> (&'static mut T, Self) {
+        const {
+            if let Some(base) = S::HOST_BASE {
+                let window = crate::layouts::DMA_WINDOW;
+                assert!(base > window.start && base < window.end);
+                assert!(base.is_multiple_of(align_of::<u32>() as u32));
+                assert!(size_of::<T>() <= (window.end - base) as usize);
+            }
+        }
         let storage = placed.into_inner();
         let geometry = Self {
             root: core::ptr::from_ref(storage).addr(),
             bytes: size_of::<T>(),
-            base: S::base(storage),
+            base: S::HOST_BASE.unwrap_or_else(|| core::ptr::from_ref(storage).addr() as u32),
             space: PhantomData,
         };
         (storage, geometry)

@@ -495,6 +495,20 @@ pub struct LeRxChain<const PACKETS: usize> {
 
 impl<const PACKETS: usize> LeRxChain<PACKETS> {
     /// Claim a linker-proven receive arena and initialize its chain.
+    /// Publish only this retained chain, with its class-specific opcode policy.
+    pub fn publish_initial_head(
+        &self,
+        controller: &mut crate::bluetooth::ControllerHal<'_>,
+    ) -> crate::bluetooth::RxMemoryListPublished {
+        match self.class() {
+            RxMemoryListClass::Scanning => {
+                controller.publish_rx_memory_list_initial_head(&self.publication_head())
+            }
+            RxMemoryListClass::NonScanning => controller
+                .publish_software_connection_rx_memory_list_initial_head(&self.publication_head()),
+        }
+    }
+
     pub fn place<S: ControllerDmaSpace>(
         placed: crate::dma_static::Placed<LeRxChainStorage<PACKETS>>,
         class: RxMemoryListClass,
@@ -550,7 +564,7 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
 
     /// The chain's initial header and list, as the RX-list publication
     /// points the hardware at them.
-    pub fn publication_head(&self) -> crate::bluetooth::RxChainHead {
+    pub(crate) fn publication_head(&self) -> crate::bluetooth::RxChainHead {
         #[allow(unsafe_code, reason = "the chain vouches for its storage")]
         // SAFETY: the chain holds its nodes `Pin<&'static mut>`, its ring
         // encodes every header link into those nodes only, and the headers

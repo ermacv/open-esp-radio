@@ -33,7 +33,9 @@ use {
     oer_esp32s31_hal::bluetooth::DirectionFindingDisabledBaselineOwner,
     oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
-    oer_esp32s31_hal::bluetooth::{BlePhyHardwareObjects, DirectionFindingDescriptor},
+    oer_esp32s31_hal::bluetooth::engine::{
+        BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned,
+    },
     oer_esp32s31_hal::domain::RadioDomain,
 };
 
@@ -82,49 +84,6 @@ pub struct TaskResources {
 
 #[cfg(any(target_arch = "riscv32", test))]
 impl TaskResources {
-    /// Bind initialized registers and one placed arena to their HAL engine.
-    #[cfg(target_arch = "riscv32")]
-    #[allow(
-        clippy::type_complexity,
-        reason = "refusal returns the exact affine input owners"
-    )]
-    pub fn bind_engine<
-        'call,
-        'pool,
-        'epoch,
-        D: oer_esp32s31_hal::bluetooth::engine::ControllerDmaSpace,
-        const A: usize,
-        const C: usize,
-        const N: usize,
-        const R: usize,
-        const O: usize,
-        const Q: usize,
-    >(
-        &'call mut self,
-        arena: oer_esp32s31_hal::dma_static::Placed<
-            oer_esp32s31_hal::bluetooth::engine::BluetoothArena<A, C, N, R, O>,
-        >,
-        pool: oer_esp32s31_hal::bluetooth::engine::PoolScope<'pool>,
-        epoch: oer_esp32s31_hal::bluetooth::engine::EpochScope<'epoch>,
-        config: oer_esp32s31_hal::bluetooth::engine::SchedulerAllocationConfig,
-    ) -> Result<
-        oer_esp32s31_hal::bluetooth::engine::Engine<'call, 'pool, 'epoch, A, C, N, R, O, Q>,
-        oer_esp32s31_hal::bluetooth::engine::EngineBindFailure<
-            oer_esp32s31_hal::bluetooth::engine::EngineRegisters<'call>,
-            oer_esp32s31_hal::dma_static::Placed<
-                oer_esp32s31_hal::bluetooth::engine::BluetoothArena<A, C, N, R, O>,
-            >,
-        >,
-    > {
-        oer_esp32s31_hal::bluetooth::engine::Engine::bind::<D>(
-            &mut self.registers,
-            arena,
-            pool,
-            epoch,
-            config,
-        )
-    }
-
     /// The HAL task owner, which proves the Bluetooth module clocks to the
     /// shared PHY domain and BTBB.
     #[cfg(target_arch = "riscv32")]
@@ -318,10 +277,9 @@ impl TaskResources {
     pub(crate) fn enable_ble_base_stack_hardware<B: PlatformClockBackend, T>(
         &mut self,
         radio: &mut RadioDomain<B, T>,
-        objects: &BlePhyHardwareObjects,
+        storage: &BlePhyEngineCpuOwned,
     ) {
-        self.registers
-            .enable_ble_base_stack_hardware(radio, objects);
+        storage.initialize_registers(&mut self.registers, radio);
     }
 
     /// Publish this epoch's public Controller identity after BLE PHY init.
@@ -343,11 +301,9 @@ impl TaskResources {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn prepare_direction_finding_disabled_baseline(
         &mut self,
-        descriptor: &DirectionFindingDescriptor,
+        workspace: &DirectionFindingWorkspaceCpuOwned,
     ) -> DirectionFindingDisabledBaselineOwner {
-        self.registers
-            .borrow_bluetooth_controller()
-            .prepare_direction_finding_disabled_baseline(descriptor)
+        workspace.publish_disabled_baseline(&mut self.registers.borrow_bluetooth_controller())
     }
 
     /// Reunite a quiescent task owner with its inactive interrupt owner.

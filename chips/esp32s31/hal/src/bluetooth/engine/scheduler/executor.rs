@@ -131,7 +131,7 @@ pub struct SchedulerNotStopped;
 ///
 /// The caller publishes `head` as the hardware-list head and then starts the
 /// scheduler with the prepared run interrupts and RUN command.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[must_use = "the list head must be published and the scheduler started"]
 pub struct SchedulerIdleInsertion {
     pub(crate) head: ControllerSramLinkAddress,
@@ -167,7 +167,7 @@ impl<I: Copy, const CAPACITY: usize> SchedulerCompletion<I, CAPACITY> {
 }
 
 /// Executor core for hardware list zero.
-pub(crate) struct SchedulerExecutor<I, const CAPACITY: usize> {
+pub struct SchedulerExecutor<I, const CAPACITY: usize> {
     list: SchedulerList<I, CAPACITY>,
     transaction: Option<Transaction<I, CAPACITY>>,
     stopped: Option<BluetoothSchedulerStopped>,
@@ -397,3 +397,9 @@ pub use step::{
 mod tests;
 
 pub(crate) use step::SchedulerAction;
+
+impl core::fmt::Debug for SchedulerIdleInsertion {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("SchedulerIdleInsertion")
+    }
+}

@@ -54,12 +54,11 @@ pub use shutdown::{BluetoothControllerReset, BluetoothShutdownError, BluetoothSh
 
 pub use oer_esp32s31_pac::{
     BlePhyEtmRouteDisabled, BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime,
-    BluetoothControllerOutputReleaseError, BluetoothControllerSramAddress,
-    BluetoothControllerSramAddressError, BluetoothControllerTimeScale,
+    BluetoothControllerOutputReleaseError, BluetoothControllerTimeScale,
     BluetoothDeviceTableEntryCount, BluetoothDeviceTablePublished, BluetoothHalInitPeriod,
     BluetoothHalInitScale, BluetoothLowPowerClockObservation,
-    BluetoothLowPowerRuntimeControlObservation, BluetoothMemoryListPointerImage,
-    BluetoothMemoryListSelector, BluetoothMemoryListSlot, BluetoothMicrosecondDeltaProjection,
+    BluetoothLowPowerRuntimeControlObservation, BluetoothMemoryListSelector,
+    BluetoothMemoryListSlot, BluetoothMicrosecondDeltaProjection,
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerCounterObservation,
     BluetoothModemLpTimerEpoch, BluetoothModemLpTimerHandlerRegisterObservation,
     BluetoothModemLpTimerInstant, BluetoothModemLpTimerInterruptObservation,
@@ -68,27 +67,30 @@ pub use oer_esp32s31_pac::{
     BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition,
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationReleased,
     BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,
-    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockRequest,
-    BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
-    BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerFinishedListObservation,
-    BluetoothSchedulerFinishedListPop, BluetoothSchedulerHardwareListHead,
-    BluetoothSchedulerHardwareListHeadEmptyObserved, BluetoothSchedulerHardwareListHeadError,
-    BluetoothSchedulerHardwareListHeadPublished,
-    BluetoothSchedulerHardwareListHeadRetirementObservation, BluetoothSchedulerHardwareListIndex,
-    BluetoothSchedulerHardwareListsCleared, BluetoothSchedulerHardwareRunCommandPublished,
-    BluetoothSchedulerInsertionCommand, BluetoothSchedulerInsertionCommandStartCleared,
+    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionModifyDisposition,
+    BluetoothSchedulerExecutionModifyPublished, BluetoothSchedulerFinishedHardwareListObserved,
+    BluetoothSchedulerFinishedListObservation, BluetoothSchedulerFinishedListPop,
+    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerHardwareListsCleared,
+    BluetoothSchedulerHardwareRunCommandPublished, BluetoothSchedulerInsertionCommand,
+    BluetoothSchedulerInsertionCommandStartCleared,
     BluetoothSchedulerLockModifyInterruptObservation, BluetoothSchedulerLockModifyObservation,
-    BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyRequest,
-    BluetoothSchedulerLockModifyTaskObservation, BluetoothSchedulerReferenceCleared,
-    BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerRunEventPublished,
+    BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyTaskObservation,
+    BluetoothSchedulerReferenceCleared, BluetoothSchedulerReferenceGateObservation,
     BluetoothSchedulerRunInterruptsPrepared, BluetoothSchedulerSkipCleared,
     BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipPublished,
-    BluetoothSchedulerSkipRequest, BluetoothSchedulerSkipResult,
-    BluetoothSchedulerSoftwareListRemovalIdle, BluetoothSchedulerSoftwareListRemovalInterruptStep,
-    BluetoothSchedulerSoftwareListRemovalJoin, BluetoothSchedulerSoftwareListRemovalReady,
-    BluetoothSchedulerStopped, BluetoothSchedulerStoppedHeadRetirement,
-    BluetoothSchedulerStoppedItem, BluetoothSchedulerWorkObservation,
-    ModemSysconBluetoothObservation, PlatformClockPowerObservation, SharedModemClockObservation,
+    BluetoothSchedulerSkipResult, BluetoothSchedulerSoftwareListRemovalIdle,
+    BluetoothSchedulerSoftwareListRemovalInterruptStep, BluetoothSchedulerSoftwareListRemovalJoin,
+    BluetoothSchedulerSoftwareListRemovalReady, BluetoothSchedulerStopped,
+    BluetoothSchedulerWorkObservation, ModemSysconBluetoothObservation,
+    PlatformClockPowerObservation, SharedModemClockObservation,
+};
+use oer_esp32s31_pac::{
+    BluetoothMemoryListPointerImage, BluetoothSchedulerExecutionLockRequest,
+    BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadEmptyObserved,
+    BluetoothSchedulerHardwareListHeadPublished,
+    BluetoothSchedulerHardwareListHeadRetirementObservation, BluetoothSchedulerLockModifyRequest,
+    BluetoothSchedulerRunEventPublished, BluetoothSchedulerSkipRequest,
+    BluetoothSchedulerStoppedHeadRetirement,
 };
 
 /// The Bluetooth partition split into its task registers, modem low-power
@@ -353,8 +355,6 @@ impl ClockedOwner {
                 time_latch: ControllerTimeLatch::new(),
                 reunitable: true,
                 epoch: ControllerEpoch::next(),
-                #[cfg(feature = "bluetooth-engine")]
-                arena_state: ControllerArenaState::Uninitialized,
             },
             InterruptSetupOwner {
                 registers: interrupts,
@@ -449,8 +449,6 @@ pub struct TaskOwner {
     time_latch: ControllerTimeLatch,
     reunitable: bool,
     epoch: ControllerEpoch,
-    #[cfg(feature = "bluetooth-engine")]
-    arena_state: ControllerArenaState,
 }
 
 /// One task owner's span, from its separation out of the clocked owner to its
@@ -527,8 +525,6 @@ impl TaskOwner {
             time_latch: _,
             reunitable: _,
             epoch: _,
-            #[cfg(feature = "bluetooth-engine")]
-                arena_state: _,
         } = self;
         Ok(ClockedOwner {
             partition: Partition {
@@ -576,7 +572,7 @@ impl TaskOwner {
     /// the initialized controller software and an inactive IRQ route, orders
     /// of the Controller's lifecycle.
     #[doc(hidden)]
-    pub fn enable_ble_base_stack_hardware<B: PlatformClockBackend, T>(
+    pub(crate) fn enable_ble_base_stack_hardware<B: PlatformClockBackend, T>(
         &mut self,
         radio: &mut RadioDomain<B, T>,
         storage: &BlePhyHardwareObjects,
@@ -608,10 +604,6 @@ impl TaskOwner {
     ) {
         self.reunitable = false;
         self.registers.initialize_controller_hal(config);
-        #[cfg(feature = "bluetooth-engine")]
-        if self.arena_state == ControllerArenaState::Uninitialized {
-            self.arena_state = ControllerArenaState::Ready;
-        }
     }
 
     /// Apply the exact modem low-power timer register prefix before source 127
@@ -1179,8 +1171,6 @@ pub struct ControllerHal<'registers> {
     registers: &'registers mut BluetoothTaskRegisters,
     time_latch: &'registers mut ControllerTimeLatch,
     epoch: ControllerEpoch,
-    #[cfg(feature = "bluetooth-engine")]
-    arena_state: &'registers mut ControllerArenaState,
 }
 
 /// Public Bluetooth Controller identity in canonical display order.
@@ -1262,7 +1252,7 @@ pub enum ScanStartError {
 
 /// The two objects of the BLE PHY engine that the base-stack enable points
 /// the hardware at.
-pub struct BlePhyHardwareObjects {
+pub(crate) struct BlePhyHardwareObjects {
     inputs: BluetoothPhyRegisterInitInputs,
 }
 
@@ -1274,14 +1264,14 @@ impl BlePhyHardwareObjects {
     /// only through volatile accesses. The HAL engine's BLE PHY engine
     /// binding is the one caller.
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub const unsafe fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
+    pub(crate) const unsafe fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
         Self { inputs }
     }
 }
 
 /// The disabled-CTE descriptor the direction-finding baseline points the
 /// hardware at.
-pub struct DirectionFindingDescriptor {
+pub(crate) struct DirectionFindingDescriptor {
     address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
 }
 
@@ -1293,7 +1283,7 @@ impl DirectionFindingDescriptor {
     /// only through volatile accesses. The HAL engine's workspace binding is
     /// the one caller.
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub const unsafe fn bind(
+    pub(crate) const unsafe fn bind(
         address: crate::layouts::DmaRef<crate::layouts::BleDirectionFindingDescriptor>,
     ) -> Self {
         Self { address }
@@ -1301,8 +1291,8 @@ impl DirectionFindingDescriptor {
 }
 
 /// The device table hardware filters against: its first entry and count.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DeviceTablePublication {
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) struct DeviceTablePublication {
     first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
     count: BluetoothDeviceTableEntryCount,
 }
@@ -1314,7 +1304,7 @@ impl DeviceTablePublication {
     /// controller SRAM that the CPU reaches only through volatile accesses.
     /// The HAL engine's device table is the one caller.
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub const unsafe fn new(
+    pub(crate) const unsafe fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
         count: BluetoothDeviceTableEntryCount,
     ) -> Self {
@@ -1322,7 +1312,9 @@ impl DeviceTablePublication {
     }
 
     /// Address of the first entry.
-    pub const fn first_entry(&self) -> crate::layouts::DmaRef<crate::layouts::BleDeviceTable> {
+    pub(crate) const fn first_entry(
+        &self,
+    ) -> crate::layouts::DmaRef<crate::layouts::BleDeviceTable> {
         self.first_entry
     }
 
@@ -1333,8 +1325,8 @@ impl DeviceTablePublication {
 }
 
 /// The first header of one receive chain and the list it belongs to.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RxChainHead {
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) struct RxChainHead {
     selector: BluetoothMemoryListSelector,
     head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
     scanning: bool,
@@ -1349,7 +1341,7 @@ impl RxChainHead {
     /// list and `scanning` whether it is the scanner's. The HAL engine's
     /// receive chain is the one caller.
     #[allow(unsafe_code, reason = "the HAL engine's codec vouches for the storage")]
-    pub const unsafe fn new(
+    pub(crate) const unsafe fn new(
         selector: BluetoothMemoryListSelector,
         head: crate::layouts::DmaRef<crate::layouts::BleBufferHeader>,
         scanning: bool,
@@ -1380,7 +1372,7 @@ impl RxMemoryListPublished {
 
     /// Return the validated first-node address without granting dereference
     /// access.
-    pub const fn head(&self) -> crate::layouts::DmaRef<crate::layouts::BleBufferHeader> {
+    pub(crate) const fn head(&self) -> crate::layouts::DmaRef<crate::layouts::BleBufferHeader> {
         self.head
     }
 }
@@ -1505,7 +1497,7 @@ impl ControllerHal<'_> {
     /// The descriptor comes from `descriptor`; the caller runs it in the
     /// powered Controller epoch, an order of its lifecycle.
     #[doc(hidden)]
-    pub fn prepare_direction_finding_disabled_baseline(
+    pub(crate) fn prepare_direction_finding_disabled_baseline(
         &mut self,
         descriptor: &DirectionFindingDescriptor,
     ) -> DirectionFindingDisabledBaselineOwner {
@@ -1537,7 +1529,7 @@ impl ControllerHal<'_> {
     /// Controller epoch with no active RUN and serializes the list's task and
     /// interrupt access, orders of the Controller's lifecycle.
     #[doc(hidden)]
-    pub fn publish_rx_memory_list_initial_head(
+    pub(crate) fn publish_rx_memory_list_initial_head(
         &mut self,
         chain: &RxChainHead,
     ) -> RxMemoryListPublished {
@@ -1574,7 +1566,7 @@ impl ControllerHal<'_> {
     /// Controller epoch with no active RUN and serializes the list's task and
     /// interrupt access, orders of the Controller's lifecycle.
     #[doc(hidden)]
-    pub fn publish_software_connection_rx_memory_list_initial_head(
+    pub(crate) fn publish_software_connection_rx_memory_list_initial_head(
         &mut self,
         chain: &RxChainHead,
     ) -> RxMemoryListPublished {
@@ -1642,7 +1634,7 @@ impl ControllerHal<'_> {
     /// Controller epoch and serializes it with every role that filters
     /// against the table, orders of the Controller's lifecycle.
     #[doc(hidden)]
-    pub fn publish_device_table(
+    pub(crate) fn publish_device_table(
         &mut self,
         table: &DeviceTablePublication,
     ) -> BluetoothDeviceTablePublished {
@@ -1683,7 +1675,7 @@ impl ControllerHal<'_> {
 
     /// Perform one fresh fenced post-completion head observation while
     /// retaining the exact affine RUN provenance on every result path.
-    pub fn observe_scheduler_hardware_list_head_retirement(
+    pub(crate) fn observe_scheduler_hardware_list_head_retirement(
         &mut self,
         run: BluetoothSchedulerHardwareRunCommandPublished,
     ) -> BluetoothSchedulerHardwareListHeadRetirementObservation {
@@ -1693,7 +1685,7 @@ impl ControllerHal<'_> {
 
     /// Read the current head of one hardware list once, followed by a
     /// device fence.
-    pub fn observe_scheduler_hardware_list_head(
+    pub(crate) fn observe_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerHardwareListHead {
@@ -1714,7 +1706,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller retains descriptor lifetime and scheduler-epoch prerequisites"
     )]
-    pub unsafe fn publish_scheduler_hardware_list_head(
+    pub(crate) unsafe fn publish_scheduler_hardware_list_head(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
         head: Option<crate::layouts::DmaRef<crate::layouts::BleSchedulerItem>>,
@@ -1738,7 +1730,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller retains the insertion result and command serialization"
     )]
-    pub unsafe fn clear_scheduler_insertion_command_start(
+    pub(crate) unsafe fn clear_scheduler_insertion_command_start(
         &mut self,
         command: BluetoothSchedulerInsertionCommand,
     ) -> BluetoothSchedulerInsertionCommandStartCleared {
@@ -1764,7 +1756,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller retains merge-selected item lifetime and list serialization"
     )]
-    pub unsafe fn admit_scheduler_execution_lock(
+    pub(crate) unsafe fn admit_scheduler_execution_lock(
         &mut self,
         request: BluetoothSchedulerExecutionLockRequest,
     ) -> BluetoothSchedulerExecutionLock {
@@ -1775,7 +1767,7 @@ impl ControllerHal<'_> {
     /// the engine-idle preamble, publication of command zero and one
     /// observation of it. Pending retains the request; the caller owns its
     /// deadline. Each BUSY sample settles within `settle`.
-    pub fn step_scheduler_execution_lock<C: oer_time::Clock + ?Sized>(
+    pub(crate) fn step_scheduler_execution_lock<C: oer_time::Clock + ?Sized>(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         lock: &mut BluetoothSchedulerExecutionLock,
@@ -1790,7 +1782,7 @@ impl ControllerHal<'_> {
     }
 
     /// Clear command-zero START of a finished execution lock.
-    pub fn clear_scheduler_execution_lock_start(
+    pub(crate) fn clear_scheduler_execution_lock_start(
         &mut self,
         mut lock: BluetoothSchedulerExecutionLock,
     ) {
@@ -1810,7 +1802,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller retains insertion reconciliation or list deletion and list serialization"
     )]
-    pub unsafe fn admit_scheduler_execution_modify(
+    pub(crate) unsafe fn admit_scheduler_execution_modify(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
         list_deletion: bool,
@@ -1823,7 +1815,7 @@ impl ControllerHal<'_> {
     /// and completion waits, the settle wait and a repeated request after a
     /// conflict. Pending retains the request; the caller owns its deadline.
     /// Each diagnostic sample settles within `settle`.
-    pub fn step_scheduler_execution_modify<C: oer_time::Clock + ?Sized>(
+    pub(crate) fn step_scheduler_execution_modify<C: oer_time::Clock + ?Sized>(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         modify: &mut BluetoothSchedulerExecutionModify,
@@ -1838,7 +1830,7 @@ impl ControllerHal<'_> {
     }
 
     /// Clear command-one START of a finished execution modify.
-    pub fn clear_scheduler_execution_modify_start(
+    pub(crate) fn clear_scheduler_execution_modify_start(
         &mut self,
         mut modify: BluetoothSchedulerExecutionModify,
     ) {
@@ -1866,7 +1858,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller retains the listed item lifetime and list serialization"
     )]
-    pub unsafe fn publish_scheduler_skip(
+    pub(crate) unsafe fn publish_scheduler_skip(
         &mut self,
         request: BluetoothSchedulerSkipRequest,
     ) -> BluetoothSchedulerSkipPublished {
@@ -1904,7 +1896,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller serializes the shared operational word"
     )]
-    pub unsafe fn index_scheduler_cancellation(
+    pub(crate) unsafe fn index_scheduler_cancellation(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
     ) -> BluetoothSchedulerCancellationIndexed {
@@ -1945,7 +1937,7 @@ impl ControllerHal<'_> {
     /// Publish the synchronous BTMAC scheduler event through the restricted
     /// PAC after the matching head and dynamic interrupts are prepared.
     #[doc(hidden)]
-    pub fn publish_scheduler_run_event(
+    pub(crate) fn publish_scheduler_run_event(
         &mut self,
         head: BluetoothSchedulerHardwareListHeadPublished,
         interrupts: BluetoothSchedulerRunInterruptsPrepared,
@@ -1995,7 +1987,7 @@ impl ControllerHal<'_> {
     }
 
     /// Retire the exact stopped RUN head without clearing a foreign item.
-    pub fn retire_stopped_scheduler_head(
+    pub(crate) fn retire_stopped_scheduler_head(
         &mut self,
         stopped: BluetoothSchedulerStopped,
         run: BluetoothSchedulerHardwareRunCommandPublished,
@@ -2032,7 +2024,7 @@ impl ControllerHal<'_> {
         unsafe_code,
         reason = "the caller retains descriptor lifetime and scheduler serialization"
     )]
-    pub unsafe fn publish_scheduler_lock_modify(
+    pub(crate) unsafe fn publish_scheduler_lock_modify(
         &mut self,
         request: BluetoothSchedulerLockModifyRequest,
     ) -> BluetoothSchedulerLockModifyPublished {
@@ -2123,8 +2115,6 @@ pub trait ControllerHalBorrow: sealed::ControllerHalBorrow {
             registers: &mut owner.registers,
             time_latch: &mut owner.time_latch,
             epoch: owner.epoch,
-            #[cfg(feature = "bluetooth-engine")]
-            arena_state: &mut owner.arena_state,
         }
     }
 }
@@ -2137,11 +2127,3 @@ mod tests;
 /// Controller-memory ownership and scheduler protocol.
 #[cfg(feature = "bluetooth-engine")]
 pub mod engine;
-
-#[cfg(feature = "bluetooth-engine")]
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum ControllerArenaState {
-    Uninitialized,
-    Ready,
-    Bound,
-}

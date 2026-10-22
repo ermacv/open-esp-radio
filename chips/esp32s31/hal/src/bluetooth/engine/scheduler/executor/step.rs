@@ -108,7 +108,7 @@ impl<I: Copy, const CAPACITY: usize> SchedulerReleased<I, CAPACITY> {
 
 /// Actions to perform in order, then the next expectation. A finished
 /// cancellation or flush also releases its items.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[must_use = "the actions must be performed before the next observation"]
 pub struct SchedulerStep<I, const CAPACITY: usize> {
     actions: [Option<SchedulerAction>; 3],
@@ -180,4 +180,13 @@ pub enum SchedulerTransactionFault {
     /// detached items stay withheld: hardware may still reach them, so only
     /// a Bluetooth core reset returns their memory.
     UnsupportedSkipResult,
+}
+
+impl<I: core::fmt::Debug, const CAPACITY: usize> core::fmt::Debug for SchedulerStep<I, CAPACITY> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SchedulerStep")
+            .field("next", &self.next)
+            .field("released", &self.released)
+            .finish_non_exhaustive()
+    }
 }

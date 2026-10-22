@@ -1,5 +1,17 @@
 //! Role value builders and list selection. None borrows controller layouts.
 
+mod dtm_event_image;
+mod legacy_scanning_event_image;
+pub use legacy_scanning_event_image::{
+    LegacyScanFilterPolicy, LegacyScanResetConfig, LegacyScanStartSelection, LegacyScanType,
+};
+mod legacy_advertising_event_image;
+pub use dtm_event_image::{
+    DtmReceiverEventPhase, DtmRole, DtmSchedulerItemEventType, DtmSchedulerReceiverPhy,
+    DtmSchedulerTransmitterPhy,
+};
+pub use legacy_advertising_event_image::LegacyAdvertisingPrimaryChannelPlan;
+
 use oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow;
 use oer_esp32s31_hal::bluetooth::{BluetoothSchedulerHardwareListIndex, engine::*};
 
@@ -105,7 +117,7 @@ impl DtmImageBuilder {
                 Some(seed.rx_header_tail_projection()),
                 self.power,
                 self.configuration,
-                self.role,
+                self.role == DtmRole::Receiver,
             ),
             DtmEventPhase::Recurring => words.link_state(),
         };
@@ -113,7 +125,7 @@ impl DtmImageBuilder {
             .scheduler_item()
             .apply_event(
                 self.frequency,
-                self.event,
+                self.event.configuration(),
                 self.window.start(),
                 self.window.end(),
             )
@@ -151,13 +163,18 @@ impl AdvertisingImageBuilder<'_> {
         pool: &mut LegacyAdvertisingPool<'pool, 'epoch, N>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<LegacyAdvertisingEvent, LegacyAdvertisingError> {
+        let address = legacy_advertising_event_image::own_address_from_pdu(self.pdu)
+            .map_err(LegacyAdvertisingError::Pdu)?;
         pool.prepare_packet(lease, self.pdu)?;
-        pool.reset_link_state(lease, self.power)?;
+        pool.reset_link_state(
+            lease,
+            self.power,
+            address,
+            SchedulerEventPriority::new(1).expect("reviewed priority fits"),
+        )?;
         pool.prepare_event(
             lease,
-            self.channels,
-            self.start,
-            self.item_duration,
+            &self.channels.image(self.start, self.item_duration, 0),
             self.coexistence,
         )
     }
@@ -172,26 +189,17 @@ pub struct ScanningImageBuilder {
 }
 
 impl ScanningImageBuilder {
-    pub fn prepare<
-        'pool,
-        'epoch,
-        const A: usize,
-        const C: usize,
-        const N: usize,
-        const R: usize,
-        const O: usize,
-        const Q: usize,
-    >(
+    pub fn prepare<'pool, 'epoch, const N: usize, const R: usize>(
         self,
-        engine: &mut Engine<'_, 'pool, 'epoch, A, C, N, R, O, Q>,
+        pool: &mut LegacyScanPool<'pool, 'epoch, N>,
+        receive: &LeRxChain<R>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<LegacyScanEvent, LegacyScanError> {
-        engine.reset_scanning(lease, self.reset)?;
-        engine.scanning().prepare_event(
+        pool.reset(lease, receive, self.reset.image())?;
+        pool.prepare_event(
             lease,
-            self.channel,
+            self.start.image(self.channel),
             self.timing,
-            self.start,
             self.coexistence,
         )
     }
@@ -208,27 +216,24 @@ pub struct ConnectableAdvertisingImageBuilder<'pdu> {
 }
 
 impl ConnectableAdvertisingImageBuilder<'_> {
-    pub fn prepare<
-        'pool,
-        'epoch,
-        const A: usize,
-        const C: usize,
-        const N: usize,
-        const R: usize,
-        const O: usize,
-        const Q: usize,
-    >(
+    pub fn prepare<'pool, 'epoch, const N: usize, const R: usize>(
         self,
-        engine: &mut Engine<'_, 'pool, 'epoch, A, C, N, R, O, Q>,
+        pool: &mut LegacyConnectableAdvertisingPool<'pool, 'epoch, N>,
+        receive: &LeRxChain<R>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<LegacyAdvertisingEvent, LegacyConnectableAdvertisingError> {
-        engine.prepare_connectable_advertising(lease, self.packets, self.power)?;
-        engine.connectable_advertising().prepare_event(
+        pool.prepare(
             lease,
-            self.channels,
-            self.start,
-            self.item_duration,
-            self.sequence_lead,
+            self.packets,
+            receive,
+            self.power,
+            SchedulerEventPriority::new(1).expect("reviewed priority fits"),
+        )?;
+        pool.prepare_event(
+            lease,
+            &self
+                .channels
+                .image(self.start, self.item_duration, self.sequence_lead),
             self.coexistence,
         )
     }
@@ -240,24 +245,14 @@ pub struct PeripheralConnectionImageBuilder {
 }
 
 impl PeripheralConnectionImageBuilder {
-    pub fn prepare<
-        'pool,
-        'epoch,
-        const A: usize,
-        const C: usize,
-        const N: usize,
-        const R: usize,
-        const O: usize,
-        const Q: usize,
-    >(
+    pub fn prepare<'pool, 'epoch, const N: usize>(
         self,
-        engine: &mut Engine<'_, 'pool, 'epoch, A, C, N, R, O, Q>,
+        pool: &mut PeripheralConnectionPool<'pool, 'epoch, N>,
+        workspace: DirectionFindingWorkspaceLink,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<PeripheralConnectionEvent, PeripheralConnectionError> {
-        engine
-            .connections()
-            .prepare_identity(lease, self.identity)?;
-        engine.prepare_first_connection(lease, self.event)
+        pool.prepare_identity(lease, self.identity)?;
+        pool.prepare_first_event(lease, self.event, workspace)
     }
 }
 

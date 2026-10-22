@@ -398,7 +398,7 @@ mod live {
 mod cancel {
     use std::vec::Vec;
 
-    use crate::bluetooth::engine::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
+    use crate::bluetooth::engine::SchedulerItemCompletionStatus;
     use crate::bluetooth::{
         BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition as Hold,
         BluetoothSchedulerExecutionModifyDisposition as Modify,
@@ -749,14 +749,15 @@ mod pools {
     use std::{boxed::Box, vec::Vec};
 
     use crate::bluetooth::engine::{
-        LegacyAdvertisingPool, LegacyAdvertisingPrimaryChannelPlan, LegacyAdvertisingStorage,
-        SchedulerAllocationConfig, SchedulerItemId, SchedulerItemSpace, SchedulerRolePoolStorage,
+        LegacyAdvertisingPool, LegacyAdvertisingStorage, SchedulerAllocationConfig,
+        SchedulerItemId, SchedulerItemSpace, SchedulerRolePoolStorage,
     };
 
     use super::idle;
     use crate::bluetooth::engine::scheduler::{
         executor::SchedulerExecutor, window::SchedulerRawWindow,
     };
+    use crate::bluetooth::engine::test_images::{ChannelFixture, image, priority};
 
     #[test]
     fn the_executor_links_the_items_of_a_role_pool() {
@@ -780,14 +781,19 @@ mod pools {
         pool.reset_link_state(
             &instance,
             crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
+            crate::bluetooth::engine::LegacyAdvertisingOwnAddress::Public,
+            priority(),
         )
         .unwrap();
         let event = pool
             .prepare_event(
                 &instance,
-                LegacyAdvertisingPrimaryChannelPlan::new(true, true, true).unwrap(),
-                1_000,
-                100,
+                &image(
+                    ChannelFixture::new(true, true, true).unwrap(),
+                    1_000,
+                    100,
+                    0,
+                ),
                 crate::bluetooth::engine::AdvertisingCoexistencePriorities {
                     lanes: [crate::bluetooth::engine::SchedulerItemCoexistencePriority::new(15)
                         .unwrap(); 4],
@@ -820,4 +826,21 @@ mod pools {
         assert_eq!(order, items.iter().map(|(id, _)| *id).collect::<Vec<_>>());
         assert_eq!(head, Some(space.link(items[0].0)));
     }
+}
+
+#[test]
+fn public_step_debug_never_prints_the_physical_actions() {
+    use crate::bluetooth::engine::{ControllerSramLinkAddress, scheduler::SchedulerAction};
+    let a = ControllerSramLinkAddress::new(0x2f00_1000).expect("fixture link");
+    let b = ControllerSramLinkAddress::new(0x2f00_2000).expect("fixture link");
+    let first = super::SchedulerStep::<u8, 1>::new(
+        &[SchedulerAction::PublishHead(Some(a))],
+        super::SchedulerNext::Finished,
+    );
+    let second = super::SchedulerStep::<u8, 1>::new(
+        &[SchedulerAction::PublishHead(Some(b))],
+        super::SchedulerNext::Finished,
+    );
+    assert_ne!(first, second);
+    assert_eq!(std::format!("{first:?}"), std::format!("{second:?}"));
 }

@@ -19,9 +19,7 @@ use core::{convert::Infallible, num::NonZeroU32};
 use crate::layouts::BleSchedulerItem;
 
 use crate::bluetooth::engine::{
-    dtm_event_image::{
-        DtmPositionalEventWords, DtmRxHeaderTailProjection, DtmTxHeaderHeadProjection,
-    },
+    dtm_image::{DtmPositionalEventWords, DtmRxHeaderTailProjection, DtmTxHeaderHeadProjection},
     dtm_rx_result::{DtmRxResultProjection, DtmRxResultProjectionError},
     le_tx_packet::LeTxPacketPreparedLength,
     scheduler_pool::{

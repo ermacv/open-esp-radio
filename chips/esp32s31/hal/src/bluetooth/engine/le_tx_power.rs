@@ -39,6 +39,14 @@ impl LeTxPower {
         TX_POWER_LEVELS_DBM[self.0 as usize]
     }
 
+    pub(super) const fn from_index(index: u8) -> Option<Self> {
+        if (index as usize) < TX_POWER_LEVELS_DBM.len() {
+            Some(Self(index))
+        } else {
+            None
+        }
+    }
+
     pub(super) const fn index(self) -> u8 {
         self.0
     }

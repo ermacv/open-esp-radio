@@ -1,7 +1,7 @@
 //! Private SRAM layout and word codec for one DTM memory graph.
 
 use crate::bluetooth::engine::{
-    dtm_event_image::{
+    dtm_image::{
         DtmLinkStateProfileWord, DtmLinkStateReviewedWords, DtmPositionalEventWords,
         DtmRxHeaderTailProjection, DtmSchedulerHardwareChainWord, DtmSchedulerItemReviewedWords,
         DtmTxHeaderHeadProjection,

@@ -1,14 +1,15 @@
+use crate::bluetooth::engine::test_images::scan_item;
 use bytemuck::Zeroable;
 use std::boxed::Box;
 
 use super::{LegacyScanError, LegacyScanPool, LegacyScanStorage};
 use crate::bluetooth::engine::{
-    LegacyScanCoexistencePriorities, LegacyScanPrimaryChannel, LegacyScanResetConfig,
-    LegacyScanSchedulerWindow, LegacyScanStartSelection, SchedulerItemCoexistencePriority,
+    LegacyScanCoexistencePriorities, LegacyScanPrimaryChannel, LegacyScanSchedulerWindow,
+    ScanResetImage, SchedulerItemCoexistencePriority,
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     le_rx_chain::{LeRxChain, LeRxChainStorage},
-    legacy_scanning_event_image::LegacyScanRxHeadProjection,
     rx_memory_list::RxMemoryListClass,
+    scanning_image::LegacyScanRxHeadProjection,
     scheduler_pool::{
         SchedulerAllocationConfig, SchedulerPoolError, SchedulerRoleInstance,
         SchedulerRolePoolStorage,
@@ -36,11 +37,11 @@ fn chain(class: RxMemoryListClass) -> LeRxChain<2> {
     .unwrap()
 }
 
-fn config() -> LegacyScanResetConfig {
-    LegacyScanResetConfig::le_1m_public(
+fn config() -> ScanResetImage {
+    ScanResetImage::new(
         crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
-        crate::bluetooth::engine::LegacyScanType::Passive,
-        crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptAll,
+        crate::bluetooth::engine::ScanItemKind::Listen,
+        false,
     )
 }
 
@@ -69,13 +70,12 @@ fn prepare(
 ) -> super::LegacyScanEvent {
     pool.prepare_event(
         instance,
-        LegacyScanPrimaryChannel::Channel38,
+        scan_item(LegacyScanPrimaryChannel::Channel38, false),
         super::LegacyScanEventTiming {
             window: window(),
             window_ticks: super::LegacyScanWindowTicks::new(0x5555).unwrap(),
             raw_sequence_lead: 0x5c,
         },
-        LegacyScanStartSelection::Requested,
         priorities([4, 11, 0, 0]),
     )
     .unwrap()
@@ -201,14 +201,13 @@ fn a_non_scanning_chain_is_refused() {
     assert_eq!(
         pool.prepare_event(
             &instance,
-            LegacyScanPrimaryChannel::Channel37,
+            scan_item(LegacyScanPrimaryChannel::Channel37, false),
             super::LegacyScanEventTiming {
                 window: window(),
                 window_ticks: super::LegacyScanWindowTicks::new(1).unwrap(),
                 raw_sequence_lead: 0x5c,
             },
-            LegacyScanStartSelection::Requested,
-            priorities([15; 4]),
+            priorities([15; 4])
         ),
         Err(LegacyScanError::State)
     );
@@ -230,10 +229,10 @@ fn only_an_active_scanner_queues_its_scan_request() {
     pool.reset(
         &active,
         &chain(RxMemoryListClass::Scanning),
-        LegacyScanResetConfig::le_1m_public(
+        ScanResetImage::new(
             crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
-            crate::bluetooth::engine::LegacyScanType::Active,
-            crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptAll,
+            crate::bluetooth::engine::ScanItemKind::RequestResponse,
+            false,
         ),
     )
     .unwrap();
@@ -256,18 +255,18 @@ fn only_an_active_scanner_queues_its_scan_request() {
 #[test]
 fn every_item_carries_the_kind_of_its_scan_type() {
     for scan_type in [
-        crate::bluetooth::engine::LegacyScanType::Passive,
-        crate::bluetooth::engine::LegacyScanType::Active,
+        crate::bluetooth::engine::ScanItemKind::Listen,
+        crate::bluetooth::engine::ScanItemKind::RequestResponse,
     ] {
         let mut pool = pool();
         let instance = pool.acquire().unwrap();
         pool.reset(
             &instance,
             &chain(RxMemoryListClass::Scanning),
-            LegacyScanResetConfig::le_1m_public(
+            ScanResetImage::new(
                 crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
                 scan_type,
-                crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptAll,
+                false,
             ),
         )
         .unwrap();
@@ -290,9 +289,9 @@ fn the_filter_policy_changes_only_the_filter_words_and_a_later_reset_restores_th
             pool.reset(
                 &instance,
                 &chain(RxMemoryListClass::Scanning),
-                LegacyScanResetConfig::le_1m_public(
+                ScanResetImage::new(
                     crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
-                    crate::bluetooth::engine::LegacyScanType::Active,
+                    crate::bluetooth::engine::ScanItemKind::RequestResponse,
                     filter_policy,
                 ),
             )
@@ -300,17 +299,14 @@ fn the_filter_policy_changes_only_the_filter_words_and_a_later_reset_restores_th
             instance
         };
         // A filtering scanner before, released, leaves nothing behind.
-        let earlier = reset(
-            &mut pool,
-            crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptListOnly,
-        );
+        let earlier = reset(&mut pool, true);
         pool.release(earlier).unwrap();
         let instance = reset(&mut pool, filter_policy);
         let (graph, _, _) = pool.shared(&instance).unwrap();
         crate::bluetooth::engine::shared_layout::LinkStateImage::read(&graph.link_state.layout)
     };
-    let all = link_state(crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptAll);
-    let listed = link_state(crate::bluetooth::engine::LegacyScanFilterPolicy::AcceptListOnly);
+    let all = link_state(false);
+    let listed = link_state(true);
     assert_ne!(all.receive_context, listed.receive_context);
     assert_ne!(all.crc_initialization, listed.crc_initialization);
     let restored = crate::bluetooth::engine::shared_layout::LinkStateImage {

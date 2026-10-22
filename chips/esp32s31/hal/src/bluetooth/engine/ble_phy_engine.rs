@@ -198,6 +198,16 @@ pub struct BlePhyEngineCpuOwned {
 }
 
 impl BlePhyEngineCpuOwned {
+    /// Publish only this owner's retained PHY graph through the powered task.
+    #[cfg(target_arch = "riscv32")]
+    pub fn initialize_registers<B: crate::power::PlatformClockBackend, T>(
+        &self,
+        task: &mut crate::bluetooth::TaskOwner,
+        radio: &mut crate::domain::RadioDomain<B, T>,
+    ) {
+        task.enable_ble_base_stack_hardware(radio, &self.hardware_objects());
+    }
+
     /// Borrow the stable address proof without changing ownership.
     #[cfg(test)]
     pub(crate) const fn binding(&self) -> &BlePhyEngineBinding {
@@ -207,7 +217,7 @@ impl BlePhyEngineCpuOwned {
     /// The environment and resolving list of this storage, as the base-stack
     /// enable points the hardware at them under the normal Controller
     /// profile.
-    pub fn hardware_objects(&self) -> crate::bluetooth::BlePhyHardwareObjects {
+    pub(crate) fn hardware_objects(&self) -> crate::bluetooth::BlePhyHardwareObjects {
         #[allow(unsafe_code, reason = "the owner of the storage vouches for it")]
         // SAFETY: this owner holds the storage `Pin<&'static mut>` for as long
         // as it lives, its binding names that storage's environment and

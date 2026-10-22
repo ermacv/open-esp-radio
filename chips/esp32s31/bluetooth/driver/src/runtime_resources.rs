@@ -5,10 +5,8 @@
 //! HCI Host state and do not make the radio operational; stable ISR placement
 //! and powered hardware transitions remain separate stages.
 //!
-//! The powered task endpoint executes the scheduler executor's list-zero
-//! steps: it performs their hardware actions, takes their wait observations,
-//! starts the idle scheduler, captures finished lists and publishes the
-//! global receive chains.
+//! The powered task endpoint owns controller-time service and finished-list
+//! capture. Physical scheduler transactions and graph publication stay in HAL.
 
 use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 

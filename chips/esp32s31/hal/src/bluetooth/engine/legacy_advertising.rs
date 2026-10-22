@@ -12,15 +12,14 @@
 use crate::layouts::*;
 
 use crate::bluetooth::engine::{
+    advertising_image::{
+        AdvertisingEventImage, LegacyAdvertisingLinkStateWords, LegacyAdvertisingOwnAddress,
+        LegacyAdvertisingPduError, LegacyAdvertisingSchedulerItemWords,
+    },
     coexistence::{AdvertisingCoexistencePriorities, with_priorities},
     le_tx_packet::{
         BLUETOOTH_LE_TX_PACKET_PREFIX_BYTES, LeTxBufferHeaderStorage, LeTxPacketAddress,
         LeTxPacketPrepareError, LeTxPacketPreparedLength,
-    },
-    legacy_advertising_event_image::{
-        LegacyAdvertisingItemPosition, LegacyAdvertisingLinkStateWords,
-        LegacyAdvertisingOwnAddress, LegacyAdvertisingPduError,
-        LegacyAdvertisingPrimaryChannelPlan, LegacyAdvertisingSchedulerItemWords,
     },
     legacy_advertising_tx_packet::LegacyAdvertisingTxPacketStorage,
     scheduler_context::SchedulerContextStorage,
@@ -412,33 +411,36 @@ impl<'pool, 'epoch, const N: usize> LegacyAdvertisingPool<'pool, 'epoch, N> {
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         default_tx_power: crate::bluetooth::engine::LeTxPower,
+        own_address: LegacyAdvertisingOwnAddress,
+        priority: super::SchedulerEventPriority,
     ) -> Result<(), LegacyAdvertisingError> {
         let cpu = self.cpu(instance).map_err(LegacyAdvertisingError::Pool)?;
         let LegacyAdvertisingState::Packet(length) = *cpu.state else {
             return Err(LegacyAdvertisingError::State);
         };
-        let own_address =
-            LegacyAdvertisingOwnAddress::from_pdu(cpu.graph.tx_packet.prepared_pdu(length))
-                .map_err(LegacyAdvertisingError::Pdu)?;
+        if length.payload_bytes() < 6 {
+            return Err(LegacyAdvertisingError::Pdu(
+                LegacyAdvertisingPduError::MissingAdvertiserAddress,
+            ));
+        }
         cpu.graph.tx_packet.lower_advertiser_address(length);
         let words = cpu.graph.link_state.reviewed_words().reset(
             cpu.binding.tx_header,
             own_address,
             default_tx_power,
+            priority,
         );
         cpu.graph.link_state.write_reviewed_words(words);
         *cpu.state = LegacyAdvertisingState::Reset(length);
         Ok(())
     }
 
-    /// Lower one event into one item per selected channel, each lasting
-    /// `raw_item_duration` from `raw_start` on.
+    /// Commit the driver's ordered item values after checking CPU custody
+    /// and this graph's scheduler-head binding.
     pub fn prepare_event(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
-        channels: LegacyAdvertisingPrimaryChannelPlan,
-        raw_start: u32,
-        raw_item_duration: u32,
+        image: &AdvertisingEventImage,
         coexistence: AdvertisingCoexistencePriorities,
     ) -> Result<LegacyAdvertisingEvent, LegacyAdvertisingError> {
         let cpu = self.cpu(instance).map_err(LegacyAdvertisingError::Pool)?;
@@ -452,23 +454,14 @@ impl<'pool, 'epoch, const N: usize> LegacyAdvertisingPool<'pool, 'epoch, N> {
         }
         let mut event = LegacyAdvertisingEvent {
             windows: [(0, 0); ITEMS],
-            items: channels.channel_count() as u8,
+            items: image.items().len() as u8,
         };
         let link_state = cpu.graph.link_state.reviewed_words();
-        for index in 0..channels.channel_count() {
-            let start = raw_start.wrapping_add(raw_item_duration.wrapping_mul(index as u32));
-            let end = start.wrapping_add(raw_item_duration);
-            let channel = channels
-                .channel(index)
-                .expect("a validated channel plan contains every active position");
+        for (index, value) in image.items().iter().copied().enumerate() {
+            let start = value.start;
+            let end = value.end;
             let item = &cpu.graph.items[index];
-            item.write_reviewed_words(item.reviewed_words().prepare_event_item(
-                link_state,
-                channel,
-                LegacyAdvertisingItemPosition::of(index),
-                start,
-                end,
-            ));
+            item.write_reviewed_words(item.reviewed_words().prepare_event_item(link_state, value));
             item.layout.coexistence_priority().write(with_priorities(
                 item.layout.coexistence_priority().read(),
                 &coexistence.lanes,

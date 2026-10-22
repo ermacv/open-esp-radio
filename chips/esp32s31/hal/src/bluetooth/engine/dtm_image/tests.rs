@@ -1,7 +1,6 @@
 use super::{
-    DtmLinkStateReviewedWords, DtmReceiverEventPhase, DtmRole, DtmSchedulerFrequency,
-    DtmSchedulerItemEventType, DtmSchedulerItemReviewedWords, DtmSchedulerReceiverPhy,
-    DtmSchedulerTransmitterPhy, LeTxPower,
+    DtmItemConfiguration, DtmLinkStateReviewedWords, DtmReceiveWait, DtmSchedulerFrequency,
+    DtmSchedulerItemReviewedWords, LeTxPower,
 };
 use crate::bluetooth::engine::le_phy_packet::{LeAccessAddress, LeCrcInit};
 use crate::layouts::*;
@@ -40,49 +39,6 @@ fn power(dbm: i8) -> LeTxPower {
 }
 
 #[test]
-fn only_a_recurring_event_copies_the_reset_power_into_the_item() {
-    let link = link_state().apply_reset(None, None, power(9), 0, DtmRole::Transmitter);
-    assert_eq!(link.power_index(), power(9).index());
-
-    let initial = item().apply_event(
-        DtmSchedulerFrequency::from_controller_image(2).unwrap(),
-        DtmSchedulerItemEventType::Transmitter(DtmSchedulerTransmitterPhy::Le1M),
-        10,
-        20,
-    );
-    assert_eq!(initial.power_index(), 0);
-    assert_eq!(
-        initial.apply_recurring_power(link).power_index(),
-        power(9).index()
-    );
-}
-
-#[test]
-fn a_receiver_reset_stores_the_zero_tick_difference() {
-    let receiver = link_state().apply_reset(None, None, power(0), 0, DtmRole::Receiver);
-    assert_eq!(receiver.word_34.value(), 0);
-    let transmitter = link_state().apply_reset(None, None, power(0), 0, DtmRole::Transmitter);
-    assert_eq!(transmitter.word_34, link_state().word_34);
-}
-
-#[test]
-fn the_sequence_start_is_stored_as_given() {
-    let event = item()
-        .apply_event(
-            DtmSchedulerFrequency::from_controller_image(4).unwrap(),
-            DtmSchedulerItemEventType::Receiver {
-                phase: DtmReceiverEventPhase::Initial,
-                phy: DtmSchedulerReceiverPhy::Le1M,
-            },
-            100,
-            300,
-        )
-        .apply_sequence_start(101);
-    assert_eq!(event.word_0c.value(), 101);
-    assert_eq!(event.word_44.value(), 100);
-}
-
-#[test]
 fn frequency_domain_accepts_127_and_rejects_128() {
     assert!(DtmSchedulerFrequency::from_controller_image(127).is_some());
     assert_eq!(DtmSchedulerFrequency::from_controller_image(128), None);
@@ -97,21 +53,36 @@ fn frequency_updates_match_the_vendor_mask_and_preserve_all_high_17_bits() {
     for seed in [0, u32::MAX, 0xaaaa_aaf5, 0x5555_55fa] {
         for image in 0..=127 {
             let frequency = DtmSchedulerFrequency::from_controller_image(image).unwrap();
-            for event_type in [
-                DtmSchedulerItemEventType::Transmitter(DtmSchedulerTransmitterPhy::Le1M),
-                DtmSchedulerItemEventType::Receiver {
-                    phase: DtmReceiverEventPhase::Initial,
-                    phy: DtmSchedulerReceiverPhy::Le1M,
-                },
-                DtmSchedulerItemEventType::Receiver {
-                    phase: DtmReceiverEventPhase::Recurring,
-                    phy: DtmSchedulerReceiverPhy::LeCoded,
-                },
+            for configuration in [
+                DtmItemConfiguration::new(
+                    true,
+                    0,
+                    None,
+                    crate::bluetooth::engine::SchedulerEventPriority::new(3)
+                        .expect("fixture priority fits"),
+                )
+                .expect("test PHY fits"),
+                DtmItemConfiguration::new(
+                    false,
+                    0,
+                    Some(DtmReceiveWait::new(1, 15).expect("test timing fits")),
+                    crate::bluetooth::engine::SchedulerEventPriority::new(3)
+                        .expect("fixture priority fits"),
+                )
+                .expect("test PHY fits"),
+                DtmItemConfiguration::new(
+                    false,
+                    2,
+                    Some(DtmReceiveWait::new(1, 0).expect("test timing fits")),
+                    crate::bluetooth::engine::SchedulerEventPriority::new(3)
+                        .expect("fixture priority fits"),
+                )
+                .expect("test PHY fits"),
             ] {
                 let mut input = item();
                 input.word_18 = BleSchedulerItemChannelAndPriority::from_bits(seed);
                 let actual = input
-                    .apply_event(frequency, event_type, 10, 20)
+                    .apply_event(frequency, configuration, 10, 20)
                     .word_18
                     .bits();
                 let priority_image = (seed & !0xf) | 3;
@@ -121,4 +92,26 @@ fn frequency_updates_match_the_vendor_mask_and_preserve_all_high_17_bits() {
             }
         }
     }
+}
+
+#[test]
+fn clearing_the_span_is_an_explicit_physical_operation() {
+    let original = link_state();
+    let cleared = original.apply_reset(None, None, power(0), 0, true);
+    let retained = original.apply_reset(None, None, power(0), 0, false);
+    assert_eq!(cleared.event_span(), 0);
+    assert_eq!(retained.event_span(), original.event_span());
+}
+
+#[test]
+fn physical_inputs_reject_out_of_range_phy_timing_and_priority() {
+    let priority =
+        crate::bluetooth::engine::SchedulerEventPriority::new(3).expect("fixture priority");
+    assert!(DtmItemConfiguration::new(true, 3, None, priority).is_some());
+    assert_eq!(DtmItemConfiguration::new(true, 4, None, priority), None);
+    assert_eq!(DtmReceiveWait::new(1, 32), None);
+    assert_eq!(
+        crate::bluetooth::engine::SchedulerEventPriority::new(16),
+        None
+    );
 }

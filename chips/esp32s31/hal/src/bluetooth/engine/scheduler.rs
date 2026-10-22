@@ -82,4 +82,4 @@ pub struct SchedulerHardwareSnapshot {
     pub head: Option<super::SchedulerItemId>,
 }
 
-pub(crate) use executor::SchedulerExecutor;
+pub use executor::SchedulerExecutor;

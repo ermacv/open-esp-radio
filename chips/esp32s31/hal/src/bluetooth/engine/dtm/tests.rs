@@ -8,7 +8,7 @@ use super::{
     DtmTxPacketPrepareError,
 };
 use crate::bluetooth::engine::{
-    dtm_event_image::{DtmPositionalEventWords, DtmRole},
+    dtm_image::DtmPositionalEventWords,
     le_phy_packet::{LeAccessAddress, LeCrcInit},
     scheduler_pool::{
         SchedulerAllocationConfig, SchedulerItemSpace, SchedulerPoolError, SchedulerRoleInstance,
@@ -19,11 +19,15 @@ use crate::bluetooth::engine::{
 type Pool = DtmPool<'static, 'static, 1>;
 
 fn pool() -> Pool {
+    pool_at::<0x2f00_0100>()
+}
+
+fn pool_at<const BASE: u32>() -> Pool {
     let storage = Box::leak(Box::new(SchedulerRolePoolStorage::<DtmStorage, 1>::zeroed()));
     let numbers = SchedulerAllocationConfig::new(2, 3, 4)
         .unwrap()
         .direct_test_mode();
-    Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_0100>>(
+    Pool::place::<crate::bluetooth::engine::HostDma<BASE>>(
         crate::dma_static::Placed::host(storage),
         numbers,
     )
@@ -37,7 +41,7 @@ fn candidate_words(seed: DtmPositionalEventSeed) -> DtmPositionalEventWords {
         Some(seed.rx_header_tail_projection()),
         crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
         0,
-        DtmRole::Transmitter,
+        false,
     );
     DtmPositionalEventWords::new(link_state, current.scheduler_item())
 }
@@ -84,7 +88,7 @@ fn the_reset_selects_the_dtm_identity_and_profile() {
         None,
         crate::bluetooth::engine::LeTxPower::from_dbm(0).expect("provider level"),
         0,
-        DtmRole::Transmitter,
+        false,
     );
     assert_eq!(reset.access_address(), LeAccessAddress::DIRECT_TEST_MODE);
     assert_eq!(reset.crc_init(), LeCrcInit::LE_PRESET);
@@ -235,4 +239,21 @@ fn a_returned_packet_with_a_sentinel_is_refused_unchanged() {
         ))
     );
     assert_eq!(pool.words(&instance), words);
+}
+
+#[test]
+fn detached_word_debug_does_not_identify_the_bound_storage() {
+    let mut first = pool_at::<0x2f00_1000>();
+    let mut second = pool_at::<0x2f00_4000>();
+    let first_lease = first.acquire().expect("fixture slot");
+    let second_lease = second.acquire().expect("fixture slot");
+    let first_words = first.words(&first_lease).expect("CPU image");
+    let second_words = second.words(&second_lease).expect("CPU image");
+    assert_ne!(first_words, second_words);
+    assert_eq!(
+        std::format!("{first_words:?}"),
+        std::format!("{second_words:?}")
+    );
+    first.release(first_lease).expect("nothing was listed");
+    second.release(second_lease).expect("nothing was listed");
 }

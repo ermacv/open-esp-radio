@@ -81,16 +81,16 @@ smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
 `oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
-Its `Engine` retains the controller register token and one placed
-`BluetoothArena`. Its codecs and scheduler lists encode the addresses
-the controller follows and hold the narrow unsafe publication boundary.
-Role builders in the driver operate on detached value seeds, never layout
-references. Pool and epoch brands bind each affine lease to its owner;
-logical item identities also carry an acquisition generation. Only the
-engine returns listed items after completion or the cancellation protocol.
-The driver's BLE PHY initialization and shutdown retain separate PHY and DF
-owners; they do not install this aggregate engine. The HAL also exposes
-standalone component placement and publication APIs.
+Its component owners retain placed graphs and private bindings. The codecs
+and scheduler lists encode the addresses the controller follows and hold the
+narrow unsafe publication boundary. Driver role builders select detached
+values, never layout references; HAL checks their binding anchors before
+writing them. Pool and epoch brands bind each affine lease to its owner;
+logical item identities also carry an acquisition generation.
+The driver's PHY initialization and shutdown retain separate PHY and DF
+owners. Address publication goes through the corresponding graph owner;
+standalone raw proof constructors and address getters are private. Opaque
+projections and public scheduler Debug output do not expose physical links.
 `scheduler::hardware::live` publishes list-zero items only after resolving
 each address to a submitted item of the `'static` scheduler pools, in the
 executor's order. The BLE PHY engine, the direction-finding workspace, the

@@ -9,6 +9,8 @@ use oer_interrupt_table::signal::SignalExecutor;
 use crate::{phy::ControllerPhyJoined, resources::InterruptBankOwner};
 #[cfg(any(target_arch = "riscv32", test))]
 use oer_bluetooth_hci::BluetoothPublicDeviceAddress;
+#[cfg(any(target_arch = "riscv32", test))]
+use oer_esp32s31_hal::bluetooth::ControllerPublicAddress;
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
 #[cfg(target_arch = "riscv32")]
@@ -18,8 +20,6 @@ use oer_esp32s31_hal::bluetooth::engine::{
     BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceLink,
     LePacketCapturedTime, PeripheralConnectionCapturedAnchorTime,
 };
-#[cfg(any(target_arch = "riscv32", test))]
-use oer_esp32s31_hal::bluetooth::{BlePhyHardwareObjects, ControllerPublicAddress};
 
 /// Controller-global DF storage after its disabled-CTE descriptor is visible to hardware.
 ///
@@ -273,9 +273,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor>
         let publication = self
             .controller
             .task_mut()
-            .prepare_direction_finding_disabled_baseline(
-                &direction_finding.disabled_cte_descriptor(),
-            );
+            .prepare_direction_finding_disabled_baseline(&direction_finding);
 
         let ControllerPhyJoined {
             controller,
@@ -301,7 +299,7 @@ fn apply_register_init_then_public_address<T>(
     storage: &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned,
     public_address: BluetoothPublicDeviceAddress,
     target: &mut T,
-    initialize: impl FnOnce(&mut T, &BlePhyHardwareObjects),
+    initialize: impl FnOnce(&mut T, &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned),
     publish_address: impl FnOnce(&mut T, ControllerPublicAddress),
 ) -> BlePhyInitializationReport {
     let report = apply_register_init(storage, |objects| initialize(target, objects));
@@ -315,9 +313,9 @@ fn apply_register_init_then_public_address<T>(
 #[cfg(any(target_arch = "riscv32", test))]
 fn apply_register_init(
     storage: &oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned,
-    initialize: impl FnOnce(&BlePhyHardwareObjects),
+    initialize: impl FnOnce(&oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned),
 ) -> BlePhyInitializationReport {
-    initialize(&storage.hardware_objects());
+    initialize(storage);
     BlePhyInitializationReport
 }
 

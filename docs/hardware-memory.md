@@ -301,32 +301,28 @@ the loan is made, with the first such buffer.
 
 ## Bluetooth controller memory
 
-`oer_esp32s31_hal::bluetooth::engine::Engine` retains one register capability
-and `Placed<BluetoothArena>`. The BLE driver enables the HAL's
-`bluetooth-engine` feature; Wi-Fi images keep their dependency graph.
-`EngineRegisters` proves the HAL's controller-SRAM-prefix initialization.
-The arena contains the PHY and DF graphs,
-device table, role pools and both RX classes. One placement geometry projects
-all fields, including in the host model. Constructor rejection returns the
-unchanged register and placement owners before any graph initialization.
-An installed arena reserves its hardware epoch after Drop; another arena
-cannot be bound to those registers without a controller reset.
+`oer_esp32s31_hal::bluetooth::engine` retains the component codecs and
+CPU/controller ownership protocol. The BLE driver enables the HAL's
+`bluetooth-engine` feature; Wi-Fi images retain their dependency graph.
+PHY, DF, device table, role pools and receive chains each retain their own
+placed allocation and private bindings. The driver's PHY lifecycle holds
+separate PHY and DF owners through initialization, activation and shutdown.
 
-The driver builds role values through closed typed HAL operations. A value
-seed contains no reusable layout reference. Pool and epoch scopes are affine
-and generative; leases from different scopes cannot be exchanged. Hardware
-heads resolve against submitted items inside HAL and return logical
-identities. An acquisition generation prevents an old identity from naming a
-reused slot. Address publication, list transactions and completion return
-for that arena belong to the engine. The scheduler's interrupt-owner lending remains inside
-HAL under the documented Sources exception.
-The asynchronous scope helpers retain these brands across task suspension
-without allocation or a shared lock.
+Driver role builders select profiles, phases, channels and event windows.
+Their detached values contain no layout reference or inspectable pointer.
+HAL encodes physical fields and checks binding anchors before committing a
+value. Raw binding constructors, layout projections and address publication
+primitives are private; PHY/DF, table and RX publication goes through the
+owner of the corresponding graph. Debug output of opaque projections and
+scheduler steps does not reveal address-bearing words.
 
-The driver's existing BLE PHY lifecycle retains separate PHY and DF owners
-through initialization, activation and shutdown. It does not install the
-aggregate arena. Standalone component placement and publication APIs also
-remain public in HAL, including `DeviceTablePublication::first_entry`.
+Generative pool and epoch scopes bind affine leases to one pool installation;
+release consumes the lease. Hardware heads resolve against submitted items
+inside HAL and return logical identities. An acquisition generation prevents
+an old identity from naming a reused slot. The asynchronous scope helpers
+retain these brands across task suspension without allocation. Physical
+scheduler transactions and interrupt-owner lending remain in HAL under the
+Sources exception.
 
 ## Where registers, layouts and the protocol meet
 

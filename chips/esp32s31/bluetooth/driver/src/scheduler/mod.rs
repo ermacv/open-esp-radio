@@ -7,7 +7,10 @@ pub mod core;
 pub(crate) mod finished_lists;
 
 #[cfg(any(target_arch = "riscv32", test))]
-pub use core::{ControllerTimeAcquisitionError, SchedulerInitialized};
+pub use core::{
+    ControllerTimeAcquisitionError, SchedulerInitializationError, SchedulerInitializationFailure,
+    SchedulerInitialized,
+};
 
 pub use finished_lists::{
     BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerHardwareListIndex,
