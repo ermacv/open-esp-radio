@@ -28,6 +28,7 @@ pub mod exclusion;
 pub mod instrumentation;
 mod large_values;
 pub mod probe;
+pub mod sizes;
 pub mod staged;
 mod strict;
 mod test_support;

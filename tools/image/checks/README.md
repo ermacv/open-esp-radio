@@ -112,3 +112,61 @@ direct handler calls, nesting rules, bounds and admitted assumptions still
 apply to the full resolved interrupt context, including its tasks.
 
 Run host regressions with `cargo test -p oer-image-checks`.
+
+## Size summary format
+
+`sizes.json` schema 1 is published by `oer-image-build` beside the image's
+ELFs. The check outcome carries `sizes::Measurements` from the same `Image`
+used for checking. Task bounds and context-specific interrupt bounds are
+captured when the checks compute them; neither a second analysis nor a second
+firmware compilation is run.
+
+The top level contains `schema`, `type_min_bytes` (the constant
+`oer_image_checks::sizes::TYPE_MIN_BYTES`, **256 B**), `provenance`, and `elfs`
+(`runtime` and `bootstrap`). Provenance contains commit/dirty status, rustc's
+verbose version, chip, target, profile/settings, application/features, purpose,
+layout seed, configuration digests, compiler flags and stack policy source
+paths/digests. Values that may contain stand credentials are hashed.
+
+Each ELF contains:
+
+- `sections`: every `SHF_ALLOC` section, keyed by name, with memory kind from
+  the chip map, `executable`, `writable`, address and byte size. `totals` gives
+  executable code and allocated RAM separately per memory kind (`sram`,
+  `psram`, `flash`; a ROM companion is analysed but allocates no image section).
+  Totals sum section sizes; overlapping NOLOAD sections remain separately
+  visible and are not a physical free-memory estimate.
+- `allocated_stacks`: linked CPU0 task stack, each hart's linked IRQ range and
+  the bootstrap stack, in bytes.
+- `bounds`: each task root, IRQ hart/level/exception and nested IRQ total, with
+  byte bound (or resolved partial bytes), `complete`, all holes and assumptions,
+  and the largest reachable own frame (including off-critical-path frames).
+  A hole retains its demangled containing function, function-relative offset
+  and reason; address movement alone does not turn it into a different hole.
+- `frames`: every `.stack_sizes` record under each full demangled function
+  alias, preserving concrete generic arguments. Repeated names retain sorted
+  individual sizes instead of silently overwriting an implementation.
+- `types`: DWARF aggregate layouts (struct/enum/union/class, tuple, future and
+  enum variant views) and arrays of at least 256 B. Keys retain enclosing named
+  scopes and concrete generic arguments from rustc; arrays use `[element; N]`.
+  DIE offsets are local reference identities, never comparison keys. Repeated
+  identical layouts coalesce; ambiguous keys with different sizes fail summary
+  generation with examples. Variant views are layouts, not separate allocations.
+- `resources`: actual work units and peak admitted working memory of the image
+  analysis, their limits/deadline, number of incomplete function facts (including
+  the ROM companion) and partial roots. These are the analysis's existing
+  counters, not process RSS or summary writer allocations. Following #369,
+  local analysis can yield partial facts; operation exhaustion is an error and
+  is never reported as a successful partial summary.
+
+`cargo fw sizes` reads two output directories; its thresholds and verdicts are
+documented in [the build README](../build/README.md#size-summaries-and-owner-thresholds).
+The summary itself never changes a check's verdict.
+
+### PR size table for an agent
+
+Build the same app/analysis and HIL configurations on main and on the PR head,
+copying all bundles into `target/size-base` and `target/size-head` respectively.
+Keep compiler/profile/flags/configuration identical. Run
+`cargo fw sizes target/size-base target/size-head` and put the table in the PR;
+a `stop` requires a question to the owner. The build README gives a W3 example.

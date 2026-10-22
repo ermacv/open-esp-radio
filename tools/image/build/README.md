@@ -364,3 +364,64 @@ slots (`exclusion::slot` under `host_build_root()/tokens`: half the cores, at
 then converted to shared for the builds).
 
 Run host regressions with `cargo test -p oer-image-build`.
+
+## Size summaries and owner thresholds
+
+App builds (including `--analysis`) and HIL image builds publish `sizes.json`
+next to `runtime.elf` and `bootstrap.elf`, listed in `bundle.json`'s reports.
+It observes the checks' existing image analysis; it changes neither the
+compiler flags, the ELF nor the checks' verdicts. The versioned format is
+specified in [the checks README](../checks/README.md#size-summary-format).
+
+```console
+cargo fw sizes target/before target/after
+```
+
+This command recursively finds summaries in two output directories and builds
+nothing. Image sets and provenance must match: chip, package and binary, target,
+compiler, profile settings, flags, features, purpose, configuration and layout
+seed. Commit and dirty status identify the inputs; they need not match. Stack
+policy source digests are retained so a policy edit remains reviewable.
+Configuration values are SHA-256 digests, including explicit removals; stand
+credentials are never recorded as plaintext. Checkout paths in compiler flags
+are normalized to `$ROOT`.
+
+The comparison prints a table per image, byte changes for each ELF, new and
+removed functions/types, analysis resource use, per-image verdicts and the
+overall verdict. `same` means no size, allocation, bound, hole, assumption or
+section change; differing provenance commits and resource consumption alone do
+not change it. `report` means changes within the owner's allowance. `stop`
+returns exit 1; errors (including incompatible provenance) also return exit 1.
+The command never asks a question itself: the agent takes a `stop` to the owner.
+
+The thresholds have one definition in
+[`sizes/compare.rs`](src/sizes/compare.rs), following
+[the owner's rule #375](https://github.com/ermacv/open-esp-radio/issues/375):
+
+> Тип/future/кадр ≤ +64 B, вычисленная граница стека ≤ +64 B (выделенные стеки без изменений), код ≤ ~1 KiB на PR — только сообщить; RAM-секции, выделенные стеки или больше — стоп и вопрос владельцу.
+
+Values/frames and bounds allow at most +64 B each; code allows +1024 B per
+image, summed over positive executable-section changes across both ELFs.
+Shrinking another section does not cancel growth. Every RAM section is checked
+individually, including executable sections in RAM; any growth stops. Any
+allocated-stack change (including shrink/removal), new hole, lost complete
+bound or new assumption stops. New functions/types are listed separately;
+without a baseline their recorded size is growth from zero. Types crossing the
+256 B inventory boundary are therefore visible as new/removed. Multiple frame
+implementations sharing a demangled name retain their sorted individual sizes.
+
+### PR size table for an agent
+
+Build main and the PR head in two output directories, with the same compiler,
+flags, image configuration and profile. For example, from clean main build
+`cargo fw build w3 --analysis`, then copy `target/fw/w3-analysis` to
+`target/size-base/w3-analysis`. Switch to the PR head, repeat the build and copy
+the output to `target/size-head/w3-analysis`. For a complete chip table include
+every app/analysis bundle and the outputs of `cargo hil images check --all` in
+each directory. Then run:
+
+```console
+cargo fw sizes target/size-base target/size-head
+```
+
+Include its table and verdict in the PR, and take any `stop` to the owner.

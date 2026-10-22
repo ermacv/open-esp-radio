@@ -49,6 +49,7 @@ pub(crate) fn build(
     let cache = crate::compile_cache(root, instrumentation);
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
     let mut values = crate::large_values::Report::new(policy.max_move_bytes);
+    let mut sizes = crate::sizes::Summary::new(spec, profile)?;
     crate::test_support::refuse(root, &spec.application.package, target)?;
 
     // Every image uplifts into the same `<target>/firmware` of the
@@ -59,6 +60,7 @@ pub(crate) fn build(
         let _cache = crate::compiler::lock_compile_cache(&cache)?;
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy, instrumentation)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
+        sizes.flags("runtime", &runtime, root)?;
         let strict = profile.memory.is_some() && profile.interrupts.is_some();
         let analysis = oer_image_checks::linker::strict::Spec {
             root: spec.root.clone(),
@@ -155,6 +157,9 @@ pub(crate) fn build(
                 output: &output,
             })
             .map_err(|error| log.failed("runtime checks", error))?;
+        if let Some(measured) = &outcome.sizes {
+            sizes.elfs.insert("runtime".into(), measured.clone());
+        }
         crate::apply_outcome(checks, crate::CheckedElf::Runtime, outcome, &mut bundle)?;
     }
 
@@ -186,6 +191,7 @@ pub(crate) fn build(
             target,
         ),
     )?;
+    sizes.flags("bootstrap", &bootstrap, root)?;
     values.append(crate::large_values::build(
         &mut bootstrap,
         &log,
@@ -221,6 +227,9 @@ pub(crate) fn build(
                 output: &output,
             })
             .map_err(|error| log.failed("bootstrap checks", error))?;
+        if let Some(measured) = &outcome.sizes {
+            sizes.elfs.insert("bootstrap".into(), measured.clone());
+        }
         crate::apply_outcome(checks, crate::CheckedElf::Bootstrap, outcome, &mut bundle)?;
     }
 
@@ -234,6 +243,8 @@ pub(crate) fn build(
         bootstrap_package: bootstrap_package.clone(),
     });
 
+    sizes.publish(&output)?;
+    bundle.reports.push(crate::sizes::FILE.into());
     staging.publish(bundle)
 }
 
