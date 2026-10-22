@@ -147,19 +147,6 @@ fn dcode_poll<
     }
 }
 
-#[inline(never)]
-pub(super) fn observe_dcode_result<O: PhyTargetObserver>(
-    observer: &mut O,
-    child: &PhyCalibrationDcodeTransition,
-    result: &Result<(), PhyTargetPortError>,
-) {
-    observer.dcode_result(format_args!(
-        "action={:?} result={:?}",
-        child.action(),
-        result
-    ));
-}
-
 /// Run RX-DC calibration and publish both gain banks using the admitted owner.
 pub async fn rx_gain<D: PhyShortDelay, P, T: oer_time::Timer>(
     clock: &T,
