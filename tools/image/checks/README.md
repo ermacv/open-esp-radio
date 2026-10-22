@@ -31,8 +31,9 @@ at one address count as one implementation. A key matching zero or multiple
 implementations fails. Duplicate exceptions, including different aliases of
 one implementation, also fail.
 
-The initial ceiling equals the measured frame. Subsequent policy changes may
-only decrease it; review must reject increases. A frame exceeding its ceiling
+The initial ceiling is the measured frame plus 64 bytes, the growth a change
+may report without stopping. Subsequent policy changes may only decrease it;
+review must reject increases. A frame exceeding its ceiling
 fails, even for Diagnostic. An exception whose frame now fits the move limit
 is stale and fails: remove the entry. An exception cannot supply a missing
 compiler record. These policy errors fail under either severity.

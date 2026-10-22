@@ -164,8 +164,8 @@ unexcepted large frame; `Required::Diagnostic` warns. Both reject invalid or
 stale exceptions and frames exceeding their exception ceilings.
 Exceptions in `[[frame_exceptions.runtime]]` or `[[frame_exceptions.bootstrap]]`
 name one exact demangled implementation without hashes, with concrete generic
-arguments, its current-code reason and an initial ceiling equal to its
-measured frame. A key matching multiple implementations or none fails; aliases
+arguments, its current-code reason and an initial ceiling of its measured
+frame plus 64 bytes. A key matching multiple implementations or none fails; aliases
 at one address count once. A frame at or below the move limit makes its
 exception stale and requires removal. Ceiling changes may only decrease the
 value, enforced in review. An extending policy can append exceptions without
