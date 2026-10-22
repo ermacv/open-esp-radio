@@ -15,7 +15,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use oer_esp32s31_phy::tracking::observation::{
-    EngineTiming, Event, GainTiming, Operation, ReadinessTrace,
+    EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RxGainExecution,
 };
 use oer_hil_protocol::phy::HoldPolls;
 use oer_time::{Clock, Duration};
@@ -78,6 +78,8 @@ fn check_quiet_root(failed: bool) {
                         Operation::WifiI2c,
                         Operation::WifiPower,
                         Operation::Dcode,
+                        Operation::RxGain,
+                        Operation::ChannelRestore,
                         Operation::Temperature,
                         Operation::Temperature,
                     ] {
@@ -103,6 +105,25 @@ fn check_quiet_root(failed: bool) {
                         );
                     }
                     observer.tx_sar_wait(3, 2, true);
+                    observer.rx_gain_execution(RxGainExecution {
+                        maximum_parts_micros: [2, 3, 4],
+                        maximum_engine_actions: [0x8b, 11],
+                        maximum_engine_micros: [10, 7],
+                        i2c_poll_micros: [[5, 2], [10, 7]],
+                        i2c_samples: [1, 3],
+                        ..RxGainExecution::default()
+                    });
+                    for first in [0, 8] {
+                        observer.channel_action_completed(
+                            14,
+                            &EngineTiming {
+                                maximum_micros: 8,
+                                maximum_ready_micros: 6,
+                                ..EngineTiming::default()
+                            },
+                            [first, first + 8],
+                        );
+                    }
                     // Unmeasured callbacks must also stay silent inside Tracking.
                     observer.tracking_operation(Operation::Temperature, Event::Completed);
                     phase = 1;
@@ -146,8 +167,8 @@ fn check_quiet_root(failed: bool) {
     metrics::report(1, &metrics.borrow(), &mut uart).expect("UART output");
     assert_eq!(sample.invalid, failed);
     assert_eq!(sample.intervals.len(), 5);
-    assert_eq!(aggregate.polls, 14);
-    assert_eq!(aggregate.pending, 7);
+    assert_eq!(aggregate.polls, 18);
+    assert_eq!(aggregate.pending, 9);
     assert!(!metrics.borrow().invalid);
     let output = bytes.borrow();
     assert!(output.contains("engine family=7 polls=4 pending=2 ready=2"));
@@ -155,6 +176,22 @@ fn check_quiet_root(failed: bool) {
     assert!(output.contains("gain-parts family=4 lower-us=2 arithmetic-us=3 publication-us=4"));
     assert!(output.contains("hold-poll tick=1 op=0 polls=2 pending=1 resumes=1"));
     assert!(output.contains("sar_tail"));
+    assert!(output.contains("calibration-atom family=6"));
+    assert!(output.contains("calibration-atom family=8"));
+    assert!(output.contains("rx-gain-parts lower-us=2 hardware-us=3 commit-us=4"));
+    assert!(output.contains("part=6 action=Dc.I2c first=true us=10"));
+    assert!(output.contains("part=6 action=Dc.I2c first=false us=7"));
+    assert!(output.contains("rx-i2c-samples-packed=4294967299"));
+    let groups: Vec<u64> = output
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix("OPEN_RADIO_HIL channel-action name=PublishTxGain packed=")
+                .map(|word| word.parse().expect("packed channel action"))
+        })
+        .collect();
+    assert_eq!(groups.len(), 2);
+    assert_eq!(((groups[0] >> 40) & 255, (groups[0] >> 48) & 255), (0, 8));
+    assert_eq!(((groups[1] >> 40) & 255, (groups[1] >> 48) & 255), (8, 16));
     assert!(clock.now().as_micros() > 0);
 }
 
@@ -165,6 +202,21 @@ fn observer_defers_all_uart_until_successful_root_return() {
 #[test]
 fn observer_defers_all_uart_until_failed_root_return() {
     check_quiet_root(true);
+}
+
+#[test]
+fn channel_observation_overflow_invalidates_the_hold_without_early_uart() {
+    let clock = VirtualClock::<1>::new();
+    let mut aggregate = HoldPolls::default();
+    let mut output = String::new();
+    {
+        let mut observer = observer::Observer::new(1, &mut aggregate, None, &clock, &mut output);
+        for _ in 0..33 {
+            observer.channel_action_completed(14, &EngineTiming::default(), [0, 8]);
+        }
+    }
+    assert!(output.is_empty());
+    assert!(aggregate.invalid);
 }
 
 #[test]

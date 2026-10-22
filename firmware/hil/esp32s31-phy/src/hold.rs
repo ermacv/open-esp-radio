@@ -148,6 +148,20 @@ impl<C: Clock, W: core::fmt::Write> oer_esp32s31_phy::PhyTargetObserver
     for &mut Observer<'_, C, W>
 {
     const OBSERVE_ENGINE_POLLS: bool = true;
+    fn channel_action_completed(
+        &mut self,
+        action: u8,
+        timing: &oer_esp32s31_phy::tracking::observation::EngineTiming,
+        entries: [u8; 2],
+    ) {
+        Observer::channel_action_completed(self, action, timing, entries);
+    }
+    fn rx_gain_execution(
+        &mut self,
+        execution: oer_esp32s31_phy::tracking::observation::RxGainExecution,
+    ) {
+        Observer::rx_gain_execution(self, execution);
+    }
     fn rfpll_engine_trace(
         &mut self,
     ) -> Option<&mut oer_esp32s31_phy::tracking::observation::RfpllEngineTrace> {
