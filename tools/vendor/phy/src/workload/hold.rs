@@ -200,7 +200,7 @@ fn validate_engine(engine: &HoldPolls, ticks: u8, policy: HoldPolicy) -> Result<
     {
         return Err("INCOMPLETE: missing or invalid engine poll observations".into());
     }
-    if engine.maximum_micros > 50 {
+    if policy == HoldPolicy::Forced && engine.maximum_micros > 50 {
         return Err("P1 engine poll exceeded 50 microseconds".into());
     }
     Ok(())
@@ -333,6 +333,31 @@ mod tests {
 #[cfg(test)]
 mod natural_tests {
     use super::*;
+    #[test]
+    fn natural_rate_investigation_retains_long_polls_without_relaxing_forced_gate() {
+        let timing = HoldPolls {
+            polls: 2,
+            pending: 1,
+            resumes: 1,
+            ready_edges: 1,
+            total_micros: 60,
+            maximum_micros: 60,
+            ..Default::default()
+        };
+        assert!(validate_engine(&timing, 1, HoldPolicy::Natural).is_ok());
+        assert!(validate_engine(&timing, 1, HoldPolicy::Forced).is_err());
+        assert!(
+            validate_engine(
+                &HoldPolls {
+                    invalid: true,
+                    ..timing
+                },
+                1,
+                HoldPolicy::Natural
+            )
+            .is_err()
+        );
+    }
     #[test]
     fn natural_samples_accept_only_the_observed_branch_subset() {
         for committed in 0..=7 {
