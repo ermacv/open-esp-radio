@@ -264,13 +264,17 @@ protocol-selected maintenance of individual operations. Joint
 Wi-Fi/Bluetooth/154 maintenance and active-traffic publication of individual
 compensation classes are not qualified execution modes.
 
-The production RX-gain and TXDC/PWDET paths execute as direct blocking
-transactions on the already-borrowed radio domain. Required 1–20 us
-hardware settles use the ESP32-S31 ROM `ets_delay_us` primitive used by the
-recovered vendor graph; bounded PBus, I2C and DC/IQ readiness reads poll
-directly. Runtime TXDC/PWDET SAR readiness uses its timer-backed 40 µs deadline. Interrupts remain enabled and the physical owner remains held until
-terminal restoration. The common RX-gain branch still runs direct hardware searches inside its
-caller polls. Longer registration,
+The RX-gain path retains one [`RxProgram`](src/rx/program.rs) in both cold
+registration and common tracking. Borrowed typed step tokens carry each
+hardware command directly to one poll loop; consuming a completion updates
+that same cursor and coefficient bank. Short ready leaves share a bounded
+poll, while an incomplete DC/IQ observation waits on the caller's timer.
+Required 1–20 us hardware settles use the ESP32-S31 ROM `ets_delay_us`
+primitive, and PBus/I2C leaves retain their bounded direct observation policy.
+TXDC/PWDET retains its direct transaction on the borrowed radio domain;
+runtime SAR readiness uses its timer-backed 40 µs deadline. Interrupts remain
+enabled and the physical owner remains held until terminal restoration.
+Longer registration,
 tracking and lifecycle operations wait on the caller's `oer_time::Timer`
 through `executor::wait::delay` and its `executor::wait::Kind`.
 
@@ -352,10 +356,11 @@ unavailable. The current executor uses bounded hardware observations where
 there is no owned completion interrupt. Moving those observations to a timer
 does not make a long calibration harmless to traffic.
 
-The event-driven RX-gain transitions remain executable semantic models for host
-tests and vendor comparison. Production calls the same source-owned arithmetic
-and finite hardware primitives directly, without creating an async boundary or
-moving a large action enum at each hot edge. Every nested DC/IQ estimator
+RX-gain host oracles exercise the same program and pure search arithmetic as
+production. The frozen leaf/outcome projection exists only in tests;
+hardware vendor comparison runs the real program through the validation owner.
+There is no per-leaf child future or nested RX action/binding/completion path.
+Every DC/IQ estimator
 consumes the same root operation budget, while the fixed outer calibration
 graph has its own finite structural bounds. Budget exhaustion cannot produce a
 complete coefficient set, and failure retains the recovered cleanup and

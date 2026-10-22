@@ -600,7 +600,6 @@ pub enum PhyBbInitAction {
     PbusMemory(crate::analog::pbus::memory::PhyPbusMemoryAction),
     RxIq(crate::rx::iq::PhyRxIqInitAction),
     RxSaturation(crate::rx::saturation::PhyRxSaturationAction),
-    RxGain(crate::rx::gain::PhyRxGainInitAction),
     Channel(crate::channel::PhyChipChannelAction),
 }
 
@@ -621,7 +620,6 @@ pub enum PhyBbInitCompletion {
     PbusMemory(crate::analog::pbus::memory::PhyPbusMemoryCompletion),
     RxIq(crate::rx::iq::PhyRxIqInitCompletion),
     RxSaturation(crate::rx::saturation::PhyRxSaturationCompletion),
-    RxGain(crate::rx::gain::PhyRxGainInitCompletion),
     Channel(crate::channel::PhyChipChannelCompletion),
 }
 
@@ -652,7 +650,6 @@ pub enum PhyBbExternalBinding {
     PbusMemory(crate::analog::pbus::memory::PhyPbusMemoryMmioBinding),
     RxIq(crate::rx::iq::PhyRxIqInitExternalBinding),
     RxSaturation(crate::rx::saturation::PhyRxSaturationExternalBinding),
-    RxGain(crate::rx::gain::PhyRxGainInitExternalBinding),
     Channel(crate::channel::PhyChipChannelExternalBinding),
 }
 
@@ -723,11 +720,7 @@ impl PhyBbExternalBinding {
                     .map(Self::RxSaturation)
                     .map_err(|_| PhyBbExternalBindingError::UnsupportedAction)
             }
-            PhyBbInitAction::RxGain(action) => {
-                crate::rx::gain::PhyRxGainInitExternalBinding::lower(action)
-                    .map(Self::RxGain)
-                    .map_err(|_| PhyBbExternalBindingError::UnsupportedAction)
-            }
+
             PhyBbInitAction::Channel(action) => {
                 crate::channel::PhyChipChannelExternalBinding::lower(action)
                     .map(Self::Channel)
@@ -743,7 +736,6 @@ pub enum PhyBbInitTransitionError {
     AlreadyComplete,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[allow(
     clippy::large_enum_variant,
     reason = "the allocation-free PHY transition owns exactly one recovered child phase"
@@ -770,7 +762,7 @@ enum PhyBbInitStep {
     RxTable(PhyRxTableInitParameters),
     RxSaturationPrepare,
     RxSaturation(crate::rx::saturation::PhyRxSaturationTransition),
-    RxGain(crate::rx::gain::PhyRxGainInitTransition),
+    RxGain(crate::rx::gain::RxProgram),
     RxSaturationFinalize,
     RegisterInit(PhyRegisterInitParameters),
     UpdateAgc,
@@ -792,6 +784,8 @@ pub enum PhyBbInitLocalStep {
     /// One state-only terminal child result was committed. The caller may
     /// invoke `step_local` again or yield to another executor task.
     StateAdvanced,
+    /// Borrow the one RX program through the enclosing registration owner.
+    RxGain,
     External(PhyBbInitAction),
     Complete(PhyBbInitOutcome),
     Failed(PhyBbInitFailure),
@@ -812,6 +806,13 @@ pub struct PhyBbInitTransition {
 }
 
 impl PhyBbInitTransition {
+    pub(crate) fn rx_program_mut(&mut self) -> Option<&mut crate::rx::gain::RxProgram> {
+        match &mut self.step {
+            PhyBbInitStep::RxGain(program) => Some(program),
+            _ => None,
+        }
+    }
+
     #[cfg(any(test, oer_probe))]
     pub const fn new(state: crate::state::PhyState) -> Self {
         Self::new_on_channel(state, 11)
@@ -857,7 +858,7 @@ impl PhyBbInitTransition {
     // Retain this child's temporary slots in its own bounded model step.
     #[inline(never)]
     pub fn step_local(&mut self) -> Result<PhyBbInitLocalStep, PhyBbInitTransitionError> {
-        let local = match self.step {
+        let local = match &mut self.step {
             PhyBbInitStep::TxDc(transition) => match transition.action() {
                 crate::tx::dc_offset::PhyTxDcAction::Complete(outcome) => {
                     self.state.apply_tx_dc_outcome(outcome);
@@ -988,18 +989,18 @@ impl PhyBbInitTransition {
                 }
                 action => PhyBbInitLocalStep::External(PhyBbInitAction::TxCfr(action)),
             },
-            PhyBbInitStep::BluetoothTxGain(mut transition) => match transition
+            PhyBbInitStep::BluetoothTxGain(transition) => match transition
                 .step_local()
                 .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?
             {
                 crate::calibration::bluetooth::PhyBluetoothTxGainInitLocalStep::StateAdvanced => {
-                    self.step = PhyBbInitStep::BluetoothTxGain(transition);
+                    self.step = PhyBbInitStep::BluetoothTxGain(*transition);
                     PhyBbInitLocalStep::StateAdvanced
                 }
                 crate::calibration::bluetooth::PhyBluetoothTxGainInitLocalStep::External(
                     action,
                 ) => {
-                    self.step = PhyBbInitStep::BluetoothTxGain(transition);
+                    self.step = PhyBbInitStep::BluetoothTxGain(*transition);
                     PhyBbInitLocalStep::External(PhyBbInitAction::BluetoothTxGain(action))
                 }
                 crate::calibration::bluetooth::PhyBluetoothTxGainInitLocalStep::Complete(
@@ -1055,10 +1056,9 @@ impl PhyBbInitTransition {
             PhyBbInitStep::RxSaturation(transition) => match transition.action() {
                 crate::rx::saturation::PhyRxSaturationAction::Complete(outcome) => {
                     if self.state.apply_rx_saturation_outcome(outcome).is_ok() {
-                        self.step =
-                            PhyBbInitStep::RxGain(crate::rx::gain::PhyRxGainInitTransition::new(
-                                self.state.rx_gain_init_parameters(),
-                            ));
+                        self.step = PhyBbInitStep::RxGain(crate::rx::gain::RxProgram::new(
+                            self.state.rx_gain_init_parameters(),
+                        ));
                     } else {
                         self.begin_failure(PhyBbInitFailure::RxSaturation(outcome));
                     }
@@ -1066,20 +1066,17 @@ impl PhyBbInitTransition {
                 }
                 action => PhyBbInitLocalStep::External(PhyBbInitAction::RxSaturation(action)),
             },
-            PhyBbInitStep::RxGain(transition) => match transition.action() {
-                crate::rx::gain::PhyRxGainInitAction::Complete => {
-                    let Some(Ok(outcome)) = transition.terminal() else {
-                        unreachable!("complete RX gain action must retain a successful outcome")
-                    };
+            PhyBbInitStep::RxGain(program) => match program.terminal() {
+                Some(Ok(outcome)) => {
                     self.state.apply_rx_gain_init_outcome(outcome);
                     self.step = PhyBbInitStep::RxSaturationFinalize;
                     PhyBbInitLocalStep::StateAdvanced
                 }
-                crate::rx::gain::PhyRxGainInitAction::Failed(failure) => {
+                Some(Err(failure)) => {
                     self.begin_failure(PhyBbInitFailure::RxGain(failure));
                     PhyBbInitLocalStep::StateAdvanced
                 }
-                action => PhyBbInitLocalStep::External(PhyBbInitAction::RxGain(action)),
+                None => PhyBbInitLocalStep::RxGain,
             },
             PhyBbInitStep::Channel(transition) => match transition.action() {
                 crate::channel::PhyChipChannelAction::Complete(outcome) => {
@@ -1093,8 +1090,8 @@ impl PhyBbInitTransition {
                 }
                 action => PhyBbInitLocalStep::External(PhyBbInitAction::Channel(action)),
             },
-            PhyBbInitStep::Complete(outcome) => PhyBbInitLocalStep::Complete(outcome),
-            PhyBbInitStep::Failed(failure) => PhyBbInitLocalStep::Failed(failure),
+            PhyBbInitStep::Complete(outcome) => PhyBbInitLocalStep::Complete(*outcome),
+            PhyBbInitStep::Failed(failure) => PhyBbInitLocalStep::Failed(*failure),
             step => PhyBbInitLocalStep::External(PhyBbInitAction::Mmio(step.mmio_action())),
         };
         Ok(local)
@@ -1105,7 +1102,7 @@ impl PhyBbInitTransition {
         &mut self,
         completion: PhyBbInitCompletion,
     ) -> Result<(), PhyBbInitTransitionError> {
-        let step = match (self.step, completion) {
+        let step = match (&mut self.step, completion) {
             (PhyBbInitStep::EnableInitialization, PhyBbInitCompletion::Mmio(completed))
                 if completed.action == PhyBbMmioAction::EnableBasebandInitialization =>
             {
@@ -1131,101 +1128,98 @@ impl PhyBbInitTransition {
                     ))
                 }
             }
-            (PhyBbInitStep::TxDc(mut transition), PhyBbInitCompletion::TxDc(completed)) => {
+            (PhyBbInitStep::TxDc(transition), PhyBbInitCompletion::TxDc(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TxDc(transition)
+                PhyBbInitStep::TxDc(*transition)
             }
-            (PhyBbInitStep::Pwdet(mut transition), PhyBbInitCompletion::Pwdet(completed)) => {
+            (PhyBbInitStep::Pwdet(transition), PhyBbInitCompletion::Pwdet(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::Pwdet(transition)
+                PhyBbInitStep::Pwdet(*transition)
             }
-            (PhyBbInitStep::TxCap(mut transition), PhyBbInitCompletion::TxCap(completed)) => {
+            (PhyBbInitStep::TxCap(transition), PhyBbInitCompletion::TxCap(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TxCap(transition)
+                PhyBbInitStep::TxCap(*transition)
             }
             (
-                PhyBbInitStep::TemperatureFirst(mut transition),
+                PhyBbInitStep::TemperatureFirst(transition),
                 PhyBbInitCompletion::Temperature(completed),
             ) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TemperatureFirst(transition)
+                PhyBbInitStep::TemperatureFirst(*transition)
             }
-            (PhyBbInitStep::TxPower(mut transition), PhyBbInitCompletion::TxPower(completed)) => {
+            (PhyBbInitStep::TxPower(transition), PhyBbInitCompletion::TxPower(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TxPower(transition)
+                PhyBbInitStep::TxPower(*transition)
+            }
+            (PhyBbInitStep::TxDcPwdet(transition), PhyBbInitCompletion::TxDcPwdet(completed)) => {
+                transition
+                    .advance(completed)
+                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
+                PhyBbInitStep::TxDcPwdet(*transition)
+            }
+            (PhyBbInitStep::Dcode(transition), PhyBbInitCompletion::Dcode(completed)) => {
+                transition
+                    .advance(completed)
+                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
+                PhyBbInitStep::Dcode(*transition)
+            }
+            (PhyBbInitStep::TxIq(transition), PhyBbInitCompletion::TxIq(completed)) => {
+                transition
+                    .advance(completed)
+                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
+                PhyBbInitStep::TxIq(*transition)
+            }
+            (PhyBbInitStep::TxCfr(transition), PhyBbInitCompletion::TxCfr(completed)) => {
+                transition
+                    .advance(completed)
+                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
+                PhyBbInitStep::TxCfr(*transition)
             }
             (
-                PhyBbInitStep::TxDcPwdet(mut transition),
-                PhyBbInitCompletion::TxDcPwdet(completed),
-            ) => {
-                transition
-                    .advance(completed)
-                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TxDcPwdet(transition)
-            }
-            (PhyBbInitStep::Dcode(mut transition), PhyBbInitCompletion::Dcode(completed)) => {
-                transition
-                    .advance(completed)
-                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::Dcode(transition)
-            }
-            (PhyBbInitStep::TxIq(mut transition), PhyBbInitCompletion::TxIq(completed)) => {
-                transition
-                    .advance(completed)
-                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TxIq(transition)
-            }
-            (PhyBbInitStep::TxCfr(mut transition), PhyBbInitCompletion::TxCfr(completed)) => {
-                transition
-                    .advance(completed)
-                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TxCfr(transition)
-            }
-            (
-                PhyBbInitStep::BluetoothTxGain(mut transition),
+                PhyBbInitStep::BluetoothTxGain(transition),
                 PhyBbInitCompletion::BluetoothTxGain(completed),
             ) => {
                 transition
                     .advance_external(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::BluetoothTxGain(transition)
+                PhyBbInitStep::BluetoothTxGain(*transition)
             }
-            (
-                PhyBbInitStep::PbusMemory(mut transition),
-                PhyBbInitCompletion::PbusMemory(completed),
-            ) => {
+            (PhyBbInitStep::PbusMemory(transition), PhyBbInitCompletion::PbusMemory(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::PbusMemory(transition)
+                PhyBbInitStep::PbusMemory(*transition)
             }
             (
-                PhyBbInitStep::TemperatureSecond(mut transition),
+                PhyBbInitStep::TemperatureSecond(transition),
                 PhyBbInitCompletion::Temperature(completed),
             ) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::TemperatureSecond(transition)
+                PhyBbInitStep::TemperatureSecond(*transition)
             }
-            (PhyBbInitStep::RxIq(mut transition), PhyBbInitCompletion::RxIq(completed)) => {
+            (PhyBbInitStep::RxIq(transition), PhyBbInitCompletion::RxIq(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::RxIq(transition)
+                PhyBbInitStep::RxIq(*transition)
             }
             (PhyBbInitStep::RxTable(parameters), PhyBbInitCompletion::Mmio(completed))
-                if completed.action == PhyBbMmioAction::ConfigureRxTable { parameters } =>
+                if completed.action
+                    == PhyBbMmioAction::ConfigureRxTable {
+                        parameters: *parameters,
+                    } =>
             {
                 PhyBbInitStep::RxSaturationPrepare
             }
@@ -1240,19 +1234,13 @@ impl PhyBbInitTransition {
                 ))
             }
             (
-                PhyBbInitStep::RxSaturation(mut transition),
+                PhyBbInitStep::RxSaturation(transition),
                 PhyBbInitCompletion::RxSaturation(completed),
             ) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::RxSaturation(transition)
-            }
-            (PhyBbInitStep::RxGain(mut transition), PhyBbInitCompletion::RxGain(completed)) => {
-                transition
-                    .advance(completed)
-                    .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::RxGain(transition)
+                PhyBbInitStep::RxSaturation(*transition)
             }
             (PhyBbInitStep::RxSaturationFinalize, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
@@ -1263,7 +1251,10 @@ impl PhyBbInitTransition {
                 PhyBbInitStep::RegisterInit(self.state.register_init_parameters())
             }
             (PhyBbInitStep::RegisterInit(parameters), PhyBbInitCompletion::Mmio(completed))
-                if completed.action == PhyBbMmioAction::ConfigurePhyRegisters { parameters } =>
+                if completed.action
+                    == PhyBbMmioAction::ConfigurePhyRegisters {
+                        parameters: *parameters,
+                    } =>
             {
                 PhyBbInitStep::UpdateAgc
             }
@@ -1282,11 +1273,11 @@ impl PhyBbInitTransition {
             {
                 PhyBbInitStep::Channel(self.channel_transition())
             }
-            (PhyBbInitStep::Channel(mut transition), PhyBbInitCompletion::Channel(completed)) => {
+            (PhyBbInitStep::Channel(transition), PhyBbInitCompletion::Channel(completed)) => {
                 transition
                     .advance(completed)
                     .map_err(|_| PhyBbInitTransitionError::WrongCompletion)?;
-                PhyBbInitStep::Channel(transition)
+                PhyBbInitStep::Channel(*transition)
             }
             (PhyBbInitStep::SetIdleMode, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
@@ -1330,7 +1321,7 @@ impl PhyBbInitTransition {
                 PhyBbInitStep::FailureDisableForcedDigitalGain(failure),
                 PhyBbInitCompletion::Mmio(completed),
             ) if completed.action == (PhyBbMmioAction::SetForcedDigitalGain { enabled: false }) => {
-                PhyBbInitStep::FailureSetIdle(failure)
+                PhyBbInitStep::FailureSetIdle(*failure)
             }
             (PhyBbInitStep::FailureSetIdle(failure), PhyBbInitCompletion::Mmio(completed))
                 if completed.action
@@ -1338,12 +1329,12 @@ impl PhyBbInitTransition {
                         mode: PhyBbBasebandMode::Idle,
                     }) =>
             {
-                PhyBbInitStep::FailureEnableAgc(failure)
+                PhyBbInitStep::FailureEnableAgc(*failure)
             }
             (PhyBbInitStep::FailureEnableAgc(failure), PhyBbInitCompletion::Mmio(completed))
                 if completed.action == PhyBbMmioAction::EnableAgc =>
             {
-                PhyBbInitStep::Failed(failure)
+                PhyBbInitStep::Failed(*failure)
             }
             (PhyBbInitStep::Complete(_), _) | (PhyBbInitStep::Failed(_), _) => {
                 return Err(PhyBbInitTransitionError::AlreadyComplete);
@@ -1356,7 +1347,7 @@ impl PhyBbInitTransition {
 }
 
 impl PhyBbInitStep {
-    const fn mmio_action(self) -> PhyBbMmioAction {
+    const fn mmio_action(&self) -> PhyBbMmioAction {
         match self {
             Self::EnableInitialization => PhyBbMmioAction::EnableBasebandInitialization,
             Self::EnableForcedDigitalGain => {
@@ -1368,14 +1359,18 @@ impl PhyBbInitStep {
             Self::SetCalibrationMode => PhyBbMmioAction::SetBasebandMode {
                 mode: PhyBbBasebandMode::Calibration,
             },
-            Self::RxTable(parameters) => PhyBbMmioAction::ConfigureRxTable { parameters },
+            Self::RxTable(parameters) => PhyBbMmioAction::ConfigureRxTable {
+                parameters: *parameters,
+            },
             Self::RxSaturationPrepare => PhyBbMmioAction::ConfigureRfRxSaturation {
                 phase: PhyRfRxSaturationPhase::PrepareCheck,
             },
             Self::RxSaturationFinalize => PhyBbMmioAction::ConfigureRfRxSaturation {
                 phase: PhyRfRxSaturationPhase::Finalize,
             },
-            Self::RegisterInit(parameters) => PhyBbMmioAction::ConfigurePhyRegisters { parameters },
+            Self::RegisterInit(parameters) => PhyBbMmioAction::ConfigurePhyRegisters {
+                parameters: *parameters,
+            },
             Self::UpdateAgc => PhyBbMmioAction::UpdateAgcRegisters,
             Self::UpdatePostInit => PhyBbMmioAction::UpdatePostInitRegisters,
             Self::EnableAgc | Self::FailureEnableAgc(_) => PhyBbMmioAction::EnableAgc,

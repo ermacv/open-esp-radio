@@ -507,14 +507,16 @@ pub struct Timing {
 /// RX-gain root actions.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxGainExecution {
-    /// Per-atom maximum: lowering, hardware transaction, model commit (microseconds).
+    /// Per-atom maximum: cursor/descriptor, hardware transaction, commit (microseconds).
     pub maximum_parts_micros: [u32; 3],
     /// Same action/first-entry tags as the engine maxima, correlated per part.
     pub maximum_parts_actions: [u8; 3],
     pub maximum_engine_micros: [u32; 2],
     pub maximum_engine_actions: [u8; 2],
-    /// Poll maxima by I2C stage (pure preparation, complete helper+commit),
+    /// Poll maxima by I2C stage (separate preparation, complete helper+commit),
     /// then first/repeated action within the same retained RX phase.
+    /// The retained program folds preparation into its descriptor step, so
+    /// there is no separate preparation poll to record in the first row.
     pub i2c_poll_micros: [[u32; 2]; 2],
     /// Completed helper polls, first/repeated within the RX phase.
     pub i2c_samples: [u32; 2],

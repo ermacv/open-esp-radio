@@ -549,9 +549,9 @@ oer_probe_macros::probe! {
         let lease = session_radio();
         let mut phy = lease.phy_hal();
         let mut child = if flags & 2 != 0 {
-            PhyRxGainInitTransition::with_initialized_tables()
+            RxProgram::with_initialized_tables()
         } else {
-            PhyRxGainInitTransition::new(PhyRxGainInitParameters {
+            RxProgram::new(PhyRxGainInitParameters {
                 dc_calibrated: flags & 1 != 0,
                 tables_initialized: false,
                 dc: PhyRxGainDcParameters {
@@ -572,8 +572,7 @@ oer_probe_macros::probe! {
         match timer.run(oer_esp32s31_phy::target_port::calibration::rx_gain_init::<
             oer_esp32s31_phy::RomShortDelay,
             _,
-            _,
-        >(&timer, &mut child, &mut (), &mut phy, |_, _| {}, |_| {}, None))
+        >(&timer, &mut child, &mut phy, |_, _| {}, |_| {}, None))
         {
             Ok(()) => {}
             Err(oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut) => return 2,

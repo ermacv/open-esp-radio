@@ -29,6 +29,11 @@ const PARAM_TRACKING_PARENT_EDGE_LIMIT: u8 = 16;
 pub trait PhyRegisterPort {
     type Error;
 
+    fn rx_gain<'a>(
+        &'a mut self,
+        program: &'a mut crate::rx::gain::RxProgram,
+    ) -> impl Future<Output = Result<(), Self::Error>> + 'a;
+
     fn complete(
         &mut self,
         binding: PhyRegisterExternalBinding,
@@ -134,6 +139,17 @@ pub async fn run_phy_register<P: PhyRegisterPort>(
             .map_err(PhyRegisterRunError::Transition)?
         {
             PhyRegisterLocalStep::StateAdvanced => {}
+            PhyRegisterLocalStep::RxGain => {
+                let program =
+                    transition
+                        .rx_program_mut()
+                        .ok_or(PhyRegisterRunError::Transition(
+                            PhyRegisterTransitionError::WrongCompletion,
+                        ))?;
+                port.rx_gain(program)
+                    .await
+                    .map_err(PhyRegisterRunError::Port)?;
+            }
             PhyRegisterLocalStep::External(action) => {
                 let binding = PhyRegisterExternalBinding::lower(action).map_err(|error| {
                     PhyRegisterRunError::Lowering {

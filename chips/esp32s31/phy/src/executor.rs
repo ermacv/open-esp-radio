@@ -12,6 +12,9 @@ pub mod wait;
 #[cfg(any(target_arch = "riscv32", test))]
 pub(crate) mod step;
 
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) mod rx;
+
 // The graph drivers and their port traits are model-level API. Ordinary builds
 // reach them only through the crate's target ports and registered owners.
 mod run;

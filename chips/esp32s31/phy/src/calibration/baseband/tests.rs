@@ -7,6 +7,38 @@ use super::{
 };
 
 #[test]
+fn cold_rx_borrows_one_program_and_rejects_an_external_leaf_completion() {
+    use crate::rx::program::tests::{Oracle, parameters};
+    let mut parent = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    parent.step = super::PhyBbInitStep::RxGain(crate::rx::gain::RxProgram::new(parameters()));
+    assert_eq!(
+        parent.step_local().expect("pending RX"),
+        super::PhyBbInitLocalStep::RxGain
+    );
+    let before = std::format!("{:?}", parent.rx_program_mut().expect("retained program"));
+    assert_eq!(
+        parent.advance_external(super::PhyBbInitCompletion::Mmio(
+            super::PhyBbMmioCompletion {
+                action: PhyBbMmioAction::EnableAgc
+            }
+        )),
+        Err(super::PhyBbInitTransitionError::WrongCompletion)
+    );
+    assert_eq!(
+        std::format!("{:?}", parent.rx_program_mut().expect("same program")),
+        before
+    );
+    assert!(!parent.state().rx_gain_init_parameters().tables_initialized);
+    Oracle::default().run(parent.rx_program_mut().expect("same program"));
+    assert_eq!(
+        parent.step_local().expect("terminal child handoff"),
+        super::PhyBbInitLocalStep::StateAdvanced
+    );
+    assert!(parent.state().rx_gain_init_parameters().tables_initialized);
+    assert!(parent.rx_program_mut().is_none());
+}
+
+#[test]
 fn rx_gain_generator_reproduces_both_cold_parent_tables() {
     let wifi = generate_phy_rx_gain_table(PhyRxGainBank::Wifi);
     assert_eq!(wifi.last_index, 71);

@@ -659,7 +659,7 @@ fn rx_gain_parent_proof_forces_dc_and_tables_through_complete_hardware_graph() {
         transition.advance(completion(action)).unwrap();
     }
 
-    let child = transition
+    let mut child = transition
         .begin_rx_gain_recalibration(crate::rx::gain::PhyRxGainInitParameters {
             dc_calibrated: true,
             tables_initialized: true,
@@ -677,14 +677,16 @@ fn rx_gain_parent_proof_forces_dc_and_tables_through_complete_hardware_graph() {
             },
         })
         .unwrap();
-    assert_eq!(
-        child.action(),
-        crate::rx::gain::PhyRxGainInitAction::PrepareDcControlRestore
-    );
-    assert!(matches!(
-        child.lower_external(),
-        Ok(crate::rx::gain::PhyRxGainInitExternalBinding::Mmio(_))
-    ));
+    {
+        let step = child.transition_mut().step().expect("forced full graph");
+        let crate::rx::program::RxStep::Control(step) = step else {
+            panic!("missing outer restore preparation")
+        };
+        assert_eq!(
+            step.command(),
+            crate::rx::program::ControlCommand::PrepareRoot
+        );
+    }
     assert!(child.commit().is_err());
 }
 
