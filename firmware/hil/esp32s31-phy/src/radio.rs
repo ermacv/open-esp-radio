@@ -84,6 +84,15 @@ impl Radio {
         )
     }
 
+    // Apply the terminal error policy after the request future is consumed.
+    // An async wrapper would retain both that future and another `self` borrow.
+    pub fn request_finished(&mut self, result: &Result<Answer>) {
+        if matches!(result, Err(RejectReason::Internal)) {
+            self.poisoned = true;
+            self.ready = None;
+        }
+    }
+
     pub async fn request(
         &mut self,
         request: Request,
@@ -92,19 +101,6 @@ impl Radio {
         if self.poisoned && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
-        let result = self.execute(request, capture_rx).await;
-        if matches!(result, Err(RejectReason::Internal)) {
-            self.poisoned = true;
-            self.ready = None;
-        }
-        result
-    }
-
-    async fn execute(
-        &mut self,
-        request: Request,
-        capture_rx: &mut Option<crate::cca_rx::Prepared>,
-    ) -> Result<Answer> {
         if self.hold.is_some() && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
             return Err(RejectReason::InvalidState);
         }
