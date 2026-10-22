@@ -638,8 +638,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             idle_command!(self.core, |view| view.set_checked_he_bss_color(color));
         }
         if held.dirty_ba.replace(false) {
-            let desired = held.block_acks.get();
-            for (old, wanted) in self.applied_ba.iter_mut().zip(desired) {
+            for (index, old) in self.applied_ba.iter_mut().enumerate() {
+                let wanted = held.block_acks.get(index);
                 if *old == wanted {
                     continue;
                 }
@@ -736,10 +736,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                         Poll::Ready(Ok(None)) => {
                             let terminal = self.group(held, device, command)?;
                             if let Err(cause) = device.finish_rx_cut() {
-                                assert!(
-                                    held.failed_terminal.set(terminal).is_ok(),
-                                    "one failed terminal per installation"
-                                );
+                                handoff::retain_terminal(held.failed_terminal, terminal);
                                 return Err(cause);
                             }
                             held.terminal(terminal);

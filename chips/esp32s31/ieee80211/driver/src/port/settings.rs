@@ -114,12 +114,7 @@ impl BlockAckSetting {
         Self(AtomicWords::new())
     }
     pub(super) fn set(&self, index: usize, value: Option<core_mac::RxBlockAckValues>) {
-        let mut words = self
-            .0
-            .get()
-            .expect("P1 exclusively writes Block Ack settings");
-        let at = index * 3;
-        words[at..at + 3].copy_from_slice(&match value {
+        let words = match value {
             None => [0; 3],
             Some(value) => {
                 let [a, b, c, d, e, f] = value.peer;
@@ -133,18 +128,18 @@ impl BlockAckSetting {
                     u32::from(value.start_sequence.get()),
                 ]
             }
-        });
-        self.0.set(words);
+        };
+        self.0.set_at(index * 3, words);
     }
     pub(super) fn clear(&self) {
         self.0.set([0; 24]);
     }
-    pub(super) fn get(&self) -> [Option<core_mac::RxBlockAckValues>; 8] {
-        let words = self.0.get().expect("completed P1 Block Ack publication");
-        core::array::from_fn(|index| {
-            let at = index * 3;
-            decode_block_ack([words[at], words[at + 1], words[at + 2]])
-        })
+    pub(super) fn get(&self, index: usize) -> Option<core_mac::RxBlockAckValues> {
+        decode_block_ack(
+            self.0
+                .get_at(index * 3)
+                .expect("completed P1 Block Ack publication"),
+        )
     }
 }
 
@@ -285,12 +280,12 @@ mod tests {
         };
         settings.set(0, Some(station));
         settings.set(7, Some(access_point));
-        let actual = settings.get();
+        let actual: [_; 8] = core::array::from_fn(|index| settings.get(index));
         assert_eq!(actual[0], Some(station));
         assert_eq!(actual[7], Some(access_point));
         assert!(actual[1..7].iter().all(Option::is_none));
         settings.set(0, None);
-        let actual = settings.get();
+        let actual: [_; 8] = core::array::from_fn(|index| settings.get(index));
         assert!(actual[..7].iter().all(Option::is_none));
         assert_eq!(actual[7], Some(access_point));
     }

@@ -20,19 +20,27 @@ impl<const N: usize> AtomicWords<N> {
     }
 
     pub(super) fn set(&self, words: [u32; N]) {
+        self.set_at(0, words);
+    }
+
+    pub(super) fn set_at<const K: usize>(&self, offset: usize, words: [u32; K]) {
         self.generation.fetch_add(1, Ordering::SeqCst);
-        for (cell, value) in self.words.iter().zip(words) {
+        for (cell, value) in self.words[offset..offset + K].iter().zip(words) {
             cell.store(value, Ordering::SeqCst);
         }
         self.generation.fetch_add(1, Ordering::SeqCst);
     }
 
     pub(super) fn get(&self) -> Option<[u32; N]> {
+        self.get_at(0)
+    }
+
+    pub(super) fn get_at<const K: usize>(&self, offset: usize) -> Option<[u32; K]> {
         let before = self.generation.load(Ordering::SeqCst);
         if before & 1 != 0 {
             return None;
         }
-        let words = core::array::from_fn(|index| self.words[index].load(Ordering::SeqCst));
+        let words = core::array::from_fn(|index| self.words[offset + index].load(Ordering::SeqCst));
         (before == self.generation.load(Ordering::SeqCst)).then_some(words)
     }
 

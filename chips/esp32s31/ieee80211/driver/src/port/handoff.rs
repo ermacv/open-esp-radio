@@ -18,6 +18,19 @@ type FailedCommand<'id, Id, D, const B: usize> = oer_memory::OnceValue<Cmd<'id, 
 type FailedTerminal<'id, Id, D, const B: usize> =
     oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B>>;
 
+// Keep the ownership-preserving failure path shared by P1 and P2 callers.
+// It never extracts the retained owner through a shared reference.
+#[inline(never)]
+pub(super) fn retain_terminal<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+    cell: &FailedTerminal<'id, Id, D, B>,
+    terminal: owned::OwnedTerminal<'id, Id, D, B>,
+) {
+    assert!(
+        cell.set(terminal).is_ok(),
+        "one failed terminal per installation"
+    );
+}
+
 pub(super) struct Incoming<'s, T, const N: usize>(
     pub(super) AffineSpscReceiver<'s, T, N, CompactSpscCursor>,
 );
@@ -163,10 +176,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'_, 'id, Id, D, B
         if let Err(owned::OwnedEvent::Terminal(terminal)) =
             self.events.push(owned::OwnedEvent::Terminal(terminal))
         {
-            assert!(
-                self.failed_terminal.set(terminal).is_ok(),
-                "one failed terminal per installation"
-            );
+            retain_terminal(self.failed_terminal, terminal);
             self.storage.poison(Fault::Capacity);
         } else {
             #[cfg(all(oer_trace, oer_debug_control))]

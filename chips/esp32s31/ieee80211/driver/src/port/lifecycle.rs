@@ -542,11 +542,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s3
                 match event {
                     owned::OwnedEvent::Terminal(t) => {
                         if let core::ops::ControlFlow::Break(t) = sink(t.lend(&loan)) {
-                            assert!(
-                                held.failed_terminal
-                                    .set(owned::OwnedTerminal::retain(t, &loan))
-                                    .is_ok(),
-                                "one failed terminal per installation"
+                            handoff::retain_terminal(
+                                held.failed_terminal,
+                                owned::OwnedTerminal::retain(t, &loan),
                             );
                             held.storage.poison(Fault::Abandoned);
                             return Poll::Ready(held.storage.check());
