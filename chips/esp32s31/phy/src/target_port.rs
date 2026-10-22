@@ -263,6 +263,12 @@ pub trait PhyTargetObserver {
     }
 
     fn dcode_pll_lock(&mut self, _locked: bool) {}
+    fn dcode_result(
+        &mut self,
+        _action: &crate::analog::dcode::PhyDcodeAction,
+        _result: &Result<(), PhyTargetPortError>,
+    ) {
+    }
 
     /// Emitted once after a terminally successful RX-gain child. The child
     /// performs no diagnostic clock reads while accumulating these counts.
@@ -1906,6 +1912,7 @@ impl<
                 )
                 .await;
                 if O::OBSERVE_ENGINE_POLLS {
+                    calibration::observe_dcode_result(&mut *self.observer, &child, &result);
                     self.observer.engine_completed(Operation::Dcode, timing);
                 }
                 self.observer
