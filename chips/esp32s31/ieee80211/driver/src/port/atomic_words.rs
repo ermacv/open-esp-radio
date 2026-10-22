@@ -35,6 +35,10 @@ impl<const N: usize> AtomicWords<N> {
         let words = core::array::from_fn(|index| self.words[index].load(Ordering::SeqCst));
         (before == self.generation.load(Ordering::SeqCst)).then_some(words)
     }
+
+    pub(super) fn word(&self, index: usize) -> u32 {
+        self.words[index].load(Ordering::SeqCst)
+    }
 }
 
 /// PTK creation stays on P1; GTK creation stays on P2. Revocation owns the

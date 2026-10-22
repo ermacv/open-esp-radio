@@ -167,10 +167,11 @@ where
         self.held.storage.check()
     }
     fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps> {
-        let mut edca = self.held.edca.get();
-        edca[if R::ROLE == VifRole::Station { 0 } else { 1 }] = parameters.get();
         self.held.publishing.set(true);
-        self.held.edca.set(edca);
+        self.held.edca.set(
+            if R::ROLE == VifRole::Station { 0 } else { 1 },
+            parameters.get(),
+        );
         self.held.dirty_edca.set(true);
         self.held.publishing.set(false);
         self.held.storage.driver.wake();

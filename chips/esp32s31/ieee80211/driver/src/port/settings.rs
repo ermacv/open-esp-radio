@@ -58,53 +58,53 @@ impl ChannelSetting {
     }
 }
 
-pub(super) struct EdcaSetting([AtomicWords<13>; 2]);
+// SupportedEdca bounds every lifetime by 500 TU, so its microseconds fit
+// one atomic word. Each VIF publishes only its own table.
+pub(super) struct EdcaSetting([AtomicWords<9>; 2]);
 impl EdcaSetting {
     const fn new() -> Self {
         Self([const { AtomicWords::new() }; 2])
     }
-    pub(super) fn set(&self, tables: [EdcaParameterSet; 2]) {
-        for (cell, table) in self.0.iter().zip(tables) {
-            let wmm = table.wmm();
-            let mut words = [0; 13];
-            words[0] = u32::from(wmm.parameter_set_count) | (u32::from(wmm.uapsd) << 8);
-            for (index, category) in WmmAccessCategory::ALL.into_iter().enumerate() {
-                let ac = table.access_category(category);
-                let parameters = ac.wmm;
-                let at = 1 + index * 3;
-                words[at] = u32::from(parameters.aifsn)
-                    | (u32::from(parameters.ecw_min) << 4)
-                    | (u32::from(parameters.ecw_max) << 8)
-                    | (u32::from(parameters.admission_control_mandatory) << 12)
-                    | (u32::from(parameters.txop_limit_units_32_us) << 16);
-                words[at + 1] = ac.msdu_lifetime.as_micros() as u32;
-                words[at + 2] = (ac.msdu_lifetime.as_micros() >> 32) as u32;
-            }
-            cell.set(words);
+    pub(super) fn set(&self, vif: usize, table: EdcaParameterSet) {
+        let wmm = table.wmm();
+        let mut words = [0; 9];
+        words[0] = u32::from(wmm.parameter_set_count) | (u32::from(wmm.uapsd) << 8);
+        for (index, category) in WmmAccessCategory::ALL.into_iter().enumerate() {
+            let ac = table.access_category(category);
+            let parameters = ac.wmm;
+            let at = 1 + index * 2;
+            words[at] = u32::from(parameters.aifsn)
+                | (u32::from(parameters.ecw_min) << 4)
+                | (u32::from(parameters.ecw_max) << 8)
+                | (u32::from(parameters.admission_control_mandatory) << 12)
+                | (u32::from(parameters.txop_limit_units_32_us) << 16);
+            words[at + 1] = u32::try_from(ac.msdu_lifetime.as_micros())
+                .ok()
+                .expect("validated MSDU lifetime fits one word");
         }
+        self.0[vif].set(words);
     }
-    pub(super) fn get(&self) -> [EdcaParameterSet; 2] {
-        core::array::from_fn(|vif| {
-            let words = self.0[vif].get().expect("completed P1 EDCA publication");
-            let acs = core::array::from_fn(|index| {
-                let bits = words[1 + index * 3];
-                WmmAcParameters {
-                    aifsn: (bits & 15) as u8,
-                    ecw_min: ((bits >> 4) & 15) as u8,
-                    ecw_max: ((bits >> 8) & 15) as u8,
-                    admission_control_mandatory: bits & (1 << 12) != 0,
-                    txop_limit_units_32_us: (bits >> 16) as u16,
-                }
-            });
-            let lifetimes = core::array::from_fn(|index| {
-                let at = 2 + index * 3;
-                Duration::from_micros(u64::from(words[at]) | (u64::from(words[at + 1]) << 32))
-            });
-            EdcaParameterSet::new(
-                WmmParameterSet::new(words[0] as u8, words[0] & (1 << 8) != 0, acs),
-                lifetimes,
-            )
-        })
+    pub(super) fn get(&self, vif: usize) -> EdcaParameterSet {
+        let words = self.0[vif].get().expect("completed P1 EDCA publication");
+        let acs = core::array::from_fn(|index| {
+            let bits = words[1 + index * 2];
+            WmmAcParameters {
+                aifsn: (bits & 15) as u8,
+                ecw_min: ((bits >> 4) & 15) as u8,
+                ecw_max: ((bits >> 8) & 15) as u8,
+                admission_control_mandatory: bits & (1 << 12) != 0,
+                txop_limit_units_32_us: (bits >> 16) as u16,
+            }
+        });
+        let lifetimes =
+            core::array::from_fn(|index| Duration::from_micros(u64::from(words[2 + index * 2])));
+        EdcaParameterSet::new(
+            WmmParameterSet::new(words[0] as u8, words[0] & (1 << 8) != 0, acs),
+            lifetimes,
+        )
+    }
+    pub(super) fn lifetime(&self, vif: usize, category: WmmAccessCategory) -> Duration {
+        Duration::from_micros(u64::from(self.0[vif].word(2 + category as usize * 2)))
     }
 }
 
@@ -257,8 +257,15 @@ mod tests {
         assert!(SupportedEdca::<Esp32s31Caps<512>>::new(table).is_some());
         let setting = EdcaSetting::new();
         let expected = [EdcaParameterSet::STANDARD_DEFAULT, table];
-        setting.set(expected);
-        assert_eq!(setting.get(), expected);
+        setting.set(0, expected[0]);
+        setting.set(1, expected[1]);
+        assert_eq!([setting.get(0), setting.get(1)], expected);
+        for category in WmmAccessCategory::ALL {
+            assert_eq!(
+                setting.lifetime(1, category),
+                table.access_category(category).msdu_lifetime
+            );
+        }
     }
 
     #[test]

@@ -232,9 +232,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         if !core_views::configuring::<Id, D, B>(self.core.view()) {
             for pending in self.queues.iter().flat_map(|q| q.iter()) {
                 if let Some(at) = pending.operation.payload().buffer.admission {
-                    let lifetime = held.edca.get()[vif(pending.role())]
-                        .access_category(pending.category)
-                        .msdu_lifetime;
+                    let lifetime = held.edca.lifetime(vif(pending.role()), pending.category);
                     deadline = deadline.min(at.saturating_add(lifetime));
                 }
             }
@@ -342,9 +340,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             .admission
             .is_some_and(|at| {
                 now.saturating_duration_since(at)
-                    >= held.edca.get()[vif(pending.role())]
-                        .access_category(pending.category)
-                        .msdu_lifetime
+                    >= held.edca.lifetime(vif(pending.role()), pending.category)
             })
     }
     fn collect(
@@ -632,7 +628,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             for role in [VifRole::Station, VifRole::AccessPoint] {
                 idle_command!(self.core, |view| view.set_checked_edca(
                     role,
-                    SupportedEdca::<Esp32s31Caps<B>>::new(held.edca.get()[vif(role)])
+                    SupportedEdca::<Esp32s31Caps<B>>::new(held.edca.get(vif(role)))
                         .ok_or(Fault::Capacity)?,
                 ))
                 .map_err(|_| Fault::Capacity)?;

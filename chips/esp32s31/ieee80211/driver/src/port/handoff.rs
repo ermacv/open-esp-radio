@@ -118,7 +118,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> HeldBacking<'id, Id, D
         self.want_enabled.set(false);
         self.rx_out.set(0);
         self.channel.set(channel);
-        self.edca.set([EdcaParameterSet::STANDARD_DEFAULT; 2]);
+        for vif in 0..2 {
+            self.edca.set(vif, EdcaParameterSet::STANDARD_DEFAULT);
+        }
         self.dirty_edca.set(true);
         self.block_acks.clear();
         self.dirty_ba.set(false);
