@@ -70,6 +70,10 @@ fn initial_transmission_needs_explicit_power_and_installs_the_lower_provider_lev
     let band = band(false);
     let permission = Permission::new(band, limits(975));
     assert_eq!(
+        BluetoothJoin::new(permission, Operation::DtmRx, Some(requested(band, 0))),
+        Err(Refusal::UnexpectedPower)
+    );
+    assert_eq!(
         BluetoothJoin::new(permission, Operation::DtmTx, None),
         Err(Refusal::PowerRequired)
     );

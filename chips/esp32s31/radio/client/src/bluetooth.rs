@@ -68,6 +68,7 @@ pub enum Refusal {
     AboveCeiling,
     BelowProviderMinimum,
     PowerRequired,
+    UnexpectedPower,
 }
 
 impl Permission {
@@ -151,7 +152,12 @@ impl BluetoothJoin {
             return Err(error);
         }
         let power = match operation {
-            Operation::PassiveScan | Operation::DtmRx => None,
+            Operation::PassiveScan | Operation::DtmRx => {
+                if requested.is_some() {
+                    return Err(Refusal::UnexpectedPower);
+                }
+                None
+            }
             _ => match requested {
                 Some(requested) => match permission.tx_power(operation, requested) {
                     Ok(power) => Some(power),

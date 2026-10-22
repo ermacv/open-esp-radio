@@ -277,17 +277,37 @@ fn preflight_refusal_never_registers_or_wakes_rf() {
 
 #[test]
 fn a_second_role_cannot_join_another_bluetooth_client() {
-    let model = model(Script { ble_available: true, ..Script::default() });
+    let model = model(Script {
+        ble_available: true,
+        ..Script::default()
+    });
     multi(&model, |_, ble| async {
         let (ble, first) = ble.join(join()).await;
         let first = first.ok().expect("one Bluetooth installation");
         let (ble, first) = ble.track(first.member, first.payload.installation).await;
         let first = first.ok().expect("tracked Bluetooth");
         let (ble, duplicate) = ble.join(join()).await;
-        assert_eq!(duplicate.err().expect("one Bluetooth client for all roles").cause, Failure::Refused);
+        assert_eq!(
+            duplicate
+                .err()
+                .expect("one Bluetooth client for all roles")
+                .cause,
+            Failure::Refused
+        );
         model.0.borrow_mut().ble_stopped = true;
-        let (_, left) = ble.leave(Leaving::Tracked(first.member), first.payload).await;
+        let (_, left) = ble
+            .leave(Leaving::Tracked(first.member), first.payload)
+            .await;
         assert!(left.payload.stopped);
     });
-    assert_eq!(model.log(), vec![REGISTERED, Event::BleEnter, Event::BleTrack, Event::BleExit, Event::CloseRf]);
+    assert_eq!(
+        model.log(),
+        vec![
+            REGISTERED,
+            Event::BleEnter,
+            Event::BleTrack,
+            Event::BleExit,
+            Event::CloseRf
+        ]
+    );
 }
