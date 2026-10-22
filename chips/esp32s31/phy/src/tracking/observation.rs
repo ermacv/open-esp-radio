@@ -6,6 +6,7 @@
 //! An abandoned future leaves a started operation without a terminal event.
 
 use crate::executor::wait;
+pub mod calibration;
 
 /// One not-ready status observation, timed from its command publication.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -223,15 +224,21 @@ pub struct GainTiming {
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {
-    pub polls: u16,
-    pub pending: u16,
     pub total_micros: u32,
     pub maximum_micros: u32,
-    pub resumes: u16,
     pub lateness_micros: u32,
     pub maximum_lateness_micros: u32,
-    pub ready_edges: u16,
     pub maximum_ready_micros: u32,
+    pub polls: u16,
+    pub pending: u16,
+    pub resumes: u16,
+    pub ready_edges: u16,
+    /// Last hardware-bearing poll, for reporting after its driver completes.
+    pub last_ready_poll_micros: u16,
+    pub last_ready_atom_micros: u16,
+    pub(crate) action: u8,
+    pub maximum_action: u8,
+    pub maximum_ready_action: u8,
     pub invalid: bool,
 }
 impl EngineTiming {
@@ -281,7 +288,11 @@ impl EngineTiming {
             if let Some(elapsed) = ready_elapsed {
                 if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
                     increment(&mut self.ready_edges, &mut self.invalid);
-                    self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+                    if elapsed > self.maximum_ready_micros {
+                        self.maximum_ready_micros = elapsed;
+                        self.maximum_ready_action = self.action;
+                    }
+                    self.last_ready_atom_micros = u16::try_from(elapsed).unwrap_or(u16::MAX);
                 } else {
                     self.invalid = true;
                 }
@@ -295,7 +306,13 @@ impl EngineTiming {
                 .and_then(|d| u32::try_from(d.as_micros()).ok())
             {
                 add(&mut self.total_micros, elapsed, &mut self.invalid);
-                self.maximum_micros = self.maximum_micros.max(elapsed);
+                if elapsed > self.maximum_micros {
+                    self.maximum_micros = elapsed;
+                    self.maximum_action = self.action;
+                }
+                if ready_elapsed.is_some() {
+                    self.last_ready_poll_micros = u16::try_from(elapsed).unwrap_or(u16::MAX);
+                }
                 if let Some((row, sample)) = command {
                     if let Ok(elapsed) = u16::try_from(elapsed) {
                         row.record(sample, elapsed);
@@ -508,6 +525,8 @@ pub struct Timing {
 pub struct RxGainExecution {
     /// Per-atom maximum: lowering, hardware transaction, model commit (microseconds).
     pub maximum_parts_micros: [u32; 3],
+    /// Same action/first-entry tags as the engine maxima, correlated per part.
+    pub maximum_parts_actions: [u8; 3],
     /// Complete RX DC product quality; absent when that child did not complete.
     pub quality: Option<crate::rx::gain_calibration::PhyRxGainDcQuality>,
     pub minimum_searches: u32,

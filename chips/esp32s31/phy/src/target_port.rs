@@ -214,6 +214,12 @@ pub trait PhyTargetObserver {
         None
     }
     const OBSERVE_ENGINE_POLLS: bool = false;
+    fn channel_action_completed(
+        &mut self,
+        _action: u8,
+        _timing: &crate::tracking::observation::EngineTiming,
+    ) {
+    }
     fn engine_completed(
         &mut self,
         _operation: crate::tracking::observation::Operation,

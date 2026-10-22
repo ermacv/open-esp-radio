@@ -51,9 +51,49 @@ fn coarse_rx_observation_contains_only_phase_boundaries() {
 }
 
 #[test]
+fn calibration_names_remain_correlated_with_the_poll_and_atom_they_measure() {
+    use oer_time::{Clock, Duration};
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let mut timing = EngineTiming::default();
+    for (action, poll, atom) in [(0x95, 48, 40), (24, 44, 41), (21, 48, 39)] {
+        timing.action = action;
+        let started = clock.now();
+        clock
+            .advance(Duration::from_micros(poll))
+            .expect("time fits");
+        timing.poll_finished(
+            &clock,
+            started,
+            true,
+            None,
+            Some(Duration::from_micros(atom)),
+            None,
+        );
+    }
+    assert_eq!((timing.maximum_micros, timing.maximum_action), (48, 0x95));
+    assert_eq!(
+        (timing.maximum_ready_micros, timing.maximum_ready_action),
+        (41, 24)
+    );
+    assert_eq!(
+        (timing.last_ready_poll_micros, timing.last_ready_atom_micros),
+        (48, 39)
+    );
+    assert_eq!(
+        calibration::name(false, timing.maximum_action),
+        "DcIq.Configure"
+    );
+    assert_eq!(
+        calibration::name(false, timing.maximum_ready_action),
+        "DcIq.AwaitReadinessEdge"
+    );
+}
+
+#[test]
 fn rx_execution_summary_is_single_and_scoped_to_the_active_child() {
     let execution = RxGainExecution {
         maximum_parts_micros: [0; 3],
+        maximum_parts_actions: [0; 3],
         quality: None,
         minimum_searches: 121,
         minimum_operations: 191,

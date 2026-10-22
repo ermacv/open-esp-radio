@@ -361,6 +361,12 @@ pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Tim
             }
             return Ok(());
         }
+        let action = if O::OBSERVE_ENGINE_POLLS {
+            channel_action_tag(child)
+        } else {
+            0
+        };
+        timing.action = action;
         let mut binding = Some(
             child
                 .lower_external()
@@ -379,6 +385,9 @@ pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Tim
         )
         .await
         .map_err(super::step::port_error)?;
+        if O::OBSERVE_ENGINE_POLLS {
+            observer.channel_action_completed(action, &timing);
+        }
         let completion = completion.ok_or(PhyTargetPortError::UnexpectedBinding)?;
         match completion {
             Done::FrequencyReadyTimedOut => {
@@ -398,6 +407,11 @@ pub async fn channel<D: PhyShortDelay, P, O: PhyTargetObserver, T: oer_time::Tim
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
     }
     Err(PhyTargetPortError::RfOperationLimit)
+}
+
+#[inline(never)]
+fn channel_action_tag(child: &PhyCalibrationChannelTransition) -> u8 {
+    crate::tracking::observation::calibration::channel(&child.action())
 }
 
 pub(crate) fn complete_channel_direct<

@@ -62,6 +62,8 @@ pub(crate) enum Outcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Step {
     Runnable,
+    TaggedRunnable(u8),
+    TaggedWaitAt { action: u8, at: Instant },
     Rfpll(crate::tracking::observation::RfpllCommandSample),
     WaitAt(Instant),
     Complete,
@@ -781,7 +783,20 @@ impl<
                         (step, Instant::EPOCH)
                     }
                 };
+                let step = match step {
+                    Step::TaggedRunnable(action) | Step::TaggedWaitAt { action, .. } => {
+                        if let RouteProj::Transport { stats: Some(stats), .. } = &mut route {
+                            stats.action = action;
+                        }
+                        match step {
+                            Step::TaggedWaitAt { at, .. } => Step::WaitAt(at),
+                            _ => Step::Runnable,
+                        }
+                    }
+                    step => step,
+                };
                 let at = match step {
+                    Step::TaggedRunnable(_) | Step::TaggedWaitAt { .. } => unreachable!("tagged step was normalized"),
                     Step::Complete => break Poll::Ready(Ok(())),
                     Step::Failure(error) => break Poll::Ready(Err(error)),
                     Step::Rfpll(_) | Step::Runnable => {

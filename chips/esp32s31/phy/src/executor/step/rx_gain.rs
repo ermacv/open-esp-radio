@@ -84,6 +84,7 @@ pub(crate) fn complete<
 pub(crate) struct Scratch {
     pub(super) binding: Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
     pub(super) completion: Option<PhyRxGainInitCompletion>,
+    seen_actions: u64,
 }
 
 pub(super) struct Run<'a> {
@@ -106,6 +107,15 @@ impl Run<'_> {
             return Ok(Step::Complete);
         }
         let started = self.measured.then(|| clock.now());
+        let mut tag = 0;
+        if self.measured {
+            tag = crate::tracking::observation::calibration::rx(&self.transition.action());
+            let bit = 1_u64 << tag;
+            if self.scratch.seen_actions & bit == 0 {
+                self.scratch.seen_actions |= bit;
+                tag |= 0x80;
+            }
+        }
         if matches!(
             self.transition.action(),
             PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
@@ -168,17 +178,21 @@ impl Run<'_> {
                     .checked_duration_since(from)
                     .and_then(|d| u32::try_from(d.as_micros()).ok())
                     .unwrap_or(u32::MAX);
-                self.execution.maximum_parts_micros[index] =
-                    self.execution.maximum_parts_micros[index].max(elapsed);
+                if elapsed > self.execution.maximum_parts_micros[index] {
+                    self.execution.maximum_parts_micros[index] = elapsed;
+                    self.execution.maximum_parts_actions[index] = tag;
+                }
             }
         }
         if waiting {
-            Ok(Step::WaitAt(
-                now.checked_add(super::RETRY)
+            Ok(Step::TaggedWaitAt {
+                action: tag,
+                at: now
+                    .checked_add(super::RETRY)
                     .ok_or(Failure::DeadlineOverflow)?,
-            ))
+            })
         } else {
-            Ok(Step::Runnable)
+            Ok(Step::TaggedRunnable(tag))
         }
     }
 
