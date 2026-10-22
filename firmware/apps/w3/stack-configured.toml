@@ -2,7 +2,7 @@ schema = 5
 extends = "stack.toml"
 
 # Configured W3 only: the unconfigured image does not link these implementations.
-# Initial ceilings measured on cd9954b7 (#358); only lower them as frames shrink.
+# The ceilings are the measured frames; they only decrease.
 # Remove an entry when its implementation disappears or its frame fits the move limit.
 
 [[frame_exceptions.runtime]]
