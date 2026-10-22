@@ -275,6 +275,7 @@ pub fn compare(
             Assumptions {
                 abi: Some(CallAbi::RiscvInteger),
                 call_summaries: false,
+                signatures: None,
                 read_only,
             },
             windows,
