@@ -405,7 +405,9 @@ impl Gates {
                                     audit.render(),
                                 )?;
                                 std::fs::write(
-                                    input.output.join(crate::stack::reachability::RUNTIME_REPORT),
+                                    input
+                                        .output
+                                        .join(crate::stack::reachability::RUNTIME_REPORT),
                                     audit.render_reachability(&image, input.policy),
                                 )?;
                                 audit.check()
@@ -530,7 +532,9 @@ impl Gates {
                     audit.render(),
                 )?;
                 std::fs::write(
-                    input.output.join(crate::stack::reachability::BOOTSTRAP_REPORT),
+                    input
+                        .output
+                        .join(crate::stack::reachability::BOOTSTRAP_REPORT),
                     audit.render_reachability(&image, input.policy),
                 )?;
                 audit.check().map(Some)
