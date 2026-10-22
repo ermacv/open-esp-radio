@@ -209,7 +209,7 @@ impl Diff {
             ));
         }
     }
-    fn inventory<T>(
+    fn inventory<T: std::fmt::Debug>(
         &mut self,
         elf: &str,
         kind: &str,
@@ -217,14 +217,20 @@ impl Diff {
         b: &BTreeMap<String, T>,
     ) {
         for (label, from, to) in [("new", b, a), ("removed", a, b)] {
-            let names: Vec<_> = from.keys().filter(|name| !to.contains_key(*name)).collect();
+            let names: Vec<_> = from
+                .iter()
+                .filter(|(name, _)| !to.contains_key(*name))
+                .collect();
             if names.is_empty() {
                 continue;
             }
             self.verdict = self.verdict.max(Verdict::Report);
             let _ = writeln!(self.output, "\n{label} {kind}s ({elf}):");
-            for name in names {
-                let _ = writeln!(self.output, "- {label} {kind} ({elf}): `{name}`");
+            for (name, bytes) in names {
+                let _ = writeln!(
+                    self.output,
+                    "- {label} {kind} ({elf}): `{name}` ({bytes:?} B)"
+                );
             }
         }
     }
@@ -273,8 +279,20 @@ impl Diff {
         self.values(elf, "type", &a.types, &b.types);
         // Retain multiplicity; compare every implementation in sorted order.
         for name in keys(&a.frames, &b.frames) {
-            let before = a.frames.get(name).map_or(&[][..], Vec::as_slice);
-            let after = b.frames.get(name).map_or(&[][..], Vec::as_slice);
+            let (Some(before), Some(after)) = (a.frames.get(name), b.frames.get(name)) else {
+                continue;
+            };
+            if before != after {
+                self.verdict = self.verdict.max(Verdict::Report);
+            }
+            if before.len() != after.len() {
+                let _ = writeln!(
+                    self.output,
+                    "frame `{name}` implementations: {} → {}",
+                    before.len(),
+                    after.len()
+                );
+            }
             for index in 0..before.len().max(after.len()) {
                 self.change(
                     elf,
@@ -355,14 +373,10 @@ impl Diff {
         b: &BTreeMap<String, u64>,
     ) {
         for name in keys(a, b) {
-            self.change(
-                elf,
-                kind,
-                name,
-                a.get(name).copied().unwrap_or(0),
-                b.get(name).copied().unwrap_or(0),
-                VALUE_GROWTH_BYTES,
-            );
+            let (Some(&before), Some(&after)) = (a.get(name), b.get(name)) else {
+                continue;
+            };
+            self.change(elf, kind, name, before, after, VALUE_GROWTH_BYTES);
         }
     }
 }

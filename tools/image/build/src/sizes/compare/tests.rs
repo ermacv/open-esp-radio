@@ -174,7 +174,8 @@ fn new_and_removed_functions_and_types_are_named_even_at_zero_size() {
     m.types.insert("fixture::New<u8>".into(), 256);
     m.frames.clear();
     m.frames.insert("fixture::new<u8>".into(), vec![0]);
-    let (_, _, shown) = compare(&a, &b).unwrap();
+    let (verdict, _, shown) = compare(&a, &b).unwrap();
+    assert_eq!(verdict, Verdict::Report);
     for line in [
         "new type (runtime): `fixture::New<u8>`",
         "removed type (runtime): `fixture::Large<u32>`",
