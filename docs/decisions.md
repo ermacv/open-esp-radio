@@ -222,11 +222,6 @@ bounds) live in the code that applies them.
 - **Station composition.** `StationPort` maps an image-owned composition to
   its concrete `Backend`, `SlotId` and `Caps`. The service retains the backend's
   lifecycle and body-loan identity; the mapping does not wrap or replace it.
-- **W3 ICMP.** The pinned Embassy/Xarxa stack uses a raw IPv4 socket and its
-  wire codecs for outgoing echoes, and native `icmp-ping-reply` for incoming
-  echoes. Both directions count distinct identifier/sequence pairs at the
-  Ethernet boundary. Malformed lengths, types and checksums are dropped and
-  counted without panicking.
 - **Reference models.** Every port has a reference model that keeps its
   contract; doubles that break the contract stay out of the conformance
   suite. A port's reference model is its own host crate,
@@ -261,9 +256,6 @@ bounds) live in the code that applies them.
   its operation kinds; the shared radio vocabulary names only the clients.
   There is no urgency level. A row without a vendor source is a product
   choice that states its reason.
-- **S31 lower-MAC coexistence.** The image selects one concrete
-  `C: RadioCoexPriorities` through its Device composition. Publication uses
-  static dispatch, without trait objects, callback pointers or a default policy.
 - **Hard deadlines** are the Bluetooth LE connection event, the 802.15.4
   timed transmission and reception and CSL slot, and the beacon window of a
   dozing Wi-Fi station; every other operation is served by the PTI alone.
