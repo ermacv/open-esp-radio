@@ -36,6 +36,12 @@ modification notice:
 Facts only (register sequences, values, call order) in the ESP32-S31 HAL and
 PAC, cited by SOURCE lines and evidence identifiers.
 
+Native analog-I2C geometry facts in
+chips/{esp32s31,esp32c5}/registers/model/analog/phy.toml, from the pinned
+4d59230d regi2c headers (Apache-2.0 OR MIT), and the S31 regi2c_impl.c block
+identifiers (Apache-2.0). The evidence catalogs cite exact paths and hashes;
+no source code is copied. Generated PAC vocabulary retains those SOURCE IDs.
+
 
 2. ESP32-S31 SVD (esp-pacs)
 ---------------------------

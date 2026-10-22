@@ -17,7 +17,11 @@ use svd_rs::{
     RegisterCluster, RegisterInfo, RegisterProperties, ValidateLevel,
 };
 
+pub mod analog;
+mod analog_render;
+mod bits;
 mod descriptions;
+pub use bits::BitStates;
 mod draft;
 mod geometry;
 mod layouts;
@@ -41,6 +45,7 @@ mod register_lints;
 mod reserved;
 pub use reserved::ReservedBits;
 mod review_defaults;
+pub use review_defaults::ReviewMetadata;
 mod shared;
 
 pub use pac_api::{
@@ -156,6 +161,9 @@ pub struct RegisterModelManifest {
     /// Memory layouts: structures in RAM whose format the hardware defines.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layouts: Vec<String>,
+    /// Independent transport spaces, omitted from the CPU SVD.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub indirect_spaces: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -236,6 +244,7 @@ pub struct RegisterModel {
     shared_peripherals: BTreeMap<String, SharedPeripheral>,
     layouts: Vec<MemoryLayout>,
     reserved: BTreeMap<(u64, u32), ReservedBits>,
+    analog_spaces: Vec<analog::AnalogSpace>,
 }
 
 /// The link's check of DMA storage against a known DMA window, which the
@@ -421,7 +430,7 @@ impl RegisterModel {
         for reference in &manifest.shared_fragments {
             paths.extend(shared::placed_fragment_inputs(path, reference)?);
         }
-        for relative in &manifest.layouts {
+        for relative in manifest.layouts.iter().chain(&manifest.indirect_spaces) {
             validate_relative_fragment(relative)
                 .map_err(|error| Error::manifest("register model manifest", path, error))?;
             paths.push(base.join(relative));
@@ -580,6 +589,8 @@ impl RegisterModel {
             .map_err(|error| Error::manifest("register model", path, error))?;
         let reserved = reserved::expand(&device, &reserved_templates)
             .map_err(|error| Error::manifest("register model", path, error))?;
+        let analog_spaces =
+            analog::load(base, &manifest.indirect_spaces, &mut loaded_inputs, naming)?;
         let model = Self {
             loaded_inputs,
             chip: manifest.chip,
@@ -590,6 +601,7 @@ impl RegisterModel {
             shared_peripherals,
             layouts,
             reserved,
+            analog_spaces,
         };
         model
             .register_identities()
@@ -600,6 +612,10 @@ impl RegisterModel {
     /// Exact input text parsed by this model, retained for execution provenance.
     pub fn loaded_inputs(&self) -> &BTreeMap<std::path::PathBuf, String> {
         &self.loaded_inputs
+    }
+
+    pub fn analog_spaces(&self) -> &[analog::AnalogSpace] {
+        &self.analog_spaces
     }
 
     pub fn render_svd(&self) -> Result<(String, SvdExportSummary)> {
@@ -626,6 +642,7 @@ impl RegisterModel {
                     "SVD does not encode explicit unknown/conflicted property states; omitted side effects do not prove ordinary hardware semantics".to_owned(),
                     "Observations, candidate fields, bit dataflow, source coverage and address gaps remain in the register inventory".to_owned(),
                     format!("{} review annotations and {} effective assertions retain provenance/applicability in the rich model, outside SVD", self.review.len(), self.reviewed_register_facts.len()),
+                    format!("{} native analog-I2C spaces are omitted; transport addresses have no CPU aliases", self.analog_spaces.len()),
                 ],
                 peripherals: self.device.peripherals.len(),
                 registers: identities.len(),

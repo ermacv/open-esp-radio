@@ -70,3 +70,7 @@ pub use phy::i2c::{
     PhyI2cInitializationInputs, PhyI2cParallelWrite, PhyI2cRcCalibration, PhyI2cSar2Code,
 };
 pub use phy::radio::PhyRadioRegisters;
+
+// Generated analog-I2C vocabulary, checked against the bus transport by host tests.
+#[cfg(test)]
+include!("analog_generated.rs");

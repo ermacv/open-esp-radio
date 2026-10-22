@@ -689,6 +689,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn generated_routes_preserve_the_request_host_mask_and_command_alias() {
+        use crate::analog_i2c::{self, Host, Profile};
+        for code in FIRST_BLOCK..=LAST_BLOCK {
+            let previous = PhyI2cBlock::from_vendor_abi(code).unwrap();
+            let route = analog_i2c::route(Profile::LibphyNormal, code).unwrap();
+            let host = match previous.host() {
+                PhyI2cHost::Host0 => Host::Host0,
+                PhyI2cHost::Host1 => Host::Host1,
+            };
+            assert_eq!(route.host, host);
+            assert_eq!(route.command_code, previous.command_code());
+            assert_eq!(
+                route.complemented_read_select(),
+                previous.read_mask() as u32
+            );
+        }
+        let alias = analog_i2c::route(Profile::LibphyNormal, 0x62).unwrap();
+        let direct = analog_i2c::route(Profile::LibphyNormal, 0x65).unwrap();
+        assert_eq!(alias.address(3), direct.address(3));
+        assert_ne!(alias.host, direct.host);
+        assert_ne!(alias.read_select, direct.read_select);
+        assert!(analog_i2c::READ_SAFE.is_empty());
+        assert!(analog_i2c::REGISTERS.iter().all(|r| r.reset.is_none()));
+    }
+
+    #[test]
     fn modeled_initialization_payloads_match_the_old_packing() {
         for parameter in 0..=u16::MAX {
             let inputs = PhyI2cInitializationInputs {

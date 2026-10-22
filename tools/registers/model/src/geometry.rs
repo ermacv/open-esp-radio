@@ -23,6 +23,43 @@ pub struct RegisterGeometry {
     pub reserved: Option<ReservedBits>,
 }
 
+impl RegisterGeometry {
+    pub fn bit_states(&self) -> Result<crate::BitStates> {
+        let mut fields = 0;
+        let mut opaque = 0;
+        let width = self
+            .width
+            .ok_or_else(|| Error::message("register without width"))?;
+        for field in &self.fields {
+            if field.width == 0
+                || field
+                    .offset
+                    .checked_add(field.width)
+                    .is_none_or(|n| n > width || n > 128)
+            {
+                return Err(Error::message("invalid field width"));
+            }
+            let mask = if field.width == 128 {
+                u128::MAX
+            } else {
+                ((1u128 << field.width) - 1) << field.offset
+            };
+            fields |= mask;
+            if self.name.ends_with(crate::OPAQUE_SUFFIX)
+                || field.name.ends_with(crate::OPAQUE_SUFFIX)
+            {
+                opaque |= mask;
+            }
+        }
+        crate::BitStates::new(
+            width,
+            fields,
+            opaque,
+            self.reserved.as_ref().map_or(0, |r| r.mask),
+        )
+    }
+}
+
 impl RegisterModel {
     /// Expanded declarations with inherited properties and every field.
     pub fn register_geometry(&self) -> Result<Vec<RegisterGeometry>> {

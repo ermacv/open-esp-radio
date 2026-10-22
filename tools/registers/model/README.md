@@ -1,5 +1,64 @@
 # Register model library
 
+## Analog-I2C space
+
+The chip manifest's `indirect-spaces = ["analog/phy.toml"]` selects one
+independent `schema = 1`, `kind = "analog-i2c"` document. Its `[[blocks]]`
+have a unique `name`, byte `code`, cited `sources`, optional `routes` and
+explicit sparse byte `registers`. There is no CPU base, pointer conversion
+or inferred 256-register array. A route has `profile`, original
+`request-code`, `host` (0/1), one-hot-or-zero `read-select`,
+`read-mask-bits` (24/32) and sources. Its command code is the enclosing
+physical block's code. Thus two C5 request routes 0x62/0x65 reach the same
+physical 0x65 bytes while retaining different host and selection facts.
+
+A byte register has `name`, `index`, optional `description`, `access`,
+`read-action`, `modified-write-values`, `reset-value`/`reset-known-mask`,
+`reserved = { mask, sources }`, `read-safe = { epoch, sources }` and fields.
+Fields use the same `FieldInfo` declarations as MMIO (`name`, `bitOffset`,
+`bitWidth`, access, enumerations, read/write actions and constraints).
+Inheritance and arrays require explicit expanded field geometry in this
+first transport model; unsupported extension keys are errors.
+
+`[blocks.review]` supplies a whole-record review default. `[[review]]`
+records replace it for a fully qualified `BLOCK.REGISTER.FIELD` or
+`BLOCK.REGISTER`. They use the common provenance, accuracy, completeness
+and naming rules. An opaque byte is `BYTE_<two-digit-index>_OPAQUE`;
+opaque fields use the usual `BIT_n_OPAQUE` / `BITS_low_high_OPAQUE` names.
+Every publication review and every block, route, reserved and safety source
+is validated against the chip's evidence catalogs.
+
+Both MMIO and analog geometry expose `BitStates`: described, opaque,
+reserved and absent. Gaps never become reserved. Unknown reset is absence
+of both reset properties; a partial reset supplies only its nonempty known
+mask, with zeroes outside that mask carrying no knowledge. Readable access
+does not qualify a dump: `read-safe` additionally needs a finite epoch and
+sources, and rejects destructive/modified reads. The current real models
+claim neither known reset nor a read-safe epoch.
+
+`AnalogAddress { block, index }` is a separate host type. Semantic IDs retain
+the existing grammar: `register:<chip>/analog-i2c/0xBBII/8`, where BB/II encode
+block/index, and `register-field:<chip>/analog-i2c/0xBBII/8/<offset>/<width>`.
+This number is a transport identity; it is never supplied to the CPU memory
+map. CMSIS-SVD exports only direct registers and its omission summary records
+the indirect spaces. `cargo registers inspect-analog --manifest
+chips/<chip>/registers/publication/registers.toml` queries full geometry,
+routes, reviews, bit states and semantic IDs without hardware access.
+
+The ordinary publication command writes the `[outputs].analog` destination,
+`pac/src/analog_generated.rs`, containing the closed PAC's `analog_i2c` module:
+addresses, bounded byte fields, original-request route lookup, register facts
+and a separately qualified `READ_SAFE` list. Shared value types live in
+`chips/espressif/analog::model`. Sampled values preserve all other bits and
+reject another register's field or a value exceeding its width. Unknown or
+partial reset never creates a whole-byte reset image. These are pure values;
+no analog bus transaction is generated here. The PAC's host tests compile
+this file and compare its routes with the bus transport. The shared crate's
+`model` feature is selected only by those dev-dependencies. Production bus
+callers use the policy field domain and manual map.
+
+## Direct register model
+
 `oer-registers-model` owns the portable register publication formats:
 
 - safe loading of a multi-file TOML model;

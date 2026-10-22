@@ -807,3 +807,7 @@ where
 
 #[cfg(test)]
 mod tests;
+
+/// Pure transport and sampled-value vocabulary of generated analog models.
+#[cfg(any(test, feature = "model"))]
+pub mod model;

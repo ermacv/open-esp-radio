@@ -86,6 +86,9 @@ bounds) live in the code that applies them.
   to a whole register as an exact constant is kept as one cited image
   operation even where reset is unknown; its lanes without established
   meaning get no field.
+- **Analog registers.** The PHY analog-I2C bytes are a separate register
+  space addressed by (block, index), generated from the register model with
+  the same bit states; no CPU address aliases them.
 - **`unsafe`** stays in the PAC, the placement constructor and the protocol
   core of the HAL; crates above the HAL forbid it.
 - **Probe hooks** compile under `cfg(oer_probe)`, which only `cargo fw probe`

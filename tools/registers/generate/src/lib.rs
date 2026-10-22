@@ -46,6 +46,8 @@ struct Context {
 struct Outputs {
     svd: PathBuf,
     bindings: PathBuf,
+    /// Native indirect vocabulary, compiled for the PAC's host tests.
+    analog: Option<PathBuf>,
     /// The PAC a publication generates; a publication read only through its
     /// SVD and binding index, such as a chip's platform registers, has none.
     pac: Option<PacOutputs>,
@@ -154,6 +156,18 @@ impl Publication {
             Self::Library(publication) => publication.generate(check),
         }
     }
+
+    /// Full native indirect geometry, independent of PAC exposure. CPU SVD
+    /// intentionally contains no aliases for these transport addresses.
+    pub fn analog_inventory(&self) -> Result<serde_json::Value> {
+        let Self::Chip(publication) = self else {
+            return Err("a register library has no chip analog space".into());
+        };
+        let spaces = publication.model.analog_spaces().iter().map(|space| {
+            Ok(serde_json::json!({"kind":space.kind, "blocks":space.blocks, "review":space.review, "registers":space.geometry(publication.model.chip())?}))
+        }).collect::<Result<Vec<_>>>()?;
+        Ok(serde_json::json!({"chip":publication.model.chip(), "spaces":spaces}))
+    }
 }
 
 /// Owns validated model, policy and output destinations. Rendering never reloads inputs.
@@ -217,6 +231,10 @@ impl ChipPublication {
         )?;
         evidence.validate_references("reserved register bits", model.reserved_sources())?;
         evidence.validate_references(
+            "analog-I2C model",
+            model.analog_spaces().iter().flat_map(|s| s.sources()),
+        )?;
+        evidence.validate_references(
             "memory layout review",
             model
                 .layouts()
@@ -224,8 +242,12 @@ impl ChipPublication {
                 .flat_map(|layout| &layout.review)
                 .flat_map(|r| r.sources.iter().map(String::as_str)),
         )?;
-        if !model.layouts().is_empty() && m.outputs.pac.is_none() {
-            return Err("a model with memory layouts publishes them through a PAC".into());
+        if (!model.layouts().is_empty() || !model.analog_spaces().is_empty())
+            && m.outputs.pac.is_none()
+        {
+            return Err(
+                "a model with memory layouts or analog spaces publishes them through a PAC".into(),
+            );
         }
         let api_sources = api.iter().flat_map(PacApiPack::source_ids);
         evidence.validate_references("PAC API", api_sources)?;
@@ -252,6 +274,9 @@ impl ChipPublication {
             api.validate_against_svd(&svd)?;
         }
         let mut outputs = m.outputs;
+        if model.analog_spaces().is_empty() != outputs.analog.is_none() {
+            return Err("an analog model requires exactly one native analog output".into());
+        }
         if let Some(pac) = &outputs.pac {
             if !matches!(pac.target.as_str(), "none" | "riscv")
                 || !matches!(pac.edition.as_str(), "2021" | "2024")
@@ -279,10 +304,12 @@ impl ChipPublication {
             .into_iter()
             .flatten();
         let linker = outputs.linker.as_mut().map(|linker| &mut linker.path);
+        let analog = outputs.analog.as_mut();
         for p in [&mut outputs.svd, &mut outputs.bindings]
             .into_iter()
             .chain(pac)
             .chain(linker)
+            .chain(analog)
         {
             *p = host::destination(&base.join(&*p))?;
             if input_paths.contains(p) || !destinations.insert(p.clone()) {
@@ -308,6 +335,12 @@ impl ChipPublication {
             pac.map(|pac| pac.crate_name.as_str()),
         )?;
         let mut outputs = vec![(&self.outputs.bindings, bindings)];
+        if let Some(path) = &self.outputs.analog {
+            outputs.push((
+                path,
+                host::format(&self.model.render_analog_rust()?, "2024")?,
+            ));
+        }
         if let (Some(pac), Some(policy)) = (pac, &self.api) {
             let (raw, api) = self.render_pac(&svd, pac, policy)?;
             outputs.extend([(&pac.raw, raw), (&pac.api, api)]);

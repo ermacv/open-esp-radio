@@ -6,6 +6,7 @@ ownership = "../policy/ownership.toml"
 api = "../policy/api.toml"
 lints = "../policy/lints.toml"
 evidence = [
+    "../evidence/analog.toml",
     "../evidence/mmio-use.toml",
     "../evidence/ble-memory.toml",
     "../evidence/policy.toml",
@@ -26,6 +27,7 @@ chip-revisions = ["rev0"]
 artifact-lineages = ["esp32s31-radio"]
 
 [outputs]
+analog = "../../pac/src/analog_generated.rs"
 svd = "../published/radio.svd"
 bindings = "../published/radio.bindings.toml"
 

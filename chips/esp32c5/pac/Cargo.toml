@@ -15,6 +15,9 @@ test-support = []
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-esp32c5-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 
+[dev-dependencies]
+oer-espressif-analog = { path = "../../espressif/analog", features = ["model"] }
+
 [lints]
 workspace = true
 

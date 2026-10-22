@@ -37,6 +37,11 @@ enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Query native analog-I2C geometry, routes, bit states and provenance.
+    InspectAnalog {
+        #[arg(long)]
+        manifest: PathBuf,
+    },
     /// The register checks.
     #[command(subcommand)]
     Check(Check),
@@ -96,6 +101,12 @@ fn run() -> oer_registers_generate::Result<()> {
             println!(
                 "register outputs {}",
                 if check { "verified" } else { "written" }
+            );
+        }
+        Command::InspectAnalog { manifest } => {
+            println!(
+                "{:#}",
+                oer_registers_generate::Publication::load(&manifest)?.analog_inventory()?
             );
         }
         Command::Check(Check::PacTransactions { directory }) => {

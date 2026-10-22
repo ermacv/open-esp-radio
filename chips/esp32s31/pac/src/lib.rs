@@ -286,3 +286,7 @@ pub(crate) mod modem;
 #[doc(hidden)]
 pub mod validation;
 pub(crate) mod wifi;
+
+// Generated analog-I2C vocabulary, checked against the bus transport by host tests.
+#[cfg(test)]
+include!("analog_generated.rs");
