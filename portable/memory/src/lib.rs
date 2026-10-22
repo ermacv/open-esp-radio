@@ -17,6 +17,8 @@
 //! that survives a reset, one holder at a time.
 //! [`init_in_place!`] initializes a complete struct directly in borrowed
 //! storage, cleaning up its initialized fields if construction stops early.
+//! [`StaticPlace`] reserves static backing for short-lived values and pinned
+//! futures without extending their input loans.
 
 #[doc(hidden)]
 pub extern crate core as __core;
@@ -35,6 +37,7 @@ pub mod retained;
 mod return_bank;
 mod rx_external_handoff;
 mod rx_handoff;
+mod static_place;
 mod static_ref;
 mod volatile;
 pub mod zeroed;
@@ -64,6 +67,7 @@ pub use rx_external_handoff::{
     ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
+pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
 pub use volatile::read_volatile;
 

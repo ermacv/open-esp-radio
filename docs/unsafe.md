@@ -157,6 +157,17 @@ Thus a callback cannot substitute another allocation for an unwritten field.
 Cached SPSC placement initializes its cursor words directly and composes with
 this nested form in the Wi-Fi RX arena; compact P1/P2 queues retain their layout.
 
+`StaticPlace` permanently claims an exclusive static allocation, then lends
+uninitialized storage with the actual value's shorter lifetime. Its layout
+type supplies only size and alignment, checked at monomorphization; no
+initialized value or reference is reinterpreted and no loan is extended.
+Unclaimed backing is `Send` regardless of its layout type: it contains no
+initialized layout value, and its permanent static loan prevents moving it
+after initialization. The initialized handle keeps its own thread restrictions.
+`PlacedFuture` owns one future constructed in that allocation, pins it once,
+and polls and drops it in place. Only the handle can move. Forgetting it
+permanently retains the backing; no safe reset or reuse path exists.
+
 `AffineSpscQueue` lends short local endpoints without new unsafe operations.
 The original endpoint remains exclusively borrowed. A local producer loan can
 be copied within its one context, supports only synchronous publication and
