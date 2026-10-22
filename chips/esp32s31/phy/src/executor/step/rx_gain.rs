@@ -195,14 +195,7 @@ impl Run<'_> {
     /// Estimator policy, ten-microsecond settles and outer control preparation
     /// retain the whole remaining poll allowance.
     pub(super) fn batch_ready(&self) -> bool {
-        self.scratch.binding.is_none()
-            && matches!(
-                self.transition.calibration_action(),
-                Some(
-                    PhyRxDcCalibrationAction::ForcePbus(_)
-                        | PhyRxDcCalibrationAction::ReadPbus { .. }
-                )
-            )
+        self.scratch.binding.is_none() && self.transition.calibration_pbus_ready()
     }
 
     #[inline(never)]
@@ -218,7 +211,7 @@ impl Run<'_> {
         }
         let stamp = super::rfpll::OutlinedClock(clock);
         if self.measured {
-            self.scratch.part_times[0] = stamp.now().as_micros();
+            self.scratch.part_times[0] = now.as_micros();
         }
         let prepared = self.scratch.binding.is_some();
         if !prepared {
