@@ -171,70 +171,55 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         if self.link().is_none() {
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
-        let state = self.take_state();
-        let State::Connected(mut connected) = state else {
-            self.state = state;
+        let State::Connected(connected) = &self.state else {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         };
         if connected.bssid != reply.bssid {
-            self.state = State::Connected(connected);
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
         if connected.sending {
-            self.state = State::Connected(connected);
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
         let protected = connected
             .rsn
             .as_ref()
             .is_some_and(|rsn| rsn.management.is_some());
+        let bssid = connected.bssid;
         let length = if reply.body.get(1) == Some(&2) { 6 } else { 9 };
         let Some(body) = reply.body.get(..length) else {
-            self.state = State::Connected(connected);
             return Err((reply, BlockAckReplyRefusal::Encode));
         };
-        let transmit = self.encode_management(
+        let transmit = match self.encode_management(
             StaManagementSubtype::Action,
-            connected.bssid,
+            bssid,
             body,
             TxPurpose::Connected(Sending::BlockAck),
             protected,
-        );
-        match transmit {
-            Ok(transmit) => {
-                connected.sending = true;
-                self.state = State::Connected(connected);
-                if protected {
-                    match &self.keys.pairwise {
-                        KeyCell::Installed(key) => {
-                            Ok(StaAction::TransmitProtected { transmit, key })
-                        }
-                        _ => {
-                            self.tickets.put(transmit.ticket);
-                            self.buffers.put(transmit.buffer);
-                            Err((reply, BlockAckReplyRefusal::LinkChanged))
-                        }
-                    }
-                } else {
-                    Ok(StaAction::Transmit(transmit))
+        ) {
+            Ok(transmit) => transmit,
+            Err(Unsent::NoTokens) => return Err((reply, BlockAckReplyRefusal::Busy)),
+            Err(Unsent::Encode) => return Err((reply, BlockAckReplyRefusal::Encode)),
+            Err(Unsent::NoConnection) => return Err((reply, BlockAckReplyRefusal::LinkChanged)),
+        };
+        if protected && !matches!(&self.keys.pairwise, KeyCell::Installed(_)) {
+            self.tickets.put(transmit.ticket);
+            self.buffers.put(transmit.buffer);
+            return Err((reply, BlockAckReplyRefusal::LinkChanged));
+        }
+        if let State::Connected(connected) = &mut self.state {
+            connected.sending = true;
+        }
+        if protected {
+            match &self.keys.pairwise {
+                KeyCell::Installed(key) => Ok(StaAction::TransmitProtected { transmit, key }),
+                _ => {
+                    self.tickets.put(transmit.ticket);
+                    self.buffers.put(transmit.buffer);
+                    Err((reply, BlockAckReplyRefusal::LinkChanged))
                 }
             }
-            Err(Unsent::NoTokens) => {
-                self.state = State::Connected(connected);
-                Err((reply, BlockAckReplyRefusal::Busy))
-            }
-            Err(Unsent::Encode) => {
-                self.state = leave_connected(
-                    connected,
-                    StaDisconnectReason::Encode,
-                    Some(REASON_UNSPECIFIED),
-                );
-                Err((reply, BlockAckReplyRefusal::Encode))
-            }
-            Err(Unsent::NoConnection) => {
-                self.state = State::Connected(connected);
-                Err((reply, BlockAckReplyRefusal::LinkChanged))
-            }
+        } else {
+            Ok(StaAction::Transmit(transmit))
         }
     }
 }

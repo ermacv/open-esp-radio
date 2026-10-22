@@ -218,7 +218,7 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
     }
 
     /// End only this role's agreements; every bank and retained frame returns
-    /// through the same phase before a healthy disable or channel retune.
+    /// through the same phase before a healthy Stop; temporary absences keep them.
     pub(super) fn clear<'p, K, P>(&mut self, phase: &mut P)
     where
         'id: 'p,
@@ -246,6 +246,7 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
         self.header.association.map(|(epoch, _)| epoch)
     }
 
+    #[inline(never)]
     pub(super) fn offer<'p, K, P>(
         &mut self,
         now: Instant,
@@ -436,6 +437,7 @@ impl<'id, Ty: PhaseTypes<'id>> RxBlockAckView<'id, Ty> {
         }
     }
 
+    #[inline(never)]
     pub(super) fn tick<'p, K, P>(&mut self, now: Instant, phase: &mut P)
     where
         'id: 'p,

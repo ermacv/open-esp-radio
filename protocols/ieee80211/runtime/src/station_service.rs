@@ -597,6 +597,8 @@ pub enum BackendContractViolation {
 pub enum ServiceFault<B: StationPort> {
     /// A checked management request exceeded its retained response domain.
     RxBlockAckCapacity,
+    /// A validated receive BA reply could not fit the control frame encoder.
+    RxBlockAckEncode,
 
     EnableRefused(<B::Backend as PortBackend<B::SlotId>>::Refusal),
     Backend(<B::Backend as PortBackend<B::SlotId>>::Fault),
@@ -1891,6 +1893,9 @@ impl<
                         }
                     }
                     Err((_, oer_ieee80211_sta::machine::BlockAckReplyRefusal::Busy)) => {}
+                    Err((_, oer_ieee80211_sta::machine::BlockAckReplyRefusal::Encode)) => {
+                        return Next::Failed(ServiceFault::RxBlockAckEncode.into());
+                    }
                     Err((_, _)) => {
                         self.pending.receive.sent(place);
                         progress = true;
