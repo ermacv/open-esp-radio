@@ -276,7 +276,10 @@ fn installed(
         stopped: false,
     };
     let device = Box::leak(Box::new(device));
-    let storage = Box::leak(Box::new(PortStorage::new(device)));
+    let storage = Box::leak(Box::new(PortStorage::new(
+        device,
+        Box::leak(Box::new(crate::port::PortSharedStorage::new())),
+    )));
     let transmitter = crate::ordinary_tx::OrdinaryTxOwner::new(crate::tx::WifiTxResources {
         slot: slot(),
         policy: oer_esp32s31_ieee80211_mac::tx::runtime::WifiTxRuntimePolicy::vendor_defaults(),

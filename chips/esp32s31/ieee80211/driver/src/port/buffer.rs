@@ -10,7 +10,7 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) place: Slot<'id, Buffers, Part<Id, 3>>,
     pub(super) dma: ReturnableBuffer<B>,
-    pub(super) admission: BufferAdmission,
+    pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>>,
 }
 pub(super) struct ReturnableBuffer<const B: usize> {
@@ -31,13 +31,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> Buffer<'_, Id, D, B> {
     pub fn index(&self) -> u8 {
         self.place.index()
     }
-    pub fn admitted_at(&self) -> Option<Ieee80211Instant> {
-        self.admission.radio()
-    }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> TxBufferMemory for Buffer<'_, Id, D, B> {
     fn renew_msdu(&mut self) {
-        self.admission = BufferAdmission::Vacant;
+        self.admission = None;
         self.dma
             .memory
             .as_mut()

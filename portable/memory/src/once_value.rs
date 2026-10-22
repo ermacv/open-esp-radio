@@ -10,13 +10,13 @@ const EMPTY: u8 = 0;
 const WRITING: u8 = 1;
 const READY: u8 = 2;
 
-/// One immutable value published by the first writer.
+/// One value retained by the first writer.
 ///
 /// A higher-priority reader never waits for a preempted writer: `get` returns
 /// `None` until publication completes, while `is_requested` already reports
 /// the request. The caller supplies its own wake after `set`. Reset requires
 /// exclusive access, after every endpoint of the previous epoch ended.
-pub struct OnceValue<T: Copy> {
+pub struct OnceValue<T> {
     state: AtomicU8,
     value: UnsafeCell<MaybeUninit<T>>,
 }
@@ -26,11 +26,13 @@ pub struct OnceValue<T: Copy> {
     reason = "one immutable value follows Release publication"
 )]
 // SAFETY: only the winning EMPTY -> WRITING CAS writes the value. Readers
-// access it only after Acquire observes READY, and no shared operation can
-// mutate it again. Exclusive reset cannot overlap any shared access.
-unsafe impl<T: Copy + Send + Sync> Sync for OnceValue<T> {}
+// copy a Copy + Sync payload only after Acquire observes READY. Non-Copy
+// owners remain opaque until exclusive destruction or reset. No shared
+// operation mutates a published payload. Exclusive reset cannot overlap any
+// shared access, and T: Send permits its cross-context ownership transfer.
+unsafe impl<T: Send> Sync for OnceValue<T> {}
 
-impl<T: Copy> OnceValue<T> {
+impl<T> OnceValue<T> {
     pub const fn new() -> Self {
         Self {
             state: AtomicU8::new(EMPTY),
@@ -68,7 +70,10 @@ impl<T: Copy> OnceValue<T> {
     }
 
     /// Copy the published value, or return immediately before it is ready.
-    pub fn get(&self) -> Option<T> {
+    pub fn get(&self) -> Option<T>
+    where
+        T: Copy + Sync,
+    {
         if self.state.load(Ordering::Acquire) != READY {
             return None;
         }
@@ -83,18 +88,37 @@ impl<T: Copy> OnceValue<T> {
 
     /// Begin a new epoch only after every old endpoint stopped borrowing it.
     pub fn reset(&mut self) {
-        *self.state.get_mut() = EMPTY;
+        let ready = core::mem::replace(self.state.get_mut(), EMPTY) == READY;
+        if ready {
+            #[allow(
+                unsafe_code,
+                reason = "exclusive reset owns the initialized retained value"
+            )]
+            // SAFETY: READY contains the one initialized value, and exclusive
+            // access ends all shared readers/writers. Clear state before Drop,
+            // including if T's destructor unwinds.
+            unsafe {
+                self.value.get_mut().assume_init_drop()
+            };
+        }
     }
 }
 
-impl<T: Copy> Default for OnceValue<T> {
+impl<T> Default for OnceValue<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
+impl<T> Drop for OnceValue<T> {
+    fn drop(&mut self) {
+        self.reset();
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    extern crate std;
     use super::*;
 
     #[test]
@@ -126,5 +150,29 @@ mod tests {
         assert_eq!(value.get(), None);
         assert_eq!(value.set(8), Ok(()));
         assert_eq!(value.get(), Some(8));
+    }
+
+    #[test]
+    fn a_non_copy_owner_stays_retained_until_exclusive_destruction() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        };
+        struct Counted(Arc<AtomicUsize>);
+        impl Drop for Counted {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, AtomicOrdering::SeqCst);
+            }
+        }
+        let count = Arc::new(AtomicUsize::new(0));
+        let mut retained = OnceValue::new();
+        assert!(retained.set(Counted(count.clone())).is_ok());
+        assert!(retained.is_requested());
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 0);
+        retained.reset();
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 1);
+        assert!(retained.set(Counted(count.clone())).is_ok());
+        drop(retained);
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 2);
     }
 }

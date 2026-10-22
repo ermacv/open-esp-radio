@@ -149,6 +149,9 @@ The original endpoint remains exclusively borrowed. A local producer loan can
 be copied within its one context, supports only synchronous publication and
 has no reservation; both local endpoints are neither Send nor Sync. The
 underlying Release/Acquire transfer still moves each complete owner once.
+Its sealed cursor layouts retain the default cache-line-separated counters
+for existing queues and permit compact atomic counters for the same-core
+P1/P2 handoff. Layout selection changes no endpoint or publication authority.
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space
 follows from N distinct indices, without an occupancy check, a backend
@@ -175,11 +178,12 @@ over and the other side's Acquire CAS takes it; the client posts only with
 the slot's one `Poster`, which the answer returns. The radio-system client
 uses it and has no unsafe code of its own.
 
-`OnceValue` publishes one immutable, copyable value. The winning atomic
-claim owns the write; an Acquire reader copies only after Release publishes
-the completed payload. A preempted writer is already observable as a request,
-but readers never wait for it. Reset requires exclusive access after the old
-endpoints ended. The S31 port uses it for the first fault cause.
+`OnceValue` retains one value. The winning atomic claim owns the write;
+an Acquire reader can copy a Copy + Sync payload only after Release publishes
+it. Other owners stay opaque until exclusive reset/destruction. A preempted
+writer is already observable as a request, but readers never wait for it.
+Reset requires exclusive access after the old endpoints ended. The S31 port
+uses it for the first fault cause and durable retention of failed messages.
 
 `ReturnBank` pairs each taken value with one affine return token. An Acquire
 CAS transfers the initialized value out of its cell; only the consumed token
@@ -244,6 +248,14 @@ reset or quarantine, because owned queue permissions rely on that identity
 having exactly one backing store. Static placement itself uses `StaticCell`'s
 safe initialization; no reference lifetime or owner is cast. Local scope
 claims have no static latch and use no unsafe code.
+
+`StaticPortSlot` keeps the declaration's permanent allocation in its P2 task.
+It lends that allocation once initially, and again only after consuming its
+nominal `Joined`. That proof follows the end of P1 endpoint loans and P2
+owner/invocation destruction and unregistration; quarantine issues no proof.
+The adapter's two pointer dereferences extend no stack allocation's lifetime.
+The S31 composition sends only frontend endpoints to P1 and retains the slot
+manager and registration in its P2 task, establishing the cleanup Drop context.
 
 The platform crates (the boards and `chips/espressif/staged-*`), the bootstrap images
 (`firmware/bootstrap/*`) and the probe images (`firmware/probes/*`) own the

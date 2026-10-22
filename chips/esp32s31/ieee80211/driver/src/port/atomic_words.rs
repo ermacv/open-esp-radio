@@ -37,9 +37,11 @@ impl<const N: usize> AtomicWords<N> {
     }
 }
 
-/// P1 writes PTK activity; P2 writes GTK activity. Initialization and normal
-/// retirement run on P2 outside all endpoint loans. Abandonment does not
-/// mutate these records: quarantine already prevents every subsequent use.
+/// PTK creation stays on P1; GTK creation stays on P2. Revocation owns the
+/// same affine key/permission before publishing its command, so two writers
+/// cannot overlap on one record. Returned GTK permissions follow P2's completed
+/// publication. Initialization and retirement run outside all endpoint loans.
+/// Abandonment does not mutate these records: quarantine prevents later use.
 #[derive(Debug)]
 pub(super) struct KeyActivity(AtomicWords<2>);
 

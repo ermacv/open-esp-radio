@@ -7,8 +7,13 @@ type Queue = AffineSpscQueue<u8, 3>;
 
 #[test]
 fn local_producer_copies_publish_whole_non_clone_values_in_fifo_order() {
+    local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with::<CachedSpscCursor>();
+    local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with::<CompactSpscCursor>();
+}
+
+fn local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with<C: SpscCursor>() {
     struct Payload(std::boxed::Box<u8>);
-    let mut queue = AffineSpscQueue::<Payload, 2>::new();
+    let mut queue = AffineSpscQueue::<Payload, 2, C>::new();
     let (mut producer, mut consumer) = queue.split();
     {
         let first = producer.borrow_local();
@@ -110,8 +115,13 @@ impl Drop for Owner {
 
 #[test]
 fn nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap() {
+    nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap_with::<CachedSpscCursor>();
+    nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap_with::<CompactSpscCursor>();
+}
+
+fn nonempty_resplit_preserves_owned_values_and_fifo_across_cursor_wrap_with<C: SpscCursor>() {
     let drops = Arc::new(AtomicUsize::new(0));
-    let mut queue = AffineSpscQueue::<Owner, 3>::new();
+    let mut queue = AffineSpscQueue::<Owner, 3, C>::new();
     for epoch in 0..12 {
         {
             let (sender, _receiver) = queue.split();
@@ -156,7 +166,12 @@ fn queue_drop_releases_each_leftover_owner_once() {
 
 #[test]
 fn endpoint_transfer_between_threads_preserves_fifo() {
-    let mut queue = Queue::new();
+    endpoint_transfer_between_threads_preserves_fifo_with::<CachedSpscCursor>();
+    endpoint_transfer_between_threads_preserves_fifo_with::<CompactSpscCursor>();
+}
+
+fn endpoint_transfer_between_threads_preserves_fifo_with<C: SpscCursor>() {
+    let mut queue = AffineSpscQueue::<u8, 3, C>::new();
     let (sender, receiver) = queue.split();
     std::thread::scope(|scope| {
         scope.spawn(move || {

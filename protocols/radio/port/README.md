@@ -76,9 +76,12 @@ and wakes P2; it does not call hardware or destroy the P2 owner.
 the body once and polls P1 beside P2 without requiring Send. Its pinned fields
 retain one body future; when the body returns, its storage holds the output
 while registration ends. Dropping even a never-polled runner ends P1 before
-the P2 cleanup guard. The current S31 conformance composition runs both sides
-in its P2 task. Execution adapters establish the synchronization and transfer
-bounds needed when the sides run in different contexts.
+the P2 cleanup guard. S31 conformance runs the portable body on P1 and retains
+the static slot and driver registration in its permanent P2 task. A typed
+request channel transfers only the frontend; the P2 future ends before its
+completion publishes Joined. Its frontend cannot reach the device. Exact
+radio-clock calls use a separate bounded P2 latch; concurrent calls refuse
+Unavailable without waiting for the other caller.
 
 `SlotRegistration::run` prioritizes quarantine before each device poll.
 Normal retirement consumes the registration's `SlotStopped` proof, finishes
@@ -128,8 +131,9 @@ cannot produce Stopped or Joined. Expiry returns Unconfirmed and leaves
 quarantine absorbing. The supervisor polls even when the body awaits an
 unrelated future; cancelling it only requests P2 cleanup. S31 uses its
 existing `SHUTDOWN_BOUND`. Its submission samples monotonic time before the
-command queue; P2 projects that admission through its sampled `ClockRelation`
-when a radio coordinate is needed, preserving the original age on retry.
+command queue and preserves it through retry. S31 has no radio-coordinate
+admission consumer. A backend that needs one projects the monotonic admission
+through its `ClockRelation`.
 
 `PortEnd::Uninstalled` carries Joined and the body output. `FailStopped`
 carries the actual timely P2 outcome and output; `Abandoned` carries the

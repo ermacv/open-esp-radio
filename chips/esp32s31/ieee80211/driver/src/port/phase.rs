@@ -5,21 +5,23 @@ use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 pub struct Esp32s31Setup<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>,
-    pub(super) held: &'a Held<'static, Id, D, B>,
+    pub(super) held: &'a FrontHeld<'id, Id, D, B>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacSetup
     for Esp32s31Setup<'_, '_, Id, D, B>
 {
     type Caps = Esp32s31Caps<B>;
     fn set_channel(&mut self, channel: SupportedChannel<Self::Caps>) {
+        self.held.publishing.set(true);
         self.held.channel.set(channel.channel());
+        self.held.publishing.set(false);
         self.held.storage.driver.wake();
     }
 }
 
 pub struct Esp32s31Phase<'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize> {
     pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>,
-    pub(super) held: &'p Held<'static, Id, D, B>,
+    pub(super) held: &'p FrontHeld<'id, Id, D, B>,
     pub(super) addresses: [IndividualAddress; 2],
 }
 #[cfg(oer_debug_control)]
@@ -52,7 +54,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> radio::PortPhase
     {
         poll_fn(|cx| {
             self.held.storage.body.register(cx.waker());
-            if let Some(event) = self.held.events.pop() {
+            if let Some(event) = self.held.events.try_receive().ok() {
                 return Poll::Ready(Ok(Ok(event.lend(&self.loan))));
             }
             if let Some(cause) = self.held.storage.poisoned.get() {
@@ -82,7 +84,12 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> LowerMac
         self.held.channel.get()
     }
     fn recycle(&mut self, buffer: ReceiveBuffer<'id, Id, D::Receive>) {
-        if let Err(buffer) = self.held.recycled.push(buffer.into_owned()) {
+        if let Err(buffer) = self
+            .held
+            .recycled
+            .try_send(buffer.into_owned())
+            .map_err(|error| error.0)
+        {
             core::mem::forget(buffer);
             self.held.storage.poison(Fault::Capacity);
         }
@@ -93,11 +100,7 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> LowerMac
             .command(driver::Command::CloseGate(gate.into_owned(&self.loan)));
     }
     fn open_gate(&mut self, gate: GateClosed<'id, Part<Id, 1>>) -> GateOpen<'id, Part<Id, 1>> {
-        let gate = self
-            .held
-            .gate
-            .borrow_mut()
-            .open(gate.into_owned(&self.loan));
+        let gate = self.held.gate.open(gate.into_owned(&self.loan));
         self.held.command(driver::Command::OpenGate);
         gate.lend(&self.loan)
     }
@@ -121,19 +124,9 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> LowerMac
 
 pub struct Esp32s31Interface<'p, 'v, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, R> {
     loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B>>,
-    held: &'v Held<'static, Id, D, B>,
+    held: &'v FrontHeld<'id, Id, D, B>,
     address: IndividualAddress,
     proof: PhantomData<fn(&'p ()) -> (&'p (), R)>,
-}
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Held<'id, Id, D, B> {
-    pub(super) fn serial(&self) -> u64 {
-        let serial = self.storage.identity.get();
-        match serial.checked_add(1) {
-            Some(next) => self.storage.identity.set(next),
-            None => self.storage.poison(Fault::Capacity),
-        }
-        serial
-    }
 }
 
 impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R>
@@ -154,13 +147,10 @@ where
     ) -> Result<(), radio::Poisoned<Fault>> {
         let mut attempt = attempt.into_parts(&self.loan);
         // Admission happens on this call, before the P2 queue is serviced.
-        attempt
-            .operation
-            .execute()
-            .mpdu
-            .buffer
-            .admission
-            .submit(self.held.storage.device.borrow().timer().now());
+        let buffer = &mut attempt.operation.execute().mpdu.buffer;
+        if buffer.admission.is_none() {
+            buffer.admission = Some(self.held.timer.now());
+        }
         self.held.command(driver::Command::Submit(driver::Pending {
             operation: attempt.operation,
             plan: attempt.execution.plan,
@@ -179,8 +169,10 @@ where
     fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps> {
         let mut edca = self.held.edca.get();
         edca[if R::ROLE == VifRole::Station { 0 } else { 1 }] = parameters.get();
+        self.held.publishing.set(true);
         self.held.edca.set(edca);
         self.held.dirty_edca.set(true);
+        self.held.publishing.set(false);
         self.held.storage.driver.wake();
         parameters
     }
@@ -215,7 +207,7 @@ where
         key: Ccmp128Key,
     ) {
         self.held.command(driver::Command::Group {
-            at: self.held.storage.device.borrow().timer().now(),
+            at: self.held.timer.now(),
             command: R::group(association, slot, permission, key_id, key).into_owned(&self.loan),
         });
     }
@@ -239,7 +231,7 @@ where
         let identity = R::group_identity(key);
         identity.activity.set(0);
         self.held.command(driver::Command::Group {
-            at: self.held.storage.device.borrow().timer().now(),
+            at: self.held.timer.now(),
             command: keys::GroupCommand::Remove {
                 identity,
                 removal: R::remove_group(permission).into_owned(&self.loan),
@@ -274,17 +266,22 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, R: InterfaceRole
     Esp32s31Interface<'_, '_, 'id, Id, D, B, R>
 {
     fn set_block_ack(&self, index: u8, agreement: Option<SupportedBlockAck<Esp32s31Caps<B>>>) {
-        self.held.block_acks.borrow_mut()[usize::from(index)] = agreement.map(|agreement| {
-            let (peer, tid, start_sequence, window) = agreement.get();
-            core_mac::RxBlockAckValues {
-                role: R::ROLE,
-                peer: peer.get(),
-                tid: tid.get(),
-                start_sequence,
-                window: window as u8,
-            }
-        });
+        self.held.publishing.set(true);
+        self.held.block_acks.set(
+            usize::from(index),
+            agreement.map(|agreement| {
+                let (peer, tid, start_sequence, window) = agreement.get();
+                core_mac::RxBlockAckValues {
+                    role: R::ROLE,
+                    peer: peer.get(),
+                    tid: tid.get(),
+                    start_sequence,
+                    window: window as u8,
+                }
+            }),
+        );
         self.held.dirty_ba.set(true);
+        self.held.publishing.set(false);
         self.held.storage.driver.wake();
     }
 }
@@ -299,7 +296,7 @@ impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> Stat
         key: Ccmp128Key,
     ) {
         self.held.command(driver::Command::Group {
-            at: self.held.storage.device.borrow().timer().now(),
+            at: self.held.timer.now(),
             command: keys::GroupCommand::Replace {
                 permission: self.loan.reclaim_slot(permission),
                 key: installed.into_owned(),
@@ -314,7 +311,7 @@ impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize> Stat
         installed: GroupKey<'id, Id, Station>,
     ) {
         self.held.command(driver::Command::Group {
-            at: self.held.storage.device.borrow().timer().now(),
+            at: self.held.timer.now(),
             command: keys::GroupCommand::Select {
                 permission: self.loan.reclaim_slot(permission),
                 key: installed.into_owned(),
