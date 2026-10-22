@@ -228,7 +228,7 @@ impl Radio {
                     return Err(RejectReason::Internal);
                 }
                 wake_concurrent_rf::<_, RomShortDelay>(
-                    &oer_espressif_executor::Cooperative::new(EmbassyClock),
+                    &crate::PHY_CLOCK,
                     &mut self.domain,
                     &self.clocks,
                 )
@@ -369,7 +369,7 @@ impl Radio {
         // Consume the native result before awaiting diagnostics: its failure
         // variant retains the complete registration transition.
         let outcome = register_concurrent_phy::<_, (), RomShortDelay, _>(
-            &oer_espressif_executor::Cooperative::new(EmbassyClock),
+            &crate::PHY_CLOCK,
             &mut self.domain,
             &mut (),
             &self.clocks,
@@ -504,7 +504,7 @@ impl Radio {
             hold.samples.len() as u8 + 1,
             &mut hold.engine,
             Some(&mut trace),
-            &oer_espressif_executor::Cooperative::new(EmbassyClock),
+            &crate::PHY_CLOCK,
             &mut uart,
         );
         observer.metrics = Some(&metrics);
@@ -513,15 +513,10 @@ impl Radio {
             let mut future = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, _>(
                 &mut self.domain,
                 &mut port,
-                &oer_espressif_executor::Cooperative::new(EmbassyClock),
+                &crate::PHY_CLOCK,
                 &mut observer,
             ));
-            crate::hold::metrics::observe(
-                future.as_mut(),
-                &oer_espressif_executor::Cooperative::new(EmbassyClock),
-                &metrics,
-            )
-            .await
+            crate::hold::metrics::observe(future.as_mut(), &crate::PHY_CLOCK, &metrics).await
         };
         let (committed, failed) = match tracked {
             Ok(ConcurrentTrackingTick::NotDue) => return,
@@ -643,17 +638,13 @@ impl Radio {
         let PhyClientAccess::Available(available) = ready.client::<WifiPhyMembership>() else {
             return Err(RejectReason::Internal);
         };
-        let joined = join_wifi(
-            available,
-            &wifi,
-            &oer_espressif_executor::Cooperative::new(EmbassyClock),
-        )
-        .map_err(|_| RejectReason::Internal)?;
+        let joined =
+            join_wifi(available, &wifi, &crate::PHY_CLOCK).map_err(|_| RejectReason::Internal)?;
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         self.member = Some(joined.membership);
         if due {
             maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                &oer_espressif_executor::Cooperative::new(EmbassyClock),
+                &crate::PHY_CLOCK,
                 &mut self.domain,
                 &mut (),
                 NoopPhyTargetObserver,
@@ -674,7 +665,7 @@ impl Radio {
             let mut platform = ();
             let (mut port, phy) = wifi.channel_hal_with_attachment(&mut platform, &mut self.domain);
             select_concurrent_wifi_channel::<RomShortDelay, _, _>(
-                &oer_espressif_executor::Cooperative::new(EmbassyClock),
+                &crate::PHY_CLOCK,
                 phy,
                 u16::from(channel),
                 0,
@@ -709,7 +700,7 @@ impl Radio {
         initialize_wifi_mac(
             &mut sources,
             &mut wifi.cold_mac_hal(&mut self.domain),
-            &oer_espressif_executor::Cooperative::new(EmbassyClock),
+            &crate::PHY_CLOCK,
             MacColdStartConfig {
                 handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
                 station_address: self.station,
@@ -764,13 +755,9 @@ impl Radio {
             crate::sar2_checkpoint::Point::BeforeRfClose,
         )
         .await?;
-        close_concurrent_rf::<_, (), RomShortDelay>(
-            &oer_espressif_executor::Cooperative::new(EmbassyClock),
-            &mut self.domain,
-            &mut (),
-        )
-        .await
-        .map_err(|_| RejectReason::Internal)?;
+        close_concurrent_rf::<_, (), RomShortDelay>(&crate::PHY_CLOCK, &mut self.domain, &mut ())
+            .await
+            .map_err(|_| RejectReason::Internal)?;
         Ok(())
     }
 
