@@ -250,8 +250,8 @@ fn rx_gain_phase<
     RxGain {
         inner: async move {
             use crate::executor::step::{Job, drive};
-            let mut job =
-                Job::rx_gain(child, execution, clock.now()).map_err(super::step::port_error)?;
+            let mut job = Job::rx_gain(child, execution, clock.now(), timing.is_some())
+                .map_err(super::step::port_error)?;
             drive::<D, _, _>(&mut job, registers, clock, timing, None, None)
                 .await
                 .map_err(super::step::port_error)

@@ -25,9 +25,10 @@ fn ready_capture_and_disable_tail_remain_in_one_poll() {
     let clock = VirtualClock::<1>::new();
     let mut io = Io::default();
     let atoms = io.atoms.clone();
-    let mut binding = Some(binding(0));
+    let mut binding = Some(rx_binding(binding(0)));
     let mut completion = None;
-    let mut job = Job::dc_iq(&mut binding, &mut completion, clock.now()).expect("clock fits");
+    let mut job =
+        Job::rx_gain_atom(&mut binding, &mut completion, clock.now()).expect("clock fits");
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
@@ -51,10 +52,18 @@ fn ready_capture_and_disable_tail_remain_in_one_poll() {
     );
     assert!(matches!(
         completion,
-        Some(PhyDcIqCompletion::CaptureFinished {
-            accumulators: Some(_),
-            ..
-        })
+        Some(crate::rx::gain::PhyRxGainInitCompletion::Dc(
+            crate::rx::gain_calibration::PhyRxGainDcCompletion::Calibration(
+                crate::rx::gain_calibration::PhyRxDcCalibrationCompletion::Minimum(
+                    crate::rx::dc_offset::PhyRxDcMinimumCompletion::DcIq(
+                        PhyDcIqCompletion::CaptureFinished {
+                            accumulators: Some(_),
+                            ..
+                        }
+                    )
+                )
+            )
+        ))
     ));
 }
 
@@ -66,9 +75,10 @@ fn false_ready_waits_without_reading_accumulators_or_disabling_measurement() {
         ..Io::default()
     };
     let atoms = io.atoms.clone();
-    let mut binding = Some(binding(0));
+    let mut binding = Some(rx_binding(binding(0)));
     let mut completion = None;
-    let mut job = Job::dc_iq(&mut binding, &mut completion, clock.now()).expect("clock fits");
+    let mut job =
+        Job::rx_gain_atom(&mut binding, &mut completion, clock.now()).expect("clock fits");
     let (waker, _) = context();
     let mut cx = Context::from_waker(&waker);
     {
@@ -82,15 +92,25 @@ fn false_ready_waits_without_reading_accumulators_or_disabling_measurement() {
         assert_eq!(future.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     }
     assert_eq!(io.dc_iq_events, ["ready"]);
+    let Some(crate::rx::gain::PhyRxGainInitCompletion::Dc(
+        crate::rx::gain_calibration::PhyRxGainDcCompletion::Calibration(
+            crate::rx::gain_calibration::PhyRxDcCalibrationCompletion::Minimum(
+                crate::rx::dc_offset::PhyRxDcMinimumCompletion::DcIq(completion),
+            ),
+        ),
+    )) = completion
+    else {
+        panic!("same estimator must complete");
+    };
     assert!(matches!(
         completion,
-        Some(PhyDcIqCompletion::ReadinessObserved {
+        PhyDcIqCompletion::ReadinessObserved {
             snapshot: crate::calibration::estimator::PhyDcIqReadinessSnapshot {
                 ready: false,
                 activity: true
             },
             ..
-        })
+        }
     ));
 }
 
@@ -108,4 +128,16 @@ fn observation_limit_cleans_up_without_sampling_ready_or_accumulators() {
             accumulators: None
         }
     );
+}
+
+fn rx_binding(binding: PhyDcIqReadinessBinding) -> crate::rx::gain::PhyRxGainInitExternalBinding {
+    crate::rx::gain::PhyRxGainInitExternalBinding::Dc(
+        crate::rx::gain_calibration::PhyRxGainDcExternalBinding::Calibration(
+            crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding::Minimum(
+                crate::rx::dc_offset::PhyRxDcMinimumExternalBinding::DcIq(
+                    crate::calibration::estimator::PhyDcIqExternalBinding::Readiness(binding),
+                ),
+            ),
+        ),
+    )
 }

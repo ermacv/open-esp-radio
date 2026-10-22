@@ -2,6 +2,7 @@ use super::*;
 mod dc_iq;
 mod dcode;
 mod power;
+mod rx_gain;
 mod wifi_i2c;
 pub(crate) struct TestDelay;
 impl crate::executor::wait::PhyShortDelay for TestDelay {
@@ -73,6 +74,26 @@ impl Io {
             PhyRxGainInitAction as Action, PhyRxGainInitCompletion as Done,
             PhyRxGainInitExternalBinding as Binding, PhyRxGainPublishAction as PubAction,
             PhyRxGainPublishCompletion as PubDone, PhyRxGainPublishExternalBinding as Publish,
+        };
+        let binding = match binding {
+            Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::Calibration(
+                crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding::Minimum(
+                    crate::rx::dc_offset::PhyRxDcMinimumExternalBinding::DcIq(
+                        crate::calibration::estimator::PhyDcIqExternalBinding::Readiness(binding),
+                    ),
+                ),
+            )) => {
+                return self.dc_iq::<D>(binding).map(|completion| {
+                    Done::Dc(
+                        crate::rx::gain_calibration::PhyRxGainDcCompletion::Calibration(
+                            crate::rx::gain_calibration::PhyRxDcCalibrationCompletion::Minimum(
+                                crate::rx::dc_offset::PhyRxDcMinimumCompletion::DcIq(completion),
+                            ),
+                        ),
+                    )
+                });
+            }
+            binding => binding,
         };
         self.atom();
         Ok(match binding {

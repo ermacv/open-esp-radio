@@ -62,6 +62,7 @@ pub(super) struct Run<'a> {
     pub(super) transition: &'a mut PhyRxGainInitTransition,
     pub(super) execution: &'a mut RxGainExecution,
     pub(super) phase: Phase,
+    pub(super) measured: bool,
 }
 
 impl Run<'_> {
@@ -75,15 +76,68 @@ impl Run<'_> {
         if self.transition.phase() != Some(self.phase) {
             return Ok(Step::Complete);
         }
-        let action = self.transition.action();
-        let binding = crate::rx::gain::PhyRxGainInitExternalBinding::lower(action)
-            .map_err(|_| Failure::Binding)?;
+        let started = self.measured.then(|| clock.now());
+        if matches!(
+            self.transition.action(),
+            PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(
+                PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(
+                    PhyDcIqAction::Configure(_)
+                ))
+            ))
+        ) && self.execution.minimum_operations
+            > 100_000 - u32::from(crate::HARDWARE_EDGE_LIMIT) - 8
+        {
+            #[cfg(target_arch = "riscv32")]
+            return Err(Failure::Target(
+                crate::target_executor::PhyTargetPortError::RfOperationLimit,
+            ));
+            #[cfg(not(target_arch = "riscv32"))]
+            return Err(Failure::Binding);
+        }
+        self.observe(self.transition.action());
+        let binding =
+            crate::rx::gain::PhyRxGainInitExternalBinding::lower(self.transition.action())
+                .map_err(|_| Failure::Binding)?;
+        let lowered = self.measured.then(|| clock.now());
         let completion = io.rx_gain::<D, _>(clock, binding)?;
-        self.observe(action, completion);
+        let completed = self.measured.then(|| clock.now());
+        if let PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
+            PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(completion)),
+        )) = completion
+        {
+            match completion {
+                PhyDcIqCompletion::CaptureFinished { accumulators, .. } => {
+                    self.execution.minimum_operations += 3 + u32::from(accumulators.is_some()) * 2;
+                    self.execution.settle_1us += 1;
+                }
+                PhyDcIqCompletion::ReadinessObserved { .. }
+                | PhyDcIqCompletion::CapturePending { .. } => {
+                    self.execution.minimum_operations += 1
+                }
+                _ => {}
+            }
+        }
         let waiting = waiting(completion);
         self.transition
             .advance(completion)
             .map_err(|_| Failure::Binding)?;
+        if let (Some(started), Some(lowered), Some(completed)) = (started, lowered, completed) {
+            for (index, (from, to)) in [
+                (started, lowered),
+                (lowered, completed),
+                (completed, clock.now()),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let elapsed = to
+                    .checked_duration_since(from)
+                    .and_then(|d| u32::try_from(d.as_micros()).ok())
+                    .unwrap_or(u32::MAX);
+                self.execution.maximum_parts_micros[index] =
+                    self.execution.maximum_parts_micros[index].max(elapsed);
+            }
+        }
         if waiting {
             Ok(Step::WaitAt(
                 now.checked_add(super::RETRY)
@@ -94,7 +148,7 @@ impl Run<'_> {
         }
     }
 
-    fn observe(&mut self, action: PhyRxGainInitAction, completion: PhyRxGainInitCompletion) {
+    fn observe(&mut self, action: PhyRxGainInitAction) {
         if let PhyRxGainInitAction::Dc(PhyRxGainDcAction::Calibration(action)) = action {
             match action {
                 PhyRxDcCalibrationAction::PrepareControlRestore => {
@@ -104,42 +158,12 @@ impl Run<'_> {
                     self.execution.settle_10us += 1
                 }
                 PhyRxDcCalibrationAction::Minimum(PhyRxDcMinimumAction::DcIq(action)) => {
-                    let (observations, tail) = match completion {
-                        PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
-                            PhyRxDcCalibrationCompletion::Minimum(PhyRxDcMinimumCompletion::DcIq(
-                                PhyDcIqCompletion::CaptureFinished { accumulators, .. },
-                            )),
-                        )) => (u32::from(accumulators.is_some()), 3),
-                        _ => (1, 0),
-                    };
-                    self.execution.minimum_operations +=
-                        if matches!(action, PhyDcIqAction::Configure(_)) {
-                            4
-                        } else {
-                            0
-                        } + observations
-                            + tail;
-                    if matches!(action, PhyDcIqAction::Configure(_)) {
-                        self.execution.settle_1us += 1;
-                    }
                     if let PhyDcIqAction::Configure(request) = action {
+                        self.execution.minimum_operations += 4;
+                        self.execution.settle_1us += 1;
                         if request.iteration == 0 {
                             self.execution.minimum_searches += 1;
                         }
-                    }
-                    if matches!(action, PhyDcIqAction::DelayMicros { micros: 1, .. })
-                        || matches!(
-                            completion,
-                            PhyRxGainInitCompletion::Dc(PhyRxGainDcCompletion::Calibration(
-                                PhyRxDcCalibrationCompletion::Minimum(
-                                    PhyRxDcMinimumCompletion::DcIq(
-                                        PhyDcIqCompletion::CaptureFinished { .. }
-                                    )
-                                )
-                            ))
-                        )
-                    {
-                        self.execution.settle_1us += 1;
                     }
                 }
                 _ => {}

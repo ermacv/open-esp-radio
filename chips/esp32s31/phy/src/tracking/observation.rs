@@ -506,6 +506,8 @@ pub struct Timing {
 /// RX-gain root actions.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxGainExecution {
+    /// Per-atom maximum: lowering, hardware transaction, model commit (microseconds).
+    pub maximum_parts_micros: [u32; 3],
     /// Complete RX DC product quality; absent when that child did not complete.
     pub quality: Option<crate::rx::gain_calibration::PhyRxGainDcQuality>,
     pub minimum_searches: u32,

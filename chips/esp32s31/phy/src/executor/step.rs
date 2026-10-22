@@ -78,10 +78,6 @@ enum Work<'a> {
         completion: &'a mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
     },
     RxGain(rx_gain::Run<'a>),
-    DcIq {
-        binding: &'a mut Option<crate::calibration::estimator::PhyDcIqReadinessBinding>,
-        completion: &'a mut Option<crate::calibration::estimator::PhyDcIqCompletion>,
-    },
     Dcode {
         transition: &'a mut crate::analog::dcode::PhyDcodeTransition,
         lock: &'a mut Option<bool>,
@@ -182,27 +178,11 @@ impl<'a> Job<'a> {
         job.deadline = Instant::from_micros(u64::MAX);
         Ok(job)
     }
-    pub(crate) fn dc_iq(
-        binding: &'a mut Option<crate::calibration::estimator::PhyDcIqReadinessBinding>,
-        completion: &'a mut Option<crate::calibration::estimator::PhyDcIqCompletion>,
-        now: Instant,
-    ) -> Result<Self, Failure> {
-        let mut job = Self::new(
-            Work::DcIq {
-                binding,
-                completion,
-            },
-            now,
-            false,
-        )?;
-        // E4 keeps its source observation limit, not a new elapsed deadline.
-        job.deadline = Instant::from_micros(u64::MAX);
-        Ok(job)
-    }
     pub(crate) fn rx_gain(
         transition: &'a mut crate::rx::gain::PhyRxGainInitTransition,
         execution: &'a mut crate::tracking::observation::RxGainExecution,
         now: Instant,
+        measured: bool,
     ) -> Result<Self, Failure> {
         let phase = transition.phase().ok_or(Failure::Binding)?;
         let mut job = Self::new(
@@ -210,6 +190,7 @@ impl<'a> Job<'a> {
                 transition,
                 execution,
                 phase,
+                measured,
             }),
             now,
             false,
@@ -327,19 +308,11 @@ impl<'a> Job<'a> {
                 binding,
                 completion,
             } => {
-                let Some(binding) = binding.take() else {
+                if binding.is_none() {
                     return Ok(Step::Complete);
-                };
+                }
                 self.ready_started = Some(clock.now());
-                let result = io.channel::<D, _>(clock, binding)?;
-                let waiting = matches!(
-                    result,
-                    crate::channel::PhyChipChannelCompletion::FrequencyReadyObserved {
-                        ready: false
-                    }
-                );
-                **completion = Some(result);
-                return if waiting {
+                return if io.channel::<D, _>(clock, binding, completion)? {
                     Ok(Step::WaitAt(
                         now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
                     ))
@@ -368,34 +341,6 @@ impl<'a> Job<'a> {
             Work::RxGain(run) => {
                 self.ready_started = Some(clock.now());
                 return run.advance::<D, _>(&mut io, clock, now);
-            }
-            Work::DcIq {
-                binding,
-                completion,
-            } => {
-                let Some(binding) = binding.take() else {
-                    return Ok(Step::Complete);
-                };
-                self.ready_started = Some(clock.now());
-                let result = io.dc_iq::<D>(binding)?;
-                let waiting = matches!(
-                    result,
-                    crate::calibration::estimator::PhyDcIqCompletion::ReadinessObserved {
-                        snapshot: crate::calibration::estimator::PhyDcIqReadinessSnapshot {
-                            ready: false,
-                            ..
-                        },
-                        ..
-                    }
-                );
-                **completion = Some(result);
-                return if waiting {
-                    Ok(Step::WaitAt(
-                        now.checked_add(RETRY).ok_or(Failure::DeadlineOverflow)?,
-                    ))
-                } else {
-                    Ok(Step::Runnable)
-                };
             }
             Work::Dcode {
                 transition,
