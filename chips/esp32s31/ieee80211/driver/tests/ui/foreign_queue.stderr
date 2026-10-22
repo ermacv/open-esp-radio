@@ -1,13 +1,13 @@
 error: lifetime may not live long enough
   --> tests/ui/foreign_queue.rs:17:19
    |
- 8 | pub fn submit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-   |               -----  -------- lifetime `'foreign` defined here
-   |               |
-   |               lifetime `'core` defined here
+ 8 | ...ubmit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::Rad...
+   |          -----  -------- lifetime `'foreign` defined here
+   |          |
+   |          lifetime `'core` defined here
 ...
-17 |     let _result = core.submit_checked(hardware, foreign, admission, values); // ui-error: lifetime may not live long enough
-   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'core` must outlive `'foreign`
+17 | ..._result = core.submit_checked(hardware, foreign, admission, values); // ui-error: lifetime may not live long enough
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'core` must outlive `'foreign`
    |
    = help: consider adding the following bound: `'core: 'foreign`
    = note: requirement occurs because of the type `FreeQueue<'_, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>`, which makes the generic argument `'_` invariant
@@ -17,16 +17,16 @@ error: lifetime may not live long enough
 error: lifetime may not live long enough
   --> tests/ui/foreign_queue.rs:17:19
    |
- 8 | pub fn submit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-   |               -----  -------- lifetime `'foreign` defined here
-   |               |
-   |               lifetime `'core` defined here
+ 8 | ...ubmit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::Rad...
+   |          -----  -------- lifetime `'foreign` defined here
+   |          |
+   |          lifetime `'core` defined here
 ...
-17 |     let _result = core.submit_checked(hardware, foreign, admission, values); // ui-error: lifetime may not live long enough
-   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'foreign` must outlive `'core`
+17 | ..._result = core.submit_checked(hardware, foreign, admission, values); // ui-error: lifetime may not live long enough
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'foreign` must outlive `'core`
    |
    = help: consider adding the following bound: `'foreign: 'core`
-   = note: requirement occurs because of a mutable reference to `EnabledView<'_, LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`
+   = note: requirement occurs because of a mutable reference to `EnabledView<'_, LowerMacCore<'_, '_, EspressifBackendTxProfile, P, E, T, C, 512, oer_radio_port::pool::path::Root<oer_radio_port::identity::LocalId<'_>>>>`
    = note: mutable references are invariant over their type parameter
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 

@@ -137,7 +137,8 @@ jobs:
                   | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
               | join(" ")' <<<"$meta"
           }
-          cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
+          # W3 keeps its large futures in typed static PSRAM, as HIL images do.
+          RUSTC_BOOTSTRAP=oer_firmware_apps_w3 cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo clippy --locked --target riscv32imac-unknown-none-elf $(firmware true)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.
@@ -160,7 +161,7 @@ jobs:
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
-          cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
+          RUSTC_BOOTSTRAP=oer_firmware_apps_w3 cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a

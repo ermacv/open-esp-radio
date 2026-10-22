@@ -389,10 +389,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 } => {
                     let response = match pending.operation.payload().layout.kind() {
                         MpduKind::Group | MpduKind::IndividualNoAck => SingleResponse::Unsolicited,
-                        MpduKind::Individual => SingleResponse::Ack(Ack { snr_db: ack_snr_db }),
+                        MpduKind::Individual => SingleResponse::Ack(Ack::from_sample(ack_snr_db)?),
                         MpduKind::BlockAckRequest => SingleResponse::BlockAck {
                             report: block_ack.ok_or(Fault::Capacity)?,
-                            ack: Ack { snr_db: ack_snr_db },
+                            ack: Ack::from_sample(ack_snr_db)?,
                         },
                     };
                     Some(TxOutcome::Ended(SingleEnd::Delivered {
@@ -444,7 +444,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
             if held.events.push(owned::OwnedEvent::Tbtt(tbtt)).is_err() {
                 held.loss.set(true);
             }
-            held.storage.shared.body.wake();
+            held.storage.shared.wake_body();
         }
         if !sink.removed.is_empty() {
             return Err(Fault::Capacity);
@@ -499,7 +499,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 core::mem::forget(event);
                 return Err(Fault::Capacity);
             }
-            held.storage.shared.body.wake();
+            held.storage.shared.wake_body();
         } else {
             device.recycle(unit);
         }
@@ -546,7 +546,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     )?;
                     held.enabled.set(true);
                     self.transition = None;
-                    held.storage.shared.body.wake();
+                    held.storage.shared.wake_body();
                 }
             }
         }
@@ -806,7 +806,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     Poll::Ready(Ok(())) => {
                         held.enabled.set(false);
                         self.transition = None;
-                        held.storage.shared.body.wake();
+                        held.storage.shared.wake_body();
                     }
                     Poll::Ready(Err(cause)) => return Err(cause),
                     Poll::Pending => {}

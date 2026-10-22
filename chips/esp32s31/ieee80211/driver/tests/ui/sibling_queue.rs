@@ -6,8 +6,8 @@ use oer_esp32s31_ieee80211_driver::{
 use oer_time::Timer;
 
 use oer_radio_port::{Child, Root};
-pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-    core: &mut EnabledView<'_, LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512, Child<Root<oer_radio_port::LocalId<'core>>, 0>>>,
+pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, H: LowerMacHardware>(
+    core: &mut EnabledView<'_, LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, C, 512, Child<Root<oer_radio_port::LocalId<'core>>, 0>>>,
     hardware: &mut H,
     own: FreeQueue<'core, Child<Root<oer_radio_port::LocalId<'core>>, 0>>,
     sibling: FreeQueue<'core, Child<Root<oer_radio_port::LocalId<'core>>, 1>>,

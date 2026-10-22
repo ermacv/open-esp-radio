@@ -5,8 +5,8 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_time::Timer;
 
-pub fn remove<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware, S: LowerMacSink<'core, 'slot, 512>>(
-    core: &mut LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>,
+pub fn remove<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, H: LowerMacHardware, S: LowerMacSink<'core, 'slot, 512>>(
+    core: &mut LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, C, 512>,
     hardware: &mut H,
     key: KeyHandle<'core>,
     ticket: TxTicket<'core>,

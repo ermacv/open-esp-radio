@@ -372,7 +372,7 @@ fn a_bound_within_its_budget_passes_with_its_headroom_reported() {
     assert_eq!(audit.check().unwrap(), Vec::<String>::new());
     let report = audit.render();
     let usage = format!(
-        "analysis: {} of 1000000000 work units, {} of 536870912 bytes of working memory\n",
+        "analysis: {} of 1000000000 work units, {} of 1073741824 bytes of working memory\n",
         image.usage.work_units, image.usage.memory_bytes
     );
     assert!(image.usage.work_units > 0 && image.usage.memory_bytes > 0);

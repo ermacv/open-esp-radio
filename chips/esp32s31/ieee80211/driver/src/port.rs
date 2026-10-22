@@ -80,6 +80,7 @@ type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
     <D as Device<B>>::Power,
     <D as Device<B>>::Entropy,
     <D as Device<B>>::Timer,
+    <D as Device<B>>::Coex,
     B,
     CorePath<Id>,
     TX_TICKETS,
@@ -96,6 +97,8 @@ pub trait ReceiveUnit: 'static {
 /// The device owns the cooperative registers, RX ring and PHY membership.
 pub trait Device<const B: usize>: Sized + 'static {
     type Profile: backend::BackendTxProfile;
+    /// Image-selected concrete coexistence policy, statically dispatched on P2.
+    type Coex: RadioCoexPriorities + 'static;
     type Power: WifiTxPowerProfile;
     type Entropy: WifiTxEntropy;
     type Timer: Timer + Clone + 'static;
@@ -205,6 +208,12 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     }
 }
 impl<const B: usize> PortSharedStorage<B> {
+    // Keep the waker's typed scope at the indirect call, independently of
+    // the large terminal dispatchers that notify the P1 body.
+    #[inline(never)]
+    fn wake_body(&self) {
+        self.body.wake();
+    }
     /// Vacant cross-context backing, placed separately from the P2-only device.
     pub const fn new() -> Self {
         Self {
@@ -219,7 +228,7 @@ impl<const B: usize> PortSharedStorage<B> {
     fn poison(&self, cause: Fault) {
         let _ = self.poisoned.set(cause);
         self.driver.wake();
-        self.body.wake();
+        self.wake_body();
     }
     fn check(&self) -> Result<(), radio::Poisoned<Fault>> {
         self.poisoned
@@ -241,7 +250,7 @@ pub struct PortParts<D: Device<B>, const B: usize> {
     pub buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
     pub config: LowerMacConfig,
     pub access_point_address: IndividualAddress,
-    pub coex: &'static dyn RadioCoexPriorities,
+    pub coex: &'static D::Coex,
 }
 
 pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
@@ -251,13 +260,13 @@ pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
     addresses: [IndividualAddress; 2],
     timer: D::Timer,
     config: LowerMacConfig,
-    coex: &'static dyn RadioCoexPriorities,
+    coex: &'static D::Coex,
     identity: PhantomData<fn(Id) -> Id>,
 }
 struct Initial<D: Device<B>, const B: usize> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
     config: LowerMacConfig,
-    coex: &'static dyn RadioCoexPriorities,
+    coex: &'static D::Coex,
 }
 enum BackendState<D: Device<B>, const B: usize> {
     Initial(Option<Initial<D, B>>),
@@ -332,7 +341,7 @@ pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize> {
         Option<OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>>,
     config: LowerMacConfig,
     addresses: [IndividualAddress; 2],
-    coex: &'static dyn RadioCoexPriorities,
+    coex: &'static D::Coex,
     identity: PhantomData<fn(Id) -> Id>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {
@@ -427,7 +436,21 @@ impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ack {
-    pub snr_db: Option<i8>,
+    pub snr_db: i8,
+}
+
+impl Ack {
+    fn from_sample(sample: Option<i8>) -> Result<Self, Fault> {
+        sample.map(|snr_db| Self { snr_db }).ok_or(Fault::Capacity)
+    }
+}
+
+// Successful ordinary completions always supply the signed vendor sample;
+// group/no-ACK transmissions carry SingleResponse::Unsolicited instead.
+impl AckSnr for Ack {
+    fn snr_db(&self) -> i8 {
+        self.snr_db
+    }
 }
 
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacBackend<Id>
@@ -438,4 +461,17 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> LowerMacBackend<Id>
         core::num::NonZeroU8::new(8).expect("eight admission tickets");
     const PUBLICATION_BOUND: Duration = PUBLICATION_BOUND;
     const GROUP_COMMAND_BOUND: Duration = COMMAND_BOUND;
+}
+
+#[cfg(test)]
+mod ack_tests {
+    use super::*;
+    #[test]
+    fn rate_control_receives_the_real_ack_sample_and_missing_evidence_is_refused() {
+        for sample in [i8::MIN, -7, 0, i8::MAX] {
+            let ack = Ack::from_sample(Some(sample)).expect("measured ACK");
+            assert_eq!(ack.snr_db(), sample);
+        }
+        assert_eq!(Ack::from_sample(None), Err(Fault::Capacity));
+    }
 }

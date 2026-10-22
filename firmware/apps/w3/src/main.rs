@@ -1,0 +1,7 @@
+#![cfg_attr(target_arch = "riscv32", no_std, no_main)]
+#![forbid(unsafe_code)]
+#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
+#[cfg(target_arch = "riscv32")]
+include!("entry.rs");
+#[cfg(not(target_arch = "riscv32"))]
+fn main() {}

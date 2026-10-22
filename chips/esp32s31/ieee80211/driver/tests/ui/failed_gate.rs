@@ -5,8 +5,8 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_time::Timer;
 
-pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
-    failed: &mut FailedGateView<'_, LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, 512>>,
+pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, H: LowerMacHardware>(
+    failed: &mut FailedGateView<'_, LowerMacCore<'core, 'slot, oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile, P, E, T, C, 512>>,
     hardware: &mut H,
     queue: FreeQueue<'core>,
     admission: TxAdmission<'core>,

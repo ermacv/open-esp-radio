@@ -1,4 +1,47 @@
 use super::*;
+
+#[test]
+fn image_report_round_trips_through_the_host_contract_on_success_and_failure() {
+    use oer_firmware_apps_w3::report::{Lease as ImageLease, Report as ImageReport};
+    let mut image = ImageReport::new(6, [2, 0, 0, 0, 0, 8], [2, 0, 0, 0, 0, 1]);
+    image.authenticated = true;
+    image.associated = true;
+    image.lease = Some(ImageLease {
+        address: Ipv4Addr::new(192, 0, 2, 8),
+        router: Ipv4Addr::new(192, 0, 2, 1),
+        prefix: 24,
+    });
+    image.sent = 100;
+    image.received = 100;
+    image.peer_requests = 100;
+    image.peer_replies = 100;
+    image.irq_free = 4096;
+    image.deauth_sent = true;
+    let mut console = String::new();
+    image.print(&mut console).unwrap();
+    assert!(
+        check(&parse(&console).unwrap(), &evidence())
+            .unwrap()
+            .passed()
+    );
+
+    image.received = 99;
+    console.clear();
+    image.print(&mut console).unwrap();
+    let mut observations = evidence();
+    observations.echoes.retain(|echo| {
+        !(echo.source == image.lease.unwrap().router
+            && echo.destination == image.lease.unwrap().address
+            && echo.reply
+            && echo.identifier == 50
+            && echo.sequence == 100)
+    });
+    let report = parse(&console).unwrap();
+    assert_eq!(report.ping.received, 99);
+    assert!(!report.claims[2]);
+    assert!(!report.result);
+    assert!(!check(&report, &observations).unwrap().passed());
+}
 use oer_lab_router::w3::{Echo, Lease, Station};
 
 const CONSOLE: &str = "boot diagnostic\n\

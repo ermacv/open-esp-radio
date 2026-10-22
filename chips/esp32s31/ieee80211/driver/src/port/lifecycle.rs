@@ -267,7 +267,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31B
                         held.clock_replies.push(answer).is_ok(),
                         "one outstanding clock latch"
                     );
-                    storage.shared.body.wake();
+                    storage.shared.wake_body();
                 }
                 if retire.is_requested() {
                     match storage.device.borrow_mut().poll_stop(cx) {

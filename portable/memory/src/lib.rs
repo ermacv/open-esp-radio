@@ -273,3 +273,6 @@ pub unsafe trait StableDmaBacking {
     /// at the final descriptor-publication edge.
     fn prepare_for_dma_read(&mut self) {}
 }
+
+mod placed;
+pub use placed::{PlaceLoan, Placed, PollPlaced, init_array, poll_placed};

@@ -169,3 +169,16 @@ pub fn best_matching_ssid_and_security<'a>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "placement")]
+impl<const N: usize> ScanTable<N> {
+    /// Construct the BSS table directly in the caller's permanent storage.
+    pub fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(storage, Self {
+            records => |place| oer_memory::init_array(place, |_| None),
+            length: 0,
+            observed_frames: 0,
+            dropped_unique_bss: 0,
+        })
+    }
+}

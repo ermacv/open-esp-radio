@@ -476,6 +476,7 @@ type DeviceCore<'core> = LowerMacCore<
     Power,
     fn() -> u32,
     Timer,
+    RadioNine,
     512,
 >;
 
@@ -576,6 +577,7 @@ struct CoreParts<'core> {
         Power,
         fn() -> u32,
         Timer,
+        RadioNine,
         512,
     >,
     free: [Option<FreeQueue<'core>>; LOWER_MAC_TX_QUEUES],

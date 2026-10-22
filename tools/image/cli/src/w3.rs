@@ -7,6 +7,8 @@ use oer_lab_router::w3::{Evidence, Ping, echo_gate, usable_address};
 
 #[cfg(target_os = "linux")]
 pub mod ax211;
+#[cfg(target_os = "linux")]
+pub mod firmware;
 
 type Result<T> = std::result::Result<T, String>;
 type Fields<'a> = BTreeMap<&'a str, &'a str>;
@@ -336,3 +338,32 @@ fn read_bounded(reader: impl std::io::Read) -> Result<String> {
 
 #[cfg(test)]
 mod tests;
+
+/// The firmware image composed for this stand.
+pub const IMAGE: &str = "w3";
+pub const ENV: [&str; 5] = [
+    "OER_W3_CHANNEL",
+    "OER_W3_BSSID",
+    "OER_W3_SSID_HEX",
+    "OER_W3_COUNTRY",
+    "OER_W3_POWER_CAP_DBM",
+];
+pub fn runtime_env(config: &crate::w1::Config) -> Vec<(String, Option<String>)> {
+    let values = [
+        config.channel.to_string(),
+        config
+            .bssid
+            .octets()
+            .iter()
+            .map(|octet| format!("{octet:02X}"))
+            .collect::<Vec<_>>()
+            .join(":"),
+        hex::encode(config.ssid.bytes()),
+        crate::w1::country_text(config.country),
+        crate::w2::LAB_POWER_CAP_DBM.to_string(),
+    ];
+    ENV.into_iter()
+        .zip(values)
+        .map(|(name, value)| (name.to_owned(), Some(value)))
+        .collect()
+}
