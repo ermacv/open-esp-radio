@@ -1,4 +1,5 @@
 use super::*;
+mod dcode;
 mod power;
 mod wifi_i2c;
 pub(crate) struct TestDelay;
@@ -42,6 +43,8 @@ impl Wake for WakeCount {
 pub(crate) struct Io {
     actions: Vec<PhyColdI2cAction>,
     rfpll_actions: Vec<crate::tracking::rfpll::Action>,
+    frequency_actions: Vec<crate::analog::rfpll::RfpllFrequencyAction>,
+    frequency_failure: bool,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
     rfpll_times: Vec<Instant>,
     rfpll_write_micros: u64,
@@ -59,6 +62,48 @@ pub(crate) struct Io {
     pub(crate) atoms: Rc<Cell<usize>>,
 }
 impl Io {
+    pub(super) fn frequency<D: crate::executor::wait::PhyShortDelay>(
+        &mut self,
+        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
+    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
+        use crate::analog::rfpll::{
+            RfpllFrequencyAction as Action, RfpllFrequencyCompletion as Completion,
+            RfpllFrequencyExternalBinding as Binding,
+        };
+        self.atom();
+        if self.frequency_failure {
+            return Err(Failure::Binding);
+        }
+        Ok(match binding {
+            Binding::Mmio(binding) => {
+                self.frequency_actions.push(binding.action());
+                match binding.action() {
+                    Action::StartChannelSwitch {
+                        frequency_index,
+                        crystal_selector,
+                    } => Completion::ChannelSwitchStarted {
+                        frequency_index,
+                        crystal_selector,
+                    },
+                    Action::ClearChannelSwitch => Completion::ChannelSwitchCleared,
+                    Action::ReadChannelReady { .. } => {
+                        Completion::ChannelReadyObserved { ready: true }
+                    }
+                    Action::ConfigureNrx { frequency_mhz } => {
+                        Completion::NrxConfigured { frequency_mhz }
+                    }
+                    _ => return Err(Failure::Binding),
+                }
+            }
+            Binding::Timer(binding) => {
+                if !D::settle_micros(binding.micros()) {
+                    return Err(Failure::Binding);
+                }
+                binding.into_completion()
+            }
+            _ => return Err(Failure::Binding),
+        })
+    }
     pub(super) fn prepare_rfpll_command(
         &mut self,
         kind: crate::tracking::observation::RfpllCommand,

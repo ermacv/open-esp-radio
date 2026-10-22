@@ -1199,6 +1199,9 @@ impl PhyCalibrationRxGainTransition {
 }
 
 impl PhyCalibrationDcodeTransition {
+    pub(crate) fn transition_mut(&mut self) -> &mut crate::analog::dcode::PhyDcodeTransition {
+        &mut self.child
+    }
     fn lower(
         parent_action: PhyCalibrationTrackingAction,
         crystal_selector: u8,

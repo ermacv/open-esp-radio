@@ -1945,18 +1945,28 @@ impl<
                 use crate::tracking::observation::{Event, Operation};
                 self.observer
                     .tracking_operation(Operation::Dcode, Event::PollStarted);
+                let mut timing = crate::tracking::observation::EngineTiming::default();
+                let mut child = transition
+                    .begin_dcode()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
                 let result = calibration::dcode::<D, _, _>(
                     self.timer,
-                    transition
-                        .begin_dcode()
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                    &mut child,
                     self.platform,
                     self.registers,
                     |locked| self.observer.dcode_pll_lock(locked),
-                );
+                    O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
+                )
+                .await;
+                if O::OBSERVE_ENGINE_POLLS {
+                    self.observer.engine_completed(Operation::Dcode, timing);
+                }
                 self.observer
                     .tracking_operation(Operation::Dcode, Event::PollReady);
-                result?
+                result?;
+                child
+                    .commit()
+                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
             }
             PhyCalibrationTrackingAction::RecalibrateRxGain => {
                 use crate::tracking::observation::{Event, Operation};

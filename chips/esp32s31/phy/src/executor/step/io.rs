@@ -122,6 +122,27 @@ impl Registers for oer_esp32s31_hal::owner::ValidationSharedPhy<'_> {
 }
 
 impl Io<'_, '_> {
+    pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
+    ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
+        #[cfg(not(any(target_arch = "riscv32", test)))]
+        let _ = (clock, binding);
+        #[cfg(test)]
+        if let crate::analog::rfpll::RfpllFrequencyExternalBinding::I2c(mut binding) = binding {
+            super::rfpll::direct_i2c(self, clock, binding.transaction_mut(), None, false)?;
+            return binding.into_completion().map_err(|_| Failure::Binding);
+        }
+        match self {
+            #[cfg(target_arch = "riscv32")]
+            Self::Shared(_) => self.rfpll_frequency::<D, _>(clock, binding),
+            #[cfg(all(target_arch = "riscv32", oer_probe))]
+            Self::Validation(_) => self.rfpll_frequency::<D, _>(clock, binding),
+            #[cfg(test)]
+            Self::Test(io, _) => io.frequency::<D>(binding),
+        }
+    }
     pub(super) fn gain_base(
         &mut self,
         action: crate::tracking::power::PhyTxPowerTrackingAction,

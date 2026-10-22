@@ -484,16 +484,20 @@ oer_probe_macros::probe! {
             >(&TraceTimer::observations(), child, registers, &mut observer)
             .map_err(|_| 2u32)?;
             parent.advance(completion).map_err(|_| 3u32)?;
-            let child = parent.begin_dcode().map_err(|_| 4u32)?;
-            let completion = calibration::dcode::<
+            let mut child = parent.begin_dcode().map_err(|_| 4u32)?;
+            // DCODE keeps its original observation clock, including the
+            // shared read/RMW timeout. RFPLL's zero-time prefix masks that limit.
+            let timer = TraceTimer::observations();
+            timer.run(calibration::dcode::<
                 RfpllTraceDelay,
                 _,
                 _,
-            >(&TraceTimer::observations(), child, &mut (), registers, |_| {})
+            >(&timer, &mut child, &mut (), registers, |_| {}, None))
             .map_err(|error| match error {
                 oer_esp32s31_phy::PhyTargetPortError::HardwareEdgeTimedOut => 5u32,
                 _ => 9u32,
             })?;
+            let completion = child.commit().map_err(|_| 9u32)?;
             let PhyCalibrationTrackingCompletion::DcodeCompleted(result) = completion else {
                 return Err(6u32);
             };

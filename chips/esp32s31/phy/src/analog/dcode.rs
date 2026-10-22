@@ -10,6 +10,10 @@
 //! MMIO operation is an identity-bound action. The four-byte ROM table and
 //! eight output bytes are Rust-owned values; no ROM RAM or callback table is
 //! required.
+//!
+//! Runtime DCODE advances through the P1 step engine one complete hardware
+//! transaction per poll. RF and bus ownership remain held across checkpoints,
+//! and the parent commits only after accepting the terminal child completion.
 
 use crate::analog::{
     i2c::{PhyI2cField, analog_registers},
@@ -115,11 +119,11 @@ impl PhyDcodeTransition {
         }
     }
 
-    pub const fn action(self) -> PhyDcodeAction {
-        match self.step {
+    pub const fn action(&self) -> PhyDcodeAction {
+        match &self.step {
             PhyDcodeStep::Rfpll { transition, .. } => PhyDcodeAction::Rfpll(transition.action()),
             PhyDcodeStep::ResetCkgen { write_index, .. } => {
-                let (field, value) = CKGEN_WRITES[write_index as usize];
+                let (field, value) = CKGEN_WRITES[*write_index as usize];
                 PhyDcodeAction::WriteMasked { field, value }
             }
             PhyDcodeStep::ReadLow { .. } => PhyDcodeAction::ReadMasked {
@@ -128,8 +132,8 @@ impl PhyDcodeTransition {
             PhyDcodeStep::ReadHigh { .. } => PhyDcodeAction::ReadMasked {
                 field: analog_registers::RFPLL_INTERNAL_DCODE_1,
             },
-            PhyDcodeStep::Complete(outcome) => PhyDcodeAction::Complete(outcome),
-            PhyDcodeStep::Failed(failure) => PhyDcodeAction::Failed(failure),
+            PhyDcodeStep::Complete(outcome) => PhyDcodeAction::Complete(*outcome),
+            PhyDcodeStep::Failed(failure) => PhyDcodeAction::Failed(*failure),
         }
     }
 
@@ -137,11 +141,13 @@ impl PhyDcodeTransition {
         &mut self,
         completion: PhyDcodeCompletion,
     ) -> Result<(), PhyDcodeTransitionError> {
-        self.step = match (self.step, completion) {
+        // A rejected RFPLL completion leaves its child unchanged. Borrow the
+        // live child rather than copying the largest step into this frame.
+        match (&mut self.step, completion) {
             (
                 PhyDcodeStep::Rfpll {
                     calibration_index,
-                    mut transition,
+                    transition,
                 },
                 PhyDcodeCompletion::Rfpll(completion),
             ) => {
@@ -149,20 +155,19 @@ impl PhyDcodeTransition {
                     .advance(completion)
                     .map_err(|_| PhyDcodeTransitionError::WrongCompletion)?;
                 match transition.action() {
-                    RfpllFrequencyAction::Complete(_) => PhyDcodeStep::ResetCkgen {
-                        calibration_index,
-                        write_index: 0,
-                    },
-                    RfpllFrequencyAction::Failed(failure) => {
-                        PhyDcodeStep::Failed(PhyDcodeFailure::Rfpll {
-                            calibration_index,
-                            failure,
-                        })
+                    RfpllFrequencyAction::Complete(_) => {
+                        self.step = PhyDcodeStep::ResetCkgen {
+                            calibration_index: *calibration_index,
+                            write_index: 0,
+                        };
                     }
-                    _ => PhyDcodeStep::Rfpll {
-                        calibration_index,
-                        transition,
-                    },
+                    RfpllFrequencyAction::Failed(failure) => {
+                        self.step = PhyDcodeStep::Failed(PhyDcodeFailure::Rfpll {
+                            calibration_index: *calibration_index,
+                            failure,
+                        });
+                    }
+                    _ => {}
                 }
             }
             (
@@ -172,17 +177,16 @@ impl PhyDcodeTransition {
                 },
                 PhyDcodeCompletion::MaskedWrite { field, value },
             ) => {
-                let (expected_field, expected_value) = CKGEN_WRITES[write_index as usize];
+                let (expected_field, expected_value) = CKGEN_WRITES[*write_index as usize];
                 if field != expected_field || value != expected_value {
                     return Err(PhyDcodeTransitionError::WrongCompletion);
                 }
-                if write_index + 1 == CKGEN_WRITES.len() as u8 {
-                    PhyDcodeStep::ReadLow { calibration_index }
+                if *write_index + 1 == CKGEN_WRITES.len() as u8 {
+                    self.step = PhyDcodeStep::ReadLow {
+                        calibration_index: *calibration_index,
+                    };
                 } else {
-                    PhyDcodeStep::ResetCkgen {
-                        calibration_index,
-                        write_index: write_index + 1,
-                    }
+                    *write_index += 1;
                 }
             }
             (
@@ -192,8 +196,10 @@ impl PhyDcodeTransition {
                     value,
                 },
             ) if value <= 0x3f => {
-                self.codes[calibration_index as usize * 2] = value;
-                PhyDcodeStep::ReadHigh { calibration_index }
+                self.codes[*calibration_index as usize * 2] = value;
+                self.step = PhyDcodeStep::ReadHigh {
+                    calibration_index: *calibration_index,
+                };
             }
             (
                 PhyDcodeStep::ReadHigh { calibration_index },
@@ -202,22 +208,22 @@ impl PhyDcodeTransition {
                     value,
                 },
             ) if value <= 0x3f => {
-                self.codes[calibration_index as usize * 2 + 1] = value;
-                if calibration_index + 1 == CHANNELS.len() as u8 {
-                    PhyDcodeStep::Complete(PhyDcodeOutcome { codes: self.codes })
+                self.codes[*calibration_index as usize * 2 + 1] = value;
+                if *calibration_index + 1 == CHANNELS.len() as u8 {
+                    self.step = PhyDcodeStep::Complete(PhyDcodeOutcome { codes: self.codes });
                 } else {
-                    let next = calibration_index + 1;
-                    PhyDcodeStep::Rfpll {
+                    let next = *calibration_index + 1;
+                    self.step = PhyDcodeStep::Rfpll {
                         calibration_index: next,
                         transition: rfpll_transition(next, self.parameters.crystal_selector),
-                    }
+                    };
                 }
             }
             (PhyDcodeStep::Complete(_), _) | (PhyDcodeStep::Failed(_), _) => {
                 return Err(PhyDcodeTransitionError::AlreadyComplete);
             }
             _ => return Err(PhyDcodeTransitionError::WrongCompletion),
-        };
+        }
         Ok(())
     }
 }
@@ -236,6 +242,11 @@ pub struct PhyDcodeI2cBinding {
 }
 
 impl PhyDcodeI2cBinding {
+    pub(crate) fn transaction_mut(
+        &mut self,
+    ) -> &mut crate::calibration::cold::PhyColdI2cTransaction {
+        &mut self.transaction
+    }
     pub fn new(action: PhyDcodeAction) -> Result<Self, PhyDcodeBindingError> {
         let request = match action {
             PhyDcodeAction::WriteMasked { field, value } => {

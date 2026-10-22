@@ -72,113 +72,78 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
     Err(PhyTargetPortError::RfOperationLimit)
 }
 
-/// Run the complete D-code child, retaining its nested PLL and I2C waits.
-/// The caller retains the same maintenance and cancellation obligations as PBus clearing.
-pub fn dcode<D: PhyShortDelay, P, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    mut child: PhyCalibrationDcodeTransition,
-    _platform: &mut P,
-    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-    mut observe: impl FnMut(bool),
-) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
-    use crate::analog::dcode::{PhyDcodeAction, PhyDcodeExternalBinding};
-
-    for _ in 0..RF_OPERATION_LIMIT {
-        // Consume ownership only at the terminal boundary; moving the whole
-        // nested PLL state through a failed commit is unnecessary per action.
-        let action = child.action();
-        if matches!(
-            action,
-            PhyDcodeAction::Complete(_) | PhyDcodeAction::Failed(_)
-        ) {
-            return child
-                .commit()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding);
-        }
-        let binding = PhyDcodeExternalBinding::lower(action)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        let completion = complete_dcode_direct::<D, _>(clock, binding, registers)?;
-        if let crate::analog::dcode::PhyDcodeCompletion::Rfpll(
-            crate::analog::rfpll::RfpllFrequencyCompletion::MaskedRead {
-                field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
-                value,
-            },
-        ) = completion
-        {
-            observe(value != 0);
-        }
-        child
-            .advance(completion)
-            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+pin_project_lite::pin_project! {
+    struct Dcode<F> { #[pin] inner: F }
+}
+impl<F: core::future::Future<Output = Result<Option<bool>, PhyTargetPortError>>>
+    core::future::Future for Dcode<F>
+{
+    type Output = Result<Option<bool>, PhyTargetPortError>;
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        self.project().inner.poll(cx)
     }
-    Err(PhyTargetPortError::RfOperationLimit)
 }
 
-fn complete_dcode_direct<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
-    clock: &C,
-    binding: crate::analog::dcode::PhyDcodeExternalBinding,
-    registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
-) -> Result<crate::analog::dcode::PhyDcodeCompletion, PhyTargetPortError> {
-    use crate::analog::dcode::{PhyDcodeCompletion, PhyDcodeExternalBinding};
-    match binding {
-        PhyDcodeExternalBinding::Rfpll(binding) => Ok(PhyDcodeCompletion::Rfpll(
-            registers
-                .rfpll_atom::<D, _>(clock, binding)
-                .map_err(super::step::port_error)?,
-        )),
-        PhyDcodeExternalBinding::I2c(mut binding) => {
-            use crate::analog::i2c::PhyI2cError;
-            use crate::calibration::cold::PhyColdI2cAction;
-            // One shared transition budget spans read and read/modify/write.
-            // The final observed edge also accepts its terminal state.
-            let completed = crate::executor::wait::i2c::complete(
-                clock,
-                &mut binding,
-                crate::analog::dcode::PhyDcodeI2cBinding::action,
-                |binding, action| {
-                    match action {
-                        PhyColdI2cAction::StartRead { address } => {
-                            match crate::analog::i2c::try_start_read(registers, address) {
-                                Ok(()) => binding
-                                    .read_started()
-                                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                                Err(PhyI2cError::Busy) => {}
-                            }
-                        }
-                        PhyColdI2cAction::StartWrite { address, value } => {
-                            match crate::analog::i2c::try_start_write(registers, address, value) {
-                                Ok(()) => binding
-                                    .write_started()
-                                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                                Err(PhyI2cError::Busy) => {}
-                            }
-                        }
-                        PhyColdI2cAction::AwaitReadCompletionEdge { address } => {
-                            binding
-                                .observe_read_result(crate::analog::i2c::try_finish_read(
-                                    registers, address,
-                                ))
-                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                        }
-                        PhyColdI2cAction::AwaitWriteCompletionEdge { address } => {
-                            binding
-                                .observe_write_result(crate::analog::i2c::try_finish_write(
-                                    registers, address,
-                                ))
-                                .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                        }
-                        PhyColdI2cAction::Complete(_) => {}
-                    }
-                    Ok(())
-                },
-            )?;
-            if !completed {
-                return Err(PhyTargetPortError::HardwareEdgeTimedOut);
+/// Run the borrowed D-code cursor through its terminal edge. The caller keeps
+/// the affine child and commits it only after this future has completed.
+/// Hardware ownership and cancellation obligations remain with that caller.
+pub fn dcode<'a, D: PhyShortDelay + 'a, P, T: oer_time::Timer>(
+    clock: &'a T,
+    child: &'a mut PhyCalibrationDcodeTransition,
+    _platform: &mut P,
+    registers: &'a mut (impl SharedPhyAccess + crate::executor::step::Registers),
+    mut observe: impl FnMut(bool) + 'a,
+    mut timing: Option<&'a mut crate::tracking::observation::EngineTiming>,
+) -> impl core::future::Future<Output = Result<(), PhyTargetPortError>> + 'a {
+    async move {
+        for _ in 0..RF_OPERATION_LIMIT {
+            if let Some(locked) =
+                dcode_poll::<D, _, _>(clock, child, registers, timing.as_deref_mut()).await?
+            {
+                observe(locked);
+            } else {
+                return Ok(());
             }
-            binding
-                .into_completion()
-                .map_err(|_| PhyTargetPortError::UnexpectedBinding)
         }
+        Err(PhyTargetPortError::RfOperationLimit)
+    }
+}
+
+// The poll boundary has no observer or platform type parameter. Diagnostic
+// callbacks stay in the thin outer adapter; the retained job is shared.
+fn dcode_poll<
+    'a,
+    D: PhyShortDelay + 'a,
+    R: crate::executor::step::Registers,
+    T: oer_time::Timer,
+>(
+    clock: &'a T,
+    child: &'a mut PhyCalibrationDcodeTransition,
+    registers: &'a mut R,
+    timing: Option<&'a mut crate::tracking::observation::EngineTiming>,
+) -> impl core::future::Future<Output = Result<Option<bool>, PhyTargetPortError>> + 'a {
+    Dcode {
+        inner: async move {
+            use crate::executor::step::{Job, drive};
+            if matches!(
+                child.action(),
+                crate::analog::dcode::PhyDcodeAction::Complete(_)
+                    | crate::analog::dcode::PhyDcodeAction::Failed(_)
+            ) {
+                return Ok(None);
+            }
+            let mut lock = None;
+            let mut job = Job::dcode(child.transition_mut(), &mut lock, clock.now())
+                .map_err(super::step::port_error)?;
+            drive::<D, _, _>(&mut job, registers, clock, timing, None, None)
+                .await
+                .map_err(super::step::port_error)?;
+            Ok(lock)
+        },
     }
 }
 

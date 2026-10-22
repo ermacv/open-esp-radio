@@ -68,6 +68,11 @@ pub(crate) enum Step {
 }
 
 enum Work<'a> {
+    Dcode {
+        transition: &'a mut crate::analog::dcode::PhyDcodeTransition,
+        lock: &'a mut Option<bool>,
+        remaining: u32,
+    },
     Rfpll(rfpll::Run<'a>),
     CountedI2c(i2c::Counted<'a>),
     I2c(&'a mut PhyColdI2cTransaction),
@@ -131,6 +136,21 @@ impl<'a> Job<'a> {
     }
     pub(crate) fn code(now: Instant) -> Result<Self, Failure> {
         Self::new(Work::Code(None), now, false)
+    }
+    pub(crate) fn dcode(
+        transition: &'a mut crate::analog::dcode::PhyDcodeTransition,
+        lock: &'a mut Option<bool>,
+        now: Instant,
+    ) -> Result<Self, Failure> {
+        Self::new(
+            Work::Dcode {
+                transition,
+                lock,
+                remaining: 100_000,
+            },
+            now,
+            false,
+        )
     }
     pub(crate) fn pbus(
         binding: &'a mut PhyPbusHardwareBinding,
@@ -222,6 +242,54 @@ impl<'a> Job<'a> {
         self.ready_started = None;
         self.first_wait = false;
         match &mut self.work {
+            Work::Dcode {
+                transition,
+                lock,
+                remaining,
+            } => {
+                use crate::analog::dcode::{
+                    PhyDcodeAction as Action, PhyDcodeCompletion as Completion,
+                    PhyDcodeExternalBinding as Binding,
+                };
+                if lock.is_some()
+                    || matches!(transition.action(), Action::Complete(_) | Action::Failed(_))
+                {
+                    return Ok(Step::Complete);
+                }
+                if *remaining == 0 {
+                    #[cfg(target_arch = "riscv32")]
+                    return Err(Failure::Target(
+                        crate::target_executor::PhyTargetPortError::RfOperationLimit,
+                    ));
+                    #[cfg(not(target_arch = "riscv32"))]
+                    return Err(Failure::Binding);
+                }
+                *remaining -= 1;
+                let binding = Binding::lower(transition.action()).map_err(|_| Failure::Binding)?;
+                self.ready_started = Some(clock.now());
+                let completion = match binding {
+                    Binding::Rfpll(binding) => {
+                        Completion::Rfpll(io.frequency::<D, _>(clock, binding)?)
+                    }
+                    Binding::I2c(mut binding) => {
+                        rfpll::direct_i2c(&mut io, clock, binding.transaction_mut(), None, false)?;
+                        binding.into_completion().map_err(|_| Failure::Binding)?
+                    }
+                };
+                if let Completion::Rfpll(
+                    crate::analog::rfpll::RfpllFrequencyCompletion::MaskedRead {
+                        field: crate::analog::i2c::analog_registers::RFPLL_LOCK_STATUS,
+                        value,
+                    },
+                ) = completion
+                {
+                    **lock = Some(value != 0);
+                }
+                transition
+                    .advance(completion)
+                    .map_err(|_| Failure::Binding)?;
+                return Ok(Step::Runnable);
+            }
             Work::Rfpll(run) => {
                 return io.advance_rfpll::<D, _>(
                     clock,
