@@ -278,7 +278,7 @@ fn conflicting_mappings_demote_but_a_missing_source_does_not_demote() {
                     width: 4,
                 },
                 preserved: 0,
-                narrowed: 0,
+                narrowed: [0; 2],
                 limits: [0; 4],
                 event: 0,
             },

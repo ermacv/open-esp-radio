@@ -21,6 +21,15 @@ impl<'s, F: Fn(u64) -> Option<&'s CallSummary>> CallAt<'s> for F {
     }
 }
 
+/// Origin of a contract audit, kept separate from the summary's ABI wiring.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArgumentSource {
+    Entry(u8),
+    MissingResult { site: u64, register: u8 },
+}
+type ObserveArgument<'v> =
+    dyn FnMut(ArgumentSource, &ReadUse, &mut dyn RunControl) -> Result<()> + 'v;
+
 /// A compact, owned recipe for the same CFG pass. Capture drops borrowed
 /// expression/address facts and keeps only lifted operations, stack/constant
 /// atoms, edges and dispatch producers. No instruction bytes or records persist.
@@ -64,12 +73,33 @@ impl<'m> ArgumentProgram<'m> {
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
+        self.summarize_inner(calls, memory, c, None)
+    }
+
+    pub fn summarize_observed(
+        self,
+        calls: &dyn CallAt<'_>,
+        memory: &'m WorkingMemory,
+        c: &mut dyn RunControl,
+        observe: &mut ObserveArgument<'_>,
+    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
+        self.summarize_inner(calls, memory, c, Some(observe))
+    }
+
+    fn summarize_inner(
+        self,
+        calls: &dyn CallAt<'_>,
+        memory: &'m WorkingMemory,
+        c: &mut dyn RunControl,
+        mut observe: Option<&mut ObserveArgument<'_>>,
+    ) -> Result<Option<(ArgumentSummary, MemoryReservation<'m>)>> {
         if self.instructions.is_empty() {
             return Ok(None);
         }
         let facts = Facts::new(&[], memory, c)?;
         let mut evaluator = FlowEngine::<Reads>::new(&facts, memory);
         evaluator.summary_mode = true;
+        evaluator.audit_results = observe.is_some();
         evaluator.edges = self.edges;
         evaluator.dispatches = self.dispatches;
         let mut work = ReadWork {
@@ -93,8 +123,12 @@ impl<'m> ArgumentProgram<'m> {
             evaluator.solve(Some(CallAbi::RiscvInteger), calls, &mut work)?;
             let mut consumed = [ArgumentConsumption::default(); 8];
             for source in evaluator.sources.iter() {
-                let ReadOrigin::Entry(register) = source.origin else {
-                    return Err(read_integrity());
+                let origin = match source.origin {
+                    ReadOrigin::Entry(register) => ArgumentSource::Entry(register),
+                    ReadOrigin::MissingResult { site, register } => {
+                        ArgumentSource::MissingResult { site, register }
+                    }
+                    ReadOrigin::Load { .. } => return Err(read_integrity()),
                 };
                 let mut value = ArgumentConsumption::default();
                 let mut event = source.event;
@@ -105,6 +139,9 @@ impl<'m> ArgumentProgram<'m> {
                         .events
                         .get(event - 1)
                         .ok_or_else(read_integrity)?;
+                    if let Some(observe) = observe.as_deref_mut() {
+                        observe(origin, &entry.usage, &mut work)?;
+                    }
                     match entry.usage.precision {
                         ReadPrecision::Exact => value.exact |= entry.usage.bits,
                         ReadPrecision::May => value.may |= entry.usage.bits,
@@ -116,18 +153,28 @@ impl<'m> ArgumentProgram<'m> {
                 // in application before capture.
                 value.may |= source.limits.iter().fold(0, |a, b| a | b);
                 value.exact &= !value.may;
-                *consumed
-                    .get_mut(usize::from(register - 10))
-                    .ok_or_else(read_integrity)? = value;
+                if let ArgumentSource::Entry(register) = origin {
+                    *consumed
+                        .get_mut(usize::from(register - 10))
+                        .ok_or_else(read_integrity)? = value;
+                }
             }
             let mut ledger = Ledger::new(memory, &mut work)?;
             let mut returned = Vec::new();
             for item in evaluator.domain.returned.iter() {
                 work.checkpoint(1)?;
+                let ReadOrigin::Entry(argument) = evaluator
+                    .sources
+                    .get(item.dependency.source)
+                    .ok_or_else(read_integrity)?
+                    .origin
+                else {
+                    continue;
+                };
                 ledger.push(
                     &mut returned,
                     ReturnedArgument {
-                        argument: 10 + item.dependency.source as u8,
+                        argument,
                         register: item.register,
                         exact: item.dependency.exact,
                         may: item.dependency.may,

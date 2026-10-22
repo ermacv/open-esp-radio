@@ -152,6 +152,7 @@ fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
     let mut summary = RegisterAccessSummary {
         schema: 4,
         contract_narrowed_bits: 0,
+        contract_may_narrowed_bits: 0,
         functions: 1,
         partial_functions: 0,
         partial_causes: PartialCauses::default(),

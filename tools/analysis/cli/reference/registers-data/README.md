@@ -169,13 +169,18 @@ consumes only its declared argument words with May precision. Absent result
 words carry neither dependencies nor constants. A computed summary remains
 in force and is checked against the contract; declared absent return words
 are excluded from Return sinks. Missing signatures retain the usual behavior.
-A computed summary consuming a word beyond the declaration, or an instruction
-reading an absent result after a call, fails with `conflict`, the function,
-call/read offsets or the declared source location. No conflicting contract is
-silently preferred. `summary.contract_narrowed_bits` counts distinct source bits
-per selected load whose CallArgument or Return sink a signature directly removes;
-a bit removed at several sinks of that load counts once, even if another sink
-still consumes it. The typed summary schema is 4.
+Only Exact consumption beyond the declared inputs, or Exact flow from an absent
+call result to a proved sink, fails with `conflict`, naming the function,
+signature and source-to-sink path. Audit observes fixed-point sink events before
+aggregation, so a separate May use cannot hide Exact evidence. A stack spill and
+reload alone is not a sink; dead arithmetic and May flow are not conflicts.
+May consumption beyond the declared inputs is removed by the ABI contract.
+`summary.contract_narrowed_bits` counts distinct source bits per selected load
+whose CallArgument or Return sink a fallback signature or result contract removes.
+`summary.contract_may_narrowed_bits` separately counts bits whose computed May
+argument consumption the contract removes. Each category counts a bit once per
+load even if several sinks were removed or another sink still consumes it.
+The typed summary schema is 4.
 
 The register-access schema is 10.
 See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).

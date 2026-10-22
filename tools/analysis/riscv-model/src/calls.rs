@@ -50,8 +50,10 @@ pub struct CallContract {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct CallSummary {
     pub contract: Option<CallContract>,
-    /// True only for a signature fallback; computed consumption stays authoritative.
+    /// True only for a signature fallback; computed facts within the ABI remain authoritative.
     pub contract_only: bool,
+    /// Original computed May consumption removed by the signature, by ABI word.
+    pub narrowed_may: [u32; 8],
     /// Sorted distinct constants at every return, for a0 and a1; a missing
     /// slot means the result is not a proven constant set.
     pub results: [Option<Vec<u32>>; 2],

@@ -1517,20 +1517,16 @@ caller:
     assert!(found.unwrap().uses.is_empty());
     assert_eq!(summary.contract_narrowed_bits, 32);
     for (body, signature, expected) in [
+        ("bnez a2, 1f\n1: ret", sig("caller", 2, "void"), "entry a2"),
         (
-            "bnez a2, 1f\n1: ret",
-            sig("caller", 2, "void"),
-            "consumes a2",
-        ),
-        (
-            "call external\naddi t0, a0, 1\nret",
+            "call external\nbnez a0, 1f\n1: ret",
             sig("external", 0, "void"),
-            "read at +0x8 after call +0x4",
+            "absent result a0 of call +0x4",
         ),
         (
-            "call external\naddi t0, a1, 1\nret",
+            "call external\nbnez a1, 1f\n1: ret",
             sig("external", 0, "u32"),
-            "a1 read",
+            "absent result a1",
         ),
     ] {
         let signatures = Signatures::parse(&signature).unwrap();
@@ -1565,4 +1561,140 @@ caller:
     )
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidRequest);
+}
+
+#[test]
+fn contracts_distinguish_exact_sinks_from_may_dead_values_and_spills() {
+    use oer_analysis_blobray_application::{library::analyze_library, signatures::Signatures};
+    let code = |body: &str| {
+        fixture(&format!(
+            r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.caller,"ax",@progbits
+.globl caller
+.type caller,@function
+caller:
+{body}
+.size caller, .-caller
+"#);
+"##
+        ))
+    };
+    let signatures = Signatures::parse(
+        "[[function]]\nname='external'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n",
+    )
+    .unwrap();
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    for (body, conflict) in [
+        ("call external\naddi t0, a0, 1\nret", false), // Dead arithmetic is no sink.
+        ("call external\naddi t0, a0, 1\nbnez t0, 1f\n1: ret", false), // May flow.
+        ("call external\ncall opaque\nret", false),    // Opaque argument consumption is May.
+        ("call external\nli a0, 0\nbnez a0, 1f\n1: ret", false),
+        (
+            "call external\naddi sp, sp, -16\nsw a0, 0(sp)\nlw t0, 0(sp)\naddi sp, sp, 16\nret",
+            false,
+        ),
+        (
+            "call external\naddi sp, sp, -16\nsw a0, 0(sp)\nlw t0, 0(sp)\naddi sp, sp, 16\nbnez t0, 1f\n1: ret",
+            true,
+        ),
+        ("call external\nsw a0, 0(s0)\nret", true),
+    ] {
+        let result = analyze_library(
+            &[Executable::new(code(body))],
+            Assumptions {
+                abi: Some(CallAbi::RiscvInteger),
+                call_summaries: true,
+                signatures: Some(&signatures),
+                ..Default::default()
+            },
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |_, _| Ok(()),
+        );
+        assert_eq!(result.is_err(), conflict, "{body}: {result:?}");
+        if let Err(error) = result {
+            assert_eq!(error.code, ErrorCode::Conflict);
+        }
+        assert_eq!(memory.used(), 0);
+    }
+    // Exact evidence must survive a separate May sink of the very same bit.
+    let signature = Signatures::parse(
+        "[[function]]\nname='caller'\narguments=2\nresult='void'\nsource='synthetic.h:2'\n",
+    )
+    .unwrap();
+    let error = analyze_library(
+        &[Executable::new(code("bnez a2, 1f\n1: call opaque\nret"))],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signature),
+            ..Default::default()
+        },
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |_, _| Ok(()),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert!(error.message.contains("Branch"));
+    // An analyzed callee's opaque May consumption is removed and counted separately.
+    let signature = Signatures::parse(
+        "[[function]]\nname='shaped'\narguments=0\nresult='void'\nsource='synthetic.h:3'\n",
+    )
+    .unwrap();
+    let object = fixture(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.shaped,"ax",@progbits
+.globl shaped
+.type shaped,@function
+shaped: call opaque
+ret
+.size shaped, .-shaped
+.section .text.root,"ax",@progbits
+.globl root
+.type root,@function
+root: lui t0, 0x20107
+lw a1, 0(t0)
+call shaped
+ret
+.size root, .-root
+"#);
+"##,
+    );
+    let mut load = None;
+    let summary = register_accesses(
+        &[Executable::new(object)],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signature),
+            ..Default::default()
+        },
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |record, _| {
+            if let RegisterAccess::Observation {
+                reads: Some(reads), ..
+            } = record
+            {
+                load = Some(reads.clone());
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert!(load.unwrap().uses.is_empty());
+    assert_eq!(summary.contract_narrowed_bits, 0);
+    assert_eq!(summary.contract_may_narrowed_bits, 32);
+    assert_eq!(memory.used(), 0);
 }

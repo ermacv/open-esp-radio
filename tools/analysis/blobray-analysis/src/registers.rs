@@ -6,7 +6,7 @@ mod arguments;
 mod domain;
 mod provenance;
 use arguments::ReturnedDependency;
-pub use arguments::{ArgumentProgram, CallAt};
+pub use arguments::{ArgumentProgram, ArgumentSource, CallAt};
 use domain::{Domain, FlowValue, Reads};
 pub use provenance::StoredProvenanceEvaluator;
 
@@ -436,14 +436,12 @@ struct ReadSlot<B> {
 struct ReadState<F: FlowValue> {
     registers: [ReadCell<F>; 32],
     slots: usize,
-    invalid_results: [Option<u64>; 2],
 }
 impl<F: FlowValue> ReadState<F> {
     fn entry() -> Self {
         let mut state = Self {
             registers: [ReadCell::default(); 32],
             slots: 0,
-            invalid_results: [None; 2],
         };
         state.set(0, ReadCell::constant(0));
         state.set(
@@ -469,12 +467,6 @@ impl<F: FlowValue> ReadState<F> {
         }
     }
     fn set(&mut self, register: u8, value: ReadCell<F>) {
-        if let Some(slot) = register
-            .checked_sub(10)
-            .and_then(|r| self.invalid_results.get_mut(usize::from(r)))
-        {
-            *slot = None;
-        }
         if let Some(slot) = self.registers.get_mut(usize::from(register)) {
             *slot = value;
         }
@@ -517,11 +509,15 @@ enum ReadOrigin<'a> {
         width: u8,
     },
     Entry(u8),
+    MissingResult {
+        site: u64,
+        register: u8,
+    },
 }
 struct ReadSource<'a> {
     origin: ReadOrigin<'a>,
     preserved: u32,
-    narrowed: u32,
+    narrowed: [u32; 2],
     limits: [u32; 4],
     event: usize,
 }
@@ -602,6 +598,8 @@ struct FlowEngine<'f, 'a, 'm, D: Domain<'m>> {
     ready: bool,
     work_limit: bool,
     summary_mode: bool,
+    audit_results: bool,
+    result_sources: AdmittedVec<'m, (u64, u8, usize)>,
     prepared: bool,
     converged: bool,
     pending: Option<usize>,
@@ -620,6 +618,8 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             ready: false,
             work_limit: false,
             summary_mode: false,
+            audit_results: false,
+            result_sources: AdmittedVec::new(memory),
             prepared: false,
             converged: false,
             pending: None,
@@ -723,7 +723,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.sources
             .binary_search_by_key(&site, |source| match source.origin {
                 ReadOrigin::Load { site, .. } => site,
-                ReadOrigin::Entry(_) => u64::MAX,
+                ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => u64::MAX,
             })
             .ok()
     }
@@ -783,7 +783,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                             width: *width,
                         },
                         preserved: 0,
-                        narrowed: 0,
+                        narrowed: [0; 2],
                         limits: [0; 4],
                         event: 0,
                     },
@@ -800,7 +800,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.sources
             .sort_unstable_by_key(|source| match source.origin {
                 ReadOrigin::Load { site, .. } => site,
-                ReadOrigin::Entry(_) => u64::MAX,
+                ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => u64::MAX,
             });
         D::prepare_sources(self, c)?;
         for record in records {
@@ -1044,17 +1044,6 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             {
                 *cell = self.join_cell(a, b, c)?;
             }
-            for ((slot, a), b) in joined
-                .invalid_results
-                .iter_mut()
-                .zip(old.invalid_results)
-                .zip(state.invalid_results)
-            {
-                *slot = match (a, b) {
-                    (Some(a), Some(b)) => Some(a.min(b)),
-                    (a, b) => a.or(b),
-                };
-            }
             joined.slots = self.join_stacks(old.slots, state.slots, c)?;
             if old == joined {
                 return Ok(());
@@ -1092,7 +1081,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     ReadSource {
                         origin: ReadOrigin::Entry(register),
                         preserved: 0,
-                        narrowed: 0,
+                        narrowed: [0; 2],
                         limits: [0; 4],
                         event: 0,
                     },
@@ -1105,6 +1094,36 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                         ..ReadCell::default()
                     },
                 );
+            }
+        }
+        if self.audit_results {
+            for id in 0..self.nodes.len() {
+                let instruction = self.node(id)?.instruction;
+                if instruction.call {
+                    for register in [10, 11] {
+                        if calls
+                            .summary(instruction.site)
+                            .is_some_and(|s| !s.returns(register))
+                        {
+                            let source = self.sources.len();
+                            self.sources.push(
+                                ReadSource {
+                                    origin: ReadOrigin::MissingResult {
+                                        site: instruction.site,
+                                        register,
+                                    },
+                                    preserved: 0,
+                                    narrowed: [0; 2],
+                                    limits: [0; 4],
+                                    event: 0,
+                                },
+                                c.position(),
+                            )?;
+                            self.result_sources
+                                .push((instruction.site, register, source), c.position())?;
+                        }
+                    }
+                }
             }
         }
         self.merge(0, entry, c)?;
@@ -1155,28 +1174,6 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         let instruction = self.node(id)?.instruction;
         let mut output = input;
         if emit {
-            for (word, callsite) in input.invalid_results.iter().enumerate() {
-                let register = 10 + word as u8;
-                let explicit_read = instruction.operation != SemanticOp::Unsupported
-                    && instruction.operation.reads_register(register)
-                    || instruction.opaque & (1 << register) != 0
-                        && instruction.operation != SemanticOp::Unsupported
-                    || instruction
-                        .branch
-                        .is_some_and(|(_, l, r)| [l, r].contains(&Operand::Register(register)))
-                    || matches!(instruction.flow, InstructionFlow::Indirect { base, .. } if base == register);
-                if let Some(callsite) = callsite
-                    && explicit_read
-                {
-                    return Err(Error::new(
-                        ErrorCode::Conflict,
-                        format!(
-                            "signature conflict: a{} read at +{:#x} after call +{:#x} which supplies no such result",
-                            word, instruction.site, callsite
-                        ),
-                    ));
-                }
-            }
             if let Some((_, left, right)) = instruction.branch {
                 for value in [left, right] {
                     D::sink(
@@ -1222,7 +1219,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     if calls.current().is_none_or(|s| s.returns(register)) {
                         D::return_value(self, input.register(register).flow, register, c)?;
                     } else {
-                        D::narrow(self, input.register(register).flow, c)?;
+                        D::narrow(self, input.register(register).flow, u32::MAX, false, c)?;
                     }
                 }
                 self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
@@ -1432,7 +1429,6 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 }
             }
             SemanticOp::Unsupported => {
-                output.invalid_results = [None; 2];
                 output.registers = ReadState::entry().registers;
                 output.set(2, ReadCell::default());
                 output.slots = 0;
@@ -1522,23 +1518,22 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     output.set(register, ReadCell::default());
                 }
                 for (register, cell) in abi.results().into_iter().zip(results) {
-                    output.set(register, cell);
-                    if calls
-                        .summary(instruction.site)
-                        .is_some_and(|s| !s.returns(register))
+                    let mut cell = cell;
+                    if self.audit_results
+                        && let Ok(id) = self.result_sources.binary_search_by_key(
+                            &(instruction.site, register),
+                            |&(site, register, _)| (site, register),
+                        )
                     {
-                        if let Some(slot) =
-                            output.invalid_results.get_mut(usize::from(register - 10))
-                        {
-                            *slot = Some(instruction.site);
-                        }
+                        let source = self.result_sources.get(id).ok_or_else(read_integrity)?.2;
+                        cell.flow = D::seed(self, source, 4, false, u32::MAX, c)?;
                     }
+                    output.set(register, cell);
                 }
             } else {
                 if emit {
                     self.limit_state(output, ReadLimitKind::UnsupportedOperation, c)?;
                 }
-                output.invalid_results = [None; 2];
                 output.registers = ReadState::entry().registers;
                 output.set(2, ReadCell::default());
             }
@@ -1596,7 +1591,15 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     && s.contract
                         .is_some_and(|shape| register >= 10 + shape.arguments)
             }) {
-                D::narrow(self, input.register(register).flow, c)?;
+                D::narrow(self, input.register(register).flow, u32::MAX, false, c)?;
+            }
+            if let Some(bits) = calls
+                .summary(site)
+                .and_then(|s| s.narrowed_may.get(usize::from(register - 10)))
+                .copied()
+                .filter(|bits| *bits != 0)
+            {
+                D::narrow(self, input.register(register).flow, bits, true, c)?;
             }
             D::consume_argument(
                 self,
@@ -1652,12 +1655,14 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     ) -> Result<()> {
         self.engine.analyze(abi, decoder, select, calls, c)
     }
-    pub fn contract_narrowed_bits(&self) -> u64 {
-        self.engine
-            .sources
-            .iter()
-            .map(|s| u64::from(s.narrowed.count_ones()))
-            .sum()
+    pub fn contract_narrowed_bits(&self) -> [u64; 2] {
+        let mut counts = [0; 2];
+        for source in self.engine.sources.iter() {
+            for (count, bits) in counts.iter_mut().zip(source.narrowed) {
+                *count += u64::from(bits.count_ones());
+            }
+        }
+        counts
     }
     pub fn reads(
         &self,

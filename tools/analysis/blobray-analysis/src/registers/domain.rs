@@ -148,6 +148,8 @@ pub(super) trait Domain<'m>: Sized {
     fn narrow(
         _e: &mut FlowEngine<'_, '_, 'm, Self>,
         _flow: Self::Flow,
+        _outputs: u32,
+        _from_may: bool,
         _c: &mut dyn RunControl,
     ) -> Result<()> {
         Ok(())
@@ -288,6 +290,8 @@ impl<'m> Domain<'m> for Reads<'m> {
     fn narrow(
         e: &mut FlowEngine<'_, '_, 'm, Self>,
         flow: usize,
+        outputs: u32,
+        from_may: bool,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         let len = e.domain.flows.values(flow)?.len();
@@ -299,15 +303,12 @@ impl<'m> Domain<'m> for Reads<'m> {
                 .values(flow)?
                 .get(index)
                 .ok_or_else(read_integrity)?;
-            let bits = dependency
-                .exact
-                .iter()
-                .chain(&dependency.may)
-                .fold(0, |a, b| a | b);
+            let (exact, may) = dependency.selected(outputs);
+            let bits = exact | may;
             e.sources
                 .get_mut(dependency.source)
                 .ok_or_else(read_integrity)?
-                .narrowed |= bits;
+                .narrowed[usize::from(from_may)] |= bits;
         }
         Ok(())
     }
@@ -473,7 +474,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
                         width: loaded_width,
                         ..
                     } => same_word(loaded, loaded_width, address, width),
-                    ReadOrigin::Entry(_) => false,
+                    ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => false,
                 });
             let mut preserved = 0;
             if same && kind == MemoryKind::Store {

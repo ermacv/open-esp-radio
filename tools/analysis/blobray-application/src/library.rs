@@ -623,6 +623,7 @@ pub fn register_accesses(
     let mut summary = RegisterAccessSummary {
         schema: 4,
         contract_narrowed_bits: 0,
+        contract_may_narrowed_bits: 0,
         ranges: ranges.to_vec(),
         functions: 0,
         partial_functions: 0,
@@ -678,7 +679,9 @@ pub fn register_accesses(
                     c,
                 )
             })?;
-            summary.contract_narrowed_bits += reads.contract_narrowed_bits();
+            let [direct, may] = reads.contract_narrowed_bits();
+            summary.contract_narrowed_bits += direct;
+            summary.contract_may_narrowed_bits += may;
             Ok(())
         }
         LibraryOutcome::Blocked { function, error } => {

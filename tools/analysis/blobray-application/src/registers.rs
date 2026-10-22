@@ -69,7 +69,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         }
     }
 
-    pub fn contract_narrowed_bits(&self) -> u64 {
+    pub fn contract_narrowed_bits(&self) -> [u64; 2] {
         self.evaluator.contract_narrowed_bits()
     }
     pub fn reads(

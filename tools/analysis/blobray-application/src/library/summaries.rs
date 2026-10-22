@@ -1,7 +1,7 @@
 //! One corpus producer for the shared result/argument port, in two analyses.
 use super::*;
 use crate::registers::{CallKey, CallLinks, Callees, Calls};
-use oer_analysis_blobray_analysis::registers::ArgumentProgram;
+use oer_analysis_blobray_analysis::registers::{ArgumentProgram, ArgumentSource};
 use oer_analysis_blobray_artifacts::{MemberIndex, PreparedObject, prepare_captured};
 use oer_analysis_riscv_analysis::{AnalysisSummary, PreparedReferences, ProvenTables};
 use oer_analysis_riscv_program::{
@@ -531,34 +531,42 @@ pub(super) fn analyze<'a>(
                                 jump_tables: &found.tables,
                                 summaries: &scoped,
                             };
-                            if !recursive
+                            let publish = !recursive
                                 && objects.get(object).ok_or_else(integrity)?.safe
                                 && eligible(
                                     analyzed.coverage,
                                     analyzed.semantics,
                                     analyzed.records,
                                     c,
-                                )?
-                            {
+                                )?;
+                            if publish || assumptions.signatures.is_some() {
                                 let facts = Facts::new(&records, memory, c)?;
                                 let links = CallLinks::new(&facts, function, catalog, memory, c)?;
-                                contract = produce(
-                                    &facts,
-                                    analyzed.records,
-                                    &scoped,
-                                    &links,
-                                    decoder,
-                                    memory,
-                                    c,
-                                )
-                                .map_err(|mut error| {
+                                let produced = if publish {
+                                    produce(
+                                        &facts,
+                                        analyzed.records,
+                                        &scoped,
+                                        &links,
+                                        decoder,
+                                        memory,
+                                        c,
+                                    )
+                                } else if needs_audit(&scoped, &links) {
+                                    argument_summary(&facts, &scoped, &links, decoder, memory, c)
+                                        .map(|_| None)
+                                } else {
+                                    Ok(None)
+                                };
+                                contract = produced.map_err(|mut error| {
                                     if error.code == ErrorCode::Conflict {
                                         error.message = format!(
-                                            "function {} ({:?}): {}",
+                                            "function {} ({:?}), signature {:?}: {}",
                                             String::from_utf8_lossy(
                                                 function.name.as_deref().unwrap_or(b"?")
                                             ),
                                             function.symbol,
+                                            signature.map(|s| (&s.name, &s.source)),
                                             error.message
                                         );
                                     }
@@ -571,11 +579,11 @@ pub(super) fn analyze<'a>(
                                     .value
                                     .arguments
                                     .consumed
-                                    .iter()
+                                    .iter_mut()
                                     .enumerate()
                                     .skip(usize::from(signature.arguments))
                                 {
-                                    if consumed.exact | consumed.may != 0 {
+                                    if consumed.exact != 0 {
                                         return Err(Error::new(
                                             ErrorCode::Conflict,
                                             format!(
@@ -588,25 +596,28 @@ pub(super) fn analyze<'a>(
                                             ),
                                         ));
                                     }
+                                    if let Some(bits) = summary.value.narrowed_may.get_mut(word) {
+                                        *bits = consumed.may;
+                                    }
+                                    consumed.may = 0;
                                 }
                                 let shape = signature.summary().contract;
                                 summary.value.contract = shape;
                                 for register in [10, 11] {
-                                    if !summary.value.returns(register) {
-                                        if let Some(result) = summary
+                                    if !summary.value.returns(register)
+                                        && let Some(result) = summary
                                             .value
                                             .results
                                             .get_mut(usize::from(register - 10))
-                                        {
-                                            *result = None;
-                                        }
+                                    {
+                                        *result = None;
                                     }
                                 }
-                                summary
-                                    .value
-                                    .arguments
-                                    .returned
-                                    .retain(|r| shape.is_none_or(|s| r.register < 10 + s.results));
+                                summary.value.arguments.returned.retain(|r| {
+                                    shape.is_none_or(|s| {
+                                        r.register < 10 + s.results && r.argument < 10 + s.arguments
+                                    })
+                                });
                             }
                             visit(LibraryOutcome::Analyzed(analyzed), c)?;
                         }
@@ -722,9 +733,8 @@ fn try_produce<'a>(
     memory: &'a WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<Option<OwnedSummary<'a>>> {
-    let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
     let Some((arguments, argument_memory)) =
-        program.summarize(&Calls { links, summaries }, memory, c)?
+        argument_summary(facts, summaries, links, decoder, memory, c)?
     else {
         return Ok(None);
     };
@@ -750,6 +760,88 @@ fn try_produce<'a>(
         _arguments: argument_memory,
         _results: ledger.into_reservation(),
     }))
+}
+
+/// Audit uses the summary interpreter's fixed-point events. It never promotes
+/// May to Exact, and stack spill/reload keeps its normal non-sink semantics.
+fn argument_summary<'a>(
+    facts: &Facts<'_, 'a>,
+    summaries: &dyn CallSummaries,
+    links: &CallLinks<'_>,
+    decoder: &dyn FunctionSemantics,
+    memory: &'a WorkingMemory,
+    c: &mut dyn RunControl,
+) -> Result<Option<(ArgumentSummary, MemoryReservation<'a>)>> {
+    let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
+    let calls = Calls { links, summaries };
+    if !needs_audit(summaries, links) {
+        return program.summarize(&calls, memory, c);
+    }
+    let mut conflicts = AdmittedVec::new(memory);
+    let mut names = Ledger::new(memory, c)?;
+    let result = program.summarize_observed(&calls, memory, c, &mut |origin, usage, c| {
+        if usage.precision != ReadPrecision::Exact {
+            return Ok(());
+        }
+        let source = match origin {
+            ArgumentSource::Entry(register)
+                if summaries
+                    .current()
+                    .and_then(|s| s.contract)
+                    .is_some_and(|s| register >= 10 + s.arguments) =>
+            {
+                format!("entry a{}", register - 10)
+            }
+            ArgumentSource::MissingResult { site, register } => format!(
+                "absent result a{} of call +{site:#x} to {}",
+                register - 10,
+                callee_name(links.callee(site))
+            ),
+            _ => return Ok(()),
+        };
+        let target = match usage.sink {
+            ReadSink::CallArgument { site, .. } => {
+                format!(" to {}", callee_name(links.callee(site)))
+            }
+            _ => String::new(),
+        };
+        let note = format!(
+            "{source} -> {:?}{target}, bits {:#010x}, Exact",
+            usage.sink, usage.bits
+        );
+        names.admit(note.capacity(), c)?;
+        conflicts.push(note, c.position())
+    })?;
+    if !conflicts.is_empty() {
+        return Err(Error::new(
+            ErrorCode::Conflict,
+            format!(
+                "signature conflict: {}",
+                conflicts
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
+        ));
+    }
+    Ok(result)
+}
+fn needs_audit(summaries: &dyn CallSummaries, links: &CallLinks<'_>) -> bool {
+    summaries.current().is_some()
+        || links.keys().any(|key| {
+            summaries
+                .summary(key.borrowed())
+                .and_then(|s| s.contract)
+                .is_some_and(|s| s.results < 2)
+        })
+}
+fn callee_name(callee: Option<Callee<'_>>) -> String {
+    match callee {
+        Some(Callee::Symbol(name)) => String::from_utf8_lossy(name).into_owned(),
+        Some(Callee::Address(address)) => format!("{address:#x}"),
+        None => "unresolved callee".into(),
+    }
 }
 
 #[cfg(test)]
