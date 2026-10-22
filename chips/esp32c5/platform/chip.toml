@@ -84,7 +84,7 @@ harts = [0]
 always-levels = []
 # The hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
-irq-stack-guard-bytes = 1024
+irq-stack-guard-bytes = { "0" = 4096 }
 irq-stack-margin-percent = 10
 
 # esp-hal sets a CPU line's CLIC level only while it initializes vectoring

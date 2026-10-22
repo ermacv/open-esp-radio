@@ -25,6 +25,7 @@ mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
 mod code;
 pub use code::CodePlacement;
+mod guard;
 
 /// The interrupt stacks' report in an image build's output directory.
 pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
@@ -41,6 +42,9 @@ pub struct InterruptStacks {
     pub handlers: Vec<(u32, Vec<u32>)>,
     /// Function names by address, for the report.
     names: BTreeMap<u32, String>,
+    /// Own function frames, read from the analysis rather than a bound's
+    /// critical path: a shorter path can still contain the largest frame.
+    pub frames: BTreeMap<u32, Option<u64>>,
     /// Copies of a CLIC level or route writer outside the functions it may
     /// run inside (the contract's `level-writers`), or a writer of which the
     /// DWARF shows no copy: where a source may take a level other than its
@@ -289,7 +293,7 @@ impl InterruptStacks {
                 }
             };
             let percent = self.contract.interrupts.irq_stack_margin_percent;
-            let usable = self.contract.irq_stack_usable_bytes();
+            let usable = self.contract.irq_stack_usable_bytes(hart.core);
             if with_margin(bytes, percent) > u64::from(usable) {
                 return Err(format!(
                     "hart {}'s interrupt stack needs {bytes} bytes and a {}% margin, more than \
@@ -300,6 +304,17 @@ impl InterruptStacks {
                     self.render()
                 )
                 .into());
+            }
+            if let Some(problem) = self.guard_problem(hart) {
+                match required {
+                    Required::Product => {
+                        return Err(format!("{problem}:\n{}", self.render()).into());
+                    }
+                    Required::Diagnostic => warnings.push(format!(
+                        "{problem} (diagnostic image, reported only):\n{}",
+                        self.render_guards()
+                    )),
+                }
             }
         }
         Ok(warnings)
@@ -325,6 +340,7 @@ impl InterruptStacks {
     fn render_report(&self, placement: Option<&InterruptPlacement>) -> String {
         let name = |address: u32| self.name(address);
         let mut out = format!("{}\n", self.traps);
+        out.push_str(&self.render_guards());
         if self.level_writers.is_empty() {
             let _ = writeln!(
                 out,
@@ -398,7 +414,7 @@ impl InterruptStacks {
                 hart.core,
                 hart.bytes
                     .map_or(format!("{} + ?", hart.partial), |bytes| bytes.to_string()),
-                self.contract.irq_stack_usable_bytes(),
+                self.contract.irq_stack_usable_bytes(hart.core),
                 match hart.bytes {
                     None => "partial",
                     Some(_) if hart.assumptions().is_empty() && hart.level_drops().is_empty() => {
@@ -597,6 +613,11 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         handlers,
         summaries: analysis.summaries.clone(),
         names: names.clone(),
+        frames: analysis
+            .functions
+            .iter()
+            .map(|(&address, facts)| (address, facts.frame))
+            .collect(),
         level_writers,
         handler_code: interrupt_code,
         code_placement,
@@ -805,6 +826,7 @@ mod tests {
             summaries: BTreeSet::new(),
             handlers,
             names: BTreeMap::from([(timer(), "TIMER".to_owned())]),
+            frames: BTreeMap::new(),
             level_writers: Vec::new(),
             handler_code: HandlerCode::default(),
             code_placement: CodePlacement::default(),
@@ -844,6 +866,7 @@ mod tests {
             summaries: BTreeSet::new(),
             handlers: Vec::new(),
             names: BTreeMap::new(),
+            frames: BTreeMap::new(),
             level_writers: Vec::new(),
             handler_code: HandlerCode::default(),
             code_placement: CodePlacement::default(),
@@ -1004,7 +1027,7 @@ mod tests {
             "{warnings:?}"
         );
         // The proven part alone must fit the usable stack with the margin.
-        let over = u64::from(contract().irq_stack_usable_bytes());
+        let over = u64::from(contract().irq_stack_usable_bytes(0));
         assert!(partial(over).check(Required::Diagnostic).is_err());
     }
 

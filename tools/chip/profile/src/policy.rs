@@ -304,7 +304,10 @@ impl StackPolicy {
             .as_ref()
             .ok_or("interrupt stack policy missing")?
             .minimum_free_bytes;
-        if bytes <= interrupts.irq_stack_guard_bytes.saturating_add(reserve)
+        if interrupts
+            .irq_stack_guard_bytes
+            .values()
+            .any(|guard| bytes <= guard.saturating_add(reserve))
             || u64::from(bytes) * interrupts.harts.len() as u64 >= u64::from(memory.sram.length)
         {
             return Err(

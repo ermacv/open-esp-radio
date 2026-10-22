@@ -114,7 +114,9 @@ impl Layout {
         assert!(self.sram.end() <= self.psram.origin);
         assert!(self.harts == 1 || self.harts == 2);
         assert!(self.retained_reserved_tail <= self.retained.length);
-        assert!(self.irq_stack_bytes > crate::interrupts::IRQ_STACK_GUARD_BYTES);
+        // Per-hart guards belong to chip.toml and are checked by the image
+        // linker; this chip-neutral layout only constrains the allocation.
+        assert!(self.irq_stack_bytes >= 16 && self.irq_stack_bytes % 16 == 0);
     }
 }
 

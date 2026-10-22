@@ -336,3 +336,59 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
         assert!(!directory.join(strict::PLACEMENT).exists());
     }
 }
+
+#[test]
+fn a_runtime_link_gets_each_guard_from_the_chip_contract_before_its_first_pass() {
+    for (chip, source, expected) in [
+        (
+            "esp32s31",
+            include_str!("../../../../../chips/esp32s31/platform/chip.toml"),
+            vec![(0, 4096), (1, 1024)],
+        ),
+        (
+            "esp32c5",
+            include_str!("../../../../../chips/esp32c5/platform/chip.toml"),
+            vec![(0, 4096)],
+        ),
+    ] {
+        let directory = tempdir();
+        let root = directory.path();
+        let platform = root.join(format!("chips/{chip}/platform"));
+        fs::create_dir_all(&platform).unwrap();
+        fs::write(platform.join("chip.toml"), source).unwrap();
+        let spec = root.join(strict::SPEC_FILE);
+        fs::write(
+            &spec,
+            toml::to_string(&strict::Spec {
+                root: root.to_owned(),
+                chip: chip.to_owned(),
+                stack_policy: root.join("unused.toml"),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let mut arguments = vec![
+            OsString::from("-Truntime/link.x"),
+            "-o".into(),
+            root.join("runtime.elf").into(),
+        ];
+        let status = link(&mut arguments, &[], Some(&spec), |arguments| {
+            let guards: Vec<_> = arguments
+                .iter()
+                .filter_map(|argument| argument.to_str())
+                .filter(|argument| argument.starts_with("--defsym=__runtime_cpu"))
+                .collect();
+            assert_eq!(guards.len(), expected.len());
+            for (hart, bytes) in &expected {
+                assert!(guards.contains(
+                    &format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes={bytes}").as_str()
+                ));
+            }
+            // Stop here: this test checks the contract handoff before any
+            // analysis or output ELF is available.
+            17
+        })
+        .unwrap();
+        assert_eq!(status, 17);
+    }
+}

@@ -27,8 +27,6 @@ pub const EXCEPTION_ENTRY_SYMBOL: &str = "_start_trap";
 /// esp-hal's per-source handler table, through which the dispatcher calls.
 pub const SOURCE_TABLE_SYMBOL: &str = "__EXTERNAL_INTERRUPTS";
 
-/// Aligned bytes at the bottom of each interrupt stack whose stores trap.
-pub const IRQ_STACK_GUARD_BYTES: u32 = 1024;
 /// The margin the interrupt-stack bound keeps below the usable stack, in
 /// percent of the bound.
 pub const IRQ_STACK_MARGIN_PERCENT: u32 = 10;
