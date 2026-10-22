@@ -276,7 +276,7 @@ impl Run<'_> {
         }
     }
 
-    #[inline(always)]
+    #[inline(never)]
     fn record_part(
         execution: &mut RxGainExecution,
         index: usize,
