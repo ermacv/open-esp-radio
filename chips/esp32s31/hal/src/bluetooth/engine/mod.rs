@@ -17,7 +17,19 @@
     reason = "private controller-memory protocols are exercised by graph and hardware-backend tests"
 )]
 
+mod access;
+mod arena;
 mod ble_phy_engine;
+pub use access::{EnginePrepareError, EngineReceiveError};
+#[cfg(target_arch = "riscv32")]
+mod live;
+mod owner;
+pub use arena::{ArenaError, ArenaMemory, BluetoothArena, ControllerMemory, Engine, EngineFault};
+#[cfg(target_arch = "riscv32")]
+pub use live::{
+    CompletionError, EngineScheduleError, EngineStopError, EngineStopStep, ReceivePublicationError,
+};
+pub use owner::{EngineShutDown, EngineShutdownError, EngineShutdownFailure};
 mod coexistence;
 mod connectable_advertising;
 mod direction_finding_workspace;
@@ -69,10 +81,7 @@ pub use scheduler_pool::{
     SchedulerRolePool, SchedulerRolePoolStorage, SchedulerRoleReleaseFailure,
 };
 
-pub use ble_phy_engine::{
-    BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES, BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES,
-    BlePhyEngineCpuOwned, BlePhyEngineStorage, BlePhyLe1MPacketStartCalibration,
-};
+pub(crate) use ble_phy_engine::{BlePhyEngineCpuOwned, BlePhyEngineStorage};
 
 pub use connectable_advertising::{
     LegacyConnectableAdvIndPacketInput, LegacyConnectableAdvertisingError,
@@ -81,9 +90,9 @@ pub use connectable_advertising::{
     LegacyConnectableAdvertisingStorage, LegacyConnectableScanResponsePacketInput,
 };
 
-pub use direction_finding_workspace::{
-    BLUETOOTH_DIRECTION_FINDING_WORKSPACE_BYTES, DirectionFindingWorkspaceCpuOwned,
-    DirectionFindingWorkspaceLink, DirectionFindingWorkspaceStorage,
+pub use direction_finding_workspace::DirectionFindingWorkspaceLink;
+pub(crate) use direction_finding_workspace::{
+    DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceStorage,
 };
 
 pub use dtm_image::{
@@ -165,3 +174,5 @@ pub(crate) use sram_link::ControllerSramLinkAddress;
 
 #[cfg(test)]
 mod test_images;
+
+pub use ble_phy_engine::BlePhyLe1MPacketStartCalibration;

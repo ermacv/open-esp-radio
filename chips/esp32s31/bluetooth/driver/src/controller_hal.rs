@@ -6,10 +6,12 @@
 //! replaced by Rust-owned runtime resources rather than copied into this
 //! hardware typestate.
 
+use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+
 use crate::resources::{InterruptBankOwner, TaskResources, separate_interrupt_owner};
 
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothControllerHalInitConfig, BluetoothControllerTimeScale, ClockedOwner,
+    BluetoothControllerHalInitConfig, BluetoothControllerTimeScale, InterruptSetupOwner,
 };
 
 /// Controller time scale of the reviewed standalone HAL configuration.
@@ -48,21 +50,21 @@ impl StandaloneAlwaysAwakeDtmProfile {
 /// interrupts, PHY, BTBB, Link Layer, HCI or a running controller. Dropping it
 /// is fail-stop because no verified rollback exists after the first write.
 #[must_use = "the controller HAL state retains every powered Bluetooth owner"]
-pub struct ControllerHalInitialized {
-    pub(crate) task: TaskResources,
+pub struct ControllerHalInitialized<M: ControllerMemory> {
+    pub(crate) task: TaskResources<M>,
     pub(crate) interrupts: InterruptBankOwner,
     pub(crate) time_scale: BluetoothControllerTimeScale,
     pub(crate) standalone_dtm_profile: StandaloneAlwaysAwakeDtmProfile,
 }
 
-impl ControllerHalInitialized {
+impl<M: ControllerMemory> ControllerHalInitialized<M> {
     /// Return the scheduler scale established for this hardware epoch.
     pub const fn controller_time_scale(&self) -> BluetoothControllerTimeScale {
         self.time_scale
     }
 }
 
-impl ControllerHalInitialized {
+impl<M: ControllerMemory> ControllerHalInitialized<M> {
     /// Execute the complete reviewed standalone controller HAL component on
     /// the clocked Bluetooth client.
     ///
@@ -74,28 +76,33 @@ impl ControllerHalInitialized {
     /// controller resets, and this transition uniquely owns the task and
     /// inactive interrupt partitions.
     #[cfg(target_arch = "riscv32")]
-    pub fn initialize(clocked: ClockedOwner) -> Self {
-        Self::initialize_with(clocked, |task, config| {
+    pub fn initialize(
+        engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        interrupts: InterruptSetupOwner,
+    ) -> Self {
+        Self::initialize_with(engine, interrupts, |task, config| {
             task.initialize_controller_hal(config)
         })
     }
 
     #[cfg(test)]
     pub fn initialize_for_validation(
-        clocked: ClockedOwner,
-        initialize: impl FnOnce(&mut TaskResources, BluetoothControllerHalInitConfig),
+        engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        interrupts: InterruptSetupOwner,
+        initialize: impl FnOnce(&mut TaskResources<M>, BluetoothControllerHalInitConfig),
     ) -> Self {
-        Self::initialize_with(clocked, initialize)
+        Self::initialize_with(engine, interrupts, initialize)
     }
 
     fn initialize_with(
-        clocked: ClockedOwner,
-        initialize: impl FnOnce(&mut TaskResources, BluetoothControllerHalInitConfig),
+        engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        interrupts: InterruptSetupOwner,
+        initialize: impl FnOnce(&mut TaskResources<M>, BluetoothControllerHalInitConfig),
     ) -> Self {
         let config = BluetoothControllerHalInitConfig::reviewed_standalone();
         let standalone_dtm_profile = StandaloneAlwaysAwakeDtmProfile::mint();
         let time_scale = config.controller_time_scale();
-        let (mut task, interrupts) = separate_interrupt_owner(clocked);
+        let (mut task, interrupts) = separate_interrupt_owner(engine, interrupts);
         initialize(&mut task, config);
         Self {
             task,

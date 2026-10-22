@@ -2730,6 +2730,7 @@ dependencies = [
 name = "oer-esp32s31-bluetooth-driver"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "critical-section",
  "oer-bluetooth-hci",
  "oer-bluetooth-le-radio",

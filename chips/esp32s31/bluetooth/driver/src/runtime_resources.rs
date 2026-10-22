@@ -8,6 +8,8 @@
 //! The powered task endpoint owns controller-time service and finished-list
 //! capture. Physical scheduler transactions and graph publication stay in HAL.
 
+use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+
 use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 
 #[cfg(any(target_arch = "riscv32", test))]
@@ -194,9 +196,9 @@ impl<X: SignalExecutor> ControllerTaskRuntime<'_, X> {
 /// capability, and [`Self::retire`] returns both for the Controller shutdown.
 #[must_use = "the powered task endpoint retains the Controller task owner"]
 #[cfg(any(target_arch = "riscv32", test))]
-pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor> {
+pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor, M: ControllerMemory> {
     pub(crate) runtime: ControllerTaskRuntime<'runtime, X>,
-    pub(crate) task: TaskResources,
+    pub(crate) task: TaskResources<M>,
     pub(crate) time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
     pub(crate) config: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
@@ -207,15 +209,19 @@ pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor> {
 pub enum ControllerTaskRetirementError {
     /// A scheduler worker still holds work.
     Runtime(ControllerRuntimeRetirementError),
+    /// The physical scheduler is not stopped and empty.
+    EngineNotStopped,
     /// The controller-time worker holds a request or faulted.
     ControllerTime(crate::controller_time::ControllerTimeRetirementError),
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
+impl<'runtime, X: SignalExecutor, M: ControllerMemory>
+    ControllerPoweredTaskRuntime<'runtime, X, M>
+{
     pub(crate) const fn new(
         runtime: ControllerTaskRuntime<'runtime, X>,
-        task: TaskResources,
+        task: TaskResources<M>,
         time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
         standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
         config: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
@@ -230,7 +236,7 @@ impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
     }
 
     /// The HAL task owner of this powered Controller epoch.
-    pub fn task_owner(&mut self) -> &mut TaskResources {
+    pub fn task_owner(&mut self) -> &mut TaskResources<M> {
         &mut self.task
     }
 
@@ -240,12 +246,15 @@ impl<'runtime, X: SignalExecutor> ControllerPoweredTaskRuntime<'runtime, X> {
         clippy::result_large_err,
         reason = "the rejection returns the complete affine endpoint"
     )]
-    pub fn retire(self) -> Result<TaskResources, (ControllerTaskRetirementError, Self)> {
+    pub fn retire(self) -> Result<TaskResources<M>, (ControllerTaskRetirementError, Self)> {
         if let Err(error) = self.runtime.retirement_ready() {
             return Err((ControllerTaskRetirementError::Runtime(error), self));
         }
         if let Err(error) = self.task.controller_time_retirement_ready() {
             return Err((ControllerTaskRetirementError::ControllerTime(error), self));
+        }
+        if !self.task.engine_retirement_ready() {
+            return Err((ControllerTaskRetirementError::EngineNotStopped, self));
         }
         Ok(self.task)
     }

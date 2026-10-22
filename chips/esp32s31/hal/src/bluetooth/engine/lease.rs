@@ -24,6 +24,19 @@ pub struct PoolScope<'pool>(PhantomData<fn(&'pool mut ()) -> &'pool mut ()>);
 /// An affine, fresh identity for one reset epoch.
 pub struct EpochScope<'epoch>(PhantomData<fn(&'epoch mut ()) -> &'epoch mut ()>);
 
+#[cfg(any(test, feature = "test-support"))]
+impl PoolScope<'_> {
+    pub(crate) const fn for_host_test() -> Self {
+        Self(PhantomData)
+    }
+}
+#[cfg(any(test, feature = "test-support"))]
+impl EpochScope<'_> {
+    pub(crate) const fn for_host_test() -> Self {
+        Self(PhantomData)
+    }
+}
+
 /// Run with a pool identity that cannot escape or be reused for another pool.
 pub fn with_pool<R>(run: impl for<'pool> FnOnce(PoolScope<'pool>) -> R) -> R {
     run(PoolScope(PhantomData))

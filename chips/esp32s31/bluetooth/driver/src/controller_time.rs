@@ -69,7 +69,7 @@ mod worker {
 
     use oer_esp32s31_hal::bluetooth::{
         BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchStep,
-        BluetoothControllerTimeLatchStepError, ControllerHal,
+        BluetoothControllerTimeLatchStepError,
     };
 
     use super::ControllerTimeSample;
@@ -91,18 +91,20 @@ mod worker {
         ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError>;
     }
 
-    impl ControllerTimeHardware for ControllerHal<'_> {
+    impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> ControllerTimeHardware
+        for oer_esp32s31_hal::bluetooth::engine::Engine<M>
+    {
         fn begin_controller_time_latch(
             &mut self,
         ) -> Result<(), BluetoothControllerTimeLatchBeginError> {
-            ControllerHal::begin_controller_time_latch(self)
+            Self::begin_controller_time_latch(self)
         }
 
         fn step_controller_time_latch(
             &mut self,
         ) -> Result<BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError>
         {
-            ControllerHal::step_controller_time_latch(self)
+            Self::step_controller_time_latch(self)
         }
     }
 
@@ -140,6 +142,8 @@ mod worker {
     /// Why a fresh logical controller-time request was not published.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ControllerTimeRequestError {
+        /// The arena entered absorbing quarantine before this request.
+        Faulted,
         /// The lower owner already held a request although the durable worker was
         /// idle. The worker entered fail-stop instead of stealing that request.
         OwnershipCollision,

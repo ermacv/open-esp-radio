@@ -12,15 +12,16 @@
 //! returns the clocked client with the BLE PHY allocations, which no hardware
 //! references after the reset.
 
+use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+
 use oer_esp32s31_hal::power::PlatformClockBackend;
 
 use oer_esp32s31_hal::bluetooth::engine::{
-    BlePhyEngineCpuOwned, DirectionFindingWorkspaceCpuOwned,
+    EngineShutDown, EngineShutdownError, EngineShutdownFailure,
 };
 use oer_esp32s31_hal::{
     bluetooth::{
-        BluetoothControllerOutputReleaseError, BluetoothControllerReset, BluetoothShutdownError,
-        BluetoothShutdownFailure, ClockedOwner, InterruptOutputAfterRoutesOwner,
+        BluetoothControllerOutputReleaseError, InterruptOutputAfterRoutesOwner,
         InterruptOutputReleasedOwner, ModemLpTimerInterruptReadyOwner,
     },
     domain::RadioDomain,
@@ -29,7 +30,6 @@ use oer_esp32s31_phy::{bluetooth_client::BluetoothPhyClientError, concurrent::Co
 use oer_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 use crate::{
-    ble_phy::{BlePhyRetainedOwners, DirectionFindingWorkspaceHardwareOwned},
     resources::TaskResources,
     runtime_resources::{
         ControllerEventCells, ControllerPoweredTaskRuntime, ControllerTaskRetirementError,
@@ -46,7 +46,7 @@ pub enum ControllerShutdownError {
     /// The shared PHY domain rejected the release.
     Phy(BluetoothPhyClientError),
     /// The Controller reset was rejected or did not read back.
-    Reset(BluetoothShutdownError),
+    Reset(EngineShutdownError),
     /// The shutdown ran outside the event cells' executor, which alone
     /// discards their notifications; the Controller was not reset.
     ForeignExecutor,
@@ -58,9 +58,9 @@ pub enum ControllerShutdownError {
 /// lost its routes and runtime, so no transition resumes it; the owners stay
 /// retained until the chip resets.
 #[must_use = "a failed shutdown retains the Controller until the chip resets"]
-pub struct ControllerShutdownFailure<X: SignalExecutor> {
+pub struct ControllerShutdownFailure<X: SignalExecutor, M: ControllerMemory> {
     error: ControllerShutdownError,
-    _retained: Retained<X>,
+    _retained: Retained<X, M>,
 }
 
 #[allow(
@@ -68,42 +68,38 @@ pub struct ControllerShutdownFailure<X: SignalExecutor> {
     clippy::large_enum_variant,
     reason = "the retained owners are never read or moved again"
 )]
-enum Retained<X: SignalExecutor> {
+enum Retained<X: SignalExecutor, M: ControllerMemory> {
     Task {
-        task: ControllerPoweredTaskRuntime<'static, X>,
-        retained: BlePhyRetainedOwners,
+        task: ControllerPoweredTaskRuntime<'static, X, M>,
+        membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
         output: InterruptOutputAfterRoutesOwner,
         timer: ModemLpTimerInterruptReadyOwner,
     },
     Output {
-        task: TaskResources,
-        retained: BlePhyRetainedOwners,
+        task: TaskResources<M>,
+        membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
         output: InterruptOutputAfterRoutesOwner,
         timer: ModemLpTimerInterruptReadyOwner,
     },
     Phy {
-        task: TaskResources,
+        task: TaskResources<M>,
         output: InterruptOutputReleasedOwner,
         timer: ModemLpTimerInterruptReadyOwner,
         membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyLeaveFailure,
-        storage: BlePhyEngineCpuOwned,
-        direction_finding: DirectionFindingWorkspaceHardwareOwned,
     },
     Reset {
-        failure: BluetoothShutdownFailure,
-        storage: BlePhyEngineCpuOwned,
-        direction_finding: DirectionFindingWorkspaceHardwareOwned,
+        failure: EngineShutdownFailure<M>,
     },
-    Retired(ControllerRetired),
+    Retired(ControllerRetired<M>),
 }
 
-impl<X: SignalExecutor> ControllerShutdownFailure<X> {
+impl<X: SignalExecutor, M: ControllerMemory> ControllerShutdownFailure<X, M> {
     pub const fn error(&self) -> ControllerShutdownError {
         self.error
     }
 }
 
-impl<X: SignalExecutor> core::fmt::Debug for ControllerShutdownFailure<X> {
+impl<X: SignalExecutor, M: ControllerMemory> core::fmt::Debug for ControllerShutdownFailure<X, M> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("ControllerShutdownFailure")
@@ -114,28 +110,14 @@ impl<X: SignalExecutor> core::fmt::Debug for ControllerShutdownFailure<X> {
 
 /// A retired Controller outside the shared PHY domain, awaiting its reset.
 #[must_use = "the retired Controller must be shut down"]
-pub struct ControllerRetired {
-    task: TaskResources,
+pub struct ControllerRetired<M: ControllerMemory> {
+    task: TaskResources<M>,
     output: InterruptOutputReleasedOwner,
     timer: ModemLpTimerInterruptReadyOwner,
-    storage: BlePhyEngineCpuOwned,
-    direction_finding: DirectionFindingWorkspaceHardwareOwned,
 }
 
-/// The clocked client and the BLE PHY allocations of a shut-down epoch.
-#[must_use = "the clocked client must release its clocks or start another epoch"]
-pub struct ControllerShutDown {
-    /// The Bluetooth client with its clocks still enabled.
-    pub clocked: ClockedOwner,
-    /// The BLE PHY environment and resolving-list storage, back at its
-    /// allocation-time image.
-    pub ble_phy: BlePhyEngineCpuOwned,
-    /// The direction-finding workspace, back at its allocation-time image.
-    pub direction_finding: DirectionFindingWorkspaceCpuOwned,
-    /// Proof of the reset, which returns the role memory of the finished
-    /// epoch to its initial image as well.
-    pub reset: BluetoothControllerReset,
-}
+/// Clocked client and the entire CPU-owned arena after verified reset.
+pub type ControllerShutDown<M> = EngineShutDown<M>;
 
 /// Retire a stopped epoch: take the task owner from its endpoint, release
 /// the Controller output and leave the shared PHY domain and BTBB. Returns
@@ -150,14 +132,14 @@ pub struct ControllerShutDown {
     clippy::result_large_err,
     reason = "the failure retains every owner of the epoch"
 )]
-pub fn retire<X: SignalExecutor, B: PlatformClockBackend>(
+pub fn retire<X: SignalExecutor, B: PlatformClockBackend, M: ControllerMemory>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
-    task: ControllerPoweredTaskRuntime<'static, X>,
-    retained: BlePhyRetainedOwners,
+    task: ControllerPoweredTaskRuntime<'static, X, M>,
+    membership: oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership,
     output: InterruptOutputAfterRoutesOwner,
     timer: ModemLpTimerInterruptReadyOwner,
     clock: &dyn oer_time::Clock,
-) -> Result<(ControllerRetired, bool), ControllerShutdownFailure<X>> {
+) -> Result<(ControllerRetired<M>, bool), ControllerShutdownFailure<X, M>> {
     let mut task = match task.retire() {
         Ok(task) => task,
         Err((error, task)) => {
@@ -165,7 +147,7 @@ pub fn retire<X: SignalExecutor, B: PlatformClockBackend>(
                 error: ControllerShutdownError::Task(error),
                 _retained: Retained::Task {
                     task,
-                    retained,
+                    membership,
                     output,
                     timer,
                 },
@@ -179,26 +161,19 @@ pub fn retire<X: SignalExecutor, B: PlatformClockBackend>(
                 error: ControllerShutdownError::Output(error),
                 _retained: Retained::Output {
                     task,
-                    retained,
+                    membership,
                     output,
                     timer,
                 },
             });
         }
     };
-    let BlePhyRetainedOwners {
-        membership,
-        storage,
-        direction_finding,
-    } = retained;
     match crate::phy::leave_phy(radio, &task, membership) {
         Ok(last) => Ok((
             ControllerRetired {
                 task,
                 output,
                 timer,
-                storage,
-                direction_finding,
             },
             last,
         )),
@@ -209,14 +184,12 @@ pub fn retire<X: SignalExecutor, B: PlatformClockBackend>(
                 output,
                 timer,
                 membership: failure,
-                storage,
-                direction_finding,
             },
         }),
     }
 }
 
-impl ControllerRetired {
+impl<M: ControllerMemory> ControllerRetired<M> {
     /// Reset the Controller domains, reunite the drained timer and return
     /// the clocked client with the BLE PHY allocations.
     ///
@@ -236,7 +209,7 @@ impl ControllerRetired {
         self,
         radio: &mut RadioDomain<B, T>,
         cells: &ControllerEventCells<X>,
-    ) -> Result<ControllerShutDown, ControllerShutdownFailure<X>> {
+    ) -> Result<ControllerShutDown<M>, ControllerShutdownFailure<X, M>> {
         // Before the reset: a foreign context could not discard the
         // notifications after it.
         if let Err(ForeignContext) = cells.is_quiet() {
@@ -249,31 +222,15 @@ impl ControllerRetired {
             task,
             output,
             timer,
-            storage,
-            direction_finding,
         } = self;
         match task.shut_down(radio, output, timer) {
-            Ok((clocked, reset)) => {
-                // The check above ran in this same executor context.
+            Ok(returned) => {
                 let _cleared = cells.clear_notifications_after_reset();
-                let mut ble_phy = storage;
-                ble_phy.reset_after_controller_reset(&reset);
-                let mut direction_finding = direction_finding.storage;
-                direction_finding.reset_after_controller_reset(&reset);
-                Ok(ControllerShutDown {
-                    clocked,
-                    ble_phy,
-                    direction_finding,
-                    reset,
-                })
+                Ok(returned)
             }
             Err(failure) => Err(ControllerShutdownFailure {
                 error: ControllerShutdownError::Reset(failure.error()),
-                _retained: Retained::Reset {
-                    failure,
-                    storage,
-                    direction_finding,
-                },
+                _retained: Retained::Reset { failure },
             }),
         }
     }

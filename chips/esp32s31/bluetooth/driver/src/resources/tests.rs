@@ -13,21 +13,25 @@ fn clocked() -> ClockedOwner {
 #[test]
 fn task_and_interrupt_owners_reunite_into_the_same_clocked_client() {
     let clocked = clocked();
-    let (task, setup) = separate_interrupt_owner(clocked);
+    let (engine, interrupts) = crate::test_clocks::engine(clocked);
+    let (task, setup) = separate_interrupt_owner(engine, interrupts);
     assert_eq!(task.controller_time_retirement_ready(), Ok(()));
     assert_eq!(
         task.controller_time_phase(),
         ControllerTimeWorkerPhase::Idle
     );
-    let _clocked = task
-        .reunite(setup)
-        .expect("untouched owners remain reunitable");
+    assert!(
+        !task.engine_retirement_ready(),
+        "retirement requires the engine's stop receipt"
+    );
+    let _retained = (task, setup);
 }
 
 #[test]
 fn task_retirement_keeps_a_controller_time_ownership_fault() {
     let clocked = clocked();
-    let (mut task, setup) = separate_interrupt_owner(clocked);
+    let (engine, interrupts) = crate::test_clocks::engine(clocked);
+    let (mut task, setup) = separate_interrupt_owner(engine, interrupts);
     assert!(
         task.controller_time
             .cancel_owned(crate::controller_time::ControllerTimeRequest::for_host_test(1))

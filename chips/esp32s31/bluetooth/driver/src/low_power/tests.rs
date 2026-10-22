@@ -8,15 +8,19 @@ use crate::{
 
 fn scheduler(
     cells: &ControllerEventCells<oer_interrupt_table::signal::host::Deferred>,
-) -> SchedulerInitialized<'_, 4, oer_interrupt_table::signal::host::Deferred> {
+) -> SchedulerInitialized<
+    '_,
+    4,
+    oer_interrupt_table::signal::host::Deferred,
+    crate::test_clocks::ModelMemory,
+> {
     let (_shared, partitions) =
         RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
-    ControllerHalInitialized::initialize_for_validation(
-        ClockedOwner::for_host_test(partitions.bluetooth),
-        |_, _| {},
-    )
-    .initialize_scheduler_for_validation(ControllerRuntimeResources::new(cells))
-    .expect("pristine host runtime")
+    let (engine, interrupts) =
+        crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
+    ControllerHalInitialized::initialize_for_validation(engine, interrupts, |_, _| {})
+        .initialize_scheduler_for_validation(ControllerRuntimeResources::new(cells))
+        .expect("pristine host runtime")
 }
 
 #[test]
@@ -85,7 +89,15 @@ fn the_task_endpoint_returns_the_actual_task_owner_once_idle() {
     let cells = ControllerEventCells::host();
     let mut scheduler = scheduler(&cells);
     let _interrupts = scheduler.take_interrupt_owner();
-    let (_, task, _) = scheduler.split_runtime();
+    let (_, mut task, _) = scheduler.split_runtime();
+    let Err((error, mut task)) = task.retire() else {
+        panic!("stop receipt required");
+    };
+    assert_eq!(
+        error,
+        crate::runtime_resources::ControllerTaskRetirementError::EngineNotStopped
+    );
+    task.task_owner().engine().stopped_for_host_test();
     let Ok(hardware) = task.retire() else {
         panic!("an idle task endpoint retires");
     };

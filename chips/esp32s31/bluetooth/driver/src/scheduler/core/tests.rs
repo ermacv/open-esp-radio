@@ -17,9 +17,12 @@ fn controller_hal_precedes_complete_scheduler_init() {
     let clocked = ClockedOwner::for_host_test(partitions.bluetooth);
     let operations = Rc::new(RefCell::new(Vec::new()));
     let hal_operations = Rc::clone(&operations);
-    let initialized = ControllerHalInitialized::initialize_for_validation(clocked, |_, _| {
-        hal_operations.borrow_mut().push("controller-hal");
-    });
+    let initialized = {
+        let (engine, interrupts) = crate::test_clocks::engine(clocked);
+        ControllerHalInitialized::initialize_for_validation(engine, interrupts, |_, _| {
+            hal_operations.borrow_mut().push("controller-hal");
+        })
+    };
     let time_scale = initialized.controller_time_scale();
     let scheduler_operations = Rc::clone(&operations);
     let cells = ControllerEventCells::host();
@@ -54,13 +57,12 @@ fn controller_hal_precedes_complete_scheduler_init() {
     assert!(!task.controller_time_needs_recheck());
 }
 
-fn initialized_for_rejection_test() -> ControllerHalInitialized {
+fn initialized_for_rejection_test() -> ControllerHalInitialized<crate::test_clocks::ModelMemory> {
     let (_, partitions) =
         RadioHardware::for_host_test().split::<crate::test_clocks::TestClockBackend, _>(());
-    ControllerHalInitialized::initialize_for_validation(
-        ClockedOwner::for_host_test(partitions.bluetooth),
-        |_, _| {},
-    )
+    let (engine, interrupts) =
+        crate::test_clocks::engine(ClockedOwner::for_host_test(partitions.bluetooth));
+    ControllerHalInitialized::initialize_for_validation(engine, interrupts, |_, _| {})
 }
 
 #[test]
