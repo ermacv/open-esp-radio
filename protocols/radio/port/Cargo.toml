@@ -14,6 +14,7 @@ readme = "README.md"
 test-support = []
 
 [dependencies]
+oer-sync = { path = "../../../portable/sync" }
 atomic-waker = { version = "1.1.2", default-features = false }
 scopeguard = { version = "1.2.0", default-features = false }
 pin-project-lite = "0.2.17"

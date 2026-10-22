@@ -16,7 +16,6 @@ use core::{
     task::Poll,
 };
 
-use atomic_waker::AtomicWaker;
 use oer_esp32s31_hal::power::PlatformClockBackend;
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockAbandonment};
 use oer_esp32s31_radio_client::{Client, Failed, LpClock, LpSource, PhyPreparation};
@@ -29,6 +28,7 @@ use oer_espressif_executor::{
     timer_observation::{Report, Window},
 };
 use oer_memory::AffineSpscSender;
+use oer_sync::PriorityWaker;
 use oer_time::{Clock, Duration, Timer};
 
 use oer_embassy_time::EmbassyClock;
@@ -100,7 +100,7 @@ pub const TIMED_PHASES: [Phase; 3] = [Phase::Window, Phase::Stress, Phase::Hold]
 oer_espressif_staged_runtime::placed_static! {
     static PHASE: AtomicU8 = AtomicU8::new(Phase::BringUp as u8), in critical_data "w1";
     /// The P2 timer task waits on it for the phase to change.
-    static PHASE_WAKER: AtomicWaker = AtomicWaker::new(), in critical_data "w1";
+    static PHASE_WAKER: PriorityWaker = PriorityWaker::new(), in critical_data "w1";
 }
 
 /// The phase now.

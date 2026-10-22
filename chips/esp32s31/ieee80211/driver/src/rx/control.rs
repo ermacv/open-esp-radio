@@ -10,6 +10,7 @@ use core::{
 use atomic_waker::AtomicWaker;
 use oer_esp32s31_ieee80211_mac::rx::{RxRingError, pool::RxStageTransactionError};
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
+use oer_sync::PriorityWaker;
 
 use super::frontier::RxFrontierError;
 
@@ -70,7 +71,7 @@ pub struct WifiRxExit {
 /// The shared words of one stop handle and its receive runner.
 pub struct ReceiveControl {
     stop: AtomicBool,
-    runner: AtomicWaker,
+    runner: PriorityWaker,
     exit: AffineSpscQueue<WifiRxExit, 1>,
     reporter: AtomicWaker,
 }
@@ -80,7 +81,7 @@ impl ReceiveControl {
     pub fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
         oer_memory::init_in_place!(storage, Self {
             stop: AtomicBool::new(false),
-            runner: AtomicWaker::new(),
+            runner: PriorityWaker::new(),
             exit => AffineSpscQueue::init_in_place,
             reporter: AtomicWaker::new(),
         })
@@ -89,7 +90,7 @@ impl ReceiveControl {
     pub const fn new() -> Self {
         Self {
             stop: AtomicBool::new(false),
-            runner: AtomicWaker::new(),
+            runner: PriorityWaker::new(),
             exit: AffineSpscQueue::new(),
             reporter: AtomicWaker::new(),
         }
@@ -131,7 +132,7 @@ impl Default for ReceiveControl {
 /// The application's handle: request the stop, then wait for the report.
 pub struct ReceiveStopHandle<'a> {
     stop: &'a AtomicBool,
-    runner: &'a AtomicWaker,
+    runner: &'a PriorityWaker,
     exit: AffineSpscReceiver<'a, WifiRxExit, 1>,
     reporter: &'a AtomicWaker,
 }
@@ -164,7 +165,7 @@ impl ReceiveStopHandle<'_> {
 /// The runner's side: observe the stop request, publish the report once.
 pub struct ReceiveRunnerControl<'a> {
     stop: &'a AtomicBool,
-    runner: &'a AtomicWaker,
+    runner: &'a PriorityWaker,
     exit: AffineSpscSender<'a, WifiRxExit, 1>,
     reporter: &'a AtomicWaker,
 }

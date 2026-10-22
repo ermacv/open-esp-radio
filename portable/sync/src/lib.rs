@@ -109,7 +109,6 @@ impl Drop for Waking<'_> {
     }
 }
 
-
 impl Default for PriorityWaker {
     fn default() -> Self {
         Self::new()

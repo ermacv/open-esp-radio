@@ -10,6 +10,7 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
+use oer_sync::PriorityWaker;
 
 use crate::{Abandon, LocalId, Quarantine, SlotIdentity};
 
@@ -275,7 +276,7 @@ const TAKEN_ANSWER: u8 = 3;
 pub(crate) struct Signals {
     state: AtomicU8,
     answer: AtomicU8,
-    p2: AtomicWaker,
+    p2: PriorityWaker,
     join: AtomicWaker,
 }
 
@@ -284,7 +285,7 @@ impl Signals {
         Self {
             state: AtomicU8::new(INITIAL),
             answer: AtomicU8::new(NO_ANSWER),
-            p2: AtomicWaker::new(),
+            p2: PriorityWaker::new(),
             join: AtomicWaker::new(),
         }
     }

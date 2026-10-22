@@ -1,80 +1,80 @@
 use super::*;
-    use std::{sync::Arc, task::Wake};
-    #[derive(Default)]
-    struct Count(AtomicUsize);
-    impl Wake for Count {
-        fn wake(self: Arc<Self>) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
+use std::{sync::Arc, task::Wake};
+#[derive(Default)]
+struct Count(AtomicUsize);
+impl Wake for Count {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::Relaxed);
     }
-    fn task() -> (Arc<Count>, Waker) {
-        let count = Arc::new(Count::default());
-        (count.clone(), Waker::from(count))
-    }
-    fn count(value: &Count) -> usize {
-        value.0.load(Ordering::Relaxed)
-    }
+}
+fn task() -> (Arc<Count>, Waker) {
+    let count = Arc::new(Count::default());
+    (count.clone(), Waker::from(count))
+}
+fn count(value: &Count) -> usize {
+    value.0.load(Ordering::Relaxed)
+}
 
-    #[test]
-    fn registration_preempting_notification_does_not_schedule_itself() {
-        let signal = PriorityWaker::new();
-        let (old, old_waker) = task();
-        let (new, new_waker) = task();
-        signal.register(&old_waker);
-        let interrupted = signal.begin_wake();
-        for _ in 0..32 {
-            signal.register(&new_waker);
-            assert_eq!((count(&old), count(&new)), (0, 0));
-        }
-        interrupted.fire();
-        drop(interrupted);
-        assert_eq!((count(&old), count(&new)), (1, 0));
-        signal.wake();
-        assert_eq!((count(&old), count(&new)), (1, 1));
+#[test]
+fn registration_preempting_notification_does_not_schedule_itself() {
+    let signal = PriorityWaker::new();
+    let (old, old_waker) = task();
+    let (new, new_waker) = task();
+    signal.register(&old_waker);
+    let interrupted = signal.begin_wake();
+    for _ in 0..32 {
+        signal.register(&new_waker);
+        assert_eq!((count(&old), count(&new)), (0, 0));
     }
+    interrupted.fire();
+    drop(interrupted);
+    assert_eq!((count(&old), count(&new)), (1, 0));
+    signal.wake();
+    assert_eq!((count(&old), count(&new)), (1, 1));
+}
 
-    #[test]
-    fn first_registration_during_an_early_notification_can_sleep() {
-        let signal = PriorityWaker::new();
-        let (new, new_waker) = task();
-        let interrupted = signal.begin_wake();
-        signal.register(&new_waker);
-        interrupted.fire();
-        drop(interrupted);
-        assert_eq!(count(&new), 0);
-        signal.wake();
-        assert_eq!(count(&new), 1);
-    }
+#[test]
+fn first_registration_during_an_early_notification_can_sleep() {
+    let signal = PriorityWaker::new();
+    let (new, new_waker) = task();
+    let interrupted = signal.begin_wake();
+    signal.register(&new_waker);
+    interrupted.fire();
+    drop(interrupted);
+    assert_eq!(count(&new), 0);
+    signal.wake();
+    assert_eq!(count(&new), 1);
+}
 
-    #[test]
-    fn nested_wake_does_not_release_a_suspended_producers_slot() {
-        let signal = PriorityWaker::new();
-        let (_, old_waker) = task();
-        let (new, new_waker) = task();
-        signal.register(&old_waker);
-        let interrupted = signal.begin_wake();
-        signal.wake();
-        signal.register(&new_waker);
-        interrupted.fire();
-        drop(interrupted);
-        assert_eq!(count(&new), 0);
-        signal.wake();
-        assert_eq!(count(&new), 1);
-    }
+#[test]
+fn nested_wake_does_not_release_a_suspended_producers_slot() {
+    let signal = PriorityWaker::new();
+    let (_, old_waker) = task();
+    let (new, new_waker) = task();
+    signal.register(&old_waker);
+    let interrupted = signal.begin_wake();
+    signal.wake();
+    signal.register(&new_waker);
+    interrupted.fire();
+    drop(interrupted);
+    assert_eq!(count(&new), 0);
+    signal.wake();
+    assert_eq!(count(&new), 1);
+}
 
-    #[test]
-    fn previous_registration_is_released_after_notification_finishes() {
-        let signal = PriorityWaker::new();
-        let (old, old_waker) = task();
-        let (_, new_waker) = task();
-        signal.register(&old_waker);
-        let interrupted = signal.begin_wake();
-        signal.register(&new_waker);
-        assert_eq!(Arc::strong_count(&old), 3);
-        drop(interrupted);
-        signal.register(&new_waker);
-        assert_eq!(Arc::strong_count(&old), 2);
-    }
+#[test]
+fn previous_registration_is_released_after_notification_finishes() {
+    let signal = PriorityWaker::new();
+    let (old, old_waker) = task();
+    let (_, new_waker) = task();
+    signal.register(&old_waker);
+    let interrupted = signal.begin_wake();
+    signal.register(&new_waker);
+    assert_eq!(Arc::strong_count(&old), 3);
+    drop(interrupted);
+    signal.register(&new_waker);
+    assert_eq!(Arc::strong_count(&old), 2);
+}
 
 // Hold the producer at every boundary around its opaque AtomicWaker operation.
 // The marked interval includes every instruction of AtomicWaker::take/wake:
@@ -113,7 +113,10 @@ fn consumer_preemption_at_each_notification_boundary_keeps_the_next_wait_live() 
         if boundary == 4 {
             signal.register(&new_waker);
         }
-        assert_eq!((count(&old), count(&new)), if boundary < 2 { (0, 1) } else { (1, 0) });
+        assert_eq!(
+            (count(&old), count(&new)),
+            if boundary < 2 { (0, 1) } else { (1, 0) }
+        );
         // A new polling cycle registers before checking its input.
         signal.register(&new_waker);
         let before = count(&new);
@@ -146,7 +149,9 @@ fn a_wake_callback_can_rebind_and_notify_without_releasing_the_outer_slot() {
     let signal = Arc::new(PriorityWaker::new());
     let (next, next_waker) = task();
     let first = Arc::new(Rebind {
-        signal: signal.clone(), next: next_waker, calls: AtomicUsize::new(0),
+        signal: signal.clone(),
+        next: next_waker,
+        calls: AtomicUsize::new(0),
     });
     signal.register(&Waker::from(first.clone()));
     signal.wake();
