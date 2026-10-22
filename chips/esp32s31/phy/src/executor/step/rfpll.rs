@@ -106,8 +106,16 @@ pub(super) fn direct_i2c<C: Clock + ?Sized>(
         if consumed && start && observed {
             published = clock.now();
         }
+        // Publication and its first readiness observation are one attempt.
+        // The common settle deadline is unchanged: busy still expires, but
+        // an already-ready write cannot be lost immediately after starting it.
+        let completed = if consumed && start {
+            io.i2c(transaction, false)? == PhyColdI2cObservation::EdgeConsumed
+        } else {
+            consumed
+        };
         Ok(if command.is_some() {
-            consumed && !start
+            completed
         } else {
             matches!(transaction.action(), PhyColdI2cAction::Complete(_))
         })

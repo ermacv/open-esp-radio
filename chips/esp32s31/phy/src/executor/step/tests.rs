@@ -47,6 +47,8 @@ pub(crate) struct Io {
     rfpll_actions: Vec<crate::tracking::rfpll::Action>,
     frequency_actions: Vec<crate::analog::rfpll::RfpllFrequencyAction>,
     frequency_failure: bool,
+    i2c_write_publication: Option<(Rc<VirtualClock<1>>, u64)>,
+    i2c_busy_after_write: bool,
     dc_iq_pending: usize,
     dc_iq_events: Vec<&'static str>,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
@@ -284,6 +286,14 @@ impl Io {
             PhyColdI2cAction::StartRead { .. } => transaction.read_started(),
             PhyColdI2cAction::StartWrite { value, .. } => {
                 self.byte = value;
+                if let Some((clock, micros)) = &self.i2c_write_publication {
+                    clock
+                        .advance(Duration::from_micros(*micros))
+                        .expect("publication fits virtual time");
+                }
+                if self.i2c_busy_after_write {
+                    self.busy.set(true);
+                }
                 transaction.write_started()
             }
             _ => return Err(Failure::Binding),

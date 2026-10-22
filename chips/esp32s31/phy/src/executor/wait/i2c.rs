@@ -23,6 +23,21 @@ pub(crate) fn complete<S, E, C: Clock + ?Sized>(
             return Ok(true);
         }
         advance(state, next)?;
+        let after = action(state);
+        if matches!(
+            (next, after),
+            (
+                PhyColdI2cAction::StartRead { .. },
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+            ) | (
+                PhyColdI2cAction::StartWrite { .. },
+                PhyColdI2cAction::AwaitWriteCompletionEdge { .. }
+            )
+        ) {
+            // Always sample a published command once in this attempt. A busy
+            // result still uses the same original twenty-us settle deadline.
+            advance(state, after)?;
+        }
         Ok(matches!(action(state), PhyColdI2cAction::Complete(_)))
     })
 }

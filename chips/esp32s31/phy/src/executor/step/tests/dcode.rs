@@ -183,3 +183,53 @@ async fn cold_complete(
         }
     }
 }
+
+#[test]
+fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
+    for busy in [false, true] {
+        let clock = Rc::new(VirtualClock::<1>::new());
+        let started = clock.now();
+        let mut io = Io {
+            i2c_write_publication: Some((clock.clone(), 21)),
+            i2c_busy_after_write: busy,
+            ..Io::default()
+        };
+        let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
+            fields::RFPLL_DCODE_CKGEN_RESET,
+            1,
+        ));
+        let result = super::super::rfpll::direct_i2c(
+            &mut super::super::io::Io::Test(&mut io, core::marker::PhantomData),
+            &*clock,
+            &mut transaction,
+            None,
+            false,
+        );
+        assert_eq!(
+            clock.now().saturating_duration_since(started).as_micros(),
+            21,
+            "no new settle window after publication"
+        );
+        assert_eq!(
+            io.actions.len(),
+            4,
+            "read publication/readiness then write publication/readiness"
+        );
+        if busy {
+            assert_eq!(result, Err(Failure::TimedOut));
+            assert!(
+                matches!(
+                    transaction.action(),
+                    PhyColdI2cAction::AwaitWriteCompletionEdge { .. }
+                ),
+                "pending hardware and cleanup obligation remain retained"
+            );
+        } else {
+            result.expect("ready write completes in the publication attempt");
+            assert!(matches!(
+                transaction.action(),
+                PhyColdI2cAction::Complete(_)
+            ));
+        }
+    }
+}
