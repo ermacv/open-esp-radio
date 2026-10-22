@@ -1,0 +1,203 @@
+//! Fixtures run only the pinned toolchain, in each test's own directory.
+use std::{collections::HashSet, path::Path, process::Command};
+
+use serde_json::Value;
+
+const TARGET: &str = "riscv32imafc-unknown-none-elf";
+const DRIVER: &str = env!("CARGO_BIN_EXE_oer-tool-image-large-values");
+
+fn compile(directory: &Path, source: &str, name: &str, extra: &[&str]) -> Value {
+    let source_path = directory.join(format!("{name}.rs"));
+    let manifest = directory.join("Cargo.toml");
+    std::fs::write(&manifest, "[package]\nname='fixture'\nversion='0.1.0'\n")
+        .expect("compiler fixture data is valid");
+    std::fs::write(&source_path, source).expect("compiler fixture data is valid");
+    let output = Command::new(DRIVER)
+        .arg("rustc")
+        .arg(&source_path)
+        .args(["--crate-name", name, "--crate-type=lib", "--edition=2024"])
+        .args(["--target", TARGET, "--emit=link", "--out-dir"])
+        .arg(directory)
+        .args([
+            "-Copt-level=3",
+            "-Cpanic=abort",
+            "-Ccodegen-units=16",
+            "-Alarge-assignments",
+        ])
+        .args(extra)
+        .env("OER_LARGE_VALUES_TARGET", TARGET)
+        .env("OER_LARGE_VALUES_LIMIT", "4096")
+        .env("CARGO_MANIFEST_DIR", directory)
+        .env(
+            "OER_LARGE_VALUES_WORKSPACE",
+            serde_json::to_string(&[manifest]).expect("compiler fixture data is valid"),
+        )
+        .env("OER_LARGE_VALUES_DRIVER_ID", "fixture")
+        .output()
+        .expect("compiler fixture data is valid");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(
+        &std::fs::read(directory.join(format!("{name}.large-values.json")))
+            .expect("compiler fixture data is valid"),
+    )
+    .expect("compiler fixture data is valid")
+}
+
+#[test]
+fn reports_concrete_values_and_call_operands_with_source_locations() {
+    let directory = tempfile::tempdir().expect("compiler fixture data is valid");
+    let source = include_str!("fixtures/values.rs");
+    let report = compile(directory.path(), source, "values", &[]);
+    assert_eq!(report["errors"], serde_json::json!([]));
+    let records = report["records"]
+        .as_array()
+        .expect("compiler fixture data is valid");
+    for (function, role) in [
+        ("local", "local"),
+        ("consume_copy", "argument"),
+        ("consume_move", "argument"),
+        ("direct_copy", "call-copy"),
+        ("direct_move", "call-move"),
+        ("indirect_copy", "call-copy"),
+        ("indirect_move", "call-move"),
+        ("return_value", "return"),
+        ("call_destination", "local"),
+    ] {
+        assert!(
+            records.iter().any(|record| {
+                record["instance"]
+                    .as_str()
+                    .expect("compiler fixture data is valid")
+                    .ends_with(&format!("::{function}"))
+                    && record["role"] == role
+                    && record["bytes"] == 8192
+            }),
+            "missing {function}/{role}: {report:#}"
+        );
+    }
+    assert!(records.iter().any(|record| {
+        record["instance"]
+            .as_str()
+            .expect("compiler fixture data is valid")
+            .contains("generic::<values::CopyBig>")
+            && record["bytes"] == 8192
+    }));
+    assert!(records.iter().any(|record| {
+        record["ty"]
+            .as_str()
+            .expect("compiler fixture data is valid")
+            .contains("future")
+            && record["bytes"]
+                .as_u64()
+                .expect("compiler fixture data is valid")
+                > 8192
+    }));
+    for record in records {
+        let name = record["instance"]
+            .as_str()
+            .expect("compiler fixture data is valid");
+        assert!(!name.ends_with("::static_reference") && !name.ends_with("::at_limit"));
+        assert!(
+            record["span"]
+                .as_str()
+                .expect("compiler fixture data is valid")
+                .contains("values.rs:")
+        );
+    }
+    let mut seen = HashSet::new();
+    assert!(records.iter().all(|record| seen.insert(record.to_string())));
+    let macro_line = source
+        .lines()
+        .position(|line| line.contains("large_local!();"))
+        .expect("compiler fixture data is valid")
+        + 1;
+    assert!(
+        records
+            .iter()
+            .filter(|record| record["instance"]
+                .as_str()
+                .expect("compiler fixture data is valid")
+                .ends_with("::macro_local"))
+            .all(|record| record["span"]
+                .as_str()
+                .expect("compiler fixture data is valid")
+                .contains(&format!("values.rs:{macro_line}:")))
+    );
+}
+
+#[test]
+fn sees_a_capped_foreign_generic_instantiated_by_a_workspace_crate() {
+    let directory = tempfile::tempdir().expect("compiler fixture data is valid");
+    let source = "#![no_std]\n#[inline(never)] pub fn generic<T: Copy>(x: &T) { let y = *x; core::hint::black_box(&y); }";
+    let report = compile(directory.path(), source, "foreign", &["--cap-lints=allow"]);
+    assert!(
+        report["records"]
+            .as_array()
+            .expect("compiler fixture data is valid")
+            .is_empty()
+    );
+    let external = format!(
+        "foreign={}",
+        directory.path().join("libforeign.rlib").display()
+    );
+    let report = compile(
+        directory.path(),
+        "#![no_std]\n#[inline(never)] pub fn caller(value: &[u8; 8192]) { foreign::generic(value); }",
+        "consumer",
+        &["--extern", &external],
+    );
+    assert!(
+        report["records"]
+            .as_array()
+            .expect("compiler fixture data is valid")
+            .iter()
+            .any(|record| {
+                record["instance"] == "foreign::generic::<[u8; 8192]>" && record["bytes"] == 8192
+            }),
+        "{report:#}"
+    );
+}
+
+#[test]
+fn imported_constructor_arguments_and_returns_need_no_exported_mir_body() {
+    let directory = tempfile::tempdir().expect("constructor fixture");
+    compile(
+        directory.path(),
+        "#![no_std]\npub enum Envelope<T> { Item(T) }",
+        "foreign",
+        &["--cap-lints=allow"],
+    );
+    let external = format!(
+        "foreign={}",
+        directory.path().join("libforeign.rlib").display()
+    );
+    let report = compile(
+        directory.path(),
+        "#![no_std]\n#[inline(never)] pub fn constructor() -> fn([u8;8192])->foreign::Envelope<[u8;8192]> { foreign::Envelope::Item }",
+        "consumer",
+        &["--extern", &external],
+    );
+    assert_eq!(report["errors"], serde_json::json!([]));
+    assert!(
+        !report["bodies_unavailable"]
+            .as_array()
+            .expect("signature-only instances")
+            .is_empty()
+    );
+    let records = report["records"].as_array().expect("records");
+    for role in ["argument", "return"] {
+        assert!(
+            records.iter().any(|record| record["role"] == role
+                && record["bytes"] == 8192
+                && record["instance"]
+                    .as_str()
+                    .expect("instance")
+                    .contains("foreign::Envelope::<[u8; 8192]>::Item")),
+            "{report:#}"
+        );
+    }
+}

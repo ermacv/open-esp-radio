@@ -11,7 +11,7 @@ use std::{
     cell::RefCell,
     ffi::OsString,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
 };
 
 use crate::{Result, strict};
@@ -146,11 +146,9 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     };
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
     let mut cargo = command(cargo, root, package, target, jobs);
-    cargo
-        .arg("--message-format=json-render-diagnostics")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
     let images = RefCell::new(Vec::new());
+    let values = RefCell::new(crate::large_values::Report::new(policy.max_move_bytes));
+    let log = crate::BuildLog::create(&output.join("build.log"))?;
     strict::build_with_retry(
         |invalidate| {
             if invalidate {
@@ -174,13 +172,12 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
                     );
                 }
             }
-            let built = cargo
-                .output()
-                .map_err(|error| format!("run cargo: {error}"))?;
-            if !built.status.success() {
-                return Err(format!("cargo build -p {package} failed ({})", built.status).into());
-            }
-            *images.borrow_mut() = linked_images(&built.stdout)?;
+            *values.borrow_mut() = crate::large_values::build(
+                &mut cargo, &log, root, &cache, target, PROFILE, "probe", &output,
+            )?;
+            *images.borrow_mut() = linked_images(&std::fs::read(
+                output.join("probe-compiler-artifacts.jsonl"),
+            )?)?;
             Ok(())
         },
         || {
@@ -192,6 +189,9 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
             )
         },
     )?;
+    if let Err(error) = values.borrow_mut().publish(&output) {
+        eprintln!("warning: large-values report: {error}");
+    }
     Ok(image(root, package, target))
 }
 

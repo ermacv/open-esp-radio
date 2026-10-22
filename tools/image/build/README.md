@@ -71,6 +71,7 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `runtime-frames.txt`, `bootstrap-frames.txt` | All recorded frames against the move limit, exceptions with ceilings and spare bytes, Diagnostic warnings |
 | `interrupt-placement.txt` | Interrupt code placement, paths to cached functions, static data references and objects, and free SRAM |
 | `image-linker.toml`, `strict-text.x`, `strict-placement.toml` | Runtime linker analysis inputs, generated strict-code fragment and the functions moved with their input sections |
+| `large-values.json`, `large-values.txt` | Compiler values above the move limit and workspace coverage |
 | `build.log` | Every step's standard error |
 
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
@@ -294,6 +295,35 @@ image's Cargo command alone, only for those `-Z` flags on the exact stable
 toolchain `rust-toolchain.toml` pins. Images build without frame pointers;
 `esp-backtrace` then reports a panic's message and location without a
 frame-pointer walk.
+
+The same setup builds the pinned [large-value reporter](../large-values/README.md)
+and installs it through `RUSTC_WRAPPER`, with an exact workspace-manifest
+filter from `cargo metadata`. Dependencies outside the workspace, host build
+scripts and proc macros run ordinary rustc with unchanged arguments. The
+wrapper preserves Cargo artifact hashes and the image compiler flags.
+`rustc-dev` is a component of the pinned toolchain for both host and chip CI.
+
+Every staged app and HIL image has `large-values.json` and `large-values.txt`
+beside its ELFs; probe reports are in `target/fw/probes/<package>/`. These
+report monomorphized MIR locals, temporaries, arguments, return slots and
+call operands above the policy's `max_move_bytes`, with full instances,
+concrete types, sizes and outer macro call sites. Static allocations are
+excluded. The report is separate from image checks and does not reject an
+oversized value. It describes pre-LLVM values, including values LLVM later
+removes; it supplies neither final frames nor call-chain bounds.
+
+Coverage lists the checked workspace units, host units and unchecked
+nonworkspace dependencies for runtime and bootstrap separately. Hashed
+sidecars remain at the compiler artifacts. Each image reads Cargo's actual
+artifact messages, including Fresh units, and checks the tool identity,
+limit and workspace manifest. Sidecars must also postdate every artifact
+output, so an ordinary rebuild after a source edit cannot reuse older facts. Cargo's binary uplifts select the hashed sidecar by file identity, and its
+full ELF digest verifies the contents. Even byte-identical feature variants
+retain their own facts.
+Missing or stale facts invalidate only the affected workspace packages'
+fingerprints in that image cache, then rerun Cargo once. A remaining missing
+report or inspection error is explicit. The image JSON envelope and each
+crate's compiler facts have independent schema versions.
 
 The stage-two header, checksum and address map come from the
 [platform layout](../../../chips/espressif/staged-layout/README.md), which application

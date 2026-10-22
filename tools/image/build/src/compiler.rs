@@ -139,6 +139,13 @@ pub struct ImageCompiler<'a> {
 /// every image shares, building the image linker first.
 pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<()> {
     let linker = build_linker(compiler.root, compiler.linker_target)?;
+    crate::large_values::configure(
+        command,
+        compiler.root,
+        &compiler.root.join("target/fw/large-values-driver"),
+        compiler.rust_target,
+        compiler.max_move_bytes,
+    )?;
     // The pinned stable toolchain supports these flags, but they remain
     // unstable: RUSTC_BOOTSTRAP enables them for this command alone. The
     // stack-size ELF section is consumed by a safe host-side parser.
@@ -170,17 +177,24 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
 /// `target_dir` and return its path. The build leaves the image's compiler
 /// environment behind: it is a host tool.
 pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
+    build_host_tool(
+        root,
+        target_dir,
+        "oer-tool-image-linker",
+        "oer-image-linker",
+    )
+}
+
+pub(crate) fn build_host_tool(
+    root: &Path,
+    target_dir: &Path,
+    package: &str,
+    binary: &str,
+) -> Result<PathBuf> {
     let mut command = oer_os_toolchain::command(Tool::Cargo)?;
     command
         .current_dir(root)
-        .args([
-            "build",
-            "--quiet",
-            "-p",
-            "oer-tool-image-linker",
-            "--bin",
-            "oer-image-linker",
-        ])
+        .args(["build", "--quiet", "-p", package, "--bin", binary])
         .arg("--manifest-path")
         .arg(root.join("Cargo.toml"))
         .arg("--target-dir")
@@ -191,16 +205,14 @@ pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
         "CARGO_BUILD_TARGET",
         "CARGO_TARGET_DIR",
         "RUSTC_BOOTSTRAP",
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
     ] {
         command.env_remove(variable);
     }
-    oer_os_process::run(&mut command).map_err(|error| {
-        format!(
-            "building the image linker of {} failed: {error}",
-            root.display()
-        )
-    })?;
-    Ok(target_dir.join("debug/oer-image-linker"))
+    oer_os_process::run(&mut command)
+        .map_err(|error| format!("building {binary} of {} failed: {error}", root.display()))?;
+    Ok(target_dir.join("debug").join(binary))
 }
 
 /// The per-target C and C++ flag variables the `cc` and `cmake` crates read.
