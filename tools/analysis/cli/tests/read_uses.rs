@@ -1123,3 +1123,115 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
         }
     )));
 }
+
+#[test]
+fn stored_is_scoped_to_resolved_and_indexed_candidates_in_selected_ranges() {
+    let source = r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.unresolved,"ax",@progbits
+.globl unresolved
+.type unresolved,@function
+unresolved:
+sw a0,0(a1)
+ret
+.size unresolved,.-unresolved
+.section .text.selected,"ax",@progbits
+.globl selected
+.type selected,@function
+selected:
+lui t0,0x20107
+sw a0,0(t0)
+ret
+.size selected,.-selected
+.section .text.indexed,"ax",@progbits
+.globl indexed
+.type indexed,@function
+indexed:
+andi a1,a1,3
+slli a1,a1,2
+lui t0,0x20107
+add t0,t0,a1
+sw a0,0(t0)
+ret
+.size indexed,.-indexed
+.section .text.alternatives,"ax",@progbits
+.globl alternatives
+.type alternatives,@function
+alternatives:
+lui t0,0x20107
+beqz a0,2f
+addi t0,t0,4
+2:
+lw t1,0(t0)
+ori t1,t1,1
+sw t1,0(t0)
+ret
+.size alternatives,.-alternatives
+
+"#);
+"##;
+    let memory = WorkingMemory::new(64 * 1024 * 1024).expect("memory");
+    let mut observations = Vec::new();
+    register_accesses(
+        &[Executable::new(fixture(source))],
+        Assumptions::default(),
+        &[ImageRegion {
+            start: 0x2010_7000,
+            length: 16,
+        }],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |o, _| {
+            observations.push(o.clone());
+            Ok(())
+        },
+    )
+    .expect("accesses");
+    for name in ["unresolved", "selected", "indexed", "alternatives"] {
+        let stores: Vec<_> = observations
+            .iter()
+            .filter_map(|r| {
+                if let RegisterAccess::Observation {
+                    function,
+                    fact,
+                    address,
+                    indexed,
+                    stored,
+                    ..
+                } = r
+                    && function.name.as_deref() == Some(name.as_bytes())
+                    && matches!(
+                        fact.as_ref(),
+                        FunctionRecord::MemoryAccess {
+                            access: MemoryKind::Store,
+                            ..
+                        }
+                    )
+                {
+                    Some((address, indexed, stored))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            stores.len(),
+            if name == "alternatives" { 2 } else { 1 },
+            "{name}"
+        );
+        for (address, indexed, stored) in stores {
+            assert_eq!(stored.is_some(), name != "unresolved", "{name}");
+            if name == "indexed" {
+                assert!(address.is_none() && indexed.is_some());
+            }
+            if name == "alternatives" {
+                let stored = stored.as_ref().expect("selected alternative");
+                assert!(stored.iter().any(|run|matches!(run.source,StoredBitsSource::Load {address:a,same_word:true,..} if a==*address && a.is_some())));
+            }
+        }
+    }
+    assert_eq!(memory.used(), 0);
+}

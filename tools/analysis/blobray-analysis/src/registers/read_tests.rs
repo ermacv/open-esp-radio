@@ -57,6 +57,12 @@ impl FunctionSemantics for Decoder {
                 signed: false,
                 swap: false,
             },
+            Some(7) | Some(8) => SemanticOp::Integer {
+                op: IntegerOp::Or,
+                dest: 6,
+                left: Operand::Register(6),
+                right: Operand::Immediate(if bytes.first() == Some(&7) { 1 } else { 2 }),
+            },
             Some(6) => SemanticOp::Memory {
                 kind: MemoryKind::Store,
                 base: 5,
@@ -422,10 +428,9 @@ fn a_function_work_limit_leaves_budget_for_the_next_function() {
 }
 
 /// A dependency means that a source reaches a sink on paths carrying it.
-/// A single-origin provenance tag must agree on every incoming path. These
-/// contracts differ when two physical loads meet at one store.
+/// Word provenance agrees across distinct physical loads of the same word.
 #[test]
-fn distinct_loads_at_a_join_keep_read_preservation_but_have_no_single_origin() {
+fn distinct_loads_at_a_join_preserve_the_same_word() {
     let memory = WorkingMemory::new(1 << 20).expect("memory");
     {
         let mut records = Vec::new();
@@ -510,9 +515,180 @@ fn distinct_loads_at_a_join_keep_read_preservation_but_have_no_single_origin() {
             [StoredBits {
                 low: 0,
                 width: 32,
-                source: StoredBitsSource::Unknown
+                source: StoredBitsSource::Load {
+                    address: Some(0x20000),
+                    width: 4,
+                    low: 0,
+                    same_word: true
+                }
             }]
         );
     }
     assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn provenance_work_counts_instruction_visits_and_checks_cancellation_between_them() {
+    #[derive(Default)]
+    struct Units {
+        units: u64,
+    }
+    impl RunControl for Units {
+        fn checkpoint(&mut self, units: u64) -> Result<()> {
+            self.units += units;
+            Ok(())
+        }
+    }
+    let mut caller = Units::default();
+    {
+        let mut work = ReadWork {
+            caller: &mut caller,
+            remaining: 2,
+            instruction_only: true,
+        };
+        work.checkpoint(1_000_000)
+            .expect("tag and bookkeeping work");
+        work.visit().expect("first instruction");
+        work.checkpoint(1_000_000).expect("more bookkeeping");
+        work.visit().expect("second instruction");
+        assert_eq!(
+            work.visit().expect_err("instruction budget").code,
+            ErrorCode::ResourceLimited
+        );
+    }
+    assert_eq!(caller.units, 2);
+    let mut cancel = || Err(Error::new(ErrorCode::Cancelled, "cancel fixture"));
+    let mut work = ReadWork {
+        caller: &mut cancel,
+        remaining: 2,
+        instruction_only: true,
+    };
+    assert_eq!(
+        work.checkpoint(32)
+            .expect_err("cancellation outside visit")
+            .code,
+        ErrorCode::Cancelled
+    );
+}
+
+#[test]
+fn a_word_and_a_forced_bit_at_a_join_remain_unknown_while_other_bits_are_kept() {
+    let memory = WorkingMemory::new(1 << 20).expect("memory");
+    let mut records = Vec::new();
+    for (site, byte) in [
+        (0, 3),
+        (4, 1),
+        (8, 7),
+        (12, 0),
+        (16, 1),
+        (20, 8),
+        (24, 6),
+        (28, 0),
+    ] {
+        records.push(FunctionRecord::Instruction {
+            offset: site,
+            bytes: vec![byte],
+            decoded: DecodedOp {
+                length: 4,
+                text: String::new(),
+                flow: if site == 28 {
+                    InstructionFlow::Return { base: 1 }
+                } else {
+                    InstructionFlow::Next
+                },
+            },
+        });
+    }
+    for (from, target, relation) in [
+        (0, 4, EdgeKind::Fallthrough),
+        (0, 16, EdgeKind::Taken),
+        (4, 8, EdgeKind::Fallthrough),
+        (8, 12, EdgeKind::Fallthrough),
+        (12, 24, EdgeKind::Jump),
+        (16, 20, EdgeKind::Fallthrough),
+        (20, 24, EdgeKind::Fallthrough),
+        (24, 28, EdgeKind::Fallthrough),
+    ] {
+        records.push(FunctionRecord::Edge {
+            from,
+            target: Some(target),
+            relation,
+            external: false,
+        });
+    }
+    records.push(FunctionRecord::Edge {
+        from: 28,
+        target: None,
+        relation: EdgeKind::Return,
+        external: true,
+    });
+    for site in [4, 16, 24] {
+        records.push(FunctionRecord::MemoryAccess {
+            offset: site,
+            access: if site == 24 {
+                MemoryKind::Store
+            } else {
+                MemoryKind::Load
+            },
+            address: number(0x20000),
+            width: 4,
+            value: None,
+            relocation: None,
+        });
+    }
+    let facts = Facts::new(&records, &memory, &mut || Ok(())).expect("facts");
+    let mut reads = ReadUsesEvaluator::new(&facts, &memory);
+    reads
+        .analyze(
+            None,
+            &Decoder,
+            &mut |_, _, _| Ok(true),
+            &|_| None,
+            &mut || Ok(()),
+        )
+        .expect("reads");
+    for (site, forced) in [(4, 1), (16, 2)] {
+        assert_eq!(
+            reads
+                .reads(site, &number(0x20000), 4, MemoryKind::Load, &mut || Ok(()))
+                .expect("read")
+                .preserved,
+            !forced
+        );
+    }
+    let mut provenance = StoredProvenanceEvaluator::new(&facts, &memory);
+    provenance
+        .analyze(None, &Decoder, &|_| None, &mut || Ok(()))
+        .expect("provenance");
+    assert!(!provenance.work_limited());
+    let stored = provenance
+        .stored(24, &number(0x20000), 4, None, &mut || Ok(()))
+        .expect("store");
+    assert_eq!(
+        stored,
+        [
+            StoredBits {
+                low: 0,
+                width: 2,
+                source: StoredBitsSource::Unknown
+            },
+            StoredBits {
+                low: 2,
+                width: 30,
+                source: StoredBitsSource::Load {
+                    address: Some(0x20000),
+                    width: 4,
+                    low: 2,
+                    same_word: true
+                }
+            }
+        ]
+    );
+    assert_eq!(
+        write_mask(4, &stored),
+        Some(RegisterMask {
+            kind: RegisterMaskKind::WriteReplacement,
+            bits: 3
+        })
+    );
 }

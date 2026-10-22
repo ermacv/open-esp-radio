@@ -84,7 +84,10 @@ whole library operation. Known sinks take precedence over limits.
 
 `stored` projects a second domain of the same CFG engine. Each register bit
 holds one tag: unknown, zero, one, or a source bit; stack bytes hold eight tags.
-This pass tracks every load and entry register. Joins keep equal tags and
+This pass tracks every load word and entry register. Word tags use the address
+and width, so distinct loads of the same word share a tag. `stored` is present
+for stores in selected ranges, including selected indexed addresses; plain
+unresolved stores carry none. Joins keep equal tags and
 replace differing tags with unknown. Integer operations, stack forwarding and
 callee return mappings use the common interpreter. Numeric alternatives retain
 only constant bits shared by all alternatives. Its function budget has the same
@@ -92,10 +95,9 @@ formula, independently of the dependency pass. On exhaustion, stores outside
 the forward closure of pending transfers retain their proven cells; literal
 store facts remain available inside it.
 
-Read dependencies describe paths carrying each source. Stored provenance
-requires one tag across all incoming paths. In particular, distinct loads
-joining before one store can be preserved in `reads` while their stored source
-is unknown.
+Read dependencies describe paths carrying each physical source. Stored
+provenance requires one word or entry tag across all incoming paths; loads of
+the same word agree independently of their instruction sites.
 
 Grouped human output prints `reads[used=... unknown=... preserved=... unused=...]`
 with sink sites, precision and limit reasons. `read-selection` remains an

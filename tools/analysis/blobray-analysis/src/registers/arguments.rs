@@ -65,6 +65,7 @@ impl<'m> ArgumentProgram<'m> {
         let mut work = ReadWork {
             caller: c,
             remaining: read_work_limit(self.instructions.len()),
+            instruction_only: false,
         };
         let result = (|| {
             for instruction in self.instructions.iter().copied() {

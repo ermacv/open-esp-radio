@@ -262,7 +262,7 @@ fn collect<'m>(
                         // Unlocated candidates only contribute to the unresolved
                         // count. Their provenance never enters a comparison.
                         let stored = if o.address.is_some() || o.indexed.is_some() {
-                            flow.stored(o.fact, c)?
+                            flow.stored(&o, c)?
                         } else {
                             None
                         };

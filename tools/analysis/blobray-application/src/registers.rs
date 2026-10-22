@@ -132,9 +132,12 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
     }
     pub fn stored(
         &mut self,
-        fact: &FunctionRecord,
+        candidate: &Candidate<'_>,
         c: &mut dyn RunControl,
     ) -> Result<Option<Vec<StoredBits>>> {
+        if candidate.address.is_none() && candidate.indexed.is_none() {
+            return Ok(None);
+        }
         if let FunctionRecord::MemoryAccess {
             offset,
             access: MemoryKind::Store,
@@ -142,7 +145,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             width,
             value,
             ..
-        } = fact
+        } = candidate.fact
         {
             self.prepare_links(c)?;
             let links = self
@@ -160,13 +163,23 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 },
                 c,
             )?;
-            Ok(Some(self.provenance.stored(
-                *offset,
-                address,
-                *width,
-                value.as_ref(),
-                c,
-            )?))
+            let mut stored = self
+                .provenance
+                .stored(*offset, address, *width, value.as_ref(), c)?;
+            // A same-word source follows the selected address alternative of
+            // this store, even when its abstract address names several words.
+            for run in &mut stored {
+                if let StoredBitsSource::Load {
+                    address,
+                    same_word: true,
+                    ..
+                } = &mut run.source
+                    && address.is_none()
+                {
+                    *address = candidate.address;
+                }
+            }
+            Ok(Some(stored))
         } else {
             Ok(None)
         }

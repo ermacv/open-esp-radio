@@ -535,7 +535,7 @@ enum ReadFlowOp {
 }
 
 /// Bound pathological CFGs without spending the whole operation's budget on
-/// one function. Every admitted step is still charged to the caller.
+/// one function. Each domain chooses its work units; all check caller control.
 const READ_MIN_FUNCTION_WORK: u64 = 100_000;
 const READ_INSTRUCTION_WORK: u64 = 512;
 fn read_work_limit(instructions: usize) -> u64 {
@@ -544,9 +544,10 @@ fn read_work_limit(instructions: usize) -> u64 {
 struct ReadWork<'c> {
     caller: &'c mut dyn RunControl,
     remaining: u64,
+    instruction_only: bool,
 }
-impl RunControl for ReadWork<'_> {
-    fn checkpoint(&mut self, units: u64) -> Result<()> {
+impl ReadWork<'_> {
+    fn charge(&mut self, units: u64) -> Result<()> {
         self.remaining = self.remaining.checked_sub(units).ok_or_else(|| {
             Error::new(
                 ErrorCode::ResourceLimited,
@@ -554,6 +555,18 @@ impl RunControl for ReadWork<'_> {
             )
         })?;
         self.caller.checkpoint(units)
+    }
+    fn visit(&mut self) -> Result<()> {
+        self.charge(1)
+    }
+}
+impl RunControl for ReadWork<'_> {
+    fn checkpoint(&mut self, units: u64) -> Result<()> {
+        if self.instruction_only {
+            self.caller.checkpoint(0)
+        } else {
+            self.charge(units)
+        }
     }
     fn position(&self) -> RunPosition {
         self.caller.position()
@@ -617,7 +630,11 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.ready = true;
         let result = (|| {
             let records = self.facts.records();
-            c.checkpoint(records.len() as u64)?;
+            c.checkpoint(if D::INSTRUCTION_WORK {
+                0
+            } else {
+                records.len() as u64
+            })?;
             let instructions = records
                 .iter()
                 .filter(|record| matches!(record, FunctionRecord::Instruction { .. }))
@@ -625,6 +642,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
             let mut work = ReadWork {
                 caller: c,
                 remaining: read_work_limit(instructions),
+                instruction_only: D::INSTRUCTION_WORK,
             };
             self.prepare(decoder, select, &mut work)?;
             self.solve(abi, calls, &mut work)
@@ -774,6 +792,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 ReadOrigin::Load { site, .. } => site,
                 ReadOrigin::Entry(_) => u64::MAX,
             });
+        D::prepare_sources(self, c)?;
         for record in records {
             c.checkpoint(1)?;
             match record {
@@ -1036,7 +1055,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         &mut self,
         abi: Option<CallAbi>,
         calls: &CallAt<'_>,
-        c: &mut dyn RunControl,
+        c: &mut ReadWork<'_>,
     ) -> Result<()> {
         if self.nodes.is_empty() {
             return Ok(());
@@ -1069,7 +1088,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.merge(0, entry, c)?;
         let mut cursor = 0;
         while let Some(id) = self.queue.get(cursor).copied() {
-            c.checkpoint(1)?;
+            c.visit()?;
             cursor += 1;
             self.pending = Some(id);
             self.node_mut(id)?.queued = false;
@@ -1095,7 +1114,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         // Emit only at the fixed point: an earlier Exact must not survive a
         // later join which demotes the same path to May.
         for id in 0..self.nodes.len() {
-            c.checkpoint(1)?;
+            c.visit()?;
             if let Some(input) = self.node(id)?.input {
                 self.execute(id, input, abi, calls, true, c)?;
             }

@@ -27,12 +27,14 @@ pub fn assert_preserved_stores(observations: &[oer_analysis_blobray_domain::Regi
             function,
             fact,
             reads: Some(reads),
+            address: resolved,
+            indexed,
             ..
         } = observation
         else {
             continue;
         };
-        if reads.preserved == 0 {
+        if reads.preserved == 0 || (resolved.is_none() && indexed.is_none()) {
             continue;
         }
         let FunctionRecord::MemoryAccess { address, width, .. } = fact.as_ref() else {

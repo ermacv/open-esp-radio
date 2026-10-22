@@ -6,43 +6,42 @@ recognition, code-coverage closures and record
 navigation. They have no filesystem authority.
 
 `registers` recognizes load masks using the shared borrowed fact index.
-One CFG dependency engine supplies both read uses and stored bit provenance.
-At a store, known bits become constants; a single exact, non-inverted source
-becomes a load or entry-register run; every other bit stays unknown.
-All function loads are sources, including RAM outside the selected ranges;
-only selected loads produce read-use observations. A read-modify-write's replacement mask covers
-the stored bits not copied identically from the same word and position;
-writes with no preserved bits carry no replacement mask. It reports
-bit-selection observations with their original physical load width;
-application owns address scope.
-The pass propagates load-site and entry-register dependencies over the
-instruction CFG to a fixed point, with union at joins, explicit limits and
-byte-level stack transfers. Values also carry known-zero and known-one masks;
-joins retain only bits known equally on every path. Neutral bitwise operands
-pass dependencies exactly; inverted bits remain uses, never preservation.
-Provenance-only loads and entry registers keep only non-inverted exact wiring;
-May dependencies, inversion and competing sources become unknown provenance.
-Selected read sources retain their full dependency matrices. Cells with more
-than eight sources widen selected dependencies to May at every output and drop
-provenance-only sources, retaining known bits. Argument-summary entry sources
-retain consumption and inverted-return dependencies because caller read uses
-require both.
-Interned state sets and the queue have working
-memory admission; each function's pass also has a
-`max(100000, 512 * instruction_count)` work-unit cap. On exhaustion,
-queued/active transfers invalidate only their forward CFG closure; other input
-cells remain proved. Literal numeric value facts remain usable at any store.
-Completed solving also keeps stored cells when observation emission is limited. Application resolves
-call-argument callees against captured input and ROM symbols. The same engine
-also seeds entry registers for argument summaries: consumed bits and returned
-bit mappings, including inversion, through the shared
-`riscv-model::calls::CallSummaries` port. Application computes the call graph
-without summaries, then analyzes functions in callee-first SCC order with
-completed callee contracts. Compact argument CFG recipes come from final
-records in this second analysis and are released after solving.
-Recursive components and unavailable or flow-incomplete callees retain May
-argument consumption. Returned dependencies continue in the caller's results;
-summary work and storage use the operation's existing limits.
+One CFG engine runs two value domains with shared traversal, stack transfers,
+ABI handling and callee-summary application. The read domain tracks selected
+physical loads with exact/May dependency matrices and keeps entry sources for
+argument summaries. The provenance domain uses one fixed tag per bit: unknown,
+zero, one, an entry-register bit or a bit of a word identified by address and
+load width. Equal word tags survive joins across distinct load instructions;
+differing tags become unknown. Numeric address forms share one word identity;
+unresolved addresses use their abstract-value identity. All loads, including
+RAM outside the selected ranges, can supply stored provenance. Stack reloads
+retain forwarded word/entry tags; other bits name the reloaded word. Known
+values remain separate from word identity until stored projection.
+
+`stored` is present for stores in the selected ranges, including selected indexed
+addresses; plain unresolved stores carry none. At those stores, constants and
+word/entry bit tags project to runs. Integer wiring and constant add/subtract
+retain bits below the first possible carry or borrow; inversion and other
+arithmetic become unknown. Numeric alternatives retain their shared constant
+bits. A replacement mask covers stored bits not copied identically from the
+same word and position; writes with no preserved bits carry no replacement mask.
+
+State sets and queues use admitted working memory. Each domain has its own
+`max(100000, 512 * instruction_count)` function budget: dependency operations
+charge their work, while provenance charges instruction visits. Both observe
+caller cancellation and deadlines throughout. On a provenance limit, only the
+forward closure of pending transfers loses its proof; independent stores and
+literal numeric facts remain available.
+
+Application resolves call-argument callees against captured input and ROM
+symbols. The read domain also computes argument consumption and returned bit
+mappings, including inversion, through `riscv-model::calls::CallSummaries`.
+Application computes the call graph without summaries, then analyzes functions
+in callee-first SCC order with completed contracts. Owned argument CFG recipes
+come from those final records and are released after solving. Recursive
+components and unavailable or flow-incomplete callees retain May consumption.
+Returned dependencies continue in caller results; summary work and storage use
+the operation's existing limits.
 It never infers register geometry, hardware field meaning or safe RMW semantics.
 
 `closure::code_closure` walks the code statically reachable from root entries

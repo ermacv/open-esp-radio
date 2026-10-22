@@ -19,6 +19,13 @@ pub(super) trait Domain<'m>: Sized {
     const ALL_LOADS: bool = false;
     const RECOVER: bool = false;
     const EMIT: bool = true;
+    const INSTRUCTION_WORK: bool = false;
+    fn prepare_sources(
+        _e: &mut FlowEngine<'_, '_, 'm, Self>,
+        _c: &mut dyn RunControl,
+    ) -> Result<()> {
+        Ok(())
+    }
     fn new(memory: &'m WorkingMemory) -> Self;
     fn entry_source(register: u8, summary: bool) -> bool {
         summary && (10..18).contains(&register)

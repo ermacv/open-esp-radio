@@ -636,7 +636,7 @@ pub fn register_accesses(
                 analyzed.summaries,
             );
             crate::registers::observe(analyzed.records, &facts, memory, ranges, c, &mut |o, c| {
-                let stored = reads.stored(o.fact, c)?;
+                let stored = reads.stored(&o, c)?;
                 let mask = o.mask.or_else(|| {
                     let FunctionRecord::MemoryAccess { width, .. } = o.fact else {
                         return None;

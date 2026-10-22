@@ -1,7 +1,7 @@
 //! Fixed-size bit provenance. Joining different tags always yields Unknown.
 use super::*;
 
-/// Compact encoding of Unknown, zero, one, or a physical source and bit.
+/// Compact encoding of Unknown, zero, one, or a word/entry source and bit.
 /// No sets or expression nodes grow behind a cell.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub(super) struct Tag(u32);
@@ -108,7 +108,10 @@ impl ProvenanceValue {
                     }
                 }))
             }
-            Sub if amount == Some(0) => a,
+            Sub if amount.is_some() => {
+                let low = amount.unwrap_or(0).trailing_zeros() as usize;
+                a.wire(|i| (i < low).then_some(i), Tag::UNKNOWN)
+            }
             ShiftAdd1 | ShiftAdd2 | ShiftAdd3 => {
                 let by = match op {
                     ShiftAdd1 => 1,
@@ -159,17 +162,91 @@ impl ProvenanceValue {
                 known
             })
     }
+    fn value_bits(mut self, known: ReadKnown) -> Self {
+        for (i, tag) in self.0.iter_mut().enumerate() {
+            if known.zero & (1 << i) != 0 {
+                *tag = Tag::ZERO;
+            }
+            if known.one & (1 << i) != 0 {
+                *tag = Tag::ONE;
+            }
+        }
+        self
+    }
 }
 
-pub(super) struct Provenance;
-impl<'m> Domain<'m> for Provenance {
+pub(super) struct Provenance<'m> {
+    memory: &'m WorkingMemory,
+    words: AdmittedVec<'m, usize>,
+}
+impl<'m> Domain<'m> for Provenance<'m> {
     type Flow = ProvenanceValue;
     type Byte = [Tag; 8];
     const ALL_LOADS: bool = true;
     const RECOVER: bool = true;
     const EMIT: bool = false;
-    fn new(_: &'m WorkingMemory) -> Self {
-        Self
+    const INSTRUCTION_WORK: bool = true;
+    fn new(memory: &'m WorkingMemory) -> Self {
+        Self {
+            memory,
+            words: AdmittedVec::new(memory),
+        }
+    }
+    fn prepare_sources(e: &mut FlowEngine<'_, '_, 'm, Self>, c: &mut dyn RunControl) -> Result<()> {
+        use std::hash::{Hash, Hasher};
+        let count = e.sources.len();
+        let size = count
+            .max(1)
+            .checked_next_power_of_two()
+            .ok_or_else(read_integrity)?;
+        let mut buckets = AdmittedVec::new(e.domain.memory);
+        let mut next = AdmittedVec::new(e.domain.memory);
+        for _ in 0..size {
+            buckets.push(0usize, c.position())?;
+        }
+        for _ in 0..count {
+            next.push(0usize, c.position())?;
+        }
+        for (id, source) in e.sources.iter().enumerate() {
+            c.checkpoint(0)?;
+            let ReadOrigin::Load { address, width, .. } = source.origin else {
+                return Err(read_integrity());
+            };
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            width.hash(&mut hash);
+            if let Some(address) = exact_address(address) {
+                (0u8, address).hash(&mut hash);
+            } else {
+                1u8.hash(&mut hash);
+                address.hash(&mut hash);
+            }
+            let bucket = (hash.finish() as usize) % size;
+            let head = *buckets.get(bucket).ok_or_else(read_integrity)?;
+            let mut candidate = head;
+            let mut word = id;
+            while candidate != 0 {
+                let other = candidate - 1;
+                let ReadOrigin::Load {
+                    address: a,
+                    width: w,
+                    ..
+                } = e.sources.get(other).ok_or_else(read_integrity)?.origin
+                else {
+                    return Err(read_integrity());
+                };
+                if same_provenance_word(a, w, address, width) {
+                    word = other;
+                    break;
+                }
+                candidate = *next.get(other).ok_or_else(read_integrity)?;
+            }
+            if word == id {
+                *next.get_mut(id).ok_or_else(read_integrity)? = head;
+                *buckets.get_mut(bucket).ok_or_else(read_integrity)? = id + 1;
+            }
+            e.domain.words.push(word, c.position())?;
+        }
+        Ok(())
     }
     fn entry_source(register: u8, _: bool) -> bool {
         register != 0 && register != 2
@@ -179,6 +256,11 @@ impl<'m> Domain<'m> for Provenance {
     }
     fn refine(mut flow: Self::Flow, known: ReadKnown) -> Self::Flow {
         for (i, tag) in flow.0.iter_mut().enumerate() {
+            // Knowing a loaded bit's value does not erase its word identity.
+            // The shared known masks retain that independent value proof.
+            if tag.origin().is_some() {
+                continue;
+            }
             if known.zero & (1 << i) != 0 {
                 *tag = Tag::ZERO;
             }
@@ -188,8 +270,12 @@ impl<'m> Domain<'m> for Provenance {
         }
         flow
     }
-    fn known(flow: Self::Flow, _: ReadKnown) -> ReadKnown {
-        flow.known()
+    fn known(flow: Self::Flow, known: ReadKnown) -> ReadKnown {
+        let tags = flow.known();
+        ReadKnown {
+            zero: known.zero | tags.zero,
+            one: known.one | tags.one,
+        }
     }
     fn join(
         _: &mut FlowEngine<'_, '_, 'm, Self>,
@@ -244,15 +330,23 @@ impl<'m> Domain<'m> for Provenance {
         c: &mut dyn RunControl,
     ) -> Result<Self::Flow> {
         c.checkpoint(1)?;
-        if let (Some(a), Some(b)) = (a.atom.constant(), b.atom.constant()) {
-            return Ok(ProvenanceValue::constant(op.evaluate(a, b)));
+        let amount = b.known.constant_value();
+        let mut flow = ProvenanceValue::integer(op, a.flow, b.flow, amount);
+        // Keep a structural word proof first. Value knowledge can also prove
+        // an operand neutral, e.g. the zero bits of a spilled field in OR.
+        for (left, right) in [
+            (a.flow, b.flow.value_bits(b.known)),
+            (a.flow.value_bits(a.known), b.flow),
+            (a.flow.value_bits(a.known), b.flow.value_bits(b.known)),
+        ] {
+            let value = ProvenanceValue::integer(op, left, right, amount);
+            for (tag, fallback) in flow.0.iter_mut().zip(value.0) {
+                if *tag == Tag::UNKNOWN {
+                    *tag = fallback;
+                }
+            }
         }
-        Ok(ProvenanceValue::integer(
-            op,
-            a.flow,
-            b.flow,
-            b.known.constant_value(),
-        ))
+        Ok(flow)
     }
     fn map(
         _: &mut FlowEngine<'_, '_, 'm, Self>,
@@ -264,7 +358,7 @@ impl<'m> Domain<'m> for Provenance {
         Ok(flow.wire(mapping, Tag::UNKNOWN))
     }
     fn seed(
-        _: &mut FlowEngine<'_, '_, 'm, Self>,
+        e: &mut FlowEngine<'_, '_, 'm, Self>,
         source: usize,
         width: u8,
         signed: bool,
@@ -272,6 +366,7 @@ impl<'m> Domain<'m> for Provenance {
         c: &mut dyn RunControl,
     ) -> Result<Self::Flow> {
         c.checkpoint(1)?;
+        let source = e.domain.words.get(source).copied().unwrap_or(source);
         let count = usize::from(width).saturating_mul(8).min(32);
         let mut value = ProvenanceValue::default();
         for (i, tag) in value.0.iter_mut().enumerate() {
@@ -297,18 +392,25 @@ impl<'m> Domain<'m> for Provenance {
         forwarded: u32,
         c: &mut dyn RunControl,
     ) -> Result<Self::Flow> {
-        let seed = Self::seed(e, source, width, signed, !forwarded, c)?;
+        let seed = Self::seed(e, source, width, signed, u32::MAX, c)?;
         Ok(ProvenanceValue(std::array::from_fn(|i| {
-            if forwarded & (1 << i) != 0 {
-                flow.0[i]
+            if forwarded & (1 << i) != 0 && flow.bit(i).origin().is_some() {
+                flow.bit(i)
             } else {
-                seed.0[i]
+                seed.bit(i)
             }
         })))
     }
     fn pack(cell: ReadCell<Self::Flow>) -> Self::Byte {
-        let flow = Self::refine(cell.flow, cell.known);
-        std::array::from_fn(|i| flow.0[i])
+        std::array::from_fn(|i| {
+            if cell.known.one & (1 << i) != 0 {
+                Tag::ONE
+            } else if cell.known.zero & (1 << i) != 0 {
+                Tag::ZERO
+            } else {
+                cell.flow.bit(i)
+            }
+        })
     }
     fn unpack(byte: Self::Byte) -> ReadCell<Self::Flow> {
         let flow = ProvenanceValue(std::array::from_fn(|i| {
@@ -388,9 +490,17 @@ impl<'m> Domain<'m> for Provenance {
     }
 }
 
+fn same_provenance_word(a: &AbstractValue, aw: u8, b: &AbstractValue, bw: u8) -> bool {
+    aw == bw
+        && match (exact_address(a), exact_address(b)) {
+            (Some(a), Some(b)) => a == b,
+            _ => a == b,
+        }
+}
+
 /// Stored bits from a second instantiation of the shared CFG engine.
 pub struct StoredProvenanceEvaluator<'f, 'a, 'm> {
-    engine: FlowEngine<'f, 'a, 'm, Provenance>,
+    engine: FlowEngine<'f, 'a, 'm, Provenance<'m>>,
 }
 impl<'f, 'a, 'm> StoredProvenanceEvaluator<'f, 'a, 'm> {
     pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
@@ -452,8 +562,8 @@ impl StoredProvenanceEvaluator<'_, '_, '_> {
         cell.flow = Provenance::refine(cell.flow, cell.known);
         let mut runs: Vec<StoredBits> = Vec::new();
         let mut previous_source = None;
+        c.checkpoint(1)?;
         for bit in 0..mask.count_ones() as u8 {
-            c.checkpoint(1)?;
             let flag = 1 << bit;
             let mut origin = None;
             let source = if (cell.known.zero | cell.known.one) & flag != 0 {
@@ -482,7 +592,12 @@ impl StoredProvenanceEvaluator<'_, '_, '_> {
                                 address: exact_address(loaded),
                                 width: loaded_width,
                                 low,
-                                same_word: same_word(loaded, loaded_width, address, width),
+                                same_word: same_provenance_word(
+                                    loaded,
+                                    loaded_width,
+                                    address,
+                                    width,
+                                ),
                             },
                         }
                     }
@@ -762,5 +877,203 @@ mod tests {
         )
         .expect("competing argument");
         assert_eq!(result, ProvenanceValue::default());
+    }
+    #[test]
+    fn word_tags_normalize_numeric_addresses_and_keep_width_and_abstract_identity() {
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
+        let mut engine = FlowEngine::<Provenance>::new(&facts, &memory);
+        let addresses = [
+            AbstractValue::Constant { value: 0x20000 },
+            AbstractValue::ImageAddress { address: 0x20000 },
+            AbstractValue::Constant { value: 0x20000 },
+            AbstractValue::Expression { id: 42 },
+            AbstractValue::Expression { id: 42 },
+            AbstractValue::Expression { id: 43 },
+        ];
+        for (id, address) in addresses.iter().enumerate() {
+            engine
+                .sources
+                .push(
+                    ReadSource {
+                        origin: ReadOrigin::Load {
+                            site: id as u64,
+                            address,
+                            width: if id == 2 { 1 } else { 4 },
+                        },
+                        preserved: 0,
+                        limits: [0; 4],
+                        event: 0,
+                    },
+                    RunPosition::default(),
+                )
+                .expect("source");
+        }
+        Provenance::prepare_sources(&mut engine, &mut || Ok(())).expect("words");
+        let mut seed = |source, width| {
+            Provenance::seed(&mut engine, source, width, false, u32::MAX, &mut || Ok(()))
+                .expect("word bits")
+        };
+        let numeric = seed(0, 4);
+        assert_eq!(seed(1, 4), numeric);
+        assert_ne!(seed(2, 1).bit(0), numeric.bit(0));
+        let abstract_word = seed(3, 4);
+        assert_eq!(seed(4, 4), abstract_word);
+        assert_ne!(seed(5, 4), abstract_word);
+    }
+    #[test]
+    fn constant_add_subtract_and_shift_add_keep_low_bits_before_carry_or_borrow() {
+        let word = ProvenanceValue(std::array::from_fn(|i| {
+            Tag::source(0, i as u8).expect("word")
+        }));
+        for constant in [0u32, 1, 2, 16, 0x8000_0000, 0xffff_fff0] {
+            let low = constant.trailing_zeros() as usize;
+            for op in [IntegerOp::Add, IntegerOp::Sub] {
+                let result = ProvenanceValue::integer(
+                    op,
+                    word,
+                    ProvenanceValue::constant(constant),
+                    Some(constant),
+                );
+                for i in 0..32 {
+                    assert_eq!(
+                        result.bit(i),
+                        if i < low { word.bit(i) } else { Tag::UNKNOWN },
+                        "{op:?}, {constant:#x}, bit {i}"
+                    );
+                }
+            }
+            for (op, shift) in [
+                (IntegerOp::ShiftAdd1, 1),
+                (IntegerOp::ShiftAdd2, 2),
+                (IntegerOp::ShiftAdd3, 3),
+            ] {
+                let result = ProvenanceValue::integer(
+                    op,
+                    word,
+                    ProvenanceValue::constant(constant),
+                    Some(constant),
+                );
+                for i in 0..low {
+                    assert_eq!(
+                        result.bit(i),
+                        if i < shift {
+                            Tag::ZERO
+                        } else {
+                            word.bit(i - shift)
+                        }
+                    );
+                }
+            }
+        }
+    }
+    #[test]
+    fn a_stack_reload_names_its_word_when_forwarded_provenance_is_unknown() {
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
+        let mut engine = FlowEngine::<Provenance>::new(&facts, &memory);
+        let word =
+            Provenance::seed(&mut engine, 0, 4, false, u32::MAX, &mut || Ok(())).expect("word");
+        let actual = Provenance::load(
+            &mut engine,
+            ProvenanceValue::default(),
+            0,
+            4,
+            false,
+            u32::MAX,
+            &mut || Ok(()),
+        )
+        .expect("reload with unknown incoming value");
+        assert_eq!(actual, word);
+        let known = ProvenanceValue::constant(0xa5);
+        assert_eq!(
+            Provenance::load(&mut engine, known, 0, 4, false, u32::MAX, &mut || Ok(()))
+                .expect("known forwarding"),
+            word
+        );
+    }
+    #[test]
+    fn a_known_loaded_value_retains_its_word_identity_when_value_knowledge_joins_away() {
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
+        let address = AbstractValue::Constant { value: 0x20000 };
+        let mut evaluator = StoredProvenanceEvaluator::new(&facts, &memory);
+        evaluator
+            .engine
+            .sources
+            .push(
+                ReadSource {
+                    origin: ReadOrigin::Load {
+                        site: 0,
+                        address: &address,
+                        width: 4,
+                    },
+                    preserved: 0,
+                    limits: [0; 4],
+                    event: 0,
+                },
+                RunPosition::default(),
+            )
+            .expect("word");
+        let flow = Provenance::seed(&mut evaluator.engine, 0, 4, false, u32::MAX, &mut || Ok(()))
+            .expect("source");
+        let known = ReadKnown::constant(0);
+        let flow = Provenance::refine(flow, known);
+        assert_eq!(Provenance::known(flow, known), known);
+        let joined = evaluator
+            .engine
+            .join_cell(
+                ReadCell {
+                    flow,
+                    known,
+                    atom: ReadAtom::Constant(0),
+                },
+                ReadCell {
+                    flow,
+                    ..ReadCell::default()
+                },
+                &mut || Ok(()),
+            )
+            .expect("join independent knowledge");
+        let stored = store(&mut evaluator, joined, None);
+        assert!(matches!(
+            stored[0].source,
+            StoredBitsSource::Load {
+                same_word: true,
+                ..
+            }
+        ));
+    }
+    #[test]
+    fn a_known_neutral_word_operand_keeps_the_other_words_bits() {
+        let memory = WorkingMemory::new(1 << 20).expect("memory");
+        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
+        let mut engine = FlowEngine::<Provenance>::new(&facts, &memory);
+        let a = ReadCell {
+            flow: Provenance::seed(&mut engine, 0, 4, false, u32::MAX, &mut || Ok(()))
+                .expect("word a"),
+            ..ReadCell::default()
+        };
+        for (op, value) in [
+            (IntegerOp::Or, 0),
+            (IntegerOp::Xor, 0),
+            (IntegerOp::And, u32::MAX),
+        ] {
+            let b = ReadCell {
+                flow: Provenance::seed(&mut engine, 1, 4, false, u32::MAX, &mut || Ok(()))
+                    .expect("word b"),
+                known: ReadKnown::constant(value),
+                atom: ReadAtom::Constant(value),
+            };
+            for (left, right) in [(a, b), (b, a)] {
+                assert_eq!(
+                    engine
+                        .integer(op, left, right, &mut || Ok(()))
+                        .expect("neutral operation")
+                        .flow,
+                    a.flow
+                );
+            }
+        }
     }
 }
