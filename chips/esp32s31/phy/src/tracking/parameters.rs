@@ -786,7 +786,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
 /// outer completion. The child must first reach its terminal action and commit
 /// that outcome into the same live [`crate::state::PhyState`].
 pub struct PhyParamTrackingTxPowerTransition<'state> {
-    parent_action: PhyParamTrackingAction,
+    diagnostics: PhyTrackingDiagnostics,
     child: crate::tracking::power::PhyTxPowerTrackingTransition,
     state: &'state mut crate::state::PhyState,
 }
@@ -795,7 +795,7 @@ impl fmt::Debug for PhyParamTrackingTxPowerTransition<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PhyParamTrackingTxPowerTransition")
-            .field("parent_action", &self.parent_action)
+            .field("diagnostics", &self.diagnostics)
             .field("action", &self.child.action())
             .finish_non_exhaustive()
     }
@@ -807,25 +807,28 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         policy: PhyParamTrackingPolicy,
         state: &'state mut crate::state::PhyState,
     ) -> Result<Self, PhyParamTrackingChildError> {
-        let request = match parent_action {
-            PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack { enabled, .. } => {
-                crate::tracking::power::PhyTxPowerTrackingRequest {
-                    class: PhyCalibrationTrackClass::BluetoothIeee802154,
-                    enabled,
-                    wifi_channel: state.current_wifi_channel(),
-                }
-            }
-            PhyParamTrackingAction::WifiTxPowerTrack { enabled, .. } => {
-                crate::tracking::power::PhyTxPowerTrackingRequest {
-                    class: PhyCalibrationTrackClass::Wifi,
-                    enabled,
-                    wifi_channel: state.current_wifi_channel(),
-                }
-            }
+        let (class, enabled, diagnostics) = match parent_action {
+            PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack {
+                enabled,
+                diagnostics,
+            } => (
+                PhyCalibrationTrackClass::BluetoothIeee802154,
+                enabled,
+                diagnostics,
+            ),
+            PhyParamTrackingAction::WifiTxPowerTrack {
+                enabled,
+                diagnostics,
+            } => (PhyCalibrationTrackClass::Wifi, enabled, diagnostics),
             _ => return Err(PhyParamTrackingChildError::UnsupportedAction),
         };
+        let request = crate::tracking::power::PhyTxPowerTrackingRequest {
+            class,
+            enabled,
+            wifi_channel: state.current_wifi_channel(),
+        };
         Ok(Self {
-            parent_action,
+            diagnostics,
             child: crate::tracking::power::PhyTxPowerTrackingTransition::new(
                 request,
                 state.tx_power_tracking_parameters(policy.relaxed_power_tracking_threshold),
@@ -836,7 +839,29 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
 
     #[cfg(any(test, oer_probe))]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
-        self.parent_action
+        let request = self.child.request();
+        match request.class {
+            PhyCalibrationTrackClass::Wifi => PhyParamTrackingAction::WifiTxPowerTrack {
+                enabled: request.enabled,
+                diagnostics: self.diagnostics,
+            },
+            PhyCalibrationTrackClass::BluetoothIeee802154 => {
+                PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack {
+                    enabled: request.enabled,
+                    diagnostics: self.diagnostics,
+                }
+            }
+        }
+    }
+
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn parts(
+        &mut self,
+    ) -> (
+        &mut crate::tracking::power::PhyTxPowerTrackingTransition,
+        &crate::state::PhyState,
+    ) {
+        (&mut self.child, self.state)
     }
 
     pub const fn action(&self) -> crate::tracking::power::PhyTxPowerTrackingAction {
@@ -876,20 +901,18 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         };
         self.state.apply_tx_power_tracking_outcome(outcome);
         let gain_updated = outcome.gain_updated;
-        Ok(match self.parent_action {
-            PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack { enabled, .. } => {
+        let enabled = self.child.request().enabled;
+        Ok(match outcome.class {
+            PhyCalibrationTrackClass::BluetoothIeee802154 => {
                 PhyParamTrackingCompletion::BluetoothIeee802154TxPowerTracked {
                     enabled,
                     gain_updated,
                 }
             }
-            PhyParamTrackingAction::WifiTxPowerTrack { enabled, .. } => {
-                PhyParamTrackingCompletion::WifiTxPowerTracked {
-                    enabled,
-                    gain_updated,
-                }
-            }
-            _ => unreachable!(),
+            PhyCalibrationTrackClass::Wifi => PhyParamTrackingCompletion::WifiTxPowerTracked {
+                enabled,
+                gain_updated,
+            },
         })
     }
 }

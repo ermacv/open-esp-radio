@@ -90,6 +90,21 @@ impl PhyTargetObserver for &mut Observer<'_> {
         self.4 = Default::default();
         Some(&mut self.4)
     }
+    fn power_gain_completed(
+        &mut self,
+        operation: Operation,
+        timing: oer_esp32s31_phy::tracking::observation::GainTiming,
+    ) {
+        let family = if operation == Operation::WifiPower {
+            4
+        } else {
+            2
+        };
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL gain-parts family={} lower-us={} arithmetic-us={} publication-us={}\n",
+            family, timing.lower_micros, timing.arithmetic_micros, timing.publication_micros,
+        ));
+    }
     fn readiness_trace(
         &mut self,
     ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {
@@ -159,7 +174,9 @@ fn report_engine(
     use oer_esp32s31_board::rom::print_fmt;
     let family = match operation {
         Operation::Rfpll => 1,
+        Operation::BluetoothIeee802154Power => 2,
         Operation::WifiI2c => 3,
+        Operation::WifiPower => 4,
         Operation::Temperature => 7,
         _ => 0,
     };
@@ -182,6 +199,15 @@ fn report_engine(
         "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
         family, timing.maximum_lateness_micros, timing.invalid
     ));
+    if matches!(
+        operation,
+        Operation::WifiPower | Operation::BluetoothIeee802154Power
+    ) {
+        print_fmt(format_args!(
+            "OPEN_RADIO_HIL power-gain family={} count={} max-us={}\n",
+            family, timing.ready_edges, timing.maximum_ready_micros
+        ));
+    }
 }
 
 /// Lossless UART quartet: invalid bit 63, command bits 48..62, then

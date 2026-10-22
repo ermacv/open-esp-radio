@@ -1,4 +1,5 @@
 use super::*;
+mod power;
 mod wifi_i2c;
 pub(crate) struct TestDelay;
 impl crate::executor::wait::PhyShortDelay for TestDelay {
@@ -48,6 +49,10 @@ pub(crate) struct Io {
     rfpll_statuses: Vec<crate::tracking::rfpll::search::Status>,
     rfpll_samples: usize,
     rfpll_failure: Option<usize>,
+    power_actions: Vec<crate::tracking::power::PhyTxPowerTrackingAction>,
+    power_failure: Option<usize>,
+    power_gain_entries: Vec<oer_esp32s31_hal::types::PhyGainMemoryEntry>,
+    power_gain_failure: Option<usize>,
     code: u8,
     byte: u8,
     busy: Rc<Cell<bool>>,
@@ -251,6 +256,24 @@ impl Registers for Io {
             clock,
             now,
         )
+    }
+    fn advance_power<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
+        &mut self,
+        child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
+        gain: &mut super::power::Cursor,
+        action: crate::tracking::power::PhyTxPowerTrackingAction,
+        clock: &C,
+        measured: bool,
+    ) -> Step {
+        super::power::advance::<D, _>(
+            &mut super::io::Io::Test(self, core::marker::PhantomData),
+            child,
+            gain,
+            action,
+            clock,
+            measured,
+        )
+        .unwrap_or_else(Step::Failure)
     }
     fn i2c_status(&mut self) -> u8 {
         self.atom();

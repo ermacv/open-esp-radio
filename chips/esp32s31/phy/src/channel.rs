@@ -159,9 +159,7 @@ const fn write_packed_halfword<const N: usize>(words: &mut [u32; N], index: usiz
 /// inputs and outputs are ordinary values; there is no MMIO, ROM ABI, global
 /// state, allocation, callback, or wait.
 pub const fn calculate_wifi_tx_gain(request: PhyWifiTxGainRequest) -> PhyWifiTxGainImage {
-    let interpolation = interpolate_tx_gain_curve(request.channel, request.calibration_curve);
-    let mut target = request.base_and_delta as i16 + 0x54 - request.correction as i16;
-    let mut table_index = 0_u8;
+    let mut generator = begin_wifi_tx_gain(request);
     let mut image = PhyWifiTxGainImage {
         seed: [0; 6],
         output_32: [0; 8],
@@ -171,28 +169,41 @@ pub const fn calculate_wifi_tx_gain(request: PhyWifiTxGainRequest) -> PhyWifiTxG
     };
     let mut output_index = 0;
     while output_index != 32 {
-        table_index = select_tx_gain_index(table_index, target);
-        let table_index_usize = table_index as usize;
-        let residual = target.wrapping_sub(WIFI_TX_GAIN_TABLE_HIGH[table_index_usize] as i16);
-        write_packed_byte(
-            &mut image.output_32,
-            output_index,
-            residual.wrapping_sub(interpolation as i16) as u8,
-        );
-        write_packed_halfword(
-            &mut image.output_64,
-            output_index,
-            WIFI_TX_GAIN_TABLE_MID[table_index_usize],
-        );
-        write_packed_halfword(
-            &mut image.output_72,
-            output_index,
-            WIFI_TX_GAIN_TABLE_LOW[table_index_usize],
-        );
-        target = target.wrapping_sub(4);
+        let value = next_wifi_tx_gain(&mut generator);
+        write_packed_byte(&mut image.output_32, output_index, value.gain_32);
+        write_packed_halfword(&mut image.output_64, output_index, value.gain_64);
+        write_packed_halfword(&mut image.output_72, output_index, value.gain_72);
         output_index += 1;
     }
     image
+}
+
+pub(crate) const fn begin_wifi_tx_gain(
+    request: PhyWifiTxGainRequest,
+) -> crate::tx::gain::Generator {
+    crate::tx::gain::Generator {
+        target: request.base_and_delta as i16 + 0x54 - request.correction as i16,
+        interpolation: interpolate_tx_gain_curve(request.channel, request.calibration_curve),
+        table_index: 0,
+    }
+}
+
+#[inline(always)]
+pub(crate) const fn next_wifi_tx_gain(
+    generator: &mut crate::tx::gain::Generator,
+) -> crate::tx::gain::Value {
+    generator.table_index = select_tx_gain_index(generator.table_index, generator.target);
+    let index = generator.table_index as usize;
+    let residual = generator
+        .target
+        .wrapping_sub(WIFI_TX_GAIN_TABLE_HIGH[index] as i16);
+    let value = crate::tx::gain::Value {
+        gain_72: WIFI_TX_GAIN_TABLE_LOW[index],
+        gain_64: WIFI_TX_GAIN_TABLE_MID[index],
+        gain_32: residual.wrapping_sub(generator.interpolation as i16) as u8,
+    };
+    generator.target = generator.target.wrapping_sub(4);
+    value
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1032,7 +1043,7 @@ impl PhyChipChannelMmioBinding {
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
             PhyChipChannelAction::PublishTxGain(image) => {
-                crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
+                crate::hardware::publish_phy_tx_gain_memory(registers, false, &image);
                 PhyChipChannelCompletion::TxGainPublished
             }
             PhyChipChannelAction::PublishTxCapCommandMemory { value } => {

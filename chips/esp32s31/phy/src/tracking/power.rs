@@ -198,6 +198,10 @@ impl PhyTxPowerTrackingTransition {
         }
     }
 
+    pub(crate) const fn request(&self) -> PhyTxPowerTrackingRequest {
+        self.request
+    }
+
     #[cfg(test)]
     pub const fn decision(self) -> PhyTxPowerTrackingDecision {
         self.decision
@@ -238,6 +242,18 @@ impl PhyTxPowerTrackingTransition {
         }
     }
 
+    /// Internal acknowledgement after the cursor consumed every complete record
+    /// (or the unchanged skip branch). The same live child owns the request.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn gain_published(&mut self) -> Result<(), PhyTxPowerTrackingTransitionError> {
+        if !matches!(self.step, PhyTxPowerTrackingStep::RegenerateGain) {
+            return Err(PhyTxPowerTrackingTransitionError::WrongCompletion);
+        }
+        self.step = self.after_gain();
+        Ok(())
+    }
+
+    #[inline(always)]
     pub fn advance(
         &mut self,
         completion: PhyTxPowerTrackingCompletion,
@@ -312,6 +328,67 @@ impl PhyTxPowerTrackingTransition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxPowerTrackingBindingError {
     UnsupportedAction,
+}
+
+/// Affine small control edge. A stepped gain publisher never lowers a whole
+/// image through this route, even on the conservative common-driver path.
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) struct ControlBinding(PhyTxPowerTrackingAction);
+#[cfg(any(target_arch = "riscv32", test))]
+impl ControlBinding {
+    pub fn lower(action: PhyTxPowerTrackingAction) -> Result<Self, PhyTxPowerTrackingBindingError> {
+        match action {
+            PhyTxPowerTrackingAction::SetBbpllCalibration { .. }
+            | PhyTxPowerTrackingAction::ForceTxRx(
+                PhyForceTxRxAction::Configure { .. } | PhyForceTxRxAction::DelayMicros { .. },
+            ) => Ok(Self(action)),
+            _ => Err(PhyTxPowerTrackingBindingError::UnsupportedAction),
+        }
+    }
+    #[cfg(test)]
+    pub const fn action(&self) -> PhyTxPowerTrackingAction {
+        self.0
+    }
+    pub const fn delay_micros(&self) -> Option<u32> {
+        match self.0 {
+            PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::DelayMicros {
+                micros, ..
+            }) => Some(micros),
+            _ => None,
+        }
+    }
+    #[cfg(target_arch = "riscv32")]
+    pub fn execute_target(
+        self,
+        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    ) -> PhyTxPowerTrackingCompletion {
+        match self.0 {
+            PhyTxPowerTrackingAction::SetBbpllCalibration { enabled } => {
+                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
+            }
+            PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::Configure {
+                enabled,
+                phase,
+            }) => {
+                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
+                PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
+                    enabled,
+                    phase,
+                })
+            }
+            PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::DelayMicros {
+                enabled,
+                completed_phase,
+                micros,
+            }) => PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::DelayElapsed {
+                enabled,
+                completed_phase,
+                micros,
+            }),
+            _ => unreachable!("control binding admitted only control edges"),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -415,19 +492,19 @@ impl PhyTxPowerTrackingExternalBinding {
         _platform: &mut P,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxPowerTrackingCompletion {
-        match self.operation {
+        match &self.operation {
             PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled } => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
-                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
+                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, *enabled);
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: *enabled }
             }
             PhyTxPowerTrackingExternalOperation::ForceTxRx(PhyForceTxRxAction::Configure {
                 enabled,
                 phase,
             }) => {
-                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
+                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, *enabled, *phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
-                    enabled,
-                    phase,
+                    enabled: *enabled,
+                    phase: *phase,
                 })
             }
             PhyTxPowerTrackingExternalOperation::ForceTxRx(PhyForceTxRxAction::DelayMicros {
@@ -435,9 +512,9 @@ impl PhyTxPowerTrackingExternalBinding {
                 completed_phase,
                 micros,
             }) => PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::DelayElapsed {
-                enabled,
-                completed_phase,
-                micros,
+                enabled: *enabled,
+                completed_phase: *completed_phase,
+                micros: *micros,
             }),
             PhyTxPowerTrackingExternalOperation::ForceTxRx(PhyForceTxRxAction::Complete {
                 ..
@@ -450,14 +527,19 @@ impl PhyTxPowerTrackingExternalBinding {
                 if let Some(image) = image {
                     crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
                 }
-                PhyTxPowerTrackingCompletion::WifiGainRegenerated { channel, gain_base }
+                PhyTxPowerTrackingCompletion::WifiGainRegenerated {
+                    channel: *channel,
+                    gain_base: *gain_base,
+                }
             }
             PhyTxPowerTrackingExternalOperation::RegenerateBluetoothIeee802154Gain {
                 gain_base,
                 image,
             } => {
                 crate::hardware::publish_bluetooth_tx_gain_memory(registers, image);
-                PhyTxPowerTrackingCompletion::BluetoothIeee802154GainRegenerated { gain_base }
+                PhyTxPowerTrackingCompletion::BluetoothIeee802154GainRegenerated {
+                    gain_base: *gain_base,
+                }
             }
         }
     }

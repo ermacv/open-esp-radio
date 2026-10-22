@@ -212,6 +212,14 @@ impl RfpllCommandMaximum {
     }
 }
 
+/// Maximum cost of gain setup, one record calculation and one publication.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GainTiming {
+    pub lower_micros: u16,
+    pub arithmetic_micros: u16,
+    pub publication_micros: u16,
+}
+
 /// Clock-free aggregate of actual engine polls and timer resumes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineTiming {

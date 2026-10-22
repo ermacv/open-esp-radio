@@ -216,6 +216,16 @@ impl ConcurrentPhy {
         Ok(())
     }
 
+    /// Make the next diagnostic tick exercise its class's real gain publisher.
+    ///
+    /// # Errors
+    /// The domain is not registered and settled.
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
+    pub fn force_power_tracking_debug(&mut self, wifi: bool) -> Result<(), ConcurrentPhyError> {
+        self.settled_mut()?.force_power_tracking_debug(wifi);
+        Ok(())
+    }
+
     /// Borrow the registered domain when every active client is settled.
     pub(crate) fn settled(&self) -> Result<&PhyDomain, ConcurrentPhyError> {
         match &self.slot {

@@ -63,6 +63,25 @@ the outer owner's lease.
 | [Common calibration](calibration.rs) | A temperature threshold selects DCODE, RX-gain calibration and channel restoration. | The branch restores MAC baseband and TX gain compensation before committing the common reference or entering class calibration. |
 | [Shared TX calibration](calibration.rs) | A shared TX threshold selects software frequency control, forced gain/TX-RX state, TXDC/PWDET and class gain publication. | The graph restores its baseband/control and gain-compensation state. This is not proof that every protocol's MAC, key, TSF or DMA context is unchanged. No selected branch means no hardware actions in this child. |
 
+T2/T4 power tracking owns its child and `EngineTiming` inside the shared P1
+driver. A safe enum separates timer/borrowed-transport storage from the
+power route; power has no outer async layer or separate job. A poll executes
+one BBPLL edge, one complete force/write plus its 1-µs settle, gain setup,
+or one complete gain-memory record. Runnable checkpoints wake the caller
+without a timer; the RF/state borrow remains held. A compact generator keeps
+only arithmetic state and the next index, never a whole image. Both pinned
+profiles select seed quartets within the seed portion of the unchanged
+seed/output32 concatenation. The whole-image builders share the same arithmetic;
+stream tests compare every encoded entry with the canonical packed image.
+Clock-free preparation and acknowledgement stay outside the clock/accounting
+shell. The shared driver decodes the action once per poll. Only after all32
+Wi-Fi or16 shared records does the gain child acknowledge publication. The terminal poll commits the semantic result after BBPLL-off.
+In power-family engine observations, `ready_edges` and `maximum_ready_micros`
+count and time gain setup and individual records; `maximum_micros` covers
+the whole driver poll. Separate maxima cover lower/setup, one record's
+arithmetic/encoding and its complete publication. Diagnostic holds force the
+selected class's gain update and report family2 (BT/154) or4 (Wi-Fi).
+
 Full cold registration and cache replay belong to
 [calibration/registration](../calibration/registration.rs), not the periodic
 scheduler. A serializable calibration snapshot does not certify hardware
