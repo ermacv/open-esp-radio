@@ -12,7 +12,7 @@ ceiling_bytes = 4944
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::step::<oer_esp32s31_ieee80211_driver::port::phase::Esp32s31Phase<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, 2, 8, 2>"
-reason = "The outlined action loop owns station/data actions, returned MPDU buffers and submission/follow-up results while dispatching them to the lower MAC. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "The outlined action loop owns station/data actions, returned MPDU buffers and submission/follow-up results while dispatching them to the lower MAC."
 ceiling_bytes = 13584
 
 [[frame_exceptions.runtime]]
@@ -22,7 +22,7 @@ ceiling_bytes = 26464
 
 [[frame_exceptions.runtime]]
 function = "oer_radio_port::slot::poll_body::<<oer_radio_port::lifecycle::run_port::BodyAdapter<oer_firmware_apps_w3::station::Body> as oer_radio_port::slot::SlotBody<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_esp32s31_ieee80211_driver::port::Esp32s31Backend<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>>::run::{closure#0}>"
-reason = "Polling BodyAdapter::run inlines the station Body future and its placed service startup/completion values into this P1 poll boundary. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "Polling BodyAdapter::run inlines the station Body future and its placed service startup/completion values into this P1 poll boundary."
 ceiling_bytes = 7744
 
 [[frame_exceptions.runtime]]
@@ -67,12 +67,12 @@ ceiling_bytes = 6960
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::input_event"
-reason = "The station takes its State by value and dispatches StaInput into transitions; the State enum includes Connected/Handshake and deferred EAPOL material. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "The station takes its State by value and dispatches StaInput into transitions; the State enum includes Connected/Handshake and deferred EAPOL material."
 ceiling_bytes = 11120
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::keys_changed"
-reason = "Key readiness handling takes and rebuilds the by-value station State, including Connected/Handshake RSN state, while advancing installation transitions. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "Key readiness handling takes and rebuilds the by-value station State, including Connected/Handshake RSN state, while advancing installation transitions."
 ceiling_bytes = 10704
 
 [[frame_exceptions.runtime]]
@@ -82,42 +82,42 @@ ceiling_bytes = 4880
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::confirming_step"
-reason = "The by-value Confirming/Connected state and StaDone are consumed into the next State, including transmit completion and handshake confirmation paths. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "The by-value Confirming/Connected state and StaDone are consumed into the next State, including transmit completion and handshake confirmation paths."
 ceiling_bytes = 7456
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::group_transition"
-reason = "Group-key transition owns PendingGroupKey and updates active replay/RSN state; key readiness transitions take and rebuild the large station State. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "Group-key transition owns PendingGroupKey and updates active replay/RSN state; key readiness transitions take and rebuild the large station State."
 ceiling_bytes = 14736
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::received_management"
-reason = "Management receive takes the station State by value and rebuilds scan/join/connected transitions after parsing beacon, authentication or association data. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "Management receive takes the station State by value and rebuilds scan/join/connected transitions after parsing beacon, authentication or association data."
 ceiling_bytes = 20176
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::owe"
-reason = "The action dispatcher takes State by value and returns State with ActionProgress; Connected/Handshake variants carry deferred EAPOL and supplicant state. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "The action dispatcher takes State by value and returns State with ActionProgress; Connected/Handshake variants carry deferred EAPOL and supplicant state."
 ceiling_bytes = 14544
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::step"
-reason = "The transition dispatcher takes State and StaDone by value and returns the rebuilt State, including the Connected and Handshake RSN variants. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "The transition dispatcher takes State and StaDone by value and returns the rebuilt State, including the Connected and Handshake RSN variants."
 ceiling_bytes = 10688
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::unsent"
-reason = "A refused transmission takes and rebuilds the owned station State while returning pending response work to Connected/Handshake state. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "A refused transmission takes and rebuilds the owned station State while returning pending response work to Connected/Handshake state."
 ceiling_bytes = 7440
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::noticed"
-reason = "Arbiter notice handling takes the owned station State and constructs the next scan/join/connected or leave state. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "Arbiter notice handling takes the owned station State and constructs the next scan/join/connected or leave state."
 ceiling_bytes = 14736
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::Station<oer_ieee80211_runtime::station_service::PortStaTokens<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>, oer_esp32s31_ieee80211_driver::port::buffer::BufferClass<1664>, 1>, oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<1664>>>::answered"
-reason = "Arbiter answer handling takes the owned station State and returns a rebuilt scan/join state or preserves the Connected/Handshake variants. RX Block Ack (#356); снижается в #350 проход 2"
+reason = "Arbiter answer handling takes the owned station State and returns a rebuilt scan/join state or preserves the Connected/Handshake variants."
 ceiling_bytes = 12000
 
 [[frame_exceptions.runtime]]
@@ -137,5 +137,5 @@ ceiling_bytes = 4912
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::deliver_received::<2, 8, 2>"
-reason = "RX Block Ack (#356); снижается в #350 проход 2"
+reason = "The outlined receive path constructs owned EthernetFrame payloads and delivers them to the receive queue while station receive processing retains its state and payload temporaries."
 ceiling_bytes = 26448
