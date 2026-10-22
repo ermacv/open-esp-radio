@@ -2,4 +2,4 @@ error[E0599]: no method named `submit_checked` found for struct `oer_esp32s31_ie
  --> tests/ui/configuration_barrier.rs:6:24
   |
 6 |     let _result = core.submit_checked(hardware, queue, admission, values); // ui-error: E0599
-  |                        ^^^^^^^^^^^^^^ method not found in `oer_esp32s31_ieee80211_driver::lower_mac::ConfiguringView<oer_esp32s31_ieee80211_driver::lower_mac::EnabledView<'_, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, EspressifBackendTxProfile, P, E, T, 512>>>`
+  |                        ^^^^^^^^^^^^^^ method not found in `oer_esp32s31_ieee80211_driver::lower_mac::ConfiguringView<oer_esp32s31_ieee80211_driver::lower_mac::EnabledView<'_, oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore<'core, 'slot, EspressifBackendTxProfile, P, E, T, C, 512>>>`

@@ -112,7 +112,7 @@ impl WifiTxEntropy for Entropy {
         value
     }
 }
-struct Coex;
+pub struct Coex;
 impl RadioCoexPriorities for Coex {
     fn beacon_window_pti(&self) -> oer_esp32s31_hal::types::MacPti {
         let event = oer_esp32s31_radio_coex::CoexEventId::new(0).expect("beacon event");
@@ -294,6 +294,7 @@ async fn install(boot: Boot, config: W3Config) -> Result<PortParts<Device, TX>, 
 impl port::Device<TX> for Device {
     type Profile = <Inner as port::Device<TX>>::Profile;
     type Power = <Inner as port::Device<TX>>::Power;
+    type Coex = <Inner as port::Device<TX>>::Coex;
     type Entropy = Entropy;
     type Timer = EmbassyClock;
     type Hardware = <Inner as port::Device<TX>>::Hardware;

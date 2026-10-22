@@ -155,6 +155,7 @@ impl WifiTxEntropy for Entropy {
 }
 struct Fixture;
 impl Composition for Fixture {
+    type Coex = Coex;
     type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Entropy = Entropy;
     type Body = FixtureBody;

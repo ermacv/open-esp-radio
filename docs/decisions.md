@@ -261,6 +261,9 @@ bounds) live in the code that applies them.
   its operation kinds; the shared radio vocabulary names only the clients.
   There is no urgency level. A row without a vendor source is a product
   choice that states its reason.
+- **S31 lower-MAC coexistence.** The image selects one concrete
+  `C: RadioCoexPriorities` through its Device composition. Publication uses
+  static dispatch, without trait objects, callback pointers or a default policy.
 - **Hard deadlines** are the Bluetooth LE connection event, the 802.15.4
   timed transmission and reception and CSL slot, and the beacon window of a
   dozing Wi-Fi station; every other operation is served by the PTI alone.

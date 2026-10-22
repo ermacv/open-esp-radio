@@ -35,6 +35,7 @@ use oer_time::{Clock, Duration, Instant};
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition;
 impl Composition for ImageComposition {
+    type Coex = radio::Coex;
     type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Entropy = radio::Entropy;
     type Body = Infallible;

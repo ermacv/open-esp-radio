@@ -80,6 +80,7 @@ type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
     <D as Device<B>>::Power,
     <D as Device<B>>::Entropy,
     <D as Device<B>>::Timer,
+    <D as Device<B>>::Coex,
     B,
     CorePath<Id>,
     TX_TICKETS,
@@ -96,6 +97,8 @@ pub trait ReceiveUnit: 'static {
 /// The device owns the cooperative registers, RX ring and PHY membership.
 pub trait Device<const B: usize>: Sized + 'static {
     type Profile: backend::BackendTxProfile;
+    /// Image-selected concrete coexistence policy, statically dispatched on P2.
+    type Coex: RadioCoexPriorities + 'static;
     type Power: WifiTxPowerProfile;
     type Entropy: WifiTxEntropy;
     type Timer: Timer + Clone + 'static;
@@ -247,7 +250,7 @@ pub struct PortParts<D: Device<B>, const B: usize> {
     pub buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
     pub config: LowerMacConfig,
     pub access_point_address: IndividualAddress,
-    pub coex: &'static dyn RadioCoexPriorities,
+    pub coex: &'static D::Coex,
 }
 
 pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
@@ -257,13 +260,13 @@ pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize> {
     addresses: [IndividualAddress; 2],
     timer: D::Timer,
     config: LowerMacConfig,
-    coex: &'static dyn RadioCoexPriorities,
+    coex: &'static D::Coex,
     identity: PhantomData<fn(Id) -> Id>,
 }
 struct Initial<D: Device<B>, const B: usize> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>,
     config: LowerMacConfig,
-    coex: &'static dyn RadioCoexPriorities,
+    coex: &'static D::Coex,
 }
 enum BackendState<D: Device<B>, const B: usize> {
     Initial(Option<Initial<D, B>>),
@@ -338,7 +341,7 @@ pub struct StoppedPort<Id: SlotIdentity, D: Device<B>, const B: usize> {
         Option<OrdinaryTxIdleOwner<'static, D::Profile, D::Power, D::Entropy, D::Timer, B>>,
     config: LowerMacConfig,
     addresses: [IndividualAddress; 2],
-    coex: &'static dyn RadioCoexPriorities,
+    coex: &'static D::Coex,
     identity: PhantomData<fn(Id) -> Id>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> StoppedPort<Id, D, B> {

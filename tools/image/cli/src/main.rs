@@ -36,7 +36,7 @@ enum Command {
     /// the stand.
     Build {
         image: String,
-        /// Use a fixed fictitious stand configuration (w0, w1, w2 only).
+        /// Use a fixed fictitious stand configuration (w0 through w3).
         /// The bundle in target/fw/<image>-analysis/ cannot be flashed.
         #[arg(long)]
         analysis: bool,

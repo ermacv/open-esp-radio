@@ -110,8 +110,8 @@ pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<St
 }
 
 /// How long `cargo fw run` waits for `image`'s result without `--timeout`:
-/// w1's hold cycles and report take up to two minutes, any other image
-/// reports within 30 s.
+/// W3's bidirectional echo workload takes up to four minutes, W1's hold
+/// cycles up to two minutes, and other images report within 30 s.
 pub fn run_timeout(image: &str) -> std::time::Duration {
     if image == w3::IMAGE {
         std::time::Duration::from_secs(240)

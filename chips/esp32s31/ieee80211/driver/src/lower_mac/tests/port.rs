@@ -149,6 +149,7 @@ impl Drop for TestReceive {
 impl Device<512> for TestDevice {
     type Profile = oer_espressif_ieee80211_policy::backend::EspressifBackendTxProfile;
     type Power = Power;
+    type Coex = RadioNine;
     type Entropy = fn() -> u32;
     type Timer = TestTimer;
     type Hardware = Hardware;
