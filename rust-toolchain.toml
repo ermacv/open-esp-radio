@@ -1,4 +1,4 @@
 [toolchain]
 channel = "1.97.1"
 targets = ["riscv32imafc-unknown-none-elf", "riscv32imac-unknown-none-elf"]
-components = ["rust-src", "rustfmt", "clippy", "llvm-tools"]
+components = ["rust-src", "rustfmt", "clippy", "llvm-tools", "rustc-dev"]
