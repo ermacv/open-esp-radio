@@ -3165,6 +3165,7 @@ dependencies = [
 name = "oer-firmware-apps-w3"
 version = "0.1.0"
 dependencies = [
+ "critical-section",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",

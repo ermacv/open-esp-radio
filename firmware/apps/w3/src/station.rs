@@ -316,7 +316,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         );
         let mut commands = MsduQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
         let mut tx = MsduQueue::<TxMsdu, 2>::new();
-        let mut rx = MsduQueue::<EthernetFrame, 2>::new();
+        let mut rx = MsduQueue::<EthernetFrame, { oer_firmware_apps_w3::policy::RX_DEPTH }>::new();
         let (command_send, command_receive) = commands.split();
         let (tx_send, tx_receive) = tx.split();
         let (rx_send, rx_receive) = rx.split();

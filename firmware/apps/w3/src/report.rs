@@ -237,7 +237,9 @@ mod tests {
         report.port_events_lost = 3;
         let mut text = String::new();
         report.print(&mut text).expect("String accepts writes");
-        assert!(text.starts_with("w3.rx queue_full=1 rejected=2 reasons=4 port_events_lost=3\r\nOER-W3-BEGIN v=1\r\n"));
+        assert!(text.starts_with(
+            "w3.rx queue_full=1 rejected=2 reasons=4 port_events_lost=3\r\nOER-W3-BEGIN v=1\r\n"
+        ));
         assert!(text.ends_with("OER-W3-END lines=12\r\nOER-RESULT: pass w3\r\n"));
     }
 }

@@ -47,7 +47,12 @@ oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
 
 [dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
+oer-embassy-net = { path = "../../../portable/embassy/net" }
+oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "9e0e3293724c30c5892e6af56150c849f5231eb2", features = ["async"] }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }

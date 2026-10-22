@@ -37,7 +37,7 @@ use owned_embassy_net::{
 use static_cell::StaticCell;
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
-const RX: usize = 4;
+const RX: usize = oer_firmware_apps_w3::policy::RX_DEPTH;
 const TX: usize = 4;
 type Endpoint = OwnedEndpointResources<NoopRawMutex, RX, TX>;
 type Device = OwnedNetworkDevice<'static, NoopRawMutex, RX, TX>;
@@ -58,7 +58,7 @@ pub async fn workload<'id, Path: PoolPath>(
     credits: StaCommandCredits<'id, Path>,
     mut commands: MsduSender<'_, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
     tx: MsduSender<'_, TxMsdu, 2>,
-    rx: MsduReceiver<'_, EthernetFrame, 2>,
+    rx: MsduReceiver<'_, EthernetFrame, RX>,
     link: &Cell<bool>,
     disconnected: &Cell<bool>,
     failed: &Cell<bool>,
@@ -120,7 +120,7 @@ async fn drain(socket: &RawSocket<'_>) -> ! {
 async fn bridge(
     radio: Runner,
     mut tx: MsduSender<'_, TxMsdu, 2>,
-    mut rx: MsduReceiver<'_, EthernetFrame, 2>,
+    mut rx: MsduReceiver<'_, EthernetFrame, RX>,
     observations: &RefCell<Observations>,
     link: &Cell<bool>,
 ) -> ! {
