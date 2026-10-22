@@ -123,7 +123,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             if overflow {
                 CUSTODY_LIMIT.set(Some(1));
             }
-            let custody = if prior {
+            let mut custody = if prior {
                 service
                     .state
                     .terminal(&mut service.arbiter, Instant::EPOCH, first)
@@ -144,13 +144,13 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 )));
                 phase.station().configure(pending, receive);
             }
-            let (ended, custody) = service
+            let ended = service
                 .state
                 .disable(
                     &mut service.arbiter,
                     owner,
                     &VirtualClock::<1>::new(),
-                    custody,
+                    &mut custody,
                 )
                 .await;
             CUSTODY_LIMIT.set(None);

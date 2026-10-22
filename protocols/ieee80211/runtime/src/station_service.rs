@@ -1059,6 +1059,7 @@ impl<
     /// loan owns the service; running it consumes that ownership as usual.
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "placement")]
+    #[inline(never)]
     pub fn init_in_place<'s>(
         storage: &'s mut core::mem::MaybeUninit<Self>,
         station: impl for<'a> FnOnce(
@@ -1315,9 +1316,8 @@ impl<
             };
             match next {
                 Served::Stop => {
-                    let (owner, custody) = self
-                        .disable(&mut arbiter, owner, timer, TerminalCustody::Clear)
-                        .await;
+                    let mut custody = TerminalCustody::Clear;
+                    let owner = self.disable(&mut arbiter, owner, timer, &mut custody).await;
                     let end = end_disabled(owner, custody);
                     let arbiter_end = match &end {
                         ServiceEnd::Stopped(_) => ArbiterEnd::Stopped,
@@ -1328,8 +1328,9 @@ impl<
                     return (end, arbiter.finish(arbiter_end));
                 }
                 Served::Failed(failure) => {
-                    let (fault, custody) = failure.into_custody();
-                    let (owner, custody) = self.disable(&mut arbiter, owner, timer, custody).await;
+                    let mut custody = TerminalCustody::Clear;
+                    let fault = failure.retain_in(&mut custody);
+                    let owner = self.disable(&mut arbiter, owner, timer, &mut custody).await;
                     let end = match owner {
                         Ok(owner) => ServiceEnd::Failed {
                             owner: FailedInstallation { owner },
@@ -1344,11 +1345,8 @@ impl<
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
-                Served::StreamEnd {
-                    end,
-                    fault,
-                    mut custody,
-                } => {
+                Served::StreamEnd { end, fault } => {
+                    let mut custody = TerminalCustody::Clear;
                     let cause = match end {
                         EventEnd::Drained { cause } | EventEnd::Quarantined { cause } => cause,
                     };
@@ -1407,9 +1405,8 @@ impl<
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
                 Served::Retune(pending) => {
-                    let (disabled, custody) = self
-                        .disable(&mut arbiter, owner, timer, TerminalCustody::Clear)
-                        .await;
+                    let mut custody = TerminalCustody::Clear;
+                    let disabled = self.disable(&mut arbiter, owner, timer, &mut custody).await;
                     let disabled = match end_disabled(disabled, custody) {
                         ServiceEnd::Stopped(owner) => owner,
                         end => {
@@ -1545,20 +1542,17 @@ impl<
         arbiter: &mut PortArbiter<'id, B>,
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
         timer: &impl Timer,
-        mut custody: TerminalCustody<'id, B>,
-    ) -> (
-        Result<
-            Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-            PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
-        >,
-        TerminalCustody<'id, B>,
-    ) {
+        custody: &mut TerminalCustody<'id, B>,
+    ) -> Result<
+        Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
+        PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+    > {
         let mut sink = |terminal| {
             let terminal = B::terminal(terminal);
-            let result = match &mut custody {
+            let result = match custody {
                 TerminalCustody::Clear => {
                     if let Err(fault) = self.terminal(arbiter, timer.now(), terminal) {
-                        custody = fault.into();
+                        *custody = fault.into();
                     }
                     core::ops::ControlFlow::Continue(())
                 }
@@ -1569,8 +1563,7 @@ impl<
             };
             result.map_break(B::port_terminal)
         };
-        let ended = owner.disable(&mut sink).await;
-        (ended, custody)
+        owner.disable(&mut sink).await
     }
 
     /// Serve the running phase until the port must move, stop or failed.
@@ -1666,7 +1659,6 @@ impl<
                     return Served::StreamEnd {
                         end,
                         fault: ServiceFault::Backend(cause),
-                        custody: TerminalCustody::Clear,
                     };
                 }
             }
@@ -1726,11 +1718,7 @@ impl<
                     Ok(Ok(LowerMacEvent::Tbtt(_))) => {}
                     Ok(Err(_)) => self.counters.events_lost.increment(),
                     Err(end) => {
-                        return Served::StreamEnd {
-                            end,
-                            fault,
-                            custody: TerminalCustody::Clear,
-                        };
+                        return Served::StreamEnd { end, fault };
                     }
                 }
             }
@@ -1741,6 +1729,8 @@ impl<
     /// Hand the network stack's next MSDU to the data machine on the
     /// station's link.
     /// Its admission is `now`: its age starts when the service takes it.
+    // Keep source-specific temporaries out of the service poll frame.
+    #[inline(never)]
     fn send<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
         now: Instant,
@@ -1788,6 +1778,8 @@ impl<
     }
 
     /// Carry out every action the machines owe at `now`.
+    // Keep source-specific temporaries out of the service poll frame.
+    #[inline(never)]
     fn step<'p, P, const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
@@ -1968,6 +1960,8 @@ impl<
 
     /// What follows a station's action, once it no longer borrows the
     /// station.
+    // Keep source-specific temporaries out of the service poll frame.
+    #[inline(never)]
     fn follow<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
         now: Instant,
@@ -2044,6 +2038,8 @@ impl<
 
     /// Take one event of the port; a received frame's buffer comes back
     /// for its recycle.
+    // Keep source-specific temporaries out of the service poll frame.
+    #[inline(never)]
     fn event<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
@@ -2772,7 +2768,6 @@ enum Served<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     StreamEnd {
         end: EventEnd<<B::Backend as PortBackend<B::SlotId>>::Fault>,
         fault: ServiceFault<B>,
-        custody: TerminalCustody<'id, B>,
     },
 }
 
@@ -2780,6 +2775,7 @@ enum Served<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 mod tests;
 
 /// Preserve the first contract violation even when the disable also fails.
+#[inline(never)]
 fn end_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     owner: Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
