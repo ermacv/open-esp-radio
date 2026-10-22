@@ -11,5 +11,5 @@ error[E0308]: mismatched types
 note: method defined here
   --> src/phase.rs
    |
-   |     pub fn close(&mut self, gate: GateOpen<'id, Path>) -> GateClosed<'id, Path> {
+   |     pub fn close(&self, gate: GateOpen<'id, Path>) -> GateClosed<'id, Path> {
    |            ^^^^^
