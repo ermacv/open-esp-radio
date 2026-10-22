@@ -543,6 +543,61 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
 impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const CAP: usize>
     StaData<'id, D, K, CAP>
 {
+    /// Retire the machine into caller-owned storage without copying its
+    /// queued-work banks through the CPU stack.
+    pub fn finish_placed<'a, 'b>(
+        mut machine: oer_memory::Placed<'a, Self>,
+        destination: &'b mut core::mem::MaybeUninit<RetiredData<'id, D, K, CAP>>,
+    ) -> oer_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
+        machine.leave();
+        let (
+            tickets,
+            buffers,
+            owed,
+            admission,
+            next_order,
+            link,
+            overflows,
+            left_behind,
+            preparation_refused,
+            indeterminate,
+            expired,
+            contention_limited,
+        ) = oer_memory::unpack_placed!(
+            machine,
+            Self {
+                tickets,
+                buffers,
+                owed,
+                admission,
+                next_order,
+                link,
+                overflows,
+                left_behind,
+                preparation_refused,
+                indeterminate,
+                expired,
+                contention_limited
+            }
+        );
+        drop(link);
+        oer_memory::Placed::init(destination, |place| {
+            oer_memory::init_in_place!(place, RetiredData {
+                tickets: tickets.read(),
+                buffers: buffers.read(),
+                owed => |place| owed.move_to(place).into_mut(),
+                admission: admission.read(),
+                next_order: next_order.read(),
+                overflows: overflows.read(),
+                left_behind: left_behind.read(),
+                preparation_refused: preparation_refused.read(),
+                indeterminate: indeterminate.read(),
+                expired: expired.read(),
+                contention_limited: contention_limited.read(),
+            })
+        })
+    }
+
     /// End admission and reclaim queued frames after the backend returned its
     /// submitted terminals. Returned owners remain in the terminal resource bank.
     pub fn finish(mut self) -> RetiredData<'id, D, K, CAP> {
@@ -584,6 +639,20 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
         buffers: [D::Buffer; BUFFERS],
         depth: core::num::NonZeroU8,
     ) -> Self {
+        let mut storage = core::mem::MaybeUninit::uninit();
+        oer_memory::Placed::init(&mut storage, |place| {
+            Self::init_in_place(place, tickets, buffers, depth)
+        })
+        .read()
+    }
+
+    /// Initialize a data bank in place; futures retain its borrowed owner.
+    pub fn init_in_place<const TICKETS: usize, const BUFFERS: usize>(
+        storage: &mut core::mem::MaybeUninit<Self>,
+        tickets: [D::Ticket; TICKETS],
+        buffers: [D::Buffer; BUFFERS],
+        depth: core::num::NonZeroU8,
+    ) -> &mut Self {
         const {
             #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
             const fn checked<const TICKETS: usize, const CAP: usize>() {
@@ -595,10 +664,10 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             }
             checked::<TICKETS, CAP>();
         };
-        Self {
+        oer_memory::init_in_place!(storage, Self {
             tickets: Pool::new(tickets),
             buffers: Pool::new(buffers),
-            owed: [const { Fifo::new() }; 8],
+            owed => |place| oer_memory::init_array(place, |_| Fifo::new()),
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
@@ -608,7 +677,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_port::Ieee80211Capabilities, const 
             contention_limited: Counter::ZERO,
             overflows: Counter::ZERO,
             left_behind: Counter::ZERO,
-        }
+        })
     }
 
     /// What the machine dropped.

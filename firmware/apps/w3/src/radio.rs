@@ -169,16 +169,15 @@ pub async fn serve(channel: FrontendChannel, config: W3Config, address: [u8; 6],
     let (_, front) = poll_fn(|cx| pending.poll_answer(cx)).await;
     let mut report = match front {
         Ok(front) => {
-            match radio::run_port(
+            let mut running = core::pin::pin!(radio::run_port(
                 front,
                 crate::station::Body {
                     config,
                     address,
                     seed,
                 },
-            )
-            .await
-            {
+            ));
+            match crate::future::Boundary(running.as_mut()).await {
                 radio::PortEnd::Uninstalled { output, .. } => output,
                 _ => {
                     oer_firmware_apps_w3::report::Report::new(config.channel, address, config.stand)

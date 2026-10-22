@@ -2107,26 +2107,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         RetiredStation<'id, T, K>,
         StationPlaceReturns<'id, T::GatePath>,
     ) {
-        self.complete_commands();
-        let notice = match self.state {
-            State::Idle => None,
-            State::Report(existing) => Some(StaNotice::Disconnected(existing)),
-            _ => Some(StaNotice::Disconnected(reason)),
-        };
-        self.commands.complete(
-            StaCommand::Connect,
-            StaCommandOutcome::ConnectFailed(reason),
-        );
-        self.commands.complete(
-            StaCommand::BackgroundScan,
-            StaCommandOutcome::BackgroundScan {
-                interrupted: Some(BackgroundScanEnd::LinkEnded(reason)),
-            },
-        );
-        self.commands.complete(
-            StaCommand::Disconnect,
-            StaCommandOutcome::Disconnected(reason),
-        );
+        let notice = self.finish_commands(reason);
         let Self {
             config,
             security,
@@ -2173,6 +2154,125 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         )
     }
 
+    fn finish_commands(&mut self, reason: StaDisconnectReason) -> Option<StaNotice> {
+        self.complete_commands();
+        let notice = match self.state {
+            State::Idle => None,
+            State::Report(existing) => Some(StaNotice::Disconnected(existing)),
+            _ => Some(StaNotice::Disconnected(reason)),
+        };
+        self.commands.complete(
+            StaCommand::Connect,
+            StaCommandOutcome::ConnectFailed(reason),
+        );
+        self.commands.complete(
+            StaCommand::BackgroundScan,
+            StaCommandOutcome::BackgroundScan {
+                interrupted: Some(BackgroundScanEnd::LinkEnded(reason)),
+            },
+        );
+        self.commands.complete(
+            StaCommand::Disconnect,
+            StaCommandOutcome::Disconnected(reason),
+        );
+        notice
+    }
+
+    /// Finalize a placed station without moving the complete machine or its
+    /// scan table through a temporary. The returned owner has only terminal APIs.
+    pub fn finish_placed<'a, 'b>(
+        mut machine: oer_memory::Placed<'a, Self>,
+        destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K>>,
+        reason: StaDisconnectReason,
+    ) -> (
+        oer_memory::Placed<'b, RetiredStation<'id, T, K>>,
+        StationPlaceReturns<'id, T::GatePath>,
+    ) {
+        let notice = machine.finish_commands(reason);
+        let (
+            config,
+            security,
+            state,
+            keys,
+            configuration,
+            tickets,
+            buffers,
+            place,
+            lease,
+            absence_place,
+            absence,
+            commands,
+            sequence,
+            scan,
+            pmksa,
+            epoch,
+            epochs,
+        ) = oer_memory::unpack_placed!(
+            machine,
+            Self {
+                config,
+                security,
+                state,
+                keys,
+                configuration,
+                tickets,
+                buffers,
+                place,
+                lease,
+                absence_place,
+                absence,
+                commands,
+                sequence,
+                scan,
+                pmksa,
+                epoch,
+                epochs
+            }
+        );
+        drop((lease, absence, scan, epoch));
+        let deferred = match state.read() {
+            State::Leave(Leave { deferred, .. }) => deferred,
+            State::Connected(Connected { rsn: Some(rsn), .. })
+            | State::Confirming(Confirming {
+                connected: Connected { rsn: Some(rsn), .. },
+                ..
+            }) => rsn.deferred,
+            _ => DeferredEapol::Empty,
+        };
+        let retired = oer_memory::Placed::init(destination, |place| {
+            oer_memory::init_in_place!(
+                place,
+                RetiredStation {
+                    deferred_eapol: deferred,
+                    config: config.read(),
+                    security: security.read(),
+                    epochs: epochs.read(),
+                    keys: keys.read(),
+                    configuration: configuration.read(),
+                    tickets: tickets.read(),
+                    buffers: buffers.read(),
+                    commands: commands.read(),
+                    sequence: sequence.read(),
+                    pmksa: pmksa.read(),
+                    notice: notice,
+                }
+            )
+        });
+        (
+            retired,
+            StationPlaceReturns::new(place.read(), absence_place.read()),
+        )
+    }
+
+    /// Construct the open machine directly in caller-provided storage.
+    pub fn init_open<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+        storage: &'a mut core::mem::MaybeUninit<Self>,
+        config: StaConfig<K>,
+        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+    ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
+        Self::from_config_in_place(storage, config, StaSecurity::Open, resources)
+    }
+
     /// Build an open station; its backend may grant zero group slots.
     #[doc = include_str!("machine/resources_contracts.md")]
     pub fn new_open<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
@@ -2198,6 +2298,25 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
+        let mut storage = core::mem::MaybeUninit::uninit();
+        let mut credits = None;
+        let station = oer_memory::Placed::init(&mut storage, |place| {
+            let (station, granted) = Self::from_config_in_place(place, config, security, resources);
+            credits = Some(granted);
+            station
+        });
+        (
+            station.read(),
+            credits.expect("construction grants command credits"),
+        )
+    }
+
+    fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+        storage: &'a mut core::mem::MaybeUninit<Self>,
+        config: StaConfig<K>,
+        security: StaSecurity,
+        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+    ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
             #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
             const fn check(tickets: usize, buffers: usize) {
@@ -2226,9 +2345,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         } = resources;
         let (commands, credits) = Commands::new();
         (
-            Self {
-                config,
-                security,
+            oer_memory::init_in_place!(storage, Self {
+                config: config,
+                security: security,
                 state: State::Idle,
                 keys: Keys::new::<GROUPS>(keys, group_permission),
                 configuration: Some(configure),
@@ -2238,13 +2357,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 lease: Held::None,
                 absence_place: Some(absence_place),
                 absence: None,
-                commands,
+                commands: commands,
                 sequence: StaSequenceCounter::new(SequenceNumber::ZERO),
-                scan: ScanTable::new(),
+                scan => ScanTable::init_in_place,
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
-                epochs,
-            },
+                epochs: epochs,
+            }),
             credits,
         )
     }

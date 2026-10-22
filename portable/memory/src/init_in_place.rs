@@ -25,10 +25,10 @@
 #[macro_export]
 macro_rules! init_in_place {
     ($storage:expr, $($ty:ident)::+ { $($field:ident $kind:tt $value:expr),+ $(,)? }) => {{
-        let __storage: &mut $crate::__core::mem::MaybeUninit<$($ty)::+> = $storage;
+        let __storage: &mut $crate::__core::mem::MaybeUninit<_> = $storage;
         // This never runs or captures inputs. Rust checks the complete
         // initializer, including field visibility and construction safety.
-        let _ = |$($field),+| $($ty)::+ { $($field),+ };
+        $crate::__InitField::check(__storage, |($($field,)+)| $($ty)::+ { $($field),+ });
         let __pointer = __storage.as_mut_ptr();
         let __fields = ($($crate::init_in_place!(@field __pointer, $field $kind $value),)+);
         // All fields now belong to the complete value, not the cleanup guards.
@@ -67,6 +67,10 @@ macro_rules! init_in_place {
 pub struct __InitField<T>(*mut T);
 
 impl<T> __InitField<T> {
+    /// The complete initializer must construct the destination's exact type.
+    #[inline(always)]
+    pub fn check<A>(_: &core::mem::MaybeUninit<T>, _: impl FnOnce(A) -> T) {}
+
     // Infer a closure against the higher-ranked signature before moving it
     // into the macro's unsafe field-projection block.
     #[inline(always)]

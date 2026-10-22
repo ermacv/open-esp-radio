@@ -30,6 +30,16 @@ pub struct ScanTable<const N: usize = SCAN_RECORD_CAPACITY> {
 }
 
 impl<const N: usize> ScanTable<N> {
+    /// Construct the BSS table directly in the caller's permanent storage.
+    pub fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(storage, Self {
+            records => |place| oer_memory::init_array(place, |_| None),
+            length: 0,
+            observed_frames: 0,
+            dropped_unique_bss: 0,
+        })
+    }
+
     pub const fn new() -> Self {
         Self {
             records: [None; N],

@@ -3844,6 +3844,7 @@ dependencies = [
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
  "oer-ieee80211-wire",
+ "oer-memory",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",

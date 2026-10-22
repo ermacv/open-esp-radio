@@ -28,6 +28,8 @@ mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
 mod init_in_place;
+mod placed;
+pub use placed::{PlaceLoan, Placed, PollPlaced, init_array, poll_placed};
 mod once_value;
 mod pinned_tx;
 mod request_slot;

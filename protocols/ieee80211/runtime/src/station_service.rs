@@ -1055,6 +1055,135 @@ impl<
         }
     }
 
+    /// Construct both machines directly in the caller's backing. The returned
+    /// loan owns the service; running it consumes that ownership as usual.
+    #[allow(clippy::too_many_arguments)]
+    pub fn init_in_place<'s>(
+        storage: &'s mut core::mem::MaybeUninit<Self>,
+        station: impl for<'a> FnOnce(
+            &'a mut core::mem::MaybeUninit<PortStation<'id, B, GROUPS>>,
+        ) -> &'a mut PortStation<'id, B, GROUPS>,
+        data: impl for<'a> FnOnce(
+            &'a mut core::mem::MaybeUninit<PortData<'id, B>>,
+        ) -> &'a mut PortData<'id, B>,
+        arbiter: PortArbiter<'id, B>,
+        rates: S,
+        terminal_access: oer_ieee80211_port::TerminalAccess<
+            'id,
+            <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
+            <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
+        >,
+    ) -> oer_memory::Placed<'s, Self> {
+        const {
+            let _power = Levels::<B::Caps>::POWER;
+            assert!(
+                B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
+                    >= <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
+            );
+        };
+        oer_memory::Placed::init(storage, |place| {
+            oer_memory::init_in_place!(place, Self {
+                arbiter: arbiter,
+                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, S, GROUPS>>| oer_memory::init_in_place!(place, ServiceState {
+                    station => station,
+                    data => data,
+                    rates: rates,
+                    terminal_access: terminal_access,
+                    counters: ServiceCounters::default(),
+                    pending: PendingActions { admissions: Admissions::default(), retune: None, group: None },
+                }),
+            })
+        })
+    }
+
+    /// Consume a placed run right and retire into caller-owned storage. Both
+    /// success and fault paths retain the same banks as the owned run API.
+    pub async fn run_placed<
+        's,
+        'out,
+        'p,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        service: oer_memory::Placed<'s, Self>,
+        output: &'out mut core::mem::MaybeUninit<ServiceCompleted<'p, 'id, B, S, GROUPS>>,
+        owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
+        >,
+        timer: &impl Timer,
+    ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, S, GROUPS>> {
+        let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
+        let mut loop_output = core::mem::MaybeUninit::uninit();
+        let ended = {
+            let mut future = core::pin::pin!(state.run_loop(arbiter.read(), owner, io, timer));
+            oer_memory::poll_placed(future.as_mut(), &mut loop_output).await
+        };
+        let (end, arbiter) = ended.split();
+        let reason = match &*end {
+            ServiceEnd::Stopped(_) => oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+            _ => oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(
+                oer_ieee80211_arbiter::LeaveReason::PortFailed,
+            ),
+        };
+        let (station, data, mut rates, counters, terminal_access, pending) = oer_memory::unpack_placed!(
+            state,
+            ServiceState {
+                station,
+                data,
+                rates,
+                counters,
+                terminal_access,
+                pending
+            }
+        );
+        rates.disconnected();
+        oer_memory::Placed::init(output, |place| {
+            oer_memory::init_in_place!(place, ServiceCompleted {
+                end => |place| end.move_to(place).into_mut(),
+                retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, S, GROUPS>>| {
+                    let mut places = None;
+                    let mut retired = oer_memory::Placed::init(place, |place| oer_memory::init_in_place!(place, RetiredService {
+                        station => |place| {
+                            let (station, returned) = Station::finish_placed(station, place, reason);
+                            places = Some(returned);
+                            station.into_mut()
+                        },
+                        data => |place| StaData::finish_placed(data, place).into_mut(),
+                        rates: rates.read(),
+                        counters: counters.read(),
+                        _places: places.take().expect("station returns its places"),
+                        _arbiter: arbiter.read(),
+                        _pending: pending.read(),
+                        _terminal_access: terminal_access.read(),
+                    }));
+                    while let Some(notice) = retired._arbiter.poll_notice() {
+                        match notice {
+                            ArbiterNotice::Station(notice) => retired._places.returned(notice),
+                            ArbiterNotice::AccessPoint(command) => (io.output)(ServiceOutput::AccessPoint(command)),
+                        }
+                    }
+                    while let Some(output) = retired.station.poll_output() {
+                        match output {
+                            oer_ieee80211_sta::machine::StaFinalOutput::CommandCompleted(terminal) =>
+                                (io.output)(ServiceOutput::CommandCompleted(terminal)),
+                            oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) =>
+                                (io.output)(ServiceOutput::Notice(notice)),
+                        }
+                    }
+                    retired.into_mut()
+                },
+            })
+        })
+    }
+
     /// Consume the service and run until Stop or port failure. Completion
     /// returns terminal resource banks, never another runnable service.
     pub async fn run<

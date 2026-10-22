@@ -31,6 +31,7 @@ use oer_ieee80211_wire::{
 };
 use oer_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
 use oer_time::{Clock, Duration, Instant};
+use static_cell::ConstStaticCell;
 
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition;
@@ -54,6 +55,10 @@ pub static AUTHENTICATED: AtomicBool = AtomicBool::new(false);
 pub static LAST_BEACON_MS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 pub static DEPARTING: AtomicBool = AtomicBool::new(false);
 pub static DEAUTH: AtomicBool = AtomicBool::new(false);
+static NETWORK_RX: ConstStaticCell<
+    MsduQueue<EthernetFrame, { oer_firmware_apps_w3::policy::RX_DEPTH }>,
+> = ConstStaticCell::new(MsduQueue::new());
+static NETWORK_TX: ConstStaticCell<MsduQueue<TxMsdu, 2>> = ConstStaticCell::new(MsduQueue::new());
 
 fn observe_terminal<'id, Id: SlotIdentity + 'id>(terminal: &LowerMacTerminal<'id, Family<Id>>) {
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
@@ -275,48 +280,61 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         );
         let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
         let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
-        let (station, credits) = Station::new_open(
-            StaConfig {
-                address: OwnAddress::new(
-                    IndividualAddress::for_interface(self.address).expect("eFuse station address"),
-                ),
-                ssid: heapless::Vec::from_slice(self.config.ssid).expect("validated SSID length"),
-                channels: heapless::Vec::from_slice(&[channel]).expect("one channel"),
-                dwell: Duration::from_millis(250),
-                skipped_absences: 3,
-                access_point_margin_db: 6,
-                supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
-                association: &ASSOCIATION,
-                listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
-                phy: PhyMode::Ht20,
-                nonce: || [0; 32],
-                he_packet_padding: |_| backend_protection::HePacketPadding::None,
+        let mut service_storage = core::mem::MaybeUninit::uninit();
+        let credits = core::cell::Cell::new(None);
+        let service = StationService::<StationComposition<Id>, _, 1>::init_in_place(
+            &mut service_storage,
+            |station_storage| {
+                let (station, granted) = Station::init_open(
+                    station_storage,
+                    StaConfig {
+                        address: OwnAddress::new(
+                            IndividualAddress::for_interface(self.address)
+                                .expect("eFuse station address"),
+                        ),
+                        ssid: heapless::Vec::from_slice(self.config.ssid)
+                            .expect("validated SSID length"),
+                        channels: heapless::Vec::from_slice(&[channel]).expect("one channel"),
+                        dwell: Duration::from_millis(250),
+                        skipped_absences: 3,
+                        access_point_margin_db: 6,
+                        supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
+                        association: &ASSOCIATION,
+                        listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
+                        phy: PhyMode::Ht20,
+                        nonce: || [0; 32],
+                        he_packet_padding: |_| backend_protection::HePacketPadding::None,
+                    },
+                    StationResources::<_, 4, 4, 1> {
+                        configure: resources.station_commands.configure,
+                        epochs: LinkEpochSource::new(resources.connection_epoch),
+                        tickets: [t0, t1, t2, t3],
+                        buffers: [b0, b1, b2, b3],
+                        place,
+                        absence_place,
+                        keys: resources.station_association,
+                        group_permission: resources.station_group_permission,
+                    },
+                );
+                credits.set(Some(granted));
+                station
             },
-            StationResources::<_, 4, 4, 1> {
-                configure: resources.station_commands.configure,
-                epochs: LinkEpochSource::new(resources.connection_epoch),
-                tickets: [t0, t1, t2, t3],
-                buffers: [b0, b1, b2, b3],
-                place,
-                absence_place,
-                keys: resources.station_association,
-                group_permission: resources.station_group_permission,
+            |place| {
+                StaData::init_in_place(
+                    place,
+                    [t4, t5, t6, t7],
+                    [b4, b5, b6, b7],
+                    Backend::<Id>::TX_QUEUE_DEPTH,
+                )
             },
-        );
-        let service = StationService::<StationComposition<Id>, _, 1>::new(
-            station,
-            StaData::new(
-                [t4, t5, t6, t7],
-                [b4, b5, b6, b7],
-                Backend::<Id>::TX_QUEUE_DEPTH,
-            ),
             arbiter,
             Rates(EspressifRateSelection::<Caps>::new()),
             resources.terminal_access,
         );
+        let credits = credits.take().expect("station grants command credits");
         let mut commands = MsduQueue::<ServiceCommand<'id, Caps, Child<Root<Id>, 8>>, 2>::new();
-        let mut tx = MsduQueue::<TxMsdu, 2>::new();
-        let mut rx = MsduQueue::<EthernetFrame, { oer_firmware_apps_w3::policy::RX_DEPTH }>::new();
+        let tx = NETWORK_TX.take();
+        let rx = NETWORK_RX.take();
         let (command_send, command_receive) = commands.split();
         let (tx_send, tx_receive) = tx.split();
         let (rx_send, rx_receive) = rx.split();
@@ -347,7 +365,14 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             receive: rx_send,
             output: &mut output,
         };
-        let mut running = core::pin::pin!(service.run(owner, &mut io, &EmbassyClock));
+        let mut completed_storage = core::mem::MaybeUninit::uninit();
+        let mut running = core::pin::pin!(StationService::run_placed(
+            service,
+            &mut completed_storage,
+            owner,
+            &mut io,
+            &EmbassyClock,
+        ));
         let mut workload = core::pin::pin!(crate::network::workload(
             self.config,
             self.address,
@@ -360,33 +385,30 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             &disconnected,
             &failed
         ));
-        let (completed, mut report) = join(
+        let mut joined = core::pin::pin!(join(
             crate::future::Boundary(running.as_mut()),
             crate::future::Boundary(workload.as_mut()),
-        )
-        .await;
-        report.service_rx_queue_full = completed.retired.counters.rx_msdus_queue_full.get();
-        report.service_rx_rejected = completed
+        ));
+        let joined = joined.as_mut().await;
+        let mut report = joined.1;
+        report.service_rx_queue_full = joined.0.retired.counters.rx_msdus_queue_full.get();
+        report.service_rx_rejected = joined
+            .0
             .retired
             .counters
             .rx_frames_dropped
             .get()
-            .saturating_add(completed.retired.counters.rx_msdus_too_long.get());
+            .saturating_add(joined.0.retired.counters.rx_msdus_too_long.get());
         report.service_rx_reasons = rx_reasons.get();
-        report.port_events_lost = completed.retired.counters.events_lost.get();
-        let (ended, _retired) = match completed.end {
-            ServiceEnd::Stopped(owner) => {
-                (rp::Ended::uninstall(owner, (), report), completed.retired)
-            }
-            ServiceEnd::Failed { owner, .. } => (owner.uninstall((), report), completed.retired),
-            ServiceEnd::Poisoned { owner, .. } => (
-                rp::Ended::fail_stop(owner.fail_stop(), report),
-                completed.retired,
-            ),
-            ServiceEnd::Quarantined { request, .. } => {
-                (rp::Ended::fail_stop(request, report), completed.retired)
-            }
-        };
+        report.port_events_lost = joined.0.retired.counters.events_lost.get();
+        let (end, _retired) =
+            oer_memory::unpack_placed!(joined.0, ServiceCompleted { end, retired });
+        let ended = oer_memory::match_placed!(end, ServiceEnd {
+            Stopped(owner) => rp::Ended::uninstall(owner.read(), (), report),
+            Failed { owner, fault, custody } => { drop((fault, custody)); owner.read().uninstall((), report) },
+            Poisoned { owner, fault, custody } => { drop((fault, custody)); rp::Ended::fail_stop(owner.read().fail_stop(), report) },
+            Quarantined { request, fault, custody } => { drop((fault, custody)); rp::Ended::fail_stop(request.read(), report) },
+        });
         ended
     }
 }

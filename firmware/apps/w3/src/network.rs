@@ -34,7 +34,7 @@ use owned_embassy_net::{
     raw::RawSocket,
     wire::{IpProtocol, IpVersion},
 };
-use static_cell::StaticCell;
+use static_cell::{ConstStaticCell, StaticCell};
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
 const RX: usize = oer_firmware_apps_w3::policy::RX_DEPTH;
@@ -45,9 +45,11 @@ type Runner = OwnedNetworkRunner<'static, NoopRawMutex, RX, TX>;
 static ENDPOINT: StaticCell<Endpoint> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 static STACK: StaticCell<StackStorage<'static>> = StaticCell::new();
-static GENERAL_STORAGE: StaticCell<PacketPoolStorage<16>> = StaticCell::new();
+static GENERAL_STORAGE: ConstStaticCell<PacketPoolStorage<16>> =
+    ConstStaticCell::new(PacketPoolStorage::new());
 static GENERAL_POOL: StaticCell<PacketPool<16>> = StaticCell::new();
-static RX_STORAGE: StaticCell<PacketPoolStorage<8>> = StaticCell::new();
+static RX_STORAGE: ConstStaticCell<PacketPoolStorage<8>> =
+    ConstStaticCell::new(PacketPoolStorage::new());
 static RX_POOL: StaticCell<PacketPool<8>> = StaticCell::new();
 
 #[allow(clippy::too_many_arguments)]
@@ -64,10 +66,10 @@ pub async fn workload<'id, Path: PoolPath>(
     failed: &Cell<bool>,
 ) -> Report {
     let general = GENERAL_POOL
-        .init_with(|| PacketPool::new(GENERAL_STORAGE.init_with(PacketPoolStorage::new)))
+        .init_with(|| PacketPool::new(GENERAL_STORAGE.take()))
         .allocator();
     let receive = RX_POOL
-        .init_with(|| PacketPool::new(RX_STORAGE.init_with(PacketPoolStorage::new)))
+        .init_with(|| PacketPool::new(RX_STORAGE.take()))
         .allocator();
     let (device, radio) =
         ENDPOINT

@@ -213,21 +213,5 @@ fn station_task_future(
     address: [u8; 6],
     seed: u64,
 ) -> StationTaskFuture {
-    async move { station_future(channel, config, address, seed).await }
-}
-
-// The opaque future stays private in the image entry module. Its storage is
-// permanent PSRAM; the Embassy task header contains only the pinned loan.
-type StationFuture = impl core::future::Future<Output = ()>;
-static STATION_FUTURE: StaticCell<StationFuture> = StaticCell::new();
-#[define_opaque(StationFuture)]
-fn station_future(
-    channel: radio::FrontendChannel,
-    config: W3Config,
-    address: [u8; 6],
-    seed: u64,
-) -> future::Boundary<'static, StationFuture> {
-    future::Boundary(core::pin::Pin::static_mut(
-        STATION_FUTURE.init_with(|| radio::serve(channel, config, address, seed)),
-    ))
+    radio::serve(channel, config, address, seed)
 }
