@@ -260,36 +260,49 @@ impl Collector {
 
     fn artifact(&self, artifact: &Artifact) -> Result<PathBuf> {
         let deps = self.release.join("deps");
-        if let Some(binary) = &artifact.executable {
-            // Cargo's unhashed uplift is a hard link of the selected unit.
-            // Identity distinguishes even feature variants with identical ELF bytes.
-            let selected = fs::metadata(binary)?;
-            let prefix = format!("{}-", artifact.target.name.replace('-', "_"));
-            for entry in fs::read_dir(&deps)? {
-                let path = entry?.path();
-                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                    continue;
-                };
-                if name.strip_prefix(&prefix).is_some_and(valid_hash) {
-                    let candidate = fs::metadata(&path)?;
-                    if (selected.dev(), selected.ino()) == (candidate.dev(), candidate.ino()) {
-                        return Ok(path);
-                    }
+        let selected = if let Some(binary) = &artifact.executable {
+            binary
+        } else {
+            artifact
+                .filenames
+                .iter()
+                .find(|path| {
+                    path.extension().is_some_and(|extension| {
+                        extension == "rlib" || extension == "rmeta" || extension == "a"
+                    })
+                })
+                .ok_or("no library artifact")?
+        };
+        if selected.parent() == Some(deps.as_path()) {
+            return Ok(selected.clone());
+        }
+        // Cargo uplifts both executables and primary rlib/staticlib outputs
+        // without a hash. File identity selects their exact hashed unit,
+        // including feature variants with identical contents.
+        let selected_metadata = fs::metadata(selected)?;
+        let name = artifact.target.name.replace('-', "_");
+        let prefix = if artifact.executable.is_some() {
+            format!("{name}-")
+        } else {
+            format!("lib{name}-")
+        };
+        for entry in fs::read_dir(&deps)? {
+            let path = entry?.path();
+            let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            if path.extension() == selected.extension()
+                && stem.strip_prefix(&prefix).is_some_and(valid_hash)
+            {
+                let candidate = fs::metadata(&path)?;
+                if (selected_metadata.dev(), selected_metadata.ino())
+                    == (candidate.dev(), candidate.ino())
+                {
+                    return Ok(path);
                 }
             }
-            return Err(format!("no hashed Cargo artifact for {}", binary.display()).into());
         }
-        artifact
-            .filenames
-            .iter()
-            .find(|path| {
-                path.parent() == Some(deps.as_path())
-                    && path
-                        .extension()
-                        .is_some_and(|extension| extension == "rlib" || extension == "rmeta")
-            })
-            .cloned()
-            .ok_or_else(|| "no hashed Rust library artifact".into())
+        Err(format!("no hashed Cargo artifact for {}", selected.display()).into())
     }
 
     fn facts(&self, artifact: &Artifact, manifest: &Path) -> Result<Value> {
@@ -304,7 +317,16 @@ impl Collector {
             stem.strip_prefix("lib")
                 .ok_or("invalid Rust library name")?
         };
-        let report = self.validate(&path.with_file_name(format!("{name}{SUFFIX}")), manifest)?;
+        let sidecar = path.with_file_name(format!("{name}{SUFFIX}"));
+        // An ordinary rustc rebuild can overwrite this unit without
+        // changing its metadata hash. Its older facts must not survive.
+        let written = fs::metadata(&sidecar)?.modified()?;
+        for file in artifact.filenames.iter().chain(std::iter::once(&path)) {
+            if written < fs::metadata(file)?.modified()? {
+                return Err("compiler facts predate the artifact".into());
+            }
+        }
+        let report = self.validate(&sidecar, manifest)?;
         if let Some(binary) = &artifact.executable
             && report["binary_sha256"] != oer_os_durable::sha256_file(binary)?
         {

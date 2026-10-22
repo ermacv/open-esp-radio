@@ -259,4 +259,83 @@ fn a_plain_cargo_cache_is_repaired_and_then_produces_identical_reports() {
             assert_eq!(value["fresh"], true);
         }
     }
+    // A later ordinary build can reuse the same metadata hash after the
+    // source changes. Existing sidecars must not certify the newer unit.
+    fs::write(
+        root.join("app/src/lib.rs"),
+        "#![no_std]\n#[inline(never)] pub fn run() { helper::small(); }",
+    )
+    .expect("changed source");
+    let mut plain = crate::cargo::command();
+    plain
+        .current_dir(root)
+        .args([
+            "build",
+            "--offline",
+            "-p",
+            "app",
+            "--profile",
+            "firmware",
+            "--target",
+            target,
+        ])
+        .env("CARGO_TARGET_DIR", &cache)
+        .env_remove("RUSTC_WRAPPER")
+        .env_remove("RUSTC_WORKSPACE_WRAPPER");
+    log.run(&mut plain, "ordinary rebuild after source change")
+        .expect("ordinary rebuild");
+    let repaired = build(
+        &mut command,
+        &log,
+        root,
+        &cache,
+        target,
+        "firmware",
+        "runtime",
+        root,
+    )
+    .expect("repair older facts");
+    assert!(
+        repaired
+            .crates
+            .iter()
+            .filter_map(|coverage| coverage.facts.as_ref())
+            .all(|facts| facts["records"].as_array().expect("records").is_empty())
+    );
+}
+
+#[test]
+fn a_primary_rlib_and_staticlib_uplift_needs_no_separate_rmeta() {
+    let directory = tempfile::tempdir().expect("temporary fixture");
+    let release = directory.path();
+    let deps = release.join("deps");
+    fs::create_dir(&deps).expect("deps");
+    let manifest = release.join("Cargo.toml");
+    fs::write(&manifest, "fixture").expect("manifest");
+    for extension in ["rlib", "a"] {
+        let hashed = deps.join(format!("libfixture-0123456789abcdef.{extension}"));
+        fs::write(&hashed, b"library").expect("library");
+        fs::hard_link(hashed, release.join(format!("libfixture.{extension}"))).expect("uplift");
+    }
+    let facts = serde_json::json!({"schema":2,"driver_id":"current","manifest":manifest,
+        "metadata_hash":"0123456789abcdef","max_move_bytes":4096,"records":[]});
+    fs::write(
+        deps.join("fixture-0123456789abcdef.large-values.json"),
+        facts.to_string(),
+    )
+    .expect("facts");
+    let artifact:Artifact = serde_json::from_value(serde_json::json!({"reason":"compiler-artifact",
+        "target":{"name":"fixture","kind":["rlib","staticlib"]},"filenames":[release.join("libfixture.rlib"),release.join("libfixture.a")]})).expect("artifact");
+    let collector = Collector {
+        packages: BTreeMap::new(),
+        release: release.into(),
+        driver_id: "current".into(),
+        limit: 4096,
+    };
+    assert_eq!(
+        collector
+            .facts(&artifact, &manifest)
+            .expect("uplifted facts"),
+        facts
+    );
 }

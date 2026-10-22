@@ -9,8 +9,9 @@ const DRIVER: &str = env!("CARGO_BIN_EXE_oer-tool-image-large-values");
 fn compile(directory: &Path, source: &str, name: &str, extra: &[&str]) -> Value {
     let source_path = directory.join(format!("{name}.rs"));
     let manifest = directory.join("Cargo.toml");
-    std::fs::write(&manifest, "[package]\nname='fixture'\nversion='0.1.0'\n").unwrap();
-    std::fs::write(&source_path, source).unwrap();
+    std::fs::write(&manifest, "[package]\nname='fixture'\nversion='0.1.0'\n")
+        .expect("compiler fixture data is valid");
+    std::fs::write(&source_path, source).expect("compiler fixture data is valid");
     let output = Command::new(DRIVER)
         .arg("rustc")
         .arg(&source_path)
@@ -29,29 +30,32 @@ fn compile(directory: &Path, source: &str, name: &str, extra: &[&str]) -> Value 
         .env("CARGO_MANIFEST_DIR", directory)
         .env(
             "OER_LARGE_VALUES_WORKSPACE",
-            serde_json::to_string(&[manifest]).unwrap(),
+            serde_json::to_string(&[manifest]).expect("compiler fixture data is valid"),
         )
         .env("OER_LARGE_VALUES_DRIVER_ID", "fixture")
         .output()
-        .unwrap();
+        .expect("compiler fixture data is valid");
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
     serde_json::from_slice(
-        &std::fs::read(directory.join(format!("{name}.large-values.json"))).unwrap(),
+        &std::fs::read(directory.join(format!("{name}.large-values.json")))
+            .expect("compiler fixture data is valid"),
     )
-    .unwrap()
+    .expect("compiler fixture data is valid")
 }
 
 #[test]
 fn reports_concrete_values_and_call_operands_with_source_locations() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = tempfile::tempdir().expect("compiler fixture data is valid");
     let source = include_str!("fixtures/values.rs");
     let report = compile(directory.path(), source, "values", &[]);
     assert_eq!(report["errors"], serde_json::json!([]));
-    let records = report["records"].as_array().unwrap();
+    let records = report["records"]
+        .as_array()
+        .expect("compiler fixture data is valid");
     for (function, role) in [
         ("local", "local"),
         ("consume_copy", "argument"),
@@ -67,7 +71,7 @@ fn reports_concrete_values_and_call_operands_with_source_locations() {
             records.iter().any(|record| {
                 record["instance"]
                     .as_str()
-                    .unwrap()
+                    .expect("compiler fixture data is valid")
                     .ends_with(&format!("::{function}"))
                     && record["role"] == role
                     && record["bytes"] == 8192
@@ -78,46 +82,64 @@ fn reports_concrete_values_and_call_operands_with_source_locations() {
     assert!(records.iter().any(|record| {
         record["instance"]
             .as_str()
-            .unwrap()
+            .expect("compiler fixture data is valid")
             .contains("generic::<values::CopyBig>")
             && record["bytes"] == 8192
     }));
     assert!(records.iter().any(|record| {
-        record["ty"].as_str().unwrap().contains("future")
-            && record["bytes"].as_u64().unwrap() > 8192
+        record["ty"]
+            .as_str()
+            .expect("compiler fixture data is valid")
+            .contains("future")
+            && record["bytes"]
+                .as_u64()
+                .expect("compiler fixture data is valid")
+                > 8192
     }));
     for record in records {
-        let name = record["instance"].as_str().unwrap();
+        let name = record["instance"]
+            .as_str()
+            .expect("compiler fixture data is valid");
         assert!(!name.ends_with("::static_reference") && !name.ends_with("::at_limit"));
-        assert!(record["span"].as_str().unwrap().contains("values.rs:"));
+        assert!(
+            record["span"]
+                .as_str()
+                .expect("compiler fixture data is valid")
+                .contains("values.rs:")
+        );
     }
     let mut seen = HashSet::new();
     assert!(records.iter().all(|record| seen.insert(record.to_string())));
     let macro_line = source
         .lines()
         .position(|line| line.contains("large_local!();"))
-        .unwrap()
+        .expect("compiler fixture data is valid")
         + 1;
     assert!(
         records
             .iter()
             .filter(|record| record["instance"]
                 .as_str()
-                .unwrap()
+                .expect("compiler fixture data is valid")
                 .ends_with("::macro_local"))
             .all(|record| record["span"]
                 .as_str()
-                .unwrap()
+                .expect("compiler fixture data is valid")
                 .contains(&format!("values.rs:{macro_line}:")))
     );
 }
 
 #[test]
 fn sees_a_capped_foreign_generic_instantiated_by_a_workspace_crate() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = tempfile::tempdir().expect("compiler fixture data is valid");
     let source = "#![no_std]\n#[inline(never)] pub fn generic<T: Copy>(x: &T) { let y = *x; core::hint::black_box(&y); }";
     let report = compile(directory.path(), source, "foreign", &["--cap-lints=allow"]);
-    assert!(report["records"].as_array().unwrap().is_empty());
+    assert!(
+        report["records"]
+            .as_array()
+            .expect("compiler fixture data is valid")
+            .is_empty()
+    );
     let external = format!(
         "foreign={}",
         directory.path().join("libforeign.rlib").display()
@@ -129,9 +151,13 @@ fn sees_a_capped_foreign_generic_instantiated_by_a_workspace_crate() {
         &["--extern", &external],
     );
     assert!(
-        report["records"].as_array().unwrap().iter().any(|record| {
-            record["instance"] == "foreign::generic::<[u8; 8192]>" && record["bytes"] == 8192
-        }),
+        report["records"]
+            .as_array()
+            .expect("compiler fixture data is valid")
+            .iter()
+            .any(|record| {
+                record["instance"] == "foreign::generic::<[u8; 8192]>" && record["bytes"] == 8192
+            }),
         "{report:#}"
     );
 }

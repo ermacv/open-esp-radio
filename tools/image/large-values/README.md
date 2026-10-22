@@ -45,8 +45,8 @@ unhashed uplift to the hashed artifact by file identity (device/inode),
 including byte-identical cached feature variants. Library reports follow hashed rlib/rmeta artifacts.
 
 The pipeline reads Cargo artifact messages, including Fresh units, to
-assemble `large-values.json` and `large-values.txt` beside the image. Missing
-or stale facts invalidate only the affected workspace packages' target
+assemble `large-values.json` and `large-values.txt` beside the image. Sidecars must postdate all unit outputs, including an ordinary compiler
+rebuild with the same metadata hash. Missing or stale facts invalidate only the affected workspace packages' target
 fingerprints and rerun Cargo once. Any remaining absence is explicit in
 coverage and stderr. Findings and sidecar-write errors do not change the
 compiler verdict. JSON has a versioned image envelope with per-crate
