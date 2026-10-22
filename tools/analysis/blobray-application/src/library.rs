@@ -636,6 +636,15 @@ pub fn register_accesses(
                 analyzed.summaries,
             );
             crate::registers::observe(analyzed.records, &facts, memory, ranges, c, &mut |o, c| {
+                let stored = reads.stored(&o, c)?;
+                let mask = o.mask.or_else(|| {
+                    let FunctionRecord::MemoryAccess { width, .. } = o.fact else {
+                        return None;
+                    };
+                    stored.as_deref().and_then(|stored| {
+                        oer_analysis_blobray_analysis::registers::write_mask(*width, stored)
+                    })
+                });
                 summary.observations += 1;
                 summary.unresolved_addresses += u64::from(o.address.is_none());
                 summary.indexed_addresses += u64::from(o.indexed.is_some());
@@ -647,8 +656,8 @@ pub fn register_accesses(
                         address: o.address,
                         alternative: o.alternative,
                         indexed: o.indexed,
-                        mask: o.mask,
-                        stored: o.stored,
+                        mask,
+                        stored,
                         reads: reads.reads(o.fact, c)?,
                     },
                     c,

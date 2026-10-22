@@ -3,7 +3,12 @@ use crate::navigation::Facts;
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 mod arguments;
+mod domain;
+mod provenance;
+use arguments::ReturnedDependency;
 pub use arguments::{ArgumentProgram, CallAt};
+use domain::{Domain, FlowValue, Reads};
+pub use provenance::StoredProvenanceEvaluator;
 
 fn constant(v: &AbstractValue) -> Option<u32> {
     if let AbstractValue::Constant { value } = v {
@@ -83,269 +88,6 @@ pub fn write_mask(width: u8, stored: &[StoredBits]) -> Option<RegisterMask> {
         kind: RegisterMaskKind::WriteReplacement,
         bits: mask & !preserved,
     })
-}
-
-/// One bit of a stored value: fixed, an entry register's bit, a loaded
-/// value's bit, or unknown. A loaded bit names its load expression's id, so
-/// two loads of one address (two reads of a register) are never one source.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Bit<'a> {
-    Zero,
-    One,
-    Entry(u8, u8),
-    Load(u32, &'a AbstractValue, u8, u8),
-    Unknown,
-}
-
-fn constant_bits<'a>(value: u32) -> [Bit<'a>; 32] {
-    std::array::from_fn(|i| {
-        if value >> i & 1 == 1 {
-            Bit::One
-        } else {
-            Bit::Zero
-        }
-    })
-}
-
-fn and<'a>(a: Bit<'a>, b: Bit<'a>) -> Bit<'a> {
-    match (a, b) {
-        (Bit::Zero, _) | (_, Bit::Zero) => Bit::Zero,
-        (Bit::One, x) | (x, Bit::One) => x,
-        (x, y) if x == y && x != Bit::Unknown => x,
-        _ => Bit::Unknown,
-    }
-}
-
-fn or<'a>(a: Bit<'a>, b: Bit<'a>) -> Bit<'a> {
-    match (a, b) {
-        (Bit::One, _) | (_, Bit::One) => Bit::One,
-        (Bit::Zero, x) | (x, Bit::Zero) => x,
-        (x, y) if x == y && x != Bit::Unknown => x,
-        _ => Bit::Unknown,
-    }
-}
-
-fn not(a: Bit<'_>) -> Bit<'_> {
-    match a {
-        Bit::Zero => Bit::One,
-        Bit::One => Bit::Zero,
-        _ => Bit::Unknown,
-    }
-}
-
-fn xor<'a>(a: Bit<'a>, b: Bit<'a>) -> Bit<'a> {
-    match (a, b) {
-        (Bit::Zero, x) | (x, Bit::Zero) => x,
-        (Bit::One, x) | (x, Bit::One) => not(x),
-        _ => Bit::Unknown,
-    }
-}
-
-/// `left + right` while no bit position can carry; from the first position
-/// where both may be set, every higher bit is unknown.
-fn add<'a>(left: [Bit<'a>; 32], right: [Bit<'a>; 32]) -> [Bit<'a>; 32] {
-    let mut carry = false;
-    std::array::from_fn(|i| {
-        if carry {
-            return Bit::Unknown;
-        }
-        match (left[i], right[i]) {
-            (Bit::Zero, x) | (x, Bit::Zero) => x,
-            _ => {
-                carry = true;
-                Bit::Unknown
-            }
-        }
-    })
-}
-
-fn shift_left(bits: [Bit<'_>; 32], by: u32) -> [Bit<'_>; 32] {
-    std::array::from_fn(|i| {
-        if (i as u32) < by {
-            Bit::Zero
-        } else {
-            bits[i - by as usize]
-        }
-    })
-}
-
-/// Bit-level sources of stored values over one function's expressions.
-///
-/// Expressions form a DAG whose shared nodes the analysis consolidates, so each
-/// node is evaluated once per function and memoized by its dense id; every
-/// newly evaluated node is charged one work unit and the memo reserves its
-/// capacity in working memory before it grows, so the walk stays inside the
-/// caller's work budget, deadline and memory.
-pub struct StoredBitsEvaluator<'f, 'a, 'm> {
-    facts: &'f Facts<'a, 'm>,
-    memory: &'m WorkingMemory,
-    /// Each evaluated expression's bits, by expression id.
-    memo: AdmittedVec<'m, Option<[Bit<'a>; 32]>>,
-}
-
-impl<'f, 'a, 'm> StoredBitsEvaluator<'f, 'a, 'm> {
-    pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
-        Self {
-            facts,
-            memory,
-            memo: AdmittedVec::new(memory),
-        }
-    }
-
-    /// The bits of `value`. A leaf is read directly; an expression is
-    /// evaluated with every node it reaches computed exactly once per
-    /// function, in post order on an admitted stack: an operand's id is
-    /// always lower than its node's, so the walk needs no depth bound.
-    fn bits(&mut self, value: &'a AbstractValue, c: &mut dyn RunControl) -> Result<[Bit<'a>; 32]> {
-        let AbstractValue::Expression { id } = value else {
-            return Ok(self.operand(value, u32::MAX));
-        };
-        if self.facts.value_expression(value).is_none() {
-            return Ok([Bit::Unknown; 32]);
-        }
-        let mut stack = AdmittedVec::new(self.memory);
-        stack.push(*id, c.position())?;
-        while let Some(&top) = stack.last() {
-            if self.memoized(top).is_some() {
-                stack.pop();
-                continue;
-            }
-            let Some(expression) = self
-                .facts
-                .value_expression(&AbstractValue::Expression { id: top })
-            else {
-                stack.pop();
-                continue;
-            };
-            let mut pending = false;
-            if let Expression::Integer { left, right, .. } = expression {
-                for operand in [left, right] {
-                    if let AbstractValue::Expression { id: operand } = operand
-                        && *operand < top
-                        && self.memoized(*operand).is_none()
-                        && self
-                            .facts
-                            .value_expression(&AbstractValue::Expression { id: *operand })
-                            .is_some()
-                    {
-                        stack.push(*operand, c.position())?;
-                        pending = true;
-                    }
-                }
-            }
-            if pending {
-                continue;
-            }
-            c.checkpoint(1)?;
-            let result = match expression {
-                Expression::EntryRegister { register } => {
-                    std::array::from_fn(|i| Bit::Entry(*register, i as u8))
-                }
-                Expression::Load {
-                    address,
-                    width,
-                    signed,
-                } => {
-                    let loaded = u32::from(*width) * 8;
-                    std::array::from_fn(|i| {
-                        let i = i as u32;
-                        if i < loaded {
-                            Bit::Load(top, address, *width, i as u8)
-                        } else if *signed && loaded != 0 {
-                            Bit::Load(top, address, *width, (loaded - 1) as u8)
-                        } else {
-                            Bit::Zero
-                        }
-                    })
-                }
-                Expression::Integer { op, left, right } => {
-                    let l = self.operand(left, top);
-                    let r = self.operand(right, top);
-                    let by = constant(right).map(|k| k & 31);
-                    match op {
-                        IntegerOp::And => std::array::from_fn(|i| and(l[i], r[i])),
-                        IntegerOp::AndNot => std::array::from_fn(|i| and(l[i], not(r[i]))),
-                        IntegerOp::Or => std::array::from_fn(|i| or(l[i], r[i])),
-                        IntegerOp::Xor => std::array::from_fn(|i| xor(l[i], r[i])),
-                        IntegerOp::Shl => match by {
-                            Some(by) => shift_left(l, by),
-                            None => [Bit::Unknown; 32],
-                        },
-                        IntegerOp::Shr | IntegerOp::Sar => match by {
-                            Some(by) => std::array::from_fn(|i| {
-                                let from = i as u32 + by;
-                                if from < 32 {
-                                    l[from as usize]
-                                } else if *op == IntegerOp::Sar {
-                                    l[31]
-                                } else {
-                                    Bit::Zero
-                                }
-                            }),
-                            None => [Bit::Unknown; 32],
-                        },
-                        IntegerOp::Add => add(l, r),
-                        IntegerOp::Sub if r.iter().all(|bit| *bit == Bit::Zero) => l,
-                        IntegerOp::ShiftAdd1 => add(shift_left(l, 1), r),
-                        IntegerOp::ShiftAdd2 => add(shift_left(l, 2), r),
-                        IntegerOp::ShiftAdd3 => add(shift_left(l, 3), r),
-                        _ => [Bit::Unknown; 32],
-                    }
-                }
-                Expression::CallResult { .. } | Expression::CallWord { .. } => [Bit::Unknown; 32],
-            };
-            while self.memo.len() <= top as usize {
-                self.memo.push(None, c.position())?;
-            }
-            self.memo[top as usize] = Some(result);
-            stack.pop();
-        }
-        Ok(self.memoized(*id).unwrap_or([Bit::Unknown; 32]))
-    }
-
-    fn memoized(&self, id: u32) -> Option<[Bit<'a>; 32]> {
-        self.memo.get(id as usize).copied().flatten()
-    }
-
-    /// An operand of node `node`: a leaf's bits, or an already evaluated
-    /// earlier expression's; anything else is unknown.
-    fn operand(&self, value: &'a AbstractValue, node: u32) -> [Bit<'a>; 32] {
-        match value {
-            AbstractValue::Constant { value } | AbstractValue::ImageAddress { address: value } => {
-                constant_bits(*value)
-            }
-            AbstractValue::Alternatives { values } => {
-                let shared =
-                    values
-                        .values()
-                        .iter()
-                        .try_fold((u32::MAX, 0), |(all, any), alternative| {
-                            let value = match alternative {
-                                ValueAlternative::Constant { value }
-                                | ValueAlternative::ImageAddress { address: value } => *value,
-                                _ => return None,
-                            };
-                            Some((all & value, any | value))
-                        });
-                match shared {
-                    Some((all, any)) => std::array::from_fn(|i| {
-                        if (all ^ any) >> i & 1 != 0 {
-                            Bit::Unknown
-                        } else if all >> i & 1 != 0 {
-                            Bit::One
-                        } else {
-                            Bit::Zero
-                        }
-                    }),
-                    None => [Bit::Unknown; 32],
-                }
-            }
-            AbstractValue::Expression { id } if *id < node => {
-                self.memoized(*id).unwrap_or([Bit::Unknown; 32])
-            }
-            _ => [Bit::Unknown; 32],
-        }
-    }
 }
 
 /// One load or entry-register source's bit dependencies in a register or stack byte.
@@ -565,6 +307,36 @@ struct ReadKnown {
     one: u32,
 }
 impl ReadKnown {
+    fn from_fact(value: &AbstractValue) -> Self {
+        match value {
+            AbstractValue::Constant { value } | AbstractValue::ImageAddress { address: value } => {
+                Self::constant(*value)
+            }
+            AbstractValue::Alternatives { values } => values
+                .values()
+                .iter()
+                .try_fold(
+                    Self {
+                        zero: u32::MAX,
+                        one: u32::MAX,
+                    },
+                    |shared, value| {
+                        let value = match value {
+                            ValueAlternative::Constant { value }
+                            | ValueAlternative::ImageAddress { address: value } => *value,
+                            _ => return None,
+                        };
+                        Some(Self {
+                            zero: shared.zero & !value,
+                            one: shared.one & value,
+                        })
+                    },
+                )
+                .unwrap_or_default(),
+            _ => Self::default(),
+        }
+    }
+
     fn constant(value: u32) -> Self {
         Self {
             zero: !value,
@@ -641,31 +413,31 @@ impl ReadKnown {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
-struct ReadCell {
-    flow: usize,
+struct ReadCell<F: FlowValue> {
+    flow: F,
     atom: ReadAtom,
     known: ReadKnown,
 }
-impl ReadCell {
+impl<F: FlowValue> ReadCell<F> {
     fn constant(value: u32) -> Self {
         Self {
-            flow: 0,
+            flow: F::constant(value),
             atom: ReadAtom::Constant(value),
             known: ReadKnown::constant(value),
         }
     }
 }
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
-struct ReadSlot {
+struct ReadSlot<B> {
     offset: i64,
-    cell: ReadCell,
+    cell: B,
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
-struct ReadState {
-    registers: [ReadCell; 32],
+struct ReadState<F: FlowValue> {
+    registers: [ReadCell<F>; 32],
     slots: usize,
 }
-impl ReadState {
+impl<F: FlowValue> ReadState<F> {
     fn entry() -> Self {
         let mut state = Self {
             registers: [ReadCell::default(); 32],
@@ -675,26 +447,26 @@ impl ReadState {
         state.set(
             2,
             ReadCell {
-                flow: 0,
+                flow: F::default(),
                 atom: ReadAtom::Stack(0),
                 known: ReadKnown::default(),
             },
         );
         state
     }
-    fn register(&self, register: u8) -> ReadCell {
+    fn register(&self, register: u8) -> ReadCell<F> {
         self.registers
             .get(usize::from(register))
             .copied()
             .unwrap_or_default()
     }
-    fn operand(&self, operand: Operand) -> ReadCell {
+    fn operand(&self, operand: Operand) -> ReadCell<F> {
         match operand {
             Operand::Register(register) => self.register(register),
             Operand::Immediate(value) => ReadCell::constant(value),
         }
     }
-    fn set(&mut self, register: u8, value: ReadCell) {
+    fn set(&mut self, register: u8, value: ReadCell<F>) {
         if let Some(slot) = self.registers.get_mut(usize::from(register)) {
             *slot = value;
         }
@@ -709,7 +481,7 @@ struct ReadInstruction<'a> {
     branch: Option<(BranchTest, Operand, Operand)>,
     flow: InstructionFlow,
     address: Option<&'a AbstractValue>,
-    value: Option<(u8, ReadAtom)>,
+    value: Option<(u8, ReadAtom, ReadKnown)>,
     address_atom: ReadAtom,
     source: Option<usize>,
     arguments: bool,
@@ -718,10 +490,11 @@ struct ReadInstruction<'a> {
     edge_start: usize,
     edge_end: usize,
 }
-struct ReadNode<'a> {
+struct ReadNode<'a, F: FlowValue> {
     instruction: ReadInstruction<'a>,
-    input: Option<ReadState>,
+    input: Option<ReadState<F>>,
     queued: bool,
+    unsettled: bool,
 }
 #[derive(Clone, Copy)]
 struct ReadEdge {
@@ -762,7 +535,7 @@ enum ReadFlowOp {
 }
 
 /// Bound pathological CFGs without spending the whole operation's budget on
-/// one function. Every admitted step is still charged to the caller.
+/// one function. Each domain chooses its work units; all check caller control.
 const READ_MIN_FUNCTION_WORK: u64 = 100_000;
 const READ_INSTRUCTION_WORK: u64 = 512;
 fn read_work_limit(instructions: usize) -> u64 {
@@ -771,9 +544,10 @@ fn read_work_limit(instructions: usize) -> u64 {
 struct ReadWork<'c> {
     caller: &'c mut dyn RunControl,
     remaining: u64,
+    instruction_only: bool,
 }
-impl RunControl for ReadWork<'_> {
-    fn checkpoint(&mut self, units: u64) -> Result<()> {
+impl ReadWork<'_> {
+    fn charge(&mut self, units: u64) -> Result<()> {
         self.remaining = self.remaining.checked_sub(units).ok_or_else(|| {
             Error::new(
                 ErrorCode::ResourceLimited,
@@ -781,6 +555,18 @@ impl RunControl for ReadWork<'_> {
             )
         })?;
         self.caller.checkpoint(units)
+    }
+    fn visit(&mut self) -> Result<()> {
+        self.charge(1)
+    }
+}
+impl RunControl for ReadWork<'_> {
+    fn checkpoint(&mut self, units: u64) -> Result<()> {
+        if self.instruction_only {
+            self.caller.checkpoint(0)
+        } else {
+            self.charge(units)
+        }
     }
     fn position(&self) -> RunPosition {
         self.caller.position()
@@ -792,41 +578,42 @@ impl RunControl for ReadWork<'_> {
 
 type SelectRead<'s> = dyn FnMut(&AbstractValue, u8, &mut dyn RunControl) -> Result<bool> + 's;
 
-/// A finite forward dataflow of load dependencies over instruction CFG edges.
-/// Joins union sources instead of consulting the value-analysis DAG. Exact
-/// mappings agree on every path carrying that source; disagreements become May.
-/// Interned register/stack sets and the work queue use admitted working memory.
-pub struct ReadUsesEvaluator<'f, 'a, 'm> {
+/// One instruction CFG interpreter, parameterized by register and stack-byte
+/// contents. Both passes share preparation, traversal, transfers, call-summary
+/// application, work budgets and admitted state/queue storage.
+struct FlowEngine<'f, 'a, 'm, D: Domain<'m>> {
     facts: &'f Facts<'a, 'm>,
-    nodes: AdmittedVec<'m, ReadNode<'a>>,
+    nodes: AdmittedVec<'m, ReadNode<'a, D::Flow>>,
     edges: AdmittedVec<'m, ReadEdge>,
-    flows: ReadSets<'m, ReadDependency>,
-    stacks: ReadSets<'m, ReadSlot>,
+    domain: D,
+    stacks: ReadSets<'m, ReadSlot<D::Byte>>,
     sources: AdmittedVec<'m, ReadSource<'a>>,
-    events: AdmittedVec<'m, ReadEvent>,
     dispatches: AdmittedVec<'m, ReadDispatch>,
     queue: AdmittedVec<'m, usize>,
     ready: bool,
     work_limit: bool,
     summary_mode: bool,
-    returned: AdmittedVec<'m, arguments::ReturnedDependency>,
+    prepared: bool,
+    converged: bool,
+    pending: Option<usize>,
 }
-impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
+impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
     pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
         Self {
             facts,
             nodes: AdmittedVec::new(memory),
             edges: AdmittedVec::new(memory),
-            flows: ReadSets::new(memory),
+            domain: D::new(memory),
             stacks: ReadSets::new(memory),
             sources: AdmittedVec::new(memory),
-            events: AdmittedVec::new(memory),
             dispatches: AdmittedVec::new(memory),
             queue: AdmittedVec::new(memory),
             ready: false,
             work_limit: false,
             summary_mode: false,
-            returned: AdmittedVec::new(memory),
+            prepared: false,
+            converged: false,
+            pending: None,
         }
     }
     pub fn analyze(
@@ -843,7 +630,11 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         self.ready = true;
         let result = (|| {
             let records = self.facts.records();
-            c.checkpoint(records.len() as u64)?;
+            c.checkpoint(if D::INSTRUCTION_WORK {
+                0
+            } else {
+                records.len() as u64
+            })?;
             let instructions = records
                 .iter()
                 .filter(|record| matches!(record, FunctionRecord::Instruction { .. }))
@@ -851,6 +642,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             let mut work = ReadWork {
                 caller: c,
                 remaining: read_work_limit(instructions),
+                instruction_only: D::INSTRUCTION_WORK,
             };
             self.prepare(decoder, select, &mut work)?;
             self.solve(abi, calls, &mut work)
@@ -860,15 +652,57 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 if matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) =>
             {
                 self.work_limit = true;
+                if D::RECOVER
+                    && !self.converged
+                    && let Err(error) = self.invalidate_pending(c)
+                {
+                    if !matches!(error.code, ErrorCode::ResourceLimited | ErrorCode::TimedOut) {
+                        return Err(error);
+                    }
+                    for node in self.nodes.iter_mut() {
+                        node.unsettled = true;
+                    }
+                }
                 Ok(())
             }
             result => result,
         }
     }
-    fn node(&self, id: usize) -> Result<&ReadNode<'a>> {
+    fn invalidate_pending(&mut self, c: &mut dyn RunControl) -> Result<()> {
+        if !self.prepared {
+            for node in self.nodes.iter_mut() {
+                node.unsettled = true;
+            }
+            return Ok(());
+        }
+        self.queue.truncate(0);
+        for (id, node) in self.nodes.iter_mut().enumerate() {
+            if node.queued || self.pending == Some(id) {
+                node.unsettled = true;
+                self.queue.push(id, c.position())?;
+            }
+        }
+        let mut cursor = 0;
+        while let Some(id) = self.queue.get(cursor).copied() {
+            c.checkpoint(1)?;
+            cursor += 1;
+            let instruction = self.node(id)?.instruction;
+            for index in instruction.edge_start..instruction.edge_end {
+                let target = self.edges.get(index).ok_or_else(read_integrity)?.target;
+                if let Some(target) = target
+                    && !self.node(target)?.unsettled
+                {
+                    self.node_mut(target)?.unsettled = true;
+                    self.queue.push(target, c.position())?;
+                }
+            }
+        }
+        Ok(())
+    }
+    fn node(&self, id: usize) -> Result<&ReadNode<'a, D::Flow>> {
         self.nodes.get(id).ok_or_else(read_integrity)
     }
-    fn node_mut(&mut self, id: usize) -> Result<&mut ReadNode<'a>> {
+    fn node_mut(&mut self, id: usize) -> Result<&mut ReadNode<'a, D::Flow>> {
         self.nodes.get_mut(id).ok_or_else(read_integrity)
     }
     fn at(&self, site: u64) -> Option<usize> {
@@ -918,6 +752,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                         },
                         input: None,
                         queued: false,
+                        unsettled: false,
                     },
                     c.position(),
                 )?,
@@ -931,7 +766,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     address,
                     width,
                     ..
-                } if select(address, *width, c)? => self.sources.push(
+                } if D::ALL_LOADS || select(address, *width, c)? => self.sources.push(
                     ReadSource {
                         origin: ReadOrigin::Load {
                             site: *offset,
@@ -957,6 +792,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 ReadOrigin::Load { site, .. } => site,
                 ReadOrigin::Entry(_) => u64::MAX,
             });
+        D::prepare_sources(self, c)?;
         for record in records {
             c.checkpoint(1)?;
             match record {
@@ -979,7 +815,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 } => {
                     if let Some(id) = self.at(*offset) {
                         self.node_mut(id)?.instruction.value =
-                            Some((*register, ReadAtom::from_fact(value)));
+                            Some((*register, ReadAtom::from_fact(value), D::fact_known(value)));
                     }
                 }
                 FunctionRecord::CallInputs { offset, .. } => {
@@ -1051,89 +887,16 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             node.instruction.edge_start = self.edges.partition_point(|edge| edge.from < id);
             node.instruction.edge_end = self.edges.partition_point(|edge| edge.from <= id);
         }
+        self.prepared = true;
         Ok(())
-    }
-    fn join_flow(&mut self, a: usize, b: usize, c: &mut dyn RunControl) -> Result<usize> {
-        if a == b || b == 0 {
-            return Ok(a);
-        }
-        if a == 0 {
-            return Ok(b);
-        }
-        self.binary_flow(a, b, ReadFlowOp::Join, c)
-    }
-    fn binary_flow(
-        &mut self,
-        left: usize,
-        right: usize,
-        operation: ReadFlowOp,
-        c: &mut dyn RunControl,
-    ) -> Result<usize> {
-        let (mut l, mut r) = (0, 0);
-        loop {
-            let a = self.flows.values(left)?.get(l).copied();
-            let b = self.flows.values(right)?.get(r).copied();
-            let load = match (a, b) {
-                (Some(a), Some(b)) => a.source.min(b.source),
-                (Some(a), _) => a.source,
-                (_, Some(b)) => b.source,
-                _ => break,
-            };
-            c.checkpoint(1)?;
-            let a = a.filter(|a| a.source == load);
-            let b = b.filter(|b| b.source == load);
-            if a.is_some() {
-                l += 1;
-            }
-            if b.is_some() {
-                r += 1;
-            }
-            let dependency = match operation {
-                ReadFlowOp::Integer(op, x, y) => read_operation(
-                    op,
-                    x,
-                    y,
-                    a.unwrap_or_else(|| ReadDependency::empty(load)),
-                    b.unwrap_or_else(|| ReadDependency::empty(load)),
-                ),
-                ReadFlowOp::Join => match (a, b) {
-                    (Some(a), Some(b)) => a.join(b),
-                    (Some(a), _) => a,
-                    (_, Some(b)) => b,
-                    _ => return Err(read_integrity()),
-                },
-                ReadFlowOp::Assemble => match (a, b) {
-                    (Some(mut a), Some(b)) => {
-                        for ((exact, may), (e, m)) in a
-                            .exact
-                            .iter_mut()
-                            .zip(&mut a.may)
-                            .zip(b.exact.iter().zip(&b.may))
-                        {
-                            *exact |= e;
-                            *may |= m;
-                        }
-                        a.inverted |= b.inverted;
-                        a
-                    }
-                    (Some(a), _) => a,
-                    (_, Some(b)) => b,
-                    _ => return Err(read_integrity()),
-                },
-            };
-            if dependency.active() {
-                self.flows.scratch.push(dependency, c.position())?;
-            }
-        }
-        self.flows.intern(c)
     }
     fn integer(
         &mut self,
         op: IntegerOp,
-        left: ReadCell,
-        right: ReadCell,
+        left: ReadCell<D::Flow>,
+        right: ReadCell<D::Flow>,
         c: &mut dyn RunControl,
-    ) -> Result<ReadCell> {
+    ) -> Result<ReadCell<D::Flow>> {
         let atom = match (op, left.atom, right.atom) {
             (_, ReadAtom::Constant(a), ReadAtom::Constant(b)) => {
                 ReadAtom::Constant(op.evaluate(a, b))
@@ -1147,76 +910,27 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             }
             _ => ReadAtom::Unknown,
         };
-        let flow = if left.flow == 0 && right.flow == 0 {
-            0
-        } else if matches!(op, IntegerOp::Add | IntegerOp::Sub)
-            && right.atom == ReadAtom::Constant(0)
-        {
-            left.flow
-        } else if op == IntegerOp::Add && left.atom == ReadAtom::Constant(0) {
-            right.flow
-        } else {
-            self.binary_flow(
-                left.flow,
-                right.flow,
-                ReadFlowOp::Integer(op, left.known, right.known),
-                c,
-            )?
-        };
+        let flow = D::integer(self, op, left, right, c)?;
         let known = atom
             .constant()
             .map(ReadKnown::constant)
             .unwrap_or_else(|| ReadKnown::integer(op, left.known, right.known));
+        let flow = D::refine(flow, known);
+        let known = D::known(flow, known);
         let atom = known
             .constant_value()
             .map(ReadAtom::Constant)
             .unwrap_or(atom);
         Ok(ReadCell { flow, atom, known })
     }
-    fn map_flow(
+    fn join_cell(
         &mut self,
-        flow: usize,
-        mapping: impl Fn(usize) -> Option<usize>,
+        a: ReadCell<D::Flow>,
+        b: ReadCell<D::Flow>,
         c: &mut dyn RunControl,
-    ) -> Result<usize> {
-        let len = self.flows.values(flow)?.len();
-        for index in 0..len {
-            c.checkpoint(1)?;
-            let dependency = self
-                .flows
-                .values(flow)?
-                .get(index)
-                .copied()
-                .ok_or_else(read_integrity)?
-                .wire(&mapping);
-            if dependency.active() {
-                self.flows.scratch.push(dependency, c.position())?;
-            }
-        }
-        self.flows.intern(c)
-    }
-    fn seed(
-        &mut self,
-        source: usize,
-        width: u8,
-        signed: bool,
-        c: &mut dyn RunControl,
-    ) -> Result<usize> {
-        let count = u32::from(width).saturating_mul(8).min(32) as usize;
-        let mut dependency = ReadDependency::empty(source);
-        for (i, bits) in dependency.exact.iter_mut().enumerate() {
-            if i < count {
-                *bits = 1 << i;
-            } else if signed && count != 0 {
-                *bits = 1 << (count - 1);
-            }
-        }
-        self.flows.scratch.push(dependency, c.position())?;
-        self.flows.intern(c)
-    }
-    fn join_cell(&mut self, a: ReadCell, b: ReadCell, c: &mut dyn RunControl) -> Result<ReadCell> {
+    ) -> Result<ReadCell<D::Flow>> {
         Ok(ReadCell {
-            flow: self.join_flow(a.flow, b.flow, c)?,
+            flow: D::join(self, a.flow, b.flow, c)?,
             atom: if a.atom == b.atom {
                 a.atom
             } else {
@@ -1252,13 +966,17 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 r += 1;
             }
             let cell = self.join_cell(
-                x.map(|x| x.cell).unwrap_or_default(),
-                y.map(|y| y.cell).unwrap_or_default(),
+                D::unpack(x.map(|x| x.cell).unwrap_or_default()),
+                D::unpack(y.map(|y| y.cell).unwrap_or_default()),
                 c,
             )?;
-            self.stacks
-                .scratch
-                .push(ReadSlot { offset, cell }, c.position())?;
+            self.stacks.scratch.push(
+                ReadSlot {
+                    offset,
+                    cell: D::pack(cell),
+                },
+                c.position(),
+            )?;
         }
         self.stacks.intern(c)
     }
@@ -1266,7 +984,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         &mut self,
         stack: usize,
         offset: i64,
-        cell: ReadCell,
+        cell: D::Byte,
         c: &mut dyn RunControl,
     ) -> Result<usize> {
         let len = self.stacks.values(stack)?.len();
@@ -1296,7 +1014,12 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         }
         self.stacks.intern(c)
     }
-    fn merge(&mut self, id: usize, state: ReadState, c: &mut dyn RunControl) -> Result<()> {
+    fn merge(
+        &mut self,
+        id: usize,
+        state: ReadState<D::Flow>,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
         let old = self.node(id)?.input;
         let joined = if let Some(old) = old {
             if old == state {
@@ -1332,14 +1055,17 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         &mut self,
         abi: Option<CallAbi>,
         calls: &CallAt<'_>,
-        c: &mut dyn RunControl,
+        c: &mut ReadWork<'_>,
     ) -> Result<()> {
         if self.nodes.is_empty() {
             return Ok(());
         }
         let mut entry = ReadState::entry();
-        if self.summary_mode {
-            for register in CallAbi::RiscvInteger.arguments() {
+        {
+            for register in 1..32 {
+                if !D::entry_source(register, self.summary_mode) {
+                    continue;
+                }
                 let source = self.sources.len();
                 self.sources.push(
                     ReadSource {
@@ -1353,7 +1079,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 entry.set(
                     register,
                     ReadCell {
-                        flow: self.seed(source, 4, false, c)?,
+                        flow: D::seed(self, source, 4, false, u32::MAX, c)?,
                         ..ReadCell::default()
                     },
                 );
@@ -1362,8 +1088,9 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         self.merge(0, entry, c)?;
         let mut cursor = 0;
         while let Some(id) = self.queue.get(cursor).copied() {
-            c.checkpoint(1)?;
+            c.visit()?;
             cursor += 1;
+            self.pending = Some(id);
             self.node_mut(id)?.queued = false;
             let input = self.node(id)?.input.ok_or_else(read_integrity)?;
             let output = self.execute(id, input, abi, calls, false, c)?;
@@ -1374,15 +1101,20 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     self.merge(target, output, c)?;
                 }
             }
+            self.pending = None;
             if cursor == self.queue.len() {
                 self.queue.truncate(0);
                 cursor = 0;
             }
         }
+        self.converged = true;
+        if !D::EMIT {
+            return Ok(());
+        }
         // Emit only at the fixed point: an earlier Exact must not survive a
         // later join which demotes the same path to May.
         for id in 0..self.nodes.len() {
-            c.checkpoint(1)?;
+            c.visit()?;
             if let Some(input) = self.node(id)?.input {
                 self.execute(id, input, abi, calls, true, c)?;
             }
@@ -1392,18 +1124,19 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
     fn execute(
         &mut self,
         id: usize,
-        input: ReadState,
+        input: ReadState<D::Flow>,
         abi: Option<CallAbi>,
         calls: &CallAt<'_>,
         emit: bool,
         c: &mut dyn RunControl,
-    ) -> Result<ReadState> {
+    ) -> Result<ReadState<D::Flow>> {
         let instruction = self.node(id)?.instruction;
         let mut output = input;
         if emit {
             if let Some((_, left, right)) = instruction.branch {
                 for value in [left, right] {
-                    self.sink(
+                    D::sink(
+                        self,
                         input.operand(value).flow,
                         u32::MAX,
                         ReadSink::Branch {
@@ -1421,7 +1154,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     c,
                 )?;
                 if !instruction.dispatch {
-                    self.sink(
+                    D::sink(
+                        self,
                         value.flow,
                         !1,
                         ReadSink::IndirectTarget {
@@ -1441,7 +1175,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             }
             if matches!(instruction.flow, InstructionFlow::Return { .. }) {
                 for register in CallAbi::RiscvInteger.results() {
-                    self.return_value(input.register(register).flow, register, c)?;
+                    D::return_value(self, input.register(register).flow, register, c)?;
                 }
                 self.limit_slots(input.slots, ReadLimitKind::StackSpill, c)?;
             }
@@ -1453,7 +1187,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         if emit {
             for register in 1..32 {
                 if opaque & (1 << register) != 0 {
-                    self.limit(
+                    D::limit(
+                        self,
                         input.register(register).flow,
                         ReadLimitKind::UnsupportedOperation,
                         c,
@@ -1511,7 +1246,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     c,
                 )?;
                 if emit {
-                    self.sink(
+                    D::sink(
+                        self,
                         address.flow,
                         u32::MAX,
                         ReadSink::Address {
@@ -1536,7 +1272,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     if let Some(offset) = stack {
                         for byte in 0..usize::from(width) {
                             let flow =
-                                self.map_flow(value.flow, |i| (i < 8).then_some(i + byte * 8), c)?;
+                                D::map(self, value.flow, |i| (i < 8).then_some(i + byte * 8), c)?;
                             let atom = value
                                 .atom
                                 .constant()
@@ -1545,20 +1281,20 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             output.slots = self.store_byte(
                                 output.slots,
                                 offset.wrapping_add(byte as i64),
-                                ReadCell {
+                                D::pack(ReadCell {
                                     flow,
                                     atom,
                                     known: value.known.wire(|i| (i < 8).then_some(i + byte * 8)),
-                                },
+                                }),
                                 c,
                             )?;
                         }
                     } else if emit && base == 2 {
                         let selected =
-                            self.map_flow(value.flow, |i| (mask & (1 << i) != 0).then_some(i), c)?;
-                        self.limit(selected, ReadLimitKind::StackSpill, c)?;
+                            D::map(self, value.flow, |i| (mask & (1 << i) != 0).then_some(i), c)?;
+                        D::limit(self, selected, ReadLimitKind::StackSpill, c)?;
                     } else if emit {
-                        self.store(value.flow, mask, instruction, kind, width, c)?;
+                        D::store(self, value.flow, mask, instruction, kind, width, c)?;
                     }
                 }
                 if matches!(kind, MemoryKind::Load | MemoryKind::LoadReserved) {
@@ -1573,24 +1309,28 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                         },
                         ..ReadCell::default()
                     };
+                    let mut forwarded = 0;
                     if let Some(offset) = stack {
                         let mut constant = Some(0u32);
                         for byte in 0..usize::from(width) {
                             let key = offset.wrapping_add(byte as i64);
                             let slots = self.stacks.values(input.slots)?;
-                            let cell = slots
+                            let slot = slots
                                 .binary_search_by_key(&key, |slot| slot.offset)
                                 .ok()
-                                .and_then(|i| slots.get(i))
-                                .map(|slot| slot.cell)
-                                .unwrap_or_default();
-                            let flow = self.map_flow(
+                                .and_then(|i| slots.get(i));
+                            if slot.is_some() {
+                                forwarded |= 255 << (byte * 8);
+                            }
+                            let cell = D::unpack(slot.map(|slot| slot.cell).unwrap_or_default());
+                            let flow = D::map(
+                                self,
                                 cell.flow,
                                 |i| i.checked_sub(byte * 8).filter(|i| *i < 8),
                                 c,
                             )?;
                             value.flow =
-                                self.binary_flow(value.flow, flow, ReadFlowOp::Assemble, c)?;
+                                D::binary(self, value.flow, flow, ReadFlowOp::Assemble, c)?;
                             value.known.zero |= (cell.known.zero & 255) << (byte * 8);
                             value.known.one |= (cell.known.one & 255) << (byte * 8);
                             constant = constant
@@ -1598,7 +1338,11 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                                 .map(|(a, b)| a | ((b & 255) << (byte * 8)));
                         }
                         if signed && width < 4 {
-                            value.flow = self.map_flow(
+                            if forwarded & (1 << (width * 8 - 1)) != 0 {
+                                forwarded |= !mask;
+                            }
+                            value.flow = D::map(
+                                self,
                                 value.flow,
                                 |i| Some(i.min(usize::from(width) * 8 - 1)),
                                 c,
@@ -1618,9 +1362,10 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                             .unwrap_or_default();
                     }
                     if let Some(source) = instruction.source {
-                        let seed = self.seed(source, width, signed, c)?;
-                        value.flow = self.join_flow(value.flow, seed, c)?;
+                        value.flow =
+                            D::load(self, value.flow, source, width, signed, forwarded, c)?;
                     }
+                    value.flow = D::refine(value.flow, value.known);
                     if let Some(dest) = dest
                         && dest != 0
                     {
@@ -1635,7 +1380,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     && matches!(kind, MemoryKind::Atomic | MemoryKind::FloatLoad)
                     && let Some(source) = instruction.source
                 {
-                    self.source_limit(source, mask, ReadLimitKind::UnsupportedOperation)?;
+                    D::source_limit(self, source, mask, ReadLimitKind::UnsupportedOperation)?;
                 }
             }
             SemanticOp::Unsupported => {
@@ -1645,18 +1390,20 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             }
             SemanticOp::None | SemanticOp::Fence { .. } => {}
         }
-        if let Some((register, fact)) = instruction.value
+        if let Some((register, atom, known)) = instruction.value
             && register != 0
         {
-            let known = fact;
-            if known != ReadAtom::Unknown {
-                let mut value = output.register(register);
-                value.atom = known;
-                if let Some(constant) = known.constant() {
-                    value.known = ReadKnown::constant(constant);
-                }
-                output.set(register, value);
+            let mut value = output.register(register);
+            if atom != ReadAtom::Unknown {
+                value.atom = atom;
             }
+            if let ReadAtom::Constant(v) = atom {
+                value.known = ReadKnown::constant(v);
+            }
+            value.known.zero |= known.zero;
+            value.known.one |= known.one;
+            value.flow = D::refine(value.flow, value.known);
+            output.set(register, value);
         }
         if emit {
             for index in 0..self.dispatches.len() {
@@ -1666,7 +1413,8 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                     .copied()
                     .ok_or_else(read_integrity)?;
                 if dispatch.producer == id {
-                    self.sink(
+                    D::sink(
+                        self,
                         output.register(dispatch.register).flow,
                         u32::MAX,
                         ReadSink::Dispatch {
@@ -1702,7 +1450,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
             if let Some(summary) = calls(instruction.site) {
                 for register in CallAbi::RiscvInteger.results() {
                     let flow = self.call_result(input, &summary.arguments, register, c)?;
-                    self.return_value(flow, register, c)?;
+                    D::return_value(self, flow, register, c)?;
                 }
             }
         }
@@ -1712,6 +1460,7 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 if let Some(summary) = calls(instruction.site) {
                     for (cell, register) in results.iter_mut().zip(abi.results()) {
                         cell.flow = self.call_result(input, &summary.arguments, register, c)?;
+                        D::call_constants(cell, summary, register);
                     }
                 }
                 for register in abi.clobbered() {
@@ -1730,97 +1479,6 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         }
         Ok(output)
     }
-    fn store(
-        &mut self,
-        flow: usize,
-        outputs: u32,
-        instruction: ReadInstruction<'_>,
-        kind: MemoryKind,
-        width: u8,
-        c: &mut dyn RunControl,
-    ) -> Result<()> {
-        let len = self.flows.values(flow)?.len();
-        for index in 0..len {
-            c.checkpoint(1)?;
-            let dependency = self
-                .flows
-                .values(flow)?
-                .get(index)
-                .copied()
-                .ok_or_else(read_integrity)?;
-            let source = self
-                .sources
-                .get(dependency.source)
-                .ok_or_else(read_integrity)?;
-            let same = instruction
-                .address
-                .is_some_and(|address| match source.origin {
-                    ReadOrigin::Load {
-                        address: loaded,
-                        width: loaded_width,
-                        ..
-                    } => same_word(loaded, loaded_width, address, width),
-                    ReadOrigin::Entry(_) => false,
-                });
-            let mut preserved = 0;
-            if same && kind == MemoryKind::Store {
-                for (i, (&exact, &may)) in dependency.exact.iter().zip(&dependency.may).enumerate()
-                {
-                    if exact == 1 << i && may == 0 && dependency.inverted & (1 << i) == 0 {
-                        preserved |= (1 << i) & outputs;
-                    }
-                }
-            }
-            self.sources
-                .get_mut(dependency.source)
-                .ok_or_else(read_integrity)?
-                .preserved |= preserved;
-            self.use_dependency(
-                dependency,
-                outputs & !preserved,
-                ReadSink::Store {
-                    site: instruction.site,
-                    address: instruction.address.and_then(exact_address),
-                    same_word: same,
-                },
-                c,
-            )?;
-        }
-        Ok(())
-    }
-    fn source_limit(&mut self, source: usize, bits: u32, limit: ReadLimitKind) -> Result<()> {
-        let index = match limit {
-            ReadLimitKind::PartialFunction => 0,
-            ReadLimitKind::StackSpill => 1,
-            ReadLimitKind::UnsupportedOperation => 2,
-            ReadLimitKind::WorkLimit => 3,
-        };
-        if let Some(slot) = self
-            .sources
-            .get_mut(source)
-            .and_then(|source| source.limits.get_mut(index))
-        {
-            *slot |= bits;
-            Ok(())
-        } else {
-            Err(read_integrity())
-        }
-    }
-    fn limit(&mut self, flow: usize, reason: ReadLimitKind, c: &mut dyn RunControl) -> Result<()> {
-        let len = self.flows.values(flow)?.len();
-        for index in 0..len {
-            c.checkpoint(1)?;
-            let dependency = self
-                .flows
-                .values(flow)?
-                .get(index)
-                .copied()
-                .ok_or_else(read_integrity)?;
-            let (a, b) = dependency.selected(u32::MAX);
-            self.source_limit(dependency.source, a | b, reason)?;
-        }
-        Ok(())
-    }
     fn limit_slots(
         &mut self,
         slots: usize,
@@ -1835,147 +1493,100 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
                 .get(index)
                 .copied()
                 .ok_or_else(read_integrity)?;
-            self.limit(slot.cell.flow, reason, c)?;
+            D::limit(self, D::unpack(slot.cell).flow, reason, c)?;
         }
         Ok(())
     }
     fn limit_state(
         &mut self,
-        state: ReadState,
+        state: ReadState<D::Flow>,
         reason: ReadLimitKind,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         for register in state.registers {
-            self.limit(register.flow, reason, c)?;
+            D::limit(self, register.flow, reason, c)?;
         }
         self.limit_slots(state.slots, reason, c)
     }
-    fn sink(
+    pub(super) fn consume_arguments(
         &mut self,
-        flow: usize,
-        outputs: u32,
-        sink: ReadSink,
+        input: ReadState<D::Flow>,
+        site: u64,
+        abi: CallAbi,
+        calls: &CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
-        let len = self.flows.values(flow)?.len();
-        for index in 0..len {
-            c.checkpoint(1)?;
-            let dependency = self
-                .flows
-                .values(flow)?
-                .get(index)
-                .copied()
-                .ok_or_else(read_integrity)?;
-            self.use_dependency(dependency, outputs, sink.clone(), c)?;
+        for register in abi.arguments() {
+            let consumed = calls(site)
+                .map(|s| &s.arguments)
+                .and_then(|s| s.consumed.get(usize::from(register - 10)).copied())
+                .unwrap_or(ArgumentConsumption {
+                    exact: 0,
+                    may: u32::MAX,
+                });
+            D::consume_argument(
+                self,
+                input.register(register).flow,
+                consumed,
+                site,
+                register,
+                c,
+            )?;
         }
         Ok(())
     }
-    fn use_dependency(
+    pub(super) fn call_result(
         &mut self,
-        dependency: ReadDependency,
-        outputs: u32,
-        sink: ReadSink,
+        input: ReadState<D::Flow>,
+        summary: &ArgumentSummary,
+        register: u8,
+        c: &mut dyn RunControl,
+    ) -> Result<D::Flow> {
+        let mut result = D::Flow::default();
+        let mut covered = 0;
+        for returned in summary.returned.iter().filter(|r| r.register == register) {
+            result = D::call_mapping(
+                self,
+                result,
+                input.register(returned.argument).flow,
+                returned,
+                &mut covered,
+                c,
+            )?;
+        }
+        Ok(result)
+    }
+}
+
+/// Selected load uses, using the original dependency domain and work budget.
+pub struct ReadUsesEvaluator<'f, 'a, 'm> {
+    engine: FlowEngine<'f, 'a, 'm, Reads<'m>>,
+}
+impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
+    pub fn new(facts: &'f Facts<'a, 'm>, memory: &'m WorkingMemory) -> Self {
+        Self {
+            engine: FlowEngine::new(facts, memory),
+        }
+    }
+    pub fn analyze(
+        &mut self,
+        abi: Option<CallAbi>,
+        decoder: &dyn FunctionSemantics,
+        select: &mut SelectRead<'_>,
+        calls: &CallAt<'_>,
         c: &mut dyn RunControl,
     ) -> Result<()> {
-        let (exact, may) = dependency.selected(outputs);
-        for (bits, precision) in [(exact, ReadPrecision::Exact), (may, ReadPrecision::May)] {
-            if bits == 0 {
-                continue;
-            }
-            let head = self
-                .sources
-                .get(dependency.source)
-                .ok_or_else(read_integrity)?
-                .event;
-            let mut event = head;
-            let mut found = false;
-            while event != 0 {
-                c.checkpoint(1)?;
-                let existing = self.events.get_mut(event - 1).ok_or_else(read_integrity)?;
-                if existing.usage.sink == sink && existing.usage.precision == precision {
-                    existing.usage.bits |= bits;
-                    found = true;
-                    break;
-                }
-                event = existing.next;
-            }
-            if !found {
-                self.events.push(
-                    ReadEvent {
-                        usage: ReadUse {
-                            bits,
-                            sink: sink.clone(),
-                            precision,
-                        },
-                        next: head,
-                    },
-                    c.position(),
-                )?;
-                self.sources
-                    .get_mut(dependency.source)
-                    .ok_or_else(read_integrity)?
-                    .event = self.events.len();
-            }
-        }
-        Ok(())
+        self.engine.analyze(abi, decoder, select, calls, c)
     }
     pub fn reads(
         &self,
         offset: u64,
-        _address: &AbstractValue,
+        address: &AbstractValue,
         width: u8,
-        _access: MemoryKind,
+        access: MemoryKind,
         c: &mut dyn RunControl,
     ) -> Result<ReadUses> {
-        let mask = width_mask(width).unwrap_or(u32::MAX);
-        let mut result = ReadUses {
-            uses: Vec::new(),
-            unknown: Vec::new(),
-            preserved: 0,
-            unused: 0,
-        };
-        let source = self.source_at(offset).and_then(|id| self.sources.get(id));
-        let mut event = source.map(|source| source.event).unwrap_or(0);
-        while event != 0 {
-            c.checkpoint(1)?;
-            let entry = self.events.get(event - 1).ok_or_else(read_integrity)?;
-            result.uses.push(entry.usage.clone());
-            event = entry.next;
-        }
-        result.uses.sort_unstable();
-        let used = result.uses.iter().fold(0, |bits, usage| bits | usage.bits);
-        let limits = source.map(|source| source.limits).unwrap_or_default();
-        let mut remaining = mask & !used;
-        for (bits, reason) in [
-            (
-                limits.get(1).copied().unwrap_or(0),
-                ReadLimitKind::StackSpill,
-            ),
-            (
-                limits.get(2).copied().unwrap_or(0),
-                ReadLimitKind::UnsupportedOperation,
-            ),
-            (
-                if self.work_limit { mask } else { 0 },
-                ReadLimitKind::WorkLimit,
-            ),
-            (
-                limits.first().copied().unwrap_or(0) | if source.is_none() { mask } else { 0 },
-                ReadLimitKind::PartialFunction,
-            ),
-        ] {
-            let bits = bits & remaining;
-            if bits != 0 {
-                result.unknown.push(ReadLimit {
-                    bits,
-                    limit: reason,
-                });
-                remaining &= !bits;
-            }
-        }
-        result.preserved = source.map(|source| source.preserved).unwrap_or(0) & remaining;
-        result.unused = remaining & !result.preserved;
-        Ok(result)
+        self.engine.reads(offset, address, width, access, c)
     }
 }
 
@@ -2367,64 +1978,6 @@ fn same_word(loaded: &AbstractValue, loaded_width: u8, address: &AbstractValue, 
     loaded == address && loaded_width == width
 }
 
-/// Where each run of the `width`-byte value stored at `address` comes from,
-/// low run first: fixed bits, a function entry register's bits (an argument
-/// for `a0`..`a7`), a loaded value's bits (with `same_word` for the stored word
-/// itself) or unknown. Each bit follows bitwise logic, constant shifts and
-/// carry-free additions of the analysis' expressions; anything else is
-/// unknown, never guessed.
-pub fn stored_bits<'a>(
-    evaluator: &mut StoredBitsEvaluator<'_, 'a, '_>,
-    address: &AbstractValue,
-    width: u8,
-    value: &'a AbstractValue,
-    c: &mut dyn RunControl,
-) -> Result<Vec<StoredBits>> {
-    let Some(mask) = width_mask(width) else {
-        return Ok(Vec::new());
-    };
-    let value = evaluator.bits(value, c)?;
-    let count = mask.count_ones() as usize;
-    let mut runs: Vec<StoredBits> = Vec::new();
-    let mut i = 0;
-    while i < count {
-        let start = i;
-        let first = value[i];
-        i += 1;
-        let next = |previous: Bit<'a>, bit: Bit<'a>| match (previous, bit) {
-            (Bit::Zero | Bit::One, Bit::Zero | Bit::One) => true,
-            (Bit::Entry(r, b), Bit::Entry(s, c)) => r == s && c == b + 1,
-            (Bit::Load(e, _, _, b), Bit::Load(f, _, _, c)) => e == f && c == b + 1,
-            (Bit::Unknown, Bit::Unknown) => true,
-            _ => false,
-        };
-        while i < count && next(value[i - 1], value[i]) {
-            i += 1;
-        }
-        let source = match first {
-            Bit::Zero | Bit::One => StoredBitsSource::Constant {
-                value: (start..i).fold(0, |acc, bit| {
-                    acc | u32::from(value[bit] == Bit::One) << (bit - start)
-                }),
-            },
-            Bit::Entry(register, low) => StoredBitsSource::EntryRegister { register, low },
-            Bit::Load(_, loaded, loaded_width, low) => StoredBitsSource::Load {
-                address: exact_address(loaded),
-                width: loaded_width,
-                low,
-                same_word: same_word(loaded, loaded_width, address, width),
-            },
-            Bit::Unknown => StoredBitsSource::Unknown,
-        };
-        runs.push(StoredBits {
-            low: start as u8,
-            width: (i - start) as u8,
-            source,
-        });
-    }
-    Ok(runs)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2447,8 +2000,6 @@ mod tests {
     }
     #[test]
     fn numeric_alternatives_keep_only_bits_shared_by_every_value() {
-        let memory = WorkingMemory::new(65536).expect("working memory");
-        let facts = Facts::new(&[], &memory, &mut || Ok(())).expect("facts");
         for (values, varying) in [
             (
                 vec![
@@ -2491,18 +2042,9 @@ mod tests {
             let value = AbstractValue::Alternatives {
                 values: ValueAlternatives::new(values).expect("numeric alternatives"),
             };
-            let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-            let bits = evaluator.bits(&value, &mut || Ok(())).expect("stored bits");
-            for (i, bit) in bits.into_iter().enumerate() {
-                assert_eq!(
-                    bit,
-                    match i {
-                        i if varying & (1 << i) != 0 => Bit::Unknown,
-                        7 => Bit::One,
-                        _ => Bit::Zero,
-                    }
-                );
-            }
+            let bits = ReadKnown::from_fact(&value);
+            assert_eq!(bits.one, 0x80);
+            assert_eq!(bits.zero, !(0x80 | varying));
         }
         for address in [
             ValueAlternative::Section {
@@ -2533,400 +2075,10 @@ mod tests {
                 let value = AbstractValue::Alternatives {
                     values: ValueAlternatives::new(values).expect("relocatable alternatives"),
                 };
-                let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-                assert_eq!(
-                    evaluator.bits(&value, &mut || Ok(())).expect("stored bits"),
-                    [Bit::Unknown; 32]
-                );
+                assert_eq!(ReadKnown::from_fact(&value), ReadKnown::default());
             }
         }
     }
-    #[test]
-    fn masks_preserve_source_positions_and_require_proven_preservation() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        let records = records(vec![
-            Expression::Load {
-                address: number(0x20000),
-                width: 2,
-                signed: true,
-            },
-            Expression::Integer {
-                op: IntegerOp::Shr,
-                left: value(0),
-                right: number(4),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(1),
-                right: number(15),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(0),
-                right: number(!15),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: AbstractValue::Unknown,
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: number(0x100),
-            },
-        ]);
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let Expression::Integer { .. } = facts
-            .expression(2, &mut || Ok(()))
-            .expect("lookup succeeds")
-            .expect("expression 2 exists")
-        else {
-            panic!()
-        };
-        let (_, width, mask) = read_mask(
-            &facts,
-            facts
-                .expression(2, &mut || Ok(()))
-                .expect("lookup succeeds")
-                .expect("expression 2 exists"),
-        )
-        .unwrap();
-        assert_eq!((width, mask.bits), (2, 0xf0));
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let values = [value(4), value(5)];
-        let addresses = [number(0x20000), number(0x20001)];
-        let mut mask = |address, width, value| {
-            write_mask(
-                width,
-                &stored_bits(&mut evaluator, address, width, value, &mut || Ok(())).unwrap(),
-            )
-        };
-        assert!(mask(&addresses[0], 2, &values[0]).is_none());
-        assert_eq!(mask(&addresses[0], 2, &values[1]).unwrap().bits, 0x10f);
-        assert!(mask(&addresses[1], 2, &values[1]).is_none());
-        assert!(mask(&addresses[0], 4, &values[1]).is_none());
-    }
-    #[test]
-    fn stored_bits_name_fields_kept_bits_constants_and_unknowns() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        let word = number(0x2010_713c);
-        let records = records(vec![
-            Expression::Load {
-                address: word.clone(),
-                width: 4,
-                signed: false,
-            },
-            Expression::EntryRegister { register: 10 },
-            Expression::Integer {
-                op: IntegerOp::Shl,
-                left: value(1),
-                right: number(18),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(2),
-                right: number(0x01fc_0000),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(0),
-                right: number(0xfe03_ffff),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: value(4),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(4),
-                right: number(0x1b << 18),
-            },
-            Expression::Integer {
-                op: IntegerOp::Mul,
-                left: value(1),
-                right: number(3),
-            },
-            Expression::EntryRegister { register: 11 },
-            Expression::Integer {
-                op: IntegerOp::Add,
-                left: value(1),
-                right: value(8),
-            },
-        ]);
-        let (field, fixed, product, sum, small) =
-            (value(5), value(6), value(7), value(9), number(0x1ff));
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        macro_rules! stored_bits {
-            ($address:expr, $width:expr, $value:expr) => {
-                super::stored_bits(&mut evaluator, $address, $width, $value, &mut || Ok(()))
-                    .unwrap()
-            };
-        }
-        let kept = |low, width| StoredBits {
-            low,
-            width,
-            source: StoredBitsSource::Load {
-                address: Some(0x2010_713c),
-                width: 4,
-                low,
-                same_word: true,
-            },
-        };
-        assert_eq!(
-            stored_bits!(&word, 4, &field),
-            [
-                kept(0, 18),
-                StoredBits {
-                    low: 18,
-                    width: 7,
-                    source: StoredBitsSource::EntryRegister {
-                        register: 10,
-                        low: 0
-                    },
-                },
-                kept(25, 7),
-            ],
-            "the argument's low seven bits replace bits 24:18; the rest are kept"
-        );
-        assert_eq!(
-            stored_bits!(&word, 4, &fixed)[1],
-            StoredBits {
-                low: 18,
-                width: 7,
-                source: StoredBitsSource::Constant { value: 0x1b },
-            }
-        );
-        let elsewhere = number(0x2010_7094);
-        assert!(matches!(
-            stored_bits!(&elsewhere, 4, &field)[0].source,
-            StoredBitsSource::Load {
-                same_word: false,
-                address: Some(0x2010_713c),
-                ..
-            }
-        ));
-        assert_eq!(
-            stored_bits!(&word, 4, &product),
-            [StoredBits {
-                low: 0,
-                width: 32,
-                source: StoredBitsSource::Unknown,
-            }],
-            "a product is never decomposed"
-        );
-        assert_eq!(
-            stored_bits!(&word, 4, &sum),
-            [StoredBits {
-                low: 0,
-                width: 32,
-                source: StoredBitsSource::Unknown,
-            }],
-            "two register values can carry from bit zero"
-        );
-        assert_eq!(
-            stored_bits!(&word, 1, &small),
-            [StoredBits {
-                low: 0,
-                width: 8,
-                source: StoredBitsSource::Constant { value: 0xff },
-            }],
-            "only the access width is described"
-        );
-    }
-    #[test]
-    fn two_loads_of_one_address_are_two_sources() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        let word = number(0x6000_0000);
-        let load = || Expression::Load {
-            address: word.clone(),
-            width: 4,
-            signed: false,
-        };
-        let records = records(vec![
-            load(),
-            load(),
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(0),
-                right: value(1),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(0),
-                right: number(0xff),
-            },
-            Expression::Integer {
-                op: IntegerOp::And,
-                left: value(1),
-                right: number(0xff00),
-            },
-            Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(3),
-                right: value(4),
-            },
-        ]);
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let (both, bytes) = (value(2), value(5));
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let mut stored =
-            |value| super::stored_bits(&mut evaluator, &word, 4, value, &mut || Ok(())).unwrap();
-        assert_eq!(
-            stored(&both),
-            [StoredBits {
-                low: 0,
-                width: 32,
-                source: StoredBitsSource::Unknown,
-            }],
-            "the OR of two reads of one register is neither read"
-        );
-        let read = |low, width| StoredBits {
-            low,
-            width,
-            source: StoredBitsSource::Load {
-                address: Some(0x6000_0000),
-                width: 4,
-                low,
-                same_word: true,
-            },
-        };
-        assert_eq!(
-            stored(&bytes),
-            [
-                read(0, 8),
-                read(8, 8),
-                StoredBits {
-                    low: 16,
-                    width: 16,
-                    source: StoredBitsSource::Constant { value: 0 },
-                },
-            ],
-            "bytes of two reads stay two runs"
-        );
-    }
-    #[test]
-    fn a_shared_expression_dag_is_evaluated_once_per_node_inside_the_budget() {
-        let memory = WorkingMemory::new(65536).unwrap();
-        // x0 = a0; x(i+1) = x(i) + x(i): one node per step, 2^steps paths.
-        let chain = |steps: u32| {
-            let mut expressions = vec![Expression::EntryRegister { register: 10 }];
-            for id in 0..steps {
-                expressions.push(Expression::Integer {
-                    op: IntegerOp::Add,
-                    left: value(id),
-                    right: value(id),
-                });
-            }
-            records(expressions)
-        };
-        let visits = |records: &[FunctionRecord], top: &AbstractValue| {
-            let facts = Facts::new(records, &memory, &mut || Ok(())).unwrap();
-            let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-            let mut visits = 0_u32;
-            let runs = stored_bits(&mut evaluator, &number(0x2010_702c), 4, top, &mut || {
-                visits += 1;
-                Ok(())
-            })
-            .unwrap();
-            assert_eq!(
-                runs,
-                [StoredBits {
-                    low: 0,
-                    width: 32,
-                    source: StoredBitsSource::Unknown,
-                }],
-                "a register added to itself can carry from bit zero"
-            );
-            visits
-        };
-        let (short, short_top) = (chain(20), value(20));
-        assert_eq!(
-            visits(&short, &short_top),
-            21,
-            "each of the 21 nodes is charged once"
-        );
-        let (long, long_top) = (chain(40), value(40));
-        assert_eq!(
-            visits(&long, &long_top),
-            41,
-            "every one of the 41 nodes is evaluated exactly once, at any depth"
-        );
-        let facts = Facts::new(&long, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let mut exhausted = || Err(Error::new(ErrorCode::ResourceLimited, "work budget"));
-        assert!(
-            stored_bits(
-                &mut evaluator,
-                &number(0x2010_702c),
-                4,
-                &long_top,
-                &mut exhausted
-            )
-            .is_err(),
-            "the walk stops when the budget does"
-        );
-    }
-    #[test]
-    fn the_memo_reserves_working_memory_before_it_grows() {
-        let records = records(vec![
-            Expression::EntryRegister { register: 10 },
-            Expression::Integer {
-                op: IntegerOp::Add,
-                left: value(0),
-                right: value(0),
-            },
-        ]);
-        let top = value(1);
-        // Enough for the expression index, not for eight memo entries of
-        // thirty-two bit sources each.
-        let memo_bytes = 8 * std::mem::size_of::<Option<(u8, [Bit<'_>; 32])>>() as u64;
-        let memory = WorkingMemory::new(memo_bytes - 1).unwrap();
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let error = stored_bits(
-            &mut evaluator,
-            &number(0x2010_702c),
-            4,
-            &top,
-            &mut || Ok(()),
-        )
-        .unwrap_err();
-        assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
-    }
-    #[test]
-    fn a_node_reached_again_by_a_later_store_costs_nothing() {
-        let memory = WorkingMemory::new(1 << 20).unwrap();
-        let mut expressions = vec![Expression::EntryRegister { register: 10 }];
-        for id in 0..30 {
-            expressions.push(Expression::Integer {
-                op: IntegerOp::Or,
-                left: value(id),
-                right: number(1 << (id % 32)),
-            });
-        }
-        let records = records(expressions);
-        let (deep, middle) = (value(30), value(15));
-        let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let mut evaluator = StoredBitsEvaluator::new(&facts, &memory);
-        let mut charged = 0_u32;
-        stored_bits(&mut evaluator, &number(0), 4, &deep, &mut || {
-            charged += 1;
-            Ok(())
-        })
-        .unwrap();
-        assert_eq!(charged, 31);
-        let mut again = 0_u32;
-        stored_bits(&mut evaluator, &number(0), 4, &middle, &mut || {
-            again += 1;
-            Ok(())
-        })
-        .unwrap();
-        assert_eq!(again, 0, "node 15 was evaluated by the first store's walk");
-    }
-
     /// The indexed progression of `expressions`' last node.
     fn indexed(expressions: Vec<Expression>) -> Option<IndexedAddress> {
         let memory = WorkingMemory::new(1 << 16).unwrap();

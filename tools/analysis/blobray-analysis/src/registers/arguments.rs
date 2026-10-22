@@ -3,8 +3,8 @@ use super::*;
 
 #[derive(Clone, Copy)]
 pub(super) struct ReturnedDependency {
-    register: u8,
-    dependency: ReadDependency,
+    pub(super) register: u8,
+    pub(super) dependency: ReadDependency,
 }
 
 /// Site resolution returns the shared model port's contract; this callback
@@ -26,7 +26,7 @@ impl<'m> ArgumentProgram<'m> {
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Self> {
-        let mut evaluator = ReadUsesEvaluator::new(facts, memory);
+        let mut evaluator = FlowEngine::<Reads>::new(facts, memory);
         evaluator.prepare(decoder, &mut |_, _, _| Ok(false), c)?;
         let mut instructions = AdmittedVec::new(memory);
         for node in evaluator.nodes.iter() {
@@ -58,13 +58,14 @@ impl<'m> ArgumentProgram<'m> {
             return Ok(None);
         }
         let facts = Facts::new(&[], memory, c)?;
-        let mut evaluator = ReadUsesEvaluator::new(&facts, memory);
+        let mut evaluator = FlowEngine::<Reads>::new(&facts, memory);
         evaluator.summary_mode = true;
         evaluator.edges = self.edges;
         evaluator.dispatches = self.dispatches;
         let mut work = ReadWork {
             caller: c,
             remaining: read_work_limit(self.instructions.len()),
+            instruction_only: false,
         };
         let result = (|| {
             for instruction in self.instructions.iter().copied() {
@@ -74,6 +75,7 @@ impl<'m> ArgumentProgram<'m> {
                         instruction,
                         input: None,
                         queued: false,
+                        unsettled: false,
                     },
                     work.position(),
                 )?;
@@ -88,7 +90,11 @@ impl<'m> ArgumentProgram<'m> {
                 let mut event = source.event;
                 while event != 0 {
                     work.checkpoint(1)?;
-                    let entry = evaluator.events.get(event - 1).ok_or_else(read_integrity)?;
+                    let entry = evaluator
+                        .domain
+                        .events
+                        .get(event - 1)
+                        .ok_or_else(read_integrity)?;
                     match entry.usage.precision {
                         ReadPrecision::Exact => value.exact |= entry.usage.bits,
                         ReadPrecision::May => value.may |= entry.usage.bits,
@@ -106,7 +112,7 @@ impl<'m> ArgumentProgram<'m> {
             }
             let mut ledger = Ledger::new(memory, &mut work)?;
             let mut returned = Vec::new();
-            for item in evaluator.returned.iter() {
+            for item in evaluator.domain.returned.iter() {
                 work.checkpoint(1)?;
                 ledger.push(
                     &mut returned,
@@ -135,133 +141,6 @@ impl<'m> ArgumentProgram<'m> {
             }
             Err(error) => Err(error),
         }
-    }
-}
-
-impl ReadUsesEvaluator<'_, '_, '_> {
-    pub(super) fn consume_arguments(
-        &mut self,
-        input: ReadState,
-        site: u64,
-        abi: CallAbi,
-        calls: &CallAt<'_>,
-        c: &mut dyn RunControl,
-    ) -> Result<()> {
-        for register in abi.arguments() {
-            let consumed = calls(site)
-                .map(|s| &s.arguments)
-                .and_then(|s| s.consumed.get(usize::from(register - 10)).copied())
-                .unwrap_or(ArgumentConsumption {
-                    exact: 0,
-                    may: u32::MAX,
-                });
-            let flow = input.register(register).flow;
-            let sink = ReadSink::CallArgument {
-                site,
-                register,
-                callee: None,
-            };
-            self.sink(flow, consumed.exact, sink.clone(), c)?;
-            let len = self.flows.values(flow)?.len();
-            for index in 0..len {
-                c.checkpoint(1)?;
-                let mut dependency = *self
-                    .flows
-                    .values(flow)?
-                    .get(index)
-                    .ok_or_else(read_integrity)?;
-                for (exact, may) in dependency.exact.iter_mut().zip(&mut dependency.may) {
-                    *may |= *exact;
-                    *exact = 0;
-                }
-                self.use_dependency(dependency, consumed.may, sink.clone(), c)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub(super) fn return_value(
-        &mut self,
-        flow: usize,
-        register: u8,
-        c: &mut dyn RunControl,
-    ) -> Result<()> {
-        if !self.summary_mode {
-            return self.sink(flow, u32::MAX, ReadSink::Return { register }, c);
-        }
-        let len = self.flows.values(flow)?.len();
-        for index in 0..len {
-            c.checkpoint(1)?;
-            let dependency = *self
-                .flows
-                .values(flow)?
-                .get(index)
-                .ok_or_else(read_integrity)?;
-            if let Some(existing) = self
-                .returned
-                .iter_mut()
-                .find(|r| r.register == register && r.dependency.source == dependency.source)
-            {
-                existing.dependency = existing.dependency.join(dependency);
-            } else {
-                self.returned.push(
-                    ReturnedDependency {
-                        register,
-                        dependency,
-                    },
-                    c.position(),
-                )?;
-            }
-        }
-        Ok(())
-    }
-
-    pub(super) fn call_result(
-        &mut self,
-        input: ReadState,
-        summary: &ArgumentSummary,
-        register: u8,
-        c: &mut dyn RunControl,
-    ) -> Result<usize> {
-        let mut result = 0;
-        for returned in summary.returned.iter().filter(|r| r.register == register) {
-            let mapping = returned;
-            let argument = returned.argument;
-            let flow = input.register(argument).flow;
-            let len = self.flows.values(flow)?.len();
-            for index in 0..len {
-                let incoming = *self
-                    .flows
-                    .values(flow)?
-                    .get(index)
-                    .ok_or_else(read_integrity)?;
-                let mut dependency = ReadDependency::empty(incoming.source);
-                for (output, ((exact, may), (&map_exact, &map_may))) in dependency
-                    .exact
-                    .iter_mut()
-                    .zip(&mut dependency.may)
-                    .zip(mapping.exact.iter().zip(&mapping.may))
-                    .enumerate()
-                {
-                    c.checkpoint(1)?;
-                    let (e, m) = incoming.selected(map_exact);
-                    let (a, b) = incoming.selected(map_may);
-                    *may = m | a | b;
-                    *exact = e & !*may;
-                    if map_exact.count_ones() == 1 && map_may == 0 {
-                        let bit = map_exact.trailing_zeros();
-                        let inverted = (incoming.inverted >> bit) ^ (mapping.inverted >> output);
-                        dependency.inverted |= (inverted & 1) << output;
-                    }
-                }
-                if dependency.active() {
-                    self.flows.scratch.push(dependency, c.position())?;
-                }
-            }
-            let composed = self.flows.intern(c)?;
-            result = self.binary_flow(result, composed, ReadFlowOp::Assemble, c)?;
-        }
-        Ok(result)
     }
 }
 

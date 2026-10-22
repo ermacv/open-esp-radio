@@ -5,30 +5,47 @@ Blobray's analyses over the bounded CFG and value analysis of
 recognition, code-coverage closures and record
 navigation. They have no filesystem authority.
 
-`registers` recognizes load masks and evaluates stored bit provenance using
-the shared borrowed fact index. A read-modify-write's replacement mask covers
-the stored bits not copied identically from the same word and position;
-writes with no preserved bits carry no replacement mask. It reports
-bit-selection observations with their original physical load width;
-application owns address scope.
-Its independent read-use pass propagates load-site dependencies over the
-instruction CFG to a fixed point, with union at joins, explicit limits and
-byte-level stack transfers. Values also carry known-zero and known-one masks;
-joins retain only bits known equally on every path. Neutral bitwise operands
-pass dependencies exactly; inverted bits remain uses, never preservation.
-Interned state sets and the queue have working
-memory admission; each function's pass also has a
-`max(100000, 512 * instruction_count)` work-unit cap. Application resolves
-call-argument callees against captured input and ROM symbols. The same engine
-also seeds entry registers for argument summaries: consumed bits and returned
-bit mappings, including inversion, through the shared
-`riscv-model::calls::CallSummaries` port. Application computes the call graph
-without summaries, then analyzes functions in callee-first SCC order with
-completed callee contracts. Compact argument CFG recipes come from final
-records in this second analysis and are released after solving.
-Recursive components and unavailable or flow-incomplete callees retain May
-argument consumption. Returned dependencies continue in the caller's results;
-summary work and storage use the operation's existing limits.
+`registers` recognizes load masks using the shared borrowed fact index.
+One CFG engine runs two value domains with shared traversal, stack transfers,
+ABI handling and callee-summary application. The read domain tracks selected
+physical loads with exact/May dependency matrices and keeps entry sources for
+argument summaries. The provenance domain uses one fixed tag per bit: unknown,
+zero, one, an entry-register bit or a bit of a word identified by address and
+load width. Equal word tags survive joins across distinct load instructions;
+differing tags become unknown. Numeric address forms share one word identity;
+unresolved addresses use their abstract-value identity. All loads, including
+RAM outside the selected ranges, can supply stored provenance. Stack reloads
+retain every forwarded tag, including unknown and constant tags; only bytes
+without a forwarded slot name the reloaded word. Known values remain separate
+from word identity until stored projection.
+Read preservation describes paths carrying that physical load; a stored tag
+describes every incoming path, so different tags at a join can yield unknown
+even for a bit preserved by one of the loads.
+
+`stored` is present for stores in the selected ranges, including selected indexed
+addresses; plain unresolved stores carry none. At those stores, constants and
+word/entry bit tags project to runs. Integer wiring and constant add/subtract
+retain bits below the first possible carry or borrow; inversion and other
+arithmetic become unknown. Numeric alternatives retain their shared constant
+bits. A replacement mask covers stored bits not copied identically from the
+same word and position; writes with no preserved bits carry no replacement mask.
+
+State sets and queues use admitted working memory. Each domain has its own
+`max(100000, 512 * instruction_count)` function budget: dependency operations
+charge their work, while provenance charges instruction visits. Both observe
+caller cancellation and deadlines throughout. On a provenance limit, only the
+forward closure of pending transfers loses its proof; independent stores and
+literal numeric facts remain available.
+
+Application resolves call-argument callees against captured input and ROM
+symbols. The read domain also computes argument consumption and returned bit
+mappings, including inversion, through `riscv-model::calls::CallSummaries`.
+Application computes the call graph without summaries, then analyzes functions
+in callee-first SCC order with completed contracts. Owned argument CFG recipes
+come from those final records and are released after solving. Recursive
+components and unavailable or flow-incomplete callees retain May consumption.
+Returned dependencies continue in caller results; summary work and storage use
+the operation's existing limits.
 It never infers register geometry, hardware field meaning or safe RMW semantics.
 
 `closure::code_closure` walks the code statically reachable from root entries
@@ -43,6 +60,6 @@ control; the function count is bounded.
 
 `navigation::Facts` requires canonical records through the shared
 [`FunctionIndex`](../riscv-model/src/navigation.rs), preserving the earlier-ID DAG
-that the expression evaluators require. The wrapper owns no tables or scans;
+that the expression observations require. The wrapper owns no tables or scans;
 all structural lookups and memory-access visits use the model's index. Unknown
 addresses remain explicit.

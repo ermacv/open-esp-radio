@@ -103,20 +103,22 @@ progressions. The human format prints the groups
 before the summary line and groups by address when a filter is given without
 `--group-by`.
 
-A store observation also carries `stored`: the runs of the stored value,
+`stored` is present for stores in the selected ranges, including selected indexed
+addresses; plain unresolved stores carry none. It lists runs of the stored value,
 low bits first, each from a fixed value, bits of a register at the function's
 entry (an argument for `a0`..`a7`), bits of a loaded value (with `same_word`
 for the stored word itself, the bits a read-modify-write keeps) or unknown.
 For finite sets of constants or image addresses, bits shared by every value
 remain constant; only differing bits are unknown. Sets containing section,
 symbol or entry-stack addresses remain unknown.
-Each bit follows the analysis' expressions through bitwise logic, constant
-shifts and additions that cannot carry; anything else is unknown, never
-guessed. Each expression node is evaluated once per function, memoized
-in working memory reserved before it grows and charged one unit of the work
-budget, so shared subexpressions cost no repeated walk and
-`--working-memory-mib`, `--max-work-units` and the deadline bound the
-evaluation. The human groups print them high bits first, for example
+Stored bits come from a second domain of the shared instruction CFG engine,
+with one tag per bit and byte-level stack forwarding. Word tags identify the
+address, load width and bit, so distinct loads of the same word agree at joins.
+Different tags merge to unknown. Bitwise wiring, constant shifts and low bits
+below the first possible carry/borrow of constant add/subtract remain exact.
+The provenance budget is `max(100000, 512 * instruction_count)` instruction
+visits per function; memory admission, cancellation and deadlines also apply.
+The human groups print them high bits first, for example
 `[31:25]=kept [24:18]=arg0[6:0] [17:0]=kept`, and another word's bits with
 their load width (`load 1B 0xa[7:0]`); entries with different sources stay
 apart, keyed by the sources themselves.
