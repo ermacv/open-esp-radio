@@ -56,6 +56,7 @@ pub(crate) struct Io {
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
     rfpll_times: Vec<Instant>,
     rfpll_write_micros: u64,
+    rfpll_command_micros: u64,
     rfpll_initial: u16,
     rfpll_statuses: Vec<crate::tracking::rfpll::search::Status>,
     rfpll_samples: usize,
@@ -421,6 +422,11 @@ impl Io {
     ) -> Result<PhyColdI2cObservation, Failure> {
         self.atom();
         self.actions.push(transaction.action());
+        if let Some(clock) = &self.rfpll_clock {
+            clock
+                .advance(Duration::from_micros(self.rfpll_command_micros))
+                .expect("test command time fits");
+        }
         match transaction.action() {
             PhyColdI2cAction::AwaitReadCompletionEdge { .. } => {
                 transaction.observe_read_result(if self.busy.get() {
@@ -1468,13 +1474,11 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
             &mut job, &mut io, &clock, None, None, None
         ));
-        for _ in 0..7 {
-            assert!(driver.as_mut().poll(&mut cx).is_pending());
-        }
+        assert!(driver.as_mut().poll(&mut cx).is_pending());
     }
     assert_eq!(
         correction.action(),
-        Action::Search(crate::tracking::rfpll::search::Action::DelayMicros(5))
+        Action::Search(crate::tracking::rfpll::search::Action::WriteCap(0))
     );
     assert!(!io.rfpll_actions.contains(&Action::Search(
         crate::tracking::rfpll::search::Action::ReadStatus
@@ -1541,7 +1545,16 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
             }
         }
         assert_eq!(timer.constructed.get(), 0);
-        assert_eq!(pending, 247); // Initial/enable commands, four polls per candidate, final write.
+        // Per-command tracing retains individual checkpoints. The quiet route
+        // batches four commands, including terminal recognition in the last poll.
+        assert_eq!(
+            pending,
+            if observed {
+                247
+            } else {
+                247 / usize::from(BATCH_COMMANDS)
+            }
+        );
         assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
         assert_eq!(
             (stats.pending as usize, stats.polls as usize, stats.resumes),
@@ -1553,6 +1566,56 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
         ));
         assert!(!trace.invalid);
     }
+}
+
+#[test]
+fn rfpll_batch_stops_at_elapsed_budget_before_its_command_count_limit() {
+    let clock = Rc::new(VirtualClock::<1>::new());
+    let mut io = Io {
+        rfpll_clock: Some(clock.clone()),
+        rfpll_command_micros: 10,
+        rfpll_initial: 100,
+        ..Io::default()
+    };
+    let mut search = crate::tracking::rfpll::search::Search::new();
+    let mut timing = EngineTiming::default();
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut job =
+            Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("clock fits");
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job,
+            &mut io,
+            clock.as_ref(),
+            Some(&mut timing),
+            None,
+            None
+        ));
+        for _ in 0..3 {
+            let before = clock.now();
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+            assert_eq!(
+                clock.now().saturating_duration_since(before).as_micros(),
+                20
+            );
+            clock
+                .advance(Duration::from_micros(500))
+                .expect("clock fits");
+        }
+    }
+    // The third batch contains the low-byte write and the masked high-byte
+    // read. Dropping it cannot publish the high byte or finish the model.
+    assert_eq!(io.actions.len(), 12);
+    assert_eq!(io.rfpll_samples, 0);
+    assert!(matches!(
+        search.action(),
+        crate::tracking::rfpll::search::Action::WriteCap(100)
+    ));
+    assert_eq!(
+        (timing.polls, timing.pending, timing.maximum_micros),
+        (3, 3, 20)
+    );
 }
 
 #[test]

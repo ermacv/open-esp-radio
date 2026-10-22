@@ -31,6 +31,12 @@ use oer_time::{Clock, Duration, Instant, Timer};
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
 
+// Admit another complete command only while the current batch is short.
+// Direct I2C retains its own 20-us answer bound; the remaining poll budget
+// belongs to model advancement and the inclusive engine observer.
+const BATCH_MICROS: u64 = 20;
+const BATCH_COMMANDS: u8 = 4;
+
 // T7's answer includes timer/executor resumption: hardware boundary 20 us,
 // measured resume lateness 66 us and 14 us margin. It starts when command
 // publication returns, yields the CPU, and does not delay a ready result.
@@ -737,7 +743,18 @@ impl<
             let mut resumed = None;
             let mut advanced = false;
             let mut ready_elapsed = None;
+            let mut ready_started = None;
             let mut rfpll_sample = None;
+            let batch_started = match &route {
+                RouteProj::Transport { job, .. }
+                    if matches!(&job.work, Work::Dcode { .. })
+                        || matches!(&job.work, Work::Rfpll(_)) && !job.rfpll_observed =>
+                {
+                    Some(started.unwrap_or_else(|| clock.now()))
+                }
+                _ => None,
+            };
+            let mut batch_commands = 0;
             let result = loop {
                 if *this.gate == Gate::Yield {
                     if let Some(trace) = this.trace.as_deref_mut() {
@@ -777,7 +794,7 @@ impl<
                             },
                             _ => None,
                         });
-                        let now = if matches!(&job.work, Work::Rfpll(_)) { Instant::EPOCH } else { clock.now() };
+                        let now = if matches!(&job.work, Work::Rfpll(_) | Work::Dcode { .. }) { Instant::EPOCH } else { clock.now() };
                         let mut step = this.registers.advance::<D, _>(job, *this.timer, now);
                         if job.first_wait {
                             match answer_deadline(clock.now()) {
@@ -787,6 +804,7 @@ impl<
                         }
                         if stats.is_some() {
                             if let Some(at) = job.ready_started.take() {
+                                let at = *ready_started.get_or_insert(at);
                                 ready_elapsed = Some(clock.now().saturating_duration_since(at));
                             }
                         }
@@ -816,6 +834,13 @@ impl<
                     Step::Failure(error) => break Poll::Ready(Err(error)),
                     Step::Rfpll(_) | Step::Runnable => {
                         if let Step::Rfpll(sample) = step { rfpll_sample = Some(sample); }
+                        batch_commands += 1;
+                        if batch_commands < BATCH_COMMANDS
+                            && batch_started.is_some_and(|at|
+                                clock.now().saturating_duration_since(at).as_micros() < BATCH_MICROS)
+                        {
+                            continue;
+                        }
                         *this.gate = Gate::Yield;
                         context.waker().wake_by_ref();
                         if this.trace.is_some() {

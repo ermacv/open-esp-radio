@@ -5,7 +5,7 @@ use crate::analog::{
 };
 
 #[test]
-fn cold_and_runtime_keep_channel_capture_order_and_checkpoint_every_transaction() {
+fn cold_and_runtime_keep_channel_capture_order_and_complete_transaction_batches() {
     let mut histories = Vec::new();
     for runtime in [false, true] {
         let clock = VirtualClock::<1>::new();
@@ -35,8 +35,8 @@ fn cold_and_runtime_keep_channel_capture_order_and_checkpoint_every_transaction(
                 let before = atoms.get();
                 let result = future.as_mut().poll(&mut cx);
                 assert!(
-                    atoms.get() - before <= 4,
-                    "one complete RMW transaction per poll"
+                    atoms.get() - before <= usize::from(BATCH_COMMANDS) * 4,
+                    "a bounded batch of complete RMW transactions per poll"
                 );
                 if let Poll::Ready(result) = result {
                     result.expect("D-code completed");
