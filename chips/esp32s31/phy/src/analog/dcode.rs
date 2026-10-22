@@ -10,6 +10,10 @@
 //! MMIO operation is an identity-bound action. The four-byte ROM table and
 //! eight output bytes are Rust-owned values; no ROM RAM or callback table is
 //! required.
+//!
+//! Runtime DCODE advances through the P1 step engine one complete hardware
+//! transaction per poll. RF and bus ownership remain held across checkpoints,
+//! and the parent commits only after accepting the terminal child completion.
 
 use crate::analog::{
     i2c::{PhyI2cField, analog_registers},
