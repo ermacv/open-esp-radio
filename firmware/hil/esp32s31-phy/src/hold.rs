@@ -90,6 +90,21 @@ impl PhyTargetObserver for &mut Observer<'_> {
         self.4 = Default::default();
         Some(&mut self.4)
     }
+    fn power_gain_completed(
+        &mut self,
+        operation: Operation,
+        timing: oer_esp32s31_phy::tracking::observation::GainTiming,
+    ) {
+        let family = if operation == Operation::WifiPower {
+            4
+        } else {
+            2
+        };
+        oer_esp32s31_board::rom::print_fmt(format_args!(
+            "OPEN_RADIO_HIL gain-parts family={} lower-us={} arithmetic-us={} publication-us={}\n",
+            family, timing.lower_micros, timing.arithmetic_micros, timing.publication_micros,
+        ));
+    }
     fn readiness_trace(
         &mut self,
     ) -> Option<&mut oer_esp32s31_phy::tracking::observation::ReadinessTrace> {

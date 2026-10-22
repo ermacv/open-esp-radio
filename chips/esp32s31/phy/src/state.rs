@@ -882,6 +882,53 @@ impl PhyState {
         calculate_bluetooth_tx_gain(parameters)
     }
 
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) fn tracking_gain_generator(
+        &self,
+        class: crate::tracking::parameters::PhyCalibrationTrackClass,
+        channel: u16,
+        gain_base: i8,
+    ) -> Option<crate::tx::gain::Generator> {
+        use crate::tracking::parameters::PhyCalibrationTrackClass as Class;
+        match class {
+            Class::Wifi => {
+                let parameters = self.channel_parameters();
+                if parameters.tx_gain_skip_publication {
+                    return None;
+                }
+                Some(crate::channel::begin_wifi_tx_gain(PhyWifiTxGainRequest {
+                    channel,
+                    calibration_curve: parameters.tx_gain_curve,
+                    correction: parameters.tx_gain_correction,
+                    base_and_delta: (gain_base as u8)
+                        .wrapping_add(parameters.tx_gain_adjustment as u8)
+                        as i8,
+                }))
+            }
+            Class::BluetoothIeee802154 => {
+                let mut parameters = self.bluetooth_tx_gain_parameters();
+                parameters.base = gain_base as u8;
+                Some(crate::calibration::bluetooth::begin_bluetooth_tx_gain(
+                    parameters,
+                ))
+            }
+        }
+    }
+
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) const fn tracking_gain_seed(
+        &self,
+        class: crate::tracking::parameters::PhyCalibrationTrackClass,
+    ) -> ([u32; 6], u16) {
+        let seed = match class {
+            crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => self.wifi_seed(),
+            crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154 => {
+                Self::packed_seed(&self.bluetooth.tx_dco)
+            }
+        };
+        (seed, self.wifi.tx_iq_config)
+    }
+
     /// Regenerate the shared calibration gain bank from a just-completed
     /// TXDC/PWDET result that has not yet reached the outer state commit.
     pub const fn bluetooth_ieee802154_calibration_gain_image(

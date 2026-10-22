@@ -118,28 +118,48 @@ pub const fn calculate_bluetooth_tx_gain(
         output_72: [0; 16],
         config: parameters.config,
     };
-    let base_delta = parameters.base.wrapping_sub(parameters.attenuation) as i8 as i16;
-    let interpolation = parameters.calibration_curve[1] as i8 as i16;
-    let mut driver = -96_i16;
-    let mut table_index = 0_u8;
+    let mut generator = begin_bluetooth_tx_gain(parameters);
     let mut output_index = 0;
     while output_index != 16 {
-        let target = base_delta
-            .wrapping_sub(parameters.correction as i16)
-            .wrapping_add(crate::calibration::math::saturate_signed(driver as i32, 80, -72) as i16);
-        table_index = select_bluetooth_tx_gain_index(table_index, target);
-        let table_index = table_index as usize;
-        image.output_72[output_index] = BLUETOOTH_TX_GAIN_TABLE_LOW[table_index];
-        image.output_64[output_index] = BLUETOOTH_TX_GAIN_TABLE_MID[table_index];
-        let residual = target
-            .wrapping_sub(BLUETOOTH_TX_GAIN_TABLE_HIGH[table_index] as i16)
-            .wrapping_sub(interpolation);
-        image.output_32[output_index] =
-            crate::calibration::math::saturate_signed(residual as i32, 24, -60) as u8;
-        driver = driver.wrapping_add(12);
+        let value = next_bluetooth_tx_gain(&mut generator, output_index as u8);
+        image.output_72[output_index] = value.gain_72;
+        image.output_64[output_index] = value.gain_64;
+        image.output_32[output_index] = value.gain_32;
         output_index += 1;
     }
     image
+}
+
+pub(crate) const fn begin_bluetooth_tx_gain(
+    parameters: PhyBluetoothTxGainParameters,
+) -> crate::tx::gain::Generator {
+    crate::tx::gain::Generator {
+        target: (parameters.base.wrapping_sub(parameters.attenuation) as i8 as i16)
+            .wrapping_sub(parameters.correction as i16),
+        interpolation: parameters.calibration_curve[1] as i8,
+        table_index: 0,
+    }
+}
+
+#[inline(never)]
+pub(crate) const fn next_bluetooth_tx_gain(
+    generator: &mut crate::tx::gain::Generator,
+    entry: u8,
+) -> crate::tx::gain::Value {
+    let driver = -96_i16 + entry as i16 * 12;
+    let target = generator
+        .target
+        .wrapping_add(crate::calibration::math::saturate_signed(driver as i32, 80, -72) as i16);
+    generator.table_index = select_bluetooth_tx_gain_index(generator.table_index, target);
+    let index = generator.table_index as usize;
+    let residual = target
+        .wrapping_sub(BLUETOOTH_TX_GAIN_TABLE_HIGH[index] as i16)
+        .wrapping_sub(generator.interpolation as i16);
+    crate::tx::gain::Value {
+        gain_72: BLUETOOTH_TX_GAIN_TABLE_LOW[index],
+        gain_64: BLUETOOTH_TX_GAIN_TABLE_MID[index],
+        gain_32: crate::calibration::math::saturate_signed(residual as i32, 24, -60) as u8,
+    }
 }
 
 /// Direct PAC-backed publication edge for one canonical Bluetooth gain image.

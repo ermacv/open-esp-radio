@@ -226,6 +226,12 @@ pub trait PhyTargetObserver {
         _timing: crate::tracking::observation::EngineTiming,
     ) {
     }
+    fn power_gain_completed(
+        &mut self,
+        _operation: crate::tracking::observation::Operation,
+        _timing: crate::tracking::observation::GainTiming,
+    ) {
+    }
     const OBSERVE_DELAYS: bool = false;
     /// Include sensor age at RFPLL entry; disabled observers add no clock read.
     const OBSERVE_RFPLL_AGE: bool = false;
@@ -2105,17 +2111,19 @@ impl<
                 let operation =
                     crate::tracking::observation::Operation::parameter(pending.action())
                         .ok_or(PhyTargetPortError::UnexpectedBinding)?;
-                let (result, timing) = crate::executor::step::power::run_param_tx_power::<D, _, _>(
-                    self.timer,
-                    pending
-                        .begin_tx_power_tracking(state)
-                        .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                    self.registers,
-                    O::OBSERVE_ENGINE_POLLS,
-                )
-                .await;
+                let (result, timing, gain) =
+                    crate::executor::step::power::run_param_tx_power::<D, _, _>(
+                        self.timer,
+                        pending
+                            .begin_tx_power_tracking(state)
+                            .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
+                        self.registers,
+                        O::OBSERVE_ENGINE_POLLS,
+                    )
+                    .await;
                 if O::OBSERVE_ENGINE_POLLS {
                     self.observer.engine_completed(operation, timing);
+                    self.observer.power_gain_completed(operation, gain);
                 }
                 result.map_err(step::port_error)?
             }

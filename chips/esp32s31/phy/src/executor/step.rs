@@ -427,10 +427,12 @@ pin_project_lite::pin_project! {
             stats: Option<&'a mut EngineTiming>,
             #[pin]
             wait: Option<F>,
+            wait_at: Instant,
         },
         Power {
             child: Option<crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'a>>,
             timing: EngineTiming,
+            gain: power::Cursor,
             measured: bool,
         },
     }
@@ -456,7 +458,6 @@ pin_project_lite::pin_project! {
         rfpll: Option<&'a mut crate::tracking::observation::RfpllEngineTrace>,
         trace: Option<&'a mut ReadinessTrace>,
         make_wait: M,
-        wait_at: Instant,
         gate: Gate,
     }
 }
@@ -470,6 +471,7 @@ trait Engine: Future<Output = Result<(), Failure>> {
     ) -> (
         Result<crate::tracking::parameters::PhyParamTrackingCompletion, Failure>,
         EngineTiming,
+        crate::tracking::observation::GainTiming,
     );
 }
 impl<
@@ -487,9 +489,15 @@ impl<
     ) -> (
         Result<crate::tracking::parameters::PhyParamTrackingCompletion, Failure>,
         EngineTiming,
+        crate::tracking::observation::GainTiming,
     ) {
         match self.project().route.project() {
-            RouteProj::Power { child, timing, .. } => {
+            RouteProj::Power {
+                child,
+                timing,
+                gain,
+                ..
+            } => {
                 let result = result.and_then(|()| {
                     child
                         .take()
@@ -497,9 +505,13 @@ impl<
                         .commit()
                         .map_err(|_| Failure::Binding)
                 });
-                (result, *timing)
+                (result, *timing, gain.timing)
             }
-            RouteProj::Transport { .. } => (Err(Failure::Binding), EngineTiming::default()),
+            RouteProj::Transport { .. } => (
+                Err(Failure::Binding),
+                EngineTiming::default(),
+                Default::default(),
+            ),
         }
     }
 }
@@ -531,12 +543,15 @@ impl<
             let result = loop {
                 if *this.gate == Gate::Yield {
                     if let Some(trace) = this.trace.as_deref_mut() {
-                        trace.yield_resumed(clock.now().saturating_duration_since(*this.wait_at).as_micros());
+                        if let RouteProj::Transport { wait_at, .. } = &route {
+                            trace.yield_resumed(clock.now().saturating_duration_since(**wait_at).as_micros());
+                        }
                     }
                     *this.gate = Gate::Idle;
                 }
                 if *this.gate != Gate::Idle {
-                    let at = *this.wait_at;
+                    let RouteProj::Transport { wait_at, .. } = &route else { break Poll::Ready(Err(Failure::Binding)); };
+                    let at = **wait_at;
                     let ready = if *this.gate == Gate::Ready {
                         true
                     } else if let RouteProj::Transport { wait, .. } = &mut route {
@@ -584,15 +599,15 @@ impl<
                         }
                         (step, now)
                     }
-                    RouteProj::Power { child, measured, .. } => {
+                    RouteProj::Power { child, measured, gain: cursor, .. } => {
                         let Some(child) = child.as_mut() else { break Poll::Ready(Err(Failure::Binding)); };
                         use crate::tracking::power::PhyTxPowerTrackingAction as Action;
                         let gain = **measured && matches!(child.action(),
                             Action::RegenerateWifiGain { .. } | Action::RegenerateBluetoothIeee802154Gain { .. });
                         let at = gain.then(|| clock.now());
-                        // Power is outside Job::advance_one: temperature/Sample's
-                        // transport dispatcher no longer calls the gain helper.
-                        let step = this.registers.advance_power::<D>(child);
+                        // This owning route calls stepped control/gain atoms directly;
+                        // no monolithic gain-image lowering is reachable here.
+                        let step = this.registers.advance_power::<D, _>(child, cursor, clock, **measured);
                         if let Some(at) = at { ready_elapsed = Some(clock.now().saturating_duration_since(at)); }
                         (step, Instant::EPOCH)
                     }
@@ -604,7 +619,9 @@ impl<
                         if let Step::Rfpll(sample) = step { rfpll_sample = Some(sample); }
                         *this.gate = Gate::Yield;
                         context.waker().wake_by_ref();
-                        if this.trace.is_some() { *this.wait_at = clock.now(); }
+                        if this.trace.is_some() {
+                            if let RouteProj::Transport { wait_at, .. } = &mut route { **wait_at = clock.now(); }
+                        }
                         break Poll::Pending;
                     }
                     Step::WaitAt(at) => {
@@ -618,7 +635,8 @@ impl<
                         if job.first_wait { at } else { at.min(job.deadline) }
                     }
                 };
-                *this.wait_at = at;
+                let RouteProj::Transport { wait_at, .. } = &mut route else { break Poll::Ready(Err(Failure::Binding)); };
+                **wait_at = at;
                 if at <= clock.now() { *this.gate = Gate::Ready; }
                 else {
                     let RouteProj::Transport { wait, .. } = &mut route else {
@@ -687,11 +705,13 @@ fn driver<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
                 job,
                 stats,
                 wait: None,
+                wait_at: Instant::EPOCH,
             }
         }
         Input::Power { child, measured } => Route::Power {
             child: Some(child),
             timing: EngineTiming::default(),
+            gain: power::Cursor::default(),
             measured,
         },
     };
@@ -703,7 +723,6 @@ fn driver<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
         rfpll,
         trace,
         make_wait: |timer: &'a T, at| timer.wait_until(at),
-        wait_at: Instant::EPOCH,
         gate: Gate::Idle,
     }
 }

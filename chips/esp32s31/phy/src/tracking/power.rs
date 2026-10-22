@@ -318,6 +318,67 @@ pub enum PhyTxPowerTrackingBindingError {
     UnsupportedAction,
 }
 
+/// Affine small control edge. A stepped gain publisher never lowers a whole
+/// image through this route, even on the conservative common-driver path.
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) struct ControlBinding(PhyTxPowerTrackingAction);
+#[cfg(any(target_arch = "riscv32", test))]
+impl ControlBinding {
+    pub fn lower(action: PhyTxPowerTrackingAction) -> Result<Self, PhyTxPowerTrackingBindingError> {
+        match action {
+            PhyTxPowerTrackingAction::SetBbpllCalibration { .. }
+            | PhyTxPowerTrackingAction::ForceTxRx(
+                PhyForceTxRxAction::Configure { .. } | PhyForceTxRxAction::DelayMicros { .. },
+            ) => Ok(Self(action)),
+            _ => Err(PhyTxPowerTrackingBindingError::UnsupportedAction),
+        }
+    }
+    #[cfg(test)]
+    pub const fn action(&self) -> PhyTxPowerTrackingAction {
+        self.0
+    }
+    pub const fn delay_micros(&self) -> Option<u32> {
+        match self.0 {
+            PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::DelayMicros {
+                micros, ..
+            }) => Some(micros),
+            _ => None,
+        }
+    }
+    #[cfg(target_arch = "riscv32")]
+    pub fn execute_target(
+        self,
+        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    ) -> PhyTxPowerTrackingCompletion {
+        match self.0 {
+            PhyTxPowerTrackingAction::SetBbpllCalibration { enabled } => {
+                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
+            }
+            PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::Configure {
+                enabled,
+                phase,
+            }) => {
+                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
+                PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
+                    enabled,
+                    phase,
+                })
+            }
+            PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::DelayMicros {
+                enabled,
+                completed_phase,
+                micros,
+            }) => PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::DelayElapsed {
+                enabled,
+                completed_phase,
+                micros,
+            }),
+            _ => unreachable!("control binding admitted only control edges"),
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 enum PhyTxPowerTrackingExternalOperation {
     SetBbpllCalibration {

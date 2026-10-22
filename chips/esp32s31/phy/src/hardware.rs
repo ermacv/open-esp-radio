@@ -102,7 +102,7 @@ pub(crate) fn configure_phy_rx_table(
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-const fn tx_baseband_gain_index(gain: u16) -> usize {
+pub(crate) const fn tx_baseband_gain_index(gain: u16) -> usize {
     match gain {
         0x0080 => 1,
         0x0100 => 2,
@@ -113,7 +113,7 @@ const fn tx_baseband_gain_index(gain: u16) -> usize {
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-const fn packed_halfword(words: &[u32], index: usize) -> u16 {
+pub(crate) const fn packed_halfword(words: &[u32], index: usize) -> u16 {
     (words[index >> 1] >> ((index & 1) * 16)) as u16
 }
 

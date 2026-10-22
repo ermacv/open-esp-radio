@@ -360,6 +360,15 @@ fn tracking_gain_regeneration_uses_live_typed_state_and_honors_wifi_skip() {
 
     state.config.tx_gain_skip_publication = true;
     assert_eq!(state.wifi_tracking_gain_image(11, 5), None);
+    assert!(
+        state
+            .tracking_gain_generator(
+                crate::tracking::parameters::PhyCalibrationTrackClass::Wifi,
+                11,
+                5
+            )
+            .is_none()
+    );
 }
 
 #[test]

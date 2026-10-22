@@ -66,14 +66,20 @@ the outer owner's lease.
 T2/T4 power tracking owns its child and `EngineTiming` inside the shared P1
 driver. A safe enum separates timer/borrowed-transport storage from the
 power route; power has no outer async layer or separate job. A poll executes
-one BBPLL edge, one complete force/write plus its 1-µs settle, or the complete
-gain-image generation and publication. Runnable checkpoints wake the caller
-without a timer; the RF/state borrow remains held. The gain image stays local
-to its publication poll. The terminal poll commits the semantic result only
-after BBPLL-off. In power-family engine observations, `ready_edges` and
-`maximum_ready_micros` count and time the gain-image/publication atom, while
-`maximum_micros` includes the complete driver poll. Diagnostic holds force the
-selected class's gain update and report family 2 (BT/154) or 4 (Wi-Fi).
+one BBPLL edge, one complete force/write plus its 1-µs settle, gain setup,
+or one complete gain-memory record. Runnable checkpoints wake the caller
+without a timer; the RF/state borrow remains held. A compact generator keeps
+only arithmetic state and the next index, never a whole image. Both pinned
+profiles select seed quartets within the seed portion of the unchanged
+seed/output32 concatenation. The whole-image builders share the same arithmetic;
+stream tests compare every encoded entry with the canonical packed image.
+Only after all32 Wi-Fi or16 shared records does the gain child acknowledge
+publication. The terminal poll commits the semantic result after BBPLL-off.
+In power-family engine observations, `ready_edges` and `maximum_ready_micros`
+count and time gain setup and individual records; `maximum_micros` covers
+the whole driver poll. Separate maxima cover lower/setup, one record's
+arithmetic/encoding and its complete publication. Diagnostic holds force the
+selected class's gain update and report family2 (BT/154) or4 (Wi-Fi).
 
 Full cold registration and cache replay belong to
 [calibration/registration](../calibration/registration.rs), not the periodic
