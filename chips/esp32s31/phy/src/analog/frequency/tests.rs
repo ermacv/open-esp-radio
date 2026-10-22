@@ -742,8 +742,8 @@ fn modeled_frequency_i2c_commands_match_old_bytes_and_field_updates() {
                 assert_eq!(descriptor.data, old_data);
                 for copy in 0..descriptor.memory_write_count() {
                     let (_, word, _) = descriptor.memory_write(copy);
-                    let register_block =
-                        u32::from(descriptor.address.block()) | (u32::from(descriptor.address.index()) << 8);
+                    let register_block = u32::from(descriptor.address.block())
+                        | (u32::from(descriptor.address.index()) << 8);
                     let old = if descriptor.kind() >= 2 {
                         register_block
                     } else {

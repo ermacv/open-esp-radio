@@ -1,9 +1,10 @@
 use super::{
     PhyColdExternalBinding, PhyColdI2cAction, PhyColdI2cBinding, PhyColdI2cConfigurationBinding,
-    PhyColdI2cObservation, PhyColdI2cOutcome, PhyColdI2cRequest, PhyColdI2cTransaction,
-    PhyColdLoweringError, PhyColdMmioBinding, PhyColdObservationBinding, PhyColdObservationRequest,
-    PhyColdObservationResult, PhyColdPbusAction, PhyColdPbusBinding, PhyColdPbusHardwareResult,
-    PhyColdPbusObservation, PhyColdTimerBinding, phy_sdm_deadline_expired,
+    PhyColdI2cError, PhyColdI2cObservation, PhyColdI2cOutcome, PhyColdI2cRequest,
+    PhyColdI2cTransaction, PhyColdLoweringError, PhyColdMmioBinding, PhyColdObservationBinding,
+    PhyColdObservationRequest, PhyColdObservationResult, PhyColdPbusAction, PhyColdPbusBinding,
+    PhyColdPbusHardwareResult, PhyColdPbusObservation, PhyColdTimerBinding,
+    phy_sdm_deadline_expired,
 };
 use crate::analog::crystal_duty::{
     XtalDutyCalibrationAction, XtalDutyCalibrationCompletion, XtalDutyPassAction,
@@ -17,6 +18,23 @@ use crate::analog::i2c::{
     PhyI2cError, PhyRfInitParameterSnapshot, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
     RcCalibrationAction, RcCalibrationCompletion, fields, registers,
 };
+
+#[test]
+fn an_unrouted_address_is_reported_without_turning_into_a_pending_edge() {
+    let address = registers::ULP_BOD_XTAL_DUTY_CANDIDATE;
+    let mut read = PhyColdI2cTransaction::new(PhyColdI2cRequest::read_byte(address));
+    read.read_started().unwrap();
+    assert_eq!(
+        read.observe_read_result(Err(PhyI2cError::UnroutedAddress)),
+        Err(PhyColdI2cError::UnroutedAddress)
+    );
+    let mut write = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_byte(address, 0));
+    write.write_started().unwrap();
+    assert_eq!(
+        write.observe_write_result(Err(PhyI2cError::UnroutedAddress)),
+        Err(PhyColdI2cError::UnroutedAddress)
+    );
+}
 use crate::analog::pbus::{PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusForceTest};
 use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion};
 use crate::calibration::estimator::{

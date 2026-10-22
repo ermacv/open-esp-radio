@@ -172,7 +172,10 @@ mod tests {
                     for value in 0..=255_u8 {
                         let result = field.insert_truncated(sample, value);
                         assert_eq!(result & !mask, sample & !mask);
-                        assert_eq!(u16::from(field.extract(result)), u16::from(value) % (1 << (msb - lsb + 1)));
+                        assert_eq!(
+                            u16::from(field.extract(result)),
+                            u16::from(value) % (1 << (msb - lsb + 1))
+                        );
                         if let Some(checked) = field.insert(sample, value) {
                             assert_eq!(checked, result);
                         }

@@ -164,7 +164,7 @@ pub(crate) fn reset_clock_generator_direct<C: oer_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::i2c::{fields, registers};
+    use oer_esp32s31_hal::phy::i2c::fields;
 
     for (field, value) in [
         (fields::RFPLL_DCODE_0_SOURCE_SELECT, 0),

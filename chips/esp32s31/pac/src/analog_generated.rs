@@ -227,55 +227,55 @@ pub mod analog_i2c {
         pub const APLL_I2C_APLL_DSDM0: Address = Address::new(0xc, 0x9);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
         pub const ULP_BOD_I2C_BOD_THRESHOLD: Address = Address::new(0x61, 0x5);
-        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        /// SOURCE: BLOB_LIBPHY_PHY_XTAL_DUTY_CAL
         pub const ULP_BOD_XTAL_DUTY_CALIBRATION_PATH_ENABLE: Address = Address::new(0x61, 0x7);
-        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        /// SOURCE: BLOB_LIBPHY_PHY_I2C
         pub const ULP_BOD_RC_CALIBRATION_DOUT_PATH_ENABLE: Address = Address::new(0x61, 0x8);
-        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        /// SOURCE: BLOB_LIBPHY_PHY_XTAL_DUTY_CAL
         pub const ULP_BOD_XTAL_DUTY_INITIAL: Address = Address::new(0x61, 0x9);
-        /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BROWNOUT
+        /// SOURCE: BLOB_LIBPHY_PHY_XTAL_DUTY_CAL
         pub const ULP_BOD_XTAL_DUTY_CANDIDATE: Address = Address::new(0x61, 0xa);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_RESTART_HIGH: Address = Address::new(0x62, 0x0);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CAPACITOR_LOW: Address = Address::new(0x62, 0x1);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CAPACITOR_HIGH: Address = Address::new(0x62, 0x2);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_DCODE_CKGEN_RESET: Address = Address::new(0x62, 0x4);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CALIBRATED_CAPACITOR_LOW: Address = Address::new(0x62, 0x5);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_LOCK_STATUS: Address = Address::new(0x62, 0x7);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CAPACITOR_SEARCH_ENABLE: Address = Address::new(0x62, 0xb);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CAPACITOR_SEARCH_STATUS: Address = Address::new(0x62, 0xc);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CHARGE_PUMP_LOCK_STATUS: Address = Address::new(0x62, 0xe);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_CHARGE_PUMP_CALIBRATION_ENABLE: Address = Address::new(0x62, 0xf);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_INTERNAL_DCODE_0: Address = Address::new(0x62, 0x11);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_INTERNAL_DCODE_1: Address = Address::new(0x62, 0x12);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_DCODE_0_SOURCE_SELECT: Address = Address::new(0x62, 0x13);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const RFPLL_DCODE_1_SOURCE_SELECT: Address = Address::new(0x62, 0x14);
         /// SOURCE: BLOB_LIBPHY_PHY_I2C
         pub const RFPLL_BYTE_0D_OPAQUE: Address = Address::new(0x62, 0xd);
         /// SOURCE: BLOB_LIBPHY_PHY_I2C
         pub const RFPLL_BYTE_15_OPAQUE: Address = Address::new(0x62, 0x15);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const SDM_RFPLL_SDM_UPDATE_ENABLE: Address = Address::new(0x63, 0x0);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const SDM_RFPLL_SDM_MOST_SIGNIFICANT_BYTE: Address = Address::new(0x63, 0x3);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const SDM_RFPLL_SDM_UPPER_MIDDLE_BYTE: Address = Address::new(0x63, 0x4);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const SDM_RFPLL_SDM_LOWER_MIDDLE_BYTE: Address = Address::new(0x63, 0x5);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RFPLL_CHANNEL
         pub const SDM_RFPLL_SDM_LOW: Address = Address::new(0x63, 0x6);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_IR_CAL_DELAY: Address = Address::new(0x66, 0x0);
@@ -297,15 +297,15 @@ pub mod analog_i2c {
         pub const BBPLL_I2C_BBPLL_OC_VCO_DBIAS: Address = Address::new(0x66, 0x9);
         /// SOURCE: ESP_IDF_4D59230D_S31_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_ENT_PLL: Address = Address::new(0x66, 0xa);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT
         pub const BBTOP_TX_IQ_LOOPBACK_ENABLE: Address = Address::new(0x67, 0x0);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907
         pub const BBTOP_RF_CLOSE_CONTROL: Address = Address::new(0x67, 0x2);
         /// SOURCE: BLOB_LIBPHY_PHY_I2C
         pub const BBTOP_SHARED_RX_GAIN_CALIBRATION_ENABLE: Address = Address::new(0x67, 0x3);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS
         pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_0: Address = Address::new(0x67, 0x1e);
-        /// SOURCE: BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS
         pub const BBTOP_BLUETOOTH_TX_POWER_HIGH_1: Address = Address::new(0x67, 0x1f);
         /// SOURCE: BLOB_LIBPHY_PHY_I2C
         pub const BBTOP_BYTE_04_OPAQUE: Address = Address::new(0x67, 0x4);

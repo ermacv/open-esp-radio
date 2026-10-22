@@ -219,39 +219,39 @@ pub mod analog_i2c {
         pub const ULP_BOD_I2C_BOD_THRESHOLD: Address = Address::new(0x61, 0x5);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT, ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS
         pub const ULP_BOD_I2C_ULP_EXT_CODE: Address = Address::new(0x61, 0x6);
-        /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT, ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
         pub const ULP_BOD_BYTE_07_OPAQUE: Address = Address::new(0x61, 0x7);
-        /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BROWNOUT, ESP_IDF_4D59230D_C5_REGI2C_LP_BIAS
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
         pub const ULP_BOD_BYTE_08_OPAQUE: Address = Address::new(0x61, 0x8);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_00_OPAQUE: Address = Address::new(0x63, 0x0);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_01_OPAQUE: Address = Address::new(0x63, 0x1);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_06_OPAQUE: Address = Address::new(0x63, 0x6);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_07_OPAQUE: Address = Address::new(0x63, 0x7);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_08_OPAQUE: Address = Address::new(0x63, 0x8);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_0E_OPAQUE: Address = Address::new(0x63, 0xe);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_0F_OPAQUE: Address = Address::new(0x63, 0xf);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_11_OPAQUE: Address = Address::new(0x63, 0x11);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_12_OPAQUE: Address = Address::new(0x63, 0x12);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_13_OPAQUE: Address = Address::new(0x63, 0x13);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_14_OPAQUE: Address = Address::new(0x63, 0x14);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_15_OPAQUE: Address = Address::new(0x63, 0x15);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_18_OPAQUE: Address = Address::new(0x63, 0x18);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_19_OPAQUE: Address = Address::new(0x63, 0x19);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const SDM_BYTE_1A_OPAQUE: Address = Address::new(0x63, 0x1a);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_IR_CAL_DELAY: Address = Address::new(0x66, 0x0);
@@ -273,47 +273,47 @@ pub mod analog_i2c {
         pub const BBPLL_I2C_BBPLL_OC_VCO_DBIAS: Address = Address::new(0x66, 0x9);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_BBPLL
         pub const BBPLL_I2C_BBPLL_BBADC_DCUR: Address = Address::new(0x66, 0xa);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
         pub const BBTOP_BYTE_03_OPAQUE: Address = Address::new(0x67, 0x3);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
         pub const BBTOP_BYTE_05_OPAQUE: Address = Address::new(0x67, 0x5);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
         pub const BBTOP_BYTE_1D_OPAQUE: Address = Address::new(0x67, 0x1d);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_01_OPAQUE: Address = Address::new(0x67, 0x1);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_02_OPAQUE: Address = Address::new(0x67, 0x2);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_06_OPAQUE: Address = Address::new(0x67, 0x6);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_07_OPAQUE: Address = Address::new(0x67, 0x7);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_08_OPAQUE: Address = Address::new(0x67, 0x8);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_09_OPAQUE: Address = Address::new(0x67, 0x9);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_0A_OPAQUE: Address = Address::new(0x67, 0xa);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_0B_OPAQUE: Address = Address::new(0x67, 0xb);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_0C_OPAQUE: Address = Address::new(0x67, 0xc);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_0D_OPAQUE: Address = Address::new(0x67, 0xd);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_0E_OPAQUE: Address = Address::new(0x67, 0xe);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_0F_OPAQUE: Address = Address::new(0x67, 0xf);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_10_OPAQUE: Address = Address::new(0x67, 0x10);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_11_OPAQUE: Address = Address::new(0x67, 0x11);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_12_OPAQUE: Address = Address::new(0x67, 0x12);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_13_OPAQUE: Address = Address::new(0x67, 0x13);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_14_OPAQUE: Address = Address::new(0x67, 0x14);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BBTOP_BYTE_15_OPAQUE: Address = Address::new(0x67, 0x15);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_SARADC
         pub const SARADC_ADC_SAR1_INITIAL_CODE_LOW_ADDR: Address = Address::new(0x69, 0x0);
@@ -339,41 +339,41 @@ pub mod analog_i2c {
         pub const SARADC_POWER_GLITCH_DREF_VDET_PERIF: Address = Address::new(0x69, 0xb);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_SARADC
         pub const SARADC_POWER_GLITCH_DREF_VDET_XTAL: Address = Address::new(0x69, 0xc);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
         pub const BIAS_BYTE_00_OPAQUE: Address = Address::new(0x6a, 0x0);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES
         pub const BIAS_BYTE_01_OPAQUE: Address = Address::new(0x6a, 0x1);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const BIAS_BYTE_03_OPAQUE: Address = Address::new(0x6a, 0x3);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
         pub const TXRF_RC_CALIBRATION_SECOND: Address = Address::new(0x6b, 0xf);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
         pub const TXRF_RC_CALIBRATION_FIRST: Address = Address::new(0x6b, 0x11);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_3
         pub const TXRF_RC_CALIBRATION_THIRD: Address = Address::new(0x6b, 0x13);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_02_OPAQUE: Address = Address::new(0x6b, 0x2);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_03_OPAQUE: Address = Address::new(0x6b, 0x3);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_04_OPAQUE: Address = Address::new(0x6b, 0x4);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_05_OPAQUE: Address = Address::new(0x6b, 0x5);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_06_OPAQUE: Address = Address::new(0x6b, 0x6);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_07_OPAQUE: Address = Address::new(0x6b, 0x7);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_08_OPAQUE: Address = Address::new(0x6b, 0x8);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_09_OPAQUE: Address = Address::new(0x6b, 0x9);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_0A_OPAQUE: Address = Address::new(0x6b, 0xa);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_0C_OPAQUE: Address = Address::new(0x6b, 0xc);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_0D_OPAQUE: Address = Address::new(0x6b, 0xd);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXRF_BYTE_0E_OPAQUE: Address = Address::new(0x6b, 0xe);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_EXT_RTC_DREG: Address = Address::new(0x6d, 0x4);
@@ -389,37 +389,37 @@ pub mod analog_i2c {
         pub const DIG_REG_I2C_DIG_REG_XPD_RTC_REG: Address = Address::new(0x6d, 0xd);
         /// SOURCE: ESP_IDF_4D59230D_C5_REGI2C_DIG_REG
         pub const DIG_REG_I2C_DIG_REG_SCK_DCAP: Address = Address::new(0x6d, 0xe);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_01_OPAQUE: Address = Address::new(0x6e, 0x1);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_04_OPAQUE: Address = Address::new(0x6e, 0x4);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_05_OPAQUE: Address = Address::new(0x6e, 0x5);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_07_OPAQUE: Address = Address::new(0x6e, 0x7);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_08_OPAQUE: Address = Address::new(0x6e, 0x8);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_09_OPAQUE: Address = Address::new(0x6e, 0x9);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_0A_OPAQUE: Address = Address::new(0x6e, 0xa);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_0B_OPAQUE: Address = Address::new(0x6e, 0xb);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_0C_OPAQUE: Address = Address::new(0x6e, 0xc);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_0D_OPAQUE: Address = Address::new(0x6e, 0xd);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_0F_OPAQUE: Address = Address::new(0x6e, 0xf);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_10_OPAQUE: Address = Address::new(0x6e, 0x10);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_11_OPAQUE: Address = Address::new(0x6e, 0x11);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_12_OPAQUE: Address = Address::new(0x6e, 0x12);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_13_OPAQUE: Address = Address::new(0x6e, 0x13);
-        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1
         pub const TXTOP_BYTE_14_OPAQUE: Address = Address::new(0x6e, 0x14);
     }
     pub mod fields {

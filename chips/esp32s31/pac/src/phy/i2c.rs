@@ -7,10 +7,10 @@ use crate::generated::PhyI2cBbpllCalibrationState;
 
 use crate::analog_i2c::{self, Address, Field, Host, Profile, Route, fields, registers};
 
-const fn normal_route(address: Address) -> Route {
+const fn normal_route(address: Address) -> Result<Route, PhyI2cAccessError> {
     match analog_i2c::route(Profile::LibphyNormal, address.block()) {
-        Some(route) => route,
-        None => panic!("production analog address requires a normal route"),
+        Some(route) => Ok(route),
+        None => Err(PhyI2cAccessError::UnroutedAddress),
     }
 }
 
@@ -18,6 +18,8 @@ const fn normal_route(address: Address) -> Route {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyI2cAccessError {
     Busy,
+    /// The physical byte has no admitted route in the production profile.
+    UnroutedAddress,
 }
 
 const PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT: usize = 45;
@@ -551,18 +553,18 @@ impl RadioPhyRegisters {
 
     /// Start one opaque analog-register read without exposing command fields.
     pub fn try_start_phy_i2c_read(&mut self, address: Address) -> Result<(), PhyI2cAccessError> {
-        let host = self.configure_and_select_phy_i2c_host(normal_route(address));
+        let host = self.configure_and_select_phy_i2c_host(normal_route(address)?);
         if self.phy_i2c_master_is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
-        self.publish_phy_i2c_read_mask(normal_route(address));
+        self.publish_phy_i2c_read_mask(normal_route(address)?);
         self.publish_phy_i2c_command(host, address.block(), address.index(), 0, false);
         Ok(())
     }
 
     /// Consume one externally delivered completion edge for an opaque read.
     pub fn try_finish_phy_i2c_read(&self, address: Address) -> Result<u8, PhyI2cAccessError> {
-        let host = normal_route(address).host;
+        let host = normal_route(address)?.host;
         if self.phy_i2c_master_is_busy(host) {
             Err(PhyI2cAccessError::Busy)
         } else {
@@ -576,7 +578,7 @@ impl RadioPhyRegisters {
         address: Address,
         value: u8,
     ) -> Result<(), PhyI2cAccessError> {
-        let host = self.configure_and_select_phy_i2c_host(normal_route(address));
+        let host = self.configure_and_select_phy_i2c_host(normal_route(address)?);
         if self.phy_i2c_master_is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
@@ -586,7 +588,7 @@ impl RadioPhyRegisters {
 
     /// Consume one externally delivered completion edge for an opaque write.
     pub fn try_finish_phy_i2c_write(&self, address: Address) -> Result<(), PhyI2cAccessError> {
-        if self.phy_i2c_master_is_busy(normal_route(address).host) {
+        if self.phy_i2c_master_is_busy(normal_route(address)?.host) {
             Err(PhyI2cAccessError::Busy)
         } else {
             Ok(())
@@ -625,7 +627,7 @@ impl RadioPhyRegisters {
         if self.phy_i2c_master_is_busy(Host::Host1) {
             return Err(PhyI2cAccessError::Busy);
         }
-        self.publish_phy_i2c_read_mask(normal_route(registers::BBTOP_RF_CLOSE_CONTROL));
+        self.publish_phy_i2c_read_mask(normal_route(registers::BBTOP_RF_CLOSE_CONTROL)?);
         self.publish_phy_i2c_command(Host::Host1, 0x67, register.address(), 0, false);
         Ok(())
     }
@@ -793,6 +795,28 @@ impl RadioPhyRegisters {
                 value,
             );
             index += 1;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn low_block_knowledge_does_not_admit_a_production_transaction() {
+        use crate::analog_i2c::blocks;
+        for block in [
+            blocks::CPLL,
+            blocks::MPLL,
+            blocks::APLL,
+            blocks::SAR_MASTER,
+            blocks::SAR_SLAVE,
+        ] {
+            assert_eq!(
+                normal_route(block.register(0)),
+                Err(PhyI2cAccessError::UnroutedAddress)
+            );
         }
     }
 }

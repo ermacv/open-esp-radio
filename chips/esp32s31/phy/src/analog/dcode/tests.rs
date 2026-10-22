@@ -17,7 +17,7 @@ fn channel_visits_update_nrx_once_before_each_measured_pair() {
         ) {
             let wrong = if matches!(action, PhyDcodeAction::Rfpll(_)) {
                 PhyDcodeCompletion::Rfpll(RfpllFrequencyCompletion::MaskedRead {
-                    field: analog_registers::RFPLL_LOCK_STATUS,
+                    field: fields::RFPLL_LOCK_STATUS,
                     value: 0,
                 })
             } else {

@@ -44,6 +44,7 @@ const PHY_I2C_SDM_DEADLINE_CYCLES: u32 = 9_999;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyI2cError {
     Busy,
+    UnroutedAddress,
 }
 
 /// Program the complete PHY-I2C command RAM from Rust-owned cold state.
@@ -90,7 +91,10 @@ pub(crate) fn try_start_read(
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     address: Address,
 ) -> Result<(), PhyI2cError> {
-    hal_phy_i2c::try_start_read(registers, address).map_err(|_| PhyI2cError::Busy)
+    hal_phy_i2c::try_start_read(registers, address).map_err(|error| match error {
+        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
+    })
 }
 
 /// Observe one previously published PHY-I2C read exactly once.
@@ -107,7 +111,10 @@ pub(crate) fn try_finish_read(
     registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
     address: Address,
 ) -> Result<u8, PhyI2cError> {
-    hal_phy_i2c::try_finish_read(registers, address).map_err(|_| PhyI2cError::Busy)
+    hal_phy_i2c::try_finish_read(registers, address).map_err(|error| match error {
+        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
+    })
 }
 
 /// Publish one complete-register PHY-I2C write after observing the
@@ -122,7 +129,10 @@ pub(crate) fn try_start_write(
     address: Address,
     value: u8,
 ) -> Result<(), PhyI2cError> {
-    hal_phy_i2c::try_start_write(registers, address, value).map_err(|_| PhyI2cError::Busy)
+    hal_phy_i2c::try_start_write(registers, address, value).map_err(|error| match error {
+        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
+    })
 }
 
 /// Observe one previously published PHY-I2C write exactly once.
@@ -138,7 +148,10 @@ pub(crate) fn try_finish_write(
     registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
     address: Address,
 ) -> Result<(), PhyI2cError> {
-    hal_phy_i2c::try_finish_write(registers, address).map_err(|_| PhyI2cError::Busy)
+    hal_phy_i2c::try_finish_write(registers, address).map_err(|error| match error {
+        hal_phy_i2c::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+        hal_phy_i2c::PhyI2cAccessError::UnroutedAddress => PhyI2cError::UnroutedAddress,
+    })
 }
 
 /// Execute the finite register prefix which precedes the vendor

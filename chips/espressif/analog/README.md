@@ -15,6 +15,9 @@ result, and `advance()`, which accepts the matching completion. A field
 write reads the register, replaces bits `msb..=lsb` and writes the byte
 back. The vendor ORs an unmasked value into the byte, so a field write
 rejects a value wider than its field instead of reproducing that leak.
+For byte-valued inputs, `AnalogField::insert_truncated` explicitly keeps only
+the low field bits. Checked insertion and sampled-byte builders reject wider
+values.
 `ParallelTransition` is `phy_i2c_paral_write_num`: install the parallel host
 map, publish each pair of host commands, wait for host 0 and then host 1
 idle, and restore the normal map.

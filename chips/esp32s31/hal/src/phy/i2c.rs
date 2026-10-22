@@ -5,7 +5,9 @@
 //! and Bluetooth TX-power phase machines, the bounded retained-wake polling
 //! loop and the Bluetooth restore obligation.
 
-pub use oer_esp32s31_pac::analog_i2c::{Address, CAPTURE, Field, Host, Route, fields, registers};
+pub use oer_esp32s31_pac::analog_i2c::{
+    Address, CAPTURE, Field, Host, Profile, Route, fields, registers, route,
+};
 
 pub use oer_esp32s31_pac::{
     BluetoothTxPowerControlRegister, PhyAdcRate, PhyFilterDcapInputs, PhyI2cAccessError,
@@ -130,13 +132,23 @@ impl oer_espressif_analog::AnalogRegisterBus for PacAnalogBus<'_> {
     fn try_start_read(&mut self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
         self.0
             .try_start_phy_i2c_read(address)
-            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
+            .map_err(|error| match error {
+                PhyI2cAccessError::Busy => oer_espressif_analog::Busy,
+                PhyI2cAccessError::UnroutedAddress => {
+                    panic!("a PAC configuration uses only admitted analog routes")
+                }
+            })
     }
 
     fn try_finish_read(&self, address: Address) -> Result<u8, oer_espressif_analog::Busy> {
         self.0
             .try_finish_phy_i2c_read(address)
-            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
+            .map_err(|error| match error {
+                PhyI2cAccessError::Busy => oer_espressif_analog::Busy,
+                PhyI2cAccessError::UnroutedAddress => {
+                    panic!("a PAC configuration uses only admitted analog routes")
+                }
+            })
     }
 
     fn try_start_write(
@@ -146,13 +158,23 @@ impl oer_espressif_analog::AnalogRegisterBus for PacAnalogBus<'_> {
     ) -> Result<(), oer_espressif_analog::Busy> {
         self.0
             .try_start_phy_i2c_write(address, value)
-            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
+            .map_err(|error| match error {
+                PhyI2cAccessError::Busy => oer_espressif_analog::Busy,
+                PhyI2cAccessError::UnroutedAddress => {
+                    panic!("a PAC configuration uses only admitted analog routes")
+                }
+            })
     }
 
     fn try_finish_write(&self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
         self.0
             .try_finish_phy_i2c_write(address)
-            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
+            .map_err(|error| match error {
+                PhyI2cAccessError::Busy => oer_espressif_analog::Busy,
+                PhyI2cAccessError::UnroutedAddress => {
+                    panic!("a PAC configuration uses only admitted analog routes")
+                }
+            })
     }
 }
 
@@ -681,7 +703,7 @@ impl BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_> {
     fn start_read(&mut self, register: BluetoothTxPowerControlRegister) -> Result<(), ()> {
         self.phy
             .start_bluetooth_tx_power_control_read(register)
-            .map_err(|PhyI2cAccessError::Busy| ())
+            .map_err(|_| ())
     }
 
     fn start_write(
@@ -691,19 +713,19 @@ impl BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_> {
     ) -> Result<(), ()> {
         self.phy
             .start_bluetooth_tx_power_control_write(register, value)
-            .map_err(|PhyI2cAccessError::Busy| ())
+            .map_err(|_| ())
     }
 
     fn observe_read(&self) -> Result<u8, ()> {
         self.phy
             .finish_phy_i2c_host_read(Host::Host1)
-            .map_err(|PhyI2cAccessError::Busy| ())
+            .map_err(|_| ())
     }
 
     fn observe_write(&self) -> Result<(), ()> {
         self.phy
             .finish_phy_i2c_host_write(Host::Host1)
-            .map_err(|PhyI2cAccessError::Busy| ())
+            .map_err(|_| ())
     }
 }
 

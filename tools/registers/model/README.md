@@ -15,10 +15,15 @@ physical 0x65 bytes while retaining different host and selection facts.
 A byte register has `name`, `index`, optional `description`, `access`,
 `read-action`, `modified-write-values`, `reset-value`/`reset-known-mask`,
 `reserved = { mask, sources }`, `read-safe = { epoch, sources }` and fields.
+The optional `read-safe.comparison-mask` selects lanes for the qualified
+capture without declaring their meaning or reset state.
 Fields use the same `FieldInfo` declarations as MMIO (`name`, `bitOffset`,
 `bitWidth`, access, enumerations, read/write actions and constraints).
 Inheritance and arrays require explicit expanded field geometry in this
 first transport model; unsupported extension keys are errors.
+Sourced `views` select strict subranges of a declared parent field using
+`name`, `field`, `bit-offset`, `bit-width` and `sources`; they do not duplicate
+the parent's hardware declaration or change bit states.
 
 `[blocks.review]` supplies a whole-record review default. `[[review]]`
 records replace it for a fully qualified `BLOCK.REGISTER.FIELD` or

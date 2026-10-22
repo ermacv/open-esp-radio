@@ -107,6 +107,7 @@ pub enum PhyColdI2cObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyColdI2cError {
     BusyAtStart,
+    UnroutedAddress,
     WrongEdge,
     AlreadyComplete,
 }
@@ -182,6 +183,7 @@ impl PhyColdI2cTransaction {
         let value = match result {
             Ok(value) => value,
             Err(PhyI2cError::Busy) => return Ok(PhyColdI2cObservation::StillPending),
+            Err(PhyI2cError::UnroutedAddress) => return Err(PhyColdI2cError::UnroutedAddress),
         };
 
         let address = self.request.address();
@@ -219,6 +221,7 @@ impl PhyColdI2cTransaction {
                 Ok(PhyColdI2cObservation::EdgeConsumed)
             }
             Err(PhyI2cError::Busy) => Ok(PhyColdI2cObservation::StillPending),
+            Err(PhyI2cError::UnroutedAddress) => Err(PhyColdI2cError::UnroutedAddress),
         }
     }
 
@@ -229,13 +232,21 @@ impl PhyColdI2cTransaction {
     ) -> Result<(), PhyColdI2cError> {
         match self.action() {
             PhyColdI2cAction::StartRead { address } => {
-                crate::analog::i2c::try_start_read(platform, address)
-                    .map_err(|PhyI2cError::Busy| PhyColdI2cError::BusyAtStart)?;
+                crate::analog::i2c::try_start_read(platform, address).map_err(
+                    |error| match error {
+                        PhyI2cError::Busy => PhyColdI2cError::BusyAtStart,
+                        PhyI2cError::UnroutedAddress => PhyColdI2cError::UnroutedAddress,
+                    },
+                )?;
                 self.read_started()
             }
             PhyColdI2cAction::StartWrite { address, value } => {
-                crate::analog::i2c::try_start_write(platform, address, value)
-                    .map_err(|PhyI2cError::Busy| PhyColdI2cError::BusyAtStart)?;
+                crate::analog::i2c::try_start_write(platform, address, value).map_err(|error| {
+                    match error {
+                        PhyI2cError::Busy => PhyColdI2cError::BusyAtStart,
+                        PhyI2cError::UnroutedAddress => PhyColdI2cError::UnroutedAddress,
+                    }
+                })?;
                 self.write_started()
             }
             PhyColdI2cAction::Complete(_) => Err(PhyColdI2cError::AlreadyComplete),

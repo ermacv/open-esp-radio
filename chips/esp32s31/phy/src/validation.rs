@@ -21,10 +21,9 @@ pub fn configure_and_select_phy_i2c_host(
     platform: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     block: u8,
 ) -> u32 {
-    let Some(block) = oer_esp32s31_pac::analog_i2c::route(
-        oer_esp32s31_pac::analog_i2c::Profile::LibphyNormal,
-        block,
-    ) else {
+    let Some(block) =
+        oer_esp32s31_hal::phy::i2c::route(oer_esp32s31_hal::phy::i2c::Profile::LibphyNormal, block)
+    else {
         return u32::MAX;
     };
 

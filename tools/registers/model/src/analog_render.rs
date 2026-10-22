@@ -131,12 +131,18 @@ impl Request {
                 if !register_names.insert(name.clone()) {
                     return Err(Error::message("analog register Rust identifier collision"));
                 }
+                let entity = format!("{}.{}", block.name, register.name);
+                let sources = space
+                    .review
+                    .iter()
+                    .find(|review| review.entity == entity)
+                    .ok_or_else(|| Error::message("analog register review omitted"))?
+                    .sources
+                    .join(", ");
                 writeln!(
                     output,
                     "/// SOURCE: {}\npub const {name}: Address = Address::new({:#x}, {:#x});",
-                    block.sources.join(", "),
-                    block.code,
-                    register.index
+                    sources, block.code, register.index
                 )
                 .ok();
             }

@@ -23,7 +23,7 @@ pub async fn observe<B: PlatformClockBackend, T>(
     domain: &mut RadioDomain<B, T>,
     point: Point,
 ) -> Result<(), RejectReason> {
-    let field = TEMPERATURE_SENSOR_SAR2_STATUS;
+    let field = SARADC_ADC_SAR2_INITIAL_CODE_HIGH_ADDR;
     let address = field.address();
     let mut registers = domain.phy_hal();
     let mut started = false;
