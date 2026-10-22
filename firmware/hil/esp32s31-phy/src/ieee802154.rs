@@ -172,7 +172,7 @@ impl Rx {
                 &mut observer,
             )
             .await;
-            observer.report();
+            observer.report(0);
             #[cfg(oer_profile)]
             crate::hold::report_timer(timer_window);
             crate::hold::report_preparation(&trace, &polls);

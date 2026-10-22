@@ -448,7 +448,7 @@ impl Radio {
                 (0, true)
             }
         };
-        observer.report();
+        observer.report(hold.samples.len() as u8 + 1);
         let recorder = observer.recorder;
         crate::hold::metrics::report(hold.samples.len() as u8 + 1, &metrics.borrow(), &mut uart)
             .expect("diagnostic UART output");

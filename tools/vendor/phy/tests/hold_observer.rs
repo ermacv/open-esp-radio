@@ -143,7 +143,7 @@ fn check_quiet_root(failed: bool) {
         assert!(bytes.borrow().is_empty());
     }
     returned.set(true);
-    observer.report();
+    observer.report(1);
     let sample = observer.recorder.finish(7, failed);
     metrics::report(1, &metrics.borrow(), &mut uart).expect("UART output");
     assert_eq!(sample.invalid, failed);

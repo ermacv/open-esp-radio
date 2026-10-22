@@ -42,7 +42,7 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
     }
     /// Called only after the root future returns, including failures.
     #[inline(never)]
-    pub fn report(&mut self) {
+    pub fn report(&mut self, tick: u8) {
         for operation in [
             Operation::Rfpll,
             Operation::BluetoothIeee802154Power,
@@ -76,7 +76,7 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
         }
         print(
             self.output,
-            format_args!("OPEN_RADIO_HIL sar_tail {:?}\n", self.tails),
+            format_args!("OPEN_RADIO_HIL sar_tail tick={} {:?}\n", tick, self.tails),
         );
     }
 }
