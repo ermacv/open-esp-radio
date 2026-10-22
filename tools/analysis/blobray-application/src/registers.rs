@@ -4,7 +4,7 @@ use oer_analysis_blobray_analysis::navigation::Facts;
 mod arguments;
 mod callees;
 pub(crate) use arguments::{CallKey, CallLinks, Calls};
-pub(crate) use callees::Callees;
+pub(crate) use callees::{CallSites, Callees};
 
 fn invalid(s: &str) -> Error {
     Error::new(ErrorCode::InvalidRequest, s)

@@ -169,9 +169,22 @@ consumes only its declared argument words with May precision. Absent result
 words carry neither dependencies nor constants. A computed summary remains
 in force and is checked against the contract; declared absent return words
 are excluded from Return sinks. Missing signatures retain the usual behavior.
-Only Exact consumption beyond the declared inputs, or Exact flow from an absent
-call result to a proved sink, fails with `conflict`, naming the function,
-signature and source-to-sink path. Audit observes fixed-point sink events before
+Exact consumption beyond the declared inputs, or Exact flow from an absent
+call result to a proved sink, becomes an entry in `summary.signature_conflicts`.
+Every entry names the function, signature declaration, argument or call-result
+origin, Exact bit mask and sink (including the resolved callee of CallArgument).
+All functions and observations are processed before the CLI closes the full JSON
+report and returns a nonzero exit code. The inventory checker writes both reports
+before failing. Conflicting results remain diagnostic; acceptance cannot rely on
+the narrowed verdicts until the contracts agree. Computed Exact consumption is
+retained alongside its conflict, rather than silently dropped.
+`summary.signature_audit_incomplete` lists functions whose audit did not reach a
+fixed point within the existing resource bounds; checking also fails when this
+list is nonempty. Failed local audits receive diagnostic retries with 16× and
+256× work allowances; their summaries are discarded, so the production summary
+budget and publication rule stay unchanged. The overall work/memory/deadline
+controls still apply. Larger corpora can use the existing resource flags such as
+`--working-memory-mib` to finish the audit. Audit observes fixed-point sink events before
 aggregation, so a separate May use cannot hide Exact evidence. A stack spill and
 reload alone is not a sink; dead arithmetic and May flow are not conflicts.
 May consumption beyond the declared inputs is removed by the ABI contract.

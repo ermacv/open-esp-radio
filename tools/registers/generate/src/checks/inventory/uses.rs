@@ -153,6 +153,27 @@ impl Report {
             summary.contract_narrowed_bits, summary.contract_may_narrowed_bits
         ));
         text.push_str(&format!(
+            "  signature conflicts {} (analysis completed; conflicting results are diagnostic)\n",
+            summary.signature_conflicts.len()
+        ));
+        text.push_str(&format!(
+            "  incomplete signature audits {}\n",
+            summary.signature_audit_incomplete.len()
+        ));
+        for failure in &summary.signature_audit_incomplete {
+            text.push_str(&format!(
+                "  INCOMPLETE SIGNATURE AUDIT {}: {}\n",
+                String::from_utf8_lossy(failure.function.name.as_deref().unwrap_or(b"?")),
+                failure.reason
+            ));
+        }
+        for conflict in &summary.signature_conflicts {
+            text.push_str(&format!(
+                "  SIGNATURE CONFLICT {}\n",
+                conflict.description()
+            ));
+        }
+        text.push_str(&format!(
             "  reserved-used {} words / {} bits; absent-used {} words / {} bits\n",
             self.words
                 .iter()

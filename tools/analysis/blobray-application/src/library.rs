@@ -16,6 +16,9 @@ pub struct AnalyzedFunction<'a> {
     pub jump_tables: &'a [JumpDispatch],
     /// The shared callee port used for these final records.
     pub summaries: &'a dyn CallSummaries,
+    pub conflicts: &'a [SignatureConflict],
+    pub signature_audit_complete: Option<bool>,
+    pub signature_audit_failure: Option<&'a Error>,
 }
 impl AnalyzedFunction<'_> {
     /// Coverage and value semantics are complete.
@@ -104,6 +107,8 @@ pub fn analyze_library(
     assumptions.validate()?;
     if assumptions.call_summaries {
         let catalog = crate::registers::Callees::capture(inputs, memory, control)?;
+        let mut conflict_count = 0;
+        let mut first_conflict = None;
         summaries::analyze(
             inputs,
             assumptions,
@@ -111,8 +116,26 @@ pub fn analyze_library(
             decoder,
             memory,
             control,
-            visit,
-        )
+            &mut |outcome, c| {
+                if let LibraryOutcome::Analyzed(a) = &outcome {
+                    conflict_count += a.conflicts.len();
+                    if first_conflict.is_none() {
+                        first_conflict = a.conflicts.first().map(SignatureConflict::description);
+                    }
+                }
+                visit(outcome, c)
+            },
+        )?;
+        if conflict_count != 0 {
+            return Err(Error::new(
+                ErrorCode::Conflict,
+                format!(
+                    "{conflict_count} signature conflicts; {}",
+                    first_conflict.unwrap_or_default()
+                ),
+            ));
+        }
+        Ok(())
     } else {
         analyze_without_summaries(inputs, assumptions, decoder, memory, control, visit)
     }
@@ -574,6 +597,9 @@ fn analyze_object(
                             semantics: summary.semantics,
                             jump_tables: &found.tables,
                             summaries: returns,
+                            conflicts: &[],
+                            signature_audit_complete: None,
+                            signature_audit_failure: None,
                         }),
                         c,
                     )?,
@@ -624,6 +650,8 @@ pub fn register_accesses(
         schema: 4,
         contract_narrowed_bits: 0,
         contract_may_narrowed_bits: 0,
+        signature_conflicts: Vec::new(),
+        signature_audit_incomplete: Vec::new(),
         ranges: ranges.to_vec(),
         functions: 0,
         partial_functions: 0,
@@ -634,8 +662,36 @@ pub fn register_accesses(
         unresolved_addresses: 0,
         indexed_addresses: 0,
     };
+    let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
+            if analyzed.signature_audit_complete == Some(false) {
+                let failure = SignatureAuditIncomplete {
+                    function: analyzed.function.clone(),
+                    reason: analyzed
+                        .signature_audit_failure
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            Error::new(ErrorCode::Unavailable, "audit has no fixed point")
+                        }),
+                };
+                conflict_memory.admit(
+                    serde_json::to_vec(&failure)
+                        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
+                        .len(),
+                    c,
+                )?;
+                conflict_memory.push(&mut summary.signature_audit_incomplete, failure, c)?;
+            }
+            for conflict in analyzed.conflicts {
+                conflict_memory.admit(
+                    serde_json::to_vec(conflict)
+                        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
+                        .len(),
+                    c,
+                )?;
+                conflict_memory.push(&mut summary.signature_conflicts, conflict.clone(), c)?;
+            }
             summary.functions += 1;
             summary.partial_functions += u64::from(!analyzed.complete());
             summary.partial_causes.add(analyzed.partial_causes(c)?);
@@ -764,6 +820,9 @@ mod tests {
             },
             jump_tables: &[],
             summaries: &NoSummaries,
+            conflicts: &[],
+            signature_audit_complete: None,
+            signature_audit_failure: None,
         }
         .partial_causes(c)
     }

@@ -157,6 +157,22 @@ pub(super) fn write_report(
             .collect::<String>()
     );
     println!("report: {}", directory.join("report.txt").display());
+    if !report.corpus.summary.signature_conflicts.is_empty() {
+        return Err(format!(
+            "{} signature conflicts; full report: {}",
+            report.corpus.summary.signature_conflicts.len(),
+            directory.join("report.json").display()
+        )
+        .into());
+    }
+    if !report.corpus.summary.signature_audit_incomplete.is_empty() {
+        return Err(format!(
+            "{} incomplete signature audits; full report: {}",
+            report.corpus.summary.signature_audit_incomplete.len(),
+            directory.join("report.json").display()
+        )
+        .into());
+    }
     if report.violations() != 0 {
         return Err(format!(
             "vendor uses reserved or absent bits in {} MMIO words; see {}",

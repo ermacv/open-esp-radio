@@ -1698,3 +1698,114 @@ ret
     assert_eq!(summary.contract_may_narrowed_bits, 32);
     assert_eq!(memory.used(), 0);
 }
+
+#[test]
+fn all_contract_conflicts_are_retained_before_the_cli_reports_failure() {
+    use oer_analysis_blobray_application::signatures::Signatures;
+    let object = fixture(
+        r##"#![no_std]
+core::arch::global_asm!(r#"
+.option norvc
+.option norelax
+.section .text.first_bad,"ax",@progbits
+.globl first_bad
+.type first_bad,@function
+first_bad: beq a0, a1, 1f
+1: ret
+.size first_bad, .-first_bad
+.section .text.second_bad,"ax",@progbits
+.globl second_bad
+.type second_bad,@function
+second_bad: lui t0, 0x20107
+sw a2, 0(t0)
+ret
+.size second_bad, .-second_bad
+.section .text.last_good,"ax",@progbits
+.globl last_good
+.type last_good,@function
+last_good: lui t0, 0x20107
+lw t1, 0(t0)
+ret
+.size last_good, .-last_good
+"#);
+"##,
+    );
+    let text = ["first_bad", "second_bad"]
+        .map(|name| {
+            format!(
+                "[[function]]\nname='{name}'\narguments=0\nresult='void'\nsource='synthetic.h:1'\n"
+            )
+        })
+        .join("\n");
+    let signatures = Signatures::parse(&text).unwrap();
+    let memory = WorkingMemory::new(64 << 20).unwrap();
+    let mut observations = Vec::new();
+    let summary = register_accesses(
+        &[Executable::new(object.clone())],
+        Assumptions {
+            abi: Some(CallAbi::RiscvInteger),
+            call_summaries: true,
+            signatures: Some(&signatures),
+            ..Default::default()
+        },
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut || Ok(()),
+        &mut |record, _| {
+            observations.push(record.clone());
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.functions, 3);
+    assert_eq!(summary.signature_conflicts.len(), 3);
+    assert!(observations.iter().any(|r| matches!(r, RegisterAccess::Observation { function, .. } if function.name.as_deref() == Some(b"last_good"))));
+    assert!(
+        summary
+            .signature_conflicts
+            .iter()
+            .all(|c| c.usage.precision == ReadPrecision::Exact)
+    );
+    assert!(
+        summary
+            .signature_conflicts
+            .iter()
+            .all(|c| c.declaration.as_deref() == Some("synthetic.h:1"))
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let binary = temp.path().join("fixture.o");
+    let contracts = temp.path().join("signatures.toml");
+    std::fs::write(&binary, &object).unwrap();
+    std::fs::write(&contracts, &text).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_blobray"))
+        .args([
+            "--format",
+            "json",
+            "register-accesses",
+            "--abi",
+            "riscv-integer",
+            "--call-summaries",
+            "--input",
+        ])
+        .arg(format!("fixture={}", binary.display()))
+        .arg("--signatures")
+        .arg(&contracts)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: oer_tool_analysis_cli::wire::RegisterAccessDocument =
+        serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document.summary.functions, 3);
+    assert_eq!(
+        document.summary.signature_conflicts,
+        summary.signature_conflicts
+    );
+    assert_eq!(document.records, observations);
+    assert_eq!(memory.used(), 0);
+}

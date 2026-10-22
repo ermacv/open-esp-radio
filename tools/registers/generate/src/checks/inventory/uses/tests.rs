@@ -153,6 +153,8 @@ fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
         schema: 4,
         contract_narrowed_bits: 0,
         contract_may_narrowed_bits: 0,
+        signature_conflicts: Vec::new(),
+        signature_audit_incomplete: Vec::new(),
         functions: 1,
         partial_functions: 0,
         partial_causes: PartialCauses::default(),
@@ -858,4 +860,45 @@ fn records_received_one_at_a_time_match_the_same_ordered_list() {
     assert_eq!(streamed.corpus.inputs[1].role, "second");
     assert_eq!(streamed.address_limits[0].function.0, "fixture");
     assert_eq!(streamed.all_reads.loads, 1);
+}
+
+#[test]
+fn signature_conflicts_fail_only_after_complete_reports_are_written() {
+    use oer_analysis_blobray_domain::{SignatureConflict, SignatureOrigin};
+    let mut report = run(vec![constant(0)], None, 0);
+    assert_eq!(report.violations(), 0);
+    report.corpus.summary.signature_conflicts = [10, 11]
+        .map(|register| SignatureConflict {
+            function: LibraryFunction {
+                input: 0,
+                symbol: symbol(b"fixture"),
+                name: Some(b"synthetic".to_vec()),
+            },
+            signature: "synthetic".into(),
+            declaration: Some("synthetic.h:1".into()),
+            origin: SignatureOrigin::Argument { register },
+            usage: ReadUse {
+                bits: 1,
+                precision: ReadPrecision::Exact,
+                sink: ReadSink::Branch { site: 16 },
+            },
+        })
+        .to_vec();
+    let directory = tempfile::tempdir().unwrap();
+    let error = crate::checks::inventory::run::write_report(directory.path(), "fixture", &report)
+        .unwrap_err();
+    assert!(error.to_string().contains("2 signature conflicts"));
+    let json: Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        json["check"]["corpus"]["summary"]["signature_conflicts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let text = std::fs::read_to_string(directory.path().join("report.txt")).unwrap();
+    assert!(text.contains("SIGNATURE CONFLICT function synthetic"));
+    assert!(text.contains("entry a0") && text.contains("entry a1"));
 }

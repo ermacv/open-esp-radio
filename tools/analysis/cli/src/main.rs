@@ -1280,6 +1280,18 @@ fn register_accesses(
                 writeln!(out, "{line}").map_err(io_error)?;
             }
         }
+        for failure in &summary.signature_audit_incomplete {
+            writeln!(
+                out,
+                "incomplete signature audit {}: {}",
+                String::from_utf8_lossy(failure.function.name.as_deref().unwrap_or(b"?")),
+                failure.reason
+            )
+            .map_err(io_error)?;
+        }
+        for conflict in &summary.signature_conflicts {
+            writeln!(out, "signature conflict: {}", conflict.description()).map_err(io_error)?;
+        }
         writeln!(
             out,
             "{} functions ({} partial{}, {} blocked), {} gaps, {} observations ({} unresolved, {} indexed)",
@@ -1295,7 +1307,13 @@ fn register_accesses(
         .map_err(io_error)?;
     }
     out.flush().map_err(io_error)?;
-    Ok(ExitCode::SUCCESS)
+    Ok(
+        if summary.signature_conflicts.is_empty() && summary.signature_audit_incomplete.is_empty() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        },
+    )
 }
 
 /// Analyze the inputs in this process and print the argument registers at

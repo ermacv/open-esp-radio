@@ -253,6 +253,57 @@ pub enum RegisterAccess {
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SignatureAuditIncomplete {
+    pub function: LibraryFunction,
+    pub reason: Error,
+}
+
+/// One Exact source-to-sink contradiction, retained even when other functions conflict.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SignatureConflict {
+    pub function: LibraryFunction,
+    pub signature: String,
+    pub declaration: Option<String>,
+    pub origin: SignatureOrigin,
+    pub usage: ReadUse,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum SignatureOrigin {
+    Argument {
+        register: u8,
+    },
+    Result {
+        site: u64,
+        register: u8,
+        callee: Option<CallTarget>,
+    },
+}
+impl SignatureConflict {
+    pub fn description(&self) -> String {
+        let source = match &self.origin {
+            SignatureOrigin::Argument { register } => {
+                format!("entry a{}", register.saturating_sub(10))
+            }
+            SignatureOrigin::Result { site, register, .. } => format!(
+                "absent result a{} of call +{site:#x}",
+                register.saturating_sub(10)
+            ),
+        };
+        format!(
+            "function {}: signature {} ({:?}): {source} -> {:?}, bits {:#010x}, Exact",
+            String::from_utf8_lossy(self.function.name.as_deref().unwrap_or(b"?")),
+            self.signature,
+            self.declaration,
+            self.usage.sink,
+            self.usage.bits
+        )
+    }
+}
+
 /// Why analyzed functions are partial. Each count is the number of partial
 /// functions with that cause, so a function with several counts under each;
 /// every partial function has at least one, `other` when none of the named
@@ -296,6 +347,9 @@ pub struct RegisterAccessSummary {
     pub contract_narrowed_bits: u64,
     /// Distinct source bits per selected load whose computed May argument use was removed.
     pub contract_may_narrowed_bits: u64,
+    pub signature_conflicts: Vec<SignatureConflict>,
+    /// Audits that could not reach a fixed point within the existing resource bounds.
+    pub signature_audit_incomplete: Vec<SignatureAuditIncomplete>,
     /// Explicit candidate intervals; empty selects every numeric address.
     pub ranges: Vec<ImageRegion>,
     pub functions: u64,
