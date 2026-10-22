@@ -44,8 +44,10 @@ mod keys;
 mod lifecycle;
 mod phase;
 mod placement;
+mod priority_wake;
 mod settings;
 use placement::Prepared;
+use priority_wake::DriverWake;
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;
@@ -183,7 +185,9 @@ pub struct PortStorage<D: 'static, const B: usize> {
 /// its DMA return places and key activity unavailable for reuse.
 pub struct PortSharedStorage<const B: usize> {
     poisoned: oer_memory::OnceValue<Fault>,
-    driver: AtomicWaker,
+    // P2 can preempt a P1 notification. The P1 body consumer cannot
+    // preempt its P2 producer, so its AtomicWaker needs no second slot.
+    driver: DriverWake,
     body: AtomicWaker,
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
@@ -218,7 +222,7 @@ impl<const B: usize> PortSharedStorage<B> {
     pub const fn new() -> Self {
         Self {
             poisoned: oer_memory::OnceValue::new(),
-            driver: AtomicWaker::new(),
+            driver: DriverWake::new(),
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
@@ -411,7 +415,7 @@ pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     unit: Option<R>,
     range: core::ops::Range<usize>,
     poison: &'static oer_memory::OnceValue<Fault>,
-    driver: &'static AtomicWaker,
+    driver: &'static DriverWake,
 }
 impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
     fn bytes(&self) -> &[u8] {
