@@ -11,6 +11,9 @@ mod hold;
 mod ieee802154;
 mod projection;
 mod radio;
+
+const PHY_CLOCK: oer_espressif_executor::Cooperative<oer_embassy_time::EmbassyClock> =
+    oer_espressif_executor::Cooperative::new(oer_embassy_time::EmbassyClock);
 mod sar2_checkpoint;
 mod transport;
 mod tx_rate_checkpoint;
