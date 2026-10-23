@@ -207,6 +207,34 @@ fn complete_program_keeps_restore_obligations_until_the_real_tail() {
     );
 }
 
+#[test]
+fn cold_program_reports_calibration_and_publication_between_control_tails() {
+    let mut program = RxProgram::new(parameters());
+    let mut oracle = Oracle::default();
+    let mut phases = Vec::new();
+    for _ in 0..100_000 {
+        let phase = program.phase();
+        if phases.last() != Some(&phase) {
+            phases.push(phase);
+        }
+        if !oracle.step(&mut program) {
+            break;
+        }
+    }
+    assert!(matches!(program.terminal(), Some(Ok(_))));
+    assert_eq!(
+        phases,
+        [
+            Some(RxPhase::Control),
+            Some(RxPhase::Dc),
+            Some(RxPhase::Control),
+            Some(RxPhase::Publish),
+            Some(RxPhase::Control),
+            None,
+        ]
+    );
+}
+
 mod frozen;
 
 fn at_pc(pc: Pc) -> RxProgram {
