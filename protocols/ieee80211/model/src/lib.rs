@@ -1612,6 +1612,8 @@ impl ModelReceiveAgreement {
 pub enum GroupFaultStage {
     Before,
     After,
+    /// Reject the replacement write, then restore the exact old GTK and fail-stop.
+    ReplacementWrite,
 }
 
 /// A receive fact deliberately delayed in the modeled ingress pipeline.
@@ -1767,6 +1769,7 @@ pub struct ModelAir {
     rx_stream: RefCell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<bool>,
     group_failure: Cell<Option<GroupFaultStage>>,
+    group_rollback: Cell<Option<oer_ieee80211_port::conformance::group_keys::Rollback>>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
@@ -1811,6 +1814,7 @@ impl ModelAir {
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
             group_failure: Default::default(),
+            group_rollback: Default::default(),
             group_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
@@ -2032,6 +2036,11 @@ impl ModelAir {
     pub fn fail_next_group_change(&self, stage: GroupFaultStage) {
         self.group_failure.set(Some(stage));
         self.wake_driver();
+    }
+
+    /// Actual internal rollback observed before poisoned teardown.
+    pub fn group_rollback(&self) -> Option<oer_ieee80211_port::conformance::group_keys::Rollback> {
+        self.group_rollback.get()
     }
 
     /// Delay commands while RX continues. The supplied clock's owner calls
@@ -3015,6 +3024,45 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 key_id,
                 key,
             } => {
+                if held.air.group_failure.get() == Some(GroupFaultStage::ReplacementWrite) {
+                    let mut table = held.air.key_installations.borrow_mut();
+                    let Some(index) = table.iter().position(|entry| {
+                        entry.identity.ptr_eq(&Rc::downgrade(&installed.identity.0))
+                    }) else {
+                        held.poison();
+                        return;
+                    };
+                    let previous = table.remove(index);
+                    installed.identity.0.active.set(false);
+                    installed.identity.0.rx_active.set(false);
+                    // Failed new publication leaves no new epoch. The old
+                    // material is written back before fail-stop, not returned
+                    // as an ordinary installed owner.
+                    table.push(previous);
+                    installed.identity.0.active.set(true);
+                    installed.identity.0.rx_active.set(true);
+                    held.air
+                        .group_writes
+                        .set(held.air.group_writes.get().saturating_add(1));
+                    held.air.group_rollback.set(Some(
+                        oer_ieee80211_port::conformance::group_keys::Rollback {
+                            previous_key_id: installed.identity.0.key_id,
+                            attempted_key_id: key_id.get(),
+                            restored: table.iter().any(|entry| {
+                                entry.identity.ptr_eq(&Rc::downgrade(&installed.identity.0))
+                            }),
+                        },
+                    ));
+                    drop(table);
+                    let _capacity_fault = held.failed_group.push(GroupChange::Replace {
+                        permission,
+                        installed,
+                        key_id,
+                        key,
+                    });
+                    held.poison();
+                    return;
+                }
                 installed.identity.0.active.set(false);
                 installed.identity.0.rx_active.set(false);
                 held.air.remove_key_material(&installed.identity);

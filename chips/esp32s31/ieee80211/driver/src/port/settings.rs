@@ -201,6 +201,8 @@ pub(super) struct Settings {
     pub(super) publication_hold: Byte,
     #[cfg(oer_debug_control)]
     pub(super) completion_hold: Flag,
+    #[cfg(oer_debug_control)]
+    pub(super) reject_group_replacement: Flag,
 }
 impl Settings {
     pub(super) const fn new() -> Self {
@@ -220,6 +222,8 @@ impl Settings {
             publication_hold: Byte::new(),
             #[cfg(oer_debug_control)]
             completion_hold: Flag::new(false),
+            #[cfg(oer_debug_control)]
+            reject_group_replacement: Flag::new(false),
         }
     }
 }

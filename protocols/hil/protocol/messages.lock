@@ -60,7 +60,7 @@ health/tracking/read ed83d4e71fad3e45 endpoint
 health/window 9b76a03610638ae5 endpoint
 health/window-finished 7cad69d1fb60899b topic
 lower-mac/case/run 7ce548b6cbb39f2d endpoint
-lower-mac/case/trace b6daa1df06118fd1 topic
+lower-mac/case/trace d7ba2c357a57c0ff topic
 lower-mac/prepare 335dfabb22e2b8f9 endpoint
 lower-mac/prepared 52e0cc98b6729aeb topic
 network/bidirectional b6817e1d148a8246 property

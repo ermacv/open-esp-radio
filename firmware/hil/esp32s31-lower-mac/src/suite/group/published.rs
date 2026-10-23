@@ -137,6 +137,7 @@ async fn exchange<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
     }
     let completed_at = EmbassyClock.now();
     Ok(ProgressTrace {
+        rollback: None,
         admitted,
         timing: Timing {
             admitted_at,

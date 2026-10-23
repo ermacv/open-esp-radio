@@ -26,6 +26,12 @@ pub struct Esp32s31Phase<'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize
 }
 #[cfg(oer_debug_control)]
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> Esp32s31Phase<'_, '_, Id, D, B> {
+    /// Reject the next GTK replacement's first publication. Rollback writes
+    /// still reach the actual hardware. Only diagnostic images expose this.
+    pub fn debug_reject_group_replacement(&mut self) {
+        self.held.reject_group_replacement.set(true);
+    }
+
     /// Hold this AC before it transfers DMA ownership to the real transmitter.
     pub fn debug_hold_publication(&mut self, category: WmmAccessCategory, hold: bool) {
         let bit = 1 << LegacyTxQueue::from_access_category(category).hardware_index();

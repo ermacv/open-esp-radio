@@ -138,6 +138,7 @@ async fn exchange<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     }
     let completed_at = Instant::from_micros(body.air.monotonic_now().as_micros());
     Ok(ProgressTrace {
+        rollback: None,
         admitted,
         timing: Timing {
             admitted_at,

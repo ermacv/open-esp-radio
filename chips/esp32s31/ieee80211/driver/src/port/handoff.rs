@@ -143,6 +143,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> HeldBacking<'id, Id, D
         {
             self.publication_hold.set(0);
             self.completion_hold.set(false);
+            self.reject_group_replacement.set(false);
         }
     }
 }

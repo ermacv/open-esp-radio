@@ -25,13 +25,22 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   through the abandonment protocol in its own context, and the installation
   stays quarantined until reset. Packet-number exhaustion is a typed refusal
   before backend handoff. No retry after a hardware TX timeout.
+- **GTK replacement.** The station keeps one physical group-key slot. A key
+  table write failure poisons the port even when an internal rollback restores
+  the old material; no success terminal or reusable old GTK is returned.
+  The receive handle retains zeroizing rollback material until removal or
+  reset. Recovery starts a new association.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
 - **HE trigger-based and beamformee** paths stay fail-closed until a hardware
   path is verified.
 - **Conformance.** The hardware lower-MAC conformance image runs every case
   the backend's declared capabilities support; A-MPDU/Block Ack cases without
-  `AmpduPhase` are reported as unsupported, never as model-only.
+  `AmpduPhase` are reported as unsupported, never as model-only. The final
+  GTK rollback case injects rejection of the new write, lets restoration
+  program the real hardware, and compares its retained owners and fail-stop
+  with the model. It returns diagnostic evidence without a reusable radio
+  owner; the image must reset before another case.
 
 ## Radio doorbell
 

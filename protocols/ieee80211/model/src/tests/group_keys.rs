@@ -1,9 +1,11 @@
 use super::*;
 use oer_ieee80211_port::conformance::group_keys as contract;
+#[cfg(feature = "test-support")]
 use oer_time::{Clock, Timer};
 use oer_time_virtual::VirtualClock;
 
 mod ingress;
+#[cfg(feature = "test-support")]
 mod progress;
 
 fn id() -> GroupKeyId {
@@ -82,12 +84,14 @@ async fn removed<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     }
 }
 
+#[cfg(feature = "test-support")]
 struct Boundary<'a> {
     case: contract::Case,
     air: &'a ModelAir,
     trace: &'a RefCell<Option<contract::Trace<Vec<contract::Event>>>>,
     clock: &'a VirtualClock,
 }
+#[cfg(feature = "test-support")]
 impl Work for Boundary<'_> {
     async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
@@ -177,6 +181,7 @@ impl Work for Boundary<'_> {
     }
 }
 
+#[cfg(feature = "test-support")]
 impl Boundary<'_> {
     async fn finish<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
@@ -299,7 +304,9 @@ impl Boundary<'_> {
     }
 }
 
+#[cfg(feature = "test-support")]
 struct Harness<'a>(&'a Rc<VirtualClock>);
+#[cfg(feature = "test-support")]
 impl contract::Harness for Harness<'_> {
     type Events = Vec<contract::Event>;
     type Completions = Vec<contract::Completion>;
@@ -328,6 +335,7 @@ impl contract::Harness for Harness<'_> {
     }
 }
 #[test]
+#[cfg(feature = "test-support")]
 fn common_gtk_boundary_suite_covers_delayed_ingress_and_retained_selection() {
     let clock = Rc::new(VirtualClock::<8>::new());
     progress::run_clocked(

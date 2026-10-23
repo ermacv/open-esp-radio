@@ -6,6 +6,8 @@ use super::{
 use oer_ieee80211_wire::qos::WmmAccessCategory;
 
 mod core_views;
+#[cfg(oer_debug_control)]
+mod key_replacement;
 // A single phase projection lends the shared command set. The operation
 // itself has one body; invalid P1 commands remain typed capacity refusals.
 macro_rules! idle_command {
@@ -734,7 +736,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                             return Err(cause);
                         }
                         Poll::Ready(Ok(None)) => {
-                            let terminal = self.group(held, device, command)?;
+                            let terminal = self.group(held, device, at, command)?;
                             if let Err(cause) = device.finish_rx_cut() {
                                 handoff::retain_terminal(held.failed_terminal, terminal);
                                 return Err(cause);
@@ -1020,6 +1022,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         &mut self,
         held: &Held<'_, 'id, Id, D, B>,
         device: &mut D,
+        at: Instant,
         command: GroupCommand<'id, Id>,
     ) -> Result<owned::OwnedTerminal<'id, Id, D, B>, Fault> {
         match command {
@@ -1034,7 +1037,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     role: VifRole::Station,
                     slot: slot.index(),
                     serial: held.serial(),
-                    spp,
                     key_id,
                     activity: &held.storage.shared.key_live[1],
                 };
@@ -1066,7 +1068,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                     role: VifRole::AccessPoint,
                     slot: slot.index(),
                     serial: held.serial(),
-                    spp,
                     key_id,
                     activity: &held.storage.shared.key_live[17 + usize::from(slot.index())],
                 };
@@ -1102,26 +1103,72 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 key_id,
                 material,
             } => {
-                let removed = self.remove(device, key.identity)?;
-                let core_mac::association::VacantKeySlot::StationGroup(slot) = removed.into_slot()
-                else {
+                let entry = self
+                    .keys
+                    .iter_mut()
+                    .flatten()
+                    .find(|(identity, _)| *identity == key.identity)
+                    .ok_or(Fault::Capacity)?;
+                let Installed::Receive(installed) = &mut entry.1 else {
                     return Err(Fault::Capacity);
                 };
+                #[cfg(oer_debug_control)]
+                let mut hardware = key_replacement::RejectOnce {
+                    hardware: device.hardware(),
+                    reject: held.reject_group_replacement.replace(false),
+                };
+                #[cfg(oer_debug_control)]
+                let hardware = &mut hardware;
+                #[cfg(not(oer_debug_control))]
+                let hardware = device.hardware();
+                let result = idle_command!(self.core, |view| view.replace_station_group_key(
+                    hardware,
+                    installed,
+                    key_id,
+                    material.as_bytes(),
+                ));
+                if let Err(_error) = result {
+                    self.pending_command = Some(Command::Group {
+                        at,
+                        command: GroupCommand::Replace {
+                            permission,
+                            key,
+                            key_id,
+                            material,
+                        },
+                    });
+                    // Observe actual quarantined owners after moving them to
+                    // permanent custody, never a synthetic success terminal.
+                    #[cfg(all(oer_trace, oer_debug_control))]
+                    if let Some(Command::Group {
+                        command:
+                            GroupCommand::Replace {
+                                permission,
+                                key,
+                                key_id,
+                                ..
+                            },
+                        ..
+                    }) = &self.pending_command
+                    {
+                        oer_trace::emit(&trace::GroupRollback {
+                            owners: [key.identity.slot, permission.index()],
+                            previous_key_id: key.identity.key_id.get(),
+                            attempted_key_id: key_id.get(),
+                            restored: matches!(_error,
+                                oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(_)),
+                        });
+                    }
+                    return Err(Fault::Core(core_mac::LowerMacFault::Key(
+                        oer_esp32s31_ieee80211_mac::crypto::CryptoKeyError::HardwareRejected,
+                    )));
+                }
                 let identity = RawKeyIdentity {
                     serial: held.serial(),
                     key_id,
                     ..key.identity
                 };
-                self.install(
-                    device,
-                    identity,
-                    Installation::Receive {
-                        spp: identity.spp,
-                        slot,
-                        key_id,
-                    },
-                    &material,
-                )?;
+                entry.0 = identity;
                 identity.activity.set(identity.serial);
                 return Ok(owned::OwnedTerminal::GroupKeyReplaced {
                     key: GroupKey {

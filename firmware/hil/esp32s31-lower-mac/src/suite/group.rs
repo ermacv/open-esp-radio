@@ -102,7 +102,7 @@ async fn admit<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         Mutation::Replace => phase.station().replace_group_key(
             permission,
             key.ok_or("replace key")?,
-            id,
+            GroupKeyId::new(2).ok_or("replacement KeyID")?,
             Ccmp128Key::new(&[2; 16]),
         ),
         Mutation::Select => phase
@@ -128,6 +128,66 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
 ) -> Ended<Id, Backend<Id>, Result<Trace, &'static str>> {
     if case == ProgressCase::PublishedRemoval {
         return published::run(owner, resources, peer).await;
+    }
+    if case == ProgressCase::ReplacementRollback {
+        let result = async {
+            let mut phase = owner.phase();
+            phase.debug_reject_group_replacement();
+            let (admitted, mut timing) = admit(&mut phase, resources, Mutation::Replace).await?;
+            let poisoned = loop {
+                match phase.next_event().await {
+                    Err(radio::EventEnd::Quarantined { .. }) => break true,
+                    Err(_) => return Err("rollback event stream ended without quarantine"),
+                    Ok(Ok(LowerMacEvent::Received { frame, .. })) => phase.recycle(frame),
+                    Ok(Ok(LowerMacEvent::Tbtt(_))) => {}
+                    _ => return Err("rollback emitted an ordinary terminal"),
+                }
+            };
+            let (observed, completed) = TRACE
+                .records()
+                .find_map(|row| {
+                    row.decode::<port::trace::GroupRollback>()
+                        .map(|event| (event, row.t_us))
+                })
+                .ok_or("missing hardware rollback observation")?;
+            let elapsed = completed.wrapping_sub(timing.admitted_at.as_micros() as u32);
+            timing.completed_at = timing
+                .admitted_at
+                .saturating_add(Duration::from_micros(u64::from(elapsed)));
+            let mut retained = Retained::new();
+            retained
+                .push(Owners {
+                    slot: observed.owners[0],
+                    permission: observed.owners[1],
+                })
+                .map_err(|_| "rollback custody extent")?;
+            let raw = ProgressTrace {
+                rollback: Some(oer_ieee80211_port::conformance::group_keys::Rollback {
+                    previous_key_id: observed.previous_key_id,
+                    attempted_key_id: observed.attempted_key_id,
+                    restored: observed.restored,
+                }),
+                admitted,
+                timing,
+                retained,
+                events: Events::new(),
+                poisoned,
+                deadline_woke: false,
+                published: None,
+                blocked_while_published: false,
+            };
+            group_trace(&raw, Backend::<Id>::GROUP_COMMAND_BOUND.as_micros())
+                .map(Trace::Group)
+                .ok_or("rollback trace extent")
+        }
+        .await;
+        return match owner
+            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+        {
+            Err(failed) => Ended::fail_stop(failed.fail_stop(), result),
+            Ok(owner) => Ended::uninstall(owner, (), Err("rollback did not fail-stop")),
+        };
     }
     let result = match case {
         ProgressCase::Disable { mutation, applied } => {
@@ -167,6 +227,7 @@ pub(super) async fn run<'p, 'id, Id: radio::SlotIdentity + 'id>(
         }
         timing.completed_at = completed_at;
         let raw = ProgressTrace {
+            rollback: None,
             admitted,
             timing,
             events,

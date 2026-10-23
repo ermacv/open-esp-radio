@@ -7,7 +7,6 @@ pub struct RawKeyIdentity {
     pub(super) role: VifRole,
     pub(super) slot: u8,
     pub(super) serial: u64,
-    pub(super) spp: Spp,
     pub(super) key_id: GroupKeyId,
     pub(super) activity: &'static KeyActivity,
 }
@@ -242,7 +241,7 @@ macro_rules! role {
     ($role:ty, $p:literal, $g:literal, $path:ty, $install:ident, $remove:ident, $group_remove:ident) => {
         impl<'id, Id: SlotIdentity + 'id> Role<'id, Id> for $role {
             fn identity(
-                association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
+                _association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
                 slot: &<PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
                 serial: u64,
                 activity: &'static [KeyActivity; 20],
@@ -251,7 +250,6 @@ macro_rules! role {
                     role: Self::ROLE,
                     slot: slot.index(),
                     serial,
-                    spp: association.spp(),
                     key_id: GroupKeyId::new(0).expect("wire KeyID zero"),
                     activity: &activity[if Self::ROLE == VifRole::Station {
                         0
