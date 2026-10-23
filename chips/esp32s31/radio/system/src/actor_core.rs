@@ -85,7 +85,6 @@ impl ActorCore {
             Action::Continue
         }
     }
-    #[inline(never)]
     pub(super) fn prepared(
         &mut self,
         result: Result<PhyPreparation, Fault>,
