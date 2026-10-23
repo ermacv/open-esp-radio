@@ -1,11 +1,12 @@
 //! Client-neutral RF epoch, health and membership custody.
 use super::*;
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct State {
     poisoned: bool,
+    has_epoch: bool,
     members: u32,
     tracked: u32,
-    epoch: Option<RfEpoch>,
+    epoch: RfEpoch,
 }
 
 pub(super) struct ActorCore {
@@ -20,9 +21,16 @@ pub(super) enum Action {
 }
 impl ActorCore {
     pub(super) fn new(mint: MemberMint) -> Self {
+        let epoch = mint.next_epoch(None);
         Self {
             mint,
-            state: State::default(),
+            state: State {
+                poisoned: false,
+                has_epoch: false,
+                members: 0,
+                tracked: 0,
+                epoch,
+            },
             #[cfg(feature = "bluetooth")]
             attached: false,
         }
@@ -62,8 +70,12 @@ impl ActorCore {
         }
     }
     pub(super) fn failed_enter(&mut self, cause: Failure) -> Action {
-        self.failed(cause);
-        if !self.state.poisoned && self.state.members == 0 {
+        // Both joins admit and prepare from a healthy core before entering;
+        // no other actor operation runs during that entered transaction.
+        if cause == Failure::Poisoned {
+            self.poison();
+            Action::Continue
+        } else if self.state.members == 0 {
             Action::CloseRf
         } else {
             Action::Continue
@@ -78,24 +90,41 @@ impl ActorCore {
         self.state.members = self.state.members.saturating_sub(1);
         if exit.health == DomainHealth::Poisoned {
             self.poison();
-        }
-        if exit.last && !self.state.poisoned {
+            Action::Continue
+        } else if exit.last && !self.state.poisoned {
             Action::CloseRf
         } else {
             Action::Continue
         }
     }
     pub(super) fn prepared(&mut self, phy: &PhyPreparation) -> RfEpoch {
-        let epoch = match (*phy, self.state.epoch) {
-            (PhyPreparation::AlreadyOpen, Some(epoch)) => epoch,
-            (_, previous) => self.mint.next_epoch(previous),
-        };
-        self.state.epoch = Some(epoch);
-        epoch
+        if *phy != PhyPreparation::AlreadyOpen && self.state.has_epoch {
+            self.state.epoch = self.mint.next_epoch(Some(self.state.epoch));
+        }
+        self.state.has_epoch = true;
+        self.state.epoch
     }
     pub(super) fn closed(&mut self, result: Result<(), CloseFault>) {
         if matches!(result, Err(CloseFault::Poisoned)) {
             self.state.poisoned = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn first_open_epoch_is_zero_and_only_a_later_reopen_advances_it() {
+        let (end, _) = oer_esp32s31_radio_client::claim_for_host_test();
+        let mut core = ActorCore::new(end.mint);
+        let zero = core.prepared(&PhyPreparation::AlreadyOpen);
+        assert_eq!(core.prepared(&PhyPreparation::AlreadyOpen), zero);
+        let next = core.prepared(&PhyPreparation::Woke { micros: 0 });
+        assert_ne!(next, zero);
+        assert_eq!(core.prepared(&PhyPreparation::AlreadyOpen), next);
+        let (end, _) = oer_esp32s31_radio_client::claim_for_host_test();
+        let mut fresh = ActorCore::new(end.mint);
+        assert_eq!(fresh.prepared(&PhyPreparation::Woke { micros: 0 }), zero);
     }
 }
