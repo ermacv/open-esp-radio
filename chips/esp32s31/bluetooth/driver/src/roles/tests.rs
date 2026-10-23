@@ -128,7 +128,7 @@ fn only_recurring_dtm_events_copy_the_link_power_into_the_item() {
                 .expect("one pool");
             let lease = pool.acquire().expect("one slot");
             let power = LeTxPower::from_dbm(9).expect("provider level");
-            let make = |phase| {
+            let make = |phase, power| {
                 DtmImageBuilder::transmitter(
                     phase,
                     DtmSchedulerTransmitterPhy::Le1M,
@@ -140,7 +140,7 @@ fn only_recurring_dtm_events_copy_the_link_power_into_the_item() {
                     101,
                 )
             };
-            make(DtmEventPhase::Initial)
+            make(DtmEventPhase::Initial, power)
                 .prepare(&mut pool, &lease)
                 .expect("initial image");
             let initial = pool.words(&lease).expect("CPU snapshot");
@@ -153,15 +153,25 @@ fn only_recurring_dtm_events_copy_the_link_power_into_the_item() {
             assert_eq!(initial.scheduler_item().raw_window(), (100, 200));
             pool.finish_event(&lease, false)
                 .expect("unpublished event recycles");
-            make(DtmEventPhase::Recurring)
+            // Each event restores its authoritative policy rather than
+            // inheriting stale fields left by the previous transmission.
+            let recurring_power = LeTxPower::from_dbm(-6).expect("provider level");
+            make(DtmEventPhase::Recurring, recurring_power)
                 .prepare(&mut pool, &lease)
                 .expect("recurring image");
             assert_eq!(
                 pool.words(&lease)
                     .expect("CPU snapshot")
+                    .link_state()
+                    .power(),
+                Some(recurring_power)
+            );
+            assert_eq!(
+                pool.words(&lease)
+                    .expect("CPU snapshot")
                     .scheduler_item()
                     .power(),
-                Some(power)
+                Some(recurring_power)
             );
             pool.release(lease).expect("nothing was listed");
         })
