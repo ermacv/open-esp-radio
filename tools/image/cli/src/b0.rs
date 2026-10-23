@@ -164,14 +164,35 @@ fn dma_snapshot(
     }
     let openocd = oer_lab_board::openocd::Openocd::locate()?;
     let mut arguments = openocd.word_arguments("esp32s31", access.id(), 0);
-    *arguments.last_mut().ok_or("OpenOCD command argument")? =
-        format!("init; halt; dump_image {{{path}}} {address:#x} {bytes}; resume; shutdown");
+    // Read-only debugger observations of named words from the S31 register
+    // model; production accesses remain in their typed PAC owners.
+    let registers = [
+        ("list_0", 0x2010_b000),
+        ("irq_enable_0", 0x2010_1054),
+        ("irq_status_0", 0x2010_105c),
+        ("irq_enable_1", 0x2010_1060),
+        ("irq_status_1", 0x2010_1068),
+        ("sram_prefix", 0x2010_1074),
+        ("scheduler_reference", 0x2010_1078),
+        ("scheduler_state", 0x2010_107c),
+        ("finished_lists", 0x2010_125c),
+        ("phy_interrupt_enable", 0x2010_14b4),
+    ];
+    let mut script = format!("init; halt; dump_image {{{path}}} {address:#x} {bytes}");
+    for (name, address) in registers {
+        script.push_str(&format!("; echo \"{name} [mdw {address:#x}]\""));
+    }
+    script.push_str("; resume; shutdown");
+    *arguments.last_mut().ok_or("OpenOCD command argument")? = script;
     let operation = access.operation()?;
     let mut command = oer_os_process::command(&openocd.program);
     command.args(arguments);
     operation.lifetime().pin(&mut command)?;
     let result = oer_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
-    fs::write(output.join("post-mortem/dma-openocd.log"), result.stderr)?;
+    fs::write(
+        output.join("post-mortem/dma-openocd.log"),
+        [result.stdout, result.stderr].concat(),
+    )?;
     Ok(())
 }
 
