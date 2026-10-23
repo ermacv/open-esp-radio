@@ -215,3 +215,8 @@ interface never are, in no message, lock file or `log.txt`.
 `cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
 exit 0, `stop` or incompatible provenance exit 1. See the [summary format and
 owner thresholds](../build/README.md#size-summaries-and-owner-thresholds).
+
+`cargo fw sizes-refresh INPUT OUTPUT --source-root CONFIGURATION` reanalyses
+saved ELF bundles into a separate schema-2 summary tree without compiling or
+linking. Inputs remain read-only; the source root must supply the original
+image configuration. See the [refresh workflow](../build/README.md#pr-size-table-for-an-agent).

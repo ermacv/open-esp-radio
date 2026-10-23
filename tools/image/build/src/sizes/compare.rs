@@ -46,12 +46,12 @@ pub fn compare_directories(base: &Path, head: &Path) -> Result<Comparison> {
     let mut result = Comparison::default();
     result
         .output
-        .push_str("| Image | Code growth B | Verdict |\n| --- | ---: | --- |\n");
+        .push_str("| Image | Net code growth B | Verdict |\n| --- | ---: | --- |\n");
     let mut details = String::new();
     for (image, base) in base {
         let (verdict, code, shown) = compare(&base, &head[&image])?;
         result.verdict = result.verdict.max(verdict);
-        let _ = writeln!(result.output, "| {image} | +{code} | {verdict} |");
+        let _ = writeln!(result.output, "| {image} | {code:+} | {verdict} |");
         let _ = writeln!(details, "\n{image}\n{shown}");
     }
     result.output.push_str(&details);
@@ -144,7 +144,7 @@ fn compiler_flags(
         .collect()
 }
 
-fn compare(a: &Summary, b: &Summary) -> Result<(Verdict, u64, String)> {
+fn compare(a: &Summary, b: &Summary) -> Result<(Verdict, i128, String)> {
     if a.schema != super::SCHEMA
         || b.schema != super::SCHEMA
         || a.type_min_bytes != b.type_min_bytes
@@ -154,13 +154,36 @@ fn compare(a: &Summary, b: &Summary) -> Result<(Verdict, u64, String)> {
         return Err("incompatible size provenance: image, compiler, target, profile, flags, features, configuration or ELF set differs".into());
     }
     let mut diff = Diff::default();
-    let mut code_growth = 0;
+    let code_growth = code_bytes(b) - code_bytes(a);
     for (elf, a) in &a.elfs {
         let b = &b.elfs[elf];
-        code_growth += code_growth_of(a, b);
         diff.measurements(elf, a, b);
     }
-    if code_growth > CODE_GROWTH_BYTES {
+    if !a.image_files.is_empty() || !b.image_files.is_empty() {
+        diff.output.push_str(
+            "\n| Image file | Base B | Head B | Delta B |\n| --- | ---: | ---: | ---: |\n",
+        );
+        for name in keys(&a.image_files, &b.image_files) {
+            let before = a.image_files.get(name).copied().unwrap_or(0);
+            let after = b.image_files.get(name).copied().unwrap_or(0);
+            let _ = writeln!(
+                diff.output,
+                "| {name} | {before} | {after} | {:+} |",
+                i128::from(after) - i128::from(before)
+            );
+            if before != after {
+                diff.verdict = diff.verdict.max(Verdict::Report);
+            }
+        }
+    }
+    if a.embedded_payloads != b.embedded_payloads {
+        let _ = writeln!(
+            diff.output,
+            "embedded payload copies (excluded from code): {:?} → {:?}",
+            a.embedded_payloads, b.embedded_payloads
+        );
+    }
+    if code_growth > i128::from(CODE_GROWTH_BYTES) {
         diff.stop(format!(
             "code growth +{code_growth} B exceeds {CODE_GROWTH_BYTES} B"
         ));
@@ -168,19 +191,19 @@ fn compare(a: &Summary, b: &Summary) -> Result<(Verdict, u64, String)> {
     Ok((diff.verdict, code_growth, diff.output))
 }
 
-fn code_growth_of(a: &Measurements, b: &Measurements) -> u64 {
-    b.sections
-        .iter()
-        .filter(|(_, s)| s.executable)
-        .map(|(name, s)| {
-            s.bytes.saturating_sub(
-                a.sections
-                    .get(name)
-                    .filter(|s| s.executable)
-                    .map_or(0, |s| s.bytes),
-            )
-        })
-        .sum()
+fn code_bytes(summary: &Summary) -> i128 {
+    let contents: i128 = summary
+        .elfs
+        .values()
+        .flat_map(|m| m.sections.values())
+        .map(|s| i128::from(s.image_content_bytes()))
+        .sum();
+    contents
+        - summary
+            .embedded_payloads
+            .iter()
+            .map(|p| i128::from(p.bytes))
+            .sum::<i128>()
 }
 
 #[derive(Default)]
@@ -248,19 +271,29 @@ impl Diff {
                 name,
                 before.map_or(0, |s| s.bytes),
                 after.map_or(0, |s| s.bytes),
-                if after.is_some_and(is_ram) {
+                if after.is_some_and(Section::is_ram) {
                     0
                 } else {
                     u64::MAX
                 },
             );
+            self.change(
+                elf,
+                "linker filler",
+                name,
+                before.map_or(0, |s| s.filler.iter().map(|r| r.bytes).sum()),
+                after.map_or(0, |s| s.filler.iter().map(|r| r.bytes).sum()),
+                u64::MAX,
+            );
             if before != after {
                 self.verdict = self.verdict.max(Verdict::Report);
-                if before.map(|s| (&s.memory, s.executable, s.writable))
-                    != after.map(|s| (&s.memory, s.executable, s.writable))
+                if before.map(|s| (&s.memory, s.class, s.nobits, s.executable, s.writable))
+                    != after.map(|s| (&s.memory, s.class, s.nobits, s.executable, s.writable))
                 {
                     let _ = writeln!(self.output, "section `{name}`: {:?} → {:?}", before, after);
-                    if before.is_some() && after.is_some_and(is_ram) && !before.is_some_and(is_ram)
+                    if before.is_some()
+                        && after.is_some_and(Section::is_ram)
+                        && !before.is_some_and(Section::is_ram)
                     {
                         self.stop(format!("{elf} `{name}` moved into RAM"));
                     }
@@ -270,11 +303,14 @@ impl Diff {
         for name in keys(&a.allocated_stacks, &b.allocated_stacks) {
             let before = a.allocated_stacks.get(name);
             let after = b.allocated_stacks.get(name);
-            if before != after {
-                self.stop(format!(
-                    "{elf} allocated stack `{name}`: {before:?} → {after:?}"
-                ));
-            }
+            self.change(
+                elf,
+                "allocated stack",
+                name,
+                before.copied().unwrap_or(0),
+                after.copied().unwrap_or(0),
+                0,
+            );
         }
         self.values(elf, "type", &a.types, &b.types);
         // Retain multiplicity; compare every implementation in sorted order.
@@ -327,11 +363,24 @@ impl Diff {
                 self.verdict = self.verdict.max(Verdict::Report);
             }
             if let Some(after) = after {
+                let mut counts = BTreeMap::new();
+                if let Some(before) = before {
+                    for hole in &before.holes {
+                        *counts
+                            .entry((&hole.function, &hole.inline_chain, &hole.reason))
+                            .or_insert(0usize) += 1;
+                    }
+                }
                 for hole in &after.holes {
-                    if !before.is_some_and(|b| b.holes.contains(hole)) {
+                    let remaining = counts
+                        .entry((&hole.function, &hole.inline_chain, &hole.reason))
+                        .or_default();
+                    if *remaining != 0 {
+                        *remaining -= 1;
+                    } else {
                         self.stop(format!(
-                            "{elf} bound `{name}` new hole: {}+{:#x}: {}",
-                            hole.function, hole.offset, hole.reason
+                            "{elf} bound `{name}` new hole: {}+{:#x}: {}; inline chain {:?}",
+                            hole.function, hole.offset, hole.reason, hole.inline_chain
                         ));
                     }
                 }
@@ -379,9 +428,6 @@ impl Diff {
             self.change(elf, kind, name, before, after, VALUE_GROWTH_BYTES);
         }
     }
-}
-fn is_ram(section: &Section) -> bool {
-    matches!(section.memory.as_str(), "sram" | "psram")
 }
 fn keys<'a, T>(a: &'a BTreeMap<String, T>, b: &'a BTreeMap<String, T>) -> BTreeSet<&'a str> {
     a.keys().chain(b.keys()).map(String::as_str).collect()

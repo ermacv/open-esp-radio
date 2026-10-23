@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, process::Command};
 
 pub mod compare;
+mod refresh;
 pub use compare::{Comparison, Verdict, compare_directories};
+pub use refresh::refresh;
 
 pub const FILE: &str = "sizes.json";
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -17,6 +19,20 @@ pub struct Summary {
     pub type_min_bytes: u64,
     pub provenance: Provenance,
     pub elfs: BTreeMap<String, Measurements>,
+    pub image_files: BTreeMap<String, u64>,
+    pub embedded_payloads: Vec<EmbeddedPayload>,
+}
+
+/// A byte-verified copy of a payload already measured through its own ELF.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmbeddedPayload {
+    pub source_file: String,
+    pub elf: String,
+    pub section: String,
+    pub address: u64,
+    pub bytes: u64,
+    pub sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -162,6 +178,8 @@ impl Summary {
                 flags: BTreeMap::new(),
             },
             elfs: BTreeMap::new(),
+            image_files: BTreeMap::new(),
+            embedded_payloads: Vec::new(),
         })
     }
 
@@ -197,12 +215,70 @@ impl Summary {
     }
 
     pub(crate) fn publish(&self, output: &Path) -> Result<()> {
-        oer_os_durable::atomic_json(&output.join(FILE), self)?;
+        let mut measured = self.clone();
+        measured.contents(output)?;
+        oer_os_durable::atomic_json(&output.join(FILE), &measured)?;
+        Ok(())
+    }
+
+    fn contents(&mut self, directory: &Path) -> Result<()> {
+        use crate::bundle::files;
+        self.image_files.clear();
+        self.embedded_payloads.clear();
+        for name in [files::RUNTIME_BIN, files::APPLICATION] {
+            let path = directory.join(name);
+            if path.is_file() {
+                self.image_files
+                    .insert(name.into(), std::fs::metadata(path)?.len());
+            }
+        }
+        let bootstrap = directory.join(files::BOOTSTRAP_ELF);
+        let runtime = directory.join(files::RUNTIME_BIN);
+        if !bootstrap.is_file() || !runtime.is_file() {
+            return Ok(());
+        }
+        let payload = std::fs::read(runtime)?;
+        if payload.is_empty() {
+            return Err("sizes: embedded runtime payload is empty".into());
+        }
+        let data = std::fs::read(bootstrap)?;
+        let elf = oer_analysis_elf::Elf::parse(&data)?;
+        for section in elf
+            .sections()
+            .filter(|s| s.allocated && !s.writable && !s.nobits)
+        {
+            for (offset, _) in section
+                .data
+                .windows(payload.len())
+                .enumerate()
+                .filter(|(_, bytes)| *bytes == payload.as_slice())
+            {
+                self.embedded_payloads.push(EmbeddedPayload {
+                    source_file: files::RUNTIME_BIN.into(),
+                    elf: "bootstrap".into(),
+                    section: section.name.into(),
+                    address: section.address + offset as u64,
+                    bytes: payload.len() as u64,
+                    sha256: oer_os_durable::sha256_bytes(&payload),
+                });
+            }
+        }
+        if self.embedded_payloads.is_empty() {
+            return Err("sizes: bootstrap contains no byte-identical copy of runtime.bin".into());
+        }
+        if self.embedded_payloads.len() != 1 {
+            return Err("sizes: bootstrap runtime copy is ambiguous".into());
+        }
         Ok(())
     }
 
     pub fn read(directory: &Path) -> Result<Self> {
-        let summary: Self = serde_json::from_slice(&std::fs::read(directory.join(FILE))?)?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(directory.join(FILE))?)?;
+        if value["schema"].as_u64() != Some(u64::from(SCHEMA)) {
+            return Err("incompatible sizes schema; regenerate with cargo fw sizes-refresh".into());
+        }
+        let summary: Self = serde_json::from_value(value)?;
         if summary.schema != SCHEMA
             || summary.type_min_bytes != oer_image_checks::sizes::TYPE_MIN_BYTES
         {

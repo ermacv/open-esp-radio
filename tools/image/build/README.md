@@ -396,15 +396,43 @@ The command never asks a question itself: the agent takes a `stop` to the owner.
 
 The thresholds have one definition in
 [`sizes/compare.rs`](src/sizes/compare.rs), following
-[the owner's rule #375](https://github.com/ermacv/open-esp-radio/issues/375):
+[the owner's rule #375](https://github.com/ermacv/open-esp-radio/issues/375)
+and its [accounting clarifications in #396](https://github.com/ermacv/open-esp-radio/issues/396):
 
 > Тип/future/кадр ≤ +64 B, вычисленная граница стека ≤ +64 B (выделенные стеки без изменений), код ≤ ~1 KiB на PR — только сообщить; RAM-секции, выделенные стеки или больше — стоп и вопрос владельцу.
 
-Values/frames and bounds allow at most +64 B each; code allows +1024 B per
-image, summed over positive executable-section changes across both ELFs.
-Shrinking another section does not cancel growth. Every RAM section is checked
-individually, including executable sections in RAM; any growth stops. Any
-allocated-stack change (including shrink/removal) or new hole stops.
+Values/frames and bounds allow at most +64 B each. Code growth is the **net**
+change in executable and read-only image contents across the runtime and
+bootstrap, excluding linker filler and byte-verified embedded copies of the
+runtime. The allowance is +1024 B per image; shrinking contents offsets growth
+elsewhere, including a move between sections. Each SRAM section (code,
+read-only data and writable data) and each writable PSRAM section is RAM;
+individual RAM-section growth stops. Input-free linker filler carries no owned
+RAM or image-content budget. An allocated stack growing stops;
+shrinking/removal is `report`. Executable/read-only SRAM also contributes to
+net code. `NOBITS` reserves occupy RAM where applicable but are not image
+contents.
+
+Schema 2 records each section's class (`code`, `read_only`, `writable`, or
+`filler`), memory kind and flags. The staged runtime's input-free zero tail is
+recognized by the existing linker symbols `__runtime_data_load_end`,
+`__runtime_image_start`, and `__runtime_payload_end`: the whole section must
+span aligned data end to max(start + 1, image start + 64 KiB), contain only
+zero bytes, and contain no sized input symbols or relocations. Bootstrap's
+input-free page-alignment gap is likewise measured from
+`__psram_runtime_payload_flash_end` to `__flash_tuning_reference_start`, verified
+against ALIGN(4096), zero bytes and absence of input symbols/relocations within
+that range. These partial-section filler ranges are recorded separately;
+section names are not used. The bootstrap's embedded runtime is found by matching all bytes
+of `runtime.bin` against its allocated read-only sections; its address, size,
+section and SHA-256 are recorded and those duplicate bytes are excluded from
+code. Bootstrap's own code and read-only data remain counted. `runtime.bin`
+and `application.bin` sizes are printed separately.
+
+A hole's identity is its demangled function, complete DWARF inline chain and
+reason. Comparison retains the count of each identity: offsets only order
+repeated sites. Moving a call inside a function adds no new hole; adding a
+second call of an existing identity does. Every new occurrence stops.
 Completeness and assumptions remain visible in the report. New functions/types
 are listed separately as additions/removals; a missing baseline is not a measured
 zero-byte layout. Growth thresholds compare matching keys. Types crossing the
@@ -425,4 +453,22 @@ each directory. Then run:
 cargo fw sizes target/size-base target/size-head
 ```
 
-Include its table and verdict in the PR, and take any `stop` to the owner.
+Include its table and verdict in the PR, and take any real `stop` to the owner.
+Different summary schemas are incompatible, even if both files would otherwise
+have matching provenance. To reanalyse saved bundles without compiling or
+linking, write new summaries to a separate directory:
+
+```console
+cargo fw sizes-refresh target/size-base target/refreshed-base --source-root /path/to/base-configuration
+cargo fw sizes-refresh target/size-head target/refreshed-head --source-root /path/to/head-configuration
+cargo fw sizes target/refreshed-base target/refreshed-head
+```
+
+The input can be one bundle or an output tree. It is read-only; refreshed output
+contains only new `sizes.json` files. The command reads the original ELF and
+binary files, preserves original build provenance, and uses the usual analysis
+and its unchanged budgets. `--source-root` defaults to the current checkout;
+it must supply the original chip configuration and stack policy (recorded
+policy hashes must match). A separate checkout or an exported source tree can
+supply historical configuration. Existing analysis reports are neither parsed
+nor changed. Schemas 1 and 2 can be refreshed; comparison accepts schema 2 only.

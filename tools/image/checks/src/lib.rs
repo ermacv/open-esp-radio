@@ -397,7 +397,7 @@ impl Gates {
                                 )?;
                                 if let Some(sizes) = &mut outcome.sizes {
                                     for stack in &audit.stacks {
-                                        sizes.task(&image, stack);
+                                        sizes.task(&image, stack)?;
                                     }
                                 }
                                 std::fs::write(
@@ -524,7 +524,7 @@ impl Gates {
                 )?;
                 if let Some(sizes) = &mut outcome.sizes {
                     for stack in &audit.stacks {
-                        sizes.task(&image, stack);
+                        sizes.task(&image, stack)?;
                     }
                 }
                 std::fs::write(
