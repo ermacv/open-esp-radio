@@ -54,7 +54,7 @@ oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.
 static CELLS: ControllerEventCells<X> =
     ControllerEventCells::new(&irq::SCHEDULER_SIGNAL, &irq::TIMER_SIGNAL);
 
-pub(super) struct Boot {
+struct Boot {
     actor: Option<Actor>,
     inbox: Option<ClientInbox<Bluetooth>>,
     cold: Option<ColdOwner>,
@@ -197,7 +197,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         profile,
         address: base,
     });
-    radio.spawn(super::radio_worker(boot).expect("one P2 driver task"));
+    radio.spawn(driver(boot).expect("one P2 driver task"));
     radio.spawn(bridge::supervisor().expect("one P2 port supervisor"));
     let app = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(p.FROM_CPU_INTR0)));
     adopted.enable_interrupts();
@@ -217,7 +217,44 @@ async fn fail<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Respon
     bridge::complete(reply, Err(Fault::Hardware));
     hold(owner).await
 }
-mod worker;
-pub(super) async fn run_worker(boot: &'static mut Boot) {
-    worker::run(boot).await;
+mod task {
+    #[embassy_executor::task]
+    pub(super) async fn driver(boot: &'static mut super::Boot) {
+        super::WORKER.take().future(|| super::worker(boot)).await;
+    }
+}
+use task::driver;
+type Worker = impl core::future::Future<Output = ()>;
+static WORKER: static_cell::ConstStaticCell<oer_memory::StaticPlace<Worker>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
+#[define_opaque(Worker)]
+fn worker(boot: &'static mut Boot) -> Worker {
+    async move {
+        let timer: &'static irq::TimerPort = boot.timer.take().expect("one P2 timer handover");
+        loop {
+            let (command, reply) = bridge::command().await;
+            if command.operation != rpc::Operation::Enable
+                || boot.port_epoch.checked_add(1) != Some(command.epoch)
+            {
+                bridge::answer(command, reply, Err(Fault::Accounting));
+                hold(boot).await;
+            }
+            boot.port_epoch = command.epoch;
+            boot.reply = Some((command, reply));
+            {
+                let mut pool = core::pin::pin!(with_pool_async(async |pool| {
+                    let mut epoch = core::pin::pin!(with_epoch_async(async |epoch| {
+                        let mut installed =
+                            core::pin::pin!(installed::run(boot, pool, epoch, timer));
+                        installed.as_mut().await;
+                    }));
+                    epoch.as_mut().await;
+                }));
+                pool.as_mut().await;
+            }
+            // Every scoped future and its old generative authority ended;
+            // the actual arena and cold owners are back in Boot.
+            bridge::complete(&mut boot.reply, Ok(rpc::Completion::Done));
+        }
+    }
 }

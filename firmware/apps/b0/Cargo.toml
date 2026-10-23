@@ -12,7 +12,7 @@ oer-bluetooth-hci = { path = "../../../protocols/bluetooth/hci" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 nb = "1.1.0"
-embassy-executor = { version = "0.10.0", default-features = false }
+embassy-executor = { version = "0.10.0", default-features = false, features = ["nightly"] }
 oer-time = { path = "../../../portable/time" }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }

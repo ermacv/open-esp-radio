@@ -28,10 +28,6 @@ oer_espressif_staged_runtime::interrupt_table! {
 type X = InterruptExecutor<2>;
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO_EXECUTOR: StaticCell<X> = StaticCell::new();
-#[embassy_executor::task]
-async fn radio_worker(boot: &'static mut radio::Boot) {
-    radio::run_worker(boot).await;
-}
 const LEVELS: LevelOrder<PrimaryToken, RadioToken, WakeToken> = LevelOrder::new();
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
