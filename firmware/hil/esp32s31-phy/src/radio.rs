@@ -1,4 +1,4 @@
-use crate::{Answer, Request, projection};
+use crate::{Answer, WireRequest as Request, projection};
 use esp_hal::rng::RngOwner;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
@@ -32,13 +32,15 @@ pub struct Radio {
     power: Option<CommonPower<WifiClient>>,
     member: Option<WifiPhyMembership>,
     identity: PhyCalibrationIdentity,
+    cache: crate::cache::Cache,
+    full_calibration_performed: bool,
+    calibration_path: CalibrationPath,
     station: [u8; 6],
     access_point: [u8; 6],
     ieee802154: crate::ieee802154::Rx,
     rng: RngOwner<'static>,
     ready: Option<CaptureReady>,
     projection: [u16; projection::WORDS],
-    registered: bool,
     poisoned: bool,
     hold: Option<crate::hold::Hold>,
     hold_id: u32,
@@ -71,12 +73,14 @@ impl Radio {
                 power: None,
                 member: None,
                 identity: identity,
+                cache => crate::cache::Cache::place,
+                full_calibration_performed: false,
+                calibration_path: CalibrationPath::FullForCache,
                 station: station,
                 access_point: access_point,
                 rng: rng,
                 ready: None,
                 projection: [0; projection::WORDS],
-                registered: false,
                 poisoned: false,
                 hold: None,
                 hold_id: 0,
@@ -90,6 +94,7 @@ impl Radio {
         if matches!(result, Err(RejectReason::Internal)) {
             self.poisoned = true;
             self.ready = None;
+            self.cache.fail();
         }
     }
 
@@ -98,10 +103,28 @@ impl Radio {
         request: Request,
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
     ) -> Result<Answer> {
-        if self.poisoned && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
+        if self.poisoned
+            && !matches!(
+                request,
+                Request::HoldGet(_)
+                    | Request::HoldStop(_)
+                    | Request::CacheIdentity(_)
+                    | Request::CacheStatus(_)
+                    | Request::CacheRead(_)
+            )
+        {
             return Err(RejectReason::InvalidState);
         }
-        if self.hold.is_some() && !matches!(request, Request::HoldGet(_) | Request::HoldStop(_)) {
+        if self.hold.is_some()
+            && !matches!(
+                request,
+                Request::HoldGet(_)
+                    | Request::HoldStop(_)
+                    | Request::CacheIdentity(_)
+                    | Request::CacheStatus(_)
+                    | Request::CacheRead(_)
+            )
+        {
             return Err(RejectReason::InvalidState);
         }
         match request {
@@ -174,70 +197,28 @@ impl Radio {
                     debug_restored: restored,
                 }))
             }
-            Request::Prepare(config) => {
-                if !config.valid() {
-                    return Err(RejectReason::InvalidConfiguration);
-                }
-                if self.registered {
-                    return Err(RejectReason::InvalidState);
-                }
-                let registration = register_concurrent_phy::<_, (), RomShortDelay, _>(
-                    &EmbassyClock,
-                    &mut self.domain,
-                    &mut (),
-                    &self.clocks,
-                    PhyRegisterConfig::new(self.identity),
-                    NoopPhyTargetObserver,
-                )
-                .await
-                .map_err(|_| {
-                    oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=FAIL step=registration");
-                    RejectReason::Internal
-                })?;
-                let outcome = registration.outcome();
-                oer_esp32s31_board::rom::print_fmt(format_args!(
-                    "OPEN_RADIO_HIL phy=registration full={} path={:?}\n",
-                    outcome.full_calibration_performed, outcome.calibration_path
-                ));
-                if !outcome.full_calibration_performed
-                    || outcome.calibration_path != PhyCalibrationPath::FullForCache
-                {
-                    return Err(RejectReason::Internal);
-                }
-                crate::tx_rate_checkpoint::observe(
-                    &self.domain,
-                    crate::tx_rate_checkpoint::Point::AfterPhyRegistration,
-                )?;
-                crate::sar2_checkpoint::observe(
-                    &mut self.domain,
-                    crate::sar2_checkpoint::Point::AfterPhyRegistration,
-                )
-                .await?;
-                let cache = self
-                    .domain
-                    .attachment()
-                    .calibration_cache(self.identity)
-                    .map_err(|_| RejectReason::Internal)?;
-                let state = self
-                    .domain
-                    .attachment()
-                    .phy_state()
-                    .map_err(|_| RejectReason::Internal)?;
-                // The vendor reports its full cold-calibration object before Wi-Fi bring-up.
-                // Preserve that same immutable registration product across radio restarts.
-                self.projection = projection::capture(state, cache.snapshot());
-                self.registered = true;
-                oer_esp32s31_board::rom::print_fmt(format_args!(
-                    "OPEN_RADIO_HIL phy=enter config={config:?}\n"
-                ));
-                self.enter_capture(config).await?;
-                let lifecycle = match config.radio {
-                    CaptureRadio::Wifi => CaptureLifecycle::Cold,
-                    CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
-                };
-                let ready = self.snapshot(1, lifecycle, config)?;
-                Ok(Answer::Ready(ready))
+            Request::CacheIdentity(_) => {
+                Ok(Answer::CacheIdentity(self.cache.identity(self.identity)))
             }
+            Request::Start(command) => Ok(Answer::Started(self.cache.begin(
+                command,
+                self.identity,
+                EmbassyClock.now(),
+            )?)),
+            Request::CacheWrite(command) => Ok(Answer::CacheWritten(
+                self.cache.write(command, EmbassyClock.now())?,
+            )),
+            Request::CacheComplete(command) => Ok(Answer::CacheCompleted(self.cache.complete(
+                command,
+                self.identity,
+                EmbassyClock.now(),
+            )?)),
+            Request::CacheStatus(command) => Ok(Answer::CacheStatus(self.cache.status(
+                command.ticket,
+                self.identity,
+                EmbassyClock.now(),
+            )?)),
+            Request::CacheRead(command) => Ok(Answer::CacheSnapshot(self.cache.read(command)?)),
             Request::Restart(RestartCaptureRadio { epoch }) => {
                 let current = self.current(epoch)?;
                 let next = epoch.checked_add(1).ok_or(RejectReason::InvalidState)?;
@@ -264,7 +245,7 @@ impl Radio {
                 };
                 self.enter_capture(config).await?;
                 if config.radio == CaptureRadio::Wifi {
-                    self.prepare_capture_rx(capture_rx)?;
+                    self.prepare_capture_rx(capture_rx).await?;
                 }
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Restart,
@@ -293,7 +274,7 @@ impl Radio {
                     Ok(())
                 };
                 let closed = self.exit_capture(current.radio).await;
-                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed());
+                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed()).await;
                 closed?;
                 observed?;
                 Ok(Answer::Stopped(CaptureStopped {
@@ -359,11 +340,125 @@ impl Radio {
         }
     }
 
-    pub fn hold_deadline(&self) -> Option<oer_time::Instant> {
-        self.hold
+    pub fn expire_cache(&mut self) {
+        self.cache.expire(EmbassyClock.now());
+    }
+    pub fn release_cache(&mut self) {
+        self.cache.release();
+    }
+    pub fn registration_pending(&self) -> bool {
+        self.cache.pending()
+    }
+
+    /// Once started, the native registration future runs to its terminal result.
+    pub async fn service_registration(&mut self) {
+        if let Err(_reason) = self.register().await {
+            self.poisoned = true;
+            self.ready = None;
+            self.cache.fail();
+        }
+    }
+
+    async fn register(&mut self) -> Result<()> {
+        let (config, candidate) = self.cache.take_registration()?;
+        let mut registration_config = PhyRegisterConfig::new(self.identity);
+        if let Some(candidate) = candidate {
+            registration_config = registration_config.with_calibration_cache(candidate);
+        }
+        let began = EmbassyClock.now();
+        // Consume the native result before awaiting diagnostics: its failure
+        // variant retains the complete registration transition.
+        let outcome = register_concurrent_phy::<_, (), RomShortDelay, _>(
+            &EmbassyClock,
+            &mut self.domain,
+            &mut (),
+            &self.clocks,
+            registration_config,
+            NoopPhyTargetObserver,
+        )
+        .await
+        .map(|registration| registration.outcome())
+        .map_err(|_| RejectReason::Internal);
+        let outcome = match outcome {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                crate::transport::CONSOLE
+                    .line_reliably(format_args!("OPEN_RADIO_HIL phy=FAIL step=registration"))
+                    .await;
+                return Err(RejectReason::Internal);
+            }
+        };
+
+        let registration_us = u32::try_from(
+            EmbassyClock
+                .now()
+                .saturating_duration_since(began)
+                .as_micros(),
+        )
+        .unwrap_or(u32::MAX);
+        crate::transport::CONSOLE
+            .line_reliably(format_args!(
+                "OPEN_RADIO_HIL phy=registration full={} path={:?}",
+                outcome.full_calibration_performed, outcome.calibration_path
+            ))
+            .await;
+        self.full_calibration_performed = outcome.full_calibration_performed;
+        self.calibration_path = match outcome.calibration_path {
+            PhyCalibrationPath::FullForCache => CalibrationPath::FullForCache,
+            PhyCalibrationPath::FullUncached => CalibrationPath::FullUncached,
+            PhyCalibrationPath::FullAfterRejectedCache => CalibrationPath::FullAfterRejectedCache,
+            PhyCalibrationPath::PartialFromCache => CalibrationPath::PartialFromCache,
+        };
+        crate::tx_rate_checkpoint::observe(
+            &self.domain,
+            crate::tx_rate_checkpoint::Point::AfterPhyRegistration,
+        )
+        .await?;
+        crate::sar2_checkpoint::observe(
+            &mut self.domain,
+            crate::sar2_checkpoint::Point::AfterPhyRegistration,
+        )
+        .await?;
+        let cache = self
+            .domain
+            .attachment()
+            .calibration_cache(self.identity)
+            .map_err(|_| RejectReason::Internal)?;
+        let state = self
+            .domain
+            .attachment()
+            .phy_state()
+            .map_err(|_| RejectReason::Internal)?;
+        // The vendor reports its full cold-calibration object before Wi-Fi bring-up.
+        // Preserve that same immutable registration product across radio restarts.
+        self.projection = projection::capture(state, cache.snapshot());
+        self.cache.freeze(
+            outcome.full_calibration_performed,
+            *cache.snapshot(),
+            registration_us,
+        )?;
+        crate::transport::CONSOLE
+            .line_reliably(format_args!("OPEN_RADIO_HIL phy=enter config={config:?}"))
+            .await;
+        self.enter_capture(config).await?;
+        let lifecycle = match config.radio {
+            CaptureRadio::Wifi => CaptureLifecycle::Cold,
+            CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
+        };
+        let ready = self.snapshot(1, lifecycle, config)?;
+        self.cache.ready(ready)
+    }
+
+    pub fn deadline(&self) -> Option<oer_time::Instant> {
+        let hold = self
+            .hold
             .as_ref()
             .filter(|hold| hold.running)
-            .map(|hold| hold.deadline)
+            .map(|hold| hold.deadline);
+        match (hold, self.cache.deadline()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 
     #[inline(never)]
@@ -471,8 +566,8 @@ impl Radio {
         let ready = CaptureReady {
             epoch,
             lifecycle,
-            full_calibration_performed: true,
-            path: CalibrationPath::FullForCache,
+            full_calibration_performed: self.full_calibration_performed,
+            path: self.calibration_path,
             projection_schema: projection::SCHEMA,
             calibration_words: projection::WORDS as u16,
             registers: self
@@ -491,12 +586,12 @@ impl Radio {
         Ok(ready)
     }
 
-    fn prepare_capture_rx(
+    async fn prepare_capture_rx(
         &mut self,
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
     ) -> Result<()> {
         let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
-        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take());
+        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take()).await;
         self.clocked = Some(wifi);
         *capture_rx = Some(prepared?);
         Ok(())
@@ -532,7 +627,8 @@ impl Radio {
         crate::tx_rate_checkpoint::observe(
             &self.domain,
             crate::tx_rate_checkpoint::Point::AfterWifiCommonPower,
-        )?;
+        )
+        .await?;
         let mut wifi = powered
             .enable_clocks(&mut self.domain, &self.clocks)
             .map_err(|_| RejectReason::Internal)?;
@@ -557,14 +653,14 @@ impl Radio {
             .map_err(|_| RejectReason::Internal)?;
         }
         use crate::cca_checkpoint::{Point, observe};
-        wifi = observe(&self.domain, wifi, Point::BeforeRx)?;
+        wifi = observe(&self.domain, wifi, Point::BeforeRx).await?;
         set_wifi_rx(
             &mut self.domain,
             self.member.as_ref().ok_or(RejectReason::Internal)?,
             true,
         );
-        wifi = observe(&self.domain, wifi, Point::AfterRx)?;
-        wifi = observe(&self.domain, wifi, Point::BeforeChannel)?;
+        wifi = observe(&self.domain, wifi, Point::AfterRx).await?;
+        wifi = observe(&self.domain, wifi, Point::BeforeChannel).await?;
         {
             let mut platform = ();
             let (mut port, phy) = wifi.channel_hal_with_attachment(&mut platform, &mut self.domain);
@@ -579,7 +675,7 @@ impl Radio {
             .await
             .map_err(|_| RejectReason::Internal)?;
         }
-        wifi = observe(&self.domain, wifi, Point::AfterChannel)?;
+        wifi = observe(&self.domain, wifi, Point::AfterChannel).await?;
         let tx = self
             .domain
             .attachment()
@@ -600,7 +696,7 @@ impl Radio {
                     .expect("generated coexistence PTI fits")
             }),
         };
-        wifi = observe(&self.domain, wifi, Point::BeforeMac)?;
+        wifi = observe(&self.domain, wifi, Point::BeforeMac).await?;
         initialize_wifi_mac(
             &mut sources,
             &mut wifi.cold_mac_hal(&mut self.domain),
@@ -613,7 +709,7 @@ impl Radio {
         )
         .await
         .map_err(|_| RejectReason::Internal)?;
-        wifi = observe(&self.domain, wifi, Point::AfterMac)?;
+        wifi = observe(&self.domain, wifi, Point::AfterMac).await?;
         // Diagnostic observation window only: allow live CCA state time to
         // evolve without changing the radio, MAC, calibration or DMA setup.
         for sample in 0..5 {
@@ -624,7 +720,7 @@ impl Radio {
                         .saturating_add(oer_time::Duration::from_micros(200_000)),
                 )
                 .await;
-            wifi = observe(&self.domain, wifi, Point::Settled(sample))?;
+            wifi = observe(&self.domain, wifi, Point::Settled(sample)).await?;
         }
         self.clocked = Some(wifi);
         Ok(())
@@ -689,11 +785,20 @@ impl Radio {
     }
 }
 
+/// Keep the registration poll's scratch frame off unrelated request paths.
 #[inline(never)]
-fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}\n"
-    ));
+pub fn poll_registration<F: core::future::Future>(
+    future: core::pin::Pin<&mut F>,
+    context: &mut core::task::Context<'_>,
+) -> core::task::Poll<F::Output> {
+    future.poll(context)
+}
+
+#[inline(never)]
+async fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
+    crate::transport::CONSOLE.line_reliably(format_args!(
+        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}"
+    )).await;
 }
 
 struct Sources<'a> {

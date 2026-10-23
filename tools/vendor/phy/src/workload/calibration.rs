@@ -21,7 +21,6 @@ const VENDOR_BOOT_TIMEOUT: Duration = Duration::from_secs(20);
 const READ_TIMEOUT: Duration = Duration::from_millis(100);
 const RESTART_TIMEOUT: Duration = Duration::from_secs(30);
 const REGISTER_IMAGE_TIMEOUT: Duration = Duration::from_secs(3);
-const PREPARE_TIMEOUT: Duration = Duration::from_secs(120);
 const CONSOLE_TAIL_CHARS: usize = 2000;
 
 pub(crate) fn run<C: Comparison>(
@@ -314,7 +313,7 @@ fn production_boot(
     let mut captured = ProductionBoot::default();
     let outcome = context.with_capture(directory, |capture| {
         let keys = capture.request_image_keys(REGISTER_IMAGE_TIMEOUT)?;
-        if !keys.has::<PrepareCapture>() || !keys.has::<ReadAnalogImage>() {
+        if !keys.has::<StartCalibration>() || !keys.has::<ReadAnalogImage>() {
             return Err("diagnostic image lacks capture endpoints".into());
         }
         let radio = if lifecycle.ieee802154() {
@@ -324,7 +323,7 @@ fn production_boot(
         } else {
             CaptureRadio::Wifi
         };
-        let mut ready = capture.request(0, PrepareCapture { channel, radio }, PREPARE_TIMEOUT)?;
+        let mut ready = super::full(context, capture, PrepareCapture { channel, radio })?;
         let result: Result<()> = (|| {
             validate_ready(&ready, registers.len(), analog.len())?;
             if ready.lifecycle

@@ -10,6 +10,7 @@ description = "PHY HIL workloads: the vendor-versus-production calibration cross
 readme = "README.md"
 
 [dependencies]
+oer-hil-runs = { path = "../../hil/runs" }
 heapless = { version = "0.9.3", features = ["serde"] }
 oer-hil-model = { path = "../../hil/model" }
 oer-hil-link = { path = "../../hil/link" }
@@ -32,6 +33,9 @@ workspace = true
 
 
 [dev-dependencies]
+oer-hil-runs = { path = "../../hil/runs", features = ["test-support"] }
+oer-memory = { path = "../../../portable/memory" }
+oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }

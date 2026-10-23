@@ -253,3 +253,70 @@ fn a_cut_line_is_counted() {
     console.line_immediately(format_args!("{}", "x".repeat(100)));
     assert_eq!(console.truncated_lines(), 1);
 }
+
+#[test]
+fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_endpoint() {
+    use core::{
+        future::Future as _,
+        task::{Context, Poll, Waker},
+    };
+    use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
+
+    struct SplitTx<'a> {
+        host: Host,
+        gate: &'a Signal<NoopRawMutex, ()>,
+        split: bool,
+        open: bool,
+    }
+    impl embedded_io_async::ErrorType for SplitTx<'_> {
+        type Error = core::convert::Infallible;
+    }
+    impl Write for SplitTx<'_> {
+        async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+            if !self.split {
+                self.split = true;
+                let count = bytes.len() / 2;
+                self.host
+                    .from_device
+                    .borrow_mut()
+                    .extend_from_slice(&bytes[..count]);
+                return Ok(count);
+            }
+            if !self.open {
+                self.gate.wait().await;
+                self.open = true;
+            }
+            self.host.from_device.borrow_mut().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    let console = console();
+    console.start(BOOT);
+    let sequence =
+        block_on(console.publish_reliably(0, 9, &WatchdogArmed(WatchdogTestMode::Complete)));
+    let message = console.messages.try_receive().expect("queued reply");
+    let host = Host::default();
+    let gate = Signal::new();
+    let mut tx = SplitTx {
+        host: host.clone(),
+        gate: &gate,
+        split: false,
+        open: false,
+    };
+    let mut writing = core::pin::pin!(console.write_message(&mut tx, &message));
+    let mut written = core::pin::pin!(console.written(sequence));
+    let mut context = Context::from_waker(Waker::noop());
+    assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
+    assert_eq!(writing.as_mut().poll(&mut context), Poll::Pending);
+    assert!(!host.from_device.borrow().is_empty());
+    assert!(host.frames().is_empty());
+    assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
+    gate.signal(());
+    assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
+    assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(()));
+    assert_eq!(host.frames(), [(9, sequence, WatchdogArmed::KEY)]);
+}

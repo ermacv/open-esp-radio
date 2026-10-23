@@ -5,6 +5,7 @@
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
 
+mod cache;
 mod cca_checkpoint;
 mod cca_rx;
 mod hold;
@@ -46,18 +47,33 @@ static DOORBELL: Doorbell = Doorbell::new();
 static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
 
 oer_hil_agent::requests! {
-    enum Request(sessions = false) {
-        Prepare(PrepareCapture), Restart(RestartCaptureRadio), Stop(StopCapture),
+    enum WireRequest(sessions = false) {
+        CacheIdentity(GetCalibrationCacheIdentity), Start(StartCalibration),
+        CacheWrite(WriteCalibrationCachePage), CacheComplete(CompleteCalibrationCache),
+        CacheStatus(GetCalibrationStartStatus), CacheRead(ReadCalibrationSnapshot),
+        Restart(RestartCaptureRadio), Stop(StopCapture),
         HoldStart(StartTrackingHold), HoldGet(GetTrackingHold), HoldStop(StopTrackingHold),
         Calibration(ReadCalibrationProjection), Registers(ReadRegisterImage), Analog(ReadAnalogImage),
     }
 }
 
+// P1 publishes the wire response before releasing P2's sealed registration.
+enum Request {
+    Wire(WireRequest),
+    Proceed,
+}
+
 enum Answer {
+    CacheIdentity(CalibrationCacheIdentity),
+    Started(CalibrationStarted),
+    CacheWritten(CalibrationCachePageWritten),
+    CacheCompleted(CalibrationCacheCompleted),
+    CacheStatus(CalibrationStartStatus),
+    CacheSnapshot(CalibrationSnapshot),
+    Proceeded,
     HoldStarted(HoldStarted),
     HoldPage(TrackingHold),
     HoldStopped(HoldStopped),
-    Ready(CaptureReady),
     Restarted(CaptureRestarted),
     Stopped(CaptureStopped),
     Calibration(CalibrationProjection),
@@ -165,8 +181,8 @@ async fn console(usb: transport::Usb, boot: u64) {
             usb.tx,
             intake,
             &transport::Chip,
-            |id, request: Request| {
-                if REQUESTS.try_send((id, request)).is_err() {
+            |id, request: WireRequest| {
+                if REQUESTS.try_send((id, Request::Wire(request))).is_err() {
                     transport::CONSOLE.publish(
                         id.session_id,
                         id.request_id,
@@ -192,37 +208,61 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
                     .await
             };
         }
-        match answer {
+        let release = matches!(&answer, Answer::Started(_) | Answer::CacheCompleted(_));
+        let sequence = match answer {
+            Answer::CacheIdentity(value) => {
+                send!(value)
+            }
+            Answer::Started(value) => {
+                send!(value)
+            }
+            Answer::CacheWritten(value) => {
+                send!(value)
+            }
+            Answer::CacheCompleted(value) => {
+                send!(value)
+            }
+            Answer::CacheStatus(value) => {
+                send!(value)
+            }
+            Answer::CacheSnapshot(value) => {
+                send!(value)
+            }
+            Answer::Proceeded => continue,
+
             Answer::HoldStarted(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::HoldPage(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::HoldStopped(value) => {
-                send!(value);
-            }
-            Answer::Ready(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Restarted(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Stopped(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Calibration(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Registers(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Analog(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Rejected(reason) => {
-                send!(Rejected(reason));
+                send!(Rejected(reason))
             }
+        };
+        if release {
+            transport::CONSOLE.written(sequence).await;
+            let mut pending = poster.post(Request::Proceed);
+            let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx)).await;
+            poster = returned;
         }
     }
 }
@@ -232,7 +272,13 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
     // RX ring authority is core-local and is created only after the P2 spawn.
     let mut capture_rx = None;
     loop {
-        if let Some(deadline) = radio.hold_deadline() {
+        radio.expire_cache();
+        if radio.registration_pending() {
+            let mut registration = core::pin::pin!(radio.service_registration());
+            poll_fn(|cx| radio::poll_registration(registration.as_mut(), cx)).await;
+            continue;
+        }
+        if let Some(deadline) = radio.deadline() {
             use core::future::Future;
             use oer_time::Timer;
             let mut timer = core::pin::pin!(oer_embassy_time::EmbassyClock.wait_until(deadline));
@@ -253,10 +299,18 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
             hold.as_mut().await;
         }
         if let Some((request, response)) = SLOT.take_request() {
-            let result = radio.request(request, &mut capture_rx).await;
-            radio.request_finished(&result);
-            let answer = result.unwrap_or_else(Answer::Rejected);
-            response.answer(answer);
+            radio.expire_cache();
+            match request {
+                Request::Proceed => {
+                    radio.release_cache();
+                    response.answer(Answer::Proceeded);
+                }
+                Request::Wire(request) => {
+                    let result = radio.request(request, &mut capture_rx).await;
+                    radio.request_finished(&result);
+                    response.answer(result.unwrap_or_else(Answer::Rejected));
+                }
+            }
         }
     }
 }

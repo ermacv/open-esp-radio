@@ -56,20 +56,20 @@ fn failure(step: &str, error: RxRingError) -> RejectReason {
 
 /// Complete the common MAC core edge, as the reference's esp_wifi_start does.
 /// The walker and MAC runtime stay stopped.
-pub fn prepare<B: PlatformClockBackend, T>(
+pub async fn prepare<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     wifi: WifiClocked,
     previous: Option<Prepared>,
 ) -> (WifiClocked, Result<Prepared>) {
     let (mut runtime, interrupts, clocks) = wifi.into_running();
-    let result = prepare_inner(domain, &mut runtime, previous);
+    let result = prepare_inner(domain, &mut runtime, previous).await;
     (
         WifiClocked::from_running(runtime, interrupts, clocks),
         result,
     )
 }
 
-fn prepare_inner<B: PlatformClockBackend, T>(
+async fn prepare_inner<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     runtime: &mut RadioAccess,
     previous: Option<Prepared>,
@@ -95,8 +95,8 @@ fn prepare_inner<B: PlatformClockBackend, T>(
             .map_err(|error| failure("publish", error))?;
         Prepared { storage, stopped }
     };
-    observe_running(domain, runtime, Point::CapturePrepared)?;
-    observe_enables(domain, runtime, Point::CapturePrepared)?;
+    observe_running(domain, runtime, Point::CapturePrepared).await?;
+    observe_enables(domain, runtime, Point::CapturePrepared).await?;
     Ok(prepared)
 }
 
@@ -108,9 +108,9 @@ pub async fn run<B: PlatformClockBackend, T>(
     prepared: Option<Prepared>,
 ) -> (WifiClocked, Result<()>) {
     let (mut runtime, interrupts, clocks) = wifi.into_running();
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=cca-rx begin channel={channel} descriptors={COUNT} capacity={CAPACITY}\n"
-    ));
+    crate::transport::CONSOLE.line_reliably(format_args!(
+        "OPEN_RADIO_HIL phy=cca-rx begin channel={channel} descriptors={COUNT} capacity={CAPACITY}"
+    )).await;
     let result = experiment(domain, &mut runtime, channel, prepared).await;
     (
         WifiClocked::from_running(runtime, interrupts, clocks),
@@ -124,14 +124,14 @@ async fn experiment<B: PlatformClockBackend, T>(
     channel: u8,
     prepared: Option<Prepared>,
 ) -> Result<()> {
-    observe_running(domain, runtime, Point::BeforeRing)?;
-    observe_enables(domain, runtime, Point::BeforeRing)?;
+    observe_running(domain, runtime, Point::BeforeRing).await?;
+    observe_enables(domain, runtime, Point::BeforeRing).await?;
     // Cold capture retains its original observation point and only prepares
     // here. A preparation failure still returns the Wi-Fi owner through run
     // so StopCapture can execute its RF teardown.
     let Prepared { storage, stopped } = match prepared {
         Some(prepared) => prepared,
-        None => prepare_inner(domain, runtime, None)?,
+        None => prepare_inner(domain, runtime, None).await?,
     };
     // The capture prepared common gates and BASE with runtime stop held.
     // Policy preserves that stop until the walker supplies the live proof.
@@ -169,8 +169,10 @@ async fn experiment<B: PlatformClockBackend, T>(
     let halted = ring
         .try_stop(runtime.rx_dma())
         .map_err(|(_, error)| failure("stop", error))?;
-    let closed = observe_running(domain, runtime, Point::RingClosed)
-        .and_then(|()| observe_enables(domain, runtime, Point::RingClosed));
+    let closed = match observe_running(domain, runtime, Point::RingClosed).await {
+        Ok(()) => observe_enables(domain, runtime, Point::RingClosed).await,
+        Err(error) => Err(error),
+    };
     let stopped = storage
         .prepare_halted(halted, runtime.rx_dma())
         .map_err(|(_, error)| failure("reclaim", error))?;
@@ -196,8 +198,8 @@ async fn sample<B: PlatformClockBackend, T>(
     ring: &mut RxRingLive<'_, COUNT>,
     channel: u8,
 ) -> Result<()> {
-    observe_running(domain, runtime, Point::RingOpen)?;
-    observe_enables(domain, runtime, Point::RingOpen)?;
+    observe_running(domain, runtime, Point::RingOpen).await?;
+    observe_enables(domain, runtime, Point::RingOpen).await?;
     let mut received = 0_u32;
     let mut beacons = 0_u32;
     let mut normalized = 0_u32;
@@ -264,8 +266,8 @@ async fn sample<B: PlatformClockBackend, T>(
                 )
                 .await;
         }
-        observe_running(domain, runtime, Point::RingSample(sample))?;
-        observe_enables(domain, runtime, Point::RingSample(sample))?;
+        observe_running(domain, runtime, Point::RingSample(sample)).await?;
+        observe_enables(domain, runtime, Point::RingSample(sample)).await?;
         if !runtime.receive_dma_snapshot().walker_enabled {
             return Err(RejectReason::Internal);
         }

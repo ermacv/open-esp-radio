@@ -130,7 +130,8 @@ impl Rx {
         crate::tx_rate_checkpoint::observe(
             domain,
             crate::tx_rate_checkpoint::Point::AfterIeee802154CommonPower,
-        )?;
+        )
+        .await?;
         let clocked = powered
             .enable_clocks(domain, clocks)
             .map_err(|_| failed(c"OPEN_RADIO_HIL phy=FAIL step=154-clocks-on"))?;

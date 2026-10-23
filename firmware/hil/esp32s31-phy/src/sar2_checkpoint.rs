@@ -32,10 +32,12 @@ pub async fn observe<B: PlatformClockBackend, T>(
             started = i2c::try_start_read(&mut registers, address).is_ok();
         }
         if started && let Ok(raw) = i2c::try_finish_read(&registers, address) {
-            oer_esp32s31_board::rom::print_fmt(format_args!(
-                "OPEN_RADIO_HIL phy=sar2-checkpoint point={point:?} raw={raw:#04x} init={}\n",
-                field.extract(raw)
-            ));
+            crate::transport::CONSOLE
+                .line_reliably(format_args!(
+                    "OPEN_RADIO_HIL phy=sar2-checkpoint point={point:?} raw={raw:#04x} init={}",
+                    field.extract(raw)
+                ))
+                .await;
             return Ok(());
         }
         EmbassyClock
