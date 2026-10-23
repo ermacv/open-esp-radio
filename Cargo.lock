@@ -2939,6 +2939,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-time",
  "oer-time-virtual",
+ "pin-project-lite",
 ]
 
 [[package]]

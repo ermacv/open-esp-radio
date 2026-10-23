@@ -82,6 +82,8 @@ pub struct Esp32s31Radio<C: PlatformClockProvider, T, O> {
     registration: Option<PhyRegisterConfig>,
     rf: Rf,
     wifi: WifiShare,
+    #[cfg(feature = "bluetooth")]
+    bluetooth_attached: bool,
 }
 
 impl<C, T, O> Esp32s31Radio<C, T, O>
@@ -107,6 +109,8 @@ where
             observer,
             registration: Some(registration),
             rf: Rf::Unregistered,
+            #[cfg(feature = "bluetooth")]
+            bluetooth_attached: false,
             wifi: WifiShare {
                 coex: Some(Coex::Absent(wifi_coex)),
                 power: None,
@@ -266,7 +270,7 @@ where
     async fn track_tick(&mut self) -> Result<(), Fault> {
         // A rejected tick (the tracking clock ran backwards) would fall due
         // again at once; it poisons like a failed one.
-        track_concurrent_phy::<_, (), RomShortDelay, O>(
+        let result = track_concurrent_phy::<_, (), RomShortDelay, O>(
             &mut self.radio,
             &mut (),
             &self.timer,
@@ -274,7 +278,12 @@ where
         )
         .await
         .map(|_tick| ())
-        .map_err(|_| Fault)
+        .map_err(|_| Fault);
+        #[cfg(feature = "bluetooth")]
+        if result.is_ok() && self.bluetooth_attached {
+            self.wifi.tracking_due = false;
+        }
+        result
     }
 }
 
@@ -290,6 +299,13 @@ where
         phy: PhyPreparation,
         _lp: &LpClock<RcSlow>,
     ) -> Result<WifiJoined, Failed<WifiReturned>> {
+        #[cfg(feature = "bluetooth")]
+        if self.bluetooth_attached && self.track_tick().await.is_err() {
+            return Err(Failed {
+                returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
+                cause: Failure::Poisoned,
+            });
+        }
         let WifiJoin { wifi: cold } = join;
         // Wi-Fi enters coexistence before common power.
         if !self.enter_coex() {
@@ -373,6 +389,13 @@ where
     }
 
     async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
+        #[cfg(feature = "bluetooth")]
+        if self.bluetooth_attached && self.track_tick().await.is_err() {
+            return Err(Failed {
+                returned: track.wifi,
+                cause: Failure::Poisoned,
+            });
+        }
         let WifiTrack {
             mut wifi,
             channel,
@@ -516,6 +539,13 @@ where
     }
 
     async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
+        #[cfg(feature = "bluetooth")]
+        if self.bluetooth_attached && self.track_tick().await.is_err() {
+            return Err(Failed {
+                returned: retune.wifi,
+                cause: Failure::Poisoned,
+            });
+        }
         let WifiRetune {
             mut wifi,
             channel,
@@ -569,6 +599,18 @@ where
     }
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
+        #[cfg(feature = "bluetooth")]
+        if self.bluetooth_attached && self.track_tick().await.is_err() {
+            return (
+                oer_esp32s31_radio_client::wifi::WifiLeft {
+                    wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
+                },
+                Exit {
+                    last: false,
+                    health: DomainHealth::Poisoned,
+                },
+            );
+        }
         let WifiLeave { wifi } = leave;
         let poisoned = |wifi, last| {
             (
@@ -619,4 +661,4 @@ fn vacant_wifi<B: PlatformClockBackend>(
 #[cfg(feature = "bluetooth")]
 mod bluetooth;
 #[cfg(feature = "bluetooth")]
-pub use bluetooth::WithBluetooth;
+pub use bluetooth::BluetoothAttachment;

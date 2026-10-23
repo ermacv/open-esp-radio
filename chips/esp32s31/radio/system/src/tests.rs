@@ -54,6 +54,8 @@ struct Script {
     #[cfg(feature = "bluetooth")]
     ble_installation: u32,
     #[cfg(feature = "bluetooth")]
+    ble_tracking: bool,
+    #[cfg(feature = "bluetooth")]
     ble_stopped: bool,
     #[cfg(feature = "bluetooth")]
     ble_fault: bool,

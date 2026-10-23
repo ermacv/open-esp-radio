@@ -15,6 +15,7 @@ oer-esp32s31-bluetooth-driver = { path = "../../bluetooth/driver", optional = tr
 oer-espressif-coex = { path = "../../../espressif/coex" }
 oer-ieee80211-port = { path = "../../../../protocols/ieee80211/port" }
 embassy-futures = "0.1.2"
+pin-project-lite = "0.2.16"
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }
 oer-esp32s31-hal = { path = "../../hal" }
