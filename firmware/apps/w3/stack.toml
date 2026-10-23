@@ -9,8 +9,8 @@ root = "runtime_main"
 bottom_symbol = "__runtime_cpu0_task_stack_bottom"
 top_symbol = "__runtime_cpu0_task_stack_top"
 minimum_free_bytes = 16384
-# Observed P1 bound: 41136 + ? bytes, plus the 16384-byte reserve.
-allocation_bytes = 57520
+# Observed P1 bound: 42224 + ? bytes, plus the 16384-byte reserve.
+allocation_bytes = 58608
 
 [interrupt_stacks]
 

@@ -103,7 +103,9 @@ retains the pairwise frontier, and reinstalling the same IGTK keeps its IPN.
 The owner and its software secrets end with the association.
 
 An unprotected class-2/3 disconnect starts the existing SA Query procedure,
-using fresh randomness from `StaConfig::nonce`. Requests and responses go
+using fresh randomness from `StaConfig::callbacks`. The concrete `StaCallbacks`
+provider also supplies the composition's HE padding policy and retains its
+state through station retirement and restart. Requests and responses go
 under the installed pairwise key; only a matching protected response ends
 the query. Retry and absolute timeout wake independently of receive traffic.
 One pending response is retained while control TX is busy; additional peer

@@ -99,12 +99,12 @@ impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
 }
 fn construct<'id, const T: usize, const B: usize, const G: usize>(
     epochs: LinkEpochSource<'id>,
-    config: StaConfig<Caps>,
+    config: StaConfig<Caps, Callbacks>,
     place: LeasePlace<'id>,
     absence: AbsencePlace<'id>,
     configure: oer_ieee80211_port::ConfigurePermission<'id, oer_ieee80211_port::Station>,
 ) -> (
-    Station<'id, Tokens<'id, G>, Caps>,
+    Station<'id, Tokens<'id, G>, Caps, Callbacks>,
     oer_ieee80211_sta::machine::StaCommandCredits<'id>,
 ) {
     Station::new_open::<T, B, G>(
@@ -120,6 +120,19 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
             group_permission: (),
         },
     )
+}
+
+struct Callbacks;
+impl oer_ieee80211_sta::machine::StaCallbacks for Callbacks {
+    fn nonce(&mut self) -> [u8; 32] {
+        [0; 32]
+    }
+    fn he_packet_padding(
+        &self,
+        _: &[u8],
+    ) -> oer_ieee80211_port::backend_protection::HePacketPadding {
+        oer_ieee80211_port::backend_protection::HePacketPadding::None
+    }
 }
 
 #[test]

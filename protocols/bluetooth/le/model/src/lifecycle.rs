@@ -292,15 +292,16 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
         f.shared.enabled.set(true);
         Ok(Ok(()))
     }
-    async fn disable<'a, 'p>(
+    async fn disable<'a, 'p, S>(
         _: Call,
         f: &'a mut Self::View<'p>,
-        sink: &'a mut dyn FnMut(Self::Terminal<'p>) -> ControlFlow<Self::Terminal<'p>>,
+        sink: &'a mut S,
     ) -> Result<(), Poisoned<Fault>>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
+        S: FnMut(Self::Terminal<'p>) -> ControlFlow<Self::Terminal<'p>>,
     {
         let q = f.shared;
         if let Some(cause) = q.fault.get() {

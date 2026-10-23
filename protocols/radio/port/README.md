@@ -113,7 +113,9 @@ context through a queue does not expose its owned representation to a body.
 Enable and disable consume `Owner`; setup and phase borrow it through an
 invariant `Lent`. Refusal preserves disabled authority, while poison retains
 its cause in `PoisonedOwner`. Disable delivers every admitted terminal to its
-sink within the backend's transition bound. A sink accepts with
+concrete `S: FnMut(Terminal) -> ControlFlow<Terminal>` sink within the backend's
+transition bound. The disable future exclusively borrows that sink through
+completion or cancellation. A sink accepts with
 `ControlFlow::Continue(())` or returns the whole terminal with
 `ControlFlow::Break(terminal)`; rejection retains that terminal and every
 remaining owner in the backend's quarantine.

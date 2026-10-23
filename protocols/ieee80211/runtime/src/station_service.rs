@@ -115,8 +115,9 @@ use oer_ieee80211_sta::{
         StaDataTokens,
     },
     machine::{
-        Peer, StaAction, StaCommandRefused, StaCommandTerminal, StaFrame, StaFrameClass, StaInput,
-        StaNotice, StaRatePlan, StaRequest, StaTokens, StaTransmit, StaTxContext, Station,
+        Peer, StaAction, StaCallbacks, StaCommandRefused, StaCommandTerminal, StaFrame,
+        StaFrameClass, StaInput, StaNotice, StaRatePlan, StaRequest, StaTokens, StaTransmit,
+        StaTxContext, Station,
     },
     power_save::NULL_TRANSMISSIONS,
 };
@@ -440,10 +441,11 @@ pub type PortRxMeta<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>
 pub type PortAck<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::AckEvidence;
 
 /// The station of the service on the port `B`.
-pub type PortStation<'id, B, const GROUPS: usize = 2> = Station<
+pub type PortStation<'id, B, C, const GROUPS: usize = 2> = Station<
     'id,
     PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
     <B as StationPort>::Caps,
+    C,
 >;
 
 /// The data machine of the service on the port `B`.
@@ -460,6 +462,29 @@ pub type PortArbiter<'id, B> = Arbiter<
     oer_ieee80211_arbiter::NoReservation,
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::GatePath,
 >;
+
+// Preserve the terminal-routing frame when static dispatch removes the
+// vtable call boundary; the target remains a direct generic call.
+#[inline(never)]
+fn retain_after_event_end<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
+    custody: &mut TerminalCustody<'id, B>,
+    terminal: <B::Backend as PortBackend<B::SlotId>>::Terminal<'id>,
+) -> core::ops::ControlFlow<<B::Backend as PortBackend<B::SlotId>>::Terminal<'id>> {
+    let terminal = B::terminal(terminal);
+    let result = match &mut *custody {
+        TerminalCustody::Clear => {
+            *custody =
+                ContractFault::sealed(BackendContractViolation::TerminalAfterEventEnd, terminal)
+                    .into();
+            core::ops::ControlFlow::Continue(())
+        }
+        TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
+            Ok(()) => core::ops::ControlFlow::Continue(()),
+            Err(terminal) => core::ops::ControlFlow::Break(terminal),
+        },
+    };
+    result.map_break(B::port_terminal)
+}
 
 /// The values the service's attempts take, which its port must offer:
 /// checked when the service's type is built, so a port without them builds
@@ -610,6 +635,19 @@ pub enum ServiceFault<B: StationPort> {
     },
 }
 
+/// A concrete output recipient. Events carry their original owners by value.
+pub trait ServiceOutputSink<'id, K, Path: oer_radio_port::PoolPath> {
+    fn emit(&mut self, output: ServiceOutput<'id, K, Path>);
+}
+
+impl<'id, K, Path: oer_radio_port::PoolPath, F: FnMut(ServiceOutput<'id, K, Path>)>
+    ServiceOutputSink<'id, K, Path> for F
+{
+    fn emit(&mut self, output: ServiceOutput<'id, K, Path>) {
+        self(output);
+    }
+}
+
 /// The service's ends to the application and the network stack.
 ///
 /// Commands require an exclusive SPSC receiver rather than a shareable channel:
@@ -651,6 +689,7 @@ pub struct ServiceIo<
     'c,
     'id,
     K,
+    O: ServiceOutputSink<'id, K, Path>,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
@@ -664,7 +703,7 @@ pub struct ServiceIo<
     /// The MSDUs the station received for the network stack.
     pub receive: MsduSender<'c, EthernetFrame, RX_DEPTH>,
     /// What the service tells the application.
-    pub output: &'c mut dyn FnMut(ServiceOutput<'id, K, Path>),
+    pub output: &'c mut O,
 }
 
 /// How the service ended.
@@ -802,11 +841,12 @@ pub struct ServiceCompleted<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
     pub end: ServiceEnd<'p, 'id, B>,
-    pub retired: RetiredService<'id, B, S, GROUPS>,
+    pub retired: RetiredService<'id, B, C, S, GROUPS>,
 }
 
 /// Only a normal Stop grants this continuation on the existing installation.
@@ -814,11 +854,12 @@ pub struct StoppedService<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
     owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-    retired: RetiredService<'id, B, S, GROUPS>,
+    retired: RetiredService<'id, B, C, S, GROUPS>,
 }
 
 /// The same port owner and resources, ready for a new service run. Deferred
@@ -827,11 +868,12 @@ pub struct RestartedService<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
     pub owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-    pub service: StationService<'id, B, S, GROUPS>,
+    pub service: StationService<'id, B, C, S, GROUPS>,
     pub deferred_eapol: oer_ieee80211_sta::machine::DeferredEapol,
     pub notice: Option<oer_ieee80211_sta::machine::StaNotice>,
 }
@@ -850,23 +892,30 @@ pub struct RestartFailed<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
     pub reason: RestartFailure,
     pub owner: FailedInstallation<'p, 'id, B>,
-    pub retired: RetiredService<'id, B, S, GROUPS>,
+    pub retired: RetiredService<'id, B, C, S, GROUPS>,
 }
 
-impl<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, S, const GROUPS: usize>
-    ServiceCompleted<'p, 'id, B, S, GROUPS>
+impl<
+    'p,
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
+    S,
+    const GROUPS: usize,
+> ServiceCompleted<'p, 'id, B, C, S, GROUPS>
 {
     /// Extract the reusable continuation only from the ordinary Stop outcome.
     #[expect(
         clippy::result_large_err,
         reason = "a failed completion returns all resource banks without allocation"
     )]
-    pub fn into_stopped(self) -> Result<StoppedService<'p, 'id, B, S, GROUPS>, Self> {
+    pub fn into_stopped(self) -> Result<StoppedService<'p, 'id, B, C, S, GROUPS>, Self> {
         match self.end {
             ServiceEnd::Stopped(owner) => Ok(StoppedService {
                 owner,
@@ -884,9 +933,10 @@ impl<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-> StoppedService<'p, 'id, B, S, GROUPS>
+> StoppedService<'p, 'id, B, C, S, GROUPS>
 {
     /// Resume on the selected channel without minting pools, epochs, leases,
     /// gate authority or admission permissions. Startup reclaims old keys and
@@ -898,7 +948,8 @@ impl<
     pub fn restart(
         self,
         channel: oer_ieee80211_port::SupportedChannel<B::Caps>,
-    ) -> Result<RestartedService<'p, 'id, B, S, GROUPS>, RestartFailed<'p, 'id, B, S, GROUPS>> {
+    ) -> Result<RestartedService<'p, 'id, B, C, S, GROUPS>, RestartFailed<'p, 'id, B, C, S, GROUPS>>
+    {
         let Self {
             mut owner,
             mut retired,
@@ -980,7 +1031,7 @@ impl<
         output: Out,
     ) -> (
         Ended<B::SlotId, B::Backend, Out>,
-        RetiredService<'id, B, S, GROUPS>,
+        RetiredService<'id, B, C, S, GROUPS>,
     ) {
         (Ended::uninstall(self.owner, control, output), self.retired)
     }
@@ -991,6 +1042,7 @@ impl<
 pub struct RetiredService<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
@@ -998,6 +1050,7 @@ pub struct RetiredService<
         'id,
         PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
         B::Caps,
+        C,
     >,
     pub data: oer_ieee80211_sta::data::RetiredData<
         'id,
@@ -1025,21 +1078,23 @@ pub struct RetiredService<
 pub struct StationService<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
     arbiter: PortArbiter<'id, B>,
-    state: ServiceState<'id, B, S, GROUPS>,
+    state: ServiceState<'id, B, C, S, GROUPS>,
 }
 
 struct ServiceState<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S,
     const GROUPS: usize = 2,
 > {
     /// The station.
-    station: PortStation<'id, B, GROUPS>,
+    station: PortStation<'id, B, C, GROUPS>,
     /// Its data machine.
     data: PortData<'id, B>,
     /// The rates of the station's frames and data.
@@ -1099,14 +1154,15 @@ enum Next<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 impl<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-> StationService<'id, B, S, GROUPS>
+> StationService<'id, B, C, S, GROUPS>
 {
     /// The service of the machines the composition built, its frames at
     /// the rates `rates` selects.
     pub fn new(
-        station: PortStation<'id, B, GROUPS>,
+        station: PortStation<'id, B, C, GROUPS>,
         data: PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
@@ -1157,8 +1213,8 @@ impl<
     pub fn init_in_place<'s>(
         storage: &'s mut core::mem::MaybeUninit<Self>,
         station: impl for<'a> FnOnce(
-            &'a mut core::mem::MaybeUninit<PortStation<'id, B, GROUPS>>,
-        ) -> &'a mut PortStation<'id, B, GROUPS>,
+            &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS>>,
+        ) -> &'a mut PortStation<'id, B, C, GROUPS>,
         data: impl for<'a> FnOnce(
             &'a mut core::mem::MaybeUninit<PortData<'id, B>>,
         ) -> &'a mut PortData<'id, B>,
@@ -1187,7 +1243,7 @@ impl<
         oer_memory::Placed::init(storage, |place| {
             oer_memory::init_in_place!(place, Self {
                 arbiter: arbiter,
-                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, S, GROUPS>>| oer_memory::init_in_place!(place, ServiceState {
+                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS>>| oer_memory::init_in_place!(place, ServiceState {
                     station => station,
                     data => data,
                     rates: rates,
@@ -1211,19 +1267,20 @@ impl<
         const COMMAND_DEPTH: usize,
     >(
         service: oer_memory::Placed<'s, Self>,
-        output: &'out mut core::mem::MaybeUninit<ServiceCompleted<'p, 'id, B, S, GROUPS>>,
+        output: &'out mut core::mem::MaybeUninit<ServiceCompleted<'p, 'id, B, C, S, GROUPS>>,
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
-    ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, S, GROUPS>> {
+    ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS>> {
         let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
         let mut custody_storage = core::mem::MaybeUninit::uninit();
         let mut custody = oer_memory::Placed::init(&mut custody_storage, |place| {
@@ -1252,7 +1309,7 @@ impl<
         oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
-                retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, S, GROUPS>>| {
+                retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS>>| {
                     let mut places = None;
                     let mut retired = oer_memory::Placed::init(place, |place| oer_memory::init_in_place!(place, RetiredService {
                         station => |place| {
@@ -1275,15 +1332,15 @@ impl<
                     while let Some(notice) = retired._arbiter.poll_notice() {
                         match notice {
                             ArbiterNotice::Station(notice) => retired._places.returned(notice),
-                            ArbiterNotice::AccessPoint(command) => (io.output)(ServiceOutput::AccessPoint(command)),
+                            ArbiterNotice::AccessPoint(command) => io.output.emit(ServiceOutput::AccessPoint(command)),
                         }
                     }
                     while let Some(output) = retired.station.poll_output() {
                         match output {
                             oer_ieee80211_sta::machine::StaFinalOutput::CommandCompleted(terminal) =>
-                                (io.output)(ServiceOutput::CommandCompleted(terminal)),
+                                io.output.emit(ServiceOutput::CommandCompleted(terminal)),
                             oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) =>
-                                (io.output)(ServiceOutput::Notice(notice)),
+                                io.output.emit(ServiceOutput::Notice(notice)),
                         }
                     }
                     retired.into_mut()
@@ -1306,13 +1363,14 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
-    ) -> ServiceCompleted<'p, 'id, B, S, GROUPS> {
+    ) -> ServiceCompleted<'p, 'id, B, C, S, GROUPS> {
         let Self { arbiter, mut state } = self;
         let mut custody = TerminalCustody::Clear;
         let (end, mut arbiter) = state
@@ -1344,17 +1402,17 @@ impl<
             match notice {
                 ArbiterNotice::Station(notice) => places.returned(notice),
                 ArbiterNotice::AccessPoint(command) => {
-                    (io.output)(ServiceOutput::AccessPoint(command))
+                    io.output.emit(ServiceOutput::AccessPoint(command))
                 }
             }
         }
         while let Some(output) = station.poll_output() {
             match output {
                 oer_ieee80211_sta::machine::StaFinalOutput::CommandCompleted(terminal) => {
-                    (io.output)(ServiceOutput::CommandCompleted(terminal))
+                    io.output.emit(ServiceOutput::CommandCompleted(terminal))
                 }
                 oer_ieee80211_sta::machine::StaFinalOutput::Notify(notice) => {
-                    (io.output)(ServiceOutput::Notice(notice))
+                    io.output.emit(ServiceOutput::Notice(notice))
                 }
             }
         }
@@ -1377,9 +1435,10 @@ impl<
 impl<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
     const GROUPS: usize,
-> ServiceState<'id, B, S, GROUPS>
+> ServiceState<'id, B, C, S, GROUPS>
 {
     async fn run_loop<
         'p,
@@ -1394,6 +1453,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1463,24 +1523,7 @@ impl<
                     }
                     // Drained promises there can be no further terminal.
                     // A violating disable return stays sealed, never reaching a machine.
-                    let mut sink = |terminal| {
-                        let terminal = B::terminal(terminal);
-                        let result = match &mut *custody {
-                            TerminalCustody::Clear => {
-                                *custody = ContractFault::sealed(
-                                    BackendContractViolation::TerminalAfterEventEnd,
-                                    terminal,
-                                )
-                                .into();
-                                core::ops::ControlFlow::Continue(())
-                            }
-                            TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
-                                Ok(()) => core::ops::ControlFlow::Continue(()),
-                                Err(terminal) => core::ops::ControlFlow::Break(terminal),
-                            },
-                        };
-                        result.map_break(B::port_terminal)
-                    };
+                    let mut sink = |terminal| retain_after_event_end::<B>(custody, terminal);
                     let end = match owner.disable(&mut sink).await {
                         Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
@@ -1533,6 +1576,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1616,6 +1660,32 @@ impl<
         }
     }
 
+    // Static dispatch can share the terminal/fault temporaries with the
+    // caller instead of retaining a separate routing frame below it.
+    #[inline(always)]
+    fn disable_terminal(
+        &mut self,
+        arbiter: &mut PortArbiter<'id, B>,
+        timer: &impl Timer,
+        custody: &mut TerminalCustody<'id, B>,
+        terminal: <B::Backend as PortBackend<B::SlotId>>::Terminal<'id>,
+    ) -> core::ops::ControlFlow<<B::Backend as PortBackend<B::SlotId>>::Terminal<'id>> {
+        let terminal = B::terminal(terminal);
+        let result = match custody {
+            TerminalCustody::Clear => {
+                if let Err(fault) = self.terminal(arbiter, timer.now(), terminal) {
+                    *custody = fault.into();
+                }
+                core::ops::ControlFlow::Continue(())
+            }
+            TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
+                Ok(()) => core::ops::ControlFlow::Continue(()),
+                Err(terminal) => core::ops::ControlFlow::Break(terminal),
+            },
+        };
+        result.map_break(B::port_terminal)
+    }
+
     /// Disable routes terminals only up to the first contract violation.
     /// The first rejected owner and every later sealed terminal are retained.
     /// A full bank returns the next owner to the port for poisoned teardown.
@@ -1629,22 +1699,7 @@ impl<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
     > {
-        let mut sink = |terminal| {
-            let terminal = B::terminal(terminal);
-            let result = match custody {
-                TerminalCustody::Clear => {
-                    if let Err(fault) = self.terminal(arbiter, timer.now(), terminal) {
-                        *custody = fault.into();
-                    }
-                    core::ops::ControlFlow::Continue(())
-                }
-                TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
-                    Ok(()) => core::ops::ControlFlow::Continue(()),
-                    Err(terminal) => core::ops::ControlFlow::Break(terminal),
-                },
-            };
-            result.map_break(B::port_terminal)
-        };
+        let mut sink = |terminal| self.disable_terminal(arbiter, timer, custody, terminal);
         owner.disable(&mut sink).await
     }
 
@@ -1663,6 +1718,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1764,7 +1820,7 @@ impl<
                 match command {
                     ServiceCommand::Station(command) => {
                         if let Err(refused) = self.station.command(now, command) {
-                            (io.output)(ServiceOutput::CommandRefused(refused));
+                            io.output.emit(ServiceOutput::CommandRefused(refused));
                         }
                     }
                     ServiceCommand::AccessPoint(fact) => arbiter.access_point(now, fact),
@@ -1834,6 +1890,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1868,7 +1925,8 @@ impl<
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. Return the original owned packet,
                 // rather than manufacturing a terminal or losing its bytes.
-                (io.output)(ServiceOutput::MsduRefused { packet, reason });
+                io.output
+                    .emit(ServiceOutput::MsduRefused { packet, reason });
             }
         }
     }
@@ -1885,6 +1943,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1910,7 +1969,7 @@ impl<
                         self.station.input(now, StaInput::Arbiter(notice));
                     }
                     ArbiterAction::AccessPoint(command) => {
-                        (io.output)(ServiceOutput::AccessPoint(command));
+                        io.output.emit(ServiceOutput::AccessPoint(command));
                     }
                     ArbiterAction::CloseGate { gate, reserve: () } => {
                         self.pending
@@ -2103,6 +2162,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2132,7 +2192,8 @@ impl<
                     TxContext::Station(_) => TxOperation::Station,
                     TxContext::Data(_) => TxOperation::Data,
                 };
-                (io.output)(ServiceOutput::TxRefused { operation, reason });
+                io.output
+                    .emit(ServiceOutput::TxRefused { operation, reason });
                 self.returned(now, context, ticket, buffer, ReturnedTx::Refused(reason))?;
             }
         }
@@ -2151,6 +2212,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2163,7 +2225,7 @@ impl<
                     self.station.input(now, StaInput::Arbiter(notice))
                 }
                 ArbiterNotice::AccessPoint(command) => {
-                    (io.output)(ServiceOutput::AccessPoint(command))
+                    io.output.emit(ServiceOutput::AccessPoint(command))
                 }
             }
         }
@@ -2185,6 +2247,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2229,6 +2292,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2293,6 +2357,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2306,7 +2371,7 @@ impl<
         });
         if let Err(reason) = result {
             self.counters.rx_frames_dropped.increment();
-            (io.output)(ServiceOutput::RxFrameDropped(reason));
+            io.output.emit(ServiceOutput::RxFrameDropped(reason));
         }
     }
 
@@ -2317,6 +2382,7 @@ impl<
             '_,
             'id,
             B::Caps,
+            impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2332,7 +2398,7 @@ impl<
             }
             Err(reason) => {
                 counters.rx_msdus_too_long.increment();
-                (io.output)(ServiceOutput::RxMsduRefused(reason));
+                io.output.emit(ServiceOutput::RxMsduRefused(reason));
             }
         }
     }
@@ -2806,6 +2872,7 @@ fn station_action<
         '_,
         'id,
         B::Caps,
+        impl ServiceOutputSink<'id, B::Caps, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,
@@ -2992,14 +3059,14 @@ where
             ));
         }
         StaAction::Notify(notice) => {
-            (io.output)(ServiceOutput::Notice(notice));
+            io.output.emit(ServiceOutput::Notice(notice));
             return Ok(match notice {
                 StaNotice::Disconnected(_) => Follow::Disconnected,
                 StaNotice::Connected { .. } => Follow::Nothing,
             });
         }
         StaAction::CommandCompleted(terminal) => {
-            (io.output)(ServiceOutput::CommandCompleted(terminal));
+            io.output.emit(ServiceOutput::CommandCompleted(terminal));
             return Ok(Follow::Nothing);
         }
         StaAction::Associated(peer) => {

@@ -1524,15 +1524,16 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
         })
     }
 
-    fn disable<'a, 'p>(
+    fn disable<'a, 'p, S>(
         _: Call,
         frontend: &'a mut Self::View<'p>,
-        sink: &'a mut dyn FnMut(ModelEvent) -> core::ops::ControlFlow<ModelEvent>,
+        sink: &'a mut S,
     ) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> + 'a
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
+        S: FnMut(ModelEvent) -> core::ops::ControlFlow<ModelEvent>,
     {
         let result = {
             let mut state = frontend.shared.borrow_mut();

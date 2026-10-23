@@ -191,8 +191,20 @@ impl<'id, const G: usize> StaTokens for Tokens<'id, G> {
 
 const SNONCE: [u8; 32] = [3; 32];
 
-fn nonce() -> [u8; 32] {
-    SNONCE
+struct Callbacks {
+    nonce_calls: usize,
+}
+impl StaCallbacks for Callbacks {
+    fn nonce(&mut self) -> [u8; 32] {
+        self.nonce_calls += 1;
+        SNONCE
+    }
+    fn he_packet_padding(
+        &self,
+        _: &[u8],
+    ) -> oer_ieee80211_port::backend_protection::HePacketPadding {
+        oer_ieee80211_port::backend_protection::HePacketPadding::None
+    }
 }
 
 const SSID: &[u8] = b"open-net";
@@ -300,7 +312,7 @@ enum Seen {
 
 /// The loop the thin service runs, with the test as the port.
 struct World<'id, const G: usize = 2> {
-    station: Station<'id, Tokens<'id, G>, Caps>,
+    station: Station<'id, Tokens<'id, G>, Caps, Callbacks>,
     arbiter: Arbiter<'id, Caps, NoReservation, TestGatePath<'id>>,
     gate_issuer: GateIssuer<'id, TestGatePath<'id>>,
     seen: Vec<Seen>,
@@ -385,10 +397,10 @@ impl<'id> World<'id> {
         skipped_absences: u8,
         group_slots: [Slot; G],
         build: impl FnOnce(
-            StaConfig<Caps>,
+            StaConfig<Caps, Callbacks>,
             StationResources<'id, Tokens<'id, G>, TX, TX, G>,
         ) -> (
-            Station<'id, Tokens<'id, G>, Caps>,
+            Station<'id, Tokens<'id, G>, Caps, Callbacks>,
             StaCommandCredits<'id, TestConfigurationPath<'id>>,
         ),
     ) -> World<'id, G> {
@@ -413,8 +425,7 @@ impl<'id> World<'id> {
             association: &CAPABILITIES,
             listen_interval: StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
-            nonce,
-            he_packet_padding: |_| oer_ieee80211_port::backend_protection::HePacketPadding::None,
+            callbacks: Callbacks { nonce_calls: 0 },
         };
         let resources = StationResources {
             configure: permissions.configure,
@@ -2327,6 +2338,14 @@ fn identical_gtk_material_keeps_its_installation_and_replay_frontier() {
             .unwrap();
         world.take();
         world.receive_verified(at(51), &group_message1(&ptk, 4, 2));
+        assert_eq!(
+            world.seen,
+            [Seen::Transmit {
+                subtype: 0x0008,
+                on: 6
+            }],
+            "an unchanged GTK immediately advances Install to Send in the same action poll",
+        );
         assert!(!world.seen.iter().any(|event| matches!(
             event,
             Seen::InstallGroup(_) | Seen::ReplaceGroup(_) | Seen::RemoveKey
@@ -3313,7 +3332,7 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                 }
                 let mut qos = [StaSequenceCounter::new(SequenceNumber::ZERO); 8];
                 fn encode<'id>(
-                    station: &mut Station<'id, Tokens<'id>, Caps>,
+                    station: &mut Station<'id, Tokens<'id>, Caps, Callbacks>,
                     qos: &mut [StaSequenceCounter; 8],
                     encoding: u8,
                 ) -> Option<StaTransmit<'id, Tokens<'id>, Caps>> {

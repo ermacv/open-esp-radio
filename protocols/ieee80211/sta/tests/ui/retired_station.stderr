@@ -1,5 +1,5 @@
-error[E0599]: no method named `command` found for struct `RetiredStation<'id, T, K>` in the current scope
+error[E0599]: no method named `command` found for struct `RetiredStation<'id, T, K, C>` in the current scope
  --> tests/ui/retired_station.rs:8:16
   |
 8 |     drop(ended.command(Instant::EPOCH, request)); // ui-error: E0599
-  |                ^^^^^^^ method not found in `RetiredStation<'id, T, K>`
+  |                ^^^^^^^ method not found in `RetiredStation<'id, T, K, C>`

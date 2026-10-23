@@ -786,6 +786,16 @@ const REASON_UNSPECIFIED: u16 = 1;
 const REASON_LEAVING: u16 = 3;
 const REASON_HANDSHAKE_TIMEOUT: u16 = 15;
 
+/// Statically dispatched composition hooks retained across stop/restart.
+/// The provider owns its entropy state; each nonce request must be fresh for
+/// protected handshakes and PMF. Open-only compositions never request one.
+pub trait StaCallbacks {
+    /// Fresh randomness for each handshake and PMF SA Query procedure.
+    fn nonce(&mut self) -> [u8; 32];
+    /// Composition policy for the peer's complete HE Capabilities element.
+    fn he_packet_padding(&self, capability: &[u8]) -> HePacketPadding;
+}
+
 /// What the station connects to and how.
 ///
 /// A scan list is a contiguous sequence of checked channels. A hole that
@@ -793,7 +803,7 @@ const REASON_HANDSHAKE_TIMEOUT: u16 = 15;
 ///
 /// ```compile_fail,E0308
 /// use oer_ieee80211_sta::machine::StaConfig;
-/// fn holes<K>(config: &mut StaConfig<K>) {
+/// fn holes<K, C: oer_ieee80211_sta::machine::StaCallbacks>(config: &mut StaConfig<K, C>) {
 ///     config.channels = [None; 16];
 /// }
 /// ```
@@ -803,11 +813,11 @@ const REASON_HANDSHAKE_TIMEOUT: u16 = 15;
 /// ```
 /// use oer_ieee80211_sta::machine::StaConfig;
 /// use oer_ieee80211_port::SupportedChannel;
-/// fn one<K>(config: &mut StaConfig<K>, channel: SupportedChannel<K>) {
+/// fn one<K, C: oer_ieee80211_sta::machine::StaCallbacks>(config: &mut StaConfig<K, C>, channel: SupportedChannel<K>) {
 ///     config.channels = heapless::Vec::from_slice(&[channel]).unwrap();
 /// }
 /// ```
-pub struct StaConfig<K> {
+pub struct StaConfig<K, C: StaCallbacks> {
     /// The interface's own address.
     pub address: OwnAddress,
     /// The network's SSID.
@@ -832,12 +842,8 @@ pub struct StaConfig<K> {
     pub listen_interval: StationListenInterval,
     /// The PHY the station associates with.
     pub phy: PhyMode,
-    /// Fresh randomness for each handshake and each PMF SA Query procedure.
-    pub nonce: fn() -> [u8; 32],
-    /// The nominal packet padding the access point's HE Capabilities
-    /// element sets: an integrator's policy (the Espressif stack's is
-    /// `oer-espressif-ieee80211-policy`'s).
-    pub he_packet_padding: fn(&[u8]) -> HePacketPadding,
+    /// Entropy and HE padding policy supplied by this composition.
+    pub callbacks: C,
 }
 
 /// The receive rules a station uses, which its port must offer: checked
@@ -874,8 +880,8 @@ impl<K: Ieee80211Capabilities> Rules<K> {
 }
 
 /// The station: its state and its tokens.
-pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities> {
-    config: StaConfig<K>,
+pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
+    config: StaConfig<K, C>,
     security: StaSecurity,
     state: State<T, K>,
     keys: Keys<T>,
@@ -903,10 +909,10 @@ pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities> {
 /// Resource bank of a terminal station. It cannot accept commands, receive
 /// frames or issue protocol effects. Every remaining owner stays in this bank
 /// until its caller retires it with the installation.
-pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities> {
+pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
     /// Authenticated successors returned by disable without protocol effects.
     deferred_eapol: DeferredEapol,
-    config: StaConfig<K>,
+    config: StaConfig<K, C>,
     security: StaSecurity,
     epochs: LinkEpochSource<'id, T::EpochPath>,
     keys: Keys<T>,
@@ -928,24 +934,24 @@ pub enum StaFinalOutput<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>
 /// A resumed machine and the terminal output which belonged to its prior run.
 /// Its first actions reclaim retained keys and receive configuration; it cannot
 /// admit a new Connect before those real port terminals return.
-pub struct StationRestart<'id, T: StaTokens, K: Ieee80211Capabilities> {
-    station: Station<'id, T, K>,
+pub struct StationRestart<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
+    station: Station<'id, T, K, C>,
     deferred_eapol: DeferredEapol,
     notice: Option<StaNotice>,
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities> StationRestart<'id, T, K> {
+impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> StationRestart<'id, T, K, C> {
     /// Consume the restart into its machine and the previous run's outputs.
-    pub fn into_parts(self) -> (Station<'id, T, K>, DeferredEapol, Option<StaNotice>) {
+    pub fn into_parts(self) -> (Station<'id, T, K, C>, DeferredEapol, Option<StaNotice>) {
         (self.station, self.deferred_eapol, self.notice)
     }
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities> RetiredStation<'id, T, K> {
+impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStation<'id, T, K, C> {
     /// Reuse this installation's owners, sequence and connection-epoch source.
     /// The stopped arbiter supplies both admission places by value. A partial
     /// return collection cannot enter this infallible transition.
-    pub fn restart(self, places: StationPlaces<'id, T::GatePath>) -> StationRestart<'id, T, K> {
+    pub fn restart(self, places: StationPlaces<'id, T::GatePath>) -> StationRestart<'id, T, K, C> {
         let (place, absence_place) = places.into_parts();
         let Self {
             config,
@@ -2342,7 +2348,7 @@ impl<const GROUPS: usize> GroupCapacity<GROUPS> {
     }
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
+impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
     /// End this machine after the backend's disable/poison terminal. The caller
     /// first returns every backend terminal it received. Unlike ordinary Leave,
     /// this path owes no configuration, key removal or transmission to a port
@@ -2352,7 +2358,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         mut self,
         reason: StaDisconnectReason,
     ) -> (
-        RetiredStation<'id, T, K>,
+        RetiredStation<'id, T, K, C>,
         StationPlaceReturns<'id, T::GatePath>,
     ) {
         let notice = self.finish_commands(reason);
@@ -2424,10 +2430,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     #[inline(never)]
     pub fn finish_placed<'a, 'b>(
         mut machine: oer_memory::Placed<'a, Self>,
-        destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K>>,
+        destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K, C>>,
         reason: StaDisconnectReason,
     ) -> (
-        oer_memory::Placed<'b, RetiredStation<'id, T, K>>,
+        oer_memory::Placed<'b, RetiredStation<'id, T, K, C>>,
         StationPlaceReturns<'id, T::GatePath>,
     ) {
         let notice = machine.finish_commands(reason);
@@ -2503,7 +2509,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     #[cfg(feature = "placement")]
     pub fn init_open<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
-        config: StaConfig<K>,
+        config: StaConfig<K, C>,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         Self::from_config_in_place(storage, config, StaSecurity::Open, resources)
@@ -2512,7 +2518,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// Build an open station; its backend may grant zero group slots.
     #[doc = include_str!("machine/resources_contracts.md")]
     pub fn new_open<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
-        config: StaConfig<K>,
+        config: StaConfig<K, C>,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         Self::from_config(config, StaSecurity::Open, resources)
@@ -2520,7 +2526,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// Build a personal station. `capacity` proves its group capacity nonzero.
     pub fn new_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
-        config: StaConfig<K>,
+        config: StaConfig<K, C>,
         password: SaePassword,
         pmk: Pmk,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
@@ -2530,7 +2536,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     fn from_config<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
-        config: StaConfig<K>,
+        config: StaConfig<K, C>,
         security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
@@ -2589,7 +2595,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     #[inline(never)]
     fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
-        config: StaConfig<K>,
+        config: StaConfig<K, C>,
         security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
@@ -2836,8 +2842,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// ```
     /// use oer_ieee80211_sta::machine::{Station, StaTokens};
     /// use oer_ieee80211_port::Ieee80211Capabilities;
-    /// fn receive<T: StaTokens, K: Ieee80211Capabilities>(
-    ///     station: &mut Station<'_, T, K>, now: oer_time::Instant,
+    /// fn receive<T: StaTokens, K: Ieee80211Capabilities, C: oer_ieee80211_sta::machine::StaCallbacks>(
+    ///     station: &mut Station<'_, T, K, C>, now: oer_time::Instant,
     ///     frame: &[u8], meta: T::RxMeta,
     /// ) {
     ///     let _ = station.receive(now, frame, meta, |_| {});
@@ -3061,7 +3067,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             _ => None,
         }
     }
-    fn transition(&mut self) -> (TransitionContext<'_, 'id, T, K>, &mut State<T, K>) {
+    fn transition(&mut self) -> (TransitionContext<'_, 'id, T, K, C>, &mut State<T, K>) {
         (
             TransitionContext {
                 config: &mut self.config,
@@ -3087,8 +3093,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 }
 
 /// Disjoint resource loans used while the resident phase is mutably borrowed.
-struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> {
-    config: &'s mut StaConfig<K>,
+struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
+    config: &'s mut StaConfig<K, C>,
     security: &'s mut StaSecurity,
     keys: &'s mut Keys<T>,
     configuration: &'s mut Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
@@ -3112,7 +3118,9 @@ struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> {
     epochs: &'s mut LinkEpochSource<'id, T::EpochPath>,
 }
 
-impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id, T, K> {
+impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
+    TransitionContext<'s, 'id, T, K, C>
+{
     /// The security policy the scan selects and the join associates with.
     const fn policy(&self) -> StaSecurityPolicy {
         match *self.security {
@@ -4090,11 +4098,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
                                 .password_element(self.config.address.get(), bssid.get())
                             }
                         };
-                        let commit =
-                            SaeCommit::new(&element, (self.config.nonce)(), (self.config.nonce)())
-                                .map_err(|error| {
-                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                                })?;
+                        let commit = SaeCommit::new(
+                            &element,
+                            self.config.callbacks.nonce(),
+                            self.config.callbacks.nonce(),
+                        )
+                        .map_err(|error| {
+                            StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
+                        })?;
                         let (authentication, transmission) =
                             StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
                                 .map_err(StaDisconnectReason::Sae)?;
@@ -4420,7 +4431,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
                                     &join.access_point,
                                     &response,
                                     self.config.phy,
-                                    self.config.he_packet_padding,
+                                    |capability| {
+                                        self.config.callbacks.he_packet_padding(capability)
+                                    },
                                 ) {
                                     Ok(associated) => {
                                         join.step = JoinStep::NotifyAssociated {
@@ -4509,7 +4522,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
                         if matches!(
                             peer_disconnect(frame, self.config.address, connected.bssid),
                             Some(6 | 7)
-                        ) && management.start_query(now, self.config.nonce).is_err()
+                        ) && management
+                            .start_query(now, || self.config.callbacks.nonce())
+                            .is_err()
                         {
                             return leave_connected(
                                 connected,
@@ -5830,7 +5845,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id,
         let supplicant = RsnStaSupplicant::try_new(
             self.config.address.get(),
             bssid.get(),
-            (self.config.nonce)(),
+            self.config.callbacks.nonce(),
             join.rsn.as_bytes(),
             join.access_point.rsn_ie_bytes(),
             join.access_point.rsnxe_bytes(),

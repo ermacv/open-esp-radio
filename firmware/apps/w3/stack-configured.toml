@@ -2,45 +2,31 @@ schema = 5
 extends = "stack.toml"
 
 # Configured W3 only: the unconfigured image does not link these implementations.
-# The ceilings are the measured frames; they only decrease.
+# The ceilings are the measured frames; changes are checked against sizes.json.
 # Remove an entry when its implementation disappears or its frame fits the move limit.
-
-[[frame_exceptions.runtime]]
-function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::send::<2, 8, 2>"
-reason = "Owned transmit packet from io.transmit.try_receive, Msdu admission and ServiceOutput::MsduRefused retain Ethernet payload temporaries in this outlined send frame."
-ceiling_bytes = 4928
 
 [[frame_exceptions.runtime]]
 function = "oer_radio_port::slot::poll_body::<<oer_radio_port::lifecycle::run_port::BodyAdapter<oer_firmware_apps_w3::station::Body> as oer_radio_port::slot::SlotBody<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_esp32s31_ieee80211_driver::port::Esp32s31Backend<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>>::run::{closure#0}>"
 reason = "Polling BodyAdapter::run inlines the station Body future and its placed service startup/completion values into this P1 poll boundary."
-ceiling_bytes = 6720
-
-[[frame_exceptions.runtime]]
-function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0}"
-reason = "The disable sink owns a LowerMacTerminal, its converted station terminal and ContractFault/TerminalCustody results while routing or quarantining it."
-ceiling_bytes = 6960
-
-[[frame_exceptions.runtime]]
-function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::run_loop::<2, 8, 2, oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0}"
-reason = "The run_loop disable sink owns a sealed LowerMacTerminal and ContractFault while retaining unexpected terminals in TerminalCustody after EventEnd."
-ceiling_bytes = 6960
-
-[[frame_exceptions.runtime]]
-function = "<<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::disable<oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0} as core::ops::function::FnOnce<(oer_ieee80211_port::phase::LowerMacTerminal<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>,)>>::call_once::{shim:vtable#0}"
-reason = "FnOnce vtable shim for the disable terminal sink passes the owned LowerMacTerminal to the closure; its conversion and ContractFault/TerminalCustody temporaries are inlined here."
-ceiling_bytes = 6960
-
-[[frame_exceptions.runtime]]
-function = "<<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::run_loop<2, 8, 2, oer_embassy_time::EmbassyClock>::{closure#0}::{closure#0} as core::ops::function::FnOnce<(oer_ieee80211_port::phase::LowerMacTerminal<oer_esp32s31_ieee80211_driver::port::Types<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>,)>>::call_once::{shim:vtable#0}"
-reason = "FnOnce vtable shim for the run_loop terminal sink passes the owned LowerMacTerminal to the closure; its conversion and ContractFault/TerminalCustody temporaries are inlined here."
-ceiling_bytes = 6960
-
-[[frame_exceptions.runtime]]
-function = "<oer_memory::static_place::PlacedFuture<<oer_ieee80211_runtime::station_service::StationService<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Rates, 1>>::run_placed<2, 8, 2, oer_embassy_time::EmbassyClock>::{closure#0}> as core::future::future::Future>::poll"
-reason = "The statically backed service poll inlines enable/disable bookkeeping and quarantine constructors; service-end custody remains resident in the future backing."
-ceiling_bytes = 11824
+ceiling_bytes = 6784
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::ConnectedRsn>::advance_deferred"
 reason = "Replacing DeferredEapol owns pending M3/GM1 requests while AES key unwrap and supplicant processing build the next installation/rekey state."
 ceiling_bytes = 4912
+
+[[frame_exceptions.runtime]]
+function = "oer_ieee80211_runtime::station_service::retain_after_event_end::<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>>"
+reason = "The static stream-end terminal handler seals unexpected owners in ContractFault/TerminalCustody and returns the original owner when that bank is full."
+ceiling_bytes = 6960
+
+
+[[frame_exceptions.runtime]]
+function = "<oer_memory::static_place::PlacedFuture<<oer_ieee80211_runtime::station_service::StationService<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::run_placed<2, 8, 2, oer_firmware_apps_w3::station::Output, oer_embassy_time::EmbassyClock>::{closure#0}> as core::future::future::Future>::poll"
+reason = "The statically backed service poll retains enable/disable bookkeeping and quarantine constructors; service-end custody remains resident in the future backing."
+ceiling_bytes = 11808
+
+[[frame_exceptions.runtime]]
+function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}"
+reason = "The disable poll combines the former owner poll and terminal-routing sink frame so their terminal/fault temporaries can share storage."
+ceiling_bytes = 7216

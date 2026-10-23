@@ -246,9 +246,46 @@ pub struct Body {
     pub seed: u64,
 }
 
-type Service<'id, Id> = StationService<'id, StationComposition<Id>, Rates, 1>;
-type Completed<'p, 'id, Id> = ServiceCompleted<'p, 'id, StationComposition<Id>, Rates, 1>;
-type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, 2, 8, 2, Child<Root<Id>, 8>>;
+struct Callbacks;
+impl machine::StaCallbacks for Callbacks {
+    // W3 admits open associations only; protected handshakes never use this.
+    fn nonce(&mut self) -> [u8; 32] { [0; 32] }
+    fn he_packet_padding(&self, _: &[u8]) -> backend_protection::HePacketPadding {
+        backend_protection::HePacketPadding::None
+    }
+}
+
+struct Output<'a> {
+    link: &'a core::cell::Cell<bool>,
+    disconnected: &'a core::cell::Cell<bool>,
+    failed: &'a core::cell::Cell<bool>,
+    rx_reasons: &'a core::cell::Cell<u16>,
+}
+impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_> {
+    fn emit(&mut self, event: ServiceOutput<'id, Caps, Path>) {
+        match event {
+            ServiceOutput::RxFrameDropped(reason) => {
+                let bit = match reason {
+                    machine::StaRxError::Frame(reason) => 1u16 << reason as u16,
+                    machine::StaRxError::Security(_) => 1u16 << 9,
+                };
+                self.rx_reasons.set(self.rx_reasons.get() | bit);
+            }
+            ServiceOutput::RxMsduRefused(_) => self.rx_reasons.set(self.rx_reasons.get() | (1u16 << 10)),
+            ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => self.link.set(true),
+            ServiceOutput::Notice(machine::StaNotice::Disconnected(_)) => {
+                self.link.set(false);
+                self.disconnected.set(true);
+            }
+            ServiceOutput::CommandRefused(_) | ServiceOutput::TxRefused { .. } => self.failed.set(true),
+            _ => {}
+        }
+    }
+}
+
+type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1>;
+type Completed<'p, 'id, Id> = ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1>;
+type Io<'c, 'id, Id> = ServiceIo<'c, 'id, Caps, Output<'c>, 2, 8, 2, Child<Root<Id>, 8>>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, Id: SlotIdentity + 'id> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, Id>>>;
 
@@ -347,7 +384,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
         Duration::from_millis(100),
     )
     .view();
-    let service = StationService::<StationComposition<Id>, _, 1>::init_in_place(
+    let service = StationService::<StationComposition<Id>, _, _, 1>::init_in_place(
         service_storage,
         |station_storage| {
             let (station, granted) = Station::init_open(
@@ -367,8 +404,7 @@ fn initialize_service<'id, Id: SlotIdentity + 'id>(
                     association: &ASSOCIATION,
                     listen_interval: oer_ieee80211_sta::request::StationListenInterval::DEFAULT,
                     phy: PhyMode::Ht20,
-                    nonce: || [0; 32],
-                    he_packet_padding: |_| backend_protection::HePacketPadding::None,
+                    callbacks: Callbacks,
                 },
                 StationResources::<_, 4, 4, 1> {
                     configure: resources.station_commands.configure,
@@ -424,23 +460,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let disconnected = core::cell::Cell::new(false);
         let failed = core::cell::Cell::new(false);
         let rx_reasons = core::cell::Cell::new(0u16);
-        let mut output = |event| match event {
-            ServiceOutput::RxFrameDropped(reason) => {
-                let bit = match reason {
-                    machine::StaRxError::Frame(reason) => 1u16 << reason as u16,
-                    machine::StaRxError::Security(_) => 1u16 << 9,
-                };
-                rx_reasons.set(rx_reasons.get() | bit);
-            }
-            ServiceOutput::RxMsduRefused(_) => rx_reasons.set(rx_reasons.get() | (1u16 << 10)),
-            ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => link.set(true),
-            ServiceOutput::Notice(machine::StaNotice::Disconnected(_)) => {
-                link.set(false);
-                disconnected.set(true);
-            }
-            ServiceOutput::CommandRefused(_) | ServiceOutput::TxRefused { .. } => failed.set(true),
-            _ => {}
-        };
+        let mut output = Output { link: &link, disconnected: &disconnected, failed: &failed, rx_reasons: &rx_reasons };
         let mut io = ServiceIo {
             commands: command_receive,
             transmit: tx_receive,
