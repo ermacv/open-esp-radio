@@ -46,12 +46,12 @@ trait PrimaryInterruptBackend {
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation;
 }
 
-struct PrimaryHardware<'a> {
+struct PrimaryHardware<'a, C: oer_time::Clock> {
     interrupts: &'a mut InterruptRegistersOwner,
-    clock: SchedulerInterruptClock<'a>,
+    clock: SchedulerInterruptClock<'a, C>,
 }
 
-impl PrimaryInterruptBackend for PrimaryHardware<'_> {
+impl<C: oer_time::Clock> PrimaryInterruptBackend for PrimaryHardware<'_, C> {
     fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
         self.interrupts.capture_primary_and_acknowledge()
     }
@@ -109,7 +109,7 @@ fn execute_primary_interrupt_capture(
 /// the existing bounded reference-gate protocol, in its original order.
 pub(crate) fn step_primary_interrupt(
     interrupts: &mut InterruptRegistersOwner,
-    clock: &dyn oer_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> PrimaryInterruptCapture {
     execute_primary_interrupt_capture(&mut PrimaryHardware {
         interrupts,

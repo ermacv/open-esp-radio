@@ -282,7 +282,7 @@ impl SchedulerHardware<HalPublications> {
         controller: &mut ControllerHal<'_>,
         interrupts: &mut SchedulerTaskHalf,
         storage: &impl SchedulerDoorbell,
-        items: &SchedulerItemSpace<'_>,
+        items: &SchedulerItemSpace<impl crate::bluetooth::engine::SchedulerItemSources>,
     ) -> Result<
         crate::bluetooth::engine::scheduler::SchedulerHardwareSnapshot,
         SchedulerHardwareError,
@@ -316,7 +316,7 @@ impl SchedulerHardware<HalPublications> {
         controller: &mut ControllerHal<'_>,
         interrupts: &mut SchedulerTaskHalf,
         storage: &impl SchedulerDoorbell,
-        items: &SchedulerItemSpace<'_>,
+        items: &SchedulerItemSpace<impl crate::bluetooth::engine::SchedulerItemSources>,
         step: &SchedulerStep<I, CAPACITY>,
     ) -> Result<(), SchedulerHardwareError> {
         for action in step.actions() {
@@ -378,7 +378,7 @@ impl SchedulerHardware<HalPublications> {
         controller: &mut ControllerHal<'_>,
         interrupts: &mut SchedulerTaskHalf,
         storage: &S,
-        items: &SchedulerItemSpace<'_>,
+        items: &SchedulerItemSpace<impl crate::bluetooth::engine::SchedulerItemSources>,
         insertion: SchedulerIdleInsertion,
     ) -> Result<(), SchedulerStartError<SchedulerInterruptError>> {
         if items.listed_item(insertion.head).is_none() {

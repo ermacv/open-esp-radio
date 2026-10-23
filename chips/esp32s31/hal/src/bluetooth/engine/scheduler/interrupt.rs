@@ -35,16 +35,16 @@ pub trait SchedulerDoorbell {
     fn poll_reply(&self, cx: &mut Context<'_>) -> Poll<Result<(), SchedulerInterruptError>>;
 }
 
-/// Shared, out-of-line clock read for the bounded P3 diagnostic settles.
+/// Typed, out-of-line clock read for the bounded P3 diagnostic settles.
 /// It reads the exact supplied clock; the boundary prevents each command's
 /// generic settle loop from inlining another copy of its conversion code.
-pub struct SchedulerInterruptClock<'a>(&'a dyn oer_time::Clock);
-impl<'a> SchedulerInterruptClock<'a> {
-    pub const fn new(clock: &'a dyn oer_time::Clock) -> Self {
+pub struct SchedulerInterruptClock<'a, C: oer_time::Clock>(&'a C);
+impl<'a, C: oer_time::Clock> SchedulerInterruptClock<'a, C> {
+    pub const fn new(clock: &'a C) -> Self {
         Self(clock)
     }
 }
-impl oer_time::Clock for SchedulerInterruptClock<'_> {
+impl<C: oer_time::Clock> oer_time::Clock for SchedulerInterruptClock<'_, C> {
     #[inline(never)]
     fn now(&self) -> oer_time::Instant {
         self.0.now()
@@ -179,7 +179,7 @@ impl SchedulerInterruptHalf {
     pub fn service(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
-        clock: &dyn oer_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> bool {
         let clock = SchedulerInterruptClock::new(clock);
         self.service_with(|command| {
