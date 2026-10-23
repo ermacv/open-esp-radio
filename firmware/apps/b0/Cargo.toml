@@ -30,7 +30,7 @@ oer-bluetooth-le-controller = { path = "../../../protocols/bluetooth/le/controll
 oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", features = ["bluetooth"] }
-oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", features = ["bluetooth"] }
+oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-espressif-esp-hal-irq = { workspace = true }
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
