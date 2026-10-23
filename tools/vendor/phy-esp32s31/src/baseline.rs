@@ -22,6 +22,32 @@ pub const SCHEMA: u16 = 1;
 const CHIP: &str = "esp32s31";
 const SCENARIO: &str = "phy-vendor-calibration-cold";
 
+// Production capture, full-registration/cache exchange and comparison inputs.
+// Test bodies live in external modules and are deliberately not recipe inputs.
+const RECIPE_INPUTS: &[&str] = &[
+    "chips/esp32s31/vendor/artifacts.toml",
+    "firmware/vendor/esp32s31/calibration/main/main.c",
+    "firmware/vendor/esp32s31/calibration/sdkconfig.defaults",
+    "firmware/vendor/esp32s31/calibration/CMakeLists.txt",
+    "firmware/vendor/esp32s31/calibration/firmware.toml",
+    "firmware/vendor/esp32s31/calibration/main/CMakeLists.txt",
+    "firmware/vendor/esp32s31/calibration/main/reported.h.in",
+    "tools/vendor/phy/src/calibration_capture.rs",
+    "tools/vendor/phy/src/calibration_capture/boots.rs",
+    "tools/vendor/phy/src/calibration_capture/vendor.rs",
+    "tools/vendor/phy/src/calibration_capture/space.rs",
+    "tools/vendor/phy/src/workload/calibration.rs",
+    "tools/vendor/phy-esp32s31/src/compare.rs",
+    "tools/vendor/phy-esp32s31/src/compare/initial_pair.rs",
+    "tools/vendor/phy/src/workload.rs",
+    "tools/vendor/phy/src/cache.rs",
+    "tools/hil/lab/src/calibration_cache.rs",
+    "tools/vendor/phy-esp32s31/src/compare/control.rs",
+    "tools/vendor/phy-esp32s31/src/baseline.rs",
+    "tools/vendor/phy-esp32s31/src/baseline/runs.rs",
+    "tools/vendor/phy-esp32s31/src/family.rs",
+];
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Signature {
@@ -105,25 +131,7 @@ impl Signature {
                 ],
             )?,
             review_sha256: oer_os_durable::sha256_bytes(compare::TOLERANCES.as_bytes()),
-            recipe_sha256: digest(
-                root,
-                &[
-                    "chips/esp32s31/vendor/artifacts.toml",
-                    "firmware/vendor/esp32s31/calibration/main/main.c",
-                    "firmware/vendor/esp32s31/calibration/sdkconfig.defaults",
-                    "firmware/vendor/esp32s31/calibration/CMakeLists.txt",
-                    "firmware/vendor/esp32s31/calibration/firmware.toml",
-                    "firmware/vendor/esp32s31/calibration/main/CMakeLists.txt",
-                    "firmware/vendor/esp32s31/calibration/main/reported.h.in",
-                    "tools/vendor/phy/src/calibration_capture.rs",
-                    "tools/vendor/phy/src/calibration_capture/boots.rs",
-                    "tools/vendor/phy/src/calibration_capture/vendor.rs",
-                    "tools/vendor/phy/src/calibration_capture/space.rs",
-                    "tools/vendor/phy/src/workload/calibration.rs",
-                    "tools/vendor/phy-esp32s31/src/compare.rs",
-                    "tools/vendor/phy-esp32s31/src/compare/initial_pair.rs",
-                ],
-            )?,
+            recipe_sha256: digest(root, RECIPE_INPUTS)?,
         })
     }
     pub fn path(&self, root: &Path) -> PathBuf {
@@ -481,6 +489,13 @@ pub struct Check {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comparison: Option<compare::Summary>,
 }
+
+/// Subject and optional authenticated primary CONTROL from its own run.
+pub struct Captures<'a> {
+    pub identity: &'a Images,
+    pub production: &'a [ProductionBoot],
+    pub control: Option<&'a compare::SameRunControl>,
+}
 impl Check {
     pub fn incomplete(reason: impl ToString) -> Self {
         Self {
@@ -631,10 +646,9 @@ impl Reference {
         images: &RegisterImages,
         board: &str,
         revision: u16,
-        identity: &Images,
-        production: &[ProductionBoot],
+        captures: Captures<'_>,
     ) -> Check {
-        match self.check_complete(signature, images, board, revision, identity, production) {
+        match self.check_complete(signature, images, board, revision, captures) {
             Ok(summary) => Check {
                 verdict: summary.verdict,
                 reasons: vec![],
@@ -649,9 +663,16 @@ impl Reference {
         images: &RegisterImages,
         board: &str,
         revision: u16,
-        identity: &Images,
-        production: &[ProductionBoot],
+        captures: Captures<'_>,
     ) -> Result<compare::Summary> {
+        let Captures {
+            identity,
+            production,
+            control,
+        } = captures;
+        if control.is_some_and(|c| !c.belongs_to(identity, production.len())) {
+            return Err("CONTROL belongs to a different capture identity or series length".into());
+        }
         self.validate(signature, images, board, revision)?;
         if identity.vendor_application_sha256 != self.vendor_application_sha256
             || identity.vendor_idf_revision != self.signature.idf_revision
@@ -725,12 +746,18 @@ impl Reference {
             mmio.iter(),
             production.iter().map(|b| &b.registers),
             &reviews.registers,
+            control
+                .map(|c| c.boots.iter().map(|b| &b.registers).collect::<Vec<_>>())
+                .as_deref(),
         );
         let analog = compare::compare_registers(
             &images.analog,
             analog.iter(),
             production.iter().map(|b| &b.analog),
             &reviews.registers,
+            control
+                .map(|c| c.boots.iter().map(|b| &b.analog).collect::<Vec<_>>())
+                .as_deref(),
         );
         let verdict = if fields.iter().any(|f| f.verdict == Verdict::Diff)
             || registers.verdict == Verdict::Diff

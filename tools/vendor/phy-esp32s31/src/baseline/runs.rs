@@ -218,8 +218,20 @@ pub fn vendor(root: &Path, label: &str, revision: u16) -> Result<Vec<Input>> {
 fn production_series(repetition: &Value, observations: &Value, captures: usize) -> Result<()> {
     let comparison = observation(observations, "comparison")?;
     let summary = comparison.get("comparison").unwrap_or(comparison);
+    let missing_control = summary.get("schema").and_then(Value::as_u64)
+        == Some(u64::from(compare::SCHEMA))
+        && summary
+            .pointer("/analog/same-run-control")
+            .and_then(Value::as_array)
+            .is_some_and(|rows| {
+                rows.iter().any(|row| {
+                    row.get("verdict").and_then(Value::as_str) == Some("incomplete")
+                        && row.get("vendor-captures").and_then(Value::as_u64) == Some(0)
+                })
+            });
     if !matches!(text(repetition, "outcome")?, "passed" | "failed")
-        || !matches!(text(comparison, "verdict")?, "match" | "diff")
+        || !(matches!(text(comparison, "verdict")?, "match" | "diff")
+            || (text(comparison, "verdict")? == "incomplete" && missing_control))
         || summary.get("production-captures").and_then(Value::as_u64) != Some(captures as u64)
         || captures == 0
     {
@@ -228,11 +240,18 @@ fn production_series(repetition: &Value, observations: &Value, captures: usize) 
     Ok(())
 }
 
-pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<ProductionBoot>)> {
+pub struct ProductionSeries {
+    pub identity: Images,
+    pub production: Vec<ProductionBoot>,
+    pub control: Option<compare::SameRunControl>,
+}
+
+pub fn production(root: &Path, label: &str, channel: u8) -> Result<ProductionSeries> {
     manifest(root, label)?;
     let suite = read(&root.join("suite.json"))?;
     let mut captures = vec![];
     let mut identity = None;
+    let mut control = None;
     for scenario in array(&suite, "scenarios")? {
         if !matches!(
             text(scenario, "scenario")?,
@@ -253,6 +272,44 @@ pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<
             let directory = text(rep, "artifact_directory")?;
             let n = count(&observations, "production-boot-")?;
             production_series(rep, &observations, n)?;
+            if text(scenario, "scenario")? == "phy-vendor-calibration-cold" {
+                if !captures.is_empty() {
+                    return Err(
+                        "same-run CONTROL requires one complete alternating repetition".into(),
+                    );
+                }
+                // The vendor importer authenticates primary attachments, discovery,
+                // image identity, run/board provenance and the unchanged channel.
+                let repetition = rep
+                    .get("repetition")
+                    .and_then(Value::as_u64)
+                    .ok_or("missing repetition")?;
+                let inputs = vendor(root, label, 0)?;
+                let mut matching = inputs.into_iter().filter(|input| {
+                    input.source.scenario == "phy-vendor-calibration-cold"
+                        && u64::from(input.source.repetition) == repetition
+                });
+                let input = matching
+                    .next()
+                    .ok_or("missing same-repetition vendor CONTROL")?;
+                if matching.next().is_some()
+                    || input.identity != *identity.as_ref().ok_or("missing identity")?
+                    || input.channel != channel
+                {
+                    return Err(
+                        "CONTROL identity/channel differs from its production series".into(),
+                    );
+                }
+                control = compare::SameRunControl::alternating(
+                    Lifecycle::Cold,
+                    &input.identity,
+                    input.boots,
+                    n,
+                );
+                if control.is_none() {
+                    return Err("CONTROL is not a complete alternating cold series".into());
+                }
+            }
             for i in 1..=n {
                 let ready = observation(&observations, &format!("production-{i:03}-registration"))?;
                 if ready.get("lifecycle").and_then(Value::as_str) != Some("Cold")
@@ -281,40 +338,12 @@ pub fn production(root: &Path, label: &str, channel: u8) -> Result<(Images, Vec<
             }
         }
     }
-    Ok((identity.ok_or("no production image identity")?, captures))
+    Ok(ProductionSeries {
+        identity: identity.ok_or("no production image identity")?,
+        production: captures,
+        control,
+    })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn partial_production_series_cannot_become_a_match_from_the_completed_prefix() {
-        let mut rep = serde_json::json!({"outcome":"failed"});
-        let mut observations = serde_json::json!({"observations":[{"name":"comparison","value":{"verdict":"diff","production-captures":2}}]});
-        production_series(&rep, &observations, 2).unwrap();
-        assert!(production_series(&rep, &observations, 1).is_err());
-        rep["outcome"] = "broken".into();
-        assert!(production_series(&rep, &observations, 2).is_err());
-        rep["outcome"] = "failed".into();
-        observations["observations"][0]["value"]["verdict"] = "incomplete".into();
-        assert!(production_series(&rep, &observations, 2).is_err());
-    }
-    #[test]
-    fn attachments_cannot_change_or_escape_and_discovery_is_not_a_primary_series() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("boot.json"), b"{}").unwrap();
-        let r = serde_json::json!({"attachments":[{"path":"boot.json","size_bytes":2,"sha256":oer_os_durable::sha256_bytes(b"{}")} ]});
-        assert_eq!(attached(dir.path(), &r, "boot.json").unwrap(), b"{}");
-        std::fs::write(dir.path().join("boot.json"), b"[]").unwrap();
-        assert!(attached(dir.path(), &r, "boot.json").is_err());
-        assert!(attached(dir.path(), &r, "../boot.json").is_err());
-        assert_eq!(count(&serde_json::json!({"observations":[{"name":"vendor-readability-discovery","value":{}}]}),"vendor-boot-").unwrap(),0);
-        assert!(
-            count(
-                &serde_json::json!({"observations":[{"name":"vendor-boot-002","value":{}}]}),
-                "vendor-boot-"
-            )
-            .is_err()
-        );
-    }
-}
+mod tests;

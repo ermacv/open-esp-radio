@@ -50,4 +50,9 @@ An IDF pin change invalidates every board/point section. A new board has no
 reference until measured and does not inherit another board's ranges.
 Recipe, model, relation, scenario or review changes invalidate the affected
 reference. Restart and IEEE 802.15.4 points have no recorded sections here.
+XTAL duty bytes `61.09`/`61.0a` require CONTROL from the same complete alternating
+run under the typed review. Recorded-only runs leave this part INCOMPLETE;
+they never supply CONTROL by building or flashing a vendor image. Other bounds
+remain fixed. Production recipe fingerprints include full/cache handling and
+exclude external test bodies. A changed production recipe requires new captures.
 Generated JSON is replaced only through the generator, never hand-edited.

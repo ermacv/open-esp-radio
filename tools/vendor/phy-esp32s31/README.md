@@ -63,8 +63,8 @@ shared or Wi-Fi RX-DC gain pair when both codes equal gain0 of that same
 capture. Gain0 and Wi-Fi fine-calibration pairs retain the range rule.
 Each acceptance outside the vendor bounds appears under the field's
 `initial-pairs`, with capture index, gain, pair and the reason
-`initial pair, vendor-faithful`. Summary schema 5 adds these rows;
-tolerance schema 3 adds the reviewed rule. The live and recorded comparisons
+`initial pair, vendor-faithful`. Summary schema 6 retains these rows;
+tolerance schema 4 defines the reviewed rules. The live and recorded comparisons
 use the same per-capture check, including when paired vendor boots are
 projected as the CONTROL subject. Reported bounds and margins remain measured.
 `excluded` skips only value comparison. Every vendor-readable register,
@@ -79,6 +79,16 @@ unchanged masks; every byte must still be read. The vendor has shifted between
 physical cause is unknown. Other recorded bounds remain fixed. Recorded-only
 comparison without CONTROL leaves these bytes explicitly INCOMPLETE and never
 builds or flashes a vendor image to supply the missing control.
+The register summary's `same-run-control` rows retain the rule reason, CONTROL
+capture count, measured vendor/production bounds, margin and verdict, including
+INCOMPLETE when CONTROL or a mandatory read is missing. A Wi-Fi CONTROL requires
+at least ten paired boots (five for IEEE 802.15.4); a smoke pair is insufficient.
+
+The recipe fingerprint hashes production capture/comparison sources, including
+the full-registration/cache exchange. Test bodies live in external modules and
+are excluded. A production recipe change leaves an older recorded reference
+INCOMPLETE until new captures are obtained; moving tests does not authorize
+re-signing captures from a different production recipe.
 
 Each run retains per-boot captures, console evidence, image digests, reference
 ESP-IDF revision, readable/unreadable registers and the complete comparison

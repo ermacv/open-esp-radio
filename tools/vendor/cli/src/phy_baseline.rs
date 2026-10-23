@@ -85,15 +85,17 @@ pub fn run(ctx: &Checkout, args: Arguments) -> Result<ExitCode> {
                 let signature = Signature::current(&ctx.root)?;
                 let reference =
                     Reference::read(&reference.unwrap_or_else(|| signature.path(&ctx.root)))?;
-                let (identity, production) =
-                    baseline::runs::production(&run, &board, reference.channel)?;
+                let series = baseline::runs::production(&run, &board, reference.channel)?;
                 Ok(reference.check(
                     &signature,
                     &baseline::images(&ctx.root)?,
                     &board,
                     revision,
-                    &identity,
-                    &production,
+                    baseline::Captures {
+                        identity: &series.identity,
+                        production: &series.production,
+                        control: series.control.as_ref(),
+                    },
                 ))
             })()
             .unwrap_or_else(Check::incomplete);
