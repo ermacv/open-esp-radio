@@ -510,23 +510,35 @@ mod tests {
     }
     #[test]
     fn profiles_keep_the_existing_operation_limits() {
-        for profile in [AnalysisProfile::RegisterInventory, AnalysisProfile::SignatureCorpus] {
-            assert_eq!(profile.limits(), OperationLimits {
-                work_units: 1_000_000_000,
-                working_memory_bytes: 256 << 20,
-                timeout_ms: 3_600_000,
-            });
+        for profile in [
+            AnalysisProfile::RegisterInventory,
+            AnalysisProfile::SignatureCorpus,
+        ] {
+            assert_eq!(
+                profile.limits(),
+                OperationLimits {
+                    work_units: 1_000_000_000,
+                    working_memory_bytes: 256 << 20,
+                    timeout_ms: 3_600_000,
+                }
+            );
         }
-        assert_eq!(AnalysisProfile::VendorScenario.limits(), OperationLimits {
-            work_units: 2_000_000_000,
-            working_memory_bytes: 256 << 20,
-            timeout_ms: 600_000,
-        });
-        assert_eq!(AnalysisProfile::VendorCopies.limits(), OperationLimits {
-            work_units: 1_000_000_000_000,
-            working_memory_bytes: 8192 << 20,
-            timeout_ms: 1_200_000,
-        });
+        assert_eq!(
+            AnalysisProfile::VendorScenario.limits(),
+            OperationLimits {
+                work_units: 2_000_000_000,
+                working_memory_bytes: 256 << 20,
+                timeout_ms: 600_000,
+            }
+        );
+        assert_eq!(
+            AnalysisProfile::VendorCopies.limits(),
+            OperationLimits {
+                work_units: 1_000_000_000_000,
+                working_memory_bytes: 8192 << 20,
+                timeout_ms: 1_200_000,
+            }
+        );
         assert_eq!(
             AnalysisProfile::BlobrayCli.limits(),
             OperationLimits {

@@ -226,6 +226,8 @@ pub fn render(label: &str, expected: Option<ComparisonVerdict>, cases: &[Case]) 
 /// The JSON form of a report.
 #[derive(Serialize)]
 struct Report<'a> {
+    schema: u32,
+    analysis_resources: &'a [crate::session::OperationResources],
     cases: &'a [Case],
     missing: &'a [crate::discovery::Missing],
 }
@@ -238,6 +240,7 @@ pub fn write(
     expected: Option<ComparisonVerdict>,
     cases: &[Case],
     missing: &[crate::discovery::Missing],
+    analysis_resources: &[crate::session::OperationResources],
 ) -> Result<PathBuf> {
     let directory = run.join(DIRECTORY);
     std::fs::create_dir_all(&directory)?;
@@ -258,7 +261,12 @@ pub fn write(
     )?;
     std::fs::write(
         directory.join(format!("{stem}.json")),
-        serde_json::to_vec_pretty(&Report { cases, missing })?,
+        serde_json::to_vec_pretty(&Report {
+            schema: 1,
+            analysis_resources,
+            cases,
+            missing,
+        })?,
     )?;
     Ok(text)
 }
@@ -374,6 +382,7 @@ pub(crate) mod tests {
             "rx append/1",
             Some(ComparisonVerdict::Match),
             &cases,
+            &[],
             &[],
         )
         .unwrap();

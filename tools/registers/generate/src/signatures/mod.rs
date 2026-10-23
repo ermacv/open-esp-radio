@@ -109,7 +109,7 @@ pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
         );
     }
     let report = serde_json::json!({
-        "chip": options.chip, "revision": revision, "corpus": corpus,
+        "schema": 1, "chip": options.chip, "revision": revision, "corpus": corpus,
         "covered": findings.signatures.len(), "uncovered_by_reason": reasons,
         "uncovered": uncovered, "failed_header_contexts": findings.failed_contexts,
         "conflicting_declarations": findings.conflicts,

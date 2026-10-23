@@ -24,7 +24,12 @@ whole-word reset writes are not uses. Unknown reset or stored value remains
 unknown unless an explicit replacement mask establishes use.
 
 The check writes `target/register-inventory/<chip>/report.txt` and `report.json`
-before failing on used bits without fields. `reserved_violation_bits` are
+before failing on used bits without fields. The JSON envelope is schema 1;
+`analysis_resources` records the `register-inventory` profile, effective limits,
+work and admitted-memory usage, and typed affected events, functions and records.
+Counters are merged across disjoint inputs while call summaries still see the
+whole corpus. `inventory-enumerated-indices` and `declared-word-runs` remain typed
+unaccounted limits. `reserved_violation_bits` are
 uses of a source's explicitly reserved bits, with per-source masks;
 `absent_violation_bits` are uses of bits without a field or reserved annotation.
 Both are errors. The single register property `reserved = { mask = ...,
@@ -422,7 +427,10 @@ for a header in a submodule. Facts are Apache-2.0; the generator remains
 under the workspace license. It copies no source declarations or code.
 
 The ignored report directory defaults to `target/register-signatures/<chip>`.
-It contains the raw call capture, compiler diagnostics and `coverage.json`:
+The child Blobray uses `--analysis-profile signature-corpus` (256 MiB,
+1,000,000,000 work units, 3600 seconds). The schema-1 `coverage.json` retains
+its complete `corpus.analysis_resources` without recalculating the child counts.
+The directory contains the raw call capture, compiler diagnostics and `coverage.json`:
 covered names, targets without captured definitions, unsupported prototype
 reasons, failed header contexts, identifiers without qualified declarations
 and names absent from all selected headers. Identifier search selects work;

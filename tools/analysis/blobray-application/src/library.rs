@@ -739,7 +739,7 @@ pub fn register_accesses(
 ) -> Result<(RegisterAccessSummary, AnalysisLimited)> {
     crate::registers::validate_ranges(ranges)?;
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
-    let mut limited = AnalysisLimited::default();
+    let mut input_limits = vec![AnalysisLimited::default(); inputs.len()];
     let mut summary = RegisterAccessSummary {
         schema: 4,
         flow_local_budget_functions: 0,
@@ -896,7 +896,10 @@ pub fn register_accesses(
                     function_limits.event(LimitReason::LocalBudget(LocalBudgetScope::ReadFlow));
                 }
             }
-            limited.function(&function_limits);
+            input_limits
+                .get_mut(analyzed.function.input as usize)
+                .ok_or_else(|| Error::new(ErrorCode::Integrity, "analyzed function has no input"))?
+                .function(&function_limits);
             let [direct, may] = reads.contract_narrowed_bits();
             summary.contract_narrowed_bits += direct;
             summary.contract_may_narrowed_bits += may;
@@ -941,6 +944,12 @@ pub fn register_accesses(
         )?;
     } else {
         analyze_without_summaries(inputs, assumptions, decoder, memory, control, &mut visit)?;
+    }
+    let mut limited = AnalysisLimited::default();
+    for input in input_limits {
+        // Function identities in separate inputs are disjoint. Summaries still
+        // see the whole corpus; only their existing counters are folded here.
+        limited.merge(&input);
     }
     Ok((summary, limited))
 }

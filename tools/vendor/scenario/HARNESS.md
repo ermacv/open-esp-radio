@@ -30,7 +30,27 @@ addresses, pins and reviewed decisions; the
 
 The engine decides every verdict and hands each claimed suite's `Findings`
 to a `RunReport` supplied by the scenario binary. The report crate depends
-on the engine. Pins come from `oer-tool-pins`, the reader of `artifacts.toml`.
+on the engine. Each suite writes a schema-1 `<suite>-report.request.json`;
+the reviewer prints its resource document. `analysis_resources` lists each
+successful inventory, catalog, data, link and execution operation with the shared
+`AnalysisResources` shape. The `vendor-scenario` defaults are 256 MiB,
+2,000,000,000 work units and 600 seconds; CLI budget flags override them and the
+report records the actual limits and usage. Executions have no function-local
+widening outcomes; operation exhaustion remains an error without a successful
+resource result. Failure JSON is schema 1 and retains the completed operations'
+resources. Repeated operations are separate, so recurring function identities
+are never added as if they were disjoint. Standalone inspection commands use
+their own interpreter and do not run these budgeted comparison operations.
+
+`cargo vendor-check copies --chip <chip>` writes schema-3
+`target/verification/<chip>/copies.json`. Its `analysis_resources` lists the
+`vendor-copies` resources and input identities of each MMIO comparison or gap
+inventory, keeping repeated ROM comparisons separate. Defaults are 8192 MiB,
+1,000,000,000,000 work units and 1200 seconds; budget flags override them.
+Typed counts come directly from each `mmio_diff` result; operation exhaustion
+fails without writing a report for that run.
+
+Pins come from `oer-tool-pins`, the reader of `artifacts.toml`.
 
 ## Declare an entry
 

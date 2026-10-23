@@ -394,3 +394,96 @@ fn several_copies_with_one_skipped_leave_that_side_incomplete() {
     assert_eq!(report.functions[0].verdict, Verdict::SeveralCopies);
     assert_eq!(report.functions[0].complete, [true, false]);
 }
+
+#[test]
+fn copies_report_actual_limits_and_keep_repeated_comparisons_separate() {
+    use clap::Parser;
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(flatten)]
+        budget: Budget,
+    }
+    let budget = Cli::parse_from([
+        "copies",
+        "--timeout-secs",
+        "60",
+        "--working-memory-mib",
+        "64",
+        "--max-work-units",
+        "1000000000",
+    ])
+    .budget;
+    let defaults = Cli::parse_from(["copies"]).budget;
+    assert_eq!(
+        defaults.max_work_units,
+        AnalysisProfile::VendorCopies.limits().work_units
+    );
+    assert_eq!(
+        defaults.working_memory_mib << 20,
+        AnalysisProfile::VendorCopies.limits().working_memory_bytes
+    );
+    assert_eq!(
+        defaults.timeout_secs * 1000,
+        AnalysisProfile::VendorCopies.limits().timeout_ms
+    );
+    let bytes = object(&[("f", &store(1))]);
+    let report = compare(
+        "chip",
+        &[input("rom-a", bytes.clone()), input("rom-b", bytes.clone())],
+        &[input("lib", bytes)],
+        &[],
+        &[ImageRegion {
+            start: 0x2000_0000,
+            length: 0x1000,
+        }],
+        &[],
+        &BTreeMap::new(),
+        &budget,
+    )
+    .unwrap();
+    assert_eq!(report.analysis_resources.len(), 2);
+    for (operation, rom) in report.analysis_resources.iter().zip(["rom-a", "rom-b"]) {
+        assert_eq!(operation.inputs, [rom, "lib"]);
+        assert_eq!(operation.resources.profile, AnalysisProfile::VendorCopies);
+        assert_eq!(
+            operation.resources.limits.operation,
+            OperationLimits {
+                work_units: budget.max_work_units,
+                working_memory_bytes: 64 << 20,
+                timeout_ms: 60000,
+            }
+        );
+        assert!(operation.resources.usage.work_units > 0);
+        assert!(operation.resources.usage.peak_admitted_bytes > 0);
+    }
+}
+
+#[test]
+fn copies_work_exhaustion_returns_an_error_without_a_report() {
+    let budget = Budget {
+        max_work_units: 0,
+        ..BUDGET
+    };
+    let bytes = object(&[("f", &store(1))]);
+    let error = compare(
+        "chip",
+        &[input("rom", bytes.clone())],
+        &[input("lib", bytes)],
+        &[],
+        &[ImageRegion {
+            start: 0x2000_0000,
+            length: 0x1000,
+        }],
+        &[],
+        &BTreeMap::new(),
+        &budget,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error
+            .downcast_ref::<oer_analysis_riscv_model::Error>()
+            .unwrap()
+            .code,
+        oer_analysis_riscv_model::ErrorCode::ResourceLimited
+    );
+}

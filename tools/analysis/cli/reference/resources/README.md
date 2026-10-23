@@ -12,8 +12,11 @@ timeout)` is the control the CLI and the vendor scenarios use: it counts work
 units against their limit on every checkpoint, checks the wall-clock deadline
 every 256 checkpoints, and keeps the run position a failure reports. The CLI
 exposes `--working-memory-mib` (default 256), `--timeout-secs` (default 900) and
-`--max-work-units` (default 1,000,000,000); the defaults are the `DEFAULT_*`
-constants of `oer-analysis-blobray-domain`. Reaching a limit fails the operation with
+`--max-work-units` (default 1,000,000,000). `--analysis-profile` selects
+`blobray-cli` (the default) or `signature-corpus` (256 MiB, 1,000,000,000 work
+units, 3600 seconds). Defaults come from `AnalysisProfile::limits` in
+`oer-analysis-riscv-model`; each explicit limit flag overrides that profile.
+JSON records the selected profile and effective values in `analysis_resources`. Reaching a limit fails the operation with
 `resource-limited`; no automatic limit increase or reduced scope occurs.
 
 Work policy 1 charges one unit per visited structural record and one per block of

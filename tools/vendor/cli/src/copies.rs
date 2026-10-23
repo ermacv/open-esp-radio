@@ -18,13 +18,16 @@ use oer_analysis_blobray_domain::{
     ImageRegion, MmioAccess, MmioDiff, MmioFunctionChange, MmioFunctionState, MmioGap,
     MmioOperation, MmioStoredSource, MmioUncertainFunction,
 };
-use oer_analysis_riscv_model::{CallAbi, ReadOnlyWindow, WorkingMemory};
+use oer_analysis_riscv_model::{
+    AnalysisLimited, AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, OperationLimits,
+    ReadOnlyWindow, WorkingMemory,
+};
 use serde::Serialize;
 
 use crate::Result;
 
 /// Schema of `target/verification/<chip>/copies.json`.
-pub const SCHEMA: u32 = 2;
+pub const SCHEMA: u32 = 3;
 
 /// What the comparison of one function's copies shows.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -84,6 +87,7 @@ pub struct Function {
 #[derive(Clone, Debug, Serialize)]
 pub struct Report {
     pub schema: u32,
+    pub analysis_resources: Vec<OperationResources>,
     pub chip: String,
     /// The pinned ROM ELFs, libraries and built vendor images compared, by
     /// artifact id.
@@ -95,6 +99,14 @@ pub struct Report {
     pub unbuilt_images: Vec<String>,
     pub windows: Vec<ImageRegion>,
     pub functions: Vec<Function>,
+}
+
+/// Resources of one operation; repeated ROM analyses remain separate.
+#[derive(Clone, Debug, Serialize)]
+pub struct OperationResources {
+    pub operation: &'static str,
+    pub inputs: Vec<String>,
+    pub resources: AnalysisResources,
 }
 
 /// One input: its artifact id and bytes.
@@ -145,6 +157,7 @@ impl Compared {
 fn members(
     input: &Input,
     budget: &Budget,
+    resources: &std::cell::RefCell<Vec<OperationResources>>,
 ) -> Result<BTreeMap<oer_analysis_riscv_model::ObjectId, String>> {
     let memory = budget.memory()?;
     let mut control = budget.control();
@@ -153,6 +166,11 @@ fn members(
         &memory,
         &mut control,
     )?;
+    resources.borrow_mut().push(OperationResources {
+        operation: "inventory",
+        inputs: vec![input.id.clone()],
+        resources: budget.resources(&memory, &control, AnalysisLimited::default())?,
+    });
     Ok(inventory
         .objects
         .into_iter()
@@ -246,44 +264,57 @@ pub fn compare(
     cited: &BTreeMap<String, Vec<String>>,
     budget: &Budget,
 ) -> Result<Report> {
+    let resources = std::cell::RefCell::new(Vec::new());
     let library_copies = copies(libraries)?;
     let decoder = oer_analysis_riscv_lift::RiscvDecoder;
-    let named_gaps = |inputs: &[&Input],
-                      gaps: Vec<MmioGap>|
-     -> Result<BTreeSet<(String, Option<String>)>> {
-        let mut named = BTreeSet::new();
-        for gap in gaps {
-            let input = inputs
-                .get(gap.input as usize)
-                .ok_or("a gap names an input the comparison was not given")?;
-            let member = match gap.object {
-                Some(object) => Some(members(input, budget)?.remove(&object).unwrap_or_default()),
-                None => None,
-            };
-            named.insert((input.id.clone(), member));
-        }
-        Ok(named)
-    };
+    let named_gaps =
+        |inputs: &[&Input], gaps: Vec<MmioGap>| -> Result<BTreeSet<(String, Option<String>)>> {
+            let mut named = BTreeSet::new();
+            for gap in gaps {
+                let input = inputs
+                    .get(gap.input as usize)
+                    .ok_or("a gap names an input the comparison was not given")?;
+                let member = match gap.object {
+                    Some(object) => Some(
+                        members(input, budget, &resources)?
+                            .remove(&object)
+                            .unwrap_or_default(),
+                    ),
+                    None => None,
+                };
+                named.insert((input.id.clone(), member));
+            }
+            Ok(named)
+        };
     let diff = |old: &Input, new: &[&Input], read_only: &[ReadOnlyWindow]| -> Result<Compared> {
         let memory = budget.memory()?;
         let mut control = budget.control();
-        let (diff, _): (MmioDiff, _) = oer_analysis_blobray_application::mmio_diff::mmio_diff(
-            &[Executable::new(old.bytes.clone())],
-            &new.iter()
-                .map(|i| Executable::new(i.bytes.clone()))
-                .collect::<Vec<_>>(),
-            Assumptions {
-                abi: Some(CallAbi::RiscvInteger),
-                call_summaries: false,
-                signatures: None,
-                call_results: &[],
-                read_only,
-            },
-            windows,
-            &decoder,
-            &memory,
-            &mut control,
-        )?;
+        let (diff, limited): (MmioDiff, _) =
+            oer_analysis_blobray_application::mmio_diff::mmio_diff(
+                &[Executable::new(old.bytes.clone())],
+                &new.iter()
+                    .map(|i| Executable::new(i.bytes.clone()))
+                    .collect::<Vec<_>>(),
+                Assumptions {
+                    abi: Some(CallAbi::RiscvInteger),
+                    call_summaries: false,
+                    signatures: None,
+                    call_results: &[],
+                    read_only,
+                },
+                windows,
+                &decoder,
+                &memory,
+                &mut control,
+            )?;
+        resources.borrow_mut().push(OperationResources {
+            operation: "mmio-diff",
+            inputs: std::iter::once(old)
+                .chain(new.iter().copied())
+                .map(|i| i.id.clone())
+                .collect(),
+            resources: budget.resources(&memory, &control, limited)?,
+        });
         let [old_gaps, new_gaps] = diff.gaps;
         Ok(Compared {
             changes: diff
@@ -369,6 +400,7 @@ pub fn compare(
     functions.sort_by(|a, b| (a.verdict, &a.name, &a.rom).cmp(&(b.verdict, &b.name, &b.rom)));
     Ok(Report {
         schema: SCHEMA,
+        analysis_resources: resources.into_inner(),
         chip: chip.to_owned(),
         roms: roms.iter().map(|i| i.id.clone()).collect(),
         libraries: libraries.iter().map(|i| i.id.clone()).collect(),
@@ -522,17 +554,40 @@ pub fn human(report: &Report) -> String {
 #[derive(Clone, Copy, Debug, clap::Args)]
 pub struct Budget {
     /// Wall-clock deadline of each comparison.
-    #[arg(long, default_value_t = 1200)]
+    #[arg(long, default_value_t = AnalysisProfile::VendorCopies.limits().timeout_ms / 1000)]
     pub timeout_secs: u64,
     /// Algorithm working memory of each comparison.
-    #[arg(long, default_value_t = 8192)]
+    #[arg(long, default_value_t = AnalysisProfile::VendorCopies.limits().working_memory_bytes >> 20)]
     pub working_memory_mib: u64,
     /// Work-unit budget of each comparison.
-    #[arg(long, default_value_t = 1_000_000_000_000)]
+    #[arg(long, default_value_t = AnalysisProfile::VendorCopies.limits().work_units)]
     pub max_work_units: u64,
 }
 
 impl Budget {
+    fn resources(
+        &self,
+        memory: &WorkingMemory,
+        control: &Limits,
+        limited: AnalysisLimited,
+    ) -> Result<AnalysisResources> {
+        Ok(AnalysisResources::new(
+            AnalysisProfile::VendorCopies,
+            OperationLimits {
+                work_units: self.max_work_units,
+                working_memory_bytes: memory.observation().limit_bytes,
+                timeout_ms: self
+                    .timeout_secs
+                    .checked_mul(1000)
+                    .ok_or("timeout milliseconds overflow")?,
+            },
+            AnalysisUsage {
+                work_units: control.used(),
+                peak_admitted_bytes: memory.peak(),
+            },
+            limited,
+        ))
+    }
     fn memory(&self) -> Result<WorkingMemory> {
         Ok(WorkingMemory::new(self.working_memory_mib << 20)?)
     }

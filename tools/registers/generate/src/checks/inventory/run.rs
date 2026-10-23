@@ -13,7 +13,7 @@ use oer_analysis_blobray_application::{
 use oer_analysis_blobray_domain::ImageRegion;
 use oer_analysis_riscv_lift::RiscvDecoder;
 use oer_analysis_riscv_model::{
-    CallAbi, DEFAULT_WORK_UNITS, DEFAULT_WORKING_BYTES, Error, ErrorCode, WorkingMemory,
+    AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, Error, ErrorCode, WorkingMemory,
 };
 use oer_os_process::Checkout;
 use std::{
@@ -22,10 +22,6 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-
-/// Wall-clock budget of one Blobray operation. Analyzing every pinned
-/// binary takes most of it; the host's default budget is shorter.
-const OPERATION_TIMEOUT_SECS: u64 = 3600;
 
 /// Every pinned vendor binary of `chip`, in pin order. Firmware outputs are
 /// applications linked from these binaries, and sources are not code.
@@ -62,7 +58,7 @@ fn accesses(
     regions: &[Region],
     declared: &std::collections::BTreeMap<u32, inventory::DeclaredWord>,
     arrays: &[Vec<u32>],
-) -> Result<inventory::uses::Report> {
+) -> Result<(inventory::uses::Report, AnalysisResources)> {
     eprintln!(
         "register-inventory: analyzing every function of {} vendor binaries",
         inputs.len()
@@ -83,14 +79,13 @@ fn accesses(
             length: u64::from(r.end - r.start),
         })
         .collect();
-    let memory = WorkingMemory::new(DEFAULT_WORKING_BYTES)?;
-    let mut control = Limits::new(
-        DEFAULT_WORK_UNITS,
-        Duration::from_secs(OPERATION_TIMEOUT_SECS),
-    );
+    let profile = AnalysisProfile::RegisterInventory;
+    let limits = profile.limits();
+    let memory = WorkingMemory::new(limits.working_memory_bytes)?;
+    let mut control = Limits::new(limits.work_units, Duration::from_millis(limits.timeout_ms));
     let mut check =
         inventory::uses::Accumulator::new(chip, inputs, assumptions, regions, declared, arrays)?;
-    let (summary, _) = library::register_accesses(
+    let (summary, limited) = library::register_accesses(
         executables,
         assumptions,
         &ranges,
@@ -103,7 +98,16 @@ fn accesses(
                 .map_err(|error| Error::new(ErrorCode::InvalidRequest, error.to_string()))
         },
     )?;
-    Ok(check.finish(summary))
+    let resources = AnalysisResources::new(
+        profile,
+        limits,
+        AnalysisUsage {
+            work_units: control.used(),
+            peak_admitted_bytes: memory.peak(),
+        },
+        limited,
+    );
+    Ok((check.finish(summary), resources))
 }
 
 /// Build the inventory of `chip` into `output`, by default
@@ -121,7 +125,7 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
                 .join(chip)
                 .join("vendor/facts/idf-function-signatures.toml"),
         )?)?;
-    let mut report = accesses(
+    let (mut report, resources) = accesses(
         chip,
         &signatures,
         &inputs,
@@ -136,19 +140,22 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
             .map(|entry| (entry.artifact, entry.symbol))
             .collect();
     report.prioritize(&cited);
-    write_report(&directory, chip, &report)
+    write_report(&directory, chip, &report, &resources)
 }
 
 pub(super) fn write_report(
     directory: &Path,
     chip: &str,
     report: &inventory::uses::Report,
+    resources: &AnalysisResources,
 ) -> Result<()> {
     let text = report.render(chip);
     fs::write(directory.join("report.txt"), &text)?;
     fs::write(
         directory.join("report.json"),
-        serde_json::to_string_pretty(&serde_json::json!({"chip": chip, "check": report}))?,
+        serde_json::to_string_pretty(
+            &serde_json::json!({"schema": 1, "analysis_resources": resources, "chip": chip, "check": report}),
+        )?,
     )?;
     print!(
         "{}",
