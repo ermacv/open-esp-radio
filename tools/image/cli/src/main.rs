@@ -9,6 +9,7 @@ use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};
 mod command;
+mod diagnostics;
 mod image;
 mod w1;
 mod w2;
@@ -25,6 +26,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Render typed boot diagnostics from a captured console file; no board I/O.
+    DecodeConsole { console: std::path::PathBuf },
     /// W3 host observations and strict report checking, independent of firmware.
     W3 {
         #[command(subcommand)]
@@ -134,6 +137,7 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
+            Command::DecodeConsole { console } => diagnostics::decode_file(&console)?,
             #[cfg(target_os = "linux")]
             Command::W3 {
                 command: W3Command::Ax211,

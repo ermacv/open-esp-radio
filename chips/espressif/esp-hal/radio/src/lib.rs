@@ -33,6 +33,8 @@
 
 use core::marker::PhantomData;
 
+pub mod diagnostics;
+
 use oer_esp32s31_hal::power::{
     PlatformClock, PlatformClockBackend, PlatformClockError, PlatformClockGuard,
     PlatformClockProvider,

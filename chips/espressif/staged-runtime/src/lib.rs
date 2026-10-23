@@ -15,6 +15,7 @@
     reason = "exported default trap handlers and the abort loop"
 )]
 mod default_handlers;
+pub mod diagnostics;
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
 pub mod interrupts;

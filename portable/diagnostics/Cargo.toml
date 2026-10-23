@@ -1,0 +1,15 @@
+[package]
+name = "oer-diagnostics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Typed boot diagnostics over the line console, without target formatting"
+
+[dependencies]
+oer-trace = { path = "../trace" }
+
+[lints]
+workspace = true

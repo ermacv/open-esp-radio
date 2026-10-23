@@ -18,6 +18,7 @@ two-harts = []
 panic-hook = []
 
 [dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-staged-layout.workspace = true
 oer-memory = { path = "../../../portable/memory" }
 esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"] }

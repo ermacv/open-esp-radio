@@ -1,0 +1,181 @@
+use super::*;
+use std::{format, vec, vec::Vec};
+
+fn encode(panic: &PreviousPanic<'_>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    Console::new(|chunk: &[u8]| {
+        bytes.extend_from_slice(chunk);
+        Ok::<_, ()>(())
+    })
+    .previous_panic(panic)
+    .unwrap();
+    bytes
+}
+
+fn line(bytes: &[u8]) -> &[u8] {
+    bytes
+        .strip_prefix(b"\r\n")
+        .unwrap()
+        .strip_suffix(b"\r\n")
+        .unwrap()
+}
+
+fn raw_frame(tag: u8, payload: &[u8]) -> Vec<u8> {
+    let mut raw = vec![0, 0, 0, 0, tag];
+    raw.extend_from_slice(payload);
+    let crc = raw.iter().fold(0xffff, |crc, &byte| checksum(crc, byte));
+    raw.extend_from_slice(&crc.to_le_bytes());
+    let mut frame = PREFIX.to_vec();
+    for byte in raw {
+        frame.extend_from_slice(format!("{byte:02x}").as_bytes());
+    }
+    frame
+}
+
+#[test]
+fn crc_matches_ccitt_false_check_value() {
+    assert_eq!(
+        b"123456789"
+            .iter()
+            .fold(0xffff, |crc, &byte| checksum(crc, byte)),
+        0x29b1
+    );
+}
+
+#[test]
+fn previous_panic_round_trip_keeps_every_field_and_message_presence() {
+    for message in [None, Some(""), Some("panic: Привет\n\r\0")] {
+        for pc in [None, Some(0), Some(u32::MAX)] {
+            let panic = PreviousPanic {
+                hart: 1,
+                in_interrupt: pc.is_some(),
+                interrupted_pc: pc,
+                line: u32::MAX,
+                column: 1234,
+                file: "目录/паника.rs",
+                message,
+            };
+            let wire = encode(&panic);
+            let mut scratch = [0; MAX_PAYLOAD + 7];
+            assert_eq!(
+                decode(line(&wire), &mut scratch),
+                Ok(Some((0, Record::PreviousPanic(panic))))
+            );
+        }
+    }
+    let panic = PreviousPanic {
+        hart: 0,
+        in_interrupt: false,
+        interrupted_pc: None,
+        line: 0,
+        column: 0,
+        file: &"f".repeat(48),
+        message: Some(&"m".repeat(64)),
+    };
+    let wire = encode(&panic);
+    assert_eq!(
+        decode(line(&wire), &mut [0; MAX_PAYLOAD + 7]),
+        Ok(Some((0, Record::PreviousPanic(panic))))
+    );
+}
+
+#[test]
+fn truncation_corruption_unknown_records_and_versions_return_errors() {
+    let frame = raw_frame(2, &[2, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+    for end in PREFIX.len()..frame.len() {
+        assert!(
+            decode(&frame[..end], &mut [0; MAX_PAYLOAD + 7]).is_err(),
+            "cut {end}"
+        );
+    }
+    let mut corrupt = frame.clone();
+    corrupt[PREFIX.len()] = b'1';
+    assert_eq!(
+        decode(&corrupt, &mut [0; MAX_PAYLOAD + 7]),
+        Err(DecodeError::Checksum)
+    );
+    corrupt[PREFIX.len()] = b'z';
+    assert_eq!(
+        decode(&corrupt, &mut [0; MAX_PAYLOAD + 7]),
+        Err(DecodeError::Hex)
+    );
+    assert_eq!(
+        decode(&raw_frame(99, &[]), &mut [0; MAX_PAYLOAD + 7]),
+        Err(DecodeError::UnknownRecord)
+    );
+    assert_eq!(
+        decode(b"OER-DIAG:02", &mut [0; MAX_PAYLOAD + 7]),
+        Err(DecodeError::Version)
+    );
+    assert_eq!(
+        decode(b"ROM boot banner", &mut [0; MAX_PAYLOAD + 7]),
+        Ok(None)
+    );
+}
+
+#[test]
+fn malformed_panic_payloads_never_panic_even_with_a_valid_checksum() {
+    for length in 0..=MAX_PAYLOAD + 1 {
+        for byte in 0..=255 {
+            let mut payload = vec![0; length];
+            if length > 1 {
+                payload[1] = byte;
+            }
+            if length > 14 {
+                payload[14] = byte;
+            }
+            if length > 15 {
+                payload[15] = byte;
+            }
+            let _ = decode(&raw_frame(1, &payload), &mut [0; MAX_PAYLOAD + 7]);
+        }
+    }
+    let mut payload = vec![0; 17];
+    payload[14] = 1;
+    payload[16] = 0xff;
+    assert_eq!(
+        decode(&raw_frame(1, &payload), &mut [0; MAX_PAYLOAD + 7]),
+        Err(DecodeError::Payload)
+    );
+}
+
+#[test]
+fn failed_write_consumes_sequence_and_the_next_record_resynchronizes() {
+    let mut bytes = Vec::new();
+    let mut writes = 0;
+    let mut console = Console::new(|chunk: &[u8]| {
+        writes += 1;
+        if writes == 3 {
+            return Err(());
+        }
+        bytes.extend_from_slice(chunk);
+        Ok(())
+    });
+    assert!(console.event(&BootSmokePassed).is_err());
+    console.event(&BootSmokePassed).unwrap();
+    let records = bytes
+        .split(|&byte| byte == b'\n')
+        .filter(|line| line.starts_with(PREFIX))
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), 2);
+    assert!(
+        decode(
+            records[0].strip_suffix(b"\r").unwrap(),
+            &mut [0; MAX_PAYLOAD + 7]
+        )
+        .is_err()
+    );
+    assert_eq!(
+        decode(
+            records[1].strip_suffix(b"\r").unwrap(),
+            &mut [0; MAX_PAYLOAD + 7]
+        ),
+        Ok(Some((
+            1,
+            Record::Event {
+                kind: BootSmokePassed::KIND,
+                words: [0, 0]
+            }
+        )))
+    );
+}
