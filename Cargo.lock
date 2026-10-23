@@ -3142,6 +3142,7 @@ dependencies = [
  "oer-espressif-esp-hal-radio",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-fifo",
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
