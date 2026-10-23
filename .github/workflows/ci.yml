@@ -190,11 +190,13 @@ jobs:
         run: |
           cargo fw build boot-smoke
           cargo fw build radio-root
+          cargo fw build b0
           cargo fw build w0
           cargo fw build w1
           cargo fw build w2
           cargo fw build w3
           cargo fw build w0 --analysis
+          cargo fw build b0 --analysis
           cargo fw build w1 --analysis
           cargo fw build w2 --analysis
           cargo fw build w3 --analysis
