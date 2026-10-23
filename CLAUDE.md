@@ -101,7 +101,8 @@ system these rules serve.
   never block the conversation.
 - **Pull requests.** Conventional Commit subjects (`fix(esp32s31): …`). Open
   the PR as a draft at the start, mark it ready when done (`gh pr ready`).
-  The owner merges; an agent never merges. PRs run no CI; CI runs on main
+  The owner merges; an agent never merges. PRs run no CI and nobody waits
+  for CI: a PR is ready when the checks its task names pass. CI runs on main
   after each merge, and a red main is fixed by whoever broke it. Rebase only
   on a conflict or when main changed the same files. Cite commit hashes as
   `git` prints them. Pass lists of paths as arrays, not one string.
