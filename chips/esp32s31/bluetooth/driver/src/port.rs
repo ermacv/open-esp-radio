@@ -194,6 +194,8 @@ impl<N: Notify> Shared<N> {
             fault: OnceValue::new(),
         }
     }
+    // Keep the notification's typed Waker scope out of generated poll frames.
+    #[inline(never)]
     fn poison(&self, fault: Fault) {
         let _ = self.fault.set(fault);
         self.enabled.store(false, Ordering::Release);
