@@ -44,7 +44,7 @@ type Device = OwnedNetworkDevice<'static, NoopRawMutex, RX, TX>;
 type Runner = OwnedNetworkRunner<'static, NoopRawMutex, RX, TX>;
 static ENDPOINT: StaticCell<Endpoint> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
-static STACK: StaticCell<StackStorage<'static>> = StaticCell::new();
+static STACK: StaticCell<StackStorage<'static, Device>> = StaticCell::new();
 static GENERAL_STORAGE: ConstStaticCell<PacketPoolStorage<16>> =
     ConstStaticCell::new(PacketPoolStorage::new());
 static GENERAL_POOL: StaticCell<PacketPool<16>> = StaticCell::new();
@@ -151,7 +151,7 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         }
     }
 }
-async fn drain(socket: &RawSocket<'_>) -> ! {
+async fn drain(socket: &RawSocket<'_, Device>) -> ! {
     loop {
         let _ = socket.recv_packet().await;
         yield_now().await;
@@ -238,8 +238,8 @@ async fn application<'id, Path: PoolPath>(
     address: [u8; 6],
     credits: StaCommandCredits<'id, Path>,
     commands: &mut MsduSender<'_, ServiceCommand<'id, crate::radio::Caps, Path>, 2>,
-    iface: Iface<'_>,
-    socket: &RawSocket<'_>,
+    iface: Iface<'_, Device>,
+    socket: &RawSocket<'_, Device>,
     observations: &RefCell<Observations>,
     link: &Cell<bool>,
     disconnected: &Cell<bool>,
