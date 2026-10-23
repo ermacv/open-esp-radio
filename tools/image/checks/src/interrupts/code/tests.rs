@@ -1,5 +1,9 @@
 use super::*;
-use crate::interrupts::{Required, handler_code, placement::tests::facts, tests::partial};
+use crate::interrupts::{
+    Required, handler_code,
+    placement::tests::facts,
+    tests::{ledger, partial},
+};
 use oer_analysis_riscv_stack::{Fact, Transfer, TransferKind, TrapEntry};
 
 fn transfer(site: u32, target: Option<u32>) -> Transfer {
@@ -60,9 +64,13 @@ fn fixture(
     resolutions.add(dequeue, Fact::TaskPolls, [task]);
     let mut level = stacks.harts[0].exception.clone();
     level.level = priority;
-    level.bound = analysis.bound_with(root, &resolutions).unwrap();
+    level.bound = analysis
+        .bound_with(root, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
     stacks.harts[0].levels = vec![level];
-    stacks.harts[0].exception.bound = analysis.bound_with(exception, &resolutions).unwrap();
+    stacks.harts[0].exception.bound = analysis
+        .bound_with(exception, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
     let own: Vec<_> = analysis
         .functions
         .values()
@@ -89,6 +97,8 @@ fn fixture(
         &inputs,
         BTreeSet::new(),
         memory,
+        &mut ledger(),
+        &mut || Ok(()),
     )
     .unwrap();
     let full = &stacks.harts[0].levels[0].bound.reached;

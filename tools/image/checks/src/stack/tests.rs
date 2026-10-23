@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "reachability_tests.rs"]
+mod reachability;
+
 const SP_DOWN_16: u32 = 0xff01_0113; // addi sp, sp, -16
 const SAVE_RA: u32 = 0x0011_2623; // sw ra, 12(sp)
 const LOAD_RA: u32 = 0x00c1_2083; // lw ra, 12(sp)

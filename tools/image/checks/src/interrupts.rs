@@ -18,7 +18,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 
 use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, WORK_UNITS};
 use crate::stack::{ADMITTED, Image, contract::Contract};
-use oer_analysis_riscv_model::WorkingMemory;
+use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
 
 mod placement;
@@ -32,6 +32,7 @@ pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
+    pub witness_memory_peak: u64,
     pub traps: oer_analysis_riscv_stack::TrapFact,
     pub harts: Vec<HartStack>,
     /// The ROM summaries the image's analysis applied: those of the ROM
@@ -517,6 +518,8 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     let field = |(offset, size): (u32, u32)| Field { offset, size };
     let memory = WorkingMemory::new(MEMORY_LIMIT)?;
     let mut control = Budget::new(WORK_UNITS, TIMEOUT);
+    let _retained = memory.reserve(image.retained_bytes, control.position())?;
+    let mut keep = Ledger::new(&memory, &mut control)?;
     let facts = ImageFacts::new(elf, &[], &memory, &mut control)?;
     let table = interrupt_table(
         &facts,
@@ -579,21 +582,31 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         sources,
         resolutions,
     };
-    let harts = oer_analysis_riscv_stack::interrupt_stacks(analysis, &inputs)?;
+    let harts =
+        oer_analysis_riscv_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
     let reached: BTreeSet<u32> = harts
         .iter()
         .flat_map(|hart| hart.levels.iter())
         .flat_map(|level| level.bound.reached.iter().copied())
         .collect();
     let interrupt_code = handler_code(analysis, &reached, names, &contract.memory);
-    let panic_code = panic_path_code(analysis, names, resolutions, &contract.memory)?;
+    let panic_code = panic_path_code(
+        analysis,
+        names,
+        resolutions,
+        &contract.memory,
+        &mut keep,
+        &mut control,
+    )?;
     let code_placement = CodePlacement::of(
         analysis,
         functions,
         &harts,
         &inputs,
-        panic_reached(analysis, names, resolutions)?,
+        panic_reached(analysis, names, resolutions, &mut keep, &mut control)?,
         &contract.memory,
+        &mut keep,
+        &mut control,
     )?;
     let hook = names
         .iter()
@@ -602,12 +615,15 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         Some((&address, _)) => cached_hook_references(
             &oer_analysis_elf::Elf::parse(elf)?,
             functions,
-            &analysis.bound_with(address, resolutions)?.reached,
+            &analysis
+                .bound_with(address, resolutions, &mut keep, &mut control)?
+                .reached,
             &contract.memory,
         )?,
         None => Vec::new(),
     };
     Ok(InterruptStacks {
+        witness_memory_peak: memory.peak().max(image.usage.memory_bytes),
         traps: image.traps.clone(),
         harts,
         handlers,
@@ -679,10 +695,12 @@ fn panic_path_code(
     names: &BTreeMap<u32, String>,
     resolutions: &oer_analysis_riscv_stack::Resolutions,
     memory: &oer_chip_profile::Memory,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
 ) -> Result<HandlerCode> {
     Ok(handler_code(
         analysis,
-        &panic_reached(analysis, names, resolutions)?,
+        &panic_reached(analysis, names, resolutions, keep, control)?,
         names,
         memory,
     ))
@@ -692,10 +710,16 @@ fn panic_reached(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
     resolutions: &oer_analysis_riscv_stack::Resolutions,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
 ) -> Result<BTreeSet<u32>> {
     let mut reached = BTreeSet::new();
     for (&address, _) in names.iter().filter(|(_, name)| panic_entry(name)) {
-        reached.extend(analysis.bound_with(address, resolutions)?.reached);
+        reached.extend(
+            analysis
+                .bound_with(address, resolutions, keep, control)?
+                .reached,
+        );
     }
     Ok(reached)
 }
@@ -819,8 +843,14 @@ mod tests {
         contract().memory.sram.origin + 0x1000
     }
 
+    pub(super) fn ledger() -> Ledger<'static> {
+        let memory = Box::leak(Box::new(WorkingMemory::new(MEMORY_LIMIT).unwrap()));
+        Ledger::new(memory, &mut || Ok(())).unwrap()
+    }
+
     pub(super) fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
         InterruptStacks {
+            witness_memory_peak: 0,
             traps: Default::default(),
             harts: Vec::new(),
             summaries: BTreeSet::new(),
@@ -846,6 +876,7 @@ mod tests {
             level_drops: Vec::new(),
             assumptions: BTreeSet::new(),
             reached: BTreeSet::new(),
+            predecessors: Default::default(),
         };
         let level = oer_analysis_riscv_stack::LevelStack {
             level: 0,
@@ -855,6 +886,7 @@ mod tests {
             bound,
         };
         InterruptStacks {
+            witness_memory_peak: 0,
             traps: Default::default(),
             harts: vec![HartStack {
                 core: 0,
@@ -972,8 +1004,15 @@ mod tests {
                 let resolutions = oer_analysis_riscv_stack::Resolutions::new();
                 let mut report = stacks(Vec::new());
                 report.names = names.clone();
-                report.panic_code =
-                    panic_path_code(&analysis, &names, &resolutions, &memory).unwrap();
+                report.panic_code = panic_path_code(
+                    &analysis,
+                    &names,
+                    &resolutions,
+                    &memory,
+                    &mut ledger(),
+                    &mut || Ok(()),
+                )
+                .unwrap();
                 for policy in [Required::Product, Required::Diagnostic] {
                     let error = report.check(policy).unwrap_err().to_string();
                     assert!(error.contains("panic path"), "{entry}: {error}");
@@ -988,8 +1027,15 @@ mod tests {
                     (sram, entry.to_owned()),
                     (leaf, "outlined_helper".to_owned()),
                 ]);
-                report.panic_code =
-                    panic_path_code(&analysis, &names, &resolutions, &memory).unwrap();
+                report.panic_code = panic_path_code(
+                    &analysis,
+                    &names,
+                    &resolutions,
+                    &memory,
+                    &mut ledger(),
+                    &mut || Ok(()),
+                )
+                .unwrap();
                 assert!(report.check(Required::Product).is_ok());
             }
         }

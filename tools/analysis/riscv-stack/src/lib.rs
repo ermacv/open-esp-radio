@@ -241,9 +241,39 @@ pub struct Bound {
     /// Every function the root reaches over what is resolved, the root
     /// included: what checks of a context's code read.
     pub reached: BTreeSet<u32>,
+    /// One actually traversed edge per non-root function, recorded at first
+    /// discovery. Shared when interrupt vectors reuse a handler's bound.
+    pub predecessors: std::rc::Rc<BTreeMap<u32, Predecessor>>,
+}
+
+/// The first edge by which a root's walk discovered a function.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Predecessor {
+    pub caller: u32,
+    pub site: u32,
 }
 
 impl Bound {
+    /// One first-discovery witness, root first. Reconstructs parent links;
+    /// it never searches the call graph. The root itself has an empty witness.
+    pub fn witness(&self, target: u32) -> Option<Vec<(u32, Predecessor)>> {
+        if !self.reached.contains(&target) {
+            return None;
+        }
+        let mut path = Vec::new();
+        let mut at = target;
+        while at != self.root {
+            if path.len() >= self.predecessors.len() {
+                return None;
+            }
+            let parent = *self.predecessors.get(&at)?;
+            path.push((at, parent));
+            at = parent.caller;
+        }
+        path.reverse();
+        Some(path)
+    }
+
     /// The unresolved sites and functions, counted by reason.
     pub fn reasons(&self) -> BTreeMap<Reason, usize> {
         let mut counts = BTreeMap::new();
@@ -809,15 +839,28 @@ impl FunctionFacts {
 }
 
 impl Analysis {
-    /// The worst-case bound of the function at `root`.
-    pub fn bound(&self, root: u32) -> Result<Bound> {
-        self.bound_with(root, &Resolutions::new())
+    /// The worst-case bound of the function at `root`. First-discovery
+    /// predecessor storage is admitted in `keep`, which the caller holds
+    /// while the bound counts against its operation's working memory.
+    pub fn bound(
+        &self,
+        root: u32,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<Bound> {
+        self.bound_with(root, &Resolutions::new(), keep, control)
     }
 
     /// [`Self::bound`] with `resolutions` for the indirect sites the
     /// analysis left unresolved: such a site reaches each of its targets.
-    pub fn bound_with(&self, root: u32, resolutions: &Resolutions) -> Result<Bound> {
-        self.bound_cut(root, resolutions, None)
+    pub fn bound_with(
+        &self,
+        root: u32,
+        resolutions: &Resolutions,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<Bound> {
+        self.bound_cut(root, resolutions, None, keep, control)
     }
 
     /// Reachability under the same rules as [`Bound::reached`], without
@@ -828,8 +871,12 @@ impl Analysis {
         root: u32,
         resolutions: &Resolutions,
         cut: &BTreeSet<u32>,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
     ) -> Result<BTreeSet<u32>> {
-        Ok(self.bound_cut(root, resolutions, Some(cut))?.reached)
+        Ok(self
+            .bound_cut(root, resolutions, Some(cut), keep, control)?
+            .reached)
     }
 
     fn bound_cut(
@@ -837,6 +884,8 @@ impl Analysis {
         root: u32,
         resolutions: &Resolutions,
         cut: Option<&BTreeSet<u32>>,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
     ) -> Result<Bound> {
         if !self.functions.contains_key(&root) {
             return Err(Error::new(
@@ -852,8 +901,12 @@ impl Analysis {
             stack: Vec::new(),
             unresolved: BTreeSet::new(),
             assumptions: BTreeSet::new(),
+            root,
+            predecessors: BTreeMap::new(),
+            keep,
+            control,
         };
-        let (bytes, path) = walk.visit(root);
+        let (bytes, path) = walk.visit(root)?;
         // An unfolded recursive function has both ordinary and terminal
         // memo entries; code checks need each reached function only once.
         let reached: BTreeSet<_> = walk.memo.keys().map(|(address, _)| *address).collect();
@@ -861,6 +914,8 @@ impl Analysis {
             .iter()
             .flat_map(|function| self.functions[function].level_drops.iter().copied())
             .collect();
+        walk.keep
+            .admit(size_of::<BTreeMap<u32, Predecessor>>(), walk.control)?;
         Ok(Bound {
             root,
             bytes: walk.unresolved.is_empty().then_some(bytes),
@@ -870,6 +925,7 @@ impl Analysis {
             level_drops,
             assumptions: walk.assumptions,
             reached,
+            predecessors: std::rc::Rc::new(walk.predecessors),
         })
     }
 
@@ -912,7 +968,7 @@ impl Analysis {
 
 type DepthPath = (u64, Vec<(u32, u64)>);
 
-struct Walk<'a> {
+struct Walk<'a, 'k, 'm> {
     analysis: &'a Analysis,
     resolutions: &'a Resolutions,
     cut: Option<&'a BTreeSet<u32>>,
@@ -923,16 +979,20 @@ struct Walk<'a> {
     stack: Vec<(u32, bool)>,
     unresolved: BTreeSet<(u32, Reason)>,
     assumptions: BTreeSet<Assumption>,
+    root: u32,
+    predecessors: BTreeMap<u32, Predecessor>,
+    keep: &'k mut Ledger<'m>,
+    control: &'k mut dyn RunControl,
 }
 
-impl Walk<'_> {
+impl Walk<'_, '_, '_> {
     /// The deepest bytes below `address`'s entry `sp` over what is resolved,
     /// with its path. Unknown frames count as zero; they are reported.
-    fn visit(&mut self, address: u32) -> (u64, Vec<(u32, u64)>) {
+    fn visit(&mut self, address: u32) -> Result<(u64, Vec<(u32, u64)>)> {
         self.visit_context(address, false)
     }
 
-    fn visit_context(&mut self, address: u32, terminal: bool) -> (u64, Vec<(u32, u64)>) {
+    fn visit_context(&mut self, address: u32, terminal: bool) -> Result<(u64, Vec<(u32, u64)>)> {
         let key = (address, terminal);
         // Only the deliberately unfolded direct self-call may reenter the
         // same address. An indirect or mutual cycle remains unresolved.
@@ -940,10 +1000,10 @@ impl Walk<'_> {
             && !(terminal && self.stack.last() == Some(&(address, false)))
         {
             self.unresolved.insert((address, Reason::Recursion));
-            return (0, Vec::new());
+            return Ok((0, Vec::new()));
         }
         if let Some(known) = self.memo.get(&key) {
-            return known.clone();
+            return Ok(known.clone());
         }
         let facts = &self.analysis.functions[&address];
         let frame = facts.frame.unwrap_or_else(|| {
@@ -1002,11 +1062,22 @@ impl Walk<'_> {
                     self.unresolved.insert((transfer.site, reason));
                     continue;
                 }
+                if target != self.root && !self.predecessors.contains_key(&target) {
+                    self.keep.insert(
+                        &mut self.predecessors,
+                        target,
+                        Predecessor {
+                            caller: address,
+                            site: transfer.site,
+                        },
+                        self.control,
+                    )?;
+                }
                 let below = if direct_self {
                     self.visit_context(target, true)
                 } else {
                     self.visit(target)
-                };
+                }?;
                 if at + below.0 > deepest.0 {
                     deepest = (at + below.0, below.1);
                 }
@@ -1017,7 +1088,7 @@ impl Walk<'_> {
         path.extend(deepest.1);
         let result = (deepest.0, path);
         self.memo.insert(key, result.clone());
-        result
+        Ok(result)
     }
 }
 

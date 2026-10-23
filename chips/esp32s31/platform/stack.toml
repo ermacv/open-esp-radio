@@ -1,5 +1,23 @@
 schema = 5
 
+# Formatting entry points watched by the host reachability report.
+observed_functions = [
+    "core::fmt::write",
+    "<core::fmt::Formatter>::*",
+    "<core::fmt::rt::Argument>::fmt*",
+    "<core::fmt::builders::*",
+    "* as core::fmt::Debug>::fmt*",
+    "* as core::fmt::Display>::fmt*",
+    "* as core::fmt::Binary>::fmt*",
+    "* as core::fmt::Octal>::fmt*",
+    "* as core::fmt::LowerHex>::fmt*",
+    "* as core::fmt::UpperHex>::fmt*",
+    "* as core::fmt::Pointer>::fmt*",
+    "* as core::fmt::LowerExp>::fmt*",
+    "* as core::fmt::UpperExp>::fmt*",
+    "* as core::fmt::Write>::write_fmt*",
+]
+
 # Every linked function without a compiler frame record (`-Z emit-stack-sizes`)
 # needs exactly one review there: assembly, vector data or compiler runtime.
 coverage_policy = "../../espressif/staged-layout/stack-coverage.toml"

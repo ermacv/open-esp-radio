@@ -172,7 +172,12 @@ fn a_waker_scope_ending_before_jalr_is_proved_by_its_exclusive_load() {
         BTreeSet::from([targets[1]])
     );
     assert_eq!(
-        analysis.bound_with(TEXT, &resolutions).unwrap().bytes,
+        analysis
+            .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || Ok(
+                ()
+            ))
+            .unwrap()
+            .bytes,
         Some(32)
     );
 }
@@ -190,7 +195,9 @@ fn a_branch_bypassing_the_load_cannot_borrow_its_waker_scope() {
     assert!(resolutions.get(TEXT + 8).is_none());
     assert!(
         analysis
-            .bound_with(TEXT, &resolutions)
+            .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || Ok(
+                ()
+            ))
             .unwrap()
             .bytes
             .is_none()
@@ -259,7 +266,12 @@ fn a_merged_tail_uses_both_slots_of_every_vtable_without_exposing_ordinary_loads
         BTreeSet::from([first[1], first[2], second[1], second[2]])
     );
     assert_eq!(
-        analysis.bound_with(TEXT, &resolutions).unwrap().bytes,
+        analysis
+            .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || Ok(
+                ()
+            ))
+            .unwrap()
+            .bytes,
         Some(64)
     );
 }
@@ -529,7 +541,11 @@ fn a_noreturn_panic_branch_preserves_the_waker_proof_and_the_callees_stack() {
         resolutions.get(TEXT + 8).unwrap().targets,
         BTreeSet::from([targets[1]])
     );
-    let bound = analysis.bound_with(TEXT, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     assert_eq!(bound.bytes, Some(64));
     assert!(bound.path.contains(&(TEXT + 56, 64)), "{bound:?}");
 }
@@ -710,7 +726,12 @@ fn a_proven_auipc_jalr_target_uses_its_noreturn_fact() {
         BTreeSet::from([targets[1]])
     );
     assert_eq!(
-        analysis.bound_with(TEXT, &resolutions).unwrap().bytes,
+        analysis
+            .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || Ok(
+                ()
+            ))
+            .unwrap()
+            .bytes,
         Some(64)
     );
 }

@@ -425,7 +425,9 @@ fn a_callee_runs_below_its_call_site_depth() {
     assert_eq!(root.frame, Some(16));
     assert_eq!(root.source, Some(FrameSource::StackSizes));
     assert_eq!(root.observed, Some(16));
-    let bound = analysis.bound(TEXT).unwrap();
+    let bound = analysis
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, Some(48));
     assert!(bound.unresolved.is_empty());
     assert_eq!(bound.path, [(TEXT, 16), (leaf_address, 32)]);
@@ -441,7 +443,10 @@ fn an_unresolved_call_leaves_the_bound_unknown_with_its_reason() {
         ],
         frame: Some(16),
     }]);
-    let bound = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let bound = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, None);
     assert_eq!(bound.unresolved, [(TEXT + 12, Reason::StackSlotCall)]);
     assert_eq!(
@@ -475,17 +480,32 @@ fn a_resolution_gives_an_unresolved_site_each_of_its_targets() {
     let site = TEXT + 12;
     let small = TEXT + 7 * 4;
     let large = small + 3 * 4;
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
     let mut resolutions = Resolutions::new();
     resolutions.add(site, Fact::FieldType, [small, large]);
-    let bound = analysis.bound_with(TEXT, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     assert_eq!(bound.bytes, Some(16 + 32));
     assert_eq!(bound.path.last(), Some(&(large, 32)));
     // A site the analysis resolved keeps its own target.
     let mut only_small = Resolutions::new();
     only_small.add(site, Fact::FieldType, [small]);
     assert_eq!(
-        analysis.bound_with(TEXT, &only_small).unwrap().bytes,
+        analysis
+            .bound_with(TEXT, &only_small, &mut crate::tests::ledger(), &mut || Ok(
+                ()
+            ))
+            .unwrap()
+            .bytes,
         Some(32)
     );
 }
@@ -507,13 +527,21 @@ fn an_empty_candidate_set_is_a_hole_unless_its_fact_proves_it() {
     let site = TEXT + 12;
     let mut found = Resolutions::new();
     found.add(site, Fact::WakerVtables, []);
-    let hole = analysis.bound_with(TEXT, &found).unwrap();
+    let hole = analysis
+        .bound_with(TEXT, &found, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(hole.bytes, None);
     assert_eq!(hole.partial, 16);
     assert_eq!(hole.unresolved, [(site, Reason::NoCandidate)]);
     let mut proven = Resolutions::new();
     proven.add(site, Fact::IpcPosts, []);
-    assert_eq!(analysis.bound_with(TEXT, &proven).unwrap().bytes, Some(16));
+    assert_eq!(
+        analysis
+            .bound_with(TEXT, &proven, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(16)
+    );
     // Facts unite: a field type's candidate joins a found-empty waker set.
     found.add(site, Fact::FieldType, [TEXT]);
     assert_eq!(found.get(site).unwrap().targets, BTreeSet::from([TEXT]));
@@ -533,7 +561,10 @@ fn recursion_leaves_the_bound_unknown() {
         ],
         frame: Some(16),
     }]);
-    let bound = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let bound = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, None);
     assert_eq!(bound.reasons(), BTreeMap::from([(Reason::Recursion, 1)]));
 }
@@ -553,7 +584,13 @@ fn a_complete_graph_without_a_record_gives_the_observed_frame() {
         (facts.frame, facts.source),
         (Some(32), Some(FrameSource::Observed))
     );
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(32));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(32)
+    );
 }
 
 #[test]
@@ -597,7 +634,7 @@ fn a_bounded_jump_table_reads_exactly_its_entries() {
     assert_eq!(
         analyze(&image, &[], &[])
             .unwrap()
-            .bound(TEXT)
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
             .unwrap()
             .bytes,
         Some(0)
@@ -614,7 +651,10 @@ fn a_bounded_table_entry_out_of_the_function_is_a_jump() {
         .map(|t| (t.site, t.target, t.kind))
         .collect();
     assert_eq!(transfers, [(TEXT + 28, Some(0x5000), TransferKind::Tail)]);
-    let bound = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let bound = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.reasons(), BTreeMap::from([(Reason::OutsideImage, 1)]));
 }
 
@@ -654,7 +694,13 @@ fn a_table_base_set_before_an_exit_is_found_by_its_dispatch_record() {
     assert!(swept(&image).unwrap().jumps.is_empty());
     let analysis = analyze(&image, &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].complete);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(16));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(16)
+    );
 }
 
 #[test]
@@ -662,7 +708,10 @@ fn an_unbounded_jump_table_stays_unknown() {
     // Without a bound or a sized table object, entries past the readable
     // ones could leave the function.
     let image = image(&[dispatch(false)], &[TEXT + 24, TEXT + 28], false);
-    let bound = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let bound = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, None);
     assert_eq!(bound.unresolved, [(TEXT + 20, Reason::IndirectJump)]);
 }
@@ -727,7 +776,9 @@ fn a_call_through_a_constant_table_object_reaches_every_entry() {
         .map(|t| (t.site, t.target))
         .collect();
     assert_eq!(calls, [(TEXT + 32, Some(small)), (TEXT + 32, Some(large))]);
-    let bound = analysis.bound(TEXT).unwrap();
+    let bound = analysis
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, Some(48));
     assert_eq!(bound.path, [(TEXT, 16), (large, 32)]);
 }
@@ -758,7 +809,10 @@ fn a_table_base_rewritten_before_the_call_stays_unresolved() {
         &[TEXT, TEXT],
         true,
     );
-    let bound = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let bound = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, None);
     assert_eq!(bound.reasons(), BTreeMap::from([(Reason::LoadedCall, 1)]));
 }
@@ -800,7 +854,13 @@ fn analysed_jump_targets_inside_the_function_are_not_transfers() {
         .map(|t| (t.site, t.target, t.kind))
         .collect();
     assert_eq!(jumps, [(TEXT + 32, Some(leaf_address), TransferKind::Tail)]);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(32));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(32)
+    );
 }
 
 #[test]
@@ -825,11 +885,16 @@ fn a_call_into_a_companion_runs_below_its_site() {
         false,
     );
     let companion = placed(rom, &[leaf(None)], &[], false, false);
-    let alone = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let alone = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(alone.reasons(), BTreeMap::from([(Reason::OutsideImage, 1)]));
     let with_rom = analyze(&image, &[&companion], &[]).unwrap();
     assert_eq!(with_rom.functions[&rom].source, Some(FrameSource::Observed));
-    let bound = with_rom.bound(TEXT).unwrap();
+    let bound = with_rom
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, Some(48));
     assert_eq!(bound.path, [(TEXT, 16), (rom, 32)]);
 }
@@ -878,7 +943,13 @@ fn a_zero_table_entry_is_an_empty_slot_not_a_call() {
         .map(|t| (t.site, t.target))
         .collect();
     assert_eq!(calls, [(TEXT + 32, Some(leaf_address))]);
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(48));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(48)
+    );
 }
 
 #[test]
@@ -909,7 +980,10 @@ fn a_labelled_jump_table_is_read_from_its_relocations() {
     let swept = swept(&image).unwrap();
     assert_eq!(swept.transfers, []);
     assert_eq!(swept.jumps, [(TEXT + 20, vec![TEXT + 24, TEXT + 28])]);
-    let bound = analyze(&image, &[], &[]).unwrap().bound(TEXT).unwrap();
+    let bound = analyze(&image, &[], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(bound.bytes, Some(0));
 }
 
@@ -975,12 +1049,21 @@ fn summary(name: &str, address: u32, frame: u64) -> Summary {
 fn a_summary_stands_for_a_companion_function_the_code_does_not_bound() {
     let rom = placed(ROM, &[dispatch(false)], &[], false, false);
     let image = calls_rom();
-    let alone = analyze(&image, &[&rom], &[]).unwrap().bound(TEXT).unwrap();
+    let alone = analyze(&image, &[&rom], &[])
+        .unwrap()
+        .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+        .unwrap();
     assert_eq!(alone.bytes, None);
     let analysis = analyze(&image, &[&rom], &[summary("dispatch", ROM, 0)]).unwrap();
     assert_eq!(analysis.functions[&ROM].source, Some(FrameSource::Summary));
     assert_eq!(analysis.summaries, BTreeSet::from(["dispatch".to_owned()]));
-    assert_eq!(analysis.bound(TEXT).unwrap().bytes, Some(16));
+    assert_eq!(
+        analysis
+            .bound(TEXT, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        Some(16)
+    );
 }
 
 #[test]
@@ -1815,7 +1898,13 @@ fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
         .find(|function| function.names.iter().any(|name| name == "_start"))
         .unwrap()
         .address;
-    assert_eq!(analysis.bound(start).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(start, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
     let resolutions =
         waker_resolutions(&analysis, &dwarf, &vtables, &mut ledger(), &mut || Ok(())).unwrap();
     // `_start`'s `wake_by_ref` reaches `by_ref` (slot 2), not `wake`.
@@ -1829,7 +1918,14 @@ fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
         resolutions.get(site).unwrap().targets,
         BTreeSet::from([vtables[0][2]])
     );
-    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(
+            start,
+            &resolutions,
+            &mut crate::tests::ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
     assert!(bound.unresolved.is_empty(), "{bound:?}");
     assert!(bound.bytes.is_some());
 }
@@ -1899,6 +1995,8 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
             sources: 0x3000,
             resolutions: &Resolutions::new(),
         },
+        &mut ledger(),
+        &mut || Ok(()),
     )
     .unwrap();
     // Level 1: 80 + 16 + 16; level 8: 80 + 16 + 32; the exception 80 + 16.
@@ -2010,7 +2108,13 @@ fn a_call_through_a_static_preserves_functions_with_unknown_stores() {
     );
     let taken = taken_addresses(&elf).unwrap();
     assert!(taken.contains(&shallow) && taken.contains(&deep));
-    assert_eq!(analysis.bound(start).unwrap().bytes, None);
+    assert_eq!(
+        analysis
+            .bound(start, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .bytes,
+        None
+    );
     let resolutions = with_facts(&elf, |image| {
         let mut keep = ledger();
         let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
@@ -2031,7 +2135,14 @@ fn a_call_through_a_static_preserves_functions_with_unknown_stores() {
         &BTreeSet::from([shallow, twice, negate, named("halve"), deep]),
         "{resolutions:x?}"
     );
-    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(
+            start,
+            &resolutions,
+            &mut crate::tests::ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
     assert!(bound.unresolved.is_empty(), "{bound:?}");
     assert!(bound.reached.contains(&deep));
     assert_eq!(
@@ -2089,7 +2200,12 @@ fn only_an_instruction_that_lowers_the_level_breaks_the_nesting_rule() {
     };
     let elf = executable(&[benign, returns, next, caller]);
     let analysis = analyze(&elf, &[], &[]).unwrap();
-    let drops = |root| analysis.bound(root).unwrap().level_drops;
+    let drops = |root| {
+        analysis
+            .bound(root, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .level_drops
+    };
     assert_eq!(drops(benign_at), []);
     assert_eq!(drops(returns_at), [(returns_at, LevelDrop::Return)]);
     assert_eq!(drops(next_at), [(next_at, LevelDrop::NextInterrupt)]);
@@ -2129,7 +2245,12 @@ fn a_bound_assumes_what_the_resolutions_it_takes_assume() {
         let mut resolutions = Resolutions::new();
         resolutions.add(site, fact, [callee]);
         analysis
-            .bound_with(caller, &resolutions)
+            .bound_with(
+                caller,
+                &resolutions,
+                &mut crate::tests::ledger(),
+                &mut || Ok(()),
+            )
             .unwrap()
             .assumptions
     };
@@ -2229,7 +2350,10 @@ fn a_bound_names_what_it_reaches_and_each_function_its_floating_point() {
     assert_eq!(analysis.functions[&TEXT].float_sites, [TEXT, TEXT + 4]);
     assert!(analysis.functions[&caller_at].float_sites.is_empty());
     assert_eq!(
-        analysis.bound(caller_at).unwrap().reached,
+        analysis
+            .bound(caller_at, &mut crate::tests::ledger(), &mut || Ok(()))
+            .unwrap()
+            .reached,
         BTreeSet::from([TEXT, caller_at])
     );
 }
@@ -3284,7 +3408,7 @@ fn removing_unproven_declaration_exclusion_exposes_an_unresolved_callee() {
     former.add(site, Fact::FieldType, [named("shallow"), named("twice")]);
     assert!(
         analysis
-            .bound_with(start, &former)
+            .bound_with(start, &former, &mut crate::tests::ledger(), &mut || Ok(()))
             .unwrap()
             .unresolved
             .is_empty()
@@ -3302,7 +3426,14 @@ fn removing_unproven_declaration_exclusion_exposes_an_unresolved_callee() {
             .targets
             .contains(&named("deep"))
     );
-    let bound = analysis.bound_with(start, &resolutions).unwrap();
+    let bound = analysis
+        .bound_with(
+            start,
+            &resolutions,
+            &mut crate::tests::ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
     assert!(!bound.unresolved.is_empty(), "{bound:?}");
     assert_eq!(bound.bytes, None);
     assert!(bound.reached.contains(&named("deep")));

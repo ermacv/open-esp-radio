@@ -97,6 +97,7 @@ impl CodePlacement {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn of(
         analysis: &Analysis,
         own: &[Function],
@@ -104,6 +105,8 @@ impl CodePlacement {
         inputs: &Stacks<'_>,
         panic: BTreeSet<u32>,
         memory: &Memory,
+        keep: &mut oer_analysis_riscv_model::Ledger<'_>,
+        control: &mut dyn oer_analysis_riscv_model::RunControl,
     ) -> Result<Self> {
         let mut contexts = Vec::new();
         let mut strict = panic.clone();
@@ -112,7 +115,8 @@ impl CodePlacement {
             for level in hart.levels.iter().chain([&hart.exception]) {
                 let resolutions = inputs.resolutions_for(analysis, hart.core, level.level);
                 let cut = task_poll_sites(&resolutions);
-                let mut reached = analysis.reached_cut(level.bound.root, &resolutions, &cut)?;
+                let mut reached =
+                    analysis.reached_cut(level.bound.root, &resolutions, &cut, keep, control)?;
                 // Only P2 grants the task-side PSRAM permission. A poll on
                 // any other level cannot relax its interrupt placement.
                 if level.level != 2 {
