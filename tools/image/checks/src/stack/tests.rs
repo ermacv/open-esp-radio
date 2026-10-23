@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "handoff_tests.rs"]
+mod handoff;
 #[path = "reachability_tests.rs"]
 mod reachability;
 

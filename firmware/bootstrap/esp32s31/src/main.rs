@@ -30,6 +30,10 @@ use static_cell::ConstStaticCell;
 const FLASH_TUNING_REFERENCE_WORDS: usize =
     LAYOUT.flash_tuning_reference_bytes as usize / size_of::<u32>();
 
+/// The stage-two entry the packed runtime's header names, known at build time:
+/// `hand_off` jumps to it and halts if the header read at boot differs.
+const RUNTIME_ENTRY: usize = staged::runtime_entry(include_bytes!(env!("PSRAM_RUNTIME_BIN")));
+
 // This is the load image, not its runtime placement. The bootstrap copies and
 // verifies it at the bootloader's qualified 80 MHz setting before changing
 // the Flash timing. The tuning sweep uses a separate, still-cold XIP span.
@@ -107,7 +111,7 @@ fn main() -> ! {
     // a distinct page, and rejected timings can leave corrupted cache lines
     // behind until a future S31 cache-invalidate primitive is available. The
     // region is disposable; stage two was copied from a disjoint range first.
-    staged::hand_off(staged)
+    staged::hand_off::<RUNTIME_ENTRY>(staged)
 }
 
 /// Replace the bootloader's analog mode-1 brownout reset with ESP-IDF's

@@ -149,6 +149,13 @@ Each ELF contains:
   image-level accounting also subtracts the embedded payload copy. Overlapping
   NOLOAD RAM sections remain separately visible, so RAM totals are not a
   physical free-memory estimate.
+- `bootstrap-stack.txt` names the end of the bootstrap stack's path when the
+  policy's `[bootstrap_stack] handoff` (the stage-two entry's symbol) holds:
+  the bootstrap jumps to the constant entry the build knows (`hand_off::<ENTRY>`,
+  which halts if the payload header names another), the checks find that
+  jump in the bootstrap ELF, and a scan of the stage-two ELF shows every path
+  from the entry installing the CPU0 task stack's top as `sp` before anything
+  reads it. Otherwise the jump stays a hole.
 - `runtime-stack.txt` ends with each task stack's allocation and where it came
   from: the proven bound plus the policy's reserve, the policy's
   `allocation_bytes`, or the chip layout's default.

@@ -29,6 +29,10 @@ use oer_esp32c5_board as board;
 use oer_esp32c5_layout::LAYOUT;
 use oer_espressif_staged_bootstrap::{self as staged, print};
 
+/// The stage-two entry the packed runtime's header names, known at build time:
+/// `hand_off` jumps to it and halts if the header read at boot differs.
+const RUNTIME_ENTRY: usize = staged::runtime_entry(include_bytes!(env!("PSRAM_RUNTIME_BIN")));
+
 // This is the load image, not its runtime placement: the bootstrap copies
 // and verifies it into PSRAM.
 // SAFETY: `.psram.runtime.payload` is the bootstrap linker script's
@@ -52,5 +56,5 @@ fn main() -> ! {
     // writes; `psram` stays alive and mapped until `hand_off` and the boot
     // uses that region nowhere else, so `stage` owns it exclusively.
     let staged = unsafe { staged::stage(&LAYOUT, &RUNTIME_PAYLOAD, psram_base, psram_size) };
-    staged::hand_off(staged)
+    staged::hand_off::<RUNTIME_ENTRY>(staged)
 }

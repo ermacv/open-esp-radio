@@ -43,6 +43,21 @@ pub const CRC_OFFSET: usize = offset_of!(Header, payload_crc32);
 
 const CRC_END: usize = CRC_OFFSET + size_of::<u32>();
 
+/// The entry word of an image's header, readable in a constant: the address
+/// the bootstrap enters. `None` for an image too short to hold it.
+pub const fn entry_of(image: &[u8]) -> Option<u32> {
+    const START: usize = offset_of!(Header, entry);
+    if image.len() < START + size_of::<u32>() {
+        return None;
+    }
+    Some(u32::from_le_bytes([
+        image[START],
+        image[START + 1],
+        image[START + 2],
+        image[START + 3],
+    ]))
+}
+
 impl Header {
     /// Reads a header from the start of an image.
     pub fn from_le_bytes(image: &[u8]) -> Option<Self> {
