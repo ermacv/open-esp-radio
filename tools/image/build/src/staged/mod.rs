@@ -49,6 +49,10 @@ pub(crate) fn build(
     // in its own cache.
     let cache = crate::compile_cache(root, instrumentation);
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
+    if task_stack_proven {
+        // One source of the size: the bound, not also the policy.
+        policy.proven_task_stack()?;
+    }
     let mut values = crate::large_values::Report::new(policy.max_move_bytes);
     let mut sizes = crate::sizes::Summary::new(spec, profile)?;
     crate::test_support::refuse(root, &spec.application.package, target)?;
@@ -69,6 +73,7 @@ pub(crate) fn build(
             stack_policy: spec.stack_policy.clone(),
             diagnostic: spec.checks.as_ref().and_then(|checks| checks.interrupts)
                 != Some(oer_image_checks::interrupts::Required::Product),
+            task_stack_proven,
         };
         let specification = strict::configure(&mut runtime, &analysis, &output, strict)?;
         crate::cargo::ensure_fetched(root)?;

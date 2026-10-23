@@ -39,7 +39,11 @@ the admitted executor invariant passes with a warning. An image that declares
 `task-stack = "proven"` under its `[package.metadata.open-radio]` is held to
 more: any unresolved path in a task stack's bound fails its build, with the
 unresolved sites listed, and `runtime-stack.txt` says the stacks are declared
-proven. Any other value of the key is an error. HIL retains its
+proven. A task stack whose image declares it proven is sized at link time to
+its proven bound plus its policy's minimum free bytes, by the image linker (see the
+[image linker](../linker/README.md)); `runtime-stack.txt` names the source of
+the size. A policy that also sets `allocation_bytes` is an error. Any other
+value of the key is an error. HIL retains its
 `Product`/`Diagnostic` interrupt policy according to image class: diagnostic
 images report large unexcepted frames and strict/P2 code placement violations as warnings; other images
 enforce them.

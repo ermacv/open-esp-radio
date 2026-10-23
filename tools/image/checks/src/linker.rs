@@ -15,7 +15,9 @@
 //!
 //! Links using the staged runtime script require an analysis specification
 //! and reuse the interrupt analysis to place strict cached code with one
-//! additional link. Other links ignore the specification.
+//! additional link, to size the IRQ stacks, and the CPU0 task stack of an
+//! image that declares it proven, from their bounds. Other links ignore the
+//! specification.
 
 use std::{
     ffi::{OsStr, OsString},
@@ -25,6 +27,7 @@ use std::{
 
 pub(crate) mod irq_stacks;
 pub mod strict;
+pub mod task_stack;
 use strict::InputSection;
 
 /// An input section bound for a zeroed region that carries an initializer.
@@ -139,7 +142,10 @@ fn link(
         return Ok(code);
     }
     let placement = strict::analyze(&spec, &output, sections, &mut inputs)?;
-    if !placement.functions.is_empty() || !placement.irq_stacks.is_empty() {
+    if !placement.functions.is_empty()
+        || !placement.irq_stacks.is_empty()
+        || placement.task_stack.is_some()
+    {
         std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
         for allocation in &placement.irq_stacks {
             set_defsym(
@@ -155,6 +161,9 @@ fn link(
                 ),
                 u32::from(allocation.from_bound),
             );
+        }
+        if let Some(task_stack) = &placement.task_stack {
+            set_defsym(arguments, "CPU0_PSRAM_TASK_STACK_BYTES", task_stack.bytes);
         }
         let code = run_linker(arguments);
         if code != 0 {

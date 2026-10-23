@@ -48,6 +48,10 @@ contracts: [Hardware memory](hardware-memory.md).
 - CPU0's task stack is in PSRAM; each hart has an SRAM interrupt stack
   with a guard region, a debug trigger and stack painting:
   [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).
+- An image that declares `task-stack = "proven"` gets a CPU0 task stack of
+  `align16(bound + minimum_free_bytes)`, sized by the image linker; other
+  images use the chip layout's 192 KiB or their policy's `allocation_bytes`.
+  See the [image linker](../tools/image/linker/README.md).
 - The image linker sizes each hart's IRQ stack to
   `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
   is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and

@@ -22,6 +22,19 @@ The first MTVT table requires 256-byte alignment, so `.isr.text` starts on
 that boundary; the gap after `.irq_stacks` is at most 255 bytes and is not
 included in either section.
 
+An image that declares `task-stack = "proven"` also gets its CPU0 task stack
+sized by the same second link: `align16(bound + minimum_free_bytes)` of the
+policy's `cpu0_task_stack`, passed as `CPU0_PSRAM_TASK_STACK_BYTES`. The bottom
+is the 64-byte aligned start of `.psram.task_stacks` and carries esp-hal's
+stack watchpoint, so the size has no other constraint; the 16 bytes keep the
+stack pointer aligned. The first-pass bound must be complete and rest only on
+admitted assumptions. After the second link the bound must differ by at most
+64 bytes and bound plus reserve must fit the allocation; otherwise the link
+fails with figures and attempts nothing further. A policy that also sets
+`allocation_bytes` names the size twice and is an error. The image's
+placement range for the stack is then exactly the linked size.
+Images without the key keep the chip layout's size or `allocation_bytes`.
+
 `strict-placement.toml` retains first-pass bounds, selected sizes and their
 sources, together with the final ELF/input fingerprint. `interrupt-stack.txt`
 reports final bounds, margins, guards, allocations and size sources per hart.

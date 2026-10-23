@@ -451,6 +451,8 @@ pub struct StackAudit {
     /// The image declares these stacks proven: [`Self::check`] fails on any
     /// unresolved path in them.
     pub declared_proven: bool,
+    /// Where the task stack's size came from, when the image's link says.
+    pub size_source: Option<crate::linker::task_stack::SizeSource>,
 }
 
 /// One stack's budget and its root's bound.
@@ -560,6 +562,7 @@ impl StackAudit {
             witness_memory_peak,
             task_bounds,
             declared_proven: false,
+            size_source: None,
         })
     }
 
@@ -683,6 +686,15 @@ impl StackAudit {
         }
         for stack in &self.stacks {
             out.push_str(&stack.render());
+        }
+        if let Some(source) = self.size_source {
+            for stack in &self.stacks {
+                let _ = writeln!(
+                    out,
+                    "{}: {} bytes allocated from {source}; minimum free {} bytes",
+                    stack.name, stack.linked.0, stack.minimum_free_bytes
+                );
+            }
         }
         out
     }

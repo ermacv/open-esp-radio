@@ -149,6 +149,9 @@ Each ELF contains:
   image-level accounting also subtracts the embedded payload copy. Overlapping
   NOLOAD RAM sections remain separately visible, so RAM totals are not a
   physical free-memory estimate.
+- `runtime-stack.txt` ends with each task stack's allocation and where it came
+  from: the proven bound plus the policy's reserve, the policy's
+  `allocation_bytes`, or the chip layout's default.
 - `allocated_stacks`: linked CPU0 task stack, each hart's linked IRQ range and
   the bootstrap stack, in bytes.
 - `bounds`: each task root, IRQ hart/level/exception and nested IRQ total, with
