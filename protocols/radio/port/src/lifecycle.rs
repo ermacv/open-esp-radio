@@ -157,15 +157,17 @@ pub trait PortBackend<Id: SlotIdentity>: SlotBodyOwner<Id> {
         'p: 'a;
     /// End admitted work within the bound and return its terminals.
     /// A rejecting sink returns its terminal by value; retain it and poison.
-    fn disable<'a, 'p>(
+    /// The concrete sink remains exclusively borrowed until the future ends.
+    fn disable<'a, 'p, S>(
         call: Call,
         view: &'a mut Self::View<'p>,
-        sink: &'a mut dyn FnMut(Self::Terminal<'p>) -> core::ops::ControlFlow<Self::Terminal<'p>>,
+        sink: &'a mut S,
     ) -> impl Future<Output = Result<(), Poisoned<Self::Fault>>> + 'a
     where
         Self: 'p,
         Id: 'p,
-        'p: 'a;
+        'p: 'a,
+        S: FnMut(Self::Terminal<'p>) -> core::ops::ControlFlow<Self::Terminal<'p>>;
     /// Read the radio clock through the frontend without changing admission.
     fn now<'a, 'p>(
         call: Call,
@@ -463,10 +465,13 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p> Owner<'a, 'p, Id, B
         Lent::new(B::phase(Call::new(), self.view))
     }
     /// Drain admitted owners to the sink within the backend transition bound.
-    pub async fn disable(
+    pub async fn disable<S>(
         self,
-        sink: &mut dyn FnMut(B::Terminal<'p>) -> core::ops::ControlFlow<B::Terminal<'p>>,
-    ) -> Result<Owner<'a, 'p, Id, B, Disabled>, PoisonedOwner<'a, 'p, Id, B>> {
+        sink: &mut S,
+    ) -> Result<Owner<'a, 'p, Id, B, Disabled>, PoisonedOwner<'a, 'p, Id, B>>
+    where
+        S: FnMut(B::Terminal<'p>) -> core::ops::ControlFlow<B::Terminal<'p>>,
+    {
         let Self { view, sentry, .. } = self;
         match B::disable(Call::new(), view, sink).await {
             Ok(()) => Ok(Owner {

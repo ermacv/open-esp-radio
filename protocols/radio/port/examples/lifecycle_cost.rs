@@ -205,15 +205,16 @@ macro_rules! port {
                     core::future::poll_fn(|_| view.probe.poll(1)).await;
                     Ok(Ok(()))
                 }
-                async fn disable<'a, 'p>(
+                async fn disable<'a, 'p, S>(
                     _: Call,
                     view: &'a mut Self::View<'p>,
-                    sink: &'a mut dyn FnMut(u32) -> core::ops::ControlFlow<u32>,
+                    sink: &'a mut S,
                 ) -> Result<(), Poisoned<u32>>
                 where
                     Self: 'p,
                     Id: 'p,
                     'p: 'a,
+                    S: FnMut(u32) -> core::ops::ControlFlow<u32>,
                 {
                     view.probe.step(2);
                     core::future::poll_fn(|_| view.probe.poll(2)).await;

@@ -456,15 +456,16 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
         }
     }
 
-    async fn disable<'a, 'p>(
+    async fn disable<'a, 'p, S>(
         _call: Call,
         frontend: &'a mut Self::View<'p>,
-        sink: &'a mut dyn FnMut(Self::Terminal<'p>) -> core::ops::ControlFlow<Self::Terminal<'p>>,
+        sink: &'a mut S,
     ) -> Result<(), Poisoned<ModelFault>>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
+        S: FnMut(Self::Terminal<'p>) -> core::ops::ControlFlow<Self::Terminal<'p>>,
     {
         frontend
             .air

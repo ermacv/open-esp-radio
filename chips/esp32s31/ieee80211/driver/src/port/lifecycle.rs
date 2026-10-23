@@ -520,17 +520,16 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s3
             }
         })
     }
-    fn disable<'a, 'p>(
+    fn disable<'a, 'p, S>(
         _: radio::Call,
         view: &'a mut Self::View<'p>,
-        sink: &'a mut dyn FnMut(
-            Terminal<'p, Id, D, B>,
-        ) -> core::ops::ControlFlow<Terminal<'p, Id, D, B>>,
+        sink: &'a mut S,
     ) -> impl Future<Output = Result<(), radio::Poisoned<Fault>>> + 'a
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
+        S: FnMut(Terminal<'p, Id, D, B>) -> core::ops::ControlFlow<Terminal<'p, Id, D, B>>,
     {
         let held = &view.held;
         let loan = view.loan;

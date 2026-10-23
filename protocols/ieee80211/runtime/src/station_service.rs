@@ -463,6 +463,29 @@ pub type PortArbiter<'id, B> = Arbiter<
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::GatePath,
 >;
 
+// Preserve the terminal-routing frame when static dispatch removes the
+// vtable call boundary; the target remains a direct generic call.
+#[inline(never)]
+fn retain_after_event_end<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
+    custody: &mut TerminalCustody<'id, B>,
+    terminal: <B::Backend as PortBackend<B::SlotId>>::Terminal<'id>,
+) -> core::ops::ControlFlow<<B::Backend as PortBackend<B::SlotId>>::Terminal<'id>> {
+    let terminal = B::terminal(terminal);
+    let result = match &mut *custody {
+        TerminalCustody::Clear => {
+            *custody =
+                ContractFault::sealed(BackendContractViolation::TerminalAfterEventEnd, terminal)
+                    .into();
+            core::ops::ControlFlow::Continue(())
+        }
+        TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
+            Ok(()) => core::ops::ControlFlow::Continue(()),
+            Err(terminal) => core::ops::ControlFlow::Break(terminal),
+        },
+    };
+    result.map_break(B::port_terminal)
+}
+
 /// The values the service's attempts take, which its port must offer:
 /// checked when the service's type is built, so a port without them builds
 /// no service.
@@ -1500,24 +1523,7 @@ impl<
                     }
                     // Drained promises there can be no further terminal.
                     // A violating disable return stays sealed, never reaching a machine.
-                    let mut sink = |terminal| {
-                        let terminal = B::terminal(terminal);
-                        let result = match &mut *custody {
-                            TerminalCustody::Clear => {
-                                *custody = ContractFault::sealed(
-                                    BackendContractViolation::TerminalAfterEventEnd,
-                                    terminal,
-                                )
-                                .into();
-                                core::ops::ControlFlow::Continue(())
-                            }
-                            TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
-                                Ok(()) => core::ops::ControlFlow::Continue(()),
-                                Err(terminal) => core::ops::ControlFlow::Break(terminal),
-                            },
-                        };
-                        result.map_break(B::port_terminal)
-                    };
+                    let mut sink = |terminal| retain_after_event_end::<B>(custody, terminal);
                     let end = match owner.disable(&mut sink).await {
                         Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
@@ -1654,6 +1660,31 @@ impl<
         }
     }
 
+    // Keep the same routing frame independently of the concrete FnMut sink.
+    #[inline(never)]
+    fn disable_terminal(
+        &mut self,
+        arbiter: &mut PortArbiter<'id, B>,
+        timer: &impl Timer,
+        custody: &mut TerminalCustody<'id, B>,
+        terminal: <B::Backend as PortBackend<B::SlotId>>::Terminal<'id>,
+    ) -> core::ops::ControlFlow<<B::Backend as PortBackend<B::SlotId>>::Terminal<'id>> {
+        let terminal = B::terminal(terminal);
+        let result = match custody {
+            TerminalCustody::Clear => {
+                if let Err(fault) = self.terminal(arbiter, timer.now(), terminal) {
+                    *custody = fault.into();
+                }
+                core::ops::ControlFlow::Continue(())
+            }
+            TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
+                Ok(()) => core::ops::ControlFlow::Continue(()),
+                Err(terminal) => core::ops::ControlFlow::Break(terminal),
+            },
+        };
+        result.map_break(B::port_terminal)
+    }
+
     /// Disable routes terminals only up to the first contract violation.
     /// The first rejected owner and every later sealed terminal are retained.
     /// A full bank returns the next owner to the port for poisoned teardown.
@@ -1667,22 +1698,7 @@ impl<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
     > {
-        let mut sink = |terminal| {
-            let terminal = B::terminal(terminal);
-            let result = match custody {
-                TerminalCustody::Clear => {
-                    if let Err(fault) = self.terminal(arbiter, timer.now(), terminal) {
-                        *custody = fault.into();
-                    }
-                    core::ops::ControlFlow::Continue(())
-                }
-                TerminalCustody::Quarantined(bank) => match bank.retain(terminal) {
-                    Ok(()) => core::ops::ControlFlow::Continue(()),
-                    Err(terminal) => core::ops::ControlFlow::Break(terminal),
-                },
-            };
-            result.map_break(B::port_terminal)
-        };
+        let mut sink = |terminal| self.disable_terminal(arbiter, timer, custody, terminal);
         owner.disable(&mut sink).await
     }
 

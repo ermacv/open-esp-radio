@@ -221,15 +221,16 @@ impl<Id: SlotIdentity> PortBackend<Id> for Backend<Id> {
             Ok(Ok(()))
         }
     }
-    async fn disable<'a, 'p>(
+    async fn disable<'a, 'p, S>(
         _: Call,
         view: &'a mut View<'p, Id>,
-        _: &'a mut dyn FnMut(()) -> core::ops::ControlFlow<()>,
+        _: &'a mut S,
     ) -> Result<(), Poisoned<u8>>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
+        S: FnMut(()) -> core::ops::ControlFlow<()>,
     {
         assert_eq!(view.model.context.get(), 1);
         view.model.disables.set(view.model.disables.get() + 1);
