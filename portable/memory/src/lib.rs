@@ -280,3 +280,6 @@ pub unsafe trait StableDmaBacking {
 
 mod placed;
 pub use placed::{PlaceLoan, Placed, PollPlaced, init_array, poll_placed};
+
+mod inline_place;
+pub use inline_place::InlinePlace;

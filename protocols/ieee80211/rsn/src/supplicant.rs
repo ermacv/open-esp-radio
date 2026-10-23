@@ -758,6 +758,7 @@ impl RsnStaSupplicant {
     /// [`RsnStaSupplicantAction::UnwrapKeyData`]: the AES unwrap stays with
     /// the caller, so a hardware backend can suspend on an interrupt without
     /// changing this state owner.
+    #[inline(never)]
     pub fn on_frame<const N: usize>(
         &mut self,
         frame: crate::OwnedEapolFrame<N>,
@@ -839,6 +840,7 @@ impl RsnStaSupplicant {
     ///
     /// A failed unwrap rejects the key data in the protocol state and returns
     /// [`RsnStaProcessError::KeyUnwrap`] with the backend error.
+    #[inline(never)]
     pub fn complete_key_data_unwrap<const N: usize, E>(
         &mut self,
         request: RsnStaKeyDataRequest<N>,

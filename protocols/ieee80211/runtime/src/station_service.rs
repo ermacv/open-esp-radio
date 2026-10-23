@@ -694,6 +694,90 @@ pub enum ServiceEnd<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     },
 }
 
+/// The loop returns only lifecycle authority; the large custody bank stays
+/// in its caller's placed storage until final output construction.
+enum ServiceStop<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
+    Stopped(Owner<'p, 'id, B::SlotId, B::Backend, Disabled>),
+    Failed {
+        owner: FailedInstallation<'p, 'id, B>,
+        fault: ServiceFault<B>,
+    },
+    Quarantined {
+        request: FailStopRequested<B::SlotId, B::Backend>,
+        fault: ServiceFault<B>,
+    },
+    Poisoned {
+        owner: PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+        fault: ServiceFault<B>,
+    },
+}
+
+impl<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> ServiceStop<'p, 'id, B> {
+    fn into_end(self, custody: TerminalCustody<'id, B>) -> ServiceEnd<'p, 'id, B> {
+        match self {
+            Self::Stopped(owner) => ServiceEnd::Stopped(owner),
+            Self::Failed { owner, fault } => ServiceEnd::Failed {
+                owner,
+                fault,
+                custody,
+            },
+            Self::Quarantined { request, fault } => ServiceEnd::Quarantined {
+                request,
+                fault,
+                custody,
+            },
+            Self::Poisoned { owner, fault } => ServiceEnd::Poisoned {
+                owner,
+                fault,
+                custody,
+            },
+        }
+    }
+
+    #[cfg(feature = "placement")]
+    #[inline(never)]
+    fn init_end<'out>(
+        self,
+        output: &'out mut core::mem::MaybeUninit<ServiceEnd<'p, 'id, B>>,
+        custody: oer_memory::Placed<'_, TerminalCustody<'id, B>>,
+    ) -> &'out mut ServiceEnd<'p, 'id, B> {
+        let end = match self {
+            Self::Stopped(owner) => output.write(ServiceEnd::Stopped(owner)),
+            Self::Failed { owner, fault } => output.write(ServiceEnd::Failed {
+                owner,
+                fault,
+                custody: TerminalCustody::Clear,
+            }),
+            Self::Quarantined { request, fault } => output.write(ServiceEnd::Quarantined {
+                request,
+                fault,
+                custody: TerminalCustody::Clear,
+            }),
+            Self::Poisoned { owner, fault } => output.write(ServiceEnd::Poisoned {
+                owner,
+                fault,
+                custody: TerminalCustody::Clear,
+            }),
+        };
+        match end {
+            ServiceEnd::Stopped(_) => drop(custody),
+            ServiceEnd::Failed {
+                custody: destination,
+                ..
+            }
+            | ServiceEnd::Quarantined {
+                custody: destination,
+                ..
+            }
+            | ServiceEnd::Poisoned {
+                custody: destination,
+                ..
+            } => custody.replace_into(destination),
+        }
+        end
+    }
+}
+
 /// A service failure with a stopped backend. Its only continuation is normal
 /// uninstall; starting another service requires a new installation. This is
 /// not a poisoned owner and does not require an otherwise unnecessary reset.
@@ -1141,14 +1225,15 @@ impl<
         timer: &impl Timer,
     ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, S, GROUPS>> {
         let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
-        let mut loop_output = core::mem::MaybeUninit::uninit();
-        let ended = {
-            let mut future = core::pin::pin!(state.run_loop(arbiter.read(), owner, io, timer));
-            oer_memory::poll_placed(future.as_mut(), &mut loop_output).await
-        };
-        let (end, arbiter) = ended.split();
-        let reason = match &*end {
-            ServiceEnd::Stopped(_) => oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
+        let mut custody_storage = core::mem::MaybeUninit::uninit();
+        let mut custody = oer_memory::Placed::init(&mut custody_storage, |place| {
+            place.write(TerminalCustody::Clear)
+        });
+        let (end, arbiter) = state
+            .run_loop(arbiter.read(), owner, io, timer, &mut custody)
+            .await;
+        let reason = match &end {
+            ServiceStop::Stopped(_) => oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
             _ => oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(
                 oer_ieee80211_arbiter::LeaveReason::PortFailed,
             ),
@@ -1166,7 +1251,7 @@ impl<
         );
         oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
-                end => |place| end.move_to(place).into_mut(),
+                end => |place| end.init_end(place, custody),
                 retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, S, GROUPS>>| {
                     let mut places = None;
                     let mut retired = oer_memory::Placed::init(place, |place| oer_memory::init_in_place!(place, RetiredService {
@@ -1183,7 +1268,7 @@ impl<
                             let places = places.take().expect("station returns its places");
                             places
                         },
-                        _arbiter: arbiter.read(),
+                        _arbiter: arbiter,
                         _pending: pending.read(),
                         _terminal_access: terminal_access.read(),
                     }));
@@ -1229,7 +1314,11 @@ impl<
         timer: &impl Timer,
     ) -> ServiceCompleted<'p, 'id, B, S, GROUPS> {
         let Self { arbiter, mut state } = self;
-        let (end, mut arbiter) = state.run_loop(arbiter, owner, io, timer).await;
+        let mut custody = TerminalCustody::Clear;
+        let (end, mut arbiter) = state
+            .run_loop(arbiter, owner, io, timer, &mut custody)
+            .await;
+        let end = end.into_end(custody);
         let reason = match &end {
             ServiceEnd::Stopped(_) => oer_ieee80211_sta::machine::StaDisconnectReason::Requested,
             ServiceEnd::Failed { .. }
@@ -1311,8 +1400,9 @@ impl<
             <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
         >,
         timer: &impl Timer,
+        custody: &mut TerminalCustody<'id, B>,
     ) -> (
-        ServiceEnd<'p, 'id, B>,
+        ServiceStop<'p, 'id, B>,
         RetiredArbiter<'id, B::Caps, NoReservation, <B::Types<'id> as PhaseTypes<'id>>::GatePath>,
     ) {
         let (mut arbiter, mut owner) = match self.enable(arbiter, owner, None, io, timer).await {
@@ -1327,56 +1417,46 @@ impl<
             };
             match next {
                 Served::Stop => {
-                    let mut custody = TerminalCustody::Clear;
-                    let owner = self.disable(&mut arbiter, owner, timer, &mut custody).await;
-                    let end = end_disabled(owner, custody);
+                    let owner = self.disable(&mut arbiter, owner, timer, custody).await;
+                    let end = stop_disabled(owner, custody);
                     let arbiter_end = match &end {
-                        ServiceEnd::Stopped(_) => ArbiterEnd::Stopped,
-                        ServiceEnd::Failed { .. }
-                        | ServiceEnd::Poisoned { .. }
-                        | ServiceEnd::Quarantined { .. } => ArbiterEnd::PortFailed,
+                        ServiceStop::Stopped(_) => ArbiterEnd::Stopped,
+                        ServiceStop::Failed { .. }
+                        | ServiceStop::Poisoned { .. }
+                        | ServiceStop::Quarantined { .. } => ArbiterEnd::PortFailed,
                     };
                     return (end, arbiter.finish(arbiter_end));
                 }
                 Served::Failed(failure) => {
-                    let mut custody = TerminalCustody::Clear;
-                    let fault = failure.retain_in(&mut custody);
-                    let owner = self.disable(&mut arbiter, owner, timer, &mut custody).await;
+                    let fault = failure.retain_in(custody);
+                    let owner = self.disable(&mut arbiter, owner, timer, custody).await;
                     let end = match owner {
-                        Ok(owner) => ServiceEnd::Failed {
+                        Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
                             fault,
-                            custody,
                         },
-                        Err(owner) => ServiceEnd::Poisoned {
-                            owner,
-                            fault,
-                            custody,
-                        },
+                        Err(owner) => ServiceStop::Poisoned { owner, fault },
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
                 Served::StreamEnd { end, fault } => {
-                    let mut custody = TerminalCustody::Clear;
                     let cause = match end {
                         EventEnd::Drained { cause } | EventEnd::Quarantined { cause } => cause,
                     };
                     if matches!(end, EventEnd::Quarantined { .. }) {
                         return (
-                            ServiceEnd::Quarantined {
+                            ServiceStop::Quarantined {
                                 request: owner.fail_stop(),
                                 fault,
-                                custody,
                             },
                             arbiter.finish(ArbiterEnd::PortFailed),
                         );
                     }
                     if let Some(missing) = self.pending.admissions.first() {
                         return (
-                            ServiceEnd::Quarantined {
+                            ServiceStop::Quarantined {
                                 request: owner.fail_stop(),
                                 fault: ServiceFault::DrainedWithOutstanding { cause, missing },
-                                custody,
                             },
                             arbiter.finish(ArbiterEnd::PortFailed),
                         );
@@ -1385,9 +1465,9 @@ impl<
                     // A violating disable return stays sealed, never reaching a machine.
                     let mut sink = |terminal| {
                         let terminal = B::terminal(terminal);
-                        let result = match &mut custody {
+                        let result = match &mut *custody {
                             TerminalCustody::Clear => {
-                                custody = ContractFault::sealed(
+                                *custody = ContractFault::sealed(
                                     BackendContractViolation::TerminalAfterEventEnd,
                                     terminal,
                                 )
@@ -1402,24 +1482,18 @@ impl<
                         result.map_break(B::port_terminal)
                     };
                     let end = match owner.disable(&mut sink).await {
-                        Ok(owner) => ServiceEnd::Failed {
+                        Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
                             fault,
-                            custody,
                         },
-                        Err(owner) => ServiceEnd::Poisoned {
-                            owner,
-                            fault,
-                            custody,
-                        },
+                        Err(owner) => ServiceStop::Poisoned { owner, fault },
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
                 Served::Retune(pending) => {
-                    let mut custody = TerminalCustody::Clear;
-                    let disabled = self.disable(&mut arbiter, owner, timer, &mut custody).await;
-                    let disabled = match end_disabled(disabled, custody) {
-                        ServiceEnd::Stopped(owner) => owner,
+                    let disabled = self.disable(&mut arbiter, owner, timer, custody).await;
+                    let disabled = match stop_disabled(disabled, custody) {
+                        ServiceStop::Stopped(owner) => owner,
                         end => {
                             self.pending.retune = Some(pending);
                             return (end, arbiter.finish(ArbiterEnd::PortFailed));
@@ -1471,7 +1545,7 @@ impl<
             Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
         ),
         (
-            ServiceEnd<'p, 'id, B>,
+            ServiceStop<'p, 'id, B>,
             RetiredArbiter<
                 'id,
                 B::Caps,
@@ -1497,10 +1571,9 @@ impl<
                     let Some(requested) = pending.take() else {
                         // Initial enable has no retune action to answer.
                         return Err((
-                            ServiceEnd::Failed {
+                            ServiceStop::Failed {
                                 owner: FailedInstallation { owner },
                                 fault: ServiceFault::EnableRefused(reason),
-                                custody: TerminalCustody::Clear,
                             },
                             arbiter.finish(ArbiterEnd::PortFailed),
                         ));
@@ -1515,10 +1588,9 @@ impl<
                         }
                         RetuneRefused::Failed(failed) => {
                             return Err((
-                                ServiceEnd::Failed {
+                                ServiceStop::Failed {
                                     owner: FailedInstallation { owner },
                                     fault: ServiceFault::EnableRefused(reason),
-                                    custody: TerminalCustody::Clear,
                                 },
                                 RetiredArbiter::PortFailed(failed),
                             ));
@@ -1533,9 +1605,8 @@ impl<
                 Err(Failed::Poisoned(poisoned)) => {
                     self.pending.retune = pending.take();
                     return Err((
-                        ServiceEnd::Poisoned {
+                        ServiceStop::Poisoned {
                             fault: ServiceFault::Backend(poisoned.cause()),
-                            custody: TerminalCustody::Clear,
                             owner: poisoned,
                         },
                         arbiter.finish(ArbiterEnd::PortFailed),
@@ -2208,6 +2279,7 @@ impl<
         }
     }
 
+    #[inline(never)]
     fn deliver_received<
         const TX_DEPTH: usize,
         const RX_DEPTH: usize,
@@ -2228,23 +2300,40 @@ impl<
         >,
     ) {
         let bytes = frame.bytes();
-        let result =
-            self.station.receive(now, bytes, meta, |parts| {
-                match EthernetFrame::from_parts(parts) {
-                    Ok(frame) => {
-                        if io.receive.try_send(frame).is_err() {
-                            self.counters.rx_msdus_queue_full.increment();
-                        }
-                    }
-                    Err(reason) => {
-                        self.counters.rx_msdus_too_long.increment();
-                        (io.output)(ServiceOutput::RxMsduRefused(reason));
-                    }
-                }
-            });
+        let counters = &mut self.counters;
+        let result = self.station.receive(now, bytes, meta, |parts| {
+            Self::queue_received(counters, io, parts);
+        });
         if let Err(reason) = result {
             self.counters.rx_frames_dropped.increment();
             (io.output)(ServiceOutput::RxFrameDropped(reason));
+        }
+    }
+
+    #[inline(never)]
+    fn queue_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+        counters: &mut ServiceCounters,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
+        >,
+        parts: oer_ieee80211_wire::data::EthernetFrameParts<'_>,
+    ) {
+        match EthernetFrame::from_parts(parts) {
+            Ok(frame) => {
+                if io.receive.try_send(frame).is_err() {
+                    counters.rx_msdus_queue_full.increment();
+                }
+            }
+            Err(reason) => {
+                counters.rx_msdus_too_long.increment();
+                (io.output)(ServiceOutput::RxMsduRefused(reason));
+            }
         }
     }
 
@@ -2942,29 +3031,26 @@ mod tests;
 
 /// Preserve the first contract violation even when the disable also fails.
 #[inline(never)]
-fn end_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
+fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     owner: Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
     >,
-    custody: TerminalCustody<'id, B>,
-) -> ServiceEnd<'p, 'id, B> {
+    custody: &TerminalCustody<'id, B>,
+) -> ServiceStop<'p, 'id, B> {
     match (owner, custody) {
-        (Ok(owner), TerminalCustody::Clear) => ServiceEnd::Stopped(owner),
-        (Ok(owner), TerminalCustody::Quarantined(bank)) => ServiceEnd::Failed {
+        (Ok(owner), TerminalCustody::Clear) => ServiceStop::Stopped(owner),
+        (Ok(owner), TerminalCustody::Quarantined(bank)) => ServiceStop::Failed {
             owner: FailedInstallation { owner },
             fault: ServiceFault::Contract(bank.violation()),
-            custody: TerminalCustody::Quarantined(bank),
         },
-        (Err(owner), TerminalCustody::Clear) => ServiceEnd::Poisoned {
+        (Err(owner), TerminalCustody::Clear) => ServiceStop::Poisoned {
             fault: ServiceFault::Backend(owner.cause()),
             owner,
-            custody: TerminalCustody::Clear,
         },
-        (Err(owner), TerminalCustody::Quarantined(bank)) => ServiceEnd::Poisoned {
+        (Err(owner), TerminalCustody::Quarantined(bank)) => ServiceStop::Poisoned {
             owner,
             fault: ServiceFault::Contract(bank.violation()),
-            custody: TerminalCustody::Quarantined(bank),
         },
     }
 }

@@ -62,9 +62,10 @@
 //!
 //! # States
 //!
-//! Its state is an enum whose variants hold their own types; a transition
-//! takes the state by value and returns the next one, so a value of one
-//! state is never read in another. Each state names the action it owes,
+//! Its state is an enum whose variants hold their own types. Transitions
+//! borrow the resident phase and return a replacement description. Established
+//! state and its RSN exchange are constructed in place and remain there across
+//! D4 confirmation, inputs and actions. Each state names the action it owes,
 //! so [`Station::poll_action`] hands it out and moves to the state that
 //! awaits its end: there is no queue of actions to overflow.
 
@@ -93,7 +94,7 @@ use oer_ieee80211_rsn::{
         RsnConnectedAction, RsnConnectedProcessError, RsnConnectedSupplicant,
         RsnConnectedSupplicantError, RsnGroupKeyInstallRequest, RsnStaDeadlineEvent,
         RsnStaKeyInstallRequest, RsnStaReady, RsnStaResponseDeadline, RsnStaResponseWait,
-        RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction,
+        RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction, RsnStaSupplicantError,
     },
 };
 use oer_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
@@ -1396,8 +1397,206 @@ impl<T: StaTokens> Keys<T> {
     }
 }
 
+/// A new variant description contains no State, Connected or ConnectedRsn owner.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "sub-limit variant initializers stay affine without an allocator"
+)]
+enum Change<T: StaTokens, K> {
+    Keep,
+    Idle,
+    Reclaiming(Reclaim),
+    Scan(Scan<K>),
+    Join(Join<T, K>),
+    Handshake(NewHandshake<T, K>),
+    Leave {
+        reason: StaDisconnectReason,
+        step: LeaveStep,
+    },
+    Report(StaDisconnectReason),
+    Establish(NewConnection<T, K>),
+    Confirm {
+        replay: CcmpRxReplayEpoch,
+        response: EapolResponse,
+    },
+}
+
+struct NewConnection<T: StaTokens, K> {
+    bssid: Bssid,
+    channel: SupportedChannel<K>,
+    association_id: u16,
+    qos: bool,
+    peer: Peer<T::RxMeta>,
+    qos_sequences: [StaSequenceCounter; 8],
+    confirmation: Option<RsnStaResponseDeadline>,
+}
+impl<T: StaTokens, K> State<T, K> {
+    fn take_deferred(&mut self) -> DeferredEapol {
+        let deferred = match self {
+            Self::Leave(leave) => &mut leave.deferred,
+            Self::Connected(connected) => match connected.rsn.as_mut() {
+                Some(rsn) => &mut rsn.deferred,
+                None => return DeferredEapol::Empty,
+            },
+            _ => return DeferredEapol::Empty,
+        };
+        core::mem::replace(deferred, DeferredEapol::Empty)
+    }
+
+    #[inline(never)]
+    fn confirm(&mut self, replay: CcmpRxReplayEpoch, response: EapolResponse) {
+        let Self::Handshake(handshake) = self else {
+            return;
+        };
+        let supplicant = handshake
+            .supplicant
+            .take()
+            .ok_or(RsnStaSupplicantError::UnexpectedAction)
+            .and_then(RsnStaSupplicant::into_connected);
+        let supplicant = match supplicant {
+            Ok(supplicant) => supplicant,
+            Err(_) => {
+                let deauthentication = Deauthentication {
+                    bssid: handshake.bssid,
+                    reason_code: REASON_UNSPECIFIED,
+                    protected: handshake.management.is_some(),
+                };
+                self.leave(
+                    StaDisconnectReason::HandshakeFailed,
+                    leave_key_step(Some(deauthentication)),
+                );
+                return;
+            }
+        };
+        let management = handshake.management.take();
+        let new = NewConnection {
+            bssid: handshake.bssid,
+            channel: handshake.channel,
+            association_id: handshake.association_id,
+            qos: handshake.qos,
+            peer: handshake.peer,
+            qos_sequences: handshake.qos_sequences,
+            confirmation: Some(handshake.deadline),
+        };
+        self.establish(new);
+        if let Self::Connected(connected) = self {
+            connected.rsn.initialize(|place| {
+                oer_memory::init_in_place!(
+                    place,
+                    ConnectedRsn {
+                        management: management,
+                        supplicant: supplicant,
+                        replay: replay,
+                        message4: DuplicateMessage4::Send(response),
+                        rekey: Rekey::None,
+                        deferred: DeferredEapol::Empty,
+                        dropped: crate::Counter::ZERO,
+                    }
+                )
+            });
+        }
+    }
+
+    #[inline(never)]
+    fn apply(&mut self, change: Change<T, K>) {
+        match change {
+            Change::Keep => {}
+            Change::Idle => *self = Self::Idle,
+            Change::Reclaiming(reclaim) => *self = Self::Reclaiming(reclaim),
+            Change::Scan(scan) => *self = Self::Scan(scan),
+            Change::Join(join) => *self = Self::Join(join),
+            Change::Handshake(new) => {
+                *self = Self::Handshake(Handshake {
+                    bssid: new.bssid,
+                    channel: new.channel,
+                    association_id: new.association_id,
+                    qos: new.qos,
+                    peer: new.peer,
+                    supplicant: new.supplicant,
+                    spp: new.spp,
+                    pmk: new.pmk,
+                    qos_sequences: new.qos_sequences,
+                    deadline: new.deadline,
+                    step: HandshakeStep::Await,
+                    management: new.management,
+                })
+            }
+            Change::Report(reason) => *self = Self::Report(reason),
+            Change::Leave { reason, step } => self.leave(reason, step),
+            Change::Confirm { replay, response } => self.confirm(replay, response),
+            Change::Establish(new) => self.establish(new),
+        }
+    }
+    #[inline(never)]
+    fn leave(&mut self, reason: StaDisconnectReason, step: LeaveStep) {
+        let deferred = self.take_deferred();
+        *self = Self::Leave(oer_memory::InlinePlace::empty());
+        if let Self::Leave(place) = self {
+            place.initialize(|place| {
+                oer_memory::init_in_place!(
+                    place,
+                    Leave {
+                        reason: reason,
+                        step: step,
+                        deferred: deferred,
+                    }
+                )
+            });
+        }
+    }
+
+    #[inline(never)]
+    fn establish(&mut self, new: NewConnection<T, K>) {
+        *self = Self::Connected(oer_memory::InlinePlace::empty());
+        if let Self::Connected(place) = self {
+            place.initialize(|place| {
+                oer_memory::init_in_place!(
+                    place,
+                    Connected {
+                        bssid: new.bssid,
+                        channel: new.channel,
+                        association_id: new.association_id,
+                        qos: new.qos,
+                        peer: new.peer,
+                        qos_sequences: new.qos_sequences,
+                        confirmation: new.confirmation,
+                        report: new
+                            .confirmation
+                            .is_none()
+                            .then_some(UpstreamFact::Connected(new.channel)),
+                        edca: false,
+                        exchange: false,
+                        power: PowerSaveView::Awake,
+                        wake: false,
+                        sending: false,
+                        waking: false,
+                        background: None,
+                        connected_notice: new.confirmation.is_none(),
+                        block_ack: None,
+                        rsn: oer_memory::InlinePlace::empty(),
+                    }
+                )
+            });
+        }
+    }
+}
+
+fn current_epoch<'id, T: StaTokens, K>(
+    state: &State<T, K>,
+    epoch: Option<LinkEpoch<'id, T::EpochPath>>,
+) -> Option<LinkEpoch<'id, T::EpochPath>> {
+    match state {
+        State::Idle | State::Reclaiming(_) | State::Leave(_) | State::Report(_) => None,
+        _ => epoch,
+    }
+}
+
 /// The protocol state. Key-cell ownership remains in Station while these
 /// states change, including while an installation response is outstanding.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "phase payloads stay resident and are never passed through transitions by value"
+)]
 enum State<T: StaTokens, K> {
     /// Not connected and not trying.
     Idle,
@@ -1409,18 +1608,15 @@ enum State<T: StaTokens, K> {
     Join(Join<T, K>),
     /// Running the WPA2 four-way handshake.
     Handshake(Handshake<T, K>),
-    /// Keys are installed; only a delivered pairwise M4 opens this link.
-    Confirming(Confirming<T, K>),
     /// Connected.
-    Connected(Connected<T, K>),
+    Connected(oer_memory::InlinePlace<Connected<T, K>>),
     /// Leaving the network.
-    Leave(Leave),
+    Leave(oer_memory::InlinePlace<Leave>),
     /// Telling the application why it is not connected, then idle.
     Report(StaDisconnectReason),
-    /// Only between a transition's take and its put.
-    Taken,
 }
 
+#[derive(Clone, Copy)]
 enum Reclaim {
     Keys,
     Configure,
@@ -1533,13 +1729,28 @@ enum AuthStage {
 }
 
 /// The WPA2 four-way handshake with the joined access point.
+struct NewHandshake<T: StaTokens, K> {
+    bssid: Bssid,
+    channel: SupportedChannel<K>,
+    association_id: u16,
+    qos: bool,
+    peer: Peer<T::RxMeta>,
+    supplicant: Option<RsnStaSupplicant>,
+    spp: oer_ieee80211_wire::security::Spp,
+    pmk: Pmk,
+    qos_sequences: [StaSequenceCounter; 8],
+    /// The deadline of the message the station waits for.
+    deadline: RsnStaResponseDeadline,
+    management: Option<ManagementProtection>,
+}
+
 struct Handshake<T: StaTokens, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
     association_id: u16,
     qos: bool,
     peer: Peer<T::RxMeta>,
-    supplicant: RsnStaSupplicant,
+    supplicant: Option<RsnStaSupplicant>,
     spp: oer_ieee80211_wire::security::Spp,
     pmk: Pmk,
     qos_sequences: [StaSequenceCounter; 8],
@@ -1547,6 +1758,18 @@ struct Handshake<T: StaTokens, K> {
     deadline: RsnStaResponseDeadline,
     step: HandshakeStep,
     management: Option<ManagementProtection>,
+}
+
+impl<T: StaTokens, K> Handshake<T, K> {
+    #[expect(
+        clippy::expect_used,
+        reason = "only the synchronous confirm transition consumes the supplicant"
+    )]
+    fn supplicant(&mut self) -> &mut RsnStaSupplicant {
+        self.supplicant
+            .as_mut()
+            .expect("handshake retains its supplicant until confirm")
+    }
 }
 
 /// The handshake's step; its values move from one step to the next, so the
@@ -1565,15 +1788,9 @@ enum HandshakeStep {
     AwaitInstalled(RsnStaRetryInstall, CcmpRxReplayEpoch, EapolProtection),
 }
 
-/// D4 retains this original handshake deadline across every later M3 and TX
-/// outcome. The established-key exchange is already group-only by type.
-struct Confirming<T: StaTokens, K> {
-    connected: Connected<T, K>,
-    deadline: RsnStaResponseDeadline,
-}
-
 /// The connected station.
 struct Connected<T: StaTokens, K> {
+    confirmation: Option<RsnStaResponseDeadline>,
     bssid: Bssid,
     channel: SupportedChannel<K>,
     association_id: u16,
@@ -1606,7 +1823,7 @@ struct Connected<T: StaTokens, K> {
     /// Parsed management to hand to the service before the next RX input.
     block_ack: Option<oer_ieee80211_wire::block_ack::frame::BlockAckAction>,
     /// The supplicant of a protected link and its group key's handshake.
-    rsn: Option<ConnectedRsn>,
+    rsn: oer_memory::InlinePlace<ConnectedRsn>,
 }
 
 /// What the connected station's transmission in flight is for.
@@ -1643,6 +1860,23 @@ struct ConnectedRsn {
 }
 
 impl ConnectedRsn {
+    #[inline(never)]
+    fn complete_install(
+        &mut self,
+        request: RsnGroupKeyInstallRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        protection: EapolProtection,
+    ) -> Result<(), StaDisconnectReason> {
+        if let (Some(management), Some(igtk)) = (&mut self.management, request.igtk()) {
+            management.install_igtk(igtk);
+        }
+        let frame = self
+            .supplicant
+            .complete_group_key_install(request, true)
+            .map_err(|_| StaDisconnectReason::HandshakeFailed)?;
+        self.rekey = Rekey::Send(EapolResponse { frame, protection });
+        Ok(())
+    }
+
     #[inline(never)]
     fn receive(
         &mut self,
@@ -1927,11 +2161,7 @@ fn group_key(install: &RsnKeyInstall) -> Option<(GroupKeyId, Ccmp128Key)> {
 /// permission. Only its terminal exchanges the selected per-ID frontier.
 fn active_replay<T: StaTokens, K>(state: &mut State<T, K>) -> Option<&mut CcmpRxReplayEpoch> {
     match state {
-        State::Connected(Connected { rsn: Some(rsn), .. })
-        | State::Confirming(Confirming {
-            connected: Connected { rsn: Some(rsn), .. },
-            ..
-        }) => Some(&mut rsn.replay),
+        State::Connected(connected) => connected.rsn.as_mut().map(|rsn| &mut rsn.replay),
         State::Handshake(handshake) => match &mut handshake.step {
             HandshakeStep::InstallGroup(_, replay, _)
             | HandshakeStep::AwaitInstalled(_, replay, _) => Some(replay),
@@ -2039,7 +2269,7 @@ impl<A> From<Option<A>> for ActionProgress<A> {
     }
 }
 
-type ActionStep<'id, T, K> = (State<T, K>, ActionProgress<Owed<'id, T, K>>);
+type ActionStep<'id, T, K> = (Change<T, K>, ActionProgress<Owed<'id, T, K>>);
 
 /// The affine resources composition grants to one station. Epoch issuance,
 /// frame pools, channel admission and key slots move into it together.
@@ -2141,21 +2371,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             commands,
             sequence,
             pmksa,
-            state,
+            mut state,
             scan: _,
             epoch: _,
         } = self;
         (
             RetiredStation {
-                deferred_eapol: match state {
-                    State::Leave(Leave { deferred, .. }) => deferred,
-                    State::Connected(Connected { rsn: Some(rsn), .. })
-                    | State::Confirming(Confirming {
-                        connected: Connected { rsn: Some(rsn), .. },
-                        ..
-                    }) => rsn.deferred,
-                    _ => DeferredEapol::Empty,
-                },
+                deferred_eapol: state.take_deferred(),
                 config,
                 security,
                 epochs,
@@ -2199,6 +2421,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// Finalize a placed station without moving the complete machine or its
     /// scan table through a temporary. The returned owner has only terminal APIs.
     #[cfg(feature = "placement")]
+    #[inline(never)]
     pub fn finish_placed<'a, 'b>(
         mut machine: oer_memory::Placed<'a, Self>,
         destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K>>,
@@ -2249,17 +2472,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             }
         );
         drop((lease, absence, scan, epoch));
-        let deferred = match &mut *state {
-            State::Leave(Leave { deferred, .. }) => {
-                core::mem::replace(deferred, DeferredEapol::Empty)
-            }
-            State::Connected(Connected { rsn: Some(rsn), .. })
-            | State::Confirming(Confirming {
-                connected: Connected { rsn: Some(rsn), .. },
-                ..
-            }) => core::mem::replace(&mut rsn.deferred, DeferredEapol::Empty),
-            _ => DeferredEapol::Empty,
-        };
+        let deferred = state.take_deferred();
         drop(state);
         let retired = oer_memory::Placed::init(destination, |place| {
             oer_memory::init_in_place!(
@@ -2373,6 +2586,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     #[cfg(feature = "placement")]
+    #[inline(never)]
     fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K>,
@@ -2435,21 +2649,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         self.tickets.lost().combined(self.buffers.lost()).get()
     }
 
-    /// A leave has closed the link even while its deauthentication and key
-    /// removals still use the old operation epoch. Taken is a synchronous
-    /// transition only; issuing actions uses that transition's owning epoch.
-    fn current_epoch(&self) -> Option<LinkEpoch<'id, T::EpochPath>> {
-        match self.state {
-            State::Idle | State::Reclaiming(_) | State::Leave(_) | State::Report(_) => None,
-            State::Scan(_)
-            | State::Join(_)
-            | State::Handshake(_)
-            | State::Confirming(_)
-            | State::Connected(_)
-            | State::Taken => self.epoch,
-        }
-    }
-
     /// Whether an operation still belongs to this connection attempt.
     /// Resource return is unconditional; protocol and rate updates use this guard.
     pub fn is_current(&self, context: &StaTxContext<'id, T::EpochPath>) -> bool {
@@ -2458,7 +2657,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// Whether the station is connected.
     pub const fn is_connected(&self) -> bool {
-        matches!(self.state, State::Connected(_))
+        match &self.state {
+            State::Connected(place) => match place.as_ref() {
+                Some(connected) => connected.confirmation.is_none(),
+                None => false,
+            },
+            _ => false,
+        }
     }
 
     /// Startup is blocked on explicit cleanup actions and their port terminals.
@@ -2472,8 +2677,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     pub const fn peer(&self) -> Option<&Peer<T::RxMeta>> {
         match &self.state {
             State::Handshake(handshake) => Some(&handshake.peer),
-            State::Confirming(confirming) => Some(&confirming.connected.peer),
-            State::Connected(connected) => Some(&connected.peer),
+            State::Connected(place) => match place.as_ref() {
+                Some(connected) => Some(&connected.peer),
+                None => None,
+            },
             _ => None,
         }
     }
@@ -2487,7 +2694,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         let State::Connected(connected) = &mut self.state else {
             return None;
         };
-        if self.absence.is_some() || connected.power.asleep() {
+        let connected = connected.as_mut()?;
+        if connected.confirmation.is_some() || self.absence.is_some() || connected.power.asleep() {
             return None;
         }
         let pairwise = match &self.keys.pairwise {
@@ -2497,7 +2705,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             | KeyCell::Removing
             | KeyCell::UnreturnedBank { .. } => None,
         };
-        let replay = match &mut connected.rsn {
+        let replay = match connected.rsn.as_mut() {
             Some(rsn) => Some(&mut rsn.replay),
             None => None,
         };
@@ -2520,7 +2728,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             protection,
         })
     }
-
+    #[cfg(test)]
     /// The security policy the scan selects and the join associates with.
     const fn policy(&self) -> StaSecurityPolicy {
         match self.security {
@@ -2529,20 +2737,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         }
     }
 
-    fn ssid(&self) -> &[u8] {
-        &self.config.ssid
-    }
-
-    fn channel(&self, visit: usize) -> Option<SupportedChannel<K>> {
-        self.config.channels.get(visit).copied()
-    }
-
-    fn take_state(&mut self) -> State<T, K> {
-        core::mem::replace(&mut self.state, State::Taken)
-    }
-
     /// Admit a request and reserve its terminal before changing protocol state.
     /// Refusal returns that same request immediately and owes no terminal.
+    #[inline(never)]
     pub fn command(
         &mut self,
         now: Instant,
@@ -2552,27 +2749,32 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         let command = request.command();
         let reason = match (command, &self.state) {
             (StaCommand::Connect, State::Idle) => None,
-            (StaCommand::Connect, State::Connected(_)) => Some(CommandRefusal::AlreadyConnected),
+            (StaCommand::Connect, State::Connected(connected))
+                if connected.confirmation.is_none() =>
+            {
+                Some(CommandRefusal::AlreadyConnected)
+            }
             (StaCommand::Connect, _) => Some(CommandRefusal::Transitioning),
             (
                 StaCommand::Disconnect,
-                State::Connected(_)
-                | State::Scan(_)
-                | State::Join(_)
-                | State::Handshake(_)
-                | State::Confirming(_),
+                State::Connected(_) | State::Scan(_) | State::Join(_) | State::Handshake(_),
             ) => None,
             (StaCommand::Disconnect, State::Idle) => Some(CommandRefusal::NotConnected),
             (StaCommand::Disconnect, _) => Some(CommandRefusal::Transitioning),
-            (StaCommand::BackgroundScan, State::Connected(_)) => None,
+            (StaCommand::BackgroundScan, State::Connected(connected))
+                if connected.confirmation.is_none() =>
+            {
+                None
+            }
             (StaCommand::BackgroundScan, _) => Some(CommandRefusal::NotConnected),
         };
         if let Some(reason) = reason {
             return Err(StaCommandRefused { request, reason });
         }
         self.commands.reserve(request);
-        let state = self.take_state();
-        self.state = self.step(state, now, Done::Command(command));
+        let (mut context, state) = self.transition();
+        let change = context.step(state, now, Done::Command(command));
+        state.apply(change);
         self.complete_commands();
         Ok(())
     }
@@ -2580,13 +2782,15 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// Record terminal outcomes before a later input can change their state.
     fn complete_commands(&mut self) {
         match &self.state {
-            State::Connected(connected) => self.commands.complete(
-                StaCommand::Connect,
-                StaCommandOutcome::Connected {
-                    bssid: connected.bssid,
-                    channel: connected.channel.channel().number(),
-                },
-            ),
+            State::Connected(connected) if connected.confirmation.is_none() => {
+                self.commands.complete(
+                    StaCommand::Connect,
+                    StaCommandOutcome::Connected {
+                        bssid: connected.bssid,
+                        channel: connected.channel.channel().number(),
+                    },
+                )
+            }
             State::Leave(leave) => self.commands.complete(
                 StaCommand::BackgroundScan,
                 StaCommandOutcome::BackgroundScan {
@@ -2615,1137 +2819,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// Take one input at `now`.
     pub fn input(&mut self, now: Instant, input: StaInput<'id, T, K>) {
-        self.input_event(now, input);
+        let (mut context, state) = self.transition();
+        context.input_event(state, now, input);
         self.complete_commands();
-    }
-
-    fn input_event(&mut self, now: Instant, input: StaInput<'id, T, K>) {
-        let done = match input {
-            StaInput::TxDone {
-                context,
-                ticket,
-                buffer,
-                completion,
-            } => {
-                // A transmission's tokens come back whatever the state.
-                self.tickets.put(ticket);
-                self.buffers.put(buffer.into_fresh(T::renew));
-                if !self.is_current(&context) {
-                    return;
-                }
-                Done::Tx {
-                    purpose: context.purpose,
-                    completion,
-                }
-            }
-            StaInput::Unsent {
-                reason,
-                context,
-                ticket,
-                buffer,
-            } => {
-                self.tickets.put(ticket);
-                self.buffers.put(buffer.into_fresh(T::renew));
-                if !self.is_current(&context) {
-                    return;
-                }
-                Done::Unsent {
-                    purpose: context.purpose,
-                    reason,
-                }
-            }
-            StaInput::Tick => Done::Tick,
-            StaInput::Configured(permission) => {
-                let (permission, pending) = permission.into_parts();
-                self.configuration = Some(permission);
-                if pending.epoch != self.current_epoch() {
-                    return;
-                }
-                Done::Configured
-            }
-            StaInput::Answer(answer) => {
-                self.answered(answer);
-                return;
-            }
-            StaInput::AbsenceAnswer(answer) => {
-                self.absence_answered(answer);
-                return;
-            }
-            StaInput::Exchanged(answer) => {
-                match answer {
-                    Ok(lease) => self.lease = Held::Lease(lease),
-                    Err(lease) => {
-                        self.lease = Held::Lease(lease);
-                        let state = self.take_state();
-                        self.state = match state {
-                            State::Connected(connected) => leave_connected(
-                                connected,
-                                StaDisconnectReason::LeaseExchangeRefused,
-                                None,
-                            ),
-                            state => state,
-                        };
-                    }
-                }
-                return;
-            }
-            StaInput::PairwiseKeyInstalled { pending, key } => {
-                let current = self.current_epoch() == Some(pending.epoch);
-                self.keys.pairwise_installed(pending, key);
-                // Leave waits for every outstanding key installation to return.
-                // An old response becomes a removal action there.
-                if current {
-                    self.keys_changed();
-                }
-                return;
-            }
-            StaInput::GroupKeyInstalled {
-                pending,
-                key,
-                permission,
-            } => {
-                self.group_transition(pending, key, permission, None, false);
-                return;
-            }
-            StaInput::GroupKeyReplaced {
-                pending,
-                key,
-                permission,
-            } => {
-                self.group_transition(
-                    pending.install,
-                    key,
-                    permission,
-                    Some(pending.previous_id),
-                    false,
-                );
-                return;
-            }
-            StaInput::GroupKeySelected {
-                pending,
-                key,
-                permission,
-            } => {
-                self.group_transition(pending.install, key, permission, None, true);
-                return;
-            }
-            StaInput::PairwiseKeyRemoved { slot, association } => {
-                // A complete initial bank and affine returns bound these
-                // collections by the same const capacities checked in Keys::new.
-                let spare = core::mem::take(&mut self.keys.spare_pairwise);
-                let parts = oer_ieee80211_port::association::KeyBankParts {
-                    pairwise: core::iter::once(slot).chain(spare).collect(),
-                    group: self
-                        .keys
-                        .group_slots
-                        .free
-                        .take_all()
-                        .into_iter()
-                        .chain(core::mem::take(&mut self.keys.spare_group))
-                        .collect(),
-                };
-                match T::collect_key_bank(parts) {
-                    Ok(bank) => {
-                        let (association, slot, parts) = T::end_association(association, bank);
-                        self.keys.pairwise = KeyCell::Free(VacantPairwise { association, slot });
-                        self.keys.spare_pairwise = parts.pairwise;
-                        let mut groups = parts.group.into_iter();
-                        self.keys.group_slots.free =
-                            Pool::from_collection(groups.by_ref().take(T::GROUP_SLOTS).collect());
-                        self.keys.spare_group = groups.collect();
-                    }
-                    Err(parts) => {
-                        self.keys.pairwise = KeyCell::UnreturnedBank {
-                            _association: association,
-                            _parts: parts,
-                        };
-                    }
-                }
-                return;
-            }
-            StaInput::GroupKeyRemoved {
-                pending,
-                slot,
-                permission,
-            } => {
-                if matches!(pending.replay, GroupReplay::Active)
-                    && let Some(replay) = active_replay(&mut self.state)
-                {
-                    replay.remove_group(pending.key_id);
-                }
-                self.keys.group_removed(slot, permission, pending.place);
-                return;
-            }
-            StaInput::Arbiter(notice) => {
-                self.noticed(notice);
-                return;
-            }
-        };
-        let state = self.take_state();
-        self.state = self.step(state, now, done);
-    }
-
-    /// The arbiter's answer.
-    #[inline(never)]
-    fn answered(&mut self, answer: Answer<'id, K, T::GatePath>) {
-        let state = self.take_state();
-        self.state = match answer {
-            Answer::Lease(lease) => {
-                let access_point = lease.access_point();
-                self.lease = Held::Lease(lease);
-                match state {
-                    State::Scan(mut scan) => {
-                        scan.access_point = access_point;
-                        scan.step = ScanStep::AwaitStart;
-                        State::Scan(scan)
-                    }
-                    State::Join(mut join) => {
-                        join.step = JoinStep::AwaitStart;
-                        State::Join(join)
-                    }
-                    state => state,
-                }
-            }
-            Answer::Refused(refusal, place) => {
-                self.place = Some(place);
-                match (state, refusal) {
-                    (State::Join(mut join), Refusal::TooSoon { retry_at }) => {
-                        join.step = JoinStep::RetryAt(retry_at);
-                        State::Join(join)
-                    }
-                    (State::Scan(_) | State::Join(_), _) => {
-                        leave_unkeyed(StaDisconnectReason::Refused(refusal))
-                    }
-                    (state, _) => state,
-                }
-            }
-        };
-    }
-
-    fn group_transition(
-        &mut self,
-        pending: PendingGroupKey<'id, T::EpochPath>,
-        key: T::GroupKey,
-        permission: T::GroupPermission,
-        replaced: Option<GroupKeyId>,
-        selected: bool,
-    ) {
-        let current = self.current_epoch() == Some(pending.epoch);
-        let replay = if current {
-            active_replay(&mut self.state)
-        } else {
-            None
-        };
-        // An evicted installation of another ID ends here. Retained entries
-        // of that ID still own their active state independently.
-        let mut replay = replay;
-        if let Some(old) = replaced
-            && old != pending.key_id
-            && !self.keys.groups.has_active(old)
-            && let Some(replay) = &mut replay
-        {
-            replay.remove_group(old);
-        }
-        self.keys
-            .group_installed(pending, key, permission, current, replay, selected);
-        if current {
-            self.group_installed();
-        }
-    }
-
-    /// A key of the handshake is installed: once both are, Message 4
-    /// follows.
-    fn keys_changed(&mut self) {
-        let state = self.take_state();
-        self.state = match state {
-            State::Handshake(mut handshake) if self.keys.installed() => {
-                match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
-                    HandshakeStep::AwaitInstalled(request, replay, protection) => {
-                        finish_handshake_install(handshake, request, replay, protection)
-                    }
-                    step => {
-                        handshake.step = step;
-                        State::Handshake(handshake)
-                    }
-                }
-            }
-            state => state,
-        };
-    }
-
-    /// A group key terminal completes only its own exchange stage. Other
-    /// stages (including an encoded response waiting for credit) stay owned.
-    fn group_installed(&mut self) {
-        let state = self.take_state();
-        self.state = match state {
-            State::Connected(connected) => finish_connected_install(connected),
-            State::Confirming(Confirming {
-                connected,
-                deadline,
-            }) => still_confirming(finish_connected_install(connected), deadline),
-            state => {
-                self.state = state;
-                self.keys_changed();
-                return;
-            }
-        };
-    }
-
-    /// The arbiter's answer to the station's absence.
-    #[inline(never)]
-    fn absence_answered(&mut self, answer: AbsenceAnswer<'id, K, T::GatePath>) {
-        let State::Connected(connected) = &mut self.state else {
-            if let AbsenceAnswer::Refused(_, place) = answer {
-                self.absence_place = Some(place);
-            }
-            return;
-        };
-        let Some(background) = &mut connected.background else {
-            return;
-        };
-        match answer {
-            AbsenceAnswer::Lease(lease) => {
-                self.absence = Some(lease);
-                background.step = BackgroundStep::NeedSleep;
-            }
-            AbsenceAnswer::Refused(reason, place) => {
-                self.absence_place = Some(place);
-                connected.background = None;
-                self.commands.complete(
-                    StaCommand::BackgroundScan,
-                    StaCommandOutcome::BackgroundScan {
-                        interrupted: Some(BackgroundScanEnd::AbsenceRefused(reason)),
-                    },
-                );
-            }
-        }
-    }
-
-    /// The background scan's step after its absence ended, `cancelled` or
-    /// not.
-    fn absence_over(&mut self, cancelled: bool) {
-        self.absence = None;
-        let limit = self.config.skipped_absences;
-        let State::Connected(connected) = &mut self.state else {
-            return;
-        };
-        let Some(background) = &mut connected.background else {
-            return;
-        };
-        background.step = if cancelled {
-            background.skipped = background.skipped.saturating_add(1);
-            if connected.power.asleep() {
-                // A PM=1 may have reached the access point: wake first.
-                BackgroundStep::NeedWake
-            } else if background.skipped >= limit {
-                connected.background = None;
-                self.commands.complete(
-                    StaCommand::BackgroundScan,
-                    StaCommandOutcome::BackgroundScan {
-                        interrupted: Some(BackgroundScanEnd::CancelledAbsences),
-                    },
-                );
-                return;
-            } else {
-                BackgroundStep::NeedAbsence
-            }
-        } else {
-            background.skipped = 0;
-            BackgroundStep::NeedHome
-        };
-    }
-
-    /// A notice of the arbiter.
-    #[inline(never)]
-    fn noticed(&mut self, notice: StationNotice<'id, K, T::GatePath>) {
-        match notice {
-            StationNotice::AbsenceStarted(id) => {
-                if self.absence.as_ref().map(Lease::id) == Some(id)
-                    && let State::Connected(Connected {
-                        background: Some(background),
-                        ..
-                    }) = &mut self.state
-                    && background.step == BackgroundStep::AwaitStart
-                {
-                    background.step = BackgroundStep::NeedConfigure;
-                }
-                return;
-            }
-            StationNotice::AbsenceEnded(place) => {
-                self.absence_place = Some(place);
-                self.absence_over(false);
-                return;
-            }
-            StationNotice::AbsenceCancelled(_, place) => {
-                self.absence_place = Some(place);
-                self.absence_over(true);
-                return;
-            }
-            _ => {}
-        }
-        let state = self.take_state();
-        self.state = match notice {
-            StationNotice::LeaseStarted(id) => {
-                if self.lease.id() != Some(id) {
-                    state
-                } else {
-                    match state {
-                        State::Scan(mut scan) if scan.step == ScanStep::AwaitStart => {
-                            scan.skipped = 0;
-                            scan.step = ScanStep::NeedConfigure;
-                            State::Scan(scan)
-                        }
-                        State::Join(mut join) if matches!(join.step, JoinStep::AwaitStart) => {
-                            join.step = JoinStep::NeedConfigure;
-                            State::Join(join)
-                        }
-                        state => state,
-                    }
-                }
-            }
-            StationNotice::LeaseEnded(place) => {
-                self.lease = Held::None;
-                self.place = Some(place);
-                self.lease_ended(state, false)
-            }
-            StationNotice::LeaseCancelled(_, place) => {
-                self.lease = Held::None;
-                self.place = Some(place);
-                self.lease_ended(state, true)
-            }
-            StationNotice::Moved(channel) => match state {
-                // The primary lease moves with the port: the station
-                // exchanges it.
-                State::Connected(mut connected) => {
-                    connected.channel = channel;
-                    connected.exchange = true;
-                    State::Connected(connected)
-                }
-                state => state,
-            },
-            StationNotice::AbsenceStarted(_)
-            | StationNotice::AbsenceEnded(..)
-            | StationNotice::AbsenceCancelled(..) => state,
-            StationNotice::Leave(reason) => {
-                let reason_code = match reason {
-                    // The port no longer reaches the access point.
-                    LeaveReason::Stopped | LeaveReason::PortFailed => None,
-                    LeaveReason::Unservable => Some(REASON_LEAVING),
-                };
-                match state {
-                    State::Connected(connected)
-                    | State::Confirming(Confirming { connected, .. }) => leave_connected(
-                        connected,
-                        StaDisconnectReason::Arbiter(reason),
-                        reason_code,
-                    ),
-                    State::Handshake(handshake) => {
-                        let bssid = handshake.bssid;
-                        leave_keyed(
-                            StaDisconnectReason::Arbiter(reason),
-                            reason_code.map(|reason_code| Deauthentication {
-                                bssid,
-                                reason_code,
-                                protected: handshake.management.is_some(),
-                            }),
-                        )
-                    }
-                    State::Join(_) => leave_unkeyed(StaDisconnectReason::Arbiter(reason)),
-                    State::Scan(_) => leave_unkeyed(StaDisconnectReason::Arbiter(reason)),
-                    state => state,
-                }
-            }
-        };
-    }
-
-    /// The state after the lease ended, at its own end or `cancelled`.
-    fn lease_ended(&mut self, state: State<T, K>, cancelled: bool) -> State<T, K> {
-        let lost = StaDisconnectReason::Arbiter(LeaveReason::PortFailed);
-        match state {
-            // A skipped absence: the same channel again, until too many in
-            // a row end the scan with what it found.
-            State::Scan(scan) if cancelled => {
-                let skipped = scan.skipped.saturating_add(1);
-                if skipped >= self.config.skipped_absences {
-                    self.select(true, scan.access_point)
-                } else {
-                    State::Scan(Scan {
-                        skipped,
-                        step: ScanStep::NeedLease,
-                        ..scan
-                    })
-                }
-            }
-            // The visit's listening is over: the next channel.
-            State::Scan(scan) => self.visit(scan.visit.saturating_add(1), 0, scan.access_point),
-            State::Leave(leave) if leave.step == LeaveStep::AwaitEnd => self.report(leave),
-            // A terminal may arrive while an earlier leave action is still
-            // owed. Only AwaitEnd proves that deauthentication and receive
-            // shutdown completed; all preceding steps retain their payload.
-            State::Leave(leave) => State::Leave(leave),
-            // The lease ended without the station's release: the port left;
-            // the station leaves, its keys first.
-            State::Connected(connected) | State::Confirming(Confirming { connected, .. }) => {
-                leave_connected(connected, lost, None)
-            }
-            State::Handshake(_) => leave_keyed(lost, None),
-            State::Join(_) => leave_unkeyed(lost),
-            state => state,
-        }
-    }
-
-    /// A leave reports once every key came back; until then it removes
-    /// them.
-    fn report(&mut self, leave: Leave) -> State<T, K> {
-        if self.keys.clear() {
-            State::Report(leave.reason)
-        } else {
-            State::Leave(Leave {
-                step: LeaveStep::RemoveKeys(None),
-                ..leave
-            })
-        }
-    }
-
-    /// The state after `done` in `state`.
-    fn step(&mut self, state: State<T, K>, now: Instant, done: StaDone<T>) -> State<T, K> {
-        if let Done::Unsent { purpose, reason } = done {
-            return self.unsent(state, now, purpose, reason);
-        }
-        match (state, done) {
-            (State::Reclaiming(Reclaim::AwaitConfigured), Done::Configured) => State::Idle,
-            (State::Idle | State::Report(_), Done::Command(StaCommand::Connect)) => {
-                self.epoch = Some(self.epochs.begin());
-                self.scan.clear();
-                self.visit(0, 0, None)
-            }
-            (State::Connected(connected), Done::Command(StaCommand::Disconnect)) => {
-                leave_connected(
-                    connected,
-                    StaDisconnectReason::Requested,
-                    Some(REASON_LEAVING),
-                )
-            }
-            (State::Scan(_), Done::Command(StaCommand::Disconnect)) => {
-                leave_unkeyed(StaDisconnectReason::Requested)
-            }
-            (State::Join(_), Done::Command(StaCommand::Disconnect)) => {
-                leave_unkeyed(StaDisconnectReason::Requested)
-            }
-            (State::Connected(mut connected), Done::Command(StaCommand::BackgroundScan))
-                if connected.background.is_none() =>
-            {
-                if now.checked_add(self.config.dwell).is_none() {
-                    self.commands.complete(
-                        StaCommand::BackgroundScan,
-                        StaCommandOutcome::BackgroundScan {
-                            interrupted: Some(BackgroundScanEnd::DeadlineOverflow),
-                        },
-                    );
-                    return State::Connected(connected);
-                }
-                self.scan.clear();
-                if self.channel(0).is_some() {
-                    connected.background = Some(Background {
-                        visit: 0,
-                        skipped: 0,
-                        step: BackgroundStep::NeedAbsence,
-                    });
-                } else {
-                    self.commands.complete(
-                        StaCommand::BackgroundScan,
-                        StaCommandOutcome::BackgroundScan { interrupted: None },
-                    );
-                }
-                State::Connected(connected)
-            }
-            (State::Connected(connected), done) => self.connected_step(connected, now, done),
-            (State::Confirming(confirming), done) => self.confirming_step(confirming, now, done),
-            (State::Scan(mut scan), Done::Configured) if scan.step == ScanStep::AwaitConfigured => {
-                scan.step = ScanStep::NeedProbe;
-                State::Scan(scan)
-            }
-            (State::Join(join), done) => self.join_step(join, now, done),
-            (State::Handshake(handshake), Done::Command(StaCommand::Disconnect)) => {
-                leave_handshake(handshake, REASON_LEAVING)
-            }
-            (State::Handshake(mut handshake), done) => match (&handshake.step, done) {
-                (
-                    HandshakeStep::AwaitSent,
-                    Done::Tx {
-                        purpose: TxPurpose::HandshakeResponse,
-                        ..
-                    },
-                ) => {
-                    handshake.step = HandshakeStep::Await;
-                    State::Handshake(handshake)
-                }
-                (_, Done::Tick)
-                    if matches!(
-                        handshake.deadline.poll(now),
-                        RsnStaDeadlineEvent::Expired { .. }
-                    ) =>
-                {
-                    leave_handshake(handshake, REASON_HANDSHAKE_TIMEOUT)
-                }
-                _ => State::Handshake(handshake),
-            },
-            (State::Leave(mut leave), done) => {
-                leave.step = match (leave.step, done) {
-                    (
-                        LeaveStep::AwaitDeauthentication,
-                        Done::Tx {
-                            purpose: TxPurpose::Deauthentication,
-                            ..
-                        },
-                    ) => LeaveStep::NeedConfigure,
-                    (
-                        LeaveStep::AwaitProtectedDeauthentication,
-                        Done::Tx {
-                            purpose: TxPurpose::Deauthentication,
-                            ..
-                        },
-                    ) => LeaveStep::RemoveKeys(None),
-                    (LeaveStep::AwaitConfigured, Done::Configured) => LeaveStep::NeedRelease,
-                    (step, _) => step,
-                };
-                State::Leave(leave)
-            }
-            (state, _) => state,
-        }
-    }
-
-    /// Refusal is a protocol input of its own. In particular, refusing M4
-    /// never executes the transition for an accepted TX completion.
-    #[inline(never)]
-    fn unsent(
-        &mut self,
-        state: State<T, K>,
-        now: Instant,
-        purpose: TxPurpose,
-        reason: TxRefusal,
-    ) -> State<T, K> {
-        match (state, purpose) {
-            (State::Confirming(confirming), TxPurpose::HandshakeLast) => leave_connected(
-                confirming.connected,
-                StaDisconnectReason::HandshakeFailed,
-                Some(REASON_UNSPECIFIED),
-            ),
-            (
-                State::Handshake(handshake),
-                TxPurpose::HandshakeResponse | TxPurpose::HandshakeLast,
-            ) => leave_handshake(handshake, REASON_UNSPECIFIED),
-            (State::Join(join), TxPurpose::Authentication { attempt }) => {
-                if matches!(join.step,
-                    JoinStep::Authenticate(Authenticate::Exchange {
-                        stage: AuthStage::AwaitSent { attempt: current, .. }, ..
-                    }) if current == attempt
-                ) {
-                    leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
-                } else {
-                    State::Join(join)
-                }
-            }
-            (State::Join(_), TxPurpose::SaeAuthentication | TxPurpose::Association) => {
-                leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
-            }
-            (State::Scan(_), TxPurpose::Probe) => {
-                leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
-            }
-            (State::Connected(connected), purpose @ TxPurpose::Connected(_)) => {
-                self.connected_step(connected, now, Done::Unsent { purpose, reason })
-            }
-            (State::Leave(mut leave), TxPurpose::Deauthentication) => {
-                leave.step = match leave.step {
-                    LeaveStep::AwaitDeauthentication => LeaveStep::NeedConfigure,
-                    LeaveStep::AwaitProtectedDeauthentication => LeaveStep::RemoveKeys(None),
-                    step => step,
-                };
-                State::Leave(leave)
-            }
-            (state, _) => state,
-        }
-    }
-
-    /// The installed-key phase still waiting for D4's delivered M4 terminal.
-    #[inline(never)]
-    fn confirming_step(
-        &mut self,
-        confirming: Confirming<T, K>,
-        now: Instant,
-        done: StaDone<T>,
-    ) -> State<T, K> {
-        let Confirming {
-            connected,
-            deadline,
-        } = confirming;
-        match done {
-            Done::Tick if matches!(deadline.poll(now), RsnStaDeadlineEvent::Expired { .. }) => {
-                leave_connected(
-                    connected,
-                    StaDisconnectReason::HandshakeFailed,
-                    Some(REASON_HANDSHAKE_TIMEOUT),
-                )
-            }
-            Done::Command(StaCommand::Disconnect) => leave_connected(
-                connected,
-                StaDisconnectReason::Requested,
-                Some(REASON_LEAVING),
-            ),
-            Done::Tx {
-                purpose: TxPurpose::HandshakeLast,
-                completion,
-            } => {
-                let state = self.connected_step(
-                    connected,
-                    now,
-                    Done::Tx {
-                        purpose: TxPurpose::Connected(Sending::DuplicateMessage4),
-                        completion,
-                    },
-                );
-                if matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. })) {
-                    match state {
-                        State::Connected(mut connected) => {
-                            connected.connected_notice = true;
-                            connected.report = Some(UpstreamFact::Connected(connected.channel));
-                            State::Connected(connected)
-                        }
-                        state => state,
-                    }
-                } else {
-                    still_confirming(state, deadline)
-                }
-            }
-            done => still_confirming(self.connected_step(connected, now, done), deadline),
-        }
-    }
-
-    /// The connected state after `done`.
-    fn connected_step(
-        &mut self,
-        mut connected: Connected<T, K>,
-        now: Instant,
-        done: StaDone<T>,
-    ) -> State<T, K> {
-        if matches!(
-            done,
-            Done::Tx {
-                completion: TxOutcome::Withdrawn(oer_ieee80211_port::WithdrawCause::Disabled),
-                ..
-            }
-        ) {
-            return leave_disabled(connected);
-        }
-        self.update_connected(&mut connected, now, done);
-        State::Connected(connected)
-    }
-
-    #[inline(never)]
-    fn update_connected(
-        &mut self,
-        connected: &mut Connected<T, K>,
-        now: Instant,
-        done: StaDone<T>,
-    ) {
-        let sent = match done {
-            Done::Tx {
-                purpose: TxPurpose::Connected(sending),
-                completion,
-            } => Some((
-                sending,
-                match completion {
-                    TxOutcome::Ended(SingleEnd::Delivered { .. }) => NullOutcome::Delivered,
-                    _ => NullOutcome::Unconfirmed,
-                },
-            )),
-            Done::Unsent {
-                purpose: TxPurpose::Connected(sending),
-                ..
-            } => Some((sending, NullOutcome::Unconfirmed)),
-            _ => None,
-        };
-        if let Some((sending, outcome)) = sent {
-            connected.sending = false;
-            match sending {
-                Sending::Wake => {
-                    connected.waking = false;
-                    connected
-                        .power
-                        .null_sent(StaPowerManagement::Active, outcome);
-                    if let Some(background) = &mut connected.background
-                        && background.step == BackgroundStep::AwaitWake
-                    {
-                        self.next_visit(background);
-                    }
-                }
-                Sending::Sleep => {
-                    connected
-                        .power
-                        .null_sent(StaPowerManagement::PowerSave, outcome);
-                    if let Some(background) = &mut connected.background
-                        && background.step == BackgroundStep::AwaitSleep
-                    {
-                        // Not delivered: no readiness; the arbiter cancels
-                        // the absence at its start.
-                        background.step = if outcome == NullOutcome::Delivered {
-                            BackgroundStep::NeedReady
-                        } else {
-                            BackgroundStep::AwaitStart
-                        };
-                    }
-                }
-                Sending::GroupResponse | Sending::DuplicateMessage4 => {
-                    if let Some(rsn) = &mut connected.rsn {
-                        if matches!(rsn.rekey, Rekey::AwaitSent) {
-                            rsn.rekey = Rekey::None;
-                        }
-                        if matches!(rsn.message4, DuplicateMessage4::AwaitSent) {
-                            rsn.message4 = DuplicateMessage4::None;
-                        }
-                        rsn.advance_deferred();
-                    }
-                }
-                Sending::Probe | Sending::SaQuery | Sending::BlockAck => {}
-            }
-            if let Some(background) = &connected.background
-                && background.step == BackgroundStep::NeedAbsence
-                && background.skipped >= self.config.skipped_absences
-            {
-                connected.background = None;
-                self.commands.complete(
-                    StaCommand::BackgroundScan,
-                    StaCommandOutcome::BackgroundScan {
-                        interrupted: Some(BackgroundScanEnd::CancelledAbsences),
-                    },
-                );
-            }
-            self.background_done(connected);
-            return;
-        }
-        let dwell = self.config.dwell;
-        if let Some(background) = &mut connected.background {
-            background.step = match (background.step, done) {
-                (BackgroundStep::AwaitConfigured, Done::Configured) => BackgroundStep::NeedProbe,
-                (BackgroundStep::AwaitHome, Done::Configured) => BackgroundStep::NeedWake,
-                (BackgroundStep::AwaitWidened, Done::Configured) => match now.checked_add(dwell) {
-                    Some(until) => BackgroundStep::HomeProbe { until },
-                    None => BackgroundStep::Narrow(Some(BackgroundScanEnd::DeadlineOverflow)),
-                },
-                (
-                    BackgroundStep::HomeProbe { until } | BackgroundStep::HomeListen { until },
-                    Done::Tick,
-                ) if now >= until => BackgroundStep::Narrow(None),
-                (BackgroundStep::AwaitNarrowed(Some(reason)), Done::Configured) => {
-                    connected.background = None;
-                    self.commands.complete(
-                        StaCommand::BackgroundScan,
-                        StaCommandOutcome::BackgroundScan {
-                            interrupted: Some(reason),
-                        },
-                    );
-                    return;
-                }
-                (BackgroundStep::AwaitNarrowed(None), Done::Configured) => {
-                    self.next_visit(background);
-                    background.step
-                }
-                (step, _) => step,
-            };
-        }
-        self.background_done(connected)
-    }
-
-    /// The next visit of the background scan, or its end.
-    fn next_visit(&mut self, background: &mut Background) {
-        let visit = if background.skipped > 0 {
-            background.visit
-        } else {
-            background.visit.saturating_add(1)
-        };
-        background.visit = visit;
-        background.step = BackgroundStep::NeedAbsence;
-    }
-
-    /// End a background scan that ran out of channels or of tries.
-    fn background_done(&mut self, connected: &mut Connected<T, K>) {
-        if let Some(background) = &connected.background
-            && background.step == BackgroundStep::NeedAbsence
-        {
-            if background.skipped >= self.config.skipped_absences {
-                connected.background = None;
-                self.commands.complete(
-                    StaCommand::BackgroundScan,
-                    StaCommandOutcome::BackgroundScan {
-                        interrupted: Some(BackgroundScanEnd::CancelledAbsences),
-                    },
-                );
-            } else if self.channel(background.visit).is_none() {
-                connected.background = None;
-                self.commands.complete(
-                    StaCommand::BackgroundScan,
-                    StaCommandOutcome::BackgroundScan { interrupted: None },
-                );
-            }
-        }
-    }
-
-    /// The scan's visit of the channel at `visit`, or its end.
-    fn visit(
-        &mut self,
-        visit: usize,
-        skipped: u8,
-        access_point: Option<SupportedChannel<K>>,
-    ) -> State<T, K> {
-        match self.channel(visit) {
-            Some(_) => State::Scan(Scan {
-                visit,
-                skipped,
-                step: ScanStep::NeedLease,
-                access_point,
-            }),
-            None => self.select(false, access_point),
-        }
-    }
-
-    /// The join of the best access point of the network the scan found:
-    /// the strongest, unless one on the channel of the access point beside
-    /// the station is within the margin of it.
-    fn select(
-        &mut self,
-        partial: bool,
-        access_point_channel: Option<SupportedChannel<K>>,
-    ) -> State<T, K> {
-        let ssid = self.ssid();
-        let policy = self.policy();
-        let candidates = || {
-            self.scan
-                .records()
-                .filter(move |record| record.ssid_bytes() == ssid)
-                .filter(move |record| select_association_rsn(record, policy).is_ok())
-        };
-        let Some(strongest) = candidates().max_by_key(|record| record.rssi).copied() else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
-        };
-        let margin = i16::from(self.config.access_point_margin_db);
-        let beside = access_point_channel.and_then(|channel| {
-            candidates()
-                .filter(|record| record.channel == channel.channel().number())
-                .filter(|record| {
-                    i16::from(record.rssi) >= i16::from(strongest.rssi).saturating_sub(margin)
-                })
-                .max_by_key(|record| record.rssi)
-                .copied()
-        });
-        let access_point = beside.unwrap_or(strongest);
-        let Ok(rsn) = select_association_rsn(&access_point, policy) else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
-        };
-        let Some(channel) = self
-            .config
-            .channels
-            .iter()
-            .copied()
-            .find(|channel| channel.channel().number() == access_point.channel)
-        else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
-        };
-        State::Join(Join {
-            access_point,
-            rsn,
-            channel,
-            step: JoinStep::NeedLease,
-        })
-    }
-
-    fn begin_authentication(
-        &mut self,
-        join: &mut Join<T, K>,
-        now: Instant,
-    ) -> Result<JoinStep<T::RxMeta>, StaDisconnectReason> {
-        let bssid = join.access_point.bssid;
-        let key = match &self.security {
-            StaSecurity::Open => AssociationKey::Open,
-            StaSecurity::Personal { password, pmk } => {
-                if let AssociationSecurity::Rsn(RsnAssociation {
-                    akm: AssociationAkm::Sae(pwe),
-                    ..
-                }) = join.rsn.security()
-                {
-                    if let Some(cached) = self.pmksa.resume(bssid, &self.config.ssid) {
-                        join.rsn = join
-                            .rsn
-                            .with_pmkid(oer_ieee80211_wire::security::Pmkid(cached.pmkid()))
-                            .ok_or(StaDisconnectReason::AuthenticationFailed)?;
-                        AssociationKey::Protected(cached.pmk().duplicate())
-                    } else {
-                        let element = match pwe {
-                            oer_ieee80211_wire::security::SaePwe::HuntingAndPecking => {
-                                SaePasswordElement::hunting_and_pecking(
-                                    password.as_bytes(),
-                                    self.config.address.get(),
-                                    bssid.get(),
-                                )
-                                .map_err(|error| {
-                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                                })?
-                            }
-                            oer_ieee80211_wire::security::SaePwe::HashToElement => {
-                                SaePasswordToken::derive(
-                                    &self.config.ssid,
-                                    password.as_bytes(),
-                                    None,
-                                )
-                                .password_element(self.config.address.get(), bssid.get())
-                            }
-                        };
-                        let commit =
-                            SaeCommit::new(&element, (self.config.nonce)(), (self.config.nonce)())
-                                .map_err(|error| {
-                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
-                                })?;
-                        let (authentication, transmission) =
-                            StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
-                                .map_err(StaDisconnectReason::Sae)?;
-                        return Ok(JoinStep::SaeSend {
-                            authentication,
-                            transmission,
-                        });
-                    }
-                } else {
-                    AssociationKey::Protected(pmk.duplicate())
-                }
-            }
-        };
-        Ok(JoinStep::Authenticate(Authenticate::NeedCredit(
-            StaAuthenticationRuntime::new(self.config.address, bssid),
-            key,
-        )))
-    }
-
-    fn sae_event(&mut self, mut join: Join<T, K>, event: StaSaeEvent, now: Instant) -> State<T, K> {
-        join.step = match event {
-            StaSaeEvent::Irrelevant(authentication) => JoinStep::SaeAwait(authentication),
-            StaSaeEvent::Transmit {
-                authentication,
-                transmission,
-            } => JoinStep::SaeSend {
-                authentication,
-                transmission,
-            },
-            StaSaeEvent::Authenticated(keys) => {
-                let bssid = join.access_point.bssid;
-                self.pmksa.insert(StaPmksa::new(
-                    bssid,
-                    self.config.ssid.clone(),
-                    keys.pmk.duplicate(),
-                    keys.pmkid,
-                ));
-                let runtime = match StaAssociationRuntime::new(
-                    self.config.address,
-                    bssid,
-                    oer_ieee80211_wire::security::LinkProtection::Ccmp,
-                    now,
-                ) {
-                    Ok(runtime) => runtime,
-                    Err(_) => return leave_unkeyed(StaDisconnectReason::DeadlineOverflow),
-                };
-                JoinStep::Associate(runtime, AssociationKey::Protected(keys.pmk))
-            }
-            StaSaeEvent::Failed(reason) => return leave_unkeyed(StaDisconnectReason::Sae(reason)),
-        };
-        State::Join(join)
-    }
-
-    fn join_step(&mut self, mut join: Join<T, K>, now: Instant, done: StaDone<T>) -> State<T, K> {
-        join.step = match (
-            core::mem::replace(&mut join.step, JoinStep::NeedLease),
-            done,
-        ) {
-            (JoinStep::AwaitConfigured, Done::Configured) => {
-                match self.begin_authentication(&mut join, now) {
-                    Ok(step) => step,
-                    Err(reason) => return leave_unkeyed(reason),
-                }
-            }
-            (
-                JoinStep::SaeSend {
-                    authentication,
-                    transmission,
-                },
-                Done::Tick,
-            ) => {
-                if now >= authentication.next_deadline() {
-                    return leave_unkeyed(StaDisconnectReason::Sae(StaSaeFailure::Timeout));
-                }
-                JoinStep::SaeSend {
-                    authentication,
-                    transmission,
-                }
-            }
-            (JoinStep::SaeAwait(authentication), Done::Tick) => {
-                match authentication.on_deadline(now) {
-                    StaSaeEvent::Irrelevant(authentication) => JoinStep::SaeAwait(authentication),
-                    StaSaeEvent::Failed(reason) => {
-                        return leave_unkeyed(StaDisconnectReason::Sae(reason));
-                    }
-                    event => return self.sae_event(join, event, now),
-                }
-            }
-            (
-                JoinStep::Authenticate(Authenticate::Exchange {
-                    runtime,
-                    mut stage,
-                    key,
-                }),
-                done,
-            ) => {
-                let timed_out = match (stage, done) {
-                    (
-                        AuthStage::AwaitSent {
-                            attempt,
-                            response_timeout,
-                        },
-                        Done::Tx {
-                            purpose: TxPurpose::Authentication { attempt: returned },
-                            completion: TxOutcome::Ended(SingleEnd::Delivered { .. }),
-                        },
-                    ) if attempt == returned => {
-                        let Some(until) = now.checked_add(response_timeout) else {
-                            return leave_unkeyed(StaDisconnectReason::DeadlineOverflow);
-                        };
-                        stage = AuthStage::AwaitResponse { until };
-                        false
-                    }
-                    (
-                        AuthStage::AwaitSent { attempt, .. },
-                        Done::Tx {
-                            purpose: TxPurpose::Authentication { attempt: returned },
-                            ..
-                        },
-                    ) if attempt == returned => true,
-                    (AuthStage::AwaitResponse { until }, Done::Tick) => now >= until,
-                    _ => false,
-                };
-                let auth = if timed_out {
-                    match runtime.response_timed_out() {
-                        StaAuthenticationEvent::Retry { runtime, .. } => {
-                            Authenticate::NeedCredit(runtime, key)
-                        }
-                        _ => return leave_unkeyed(StaDisconnectReason::AuthenticationFailed),
-                    }
-                } else {
-                    Authenticate::Exchange {
-                        runtime,
-                        stage,
-                        key,
-                    }
-                };
-                JoinStep::Authenticate(auth)
-            }
-            (step, _) => step,
-        };
-        State::Join(join)
     }
 
     /// Admit a received frame once, process station EAPOL/management, and
@@ -3767,6 +2843,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     ///     let _ = station.receive(now, frame, meta, |_| {});
     /// }
     /// ```
+    #[inline(never)]
     pub fn receive<'frame>(
         &mut self,
         now: Instant,
@@ -3774,361 +2851,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         meta: T::RxMeta,
         mut deliver: impl FnMut(oer_ieee80211_wire::data::EthernetFrameParts<'frame>),
     ) -> Result<(), StaRxError> {
-        let result = self.receive_frame(now, frame, meta, &mut deliver);
+        let (mut context, state) = self.transition();
+        let result = context.receive_frame(state, now, frame, meta, &mut deliver);
         self.complete_commands();
         result
-    }
-
-    fn receive_frame<'frame>(
-        &mut self,
-        now: Instant,
-        frame: &'frame [u8],
-        meta: T::RxMeta,
-        mut deliver: impl FnMut(oer_ieee80211_wire::data::EthernetFrameParts<'frame>),
-    ) -> Result<(), StaRxError> {
-        use oer_ieee80211_upper_mac::receive::{AdmittedData, RxDropReason};
-        let header = match crate::receive::classify(frame)? {
-            Received::Management(management) => {
-                self.received_management(now, management, meta);
-                return Ok(());
-            }
-            Received::Data(header) => header,
-        };
-        let (bssid, replay) = match &mut self.state {
-            State::Handshake(handshake) => (
-                handshake.bssid,
-                match &mut handshake.step {
-                    HandshakeStep::InstallGroup(_, replay, _)
-                    | HandshakeStep::AwaitInstalled(_, replay, _) => Some(replay),
-                    _ => None,
-                },
-            ),
-            State::Connected(connected) | State::Confirming(Confirming { connected, .. }) => (
-                connected.bssid,
-                connected.rsn.as_mut().map(|rsn| &mut rsn.replay),
-            ),
-            _ => return Err(RxDropReason::NotConnected.into()),
-        };
-        let admitted = AdmittedData::admit(
-            header,
-            self.config.address,
-            bssid,
-            crate::data::integrity(meta.common()),
-            replay,
-        )?;
-        for parts in admitted.msdus()? {
-            let parts = parts?;
-            if parts.ether_type == EAPOL_ETHER_TYPE {
-                if !matches!(self.security, StaSecurity::Open)
-                    && !admitted.protected()
-                    && parts.destination != self.config.address.get()
-                    && parts.destination != PAE_GROUP_ADDRESS
-                {
-                    continue;
-                }
-                let eapol =
-                    OwnedEapolFrame::try_copy(RsnInterface::Station, bssid.get(), parts.payload)
-                        .map_err(|_| RxDropReason::Payload)?;
-                let protection = if admitted.protected() {
-                    EapolProtection::Pairwise
-                } else {
-                    EapolProtection::Open
-                };
-                let state = self.take_state();
-                self.state = match state {
-                    State::Handshake(handshake) => {
-                        self.handshake_eapol(handshake, now, eapol, protection)
-                    }
-                    State::Connected(connected) => {
-                        let (state, result) = Self::connected_eapol(connected, eapol, protection);
-                        self.state = state;
-                        result?;
-                        self.take_state()
-                    }
-                    State::Confirming(Confirming {
-                        connected,
-                        deadline,
-                    }) => {
-                        let (state, result) = Self::connected_eapol(connected, eapol, protection);
-                        self.state = still_confirming(state, deadline);
-                        result?;
-                        self.take_state()
-                    }
-                    state => state,
-                };
-            } else {
-                if !matches!(self.security, StaSecurity::Open) && !admitted.protected() {
-                    return Err(RxDropReason::Protection.into());
-                }
-                if self.link().is_none() {
-                    return Err(RxDropReason::NotConnected.into());
-                }
-                deliver(parts);
-            }
-        }
-        Ok(())
-    }
-
-    /// Take a received frame.
-    #[inline(never)]
-    fn received_management(&mut self, now: Instant, management: Management<'_>, meta: T::RxMeta) {
-        let frame = management.frame();
-        let state = self.take_state();
-        self.state = match state {
-            State::Scan(scan)
-                if scan.step == ScanStep::Listen || scan.step == ScanStep::NeedProbe =>
-            {
-                observe_scan(&mut self.scan, now, management, &meta);
-                State::Scan(scan)
-            }
-            State::Join(mut join) => {
-                match core::mem::replace(&mut join.step, JoinStep::NeedLease) {
-                    JoinStep::SaeAwait(authentication) => {
-                        let event = authentication.observe_management_frame(frame, now);
-                        self.sae_event(join, event, now)
-                    }
-
-                    JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key)) => {
-                        join.step = JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
-                        State::Join(join)
-                    }
-                    JoinStep::Authenticate(Authenticate::Exchange {
-                        mut runtime,
-                        stage,
-                        key,
-                    }) => {
-                        runtime.observe_received_frame();
-                        match runtime.observe_management_frame(frame) {
-                            StaAuthenticationEvent::Authenticated { .. } => {
-                                match StaAssociationRuntime::new(
-                                    self.config.address,
-                                    join.access_point.bssid,
-                                    match self.security {
-                                        StaSecurity::Open => {
-                                            oer_ieee80211_wire::security::LinkProtection::Open
-                                        }
-                                        StaSecurity::Personal { .. } => {
-                                            oer_ieee80211_wire::security::LinkProtection::Ccmp
-                                        }
-                                    },
-                                    now,
-                                ) {
-                                    Ok(runtime) => {
-                                        join.step = JoinStep::Associate(runtime, key);
-                                        State::Join(join)
-                                    }
-                                    Err(_) => leave_unkeyed(StaDisconnectReason::DeadlineOverflow),
-                                }
-                            }
-                            StaAuthenticationEvent::Retry { runtime, .. } => {
-                                join.step =
-                                    JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
-                                State::Join(join)
-                            }
-                            StaAuthenticationEvent::Failed { .. } => {
-                                leave_unkeyed(StaDisconnectReason::AuthenticationFailed)
-                            }
-                            StaAuthenticationEvent::Irrelevant(runtime) => {
-                                join.step = JoinStep::Authenticate(Authenticate::Exchange {
-                                    runtime,
-                                    stage,
-                                    key,
-                                });
-                                State::Join(join)
-                            }
-                        }
-                    }
-                    JoinStep::Associate(mut runtime, key) => {
-                        runtime.observe_received_frame();
-                        match runtime.observe_management_frame(frame, now) {
-                            StaAssociationEvent::Associated { response, .. } => {
-                                match StaAssociatedPeer::derive(
-                                    &join.access_point,
-                                    &response,
-                                    self.config.phy,
-                                    self.config.he_packet_padding,
-                                ) {
-                                    Ok(associated) => {
-                                        join.step = JoinStep::NotifyAssociated {
-                                            association_id: response.association_id,
-                                            key,
-                                            // The rate selection starts from the
-                                            // response's metadata.
-                                            peer: Peer {
-                                                associated,
-                                                response: meta,
-                                            },
-                                        };
-                                        State::Join(join)
-                                    }
-                                    Err(_) => leave_unkeyed(StaDisconnectReason::AssociationFailed),
-                                }
-                            }
-                            StaAssociationEvent::Failed { failure, .. } => {
-                                leave_unkeyed(association_failure(failure))
-                            }
-                            StaAssociationEvent::Irrelevant(runtime) => {
-                                join.step = JoinStep::Associate(runtime, key);
-                                State::Join(join)
-                            }
-                        }
-                    }
-                    step => {
-                        join.step = step;
-                        State::Join(join)
-                    }
-                }
-            }
-            State::Handshake(mut handshake) => {
-                let disconnect = if handshake.supplicant.management_protection() {
-                    handshake.management.as_mut().and_then(|management| {
-                        match management.receive(frame, self.config.address, handshake.bssid) {
-                            Some(ManagementEvent::Disconnect(reason)) => Some(reason),
-                            _ => None,
-                        }
-                    })
-                } else {
-                    peer_disconnect(frame, self.config.address, handshake.bssid)
-                };
-                match disconnect {
-                    Some(reason_code) => {
-                        leave_keyed(StaDisconnectReason::Peer { reason_code }, None)
-                    }
-                    None => State::Handshake(handshake),
-                }
-            }
-            State::Connected(connected) => {
-                self.connected_received(connected, now, management, &meta)
-            }
-            State::Confirming(Confirming {
-                connected,
-                deadline,
-            }) => {
-                let state = self.connected_received(connected, now, management, &meta);
-                still_confirming(state, deadline)
-            }
-            state => state,
-        };
-    }
-
-    /// The connected state after a received frame.
-    fn connected_received(
-        &mut self,
-        mut connected: Connected<T, K>,
-        now: Instant,
-        management: Management<'_>,
-        meta: &T::RxMeta,
-    ) -> State<T, K> {
-        let frame = management.frame();
-        let disconnect = match connected
-            .rsn
-            .as_mut()
-            .and_then(|rsn| rsn.management.as_mut())
-        {
-            Some(management) => {
-                match management.receive(frame, self.config.address, connected.bssid) {
-                    Some(ManagementEvent::Disconnect(reason)) => Some(reason),
-                    Some(ManagementEvent::Query(query)) => {
-                        management.received_query(query);
-                        None
-                    }
-                    Some(ManagementEvent::BlockAck(action)) => {
-                        connected.block_ack = Some(action);
-                        None
-                    }
-                    None => {
-                        if matches!(
-                            peer_disconnect(frame, self.config.address, connected.bssid),
-                            Some(6 | 7)
-                        ) && management.start_query(now, self.config.nonce).is_err()
-                        {
-                            return leave_connected(
-                                connected,
-                                StaDisconnectReason::DeadlineOverflow,
-                                Some(REASON_UNSPECIFIED),
-                            );
-                        }
-                        None
-                    }
-                }
-            }
-            None => {
-                if let Some(action) =
-                    block_ack::unprotected_action(management, self.config.address, connected.bssid)
-                {
-                    connected.block_ack = Some(action);
-                }
-                peer_disconnect(frame, self.config.address, connected.bssid)
-            }
-        };
-        if let Some(reason_code) = disconnect {
-            // The access point ended the link: no Deauthentication back.
-            return leave_connected(connected, StaDisconnectReason::Peer { reason_code }, None);
-        }
-        let step = connected
-            .background
-            .as_ref()
-            .map(|background| background.step);
-        let away = matches!(
-            step,
-            Some(BackgroundStep::NeedProbe | BackgroundStep::Listen)
-        );
-        let home = matches!(
-            step,
-            Some(BackgroundStep::HomeProbe { .. } | BackgroundStep::HomeListen { .. })
-        );
-        if away || home {
-            observe_scan(&mut self.scan, now, management, meta);
-            if away {
-                return State::Connected(connected);
-            }
-        }
-        if let Ok(beacon) = parse_sta_beacon(frame, connected.bssid.get(), connected.association_id)
-        {
-            if let Some(edca) = beacon.edca
-                && edca != connected.peer.associated.edca
-            {
-                connected.peer.associated.edca = edca;
-                connected.edca = true;
-            }
-            if connected.power.beacon(beacon.tim) == PowerSaveDecision::SendActive
-                && !connected.waking
-            {
-                connected.wake = true;
-            }
-        }
-        State::Connected(connected)
-    }
-
-    /// A checked peer-input drop is reported at RX; it is not a lifecycle
-    /// refusal and does not discard a previously authenticated successor.
-    #[inline(never)]
-    fn connected_eapol(
-        mut connected: Connected<T, K>,
-        eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
-        protection: EapolProtection,
-    ) -> (State<T, K>, Result<(), StaRxError>) {
-        let Some(rsn) = &mut connected.rsn else {
-            return (
-                State::Connected(connected),
-                Err(oer_ieee80211_upper_mac::receive::RxDropReason::Protection.into()),
-            );
-        };
-        let result = rsn.receive(eapol, protection);
-        (State::Connected(connected), result)
-    }
-
-    fn configure(&mut self, receive: StationReceive<K>) -> Option<Owed<'id, T, K>> {
-        let place = self.configuration.take()?;
-        let epoch = if matches!(receive, StationReceive::Off) {
-            None
-        } else {
-            self.epoch
-        };
-        Some(Owed::Configure(
-            receive,
-            place.with_context(StaConfigurationContext { epoch }),
-        ))
     }
 
     /// The next action to carry out at `now`, if any. `None` means a wait
@@ -4143,6 +2869,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// completion or a new command. Associated is its own join step before
     /// either Connected or the first handshake action.
     #[must_use = "perform the returned action before waiting for another input"]
+    #[inline(never)]
     pub fn poll_action(&mut self, now: Instant) -> Option<StaAction<'_, 'id, T, K>> {
         if matches!(self.keys.pairwise, KeyCell::UnreturnedBank { .. }) {
             return Some(StaAction::ContractViolation(
@@ -4154,9 +2881,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             if let Some(terminal) = self.commands.poll() {
                 return Some(StaAction::CommandCompleted(terminal));
             }
-            let state = self.take_state();
-            let (state, progress) = self.owe(state, now);
-            self.state = state;
+            let (mut context, state) = self.transition();
+            let (change, progress) = context.owe(state, now);
+            state.apply(change);
             match progress {
                 ActionProgress::Action(owed) => break owed,
                 ActionProgress::Transition => continue,
@@ -4271,18 +2998,1617 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         })
     }
 
-    /// The action `state` owes, and the state that awaits its end.
-    fn owe(&mut self, state: State<T, K>, now: Instant) -> ActionStep<'id, T, K> {
+    /// When the station next needs a [`StaInput::Tick`], even without an
+    /// event.
+    pub fn poll_deadline(&self) -> Option<Instant> {
+        match &self.state {
+            State::Join(Join {
+                step:
+                    JoinStep::Authenticate(Authenticate::Exchange {
+                        stage: AuthStage::AwaitResponse { until },
+                        ..
+                    }),
+                ..
+            }) => Some(*until),
+            State::Join(Join {
+                step: JoinStep::Associate(runtime, _),
+                ..
+            }) => {
+                if self.tickets.is_empty() || self.buffers.is_empty() {
+                    Some(runtime.response_deadline())
+                } else {
+                    Some(runtime.next_deadline())
+                }
+            }
+            State::Join(Join {
+                step: JoinStep::SaeSend { authentication, .. } | JoinStep::SaeAwait(authentication),
+                ..
+            }) => Some(authentication.next_deadline()),
+            State::Join(Join {
+                step: JoinStep::RetryAt(at),
+                ..
+            }) => Some(*at),
+            State::Handshake(Handshake { deadline, .. }) => Some(deadline.deadline()),
+            State::Connected(connected) => {
+                if let Some(deadline) = connected.confirmation {
+                    return Some(deadline.deadline());
+                }
+                let background =
+                    connected
+                        .background
+                        .as_ref()
+                        .and_then(|background| match background.step {
+                            BackgroundStep::HomeProbe { until }
+                            | BackgroundStep::HomeListen { until } => Some(until),
+                            _ => None,
+                        });
+                let management = connected
+                    .rsn
+                    .as_ref()
+                    .and_then(|rsn| rsn.management.as_ref())
+                    .and_then(|management| {
+                        management.deadline(
+                            connected.sending
+                                || self.tickets.is_empty()
+                                || self.buffers.is_empty()
+                                || !(self.absence.is_none()
+                                    && !connected.power.asleep()
+                                    && matches!(self.keys.pairwise, KeyCell::Installed(_))),
+                        )
+                    });
+                crate::time::earliest(background, management)
+            }
+            _ => None,
+        }
+    }
+    fn transition(&mut self) -> (TransitionContext<'_, 'id, T, K>, &mut State<T, K>) {
+        (
+            TransitionContext {
+                config: &mut self.config,
+                security: &mut self.security,
+                keys: &mut self.keys,
+                configuration: &mut self.configuration,
+                tickets: &mut self.tickets,
+                buffers: &mut self.buffers,
+                place: &mut self.place,
+                lease: &mut self.lease,
+                absence_place: &mut self.absence_place,
+                absence: &mut self.absence,
+                commands: &mut self.commands,
+                sequence: &mut self.sequence,
+                scan: &mut self.scan,
+                pmksa: &mut self.pmksa,
+                epoch: &mut self.epoch,
+                epochs: &mut self.epochs,
+            },
+            &mut self.state,
+        )
+    }
+}
+
+/// Disjoint resource loans used while the resident phase is mutably borrowed.
+struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> {
+    config: &'s mut StaConfig<K>,
+    security: &'s mut StaSecurity,
+    keys: &'s mut Keys<T>,
+    configuration: &'s mut Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
+    tickets: &'s mut Pool<T::Ticket>,
+    buffers: &'s mut Pool<T::SmallBuffer>,
+    /// The station's place for a lease, while it holds none.
+    place: &'s mut Option<LeasePlace<'id, T::GatePath>>,
+    /// The lease the station holds, or gave back and awaits the end of.
+    lease: &'s mut Held<'id, K, T::GatePath>,
+    /// The station's place for an absence, while it takes none.
+    absence_place: &'s mut Option<AbsencePlace<'id, T::GatePath>>,
+    /// The absence the station holds.
+    absence: &'s mut Option<Lease<'id, K, T::GatePath>>,
+    /// Each admitted application request reserves its own terminal cell.
+    commands: &'s mut Commands<'id, T::ConfigurationPath>,
+    sequence: &'s mut StaSequenceCounter,
+    scan: &'s mut ScanTable<SCAN_CAPACITY>,
+    pmksa: &'s mut StaPmksaCache,
+    /// The connection attempt that owns new TX operations.
+    epoch: &'s mut Option<LinkEpoch<'id, T::EpochPath>>,
+    epochs: &'s mut LinkEpochSource<'id, T::EpochPath>,
+}
+
+impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities> TransitionContext<'s, 'id, T, K> {
+    /// The security policy the scan selects and the join associates with.
+    const fn policy(&self) -> StaSecurityPolicy {
+        match *self.security {
+            StaSecurity::Open => StaSecurityPolicy::Open,
+            StaSecurity::Personal { .. } => StaSecurityPolicy::Wpa2Personal,
+        }
+    }
+
+    fn ssid(&self) -> &[u8] {
+        &self.config.ssid
+    }
+
+    fn channel(&self, visit: usize) -> Option<SupportedChannel<K>> {
+        self.config.channels.get(visit).copied()
+    }
+
+    #[inline(never)]
+    fn input_event(&mut self, state: &mut State<T, K>, now: Instant, input: StaInput<'id, T, K>) {
+        let done = match input {
+            StaInput::TxDone {
+                context,
+                ticket,
+                buffer,
+                completion,
+            } => {
+                // A transmission's tokens come back whatever the state.
+                self.tickets.put(ticket);
+                self.buffers.put(buffer.into_fresh(T::renew));
+                if Some(context.epoch) != *self.epoch {
+                    return;
+                }
+                Done::Tx {
+                    purpose: context.purpose,
+                    completion,
+                }
+            }
+            StaInput::Unsent {
+                reason,
+                context,
+                ticket,
+                buffer,
+            } => {
+                self.tickets.put(ticket);
+                self.buffers.put(buffer.into_fresh(T::renew));
+                if Some(context.epoch) != *self.epoch {
+                    return;
+                }
+                Done::Unsent {
+                    purpose: context.purpose,
+                    reason,
+                }
+            }
+            StaInput::Tick => Done::Tick,
+            StaInput::Configured(permission) => {
+                let (permission, pending) = permission.into_parts();
+                (*self.configuration) = Some(permission);
+                if pending.epoch != current_epoch(state, *self.epoch) {
+                    return;
+                }
+                Done::Configured
+            }
+            StaInput::Answer(answer) => {
+                self.answered(state, answer);
+                return;
+            }
+            StaInput::AbsenceAnswer(answer) => {
+                self.absence_answered(state, answer);
+                return;
+            }
+            StaInput::Exchanged(answer) => {
+                match answer {
+                    Ok(lease) => (*self.lease) = Held::Lease(lease),
+                    Err(lease) => {
+                        (*self.lease) = Held::Lease(lease);
+                        if let State::Connected(connected) = state
+                            && connected.confirmation.is_none()
+                        {
+                            let change = leave_connected(
+                                connected,
+                                StaDisconnectReason::LeaseExchangeRefused,
+                                None,
+                            );
+                            state.apply(change);
+                        }
+                    }
+                }
+                return;
+            }
+            StaInput::PairwiseKeyInstalled { pending, key } => {
+                let current = current_epoch(state, *self.epoch) == Some(pending.epoch);
+                self.keys.pairwise_installed(pending, key);
+                // Leave waits for every outstanding key installation to return.
+                // An old response becomes a removal action there.
+                if current {
+                    self.keys_changed(state);
+                }
+                return;
+            }
+            StaInput::GroupKeyInstalled {
+                pending,
+                key,
+                permission,
+            } => {
+                self.group_transition(state, pending, key, permission, None, false);
+                return;
+            }
+            StaInput::GroupKeyReplaced {
+                pending,
+                key,
+                permission,
+            } => {
+                self.group_transition(
+                    state,
+                    pending.install,
+                    key,
+                    permission,
+                    Some(pending.previous_id),
+                    false,
+                );
+                return;
+            }
+            StaInput::GroupKeySelected {
+                pending,
+                key,
+                permission,
+            } => {
+                self.group_transition(state, pending.install, key, permission, None, true);
+                return;
+            }
+            StaInput::PairwiseKeyRemoved { slot, association } => {
+                // A complete initial bank and affine returns bound these
+                // collections by the same const capacities checked in Keys::new.
+                let spare = core::mem::take(&mut self.keys.spare_pairwise);
+                let parts = oer_ieee80211_port::association::KeyBankParts {
+                    pairwise: core::iter::once(slot).chain(spare).collect(),
+                    group: self
+                        .keys
+                        .group_slots
+                        .free
+                        .take_all()
+                        .into_iter()
+                        .chain(core::mem::take(&mut self.keys.spare_group))
+                        .collect(),
+                };
+                match T::collect_key_bank(parts) {
+                    Ok(bank) => {
+                        let (association, slot, parts) = T::end_association(association, bank);
+                        self.keys.pairwise = KeyCell::Free(VacantPairwise { association, slot });
+                        self.keys.spare_pairwise = parts.pairwise;
+                        let mut groups = parts.group.into_iter();
+                        self.keys.group_slots.free =
+                            Pool::from_collection(groups.by_ref().take(T::GROUP_SLOTS).collect());
+                        self.keys.spare_group = groups.collect();
+                    }
+                    Err(parts) => {
+                        self.keys.pairwise = KeyCell::UnreturnedBank {
+                            _association: association,
+                            _parts: parts,
+                        };
+                    }
+                }
+                return;
+            }
+            StaInput::GroupKeyRemoved {
+                pending,
+                slot,
+                permission,
+            } => {
+                if matches!(pending.replay, GroupReplay::Active)
+                    && let Some(replay) = active_replay(state)
+                {
+                    replay.remove_group(pending.key_id);
+                }
+                self.keys.group_removed(slot, permission, pending.place);
+                return;
+            }
+            StaInput::Arbiter(notice) => {
+                self.noticed(state, notice);
+                return;
+            }
+        };
+        let change = self.step(state, now, done);
+        state.apply(change);
+    }
+
+    /// The arbiter's answer.
+    #[inline(never)]
+    fn answered(&mut self, state: &mut State<T, K>, answer: Answer<'id, K, T::GatePath>) {
+        let change = match answer {
+            Answer::Lease(lease) => {
+                let access_point = lease.access_point();
+                *self.lease = Held::Lease(lease);
+                match state {
+                    State::Scan(scan) => {
+                        scan.access_point = access_point;
+                        scan.step = ScanStep::AwaitStart;
+                    }
+                    State::Join(join) => join.step = JoinStep::AwaitStart,
+                    _ => {}
+                }
+                Change::Keep
+            }
+            Answer::Refused(refusal, place) => {
+                *self.place = Some(place);
+                match (&mut *state, refusal) {
+                    (State::Join(join), Refusal::TooSoon { retry_at }) => {
+                        join.step = JoinStep::RetryAt(retry_at);
+                        Change::Keep
+                    }
+                    (State::Scan(_) | State::Join(_), _) => {
+                        leave_unkeyed(StaDisconnectReason::Refused(refusal))
+                    }
+                    _ => Change::Keep,
+                }
+            }
+        };
+        state.apply(change);
+    }
+
+    #[inline(never)]
+    fn group_transition(
+        &mut self,
+        state: &mut State<T, K>,
+        pending: PendingGroupKey<'id, T::EpochPath>,
+        key: T::GroupKey,
+        permission: T::GroupPermission,
+        replaced: Option<GroupKeyId>,
+        selected: bool,
+    ) {
+        let current = current_epoch(state, *self.epoch) == Some(pending.epoch);
+        let replay = if current { active_replay(state) } else { None };
+        // An evicted installation of another ID ends here. Retained entries
+        // of that ID still own their active state independently.
+        let mut replay = replay;
+        if let Some(old) = replaced
+            && old != pending.key_id
+            && !self.keys.groups.has_active(old)
+            && let Some(replay) = &mut replay
+        {
+            replay.remove_group(old);
+        }
+        (*self.keys).group_installed(pending, key, permission, current, replay, selected);
+        if current {
+            self.group_installed(state);
+        }
+    }
+
+    /// A key of the handshake is installed: once both are, Message 4
+    /// follows.
+    #[inline(never)]
+    fn keys_changed(&mut self, state: &mut State<T, K>) {
+        let change = match state {
+            State::Handshake(handshake) if self.keys.installed() => {
+                match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
+                    HandshakeStep::AwaitInstalled(request, replay, protection) => {
+                        finish_handshake_install(handshake, request, replay, protection)
+                    }
+                    step => {
+                        handshake.step = step;
+                        Change::Keep
+                    }
+                }
+            }
+            _ => Change::Keep,
+        };
+        state.apply(change);
+    }
+
+    /// A group key terminal completes only its own exchange stage. Other
+    /// stages (including an encoded response waiting for credit) stay owned.
+    fn group_installed(&mut self, state: &mut State<T, K>) {
         match state {
-            State::Reclaiming(reclaim) => self.owe_reclaim(reclaim),
-            State::Report(reason) => {
-                self.epoch = None;
-                (
-                    State::Idle,
-                    ActionProgress::Action(Owed::Notify(StaNotice::Disconnected(reason))),
+            State::Connected(connected) => finish_connected_install(connected),
+            _ => self.keys_changed(state),
+        }
+    }
+
+    /// The arbiter's answer to the station's absence.
+    #[inline(never)]
+    fn absence_answered(
+        &mut self,
+        state: &mut State<T, K>,
+        answer: AbsenceAnswer<'id, K, T::GatePath>,
+    ) {
+        let connected = match state {
+            State::Connected(connected) if connected.confirmation.is_none() => connected,
+            _ => {
+                if let AbsenceAnswer::Refused(_, place) = answer {
+                    *self.absence_place = Some(place);
+                }
+                return;
+            }
+        };
+        let Some(background) = &mut connected.background else {
+            return;
+        };
+        match answer {
+            AbsenceAnswer::Lease(lease) => {
+                (*self.absence) = Some(lease);
+                background.step = BackgroundStep::NeedSleep;
+            }
+            AbsenceAnswer::Refused(reason, place) => {
+                (*self.absence_place) = Some(place);
+                connected.background = None;
+                self.commands.complete(
+                    StaCommand::BackgroundScan,
+                    StaCommandOutcome::BackgroundScan {
+                        interrupted: Some(BackgroundScanEnd::AbsenceRefused(reason)),
+                    },
+                );
+            }
+        }
+    }
+
+    /// The background scan's step after its absence ended, `cancelled` or
+    /// not.
+    fn absence_over(&mut self, state: &mut State<T, K>, cancelled: bool) {
+        (*self.absence) = None;
+        let limit = self.config.skipped_absences;
+        let connected = match state {
+            State::Connected(connected) if connected.confirmation.is_none() => connected,
+            _ => return,
+        };
+        let connected = &mut **connected;
+        let Some(background) = &mut connected.background else {
+            return;
+        };
+        background.step = if cancelled {
+            background.skipped = background.skipped.saturating_add(1);
+            if connected.power.asleep() {
+                // A PM=1 may have reached the access point: wake first.
+                BackgroundStep::NeedWake
+            } else if background.skipped >= limit {
+                connected.background = None;
+                self.commands.complete(
+                    StaCommand::BackgroundScan,
+                    StaCommandOutcome::BackgroundScan {
+                        interrupted: Some(BackgroundScanEnd::CancelledAbsences),
+                    },
+                );
+                return;
+            } else {
+                BackgroundStep::NeedAbsence
+            }
+        } else {
+            background.skipped = 0;
+            BackgroundStep::NeedHome
+        };
+    }
+
+    /// A notice of the arbiter.
+    #[inline(never)]
+    fn noticed(&mut self, state: &mut State<T, K>, notice: StationNotice<'id, K, T::GatePath>) {
+        let change = match notice {
+            StationNotice::AbsenceStarted(id) => {
+                if self.absence.as_ref().map(Lease::id) == Some(id)
+                    && let State::Connected(connected) = &mut *state
+                    && connected.confirmation.is_none()
+                    && let Some(background) = &mut connected.background
+                    && background.step == BackgroundStep::AwaitStart
+                {
+                    background.step = BackgroundStep::NeedConfigure;
+                }
+                Change::Keep
+            }
+            StationNotice::AbsenceEnded(place) => {
+                *self.absence_place = Some(place);
+                self.absence_over(state, false);
+                Change::Keep
+            }
+            StationNotice::AbsenceCancelled(_, place) => {
+                *self.absence_place = Some(place);
+                self.absence_over(state, true);
+                Change::Keep
+            }
+            StationNotice::LeaseStarted(id) => {
+                if self.lease.id() == Some(id) {
+                    match &mut *state {
+                        State::Scan(scan) if scan.step == ScanStep::AwaitStart => {
+                            scan.skipped = 0;
+                            scan.step = ScanStep::NeedConfigure;
+                        }
+                        State::Join(join) if matches!(join.step, JoinStep::AwaitStart) => {
+                            join.step = JoinStep::NeedConfigure
+                        }
+                        _ => {}
+                    }
+                }
+                Change::Keep
+            }
+            StationNotice::LeaseEnded(place) => {
+                *self.lease = Held::None;
+                *self.place = Some(place);
+                self.lease_ended(state, false)
+            }
+            StationNotice::LeaseCancelled(_, place) => {
+                *self.lease = Held::None;
+                *self.place = Some(place);
+                self.lease_ended(state, true)
+            }
+            StationNotice::Moved(channel) => {
+                if let State::Connected(connected) = &mut *state
+                    && connected.confirmation.is_none()
+                {
+                    connected.channel = channel;
+                    connected.exchange = true;
+                }
+                Change::Keep
+            }
+            StationNotice::Leave(reason) => {
+                let reason_code = match reason {
+                    LeaveReason::Stopped | LeaveReason::PortFailed => None,
+                    LeaveReason::Unservable => Some(REASON_LEAVING),
+                };
+                match &mut *state {
+                    State::Connected(connected) => leave_connected(
+                        connected,
+                        StaDisconnectReason::Arbiter(reason),
+                        reason_code,
+                    ),
+                    State::Handshake(handshake) => leave_keyed(
+                        StaDisconnectReason::Arbiter(reason),
+                        reason_code.map(|reason_code| Deauthentication {
+                            bssid: handshake.bssid,
+                            reason_code,
+                            protected: handshake.management.is_some(),
+                        }),
+                    ),
+                    State::Join(_) | State::Scan(_) => {
+                        leave_unkeyed(StaDisconnectReason::Arbiter(reason))
+                    }
+                    _ => Change::Keep,
+                }
+            }
+        };
+        state.apply(change);
+    }
+
+    /// The state after the lease ended, at its own end or `cancelled`.
+    fn lease_ended(&mut self, state: &mut State<T, K>, cancelled: bool) -> Change<T, K> {
+        let lost = StaDisconnectReason::Arbiter(LeaveReason::PortFailed);
+        match state {
+            // A skipped absence: the same channel again, until too many in
+            // a row end the scan with what it found.
+            State::Scan(scan) if cancelled => {
+                let skipped = scan.skipped.saturating_add(1);
+                if skipped >= self.config.skipped_absences {
+                    self.select(true, scan.access_point)
+                } else {
+                    Change::Scan(Scan {
+                        skipped,
+                        step: ScanStep::NeedLease,
+                        visit: scan.visit,
+                        access_point: scan.access_point,
+                    })
+                }
+            }
+            // The visit's listening is over: the next channel.
+            State::Scan(scan) => self.visit(scan.visit.saturating_add(1), 0, scan.access_point),
+            State::Leave(leave) if leave.step == LeaveStep::AwaitEnd => self.report(leave),
+            // A terminal may arrive while an earlier leave action is still
+            // owed. Only AwaitEnd proves that deauthentication and receive
+            // shutdown completed; all preceding steps retain their payload.
+            State::Leave(_) => Change::Keep,
+            // The lease ended without the station's release: the port left;
+            // the station leaves, its keys first.
+            State::Connected(connected) => leave_connected(connected, lost, None),
+            State::Handshake(_) => leave_keyed(lost, None),
+            State::Join(_) => leave_unkeyed(lost),
+            _ => Change::Keep,
+        }
+    }
+
+    /// A leave reports once every key came back; until then it removes
+    /// them.
+    fn report(&mut self, leave: &mut Leave) -> Change<T, K> {
+        if self.keys.clear() {
+            Change::Report(leave.reason)
+        } else {
+            leave.step = LeaveStep::RemoveKeys(None);
+            Change::Keep
+        }
+    }
+
+    /// The state after `done` in `state`.
+    #[inline(never)]
+    fn step(&mut self, state: &mut State<T, K>, now: Instant, done: StaDone<T>) -> Change<T, K> {
+        if let Done::Unsent { purpose, reason } = done {
+            return self.unsent(state, now, purpose, reason);
+        }
+        match (state, done) {
+            (State::Reclaiming(Reclaim::AwaitConfigured), Done::Configured) => Change::Idle,
+            (State::Idle | State::Report(_), Done::Command(StaCommand::Connect)) => {
+                (*self.epoch) = Some(self.epochs.begin());
+                self.scan.clear();
+                self.visit(0, 0, None)
+            }
+            (State::Connected(connected), Done::Command(StaCommand::Disconnect)) => {
+                leave_connected(
+                    connected,
+                    StaDisconnectReason::Requested,
+                    Some(REASON_LEAVING),
                 )
             }
-            State::Scan(mut scan) => {
+            (State::Scan(_), Done::Command(StaCommand::Disconnect)) => {
+                leave_unkeyed(StaDisconnectReason::Requested)
+            }
+            (State::Join(_), Done::Command(StaCommand::Disconnect)) => {
+                leave_unkeyed(StaDisconnectReason::Requested)
+            }
+            (State::Connected(connected), Done::Command(StaCommand::BackgroundScan))
+                if connected.confirmation.is_none() && connected.background.is_none() =>
+            {
+                if now.checked_add(self.config.dwell).is_none() {
+                    self.commands.complete(
+                        StaCommand::BackgroundScan,
+                        StaCommandOutcome::BackgroundScan {
+                            interrupted: Some(BackgroundScanEnd::DeadlineOverflow),
+                        },
+                    );
+                    return Change::Keep;
+                }
+                self.scan.clear();
+                if self.channel(0).is_some() {
+                    connected.background = Some(Background {
+                        visit: 0,
+                        skipped: 0,
+                        step: BackgroundStep::NeedAbsence,
+                    });
+                } else {
+                    self.commands.complete(
+                        StaCommand::BackgroundScan,
+                        StaCommandOutcome::BackgroundScan { interrupted: None },
+                    );
+                }
+                Change::Keep
+            }
+            (State::Connected(connected), done) => self.confirming_step(connected, now, done),
+            (State::Scan(scan), Done::Configured) if scan.step == ScanStep::AwaitConfigured => {
+                scan.step = ScanStep::NeedProbe;
+                Change::Keep
+            }
+            (State::Join(join), done) => self.join_step(join, now, done),
+            (State::Handshake(handshake), Done::Command(StaCommand::Disconnect)) => {
+                leave_handshake(handshake, REASON_LEAVING)
+            }
+            (State::Handshake(handshake), done) => match (&handshake.step, done) {
+                (
+                    HandshakeStep::AwaitSent,
+                    Done::Tx {
+                        purpose: TxPurpose::HandshakeResponse,
+                        ..
+                    },
+                ) => {
+                    handshake.step = HandshakeStep::Await;
+                    Change::Keep
+                }
+                (_, Done::Tick)
+                    if matches!(
+                        handshake.deadline.poll(now),
+                        RsnStaDeadlineEvent::Expired { .. }
+                    ) =>
+                {
+                    leave_handshake(handshake, REASON_HANDSHAKE_TIMEOUT)
+                }
+                _ => Change::Keep,
+            },
+            (State::Leave(leave), done) => {
+                leave.step = match (leave.step, done) {
+                    (
+                        LeaveStep::AwaitDeauthentication,
+                        Done::Tx {
+                            purpose: TxPurpose::Deauthentication,
+                            ..
+                        },
+                    ) => LeaveStep::NeedConfigure,
+                    (
+                        LeaveStep::AwaitProtectedDeauthentication,
+                        Done::Tx {
+                            purpose: TxPurpose::Deauthentication,
+                            ..
+                        },
+                    ) => LeaveStep::RemoveKeys(None),
+                    (LeaveStep::AwaitConfigured, Done::Configured) => LeaveStep::NeedRelease,
+                    (step, _) => step,
+                };
+                Change::Keep
+            }
+            (_, _) => Change::Keep,
+        }
+    }
+
+    /// Refusal is a protocol input of its own. In particular, refusing M4
+    /// never executes the transition for an accepted TX completion.
+    #[inline(never)]
+    fn unsent(
+        &mut self,
+        state: &mut State<T, K>,
+        now: Instant,
+        purpose: TxPurpose,
+        reason: TxRefusal,
+    ) -> Change<T, K> {
+        match (state, purpose) {
+            (State::Connected(connected), TxPurpose::HandshakeLast)
+                if connected.confirmation.is_some() =>
+            {
+                leave_connected(
+                    connected,
+                    StaDisconnectReason::HandshakeFailed,
+                    Some(REASON_UNSPECIFIED),
+                )
+            }
+            (
+                State::Handshake(handshake),
+                TxPurpose::HandshakeResponse | TxPurpose::HandshakeLast,
+            ) => leave_handshake(handshake, REASON_UNSPECIFIED),
+            (State::Join(join), TxPurpose::Authentication { attempt }) => {
+                if matches!(join.step,
+                    JoinStep::Authenticate(Authenticate::Exchange {
+                        stage: AuthStage::AwaitSent { attempt: current, .. }, ..
+                    }) if current == attempt
+                ) {
+                    leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
+                } else {
+                    Change::Keep
+                }
+            }
+            (State::Join(_), TxPurpose::SaeAuthentication | TxPurpose::Association) => {
+                leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
+            }
+            (State::Scan(_), TxPurpose::Probe) => {
+                leave_unkeyed(StaDisconnectReason::TransmitRefused(reason))
+            }
+            (State::Connected(connected), purpose @ TxPurpose::Connected(_))
+                if connected.confirmation.is_none() =>
+            {
+                self.connected_step(connected, now, Done::Unsent { purpose, reason })
+            }
+            (State::Leave(leave), TxPurpose::Deauthentication) => {
+                leave.step = match leave.step {
+                    LeaveStep::AwaitDeauthentication => LeaveStep::NeedConfigure,
+                    LeaveStep::AwaitProtectedDeauthentication => LeaveStep::RemoveKeys(None),
+                    step => step,
+                };
+                Change::Keep
+            }
+            (_, _) => Change::Keep,
+        }
+    }
+
+    /// The installed-key phase still waiting for D4's delivered M4 terminal.
+    #[inline(never)]
+    fn confirming_step(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        now: Instant,
+        done: StaDone<T>,
+    ) -> Change<T, K> {
+        let Some(deadline) = connected.confirmation else {
+            return self.connected_step(connected, now, done);
+        };
+        match done {
+            Done::Tick if matches!(deadline.poll(now), RsnStaDeadlineEvent::Expired { .. }) => {
+                leave_connected(
+                    connected,
+                    StaDisconnectReason::HandshakeFailed,
+                    Some(REASON_HANDSHAKE_TIMEOUT),
+                )
+            }
+            Done::Command(StaCommand::Disconnect) => leave_connected(
+                connected,
+                StaDisconnectReason::Requested,
+                Some(REASON_LEAVING),
+            ),
+            Done::Tx {
+                purpose: TxPurpose::HandshakeLast,
+                completion,
+            } => {
+                let change = self.connected_step(
+                    connected,
+                    now,
+                    Done::Tx {
+                        purpose: TxPurpose::Connected(Sending::DuplicateMessage4),
+                        completion,
+                    },
+                );
+                if matches!(change, Change::Keep)
+                    && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
+                {
+                    connected.confirmation = None;
+                    connected.connected_notice = true;
+                    connected.report = Some(UpstreamFact::Connected(connected.channel));
+                }
+                change
+            }
+            done => self.connected_step(connected, now, done),
+        }
+    }
+
+    /// The connected state after `done`.
+    fn connected_step(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        now: Instant,
+        done: StaDone<T>,
+    ) -> Change<T, K> {
+        if matches!(
+            done,
+            Done::Tx {
+                completion: TxOutcome::Withdrawn(oer_ieee80211_port::WithdrawCause::Disabled),
+                ..
+            }
+        ) {
+            return leave_disabled(connected);
+        }
+        self.update_connected(connected, now, done);
+        Change::Keep
+    }
+
+    #[inline(never)]
+    fn update_connected(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        now: Instant,
+        done: StaDone<T>,
+    ) {
+        let sent = match done {
+            Done::Tx {
+                purpose: TxPurpose::Connected(sending),
+                completion,
+            } => Some((
+                sending,
+                match completion {
+                    TxOutcome::Ended(SingleEnd::Delivered { .. }) => NullOutcome::Delivered,
+                    _ => NullOutcome::Unconfirmed,
+                },
+            )),
+            Done::Unsent {
+                purpose: TxPurpose::Connected(sending),
+                ..
+            } => Some((sending, NullOutcome::Unconfirmed)),
+            _ => None,
+        };
+        if let Some((sending, outcome)) = sent {
+            connected.sending = false;
+            match sending {
+                Sending::Wake => {
+                    connected.waking = false;
+                    connected
+                        .power
+                        .null_sent(StaPowerManagement::Active, outcome);
+                    if let Some(background) = &mut connected.background
+                        && background.step == BackgroundStep::AwaitWake
+                    {
+                        self.next_visit(background);
+                    }
+                }
+                Sending::Sleep => {
+                    connected
+                        .power
+                        .null_sent(StaPowerManagement::PowerSave, outcome);
+                    if let Some(background) = &mut connected.background
+                        && background.step == BackgroundStep::AwaitSleep
+                    {
+                        // Not delivered: no readiness; the arbiter cancels
+                        // the absence at its start.
+                        background.step = if outcome == NullOutcome::Delivered {
+                            BackgroundStep::NeedReady
+                        } else {
+                            BackgroundStep::AwaitStart
+                        };
+                    }
+                }
+                Sending::GroupResponse | Sending::DuplicateMessage4 => {
+                    if let Some(rsn) = connected.rsn.as_mut() {
+                        if matches!(rsn.rekey, Rekey::AwaitSent) {
+                            rsn.rekey = Rekey::None;
+                        }
+                        if matches!(rsn.message4, DuplicateMessage4::AwaitSent) {
+                            rsn.message4 = DuplicateMessage4::None;
+                        }
+                        rsn.advance_deferred();
+                    }
+                }
+                Sending::Probe | Sending::SaQuery | Sending::BlockAck => {}
+            }
+            if let Some(background) = &connected.background
+                && background.step == BackgroundStep::NeedAbsence
+                && background.skipped >= self.config.skipped_absences
+            {
+                connected.background = None;
+                self.commands.complete(
+                    StaCommand::BackgroundScan,
+                    StaCommandOutcome::BackgroundScan {
+                        interrupted: Some(BackgroundScanEnd::CancelledAbsences),
+                    },
+                );
+            }
+            self.background_done(connected);
+            return;
+        }
+        let dwell = self.config.dwell;
+        if let Some(background) = &mut connected.background {
+            background.step = match (background.step, done) {
+                (BackgroundStep::AwaitConfigured, Done::Configured) => BackgroundStep::NeedProbe,
+                (BackgroundStep::AwaitHome, Done::Configured) => BackgroundStep::NeedWake,
+                (BackgroundStep::AwaitWidened, Done::Configured) => match now.checked_add(dwell) {
+                    Some(until) => BackgroundStep::HomeProbe { until },
+                    None => BackgroundStep::Narrow(Some(BackgroundScanEnd::DeadlineOverflow)),
+                },
+                (
+                    BackgroundStep::HomeProbe { until } | BackgroundStep::HomeListen { until },
+                    Done::Tick,
+                ) if now >= until => BackgroundStep::Narrow(None),
+                (BackgroundStep::AwaitNarrowed(Some(reason)), Done::Configured) => {
+                    connected.background = None;
+                    self.commands.complete(
+                        StaCommand::BackgroundScan,
+                        StaCommandOutcome::BackgroundScan {
+                            interrupted: Some(reason),
+                        },
+                    );
+                    return;
+                }
+                (BackgroundStep::AwaitNarrowed(None), Done::Configured) => {
+                    self.next_visit(background);
+                    background.step
+                }
+                (step, _) => step,
+            };
+        }
+        self.background_done(connected)
+    }
+
+    /// The next visit of the background scan, or its end.
+    fn next_visit(&mut self, background: &mut Background) {
+        let visit = if background.skipped > 0 {
+            background.visit
+        } else {
+            background.visit.saturating_add(1)
+        };
+        background.visit = visit;
+        background.step = BackgroundStep::NeedAbsence;
+    }
+
+    /// End a background scan that ran out of channels or of tries.
+    fn background_done(&mut self, connected: &mut Connected<T, K>) {
+        if let Some(background) = &connected.background
+            && background.step == BackgroundStep::NeedAbsence
+        {
+            if background.skipped >= self.config.skipped_absences {
+                connected.background = None;
+                self.commands.complete(
+                    StaCommand::BackgroundScan,
+                    StaCommandOutcome::BackgroundScan {
+                        interrupted: Some(BackgroundScanEnd::CancelledAbsences),
+                    },
+                );
+            } else if self.channel(background.visit).is_none() {
+                connected.background = None;
+                self.commands.complete(
+                    StaCommand::BackgroundScan,
+                    StaCommandOutcome::BackgroundScan { interrupted: None },
+                );
+            }
+        }
+    }
+
+    /// The scan's visit of the channel at `visit`, or its end.
+    fn visit(
+        &mut self,
+        visit: usize,
+        skipped: u8,
+        access_point: Option<SupportedChannel<K>>,
+    ) -> Change<T, K> {
+        match self.channel(visit) {
+            Some(_) => Change::Scan(Scan {
+                visit,
+                skipped,
+                step: ScanStep::NeedLease,
+                access_point,
+            }),
+            None => self.select(false, access_point),
+        }
+    }
+
+    /// The join of the best access point of the network the scan found:
+    /// the strongest, unless one on the channel of the access point beside
+    /// the station is within the margin of it.
+    fn select(
+        &mut self,
+        partial: bool,
+        access_point_channel: Option<SupportedChannel<K>>,
+    ) -> Change<T, K> {
+        let ssid = self.ssid();
+        let policy = self.policy();
+        let candidates = || {
+            (*self.scan)
+                .records()
+                .filter(move |record| record.ssid_bytes() == ssid)
+                .filter(move |record| select_association_rsn(record, policy).is_ok())
+        };
+        let Some(strongest) = candidates().max_by_key(|record| record.rssi).copied() else {
+            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
+        };
+        let margin = i16::from(self.config.access_point_margin_db);
+        let beside = access_point_channel.and_then(|channel| {
+            candidates()
+                .filter(|record| record.channel == channel.channel().number())
+                .filter(|record| {
+                    i16::from(record.rssi) >= i16::from(strongest.rssi).saturating_sub(margin)
+                })
+                .max_by_key(|record| record.rssi)
+                .copied()
+        });
+        let access_point = beside.unwrap_or(strongest);
+        let Ok(rsn) = select_association_rsn(&access_point, policy) else {
+            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
+        };
+        let Some(channel) = self
+            .config
+            .channels
+            .iter()
+            .copied()
+            .find(|channel| channel.channel().number() == access_point.channel)
+        else {
+            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
+        };
+        Change::Join(Join {
+            access_point,
+            rsn,
+            channel,
+            step: JoinStep::NeedLease,
+        })
+    }
+
+    fn begin_authentication(
+        &mut self,
+        join: &mut Join<T, K>,
+        now: Instant,
+    ) -> Result<JoinStep<T::RxMeta>, StaDisconnectReason> {
+        let bssid = join.access_point.bssid;
+        let key = match &(*self.security) {
+            StaSecurity::Open => AssociationKey::Open,
+            StaSecurity::Personal { password, pmk } => {
+                if let AssociationSecurity::Rsn(RsnAssociation {
+                    akm: AssociationAkm::Sae(pwe),
+                    ..
+                }) = join.rsn.security()
+                {
+                    if let Some(cached) = self.pmksa.resume(bssid, &self.config.ssid) {
+                        join.rsn = join
+                            .rsn
+                            .with_pmkid(oer_ieee80211_wire::security::Pmkid(cached.pmkid()))
+                            .ok_or(StaDisconnectReason::AuthenticationFailed)?;
+                        AssociationKey::Protected(cached.pmk().duplicate())
+                    } else {
+                        let element = match pwe {
+                            oer_ieee80211_wire::security::SaePwe::HuntingAndPecking => {
+                                SaePasswordElement::hunting_and_pecking(
+                                    password.as_bytes(),
+                                    self.config.address.get(),
+                                    bssid.get(),
+                                )
+                                .map_err(|error| {
+                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
+                                })?
+                            }
+                            oer_ieee80211_wire::security::SaePwe::HashToElement => {
+                                SaePasswordToken::derive(
+                                    &self.config.ssid,
+                                    password.as_bytes(),
+                                    None,
+                                )
+                                .password_element(self.config.address.get(), bssid.get())
+                            }
+                        };
+                        let commit =
+                            SaeCommit::new(&element, (self.config.nonce)(), (self.config.nonce)())
+                                .map_err(|error| {
+                                    StaDisconnectReason::Sae(StaSaeFailure::Protocol(error))
+                                })?;
+                        let (authentication, transmission) =
+                            StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
+                                .map_err(StaDisconnectReason::Sae)?;
+                        return Ok(JoinStep::SaeSend {
+                            authentication,
+                            transmission,
+                        });
+                    }
+                } else {
+                    AssociationKey::Protected(pmk.duplicate())
+                }
+            }
+        };
+        Ok(JoinStep::Authenticate(Authenticate::NeedCredit(
+            StaAuthenticationRuntime::new(self.config.address, bssid),
+            key,
+        )))
+    }
+
+    fn sae_event(
+        &mut self,
+        join: &mut Join<T, K>,
+        event: StaSaeEvent,
+        now: Instant,
+    ) -> Change<T, K> {
+        join.step = match event {
+            StaSaeEvent::Irrelevant(authentication) => JoinStep::SaeAwait(authentication),
+            StaSaeEvent::Transmit {
+                authentication,
+                transmission,
+            } => JoinStep::SaeSend {
+                authentication,
+                transmission,
+            },
+            StaSaeEvent::Authenticated(keys) => {
+                let bssid = join.access_point.bssid;
+                self.pmksa.insert(StaPmksa::new(
+                    bssid,
+                    self.config.ssid.clone(),
+                    keys.pmk.duplicate(),
+                    keys.pmkid,
+                ));
+                let runtime = match StaAssociationRuntime::new(
+                    self.config.address,
+                    bssid,
+                    oer_ieee80211_wire::security::LinkProtection::Ccmp,
+                    now,
+                ) {
+                    Ok(runtime) => runtime,
+                    Err(_) => return leave_unkeyed(StaDisconnectReason::DeadlineOverflow),
+                };
+                JoinStep::Associate(runtime, AssociationKey::Protected(keys.pmk))
+            }
+            StaSaeEvent::Failed(reason) => return leave_unkeyed(StaDisconnectReason::Sae(reason)),
+        };
+        Change::Keep
+    }
+
+    fn join_step(&mut self, join: &mut Join<T, K>, now: Instant, done: StaDone<T>) -> Change<T, K> {
+        join.step = match (
+            core::mem::replace(&mut join.step, JoinStep::NeedLease),
+            done,
+        ) {
+            (JoinStep::AwaitConfigured, Done::Configured) => {
+                match self.begin_authentication(join, now) {
+                    Ok(step) => step,
+                    Err(reason) => return leave_unkeyed(reason),
+                }
+            }
+            (
+                JoinStep::SaeSend {
+                    authentication,
+                    transmission,
+                },
+                Done::Tick,
+            ) => {
+                if now >= authentication.next_deadline() {
+                    return leave_unkeyed(StaDisconnectReason::Sae(StaSaeFailure::Timeout));
+                }
+                JoinStep::SaeSend {
+                    authentication,
+                    transmission,
+                }
+            }
+            (JoinStep::SaeAwait(authentication), Done::Tick) => {
+                match authentication.on_deadline(now) {
+                    StaSaeEvent::Irrelevant(authentication) => JoinStep::SaeAwait(authentication),
+                    StaSaeEvent::Failed(reason) => {
+                        return leave_unkeyed(StaDisconnectReason::Sae(reason));
+                    }
+                    event => return self.sae_event(join, event, now),
+                }
+            }
+            (
+                JoinStep::Authenticate(Authenticate::Exchange {
+                    runtime,
+                    mut stage,
+                    key,
+                }),
+                done,
+            ) => {
+                let timed_out = match (stage, done) {
+                    (
+                        AuthStage::AwaitSent {
+                            attempt,
+                            response_timeout,
+                        },
+                        Done::Tx {
+                            purpose: TxPurpose::Authentication { attempt: returned },
+                            completion: TxOutcome::Ended(SingleEnd::Delivered { .. }),
+                        },
+                    ) if attempt == returned => {
+                        let Some(until) = now.checked_add(response_timeout) else {
+                            return leave_unkeyed(StaDisconnectReason::DeadlineOverflow);
+                        };
+                        stage = AuthStage::AwaitResponse { until };
+                        false
+                    }
+                    (
+                        AuthStage::AwaitSent { attempt, .. },
+                        Done::Tx {
+                            purpose: TxPurpose::Authentication { attempt: returned },
+                            ..
+                        },
+                    ) if attempt == returned => true,
+                    (AuthStage::AwaitResponse { until }, Done::Tick) => now >= until,
+                    _ => false,
+                };
+                let auth = if timed_out {
+                    match runtime.response_timed_out() {
+                        StaAuthenticationEvent::Retry { runtime, .. } => {
+                            Authenticate::NeedCredit(runtime, key)
+                        }
+                        _ => return leave_unkeyed(StaDisconnectReason::AuthenticationFailed),
+                    }
+                } else {
+                    Authenticate::Exchange {
+                        runtime,
+                        stage,
+                        key,
+                    }
+                };
+                JoinStep::Authenticate(auth)
+            }
+            (step, _) => step,
+        };
+        Change::Keep
+    }
+    fn has_link(&self, state: &State<T, K>) -> bool {
+        let State::Connected(connected) = state else {
+            return false;
+        };
+        if self.epoch.is_none()
+            || connected.confirmation.is_some()
+            || self.absence.is_some()
+            || connected.power.asleep()
+        {
+            return false;
+        }
+        matches!(self.keys.pairwise, KeyCell::Installed(_)) == connected.rsn.as_ref().is_some()
+    }
+
+    #[inline(never)]
+    fn receive_frame<'frame>(
+        &mut self,
+        state: &mut State<T, K>,
+        now: Instant,
+        frame: &'frame [u8],
+        meta: T::RxMeta,
+        mut deliver: impl FnMut(oer_ieee80211_wire::data::EthernetFrameParts<'frame>),
+    ) -> Result<(), StaRxError> {
+        use oer_ieee80211_upper_mac::receive::{AdmittedData, RxDropReason};
+        let header = match crate::receive::classify(frame)? {
+            Received::Management(management) => {
+                self.received_management(state, now, management, meta);
+                return Ok(());
+            }
+            Received::Data(header) => header,
+        };
+        let (bssid, replay) = match &mut *state {
+            State::Handshake(handshake) => (
+                handshake.bssid,
+                match &mut handshake.step {
+                    HandshakeStep::InstallGroup(_, replay, _)
+                    | HandshakeStep::AwaitInstalled(_, replay, _) => Some(replay),
+                    _ => None,
+                },
+            ),
+            State::Connected(connected) => (
+                connected.bssid,
+                connected.rsn.as_mut().map(|rsn| &mut rsn.replay),
+            ),
+            _ => return Err(RxDropReason::NotConnected.into()),
+        };
+        let admitted = AdmittedData::admit(
+            header,
+            self.config.address,
+            bssid,
+            crate::data::integrity(meta.common()),
+            replay,
+        )?;
+        for parts in admitted.msdus()? {
+            let parts = parts?;
+            if parts.ether_type == EAPOL_ETHER_TYPE {
+                if !matches!(*self.security, StaSecurity::Open)
+                    && !admitted.protected()
+                    && parts.destination != self.config.address.get()
+                    && parts.destination != PAE_GROUP_ADDRESS
+                {
+                    continue;
+                }
+                let eapol =
+                    OwnedEapolFrame::try_copy(RsnInterface::Station, bssid.get(), parts.payload)
+                        .map_err(|_| RxDropReason::Payload)?;
+                let protection = if admitted.protected() {
+                    EapolProtection::Pairwise
+                } else {
+                    EapolProtection::Open
+                };
+                let change = match &mut *state {
+                    State::Handshake(handshake) => {
+                        self.handshake_eapol(handshake, now, eapol, protection)
+                    }
+                    State::Connected(connected) => {
+                        Self::connected_eapol(connected, eapol, protection)?;
+                        Change::Keep
+                    }
+                    _ => Change::Keep,
+                };
+                state.apply(change);
+            } else {
+                if !matches!(*self.security, StaSecurity::Open) && !admitted.protected() {
+                    return Err(RxDropReason::Protection.into());
+                }
+                if !self.has_link(state) {
+                    return Err(RxDropReason::NotConnected.into());
+                }
+                deliver(parts);
+            }
+        }
+        Ok(())
+    }
+
+    /// Take a received frame.
+    #[inline(never)]
+    fn received_management(
+        &mut self,
+        state: &mut State<T, K>,
+        now: Instant,
+        management: Management<'_>,
+        meta: T::RxMeta,
+    ) {
+        let frame = management.frame();
+        let change = match &mut *state {
+            State::Scan(scan)
+                if scan.step == ScanStep::Listen || scan.step == ScanStep::NeedProbe =>
+            {
+                observe_scan(&mut (*self.scan), now, management, &meta);
+                Change::Keep
+            }
+            State::Join(join) => {
+                match core::mem::replace(&mut join.step, JoinStep::NeedLease) {
+                    JoinStep::SaeAwait(authentication) => {
+                        let event = authentication.observe_management_frame(frame, now);
+                        self.sae_event(join, event, now)
+                    }
+
+                    JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key)) => {
+                        join.step = JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
+                        Change::Keep
+                    }
+                    JoinStep::Authenticate(Authenticate::Exchange {
+                        mut runtime,
+                        stage,
+                        key,
+                    }) => {
+                        runtime.observe_received_frame();
+                        match runtime.observe_management_frame(frame) {
+                            StaAuthenticationEvent::Authenticated { .. } => {
+                                match StaAssociationRuntime::new(
+                                    self.config.address,
+                                    join.access_point.bssid,
+                                    match *self.security {
+                                        StaSecurity::Open => {
+                                            oer_ieee80211_wire::security::LinkProtection::Open
+                                        }
+                                        StaSecurity::Personal { .. } => {
+                                            oer_ieee80211_wire::security::LinkProtection::Ccmp
+                                        }
+                                    },
+                                    now,
+                                ) {
+                                    Ok(runtime) => {
+                                        join.step = JoinStep::Associate(runtime, key);
+                                        Change::Keep
+                                    }
+                                    Err(_) => leave_unkeyed(StaDisconnectReason::DeadlineOverflow),
+                                }
+                            }
+                            StaAuthenticationEvent::Retry { runtime, .. } => {
+                                join.step =
+                                    JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
+                                Change::Keep
+                            }
+                            StaAuthenticationEvent::Failed { .. } => {
+                                leave_unkeyed(StaDisconnectReason::AuthenticationFailed)
+                            }
+                            StaAuthenticationEvent::Irrelevant(runtime) => {
+                                join.step = JoinStep::Authenticate(Authenticate::Exchange {
+                                    runtime,
+                                    stage,
+                                    key,
+                                });
+                                Change::Keep
+                            }
+                        }
+                    }
+                    JoinStep::Associate(mut runtime, key) => {
+                        runtime.observe_received_frame();
+                        match runtime.observe_management_frame(frame, now) {
+                            StaAssociationEvent::Associated { response, .. } => {
+                                match StaAssociatedPeer::derive(
+                                    &join.access_point,
+                                    &response,
+                                    self.config.phy,
+                                    self.config.he_packet_padding,
+                                ) {
+                                    Ok(associated) => {
+                                        join.step = JoinStep::NotifyAssociated {
+                                            association_id: response.association_id,
+                                            key,
+                                            // The rate selection starts from the
+                                            // response's metadata.
+                                            peer: Peer {
+                                                associated,
+                                                response: meta,
+                                            },
+                                        };
+                                        Change::Keep
+                                    }
+                                    Err(_) => leave_unkeyed(StaDisconnectReason::AssociationFailed),
+                                }
+                            }
+                            StaAssociationEvent::Failed { failure, .. } => {
+                                leave_unkeyed(association_failure(failure))
+                            }
+                            StaAssociationEvent::Irrelevant(runtime) => {
+                                join.step = JoinStep::Associate(runtime, key);
+                                Change::Keep
+                            }
+                        }
+                    }
+                    step => {
+                        join.step = step;
+                        Change::Keep
+                    }
+                }
+            }
+            State::Handshake(handshake) => {
+                let disconnect = if handshake.supplicant().management_protection() {
+                    handshake.management.as_mut().and_then(|management| {
+                        match management.receive(frame, self.config.address, handshake.bssid) {
+                            Some(ManagementEvent::Disconnect(reason)) => Some(reason),
+                            _ => None,
+                        }
+                    })
+                } else {
+                    peer_disconnect(frame, self.config.address, handshake.bssid)
+                };
+                match disconnect {
+                    Some(reason_code) => {
+                        leave_keyed(StaDisconnectReason::Peer { reason_code }, None)
+                    }
+                    None => Change::Keep,
+                }
+            }
+            State::Connected(connected) => {
+                self.connected_received(connected, now, management, &meta)
+            }
+            _ => Change::Keep,
+        };
+        state.apply(change);
+    }
+
+    /// The connected state after a received frame.
+    #[inline(never)]
+    fn connected_received(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        now: Instant,
+        management: Management<'_>,
+        meta: &T::RxMeta,
+    ) -> Change<T, K> {
+        let frame = management.frame();
+        let disconnect = match connected
+            .rsn
+            .as_mut()
+            .and_then(|rsn| rsn.management.as_mut())
+        {
+            Some(management) => {
+                match management.receive(frame, self.config.address, connected.bssid) {
+                    Some(ManagementEvent::Disconnect(reason)) => Some(reason),
+                    Some(ManagementEvent::Query(query)) => {
+                        management.received_query(query);
+                        None
+                    }
+                    Some(ManagementEvent::BlockAck(action)) => {
+                        connected.block_ack = Some(action);
+                        None
+                    }
+                    None => {
+                        if matches!(
+                            peer_disconnect(frame, self.config.address, connected.bssid),
+                            Some(6 | 7)
+                        ) && management.start_query(now, self.config.nonce).is_err()
+                        {
+                            return leave_connected(
+                                connected,
+                                StaDisconnectReason::DeadlineOverflow,
+                                Some(REASON_UNSPECIFIED),
+                            );
+                        }
+                        None
+                    }
+                }
+            }
+            None => {
+                if let Some(action) =
+                    block_ack::unprotected_action(management, self.config.address, connected.bssid)
+                {
+                    connected.block_ack = Some(action);
+                }
+                peer_disconnect(frame, self.config.address, connected.bssid)
+            }
+        };
+        if let Some(reason_code) = disconnect {
+            // The access point ended the link: no Deauthentication back.
+            return leave_connected(connected, StaDisconnectReason::Peer { reason_code }, None);
+        }
+        let step = connected
+            .background
+            .as_ref()
+            .map(|background| background.step);
+        let away = matches!(
+            step,
+            Some(BackgroundStep::NeedProbe | BackgroundStep::Listen)
+        );
+        let home = matches!(
+            step,
+            Some(BackgroundStep::HomeProbe { .. } | BackgroundStep::HomeListen { .. })
+        );
+        if away || home {
+            observe_scan(&mut (*self.scan), now, management, meta);
+            if away {
+                return Change::Keep;
+            }
+        }
+        if let Ok(beacon) = parse_sta_beacon(frame, connected.bssid.get(), connected.association_id)
+        {
+            if let Some(edca) = beacon.edca
+                && edca != connected.peer.associated.edca
+            {
+                connected.peer.associated.edca = edca;
+                connected.edca = true;
+            }
+            if connected.power.beacon(beacon.tim) == PowerSaveDecision::SendActive
+                && !connected.waking
+            {
+                connected.wake = true;
+            }
+        }
+        Change::Keep
+    }
+
+    /// A checked peer-input drop is reported at RX; it is not a lifecycle
+    /// refusal and does not discard a previously authenticated successor.
+    #[inline(never)]
+    fn connected_eapol(
+        connected: &mut Connected<T, K>,
+        eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        protection: EapolProtection,
+    ) -> Result<(), StaRxError> {
+        let Some(rsn) = connected.rsn.as_mut() else {
+            return Err(oer_ieee80211_upper_mac::receive::RxDropReason::Protection.into());
+        };
+        rsn.receive(eapol, protection)
+    }
+
+    fn configure(&mut self, receive: StationReceive<K>) -> Option<Owed<'id, T, K>> {
+        let place = self.configuration.take()?;
+        let epoch = if matches!(receive, StationReceive::Off) {
+            None
+        } else {
+            *self.epoch
+        };
+        Some(Owed::Configure(
+            receive,
+            place.with_context(StaConfigurationContext { epoch }),
+        ))
+    }
+
+    /// The action `state` owes, and the state that awaits its end.
+    #[inline(never)]
+    fn owe(&mut self, state: &mut State<T, K>, now: Instant) -> ActionStep<'id, T, K> {
+        match state {
+            State::Reclaiming(reclaim) => self.owe_reclaim(*reclaim),
+            State::Report(reason) => {
+                (*self.epoch) = None;
+                (
+                    Change::Idle,
+                    ActionProgress::Action(Owed::Notify(StaNotice::Disconnected(*reason))),
+                )
+            }
+            State::Scan(scan) => {
                 let owed = match scan.step {
                     ScanStep::NeedLease if self.place.is_some() => {
                         match (self.channel(scan.visit), self.place.take()) {
@@ -4299,7 +4625,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                                 ))
                             }
                             (_, place) => {
-                                self.place = place;
+                                (*self.place) = place;
                                 None
                             }
                         }
@@ -4331,24 +4657,20 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     },
                     _ => None,
                 };
-                (State::Scan(scan), owed.into())
+                (Change::Keep, owed.into())
             }
             State::Join(join) => self.owe_join(join, now),
             State::Handshake(handshake) => self.owe_handshake(handshake),
-            State::Connected(connected) => self.owe_connected(
-                connected,
-                now,
-                TxPurpose::Connected(Sending::DuplicateMessage4),
-            ),
-            State::Confirming(Confirming {
-                connected,
-                deadline,
-            }) => {
-                let (state, action) = self.owe_connected(connected, now, TxPurpose::HandshakeLast);
-                (still_confirming(state, deadline), action)
+            State::Connected(connected) => {
+                let purpose = if connected.confirmation.is_some() {
+                    TxPurpose::HandshakeLast
+                } else {
+                    TxPurpose::Connected(Sending::DuplicateMessage4)
+                };
+                self.owe_connected(connected, now, purpose)
             }
             State::Leave(leave) => self.owe_leave(leave),
-            state => (state, ActionProgress::Wait),
+            _ => (Change::Keep, ActionProgress::Wait),
         }
     }
 
@@ -4359,42 +4681,42 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             Reclaim::Keys => {
                 if let Some(removal) = self.group_removal(false) {
                     (
-                        State::Reclaiming(Reclaim::Keys),
+                        Change::Reclaiming(Reclaim::Keys),
                         ActionProgress::Action(removal),
                     )
                 } else if self.keys.group_slots.is_full()
                     && let Some(key) = self.keys.take_pairwise_key()
                 {
                     (
-                        State::Reclaiming(Reclaim::Keys),
+                        Change::Reclaiming(Reclaim::Keys),
                         ActionProgress::Action(Owed::RemovePairwise(key)),
                     )
                 } else if self.keys.clear() {
                     (
-                        State::Reclaiming(Reclaim::Configure),
+                        Change::Reclaiming(Reclaim::Configure),
                         ActionProgress::Transition,
                     )
                 } else {
-                    (State::Reclaiming(Reclaim::Keys), ActionProgress::Wait)
+                    (Change::Reclaiming(Reclaim::Keys), ActionProgress::Wait)
                 }
             }
             Reclaim::Configure => match self.configure(StationReceive::Off) {
                 Some(owed) => (
-                    State::Reclaiming(Reclaim::AwaitConfigured),
+                    Change::Reclaiming(Reclaim::AwaitConfigured),
                     ActionProgress::Action(owed),
                 ),
-                None => (State::Reclaiming(Reclaim::Configure), ActionProgress::Wait),
+                None => (Change::Reclaiming(Reclaim::Configure), ActionProgress::Wait),
             },
-            Reclaim::AwaitConfigured => (State::Reclaiming(reclaim), ActionProgress::Wait),
+            Reclaim::AwaitConfigured => (Change::Reclaiming(reclaim), ActionProgress::Wait),
         }
     }
 
     /// The action the leave owes.
-    fn owe_leave(&mut self, mut leave: Leave) -> ActionStep<'id, T, K> {
+    fn owe_leave(&mut self, leave: &mut Leave) -> ActionStep<'id, T, K> {
         let owed = match leave.step {
             LeaveStep::AwaitAbsenceEnd(deauthentication) if self.absence.is_none() => {
                 leave.step = leave_key_step(deauthentication);
-                return (State::Leave(leave), ActionProgress::Transition);
+                return (Change::Keep, ActionProgress::Transition);
             }
             LeaveStep::RemoveKeys(deauthentication) => {
                 if let Some(removal) = self.group_removal(false) {
@@ -4409,7 +4731,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         Some(deauthentication) => LeaveStep::NeedDeauthentication(deauthentication),
                         None => LeaveStep::NeedConfigure,
                     };
-                    return (State::Leave(leave), ActionProgress::Transition);
+                    return (Change::Keep, ActionProgress::Transition);
                 } else {
                     None
                 }
@@ -4420,7 +4742,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 protected,
             }) => {
                 if protected && !matches!(self.keys.pairwise, KeyCell::Installed(_)) {
-                    return (State::Leave(leave), ActionProgress::Wait);
+                    return (Change::Keep, ActionProgress::Wait);
                 }
                 match self.encode_management(
                     StaManagementSubtype::Deauthentication,
@@ -4445,7 +4767,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         } else {
                             LeaveStep::NeedConfigure
                         };
-                        return (State::Leave(leave), ActionProgress::Transition);
+                        return (Change::Keep, ActionProgress::Transition);
                     }
                 }
             }
@@ -4453,44 +4775,49 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 leave.step = LeaveStep::AwaitConfigured;
                 self.configure(StationReceive::Off)
             }
-            LeaveStep::NeedRelease => match core::mem::replace(&mut self.lease, Held::None) {
+            LeaveStep::NeedRelease => match core::mem::replace(&mut (*self.lease), Held::None) {
                 Held::Lease(lease) => {
-                    self.lease = Held::Released(lease.id());
+                    (*self.lease) = Held::Released(lease.id());
                     leave.step = LeaveStep::AwaitEnd;
                     Some(Owed::Release(lease))
                 }
                 // No lease to give back: done.
                 held => {
-                    self.lease = held;
+                    (*self.lease) = held;
                     return (self.report(leave), ActionProgress::Transition);
                 }
             },
             _ => None,
         };
-        (State::Leave(leave), owed.into())
+        (Change::Keep, owed.into())
     }
 
     /// The handshake's state after a received frame.
+    #[inline(never)]
     fn handshake_eapol(
         &mut self,
-        mut handshake: Handshake<T, K>,
+        handshake: &mut Handshake<T, K>,
         now: Instant,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
-    ) -> State<T, K> {
+    ) -> Change<T, K> {
         if !matches!(
             handshake.step,
             HandshakeStep::Await | HandshakeStep::AwaitSent
         ) {
-            return State::Handshake(handshake);
+            return Change::Keep;
         }
-        let action = match handshake.supplicant.on_frame(eapol, &handshake.pmk) {
+        let received = match handshake.supplicant.as_mut() {
+            Some(supplicant) => supplicant.on_frame(eapol, &handshake.pmk),
+            None => Err(RsnStaSupplicantError::UnexpectedAction),
+        };
+        let action = match received {
             // Message 3's key data, unwrapped in the step: a few AES blocks.
             Ok(RsnStaSupplicantAction::UnwrapKeyData(request)) => {
                 let unwrapped =
                     software_aes128_key_unwrap(request.kek(), request.wrapped_key_data());
                 match handshake
-                    .supplicant
+                    .supplicant()
                     .complete_key_data_unwrap(request, unwrapped)
                 {
                     Ok(action) => action,
@@ -4527,11 +4854,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             }
             RsnStaReady::None => {}
         }
-        State::Handshake(handshake)
+        Change::Keep
     }
 
     /// The action the handshake owes.
-    fn owe_handshake(&mut self, mut handshake: Handshake<T, K>) -> ActionStep<'id, T, K> {
+    #[inline(never)]
+    fn owe_handshake(&mut self, handshake: &mut Handshake<T, K>) -> ActionStep<'id, T, K> {
         let (step, owed) = match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
             HandshakeStep::Send(message) => {
                 match self.encode_eapol(
@@ -4559,14 +4887,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     );
                 };
                 let peer = handshake.bssid.individual();
-                match self
-                    .current_epoch()
+                match (*self.epoch)
                     .and_then(|epoch| self.keys.take_pairwise_slot(epoch, handshake.spp))
                 {
                     Some((association, slot, pending)) => {
                         let (pairwise, group) = request.into_parts();
                         let key = pairwise.into_key();
-                        if handshake.supplicant.management_protection()
+                        if handshake.supplicant().management_protection()
                             && handshake.management.is_none()
                         {
                             handshake.management =
@@ -4623,7 +4950,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             step => (step, None),
         };
         handshake.step = step;
-        (State::Handshake(handshake), owed.into())
+        (Change::Keep, owed.into())
     }
 
     /// An EAPOL frame to `bssid` in a data frame, in a buffer.
@@ -4657,9 +4984,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// The action the connected state owes.
+    #[inline(never)]
     fn owe_connected(
         &mut self,
-        mut connected: Connected<T, K>,
+        connected: &mut Connected<T, K>,
         now: Instant,
         pairwise_purpose: TxPurpose,
     ) -> ActionStep<'id, T, K> {
@@ -4679,7 +5007,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             );
         }
         if let Some(action) = connected.block_ack.take()
-            && let Some(epoch) = self.epoch
+            && let Some(epoch) = (*self.epoch)
         {
             let request = PendingRxBlockAck::new(
                 epoch,
@@ -4688,7 +5016,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 connected.qos && connected.peer.associated.phy != PhyMode::Legacy,
             );
             return (
-                State::Connected(connected),
+                Change::Keep,
                 ActionProgress::Action(Owed::BlockAck(request)),
             );
         }
@@ -4698,54 +5026,42 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 bssid: connected.bssid,
                 channel: connected.channel.channel().number(),
             };
-            return (
-                State::Connected(connected),
-                ActionProgress::Action(Owed::Notify(notice)),
-            );
+            return (Change::Keep, ActionProgress::Action(Owed::Notify(notice)));
         }
         if let Some(fact) = connected.report.take() {
-            return (
-                State::Connected(connected),
-                ActionProgress::Action(Owed::Upstream(fact)),
-            );
+            return (Change::Keep, ActionProgress::Action(Owed::Upstream(fact)));
         }
         if core::mem::take(&mut connected.edca)
             && let Some(edca) = SupportedEdca::new(oer_ieee80211_port::EdcaParameterSet::from_wmm(
                 connected.peer.associated.edca,
             ))
         {
-            return (
-                State::Connected(connected),
-                ActionProgress::Action(Owed::SetEdca(edca)),
-            );
+            return (Change::Keep, ActionProgress::Action(Owed::SetEdca(edca)));
         }
         if connected.exchange {
-            match core::mem::replace(&mut self.lease, Held::None) {
+            match core::mem::replace(&mut (*self.lease), Held::None) {
                 Held::Lease(lease) => {
                     connected.exchange = false;
-                    return (
-                        State::Connected(connected),
-                        ActionProgress::Action(Owed::Exchange(lease)),
-                    );
+                    return (Change::Keep, ActionProgress::Action(Owed::Exchange(lease)));
                 }
-                held => self.lease = held,
+                held => (*self.lease) = held,
             }
         }
         if let Some(owed) = self
-            .owe_sa_query(&mut connected, now)
-            .or_else(|| self.owe_duplicate_message4(&mut connected, pairwise_purpose))
-            .or_else(|| self.owe_rekey(&mut connected, pairwise_purpose))
+            .owe_sa_query(connected, now)
+            .or_else(|| self.owe_duplicate_message4(connected, pairwise_purpose))
+            .or_else(|| self.owe_rekey(connected, pairwise_purpose))
         {
             return match owed {
-                Ok(owed) => (State::Connected(connected), ActionProgress::Action(owed)),
+                Ok(owed) => (Change::Keep, ActionProgress::Action(owed)),
                 Err(reason) => (
                     leave_connected(connected, reason, Some(REASON_UNSPECIFIED)),
                     ActionProgress::Transition,
                 ),
             };
         }
-        match self.owe_background(&mut connected, now) {
-            Ok(progress) => (State::Connected(connected), progress),
+        match self.owe_background(connected, now) {
+            Ok(progress) => (Change::Keep, progress),
             Err(reason) => (
                 leave_connected(connected, reason, Some(REASON_UNSPECIFIED)),
                 ActionProgress::Transition,
@@ -4758,7 +5074,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         connected: &mut Connected<T, K>,
         now: Instant,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        if connected.sending || !self.link_up(&connected.power, &self.keys) {
+        if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
             return None;
         }
         let management = connected.rsn.as_mut()?.management.as_mut()?;
@@ -4788,7 +5104,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         connected: &mut Connected<T, K>,
         purpose: TxPurpose,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        if connected.sending || !self.link_up(&connected.power, &self.keys) {
+        if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
             return None;
         }
         let rsn = connected.rsn.as_mut()?;
@@ -4841,7 +5157,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         {
             return Ok(ActionProgress::Transition);
         }
-        let Some(epoch) = self.current_epoch() else {
+        let Some(epoch) = *self.epoch else {
             return Ok(ActionProgress::Wait);
         };
         let Some(permission) = self.keys.group_permission.take() else {
@@ -4947,63 +5263,65 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         })
     }
 
+    #[inline(never)]
     fn owe_rekey(
         &mut self,
         connected: &mut Connected<T, K>,
         pairwise_purpose: TxPurpose,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        let rsn = connected.rsn.as_mut()?;
-        let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
-            Rekey::Install(request, protection) => match self.begin_group_change(request.group()) {
-                Ok(ActionProgress::Transition) => {
-                    if let (Some(management), Some(igtk)) = (&mut rsn.management, request.igtk()) {
-                        management.install_igtk(igtk);
-                    }
-                    rsn.rekey = match rsn.supplicant.complete_group_key_install(request, true) {
-                        Ok(frame) => Rekey::Send(EapolResponse { frame, protection }),
-                        Err(_) => return Some(Err(StaDisconnectReason::HandshakeFailed)),
-                    };
-                    return self.owe_rekey(connected, pairwise_purpose);
-                }
-                Ok(ActionProgress::Action(owed)) => {
-                    (Rekey::AwaitInstalled(request, protection), Some(owed))
-                }
-                Ok(ActionProgress::Wait) => (Rekey::Install(request, protection), None),
-                Err(()) => return Some(Err(StaDisconnectReason::HandshakeFailed)),
-            },
-            Rekey::Send(message)
-                if !connected.sending && self.link_up(&connected.power, &self.keys) =>
-            {
-                let qos = connected.qos.then_some(&mut connected.qos_sequences);
-                match self.encode_eapol_response(
-                    connected.bssid,
-                    qos,
-                    &message,
-                    if message.frame.key_frame().message()
-                        == oer_ieee80211_rsn::EapolKeyMessage::PairwiseMessage4
-                    {
-                        pairwise_purpose
-                    } else {
-                        TxPurpose::Connected(Sending::GroupResponse)
-                    },
-                ) {
-                    Ok(owed) => {
-                        connected.sending = true;
-                        (Rekey::AwaitSent, Some(owed))
-                    }
-                    Err(Unsent::NoTokens) => (Rekey::Send(message), None),
-                    Err(Unsent::Encode) => return Some(Err(StaDisconnectReason::Encode)),
-                    Err(Unsent::NoConnection) => {
-                        return Some(Err(StaDisconnectReason::TransmitRefused(
-                            TxRefusal::LinkChanged,
-                        )));
+        // Only a completed install repeats; it becomes Send, so there are at most two iterations.
+        loop {
+            let rsn = connected.rsn.as_mut()?;
+            let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
+                Rekey::Install(request, protection) => {
+                    match self.begin_group_change(request.group()) {
+                        Ok(ActionProgress::Transition) => {
+                            if let Err(reason) = rsn.complete_install(request, protection) {
+                                return Some(Err(reason));
+                            }
+                            continue;
+                        }
+                        Ok(ActionProgress::Action(owed)) => {
+                            (Rekey::AwaitInstalled(request, protection), Some(owed))
+                        }
+                        Ok(ActionProgress::Wait) => (Rekey::Install(request, protection), None),
+                        Err(()) => return Some(Err(StaDisconnectReason::HandshakeFailed)),
                     }
                 }
-            }
-            rekey => (rekey, None),
-        };
-        rsn.rekey = rekey;
-        owed.map(Ok)
+                Rekey::Send(message)
+                    if !connected.sending && self.link_up(&connected.power, &(*self.keys)) =>
+                {
+                    let qos = connected.qos.then_some(&mut connected.qos_sequences);
+                    match self.encode_eapol_response(
+                        connected.bssid,
+                        qos,
+                        &message,
+                        if message.frame.key_frame().message()
+                            == oer_ieee80211_rsn::EapolKeyMessage::PairwiseMessage4
+                        {
+                            pairwise_purpose
+                        } else {
+                            TxPurpose::Connected(Sending::GroupResponse)
+                        },
+                    ) {
+                        Ok(owed) => {
+                            connected.sending = true;
+                            (Rekey::AwaitSent, Some(owed))
+                        }
+                        Err(Unsent::NoTokens) => (Rekey::Send(message), None),
+                        Err(Unsent::Encode) => return Some(Err(StaDisconnectReason::Encode)),
+                        Err(Unsent::NoConnection) => {
+                            return Some(Err(StaDisconnectReason::TransmitRefused(
+                                TxRefusal::LinkChanged,
+                            )));
+                        }
+                    }
+                }
+                rekey => (rekey, None),
+            };
+            rsn.rekey = rekey;
+            return owed.map(Ok);
+        }
     }
 
     /// The background scan's action, or a Null the access point is owed.
@@ -5048,7 +5366,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         }
                     }
                     Some(channel)
-                        if self.absence_place.is_some() && matches!(self.lease, Held::Lease(_)) =>
+                        if self.absence_place.is_some()
+                            && matches!(*self.lease, Held::Lease(_)) =>
                     {
                         owed = self.absence_place.take().map(|place| {
                             Owed::Absence(
@@ -5189,7 +5508,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         Ok(transmit)
     }
 
-    fn owe_join(&mut self, mut join: Join<T, K>, now: Instant) -> ActionStep<'id, T, K> {
+    #[inline(never)]
+    fn owe_join(&mut self, join: &mut Join<T, K>, now: Instant) -> ActionStep<'id, T, K> {
         let connect = ChannelRequest {
             channel: join.channel,
             purpose: Purpose::Connect,
@@ -5224,7 +5544,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                             authentication,
                             transmission,
                         };
-                        return (State::Join(join), ActionProgress::Wait);
+                        return (Change::Keep, ActionProgress::Wait);
                     }
                     Err(Unsent::Encode) => {
                         return (
@@ -5280,7 +5600,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     Ok(credit) => credit,
                     Err(Unsent::NoTokens) => {
                         join.step = JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
-                        return (State::Join(join), ActionProgress::Wait);
+                        return (Change::Keep, ActionProgress::Wait);
                     }
                     Err(Unsent::Encode) => {
                         return (
@@ -5297,7 +5617,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         );
                     }
                 };
-                let (runtime, attempt) = runtime.begin_attempt(&mut self.sequence);
+                let (runtime, attempt) = runtime.begin_attempt(&mut (*self.sequence));
                 let bssid = join.access_point.bssid;
                 let address = self.config.address;
                 let encoded = self.encode_reserved(
@@ -5348,7 +5668,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     Ok(credit) => credit,
                     Err(Unsent::NoTokens) => {
                         join.step = JoinStep::Associate(runtime, key);
-                        return (State::Join(join), ActionProgress::Wait);
+                        return (Change::Keep, ActionProgress::Wait);
                     }
                     Err(Unsent::Encode) => {
                         return (
@@ -5365,7 +5685,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         );
                     }
                 };
-                match runtime.poll(now, &mut self.sequence) {
+                match runtime.poll(now, &mut (*self.sequence)) {
                     StaAssociationPoll::Transmit { runtime, attempt } => {
                         let capabilities = self.config.association;
                         let phy = self.config.phy;
@@ -5450,7 +5770,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     Some(edca) => (next, Some(Owed::SetEdca(edca))),
                     None => {
                         join.step = next;
-                        return (State::Join(join), ActionProgress::Transition);
+                        return (Change::Keep, ActionProgress::Transition);
                     }
                 }
             }
@@ -5465,43 +5785,34 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             step => (step, None),
         };
         join.step = step;
-        (State::Join(join), owed.into())
+        (Change::Keep, owed.into())
     }
 
     /// The associated station: its handshake, or, on an open network,
     /// connected.
+    #[inline(never)]
     fn joined(
         &mut self,
-        join: Join<T, K>,
+        join: &mut Join<T, K>,
         association_id: u16,
         peer: Peer<T::RxMeta>,
         key: AssociationKey,
         now: Instant,
-    ) -> State<T, K> {
+    ) -> Change<T, K> {
         let bssid = join.access_point.bssid;
         let channel = join.channel;
         let qos = !join.access_point.wmm_ie_bytes().is_empty();
         let pmk = match key {
             AssociationKey::Protected(pmk) => pmk,
             AssociationKey::Open => {
-                return State::Connected(Connected {
+                return Change::Establish(NewConnection {
                     bssid,
                     channel,
                     association_id,
                     qos,
                     peer,
                     qos_sequences: QOS_SEQUENCES,
-                    report: Some(UpstreamFact::Connected(channel)),
-                    edca: false,
-                    exchange: false,
-                    power: PowerSaveView::Awake,
-                    wake: false,
-                    sending: false,
-                    block_ack: None,
-                    waking: false,
-                    background: None,
-                    connected_notice: true,
-                    rsn: None,
+                    confirmation: None,
                 });
             }
         };
@@ -5525,7 +5836,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             join.access_point.rsnxe_bytes(),
         );
         match supplicant {
-            Ok(supplicant) => State::Handshake(Handshake {
+            Ok(supplicant) => Change::Handshake(NewHandshake {
                 spp: match join.rsn.security() {
                     AssociationSecurity::Rsn(rsn) => rsn.spp,
                     AssociationSecurity::Open => {
@@ -5537,11 +5848,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 association_id,
                 qos,
                 peer,
-                supplicant,
+                supplicant: Some(supplicant),
                 pmk,
                 qos_sequences: QOS_SEQUENCES,
                 deadline,
-                step: HandshakeStep::Await,
                 management: None,
             }),
             _ => leave_keyed(
@@ -5751,66 +6061,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             StaRatePlan::Management,
         )?)
     }
-
-    /// When the station next needs a [`StaInput::Tick`], even without an
-    /// event.
-    pub fn poll_deadline(&self) -> Option<Instant> {
-        match &self.state {
-            State::Join(Join {
-                step:
-                    JoinStep::Authenticate(Authenticate::Exchange {
-                        stage: AuthStage::AwaitResponse { until },
-                        ..
-                    }),
-                ..
-            }) => Some(*until),
-            State::Join(Join {
-                step: JoinStep::Associate(runtime, _),
-                ..
-            }) => {
-                if self.tickets.is_empty() || self.buffers.is_empty() {
-                    Some(runtime.response_deadline())
-                } else {
-                    Some(runtime.next_deadline())
-                }
-            }
-            State::Join(Join {
-                step: JoinStep::SaeSend { authentication, .. } | JoinStep::SaeAwait(authentication),
-                ..
-            }) => Some(authentication.next_deadline()),
-            State::Join(Join {
-                step: JoinStep::RetryAt(at),
-                ..
-            }) => Some(*at),
-            State::Handshake(Handshake { deadline, .. }) => Some(deadline.deadline()),
-            State::Confirming(Confirming { deadline, .. }) => Some(deadline.deadline()),
-            State::Connected(connected) => {
-                let background =
-                    connected
-                        .background
-                        .as_ref()
-                        .and_then(|background| match background.step {
-                            BackgroundStep::HomeProbe { until }
-                            | BackgroundStep::HomeListen { until } => Some(until),
-                            _ => None,
-                        });
-                let management = connected
-                    .rsn
-                    .as_ref()
-                    .and_then(|rsn| rsn.management.as_ref())
-                    .and_then(|management| {
-                        management.deadline(
-                            connected.sending
-                                || self.tickets.is_empty()
-                                || self.buffers.is_empty()
-                                || !self.link_up(&connected.power, &self.keys),
-                        )
-                    });
-                crate::time::earliest(background, management)
-            }
-            _ => None,
-        }
-    }
 }
 
 /// The network's receive rules of `filter` for `bssid`.
@@ -5830,14 +6080,12 @@ fn association_failure(failure: StaAssociationFailure) -> StaDisconnectReason {
     }
 }
 
-fn leave_unkeyed<T: StaTokens, K>(reason: StaDisconnectReason) -> State<T, K> {
-    State::Leave(Leave {
+fn leave_unkeyed<T: StaTokens, K>(reason: StaDisconnectReason) -> Change<T, K> {
+    Change::Leave {
         reason,
         step: LeaveStep::NeedConfigure,
-        deferred: DeferredEapol::Empty,
-    })
+    }
 }
-
 fn leave_key_step(deauthentication: Option<Deauthentication>) -> LeaveStep {
     match deauthentication {
         Some(deauthentication) if deauthentication.protected => {
@@ -5846,23 +6094,16 @@ fn leave_key_step(deauthentication: Option<Deauthentication>) -> LeaveStep {
         other => LeaveStep::RemoveKeys(other),
     }
 }
-
-/// Leave with key removal terminals. A protected Deauthentication must end
-/// before the pairwise key can be removed.
 fn leave_keyed<T: StaTokens, K>(
     reason: StaDisconnectReason,
     deauthentication: Option<Deauthentication>,
-) -> State<T, K> {
-    State::Leave(Leave {
+) -> Change<T, K> {
+    Change::Leave {
         reason,
         step: leave_key_step(deauthentication),
-        deferred: DeferredEapol::Empty,
-    })
+    }
 }
-
-/// A failed handshake: the keys, then a Deauthentication with
-/// `reason_code`.
-fn leave_handshake<T: StaTokens, K>(handshake: Handshake<T, K>, reason_code: u16) -> State<T, K> {
+fn leave_handshake<T: StaTokens, K>(handshake: &Handshake<T, K>, reason_code: u16) -> Change<T, K> {
     let reason = if reason_code == REASON_LEAVING {
         StaDisconnectReason::Requested
     } else {
@@ -5877,170 +6118,69 @@ fn leave_handshake<T: StaTokens, K>(handshake: Handshake<T, K>, reason_code: u16
         }),
     )
 }
-
-/// Leave after the absence ends. PMF keeps the pairwise key until the
-/// Deauthentication terminal; every key slot then returns before receive-off.
 fn leave_connected<T: StaTokens, K>(
-    connected: Connected<T, K>,
+    connected: &Connected<T, K>,
     reason: StaDisconnectReason,
     reason_code: Option<u16>,
-) -> State<T, K> {
+) -> Change<T, K> {
     let bssid = connected.bssid;
     let protected = connected
         .rsn
         .as_ref()
         .is_some_and(|rsn| rsn.management.is_some());
-    let deferred = match connected.rsn {
-        Some(rsn) => rsn.deferred,
-        None => DeferredEapol::Empty,
-    };
-    State::Leave(Leave {
+    Change::Leave {
         reason,
-        deferred,
         step: LeaveStep::AwaitAbsenceEnd(reason_code.map(|reason_code| Deauthentication {
             bssid,
             reason_code,
             protected,
         })),
-    })
+    }
 }
-
-#[inline(never)]
-fn leave_disabled<T: StaTokens, K>(connected: Connected<T, K>) -> State<T, K> {
-    State::Leave(Leave {
+fn leave_disabled<T: StaTokens, K>(_connected: &Connected<T, K>) -> Change<T, K> {
+    Change::Leave {
         reason: StaDisconnectReason::TransmitRefused(TxRefusal::LinkChanged),
         step: LeaveStep::Disabled,
-        deferred: match connected.rsn {
-            Some(rsn) => rsn.deferred,
-            None => DeferredEapol::Empty,
-        },
-    })
+    }
 }
-
-fn finish_connected_install<T: StaTokens, K>(mut connected: Connected<T, K>) -> State<T, K> {
-    if let Some(mut rsn) = connected.rsn {
-        rsn.rekey = match rsn.rekey {
+#[inline(never)]
+fn finish_connected_install<T: StaTokens, K>(connected: &mut Connected<T, K>) {
+    if let Some(rsn) = connected.rsn.as_mut() {
+        let rekey = core::mem::replace(&mut rsn.rekey, Rekey::None);
+        match rekey {
             Rekey::AwaitInstalled(request, protection) => {
-                if let (Some(management), Some(igtk)) = (&mut rsn.management, request.igtk()) {
-                    management.install_igtk(igtk);
-                }
-                match rsn.supplicant.complete_group_key_install(request, true) {
-                    Ok(frame) => Rekey::Send(EapolResponse { frame, protection }),
-                    Err(_) => {
-                        rsn.dropped.increment();
-                        Rekey::None
-                    }
+                if rsn.complete_install(request, protection).is_err() {
+                    rsn.dropped.increment();
                 }
             }
-            rekey => rekey,
-        };
-        connected.rsn = Some(rsn);
+            rekey => rsn.rekey = rekey,
+        }
     }
-    State::Connected(connected)
 }
 
 fn finish_handshake_install<T: StaTokens, K>(
-    mut handshake: Handshake<T, K>,
+    handshake: &mut Handshake<T, K>,
     request: RsnStaRetryInstall,
     replay: CcmpRxReplayEpoch,
     protection: EapolProtection,
-) -> State<T, K> {
+) -> Change<T, K> {
     if let (Some(management), Some(igtk)) = (&mut handshake.management, request.igtk()) {
         management.install_igtk(igtk);
     }
     match handshake
-        .supplicant
+        .supplicant()
         .complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY>(request, true)
     {
-        Ok(RsnStaReady::Transmit(message)) => confirm(
-            handshake,
+        Ok(RsnStaReady::Transmit(message)) => Change::Confirm {
             replay,
-            EapolResponse {
+            response: EapolResponse {
                 frame: message,
                 protection,
             },
-        ),
+        },
         _ => leave_handshake(handshake, REASON_UNSPECIFIED),
     }
 }
-
-/// Pairwise installation is consumed before this state is made. Every later
-/// M3 has only the connected supplicant's GTK authority, even before D4 opens
-/// application data.
-fn confirm<T: StaTokens, K>(
-    handshake: Handshake<T, K>,
-    replay: CcmpRxReplayEpoch,
-    response: EapolResponse,
-) -> State<T, K> {
-    let Handshake {
-        bssid,
-        channel,
-        association_id,
-        qos,
-        peer,
-        supplicant,
-        management,
-        qos_sequences,
-        deadline,
-        ..
-    } = handshake;
-    match supplicant.into_connected() {
-        Ok(supplicant) => State::Confirming(Confirming {
-            deadline,
-            connected: Connected {
-                bssid,
-                channel,
-                association_id,
-                qos,
-                peer,
-                qos_sequences,
-                report: None,
-                edca: false,
-                exchange: false,
-                power: PowerSaveView::Awake,
-                wake: false,
-                sending: false,
-                block_ack: None,
-                waking: false,
-                background: None,
-                connected_notice: false,
-                rsn: Some(ConnectedRsn {
-                    management,
-                    supplicant,
-                    replay,
-                    message4: DuplicateMessage4::Send(response),
-                    rekey: Rekey::None,
-                    deferred: DeferredEapol::Empty,
-                    dropped: crate::Counter::ZERO,
-                }),
-            },
-        }),
-        Err(_) => leave_keyed(
-            StaDisconnectReason::HandshakeFailed,
-            Some(Deauthentication {
-                bssid,
-                reason_code: REASON_UNSPECIFIED,
-                protected: management.is_some(),
-            }),
-        ),
-    }
-}
-
-/// Carry the original D4 deadline through a transition of the shared
-/// established-key exchange; failures already own their Leave state.
-fn still_confirming<T: StaTokens, K>(
-    state: State<T, K>,
-    deadline: RsnStaResponseDeadline,
-) -> State<T, K> {
-    match state {
-        State::Connected(connected) => State::Confirming(Confirming {
-            connected,
-            deadline,
-        }),
-        other => other,
-    }
-}
-
 /// Why a frame was not handed out.
 #[derive(Debug)]
 enum Unsent {

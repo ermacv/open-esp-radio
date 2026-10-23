@@ -164,7 +164,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 .await;
             CUSTODY_LIMIT.set(None);
             assert!(service.state.station.is_reclaiming());
-            let end = end_disabled(ended, custody);
+            let end = stop_disabled(ended, &custody).into_end(custody);
             let (owner, custody) = match end {
                 ServiceEnd::Failed {
                     owner,
