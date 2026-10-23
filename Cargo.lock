@@ -3681,6 +3681,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-family-wifi"
+version = "0.1.0"
+dependencies = [
+ "oer-hil-family-lower-mac",
+ "oer-hil-lab",
+ "oer-hil-link",
+ "oer-hil-model",
+ "oer-hil-protocol",
+ "oer-hil-scenario",
+ "oer-ieee80211-port",
+ "oer-lab-router",
+ "oer-os-durable",
+ "oer-os-process",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "oer-hil-fixtures-bluetooth"
 version = "0.1.0"
 dependencies = [

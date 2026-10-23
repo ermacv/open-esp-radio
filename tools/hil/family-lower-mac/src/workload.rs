@@ -122,7 +122,8 @@ fn traces_match(left: &Trace, right: &Trace) -> bool {
     )
 }
 
-fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
+/// Recompute the reference trace from the preparation's observed basic rates.
+pub fn model(case: Case, prepared: &Prepared, channel: u8) -> Result<Trace> {
     let rates = prepared
         .basic_rates
         .get(..usize::from(prepared.basic_rates_len))
