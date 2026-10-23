@@ -106,11 +106,11 @@ where
             let mut served = false;
             if let Some((request, responder)) = self.actor.inbox.take() {
                 // Same receiver/backend type as a Wi-Fi-only composition.
-                responder.answer(boundary::Boundary::new(self.actor.serve(request)).await);
+                responder.answer(boundary::shared(self.actor.serve(request)).await);
                 served = true;
             }
             if let Some((request, responder)) = self.inbox.take() {
-                responder.answer(boundary::Boundary::new(self.serve(request)).await);
+                responder.answer(boundary::shared(self.serve(request)).await);
                 served = true;
             }
             if served {

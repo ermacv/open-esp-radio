@@ -1,27 +1,33 @@
 //! Typed poll boundary shared independently of the set of actor clients.
-use core::{
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use core::future::Future;
+
+/// A Wi-Fi-only image keeps its original future type and poll path.
+#[cfg(not(feature = "bluetooth"))]
+pub(super) fn shared<F: Future>(future: F) -> F {
+    future
+}
+
+/// Attached clients reuse one concrete physical poll implementation.
+#[cfg(feature = "bluetooth")]
+pub(super) fn shared<F: Future>(future: F) -> impl Future<Output = F::Output> {
+    Boundary { future }
+}
+
+#[cfg(feature = "bluetooth")]
 pin_project_lite::pin_project! {
-    pub(super) struct Boundary<F> {
+    struct Boundary<F> {
         #[pin]
-        future:F,
+        future: F,
     }
 }
-impl<F> Boundary<F> {
-    pub(super) fn new(future: F) -> Self {
-        Self { future }
-    }
-}
+#[cfg(feature = "bluetooth")]
 impl<F: Future> Future for Boundary<F> {
     type Output = F::Output;
-    // Multiple client paths share one physical poll body. A Wi-Fi-only
-    // image has one caller and can inline the identical typed projection.
-    #[cfg_attr(feature = "bluetooth", inline(never))]
-    #[cfg_attr(not(feature = "bluetooth"), inline(always))]
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    #[inline(never)]
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
         self.project().future.poll(cx)
     }
 }

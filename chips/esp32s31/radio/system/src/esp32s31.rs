@@ -245,7 +245,7 @@ where
     O: PhyTargetObserver + Clone,
 {
     fn prepare(&mut self) -> impl core::future::Future<Output = Result<PhyPreparation, Fault>> {
-        crate::boundary::Boundary::new(self.prepare_rf())
+        crate::boundary::shared(self.prepare_rf())
     }
 
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
