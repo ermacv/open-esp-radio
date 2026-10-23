@@ -17,6 +17,7 @@ pub(in crate::interrupts) fn facts(address: u32, size: u32) -> FunctionFacts {
         observed: Some(0),
         complete: true,
         expression_limited: false,
+        limit_events: [0; 2],
         terminal_recursive_callees: false,
         target_loads: BTreeMap::new(),
         open_exit_target_loads: BTreeMap::new(),

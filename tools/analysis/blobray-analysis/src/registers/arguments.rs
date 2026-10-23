@@ -114,20 +114,16 @@ impl<'m> ArgumentProgram<'m> {
     }
 
     fn work<'c>(&self, c: &'c mut dyn RunControl, audit: bool) -> ReadWork<'c> {
-        // Audits have a separate 16x function allowance; all work still charges the operation.
-        let limit =
-            read_work_limit(self.instructions.len()).saturating_mul(if audit { 16 } else { 1 });
+        let scope = if audit {
+            LocalBudgetScope::SignatureAudit
+        } else {
+            LocalBudgetScope::ArgumentSummary
+        };
+        let limit = LocalLimit::of(scope).limit(self.instructions.len() as u64);
         ReadWork {
             caller: c,
             remaining: limit,
-            budget: LocalBudgetExceeded {
-                limit,
-                scope: if audit {
-                    LocalBudgetScope::SignatureAudit
-                } else {
-                    LocalBudgetScope::ArgumentSummary
-                },
-            },
+            budget: LocalBudgetExceeded { limit, scope },
             instruction_only: false,
         }
     }
@@ -250,6 +246,40 @@ impl<'m> ArgumentProgram<'m> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summary_and_audit_apply_the_reported_formulas() {
+        let report = AnalysisResources::new(
+            AnalysisProfile::BlobrayCli,
+            AnalysisProfile::BlobrayCli.limits(),
+            AnalysisUsage::default(),
+            AnalysisLimited::default(),
+        );
+        let memory = WorkingMemory::new(64 << 20).expect("working memory");
+        for instructions in [0, 1, 195, 196, 8192] {
+            let mut program = returning(&memory);
+            let instruction = *program.instructions.first().expect("return instruction");
+            program.instructions.truncate(0);
+            for _ in 0..instructions {
+                program
+                    .instructions
+                    .push(instruction, RunPosition::default())
+                    .expect("instruction recipe");
+            }
+            for audit in [false, true] {
+                let mut control = || Ok(());
+                let work = program.work(&mut control, audit);
+                let formula = report
+                    .limits
+                    .local
+                    .iter()
+                    .find(|limit| limit.scope == work.budget.scope)
+                    .expect("reported budget");
+                assert_eq!(work.budget.limit, formula.limit(instructions as u64));
+                assert_eq!(work.remaining, work.budget.limit);
+            }
+        }
+    }
 
     fn returning(memory: &WorkingMemory) -> ArgumentProgram<'_> {
         let mut instructions = AdmittedVec::new(memory);

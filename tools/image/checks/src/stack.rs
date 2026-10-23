@@ -34,7 +34,7 @@ use oer_analysis_riscv_stack::{
     image_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
 };
 
-use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
+use crate::stack::budget::{Budget, LIMITS};
 
 pub use coverage::{Coverage, CoverageCategory, CoveragePolicy, CoverageReview};
 use oer_chip_profile::policy::{StackPolicy, Storage, TaskStack};
@@ -108,7 +108,7 @@ pub struct Image {
     /// The chip's address map and interrupt contract, when it names them.
     pub contract: Option<Contract>,
     /// What the analysis used of its [`budget`].
-    pub usage: Usage,
+    pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
     /// Retained analysis and ELF allocations, reserved beside bound evidence.
     pub retained_bytes: u64,
     /// Chip selectors apply even when an image supplies its own stack layout.
@@ -186,8 +186,11 @@ impl Image {
         summaries: &[Summary],
         contract: Option<Contract>,
     ) -> Result<Self> {
-        let memory = WorkingMemory::new(MEMORY_LIMIT)?;
-        let mut control = Budget::new(WORK_UNITS, TIMEOUT);
+        let memory = WorkingMemory::new(LIMITS.working_memory_bytes)?;
+        let mut control = Budget::new(
+            LIMITS.work_units,
+            std::time::Duration::from_millis(LIMITS.timeout_ms),
+        );
         // The image's and its companions' bytes are the analysis's too: its
         // DWARF reads borrow them.
         let input = elf.len()
@@ -213,6 +216,7 @@ impl Image {
         let mut keep = Ledger::new(&memory, &mut control)?;
         let (dwarf, types) =
             read_debug(&elf, DebugMetadata::TypedLocations, &mut keep, &mut control)?;
+        let mut preliminary = BTreeMap::new();
         let traps = if let Some(contract) = &contract {
             let interrupts = &contract.interrupts;
             let mut proof = Ledger::new(&memory, &mut control)?;
@@ -237,6 +241,11 @@ impl Image {
                 &mut proof,
                 &mut control,
             )?;
+            for (&address, function) in &unknown.functions {
+                if function.limit_events != [0; 2] {
+                    preliminary.insert(address, function.limit_events);
+                }
+            }
             oer_analysis_riscv_stack::prove_traps(
                 &facts,
                 &unknown,
@@ -304,15 +313,21 @@ impl Image {
             dwarf,
             resolutions: Resolutions::new(),
             contract,
-            usage: Usage::default(),
+            resources: Box::new(budget::resources(0, 0, Default::default())),
             retained_bytes: 0,
             observed_functions: Vec::new(),
         };
         resolutions.extend(image.ipc_resolutions(&taken, &mut keep, &mut control)?);
-        image.usage = Usage {
-            memory_bytes: memory.peak(),
-            work_units: control.used(),
-        };
+        let mut limited = oer_analysis_riscv_model::AnalysisLimited::default();
+        for (&address, function) in &image.analysis.functions {
+            let first = preliminary.remove(&address).unwrap_or_default();
+            let limits = oer_analysis_riscv_model::FunctionLimits::value_events([
+                first[0] + function.limit_events[0],
+                first[1] + function.limit_events[1],
+            ]);
+            limited.function(&limits);
+        }
+        image.resources = Box::new(budget::resources(control.used(), memory.peak(), limited));
         image.resolutions = resolutions;
         image.retained_bytes = keep.bytes() + image.elf.len() as u64;
         Ok(image)
@@ -324,12 +339,18 @@ impl Image {
         &self,
         build: impl FnOnce(&mut Ledger<'_>, &mut Budget) -> Result<T>,
     ) -> Result<(T, u64)> {
-        let memory = WorkingMemory::new(MEMORY_LIMIT)?;
-        let mut control = Budget::new(WORK_UNITS, TIMEOUT);
+        let memory = WorkingMemory::new(LIMITS.working_memory_bytes)?;
+        let mut control = Budget::new(
+            LIMITS.work_units,
+            std::time::Duration::from_millis(LIMITS.timeout_ms),
+        );
         let _retained = memory.reserve(self.retained_bytes, control.position())?;
         let mut keep = Ledger::new(&memory, &mut control)?;
         let value = build(&mut keep, &mut control)?;
-        Ok((value, memory.peak().max(self.usage.memory_bytes)))
+        Ok((
+            value,
+            memory.peak().max(self.resources.usage.peak_admitted_bytes),
+        ))
     }
 
     /// The image's function that carries the symbol `name`.
@@ -423,7 +444,7 @@ pub struct StackAudit {
     pub coverage: Coverage,
     pub stacks: Vec<StackBound>,
     /// What the image's analysis used of its [`budget`].
-    pub usage: Usage,
+    pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
     pub witness_memory_peak: u64,
     /// Independent task roots, reported without changing the stack gate.
     pub task_bounds: Vec<Bound>,
@@ -532,7 +553,7 @@ impl StackAudit {
             traps: image.traps.clone(),
             coverage,
             stacks: bounds,
-            usage: image.usage,
+            resources: image.resources.clone(),
             witness_memory_peak,
             task_bounds,
         })
@@ -612,10 +633,15 @@ impl StackAudit {
     /// and unresolved sites.
     pub fn render(&self) -> String {
         let coverage = &self.coverage;
-        let mut out = format!(
-            "analysis: {} of {WORK_UNITS} work units, {} of {MEMORY_LIMIT} bytes of working memory\n",
-            self.usage.work_units, self.usage.memory_bytes
-        );
+        let mut resources = (*self.resources).clone();
+        if self.expression_limited_functions != 0 {
+            resources
+                .limited
+                .result(oer_analysis_riscv_model::LimitReason::LocalBudget(
+                    oer_analysis_riscv_model::LocalBudgetScope::FunctionExpressions,
+                ));
+        }
+        let mut out = budget::header(&resources, resources.usage.peak_admitted_bytes);
         if self.expression_limited_functions != 0 {
             let _ = writeln!(
                 out,

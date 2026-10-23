@@ -1,5 +1,27 @@
 use super::*;
 
+#[test]
+fn read_flow_uses_the_formula_written_in_the_report() {
+    let report = AnalysisResources::new(
+        AnalysisProfile::BlobrayCli,
+        AnalysisProfile::BlobrayCli.limits(),
+        AnalysisUsage::default(),
+        AnalysisLimited::default(),
+    );
+    let formula = report
+        .limits
+        .local
+        .iter()
+        .find(|limit| limit.scope == LocalBudgetScope::ReadFlow)
+        .expect("read-flow limit");
+    for instructions in [0, 1, 195, 196, 8192, usize::MAX] {
+        assert_eq!(
+            read_work_limit(instructions),
+            formula.limit(instructions as u64)
+        );
+    }
+}
+
 struct Decoder;
 impl FunctionDecoder for Decoder {
     fn identity(&self) -> &'static str {
@@ -336,7 +358,7 @@ fn a_large_straight_line_function_gets_a_size_proportional_budget() {
         )
         .expect("large straight line");
     assert!(
-        work > READ_MIN_FUNCTION_WORK,
+        work > read_work_limit(0),
         "fixture exceeds the old flat limit"
     );
     let result = reads

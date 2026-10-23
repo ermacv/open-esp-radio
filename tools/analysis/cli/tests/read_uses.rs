@@ -64,7 +64,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
     let mut by_name: BTreeMap<Vec<u8>, Vec<(u64, ReadUses)>> = BTreeMap::new();
     let mut functions = BTreeMap::new();
     let mut observations = Vec::new();
-    let summary = register_accesses(
+    let (summary, _) = register_accesses(
         &[Executable::new(fixture(include_str!(
             "fixtures/read_uses.rs"
         )))],
@@ -499,7 +499,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
         "call results carry no dependency on the previous argument"
     );
-    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 12);
+    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 13);
     assert!(
         oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
     );
@@ -762,7 +762,7 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
     source.push_str("\"#);\n");
     let mut observations = Vec::new();
     let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
-    let summary = register_accesses(
+    let (summary, _) = register_accesses(
         &[Executable::new(fixture(&source))],
         Assumptions {
             abi: Some(CallAbi::RiscvInteger),
@@ -1422,7 +1422,7 @@ caller:
         ] {
             let memory = WorkingMemory::new(64 << 20).unwrap();
             let mut found = None;
-            let summary = register_accesses(
+            let (summary, _) = register_accesses(
                 &inputs,
                 Assumptions {
                     abi: Some(CallAbi::RiscvInteger),
@@ -1492,7 +1492,7 @@ caller:
     let signatures = Signatures::parse(&sig("caller", 0, "void")).unwrap();
     let memory = WorkingMemory::new(64 << 20).unwrap();
     let mut found = None;
-    let summary = register_accesses(
+    let (summary, _) = register_accesses(
         &[Executable::new(code("lui t0, 0x20107\nlw a0, 0(t0)\nret"))],
         Assumptions {
             abi: Some(CallAbi::RiscvInteger),
@@ -1679,7 +1679,7 @@ ret
 "##,
     );
     let mut load = None;
-    let summary = register_accesses(
+    let (summary, _) = register_accesses(
         &[Executable::new(object)],
         Assumptions {
             abi: Some(CallAbi::RiscvInteger),
@@ -1749,7 +1749,7 @@ ret
     let signatures = Signatures::parse(&text).unwrap();
     let memory = WorkingMemory::new(64 << 20).unwrap();
     let mut observations = Vec::new();
-    let summary = register_accesses(
+    let (summary, _) = register_accesses(
         &[Executable::new(object.clone())],
         Assumptions {
             abi: Some(CallAbi::RiscvInteger),
@@ -1992,7 +1992,7 @@ bnez a0, 1f
             ..Default::default()
         };
         let mut observations = Vec::new();
-        let summary = register_accesses(
+        let (summary, _) = register_accesses(
             &inputs,
             assumptions,
             &[],
@@ -2165,7 +2165,7 @@ identity: ret
                 assert!(error.memory.is_some(), "{error:?}");
                 rejected = true;
             }
-            Ok(summary) => {
+            Ok((summary, _)) => {
                 assert!(summary.signature_audit_incomplete.is_empty());
                 assert_eq!(summary.signature_audit_incomplete_reasons.local_budget, 0);
                 let counts = summary.summary_outcomes;
@@ -2219,7 +2219,7 @@ source = "synthetic"
     let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
     let run = |names: &[String], abi| {
         let mut records = Vec::new();
-        let summary = register_accesses(
+        let (summary, _) = register_accesses(
             &inputs,
             Assumptions {
                 abi,

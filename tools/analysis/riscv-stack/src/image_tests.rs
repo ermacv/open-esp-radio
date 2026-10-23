@@ -22,6 +22,7 @@ fn observation(records: &[FunctionRecord]) -> Observation {
         depth: Some(0),
         complete: false,
         expression_limited: observer.expression_limited,
+        limit_events: [0; 2],
         resolved: observer.transfers,
         local_jumps: observer.unexpanded,
         site_depths: observer.site_depths,

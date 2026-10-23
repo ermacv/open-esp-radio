@@ -16,7 +16,7 @@ use oer_analysis_riscv_stack::{
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, WORK_UNITS};
+use crate::stack::budget::{Budget, LIMITS};
 use crate::stack::{ADMITTED, Image, contract::Contract};
 use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
@@ -34,6 +34,7 @@ pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
+    pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
     /// Each hart's actual linked storage, independently of the contract maximum.
     pub allocations: BTreeMap<u32, LinkedStack>,
     pub expression_limited_functions: usize,
@@ -345,7 +346,16 @@ impl InterruptStacks {
 
     fn render_report(&self, placement: Option<&InterruptPlacement>) -> String {
         let name = |address: u32| self.name(address);
-        let mut out = format!("{}\n", self.traps);
+        let mut resources = (*self.resources).clone();
+        if self.expression_limited_functions != 0 {
+            resources
+                .limited
+                .result(oer_analysis_riscv_model::LimitReason::LocalBudget(
+                    oer_analysis_riscv_model::LocalBudgetScope::FunctionExpressions,
+                ));
+        }
+        let mut out = crate::stack::budget::header(&resources, self.witness_memory_peak);
+        let _ = writeln!(out, "{}", self.traps);
         if self.expression_limited_functions != 0 {
             let _ = writeln!(
                 out,
@@ -524,8 +534,11 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
             .ok_or_else(|| format!("the runtime has no `{name}`").into())
     };
     let field = |(offset, size): (u32, u32)| Field { offset, size };
-    let memory = WorkingMemory::new(MEMORY_LIMIT)?;
-    let mut control = Budget::new(WORK_UNITS, TIMEOUT);
+    let memory = WorkingMemory::new(LIMITS.working_memory_bytes)?;
+    let mut control = Budget::new(
+        LIMITS.work_units,
+        std::time::Duration::from_millis(LIMITS.timeout_ms),
+    );
     let _retained = memory.reserve(image.retained_bytes, control.position())?;
     let mut keep = Ledger::new(&memory, &mut control)?;
     let facts = ImageFacts::new(elf, &[], &memory, &mut control)?;
@@ -631,13 +644,14 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         None => Vec::new(),
     };
     Ok(InterruptStacks {
+        resources: image.resources.clone(),
         allocations: allocation::read(
             &oer_analysis_elf::Elf::parse(elf)?,
             interrupts,
             &contract.memory,
         )?,
         expression_limited_functions: analysis.expression_limited_functions(),
-        witness_memory_peak: memory.peak().max(image.usage.memory_bytes),
+        witness_memory_peak: memory.peak().max(image.resources.usage.peak_admitted_bytes),
         traps: image.traps.clone(),
         harts,
         handlers,
@@ -858,12 +872,15 @@ mod tests {
     }
 
     pub(super) fn ledger() -> Ledger<'static> {
-        let memory = Box::leak(Box::new(WorkingMemory::new(MEMORY_LIMIT).unwrap()));
+        let memory = Box::leak(Box::new(
+            WorkingMemory::new(LIMITS.working_memory_bytes).unwrap(),
+        ));
         Ledger::new(memory, &mut || Ok(())).unwrap()
     }
 
     pub(super) fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
         InterruptStacks {
+            resources: Box::new(crate::stack::budget::resources(0, 0, Default::default())),
             allocations: BTreeMap::new(),
             expression_limited_functions: 0,
             witness_memory_peak: 0,
@@ -902,6 +919,7 @@ mod tests {
             bound,
         };
         InterruptStacks {
+            resources: Box::new(crate::stack::budget::resources(0, 0, Default::default())),
             allocations: BTreeMap::new(),
             expression_limited_functions: 0,
             witness_memory_peak: 0,
@@ -1008,6 +1026,7 @@ mod tests {
             observed: Some(0),
             complete: true,
             expression_limited: false,
+            limit_events: [0; 2],
             terminal_recursive_callees: false,
             target_loads: BTreeMap::new(),
             open_exit_target_loads: BTreeMap::new(),

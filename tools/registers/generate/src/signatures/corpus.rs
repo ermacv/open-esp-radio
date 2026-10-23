@@ -27,6 +27,7 @@ struct Site {
 }
 #[derive(Deserialize)]
 struct Document {
+    analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     schema: u32,
     inputs: Vec<Input>,
     abi: Option<String>,
@@ -140,7 +141,9 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
     let path = output.join("calls.json");
     fs::rename(partial, &path)?;
     let document: Document = serde_json::from_slice(&fs::read(path)?)?;
-    if document.schema != 6
+    if document.schema != 7
+        || document.analysis_resources.profile
+            != oer_analysis_riscv_model::AnalysisProfile::BlobrayCli
         || document.inputs != inputs
         || document.symbols != names
         || document.abi.as_deref() != Some("riscv-integer")

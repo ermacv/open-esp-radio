@@ -23,6 +23,29 @@ fn object(instruction: u32, size: u64) -> Executable {
 }
 
 #[test]
+fn operation_work_failure_returns_no_resource_marked_report() {
+    let memory = WorkingMemory::new(64 << 20).expect("working memory");
+    let mut control = crate::in_process::Limits::new(0, std::time::Duration::from_secs(60));
+    let mut emitted = 0;
+    let error = register_accesses(
+        &[object(0x0000_8067, 4)],
+        Assumptions::default(),
+        &[],
+        &oer_analysis_riscv_lift::RiscvDecoder,
+        &memory,
+        &mut control,
+        &mut |_, _| {
+            emitted += 1;
+            Ok(())
+        },
+    )
+    .expect_err("operation work guard");
+    assert_eq!(error.code, ErrorCode::ResourceLimited);
+    assert_eq!(emitted, 0);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
 fn all_three_queries_count_blocked_functions_gaps_and_partial_causes_identically() {
     let inputs = [
         object(0x0000_8067, 4),                         // ret: complete

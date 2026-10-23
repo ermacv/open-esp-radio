@@ -90,7 +90,7 @@ fn accesses(
     );
     let mut check =
         inventory::uses::Accumulator::new(chip, inputs, assumptions, regions, declared, arrays)?;
-    let summary = library::register_accesses(
+    let (summary, _) = library::register_accesses(
         executables,
         assumptions,
         &ranges,

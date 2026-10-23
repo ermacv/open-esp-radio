@@ -151,6 +151,7 @@ pub(crate) struct Observation {
     pub depth: Option<u64>,
     pub complete: bool,
     pub expression_limited: bool,
+    pub limit_events: [u64; 2],
     /// Transfers whose target the value analysis resolved.
     pub resolved: Vec<(u32, u32, TransferKind)>,
     /// Sites of indirect jumps whose targets the analysis found inside the
@@ -440,6 +441,7 @@ pub(crate) fn observing<R>(
         }
         Ok(Observation {
             expression_limited: observer.expression_limited,
+            limit_events: summary.limit_events,
             depth,
             complete,
             resolved: observer.transfers,

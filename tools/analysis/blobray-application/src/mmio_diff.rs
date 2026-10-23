@@ -230,12 +230,18 @@ fn collect<'m>(
     memory: &'m WorkingMemory,
     control: &mut dyn RunControl,
     admitted: &mut Vec<MemoryReservation<'m>>,
-) -> Result<(BTreeMap<String, Accesses>, u64, Vec<MmioGap>)> {
+) -> Result<(
+    BTreeMap<String, Accesses>,
+    u64,
+    Vec<MmioGap>,
+    AnalysisLimited,
+)> {
     let symbols = symbols(inputs, memory, control, admitted)?;
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
     let mut functions: BTreeMap<String, Accesses> = BTreeMap::new();
     let mut blocked = 0;
     let mut gaps = Vec::new();
+    let mut limited = AnalysisLimited::default();
     crate::library::analyze_library(
         inputs,
         assumptions,
@@ -244,6 +250,7 @@ fn collect<'m>(
         control,
         &mut |outcome, c| match outcome {
             crate::library::LibraryOutcome::Analyzed(analyzed) => {
+                let mut function_limits = analyzed.limits.clone();
                 let name = stable_name(analyzed.function.name.as_deref());
                 admit(memory, admitted, name.len() + size_of::<Accesses>(), c)?;
                 let entry = functions.entry(name).or_default();
@@ -303,7 +310,14 @@ fn collect<'m>(
                         }
                         Ok(())
                     },
-                )
+                )?;
+                for exhausted in flow.local_budget_exhaustion() {
+                    if exhausted {
+                        function_limits.event(LimitReason::LocalBudget(LocalBudgetScope::ReadFlow));
+                    }
+                }
+                limited.function(&function_limits);
+                Ok(())
             }
             crate::library::LibraryOutcome::Blocked { function, .. } => {
                 blocked += 1;
@@ -338,7 +352,7 @@ fn collect<'m>(
             format!("the {build} build has no analyzed function: {why}"),
         ));
     }
-    Ok((functions, blocked, gaps))
+    Ok((functions, blocked, gaps, limited))
 }
 
 /// The bytes one access holds: itself, its stored runs and the names of
@@ -509,7 +523,7 @@ pub fn mmio_diff(
     decoder: &dyn FunctionSemantics,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
-) -> Result<MmioDiff> {
+) -> Result<(MmioDiff, AnalysisLimited)> {
     crate::registers::validate_ranges(ranges)?;
     if ranges.is_empty() {
         return Err(Error::new(
@@ -518,7 +532,7 @@ pub fn mmio_diff(
         ));
     }
     let mut admitted = Vec::new();
-    let (mut before, blocked_before, gaps_before) = collect(
+    let (mut before, blocked_before, gaps_before, mut limited) = collect(
         "old",
         old,
         assumptions,
@@ -528,7 +542,7 @@ pub fn mmio_diff(
         control,
         &mut admitted,
     )?;
-    let (mut after, blocked_after, gaps_after) = collect(
+    let (mut after, blocked_after, gaps_after, after_limits) = collect(
         "new",
         new,
         assumptions,
@@ -538,6 +552,7 @@ pub fn mmio_diff(
         control,
         &mut admitted,
     )?;
+    limited.merge(&after_limits);
     let with_accesses = |map: &BTreeMap<String, Accesses>| {
         map.values().filter(|f| !f.accesses.is_empty()).count() as u64
     };
@@ -616,14 +631,17 @@ pub fn mmio_diff(
         });
     }
     admit(memory, &mut admitted, size_of_val(ranges), control)?;
-    Ok(MmioDiff {
-        ranges: ranges.to_vec(),
-        functions,
-        changes,
-        uncertain,
-        blocked: [blocked_before, blocked_after],
-        gaps: [gaps_before, gaps_after],
-    })
+    Ok((
+        MmioDiff {
+            ranges: ranges.to_vec(),
+            functions,
+            changes,
+            uncertain,
+            blocked: [blocked_before, blocked_after],
+            gaps: [gaps_before, gaps_after],
+        },
+        limited,
+    ))
 }
 
 #[cfg(test)]

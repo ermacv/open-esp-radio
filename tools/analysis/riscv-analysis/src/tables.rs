@@ -127,6 +127,7 @@ pub fn research_following_tables_with_options<'m, S: JumpTableSource + ?Sized>(
     let mut followed = ProvenTables::none(memory);
     let mut records = RecordBuffer::new(memory);
     let mut summary = pass(known, control, &mut Buffer(&mut records))?;
+    let mut events = summary.limit_events;
     loop {
         let found = source.tables(&records, input.extent, memory, control)?;
         let keeps = followed
@@ -137,11 +138,16 @@ pub fn research_following_tables_with_options<'m, S: JumpTableSource + ?Sized>(
             for record in records.iter() {
                 sink.record(record, control)?;
             }
+            summary.limit_events = events;
             return Ok((summary, followed));
         }
         if !keeps {
             drop(records);
-            let summary = pass(known, control, sink)?;
+            let mut summary = pass(known, control, sink)?;
+            for (total, new) in events.iter_mut().zip(summary.limit_events) {
+                *total += new;
+            }
+            summary.limit_events = events;
             return Ok((summary, ProvenTables::none(memory)));
         }
         // The pass's jumps: the source's reservations admit its tables'
@@ -159,5 +165,8 @@ pub fn research_following_tables_with_options<'m, S: JumpTableSource + ?Sized>(
         followed = found;
         records = RecordBuffer::new(memory);
         summary = pass(&jumps, control, &mut Buffer(&mut records))?;
+        for (total, new) in events.iter_mut().zip(summary.limit_events) {
+            *total += new;
+        }
     }
 }

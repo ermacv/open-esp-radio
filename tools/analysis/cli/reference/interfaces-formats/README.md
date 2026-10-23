@@ -56,14 +56,14 @@ schema.
 
 | Document | Schema | Shape |
 | --- | --- | --- |
-| `register-accesses` | `REGISTER_ACCESSES_SCHEMA` 11 | `{schema, inputs, abi, call_summaries, read_only, records, groups?, summary}`, records streamed; `groups` only with `--group-by`; a store observation carries `stored`, a load its typed bit classes in `reads` (`uses`, `unknown`, `preserved`, `unused`); a `call-argument` sink carries nullable `callee: {address, function, name}`; an unresolved observation carries its `indexed` progression when it has one; `summary` (its own `schema` 4) carries `partial_causes`, `indexed_addresses` both `contract_narrowed_bits` / `contract_may_narrowed_bits`, all `signature_conflicts` and `signature_audit_incomplete` |
-| `function-records` | `FUNCTION_RECORDS_SCHEMA` 10 | `{schema, inputs, abi, call_summaries, read_only, functions, missing}`; an analyzed function carries every record of its analysis (a table dispatch as a `dispatch` record: `{offset, base, index, scale, displacement}`) and `jump_tables` it followed: tagged `table` with ordered `entries`/`first_case`, or `target-set` with `targets` and no index mapping |
-| `mmio-diff` | `MMIO_DIFF_SCHEMA` 5 | `{schema, old, new, abi, call_summaries, read_only, ranges, functions, changes, uncertain, blocked, gaps}`, each gap `{input, object, reason}`; each uncertain function `{function, state, complete}`; each change `{function, state, complete, removed, added, unresolved}`, `state` the old and new build's `analyzed`, `blocked` or `absent`, an access `{location, operation, width?, mask?, reads?, stored?}`, a load's `reads` masks `{used, preserved, unknown, unused}` omit sinks and limit reasons; a stored run `{low, width, source}` with `source` `constant` (`{value, symbol?: {name, offset}}`), `entry-register`, `load` or `unknown` |
-| `field-accesses` | `FIELD_ACCESSES_SCHEMA` 6 | `{schema, inputs, abi, call_summaries, read_only, offset, width, functions, blocked, partial, partial_causes, gaps, unknown_addresses}` |
-| `callers` | `CALLERS_SCHEMA` 5 | `{schema, inputs, abi, call_summaries, read_only, symbols, callers, stored, scan, functions, blocked, partial, partial_causes, gaps}`; references carry `kind`, `destination`, `relocation_kind`, `alternatives`, `offset` and `site`; `stored` carries candidate `stored-word` / `materialized` records, never call proof |
-| `call-arguments` | `CALL_ARGUMENTS_SCHEMA` 6 | `{schema, inputs, abi, call_summaries, read_only, symbols, callers, blocked, partial, partial_causes, gaps}`; each site carries `kind`, `destination` and `alternatives` alongside `offset`, `target`, `arguments` |
-| `symbols` | `SYMBOLS_SCHEMA` 1 | `{schema, inputs, symbols}` |
-| `strings` | `STRINGS_SCHEMA` 1 | `{schema, inputs, strings}` |
+| `register-accesses` | `REGISTER_ACCESSES_SCHEMA` 13 | `{schema, analysis_resources, inputs, abi, call_summaries, read_only, records, groups?, summary}`, records streamed; `groups` only with `--group-by`; a store observation carries `stored`, a load its typed bit classes in `reads` (`uses`, `unknown`, `preserved`, `unused`); a `call-argument` sink carries nullable `callee: {address, function, name}`; an unresolved observation carries its `indexed` progression when it has one; `summary` (its own `schema` 4) carries `partial_causes`, `indexed_addresses` both `contract_narrowed_bits` / `contract_may_narrowed_bits`, all `signature_conflicts` and `signature_audit_incomplete` |
+| `function-records` | `FUNCTION_RECORDS_SCHEMA` 11 | `{schema, analysis_resources, inputs, abi, call_summaries, read_only, functions, missing}`; an analyzed function carries every record of its analysis (a table dispatch as a `dispatch` record: `{offset, base, index, scale, displacement}`) and `jump_tables` it followed: tagged `table` with ordered `entries`/`first_case`, or `target-set` with `targets` and no index mapping |
+| `mmio-diff` | `MMIO_DIFF_SCHEMA` 6 | `{schema, analysis_resources, old, new, abi, call_summaries, read_only, ranges, functions, changes, uncertain, blocked, gaps}`, each gap `{input, object, reason}`; each uncertain function `{function, state, complete}`; each change `{function, state, complete, removed, added, unresolved}`, `state` the old and new build's `analyzed`, `blocked` or `absent`, an access `{location, operation, width?, mask?, reads?, stored?}`, a load's `reads` masks `{used, preserved, unknown, unused}` omit sinks and limit reasons; a stored run `{low, width, source}` with `source` `constant` (`{value, symbol?: {name, offset}}`), `entry-register`, `load` or `unknown` |
+| `field-accesses` | `FIELD_ACCESSES_SCHEMA` 7 | `{schema, analysis_resources, inputs, abi, call_summaries, read_only, offset, width, functions, blocked, partial, partial_causes, gaps, unknown_addresses}` |
+| `callers` | `CALLERS_SCHEMA` 6 | `{schema, analysis_resources, inputs, abi, call_summaries, read_only, symbols, callers, stored, scan, functions, blocked, partial, partial_causes, gaps}`; references carry `kind`, `destination`, `relocation_kind`, `alternatives`, `offset` and `site`; `stored` carries candidate `stored-word` / `materialized` records, never call proof |
+| `call-arguments` | `CALL_ARGUMENTS_SCHEMA` 7 | `{schema, analysis_resources, inputs, abi, call_summaries, read_only, symbols, callers, blocked, partial, partial_causes, gaps}`; each site carries `kind`, `destination` and `alternatives` alongside `offset`, `target`, `arguments` |
+| `symbols` | `SYMBOLS_SCHEMA` 2 | `{schema, analysis_resources, inputs, symbols}` |
+| `strings` | `STRINGS_SCHEMA` 2 | `{schema, analysis_resources, inputs, strings}` |
 | Linked image manifest | 4 | `ImageManifest` |
 | Execution request | `EXECUTION_SCHEMA` 25 | `ExecutionRequest` |
 | Errors | 1 | `{schema:1, error:{code, message, memory}}` on stderr |
@@ -90,3 +90,12 @@ cargo clippy --manifest-path tools/analysis/cli/Cargo.toml --workspace --all-tar
 ```
 
 Tests use synthetic binaries.
+
+Every CLI analysis document carries `analysis_resources` from the shared RV32
+model: the `blobray-cli` profile, effective operation limits (including CLI
+overrides), local-budget formulas, the value-alternative capacity, charged work,
+peak admitted bytes, typed-limit event counts, distinct affected functions and
+output records carrying a limit reason. `events_by_reason` also separates those
+three counts per reason. Filtering changes output counts, not analysis events.
+`unaccounted` lists limits without typed local provenance. An operation failure
+is an error on stderr, with no successful resource document.

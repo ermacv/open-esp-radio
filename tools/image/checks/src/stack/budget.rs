@@ -20,25 +20,36 @@
 use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, RunPosition};
 use std::time::{Duration, Instant};
 
-/// Working memory one image analysis may reserve.
-// The complete station + owned IP stack needs room beside the pinned ROM
-// analysis; this caps host working memory, independently of image RAM.
-pub const MEMORY_LIMIT: u64 = 1024 << 20;
-/// Work units one image analysis may charge.
-pub const WORK_UNITS: u64 = 1_000_000_000;
-/// Wall-clock time one image analysis may take.
-pub const TIMEOUT: Duration = Duration::from_secs(5 * 60);
+pub const LIMITS: oer_analysis_riscv_model::OperationLimits =
+    oer_analysis_riscv_model::AnalysisProfile::ImageChecks.limits();
+
+pub fn resources(
+    work_units: u64,
+    peak_admitted_bytes: u64,
+    limited: oer_analysis_riscv_model::AnalysisLimited,
+) -> oer_analysis_riscv_model::AnalysisResources {
+    oer_analysis_riscv_model::AnalysisResources::new(
+        oer_analysis_riscv_model::AnalysisProfile::ImageChecks,
+        LIMITS,
+        oer_analysis_riscv_model::AnalysisUsage {
+            work_units,
+            peak_admitted_bytes,
+        },
+        limited,
+    )
+}
+
+pub fn header(resources: &oer_analysis_riscv_model::AnalysisResources, memory_peak: u64) -> String {
+    let mut resources = resources.clone();
+    resources.usage.peak_admitted_bytes = memory_peak;
+    format!(
+        "analysis_resources: {}\n",
+        serde_json::to_string(&resources).expect("resource provenance is JSON")
+    )
+}
 
 /// Checkpoints between wall-clock checks.
 const DEADLINE_INTERVAL: u32 = 256;
-
-/// What one image analysis used of its resources.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Usage {
-    /// The most working memory reserved at once, in bytes.
-    pub memory_bytes: u64,
-    pub work_units: u64,
-}
 
 /// The work units and deadline of one image analysis.
 pub struct Budget {

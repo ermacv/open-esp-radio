@@ -267,7 +267,7 @@ pub fn compare(
     let diff = |old: &Input, new: &[&Input], read_only: &[ReadOnlyWindow]| -> Result<Compared> {
         let memory = budget.memory()?;
         let mut control = budget.control();
-        let diff: MmioDiff = oer_analysis_blobray_application::mmio_diff::mmio_diff(
+        let (diff, _): (MmioDiff, _) = oer_analysis_blobray_application::mmio_diff::mmio_diff(
             &[Executable::new(old.bytes.clone())],
             &new.iter()
                 .map(|i| Executable::new(i.bytes.clone()))

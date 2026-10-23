@@ -882,7 +882,7 @@ pub(super) fn analyze(
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
-) -> Result<SemanticSummary> {
+) -> Result<(SemanticSummary, [u64; 2])> {
     // Unit fixtures supply decoded nodes directly and have no decode-gap
     // records. The production caller also accounts for those records.
     analyze_with(
@@ -922,7 +922,7 @@ pub(super) fn analyze_with<'m>(
     noreturn: &mut AdmittedVec<'_, u64>,
     closed_graph: bool,
     context: Option<&mut writes::context::ContextRun<'_, 'm>>,
-) -> Result<SemanticSummary> {
+) -> Result<(SemanticSummary, [u64; 2])> {
     let symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
     analyze_with_symbols(
         input,
@@ -962,7 +962,7 @@ fn analyze_with_symbols<'m, 's>(
     closed_graph: bool,
     context: Option<&mut writes::context::ContextRun<'_, 'm>>,
     mut symbols: Symbols<'s>,
-) -> Result<SemanticSummary> {
+) -> Result<(SemanticSummary, [u64; 2])> {
     control.phase(RunPhase::AnalyzeValues)?;
     let bytes_per_node = std::mem::size_of::<Option<State>>()
         + std::mem::size_of::<Operation>()
@@ -1483,7 +1483,10 @@ fn analyze_with_symbols<'m, 's>(
             control,
         )?;
     }
-    Ok(summary)
+    Ok((
+        summary,
+        [symbols.expression_limit_events, symbols.sets.limit_events],
+    ))
 }
 
 struct Symbols<'a> {
@@ -1499,19 +1502,16 @@ struct Symbols<'a> {
     memory: &'a WorkingMemory,
     limit: usize,
     exhausted: bool,
+    expression_limit_events: u64,
 }
 impl<'a> Symbols<'a> {
     fn new(nodes: usize, memory: &'a WorkingMemory, _c: &mut dyn RunControl) -> Result<Self> {
-        let limit = if nodes == 0 {
-            0
-        } else {
-            nodes
-                .checked_mul(8)
-                .and_then(|n| n.checked_add(32))
-                .ok_or_else(|| {
-                    Error::new(ErrorCode::ResourceLimited, "expression capacity overflow")
-                })?
-        };
+        let limit = LocalLimit::of(LocalBudgetScope::FunctionExpressions)
+            .checked_limit(nodes as u64)
+            .and_then(|limit| usize::try_from(limit).ok())
+            .ok_or_else(|| {
+                Error::new(ErrorCode::ResourceLimited, "expression capacity overflow")
+            })?;
         Ok(Self {
             symbolic_spills: false,
             memory_words: false,
@@ -1525,6 +1525,7 @@ impl<'a> Symbols<'a> {
             memory,
             limit,
             exhausted: false,
+            expression_limit_events: 0,
         })
     }
     fn expression(
@@ -1539,6 +1540,7 @@ impl<'a> Symbols<'a> {
             return Ok(Value::Expr(id));
         }
         if self.records.len() >= self.limit {
+            self.expression_limit_events += 1;
             self.exhausted = true;
             return Ok(Value::Unknown);
         }
@@ -2171,6 +2173,36 @@ fn returned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expression_capacity_applies_the_reported_formula_and_rejects_overflow() {
+        let report = AnalysisResources::new(
+            AnalysisProfile::BlobrayCli,
+            AnalysisProfile::BlobrayCli.limits(),
+            AnalysisUsage::default(),
+            AnalysisLimited::default(),
+        );
+        let formula = report
+            .limits
+            .local
+            .iter()
+            .find(|limit| limit.scope == LocalBudgetScope::FunctionExpressions)
+            .expect("expression formula");
+        let memory = WorkingMemory::new(1 << 20).expect("working memory");
+        for instructions in [0, 1, 195, 196, 8192] {
+            let symbols =
+                Symbols::new(instructions, &memory, &mut || Ok(())).expect("expression pool");
+            assert_eq!(
+                symbols.limit as u64,
+                formula
+                    .checked_limit(instructions as u64)
+                    .expect("capacity")
+            );
+        }
+        assert!(
+            matches!(Symbols::new(usize::MAX, &memory, &mut || Ok(())), Err(error) if error.code == ErrorCode::ResourceLimited)
+        );
+    }
     #[test]
     fn jalr_wraps_each_alternative_then_clears_its_low_bit() {
         let memory = WorkingMemory::new(1 << 20).unwrap();
@@ -2388,7 +2420,7 @@ mod tests {
             let mut symbols = Symbols::new(nodes.len(), &memory, &mut c).unwrap();
             symbols.limit = limit;
             let mut sink = Records::default();
-            let summary = analyze_with_symbols(
+            let (summary, events) = analyze_with_symbols(
                 &input,
                 &nodes,
                 &edges,
@@ -2408,6 +2440,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(summary.complete, !limited);
+            assert_eq!(events[0] > 0, limited);
             assert_eq!(
                 sink.0
                     .iter()
@@ -2570,7 +2603,7 @@ mod tests {
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
         let mut sink = Records::default();
-        let summary = analyze(
+        let (summary, _) = analyze(
             &input,
             &nodes,
             &edges,
@@ -2847,7 +2880,7 @@ mod tests {
             };
             let memory = WorkingMemory::new(1024 * 1024).unwrap();
             let mut sink = Records::default();
-            let summary = analyze_with(
+            let (summary, _) = analyze_with(
                 &input,
                 &nodes,
                 &edges,

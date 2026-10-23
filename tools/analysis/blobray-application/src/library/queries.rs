@@ -7,6 +7,7 @@ type Emit<'e, T> = dyn FnMut(&T, &mut dyn RunControl) -> Result<()> + 'e;
 /// Coverage of the whole query, independent of which functions matched.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct QuerySummary {
+    pub limited: AnalysisLimited,
     pub functions: u64,
     pub partial: u64,
     pub partial_causes: PartialCauses,
@@ -54,7 +55,7 @@ fn query(
     visit: &mut Visit<'_>,
 ) -> Result<QuerySummary> {
     let mut summary = QuerySummary::default();
-    analyze_library(
+    summary.limited = analyze_library(
         inputs,
         assumptions,
         decoder,

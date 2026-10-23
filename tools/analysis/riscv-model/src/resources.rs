@@ -1,6 +1,9 @@
 //! Cooperative resource ports. These contain no platform clock or process policy.
 use crate::*;
 
+mod report;
+pub use report::*;
+
 pub const DEFAULT_WORK_UNITS: u64 = 1_000_000_000;
 pub const WORK_BLOCK: usize = 4096;
 /// Wall-clock deadline of one operation.

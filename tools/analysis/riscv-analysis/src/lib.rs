@@ -54,6 +54,8 @@ pub struct KnownJump {
 }
 #[derive(Default)]
 pub struct AnalysisSummary {
+    /// Fresh expression-capacity and value-alternative limit events.
+    pub limit_events: [u64; 2],
     pub coverage: FunctionCoverage,
     pub instructions: u64,
     pub blocks: u64,
@@ -240,7 +242,16 @@ fn analyze_with<'m>(
         &noreturn,
         context,
     )
-    .map(|(summary, _)| summary)
+    .map(|(mut final_summary, _)| {
+        for (total, earlier) in final_summary
+            .limit_events
+            .iter_mut()
+            .zip(summary.limit_events)
+        {
+            *total += earlier;
+        }
+        final_summary
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -642,7 +653,7 @@ fn analyze_pass<'m>(
     // Every rejecting decode gap and every edge contributes to this result.
     // The later Unvisited records preserve closure under the shared contract.
     let closed_graph = sink.closed;
-    summary.semantics = values::analyze_with(
+    (summary.semantics, summary.limit_events) = values::analyze_with(
         input,
         &nodes,
         &edges,

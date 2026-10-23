@@ -14,6 +14,7 @@ pub use queries::{
 
 /// One analyzed function with its records, borrowed for a visit.
 pub struct AnalyzedFunction<'a> {
+    pub limits: FunctionLimits,
     pub function: &'a LibraryFunction,
     pub records: &'a [FunctionRecord],
     pub coverage: FunctionCoverage,
@@ -112,7 +113,14 @@ pub fn analyze_library(
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     visit: &mut Visit<'_>,
-) -> Result<()> {
+) -> Result<AnalysisLimited> {
+    let mut limited = AnalysisLimited::default();
+    let mut counted_visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| {
+        if let LibraryOutcome::Analyzed(a) = &outcome {
+            limited.function(&a.limits);
+        }
+        visit(outcome, c)
+    };
     assumptions.validate()?;
     if assumptions.call_summaries {
         let catalog = crate::registers::Callees::capture(inputs, memory, control)?;
@@ -132,7 +140,7 @@ pub fn analyze_library(
                         first_conflict = a.conflicts.first().map(SignatureConflict::description);
                     }
                 }
-                visit(outcome, c)
+                counted_visit(outcome, c)
             },
         )?;
         if conflict_count != 0 {
@@ -144,9 +152,17 @@ pub fn analyze_library(
                 ),
             ));
         }
-        Ok(())
+        Ok(limited)
     } else {
-        analyze_without_summaries(inputs, assumptions, decoder, memory, control, visit)
+        analyze_without_summaries(
+            inputs,
+            assumptions,
+            decoder,
+            memory,
+            control,
+            &mut counted_visit,
+        )?;
+        Ok(limited)
     }
 }
 
@@ -610,6 +626,7 @@ fn analyze_object(
             let mut references = AdmittedVec::new(memory);
             for function in &functions {
                 let mut records = RecordBuffer::new(memory);
+                let mut sink = Records(&mut records);
                 let researched = research_function(
                     prepared,
                     &mut references,
@@ -622,11 +639,12 @@ fn analyze_object(
                     decoder,
                     memory,
                     c,
-                    &mut Records(&mut records),
+                    &mut sink,
                 );
                 match researched {
                     Ok((summary, found)) => visit(
                         LibraryOutcome::Analyzed(AnalyzedFunction {
+                            limits: FunctionLimits::value_events(summary.limit_events),
                             function,
                             records: &records,
                             coverage: summary.coverage,
@@ -691,6 +709,23 @@ fn summary_failure(
     })
 }
 
+pub fn register_limit_reason(record: &RegisterAccess) -> Option<LimitReason> {
+    let reads = match record {
+        RegisterAccess::Observation { reads, .. } => reads.as_ref(),
+        RegisterAccess::CallResult { reads, .. } => Some(reads),
+        _ => None,
+    };
+    if reads.is_some_and(|r| {
+        r.unknown
+            .iter()
+            .any(|r| r.limit == ReadLimitKind::WorkLimit)
+    }) {
+        Some(LimitReason::LocalBudget(LocalBudgetScope::ReadFlow))
+    } else {
+        None
+    }
+}
+
 /// Every candidate memory address the functions `inputs` define access,
 /// inside `ranges` when it is nonempty, with blocked functions and gaps.
 pub fn register_accesses(
@@ -701,9 +736,10 @@ pub fn register_accesses(
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     emit: &mut dyn FnMut(&RegisterAccess, &mut dyn RunControl) -> Result<()>,
-) -> Result<RegisterAccessSummary> {
+) -> Result<(RegisterAccessSummary, AnalysisLimited)> {
     crate::registers::validate_ranges(ranges)?;
     let callees = crate::registers::Callees::capture(inputs, memory, control)?;
+    let mut limited = AnalysisLimited::default();
     let mut summary = RegisterAccessSummary {
         schema: 4,
         flow_local_budget_functions: 0,
@@ -730,6 +766,7 @@ pub fn register_accesses(
     let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
+            let mut function_limits = analyzed.limits.clone();
             if let Some(outcome) = analyzed.summary_outcome {
                 summary.summary_outcomes.record(outcome);
             }
@@ -766,6 +803,9 @@ pub fn register_accesses(
                 else {
                     continue;
                 };
+                if let Some(SummaryOutcome::LocalBudgetExceeded(budget)) = outcome {
+                    function_limits.result(&[LimitReason::LocalBudget(budget.scope)]);
+                }
                 conflict_memory.admit(
                     serde_json::to_vec(&failure)
                         .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
@@ -826,27 +866,37 @@ pub fn register_accesses(
                 summary.observations += 1;
                 summary.unresolved_addresses += u64::from(o.address.is_none());
                 summary.indexed_addresses += u64::from(o.indexed.is_some());
-                emit(
-                    &RegisterAccess::Observation {
-                        function: analyzed.function.clone(),
-                        record: o.record,
-                        fact: Box::new(o.fact.clone()),
-                        address: o.address,
-                        alternative: o.alternative,
-                        indexed: o.indexed,
-                        mask,
-                        stored,
-                        reads: reads.reads(o.fact, c)?,
-                    },
-                    c,
-                )
+                let observation = RegisterAccess::Observation {
+                    function: analyzed.function.clone(),
+                    record: o.record,
+                    fact: Box::new(o.fact.clone()),
+                    address: o.address,
+                    alternative: o.alternative,
+                    indexed: o.indexed,
+                    mask,
+                    stored,
+                    reads: reads.reads(o.fact, c)?,
+                };
+                if let Some(reason) = register_limit_reason(&observation) {
+                    function_limits.result(&[reason]);
+                }
+                emit(&observation, c)
             })?;
             reads.call_results(c, &mut |observation, c| {
                 summary.observations += 1;
+                if let Some(reason) = register_limit_reason(observation) {
+                    function_limits.result(&[reason]);
+                }
                 emit(observation, c)
             })?;
             let [read_limit, stored_limit] = reads.local_budget_exhaustion();
             summary.flow_local_budget_functions += u64::from(read_limit || stored_limit);
+            for exhausted in [read_limit, stored_limit] {
+                if exhausted {
+                    function_limits.event(LimitReason::LocalBudget(LocalBudgetScope::ReadFlow));
+                }
+            }
+            limited.function(&function_limits);
             let [direct, may] = reads.contract_narrowed_bits();
             summary.contract_narrowed_bits += direct;
             summary.contract_may_narrowed_bits += may;
@@ -892,7 +942,7 @@ pub fn register_accesses(
     } else {
         analyze_without_summaries(inputs, assumptions, decoder, memory, control, &mut visit)?;
     }
-    Ok(summary)
+    Ok((summary, limited))
 }
 
 #[cfg(test)]
@@ -974,6 +1024,7 @@ mod tests {
     ) -> Result<PartialCauses> {
         let function = function();
         AnalyzedFunction {
+            limits: FunctionLimits::default(),
             function: &function,
             records,
             coverage,

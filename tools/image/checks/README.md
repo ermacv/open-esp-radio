@@ -231,8 +231,9 @@ chain. The stack walk retains one predecessor at first discovery; a witness
 follows these parent links and is neither a shortest-path search nor the
 deepest stack path. Reporting does not traverse call edges again. Predecessor
 storage is admitted through `Ledger` beside the retained image analysis,
-using the existing memory limit. The new reports state the accounted peak
-with witnesses and the original image-analysis peak.
+using the existing memory limit. The reports carry `analysis_resources`, including the accounted peak with
+witnesses. Charged work describes the original image analysis; bounds retain
+their existing separate work/deadline guards.
 
 Schema 2 additionally records section classes (`code`, `read_only`, `writable`,
 `filler`), input-free filler ranges within sections, `NOBITS`, totals by class/memory, final binary sizes, and the
@@ -240,3 +241,14 @@ byte-verified embedded-runtime range in bootstrap. Net code excludes filler
 and that duplicate payload. Hole comparison uses the multiset of function,
 inline chain and reason; offsets order repeated sites. See the
 [comparison and refresh rules](../build/README.md#size-summaries-and-owner-thresholds).
+
+Stack and reachability text reports begin with one `analysis_resources` JSON
+line. The `image-checks` profile preserves 1 GiB admission, one billion work
+units and 300,000 ms per analysis budget. The line records effective limits,
+local formulas, charged image-analysis work, peak admitted bytes and typed-limit
+events/affected functions/output records. Preparation and final value passes
+contribute events while the same physical function counts once. Output counts
+cover explicit reasons, including the expression-limit summary line in stack
+reports; unknown bounds do not acquire an inferred resource cause. Limits
+without typed local reasons are named in `unaccounted`. These headers do not
+change stack bounds, holes, verdicts or allocated firmware stacks.

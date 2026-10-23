@@ -72,7 +72,7 @@ fn accesses_with(
     let memory = WorkingMemory::new(64 * 1024 * 1024).unwrap();
     let mut control = WorkBudget::new();
     let mut records = Vec::new();
-    let summary = register_accesses(
+    let (summary, _) = register_accesses(
         inputs,
         assumptions,
         ranges,

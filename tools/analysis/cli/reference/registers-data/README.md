@@ -244,14 +244,14 @@ with a reason and are nonfatal. Applicable contract audits remain distinct.
 No `noreturn` facts are inferred or added.
 The typed summary schema is 4.
 
-The register-access schema is 11.
+The register-access schema is 13.
 See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
 
 Human groups show the four classes, sinks, precision and reasons; observations
 with different `reads` remain separate entries. Write-replacement masks retain their expression meaning.
 Read selection comes only from the load's `reads` dataflow.
 
-The JSON document streams `{"schema":12,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+The JSON document streams `{"schema":13,"analysis_resources":{...},"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 `records` holds the selected records and `groups` appears only with
 `--group-by`.
 `inputs` lists each input's role and SHA-256. A record is an `observation` (the
