@@ -99,8 +99,8 @@ fn identical_sizes_ignore_commit_dirt_and_resource_use() {
     assert_eq!(compare(&a, &b).unwrap().0, Verdict::Same);
 }
 #[test]
-fn owner_boundaries_are_inclusive() {
-    for (growth, expected) in [(64, Verdict::Report), (65, Verdict::Stop)] {
+fn type_frame_and_bound_growth_is_reported_never_stopped() {
+    for growth in [64, 65, 4096] {
         for kind in ["type", "frame", "bound", "root maximum frame"] {
             let a = summary();
             let mut b = a.clone();
@@ -111,18 +111,25 @@ fn owner_boundaries_are_inclusive() {
                 "bound" => m.bounds.get_mut("cpu0").unwrap().bytes += growth,
                 _ => m.bounds.get_mut("cpu0").unwrap().maximum_frame += growth,
             }
-            assert_eq!(compare(&a, &b).unwrap().0, expected, "{kind} {growth}");
+            assert_eq!(
+                compare(&a, &b).unwrap().0,
+                Verdict::Report,
+                "{kind} {growth}"
+            );
         }
-    }
-    for (growth, expected) in [(1024, Verdict::Report), (1025, Verdict::Stop)] {
-        let a = summary();
-        let mut b = a.clone();
-        runtime(&mut b).sections.get_mut(".text").unwrap().bytes += growth;
-        assert_eq!(compare(&a, &b).unwrap().0, expected);
     }
 }
 #[test]
-fn ram_growth_is_checked_per_section_and_only_stack_growth_stops() {
+fn code_growth_is_reported_never_stopped() {
+    for growth in [1024, 1025, 2048] {
+        let a = summary();
+        let mut b = a.clone();
+        runtime(&mut b).sections.get_mut(".text").unwrap().bytes += growth;
+        assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report, "{growth}");
+    }
+}
+#[test]
+fn sram_section_and_allocated_stack_growth_stops() {
     let a = summary();
     let mut b = a.clone();
     let m = runtime(&mut b);
@@ -138,12 +145,12 @@ fn ram_growth_is_checked_per_section_and_only_stack_growth_stops() {
     }
 }
 #[test]
-fn equal_bound_and_hole_count_cannot_hide_a_different_hole() {
+fn a_new_hole_is_reported_and_an_equal_count_cannot_hide_a_different_one() {
     let a = summary();
     let mut b = a.clone();
     runtime(&mut b).bounds.get_mut("cpu0").unwrap().holes = BTreeSet::from([hole("new")]);
     let (verdict, _, shown) = compare(&a, &b).unwrap();
-    assert_eq!(verdict, Verdict::Stop);
+    assert_eq!(verdict, Verdict::Report);
     assert!(shown.contains("new hole: new+0x8"));
 }
 #[test]
@@ -204,7 +211,7 @@ fn code_growth_is_accumulated_across_elfs_and_sections() {
     a.elfs.insert("bootstrap".into(), a.elfs["runtime"].clone());
     b.elfs.insert("bootstrap".into(), second);
     runtime(&mut b).sections.get_mut(".text").unwrap().bytes += 600;
-    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Stop);
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
 }
 #[test]
 fn directory_comparison_is_read_only_and_reports_every_image() {
@@ -292,7 +299,7 @@ fn psram_code_and_read_only_data_share_the_net_code_budget() {
         for (growth, expected) in [
             (652, Verdict::Report),
             (1024, Verdict::Report),
-            (1025, Verdict::Stop),
+            (1025, Verdict::Report),
         ] {
             let mut a = summary();
             runtime(&mut a)
@@ -367,7 +374,7 @@ fn source_hole_identity_ignores_offsets_but_retains_chain_and_multiplicity() {
         ..moved.clone()
     };
     runtime(&mut changed).bounds.get_mut("cpu0").unwrap().holes = BTreeSet::from([h]);
-    assert_eq!(compare(&a, &changed).unwrap().0, Verdict::Stop);
+    assert_eq!(compare(&a, &changed).unwrap().0, Verdict::Report);
     runtime(&mut b)
         .bounds
         .get_mut("cpu0")
@@ -378,7 +385,7 @@ fn source_hole_identity_ignores_offsets_but_retains_chain_and_multiplicity() {
             ..moved
         });
     let (verdict, _, shown) = compare(&a, &b).unwrap();
-    assert_eq!(verdict, Verdict::Stop);
+    assert_eq!(verdict, Verdict::Report);
     assert_eq!(shown.matches("new hole:").count(), 1);
 }
 
@@ -427,7 +434,7 @@ fn embedded_runtime_is_counted_once_and_own_bootstrap_code_is_counted() {
         .bytes += 1025;
     assert_eq!(
         (compare(&a, &b).unwrap().0, compare(&a, &b).unwrap().1),
-        (Verdict::Stop, 1025)
+        (Verdict::Report, 1025)
     );
 }
 
@@ -555,4 +562,21 @@ fn refresh_accepts_a_new_output_tree_without_creating_it_on_input_error() {
         "{error}"
     );
     assert!(!output.exists());
+}
+
+#[test]
+fn an_interrupt_stack_grows_only_as_an_allocated_stack() {
+    let mut a = summary();
+    runtime(&mut a)
+        .allocated_stacks
+        .insert("irq hart 0".into(), 4096);
+    let mut b = a.clone();
+    runtime(&mut b)
+        .allocated_stacks
+        .insert("irq hart 0".into(), 4112);
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Stop);
+    runtime(&mut b)
+        .allocated_stacks
+        .insert("irq hart 0".into(), 4080);
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
 }

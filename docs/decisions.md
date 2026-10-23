@@ -470,6 +470,13 @@ bounds) live in the code that applies them.
   merge; a red main is fixed by whoever broke it.
 - **Review.** At most one AI review per pull request, only when the owner
   asks for it; its findings go into the pull request.
+- **Size budgets.** Growth of `.text` or `.rodata`, and of a type, future or
+  frame, is reported in the pull request's `cargo fw sizes` table and never
+  stops it; an image's code budget is reviewed when its milestone closes.
+  Growth of an SRAM section, an allocated task stack or an interrupt stack,
+  including type growth that grows one, stops the pull request until the
+  owner answers. A size or step-cost reduction is tasked only when a hard
+  limit or a timing contract (the PHY response bound) is reached.
 - **Documents** state the current state. Plans, work lists and notes live
   outside the repository.
 - **English** in the repository.
