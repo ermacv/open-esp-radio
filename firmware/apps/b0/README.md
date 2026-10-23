@@ -33,4 +33,5 @@ reclaims an interrupted event without counting it; naturally completed
 events count only valid received packets. Every DTM event restores the
 reviewed link-state policy before publication.
 
-Hardware port conformance is unqualified.
+The two-boot 1M RF/count gate is qualified on s31-a/c5-a. Hardware port
+conformance is unqualified.
