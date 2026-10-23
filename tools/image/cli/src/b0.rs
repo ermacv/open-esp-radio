@@ -77,6 +77,11 @@ impl<S: Read + Write> H4<S> {
     }
 }
 fn completion(event: &[u8], opcode: u16) -> Result<Vec<u8>> {
+    if let [4, 0x10, 1, code] = event {
+        return Err(
+            format!("Controller Hardware Error {code} while awaiting HCI {opcode:#06x}").into(),
+        );
+    }
     let [low, high] = opcode.to_le_bytes();
     if event.len() < 7
         || event.get(..2) != Some(&[4, 0x0e])
@@ -306,5 +311,42 @@ mod tests {
             assert!(completion(&bad, RESET).is_err());
         }
         assert!(completion(&good[..6], RESET).is_err());
+    }
+
+    #[test]
+    fn a_hardware_error_is_not_reported_as_a_command_timeout() {
+        let error = completion(&[4, 0x10, 1, 9], RAND).expect_err("physical clock failure");
+        assert!(error.to_string().contains("Hardware Error 9"));
+    }
+
+    #[test]
+    fn the_full_sram_limit_includes_alignment_between_owned_sections() {
+        let directory = tempfile::tempdir().expect("own image summaries");
+        let base = directory.path().join("base.json");
+        let head = directory.path().join("head.json");
+        let fixture = |gap| {
+            json!({"elfs":{"runtime":{
+            "totals":{"sram":{"code":16,"ram":48}},
+            "sections":{
+                ".text":{"memory":"sram","address":1000,"bytes":16},
+                ".irq_stacks":{"memory":"sram","address":1016+gap,"bytes":32}
+            }}}})
+        };
+        fs::write(
+            &base,
+            serde_json::to_vec(&fixture(0)).expect("base summary"),
+        )
+        .expect("write base");
+        for (gap, passed) in [(7360, true), (7361, false)] {
+            fs::write(
+                &head,
+                serde_json::to_vec(&fixture(gap)).expect("head summary"),
+            )
+            .expect("write head");
+            let report = sram_accounting(&base, &head).expect("full accounting");
+            assert_eq!(report["full_sram"], gap);
+            assert_eq!(report["alignment"], gap);
+            assert_eq!(report["passed"], passed);
+        }
     }
 }

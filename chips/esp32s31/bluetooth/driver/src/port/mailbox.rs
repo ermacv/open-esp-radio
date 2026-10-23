@@ -229,17 +229,24 @@ impl ClockClient for ClockEndpoint {
                     if let Some(cause) = state.fault {
                         return Poll::Ready(Err(Poisoned { cause }));
                     }
-                    if state.cancel.load(Ordering::Acquire) {
-                        return Poll::Ready(Err(Poisoned {
-                            cause: Fault::Abandoned,
-                        }));
-                    }
                     if state.epoch != request.epoch {
                         return Poll::Ready(Ok(Err(ClockError::Unavailable)));
                     }
-                    state
-                        .take_answer(cx)
-                        .map(|answer| answer.result.map(Ok).map_err(|cause| Poisoned { cause }))
+                    match state.take_answer(cx) {
+                        Poll::Ready(answer) => Poll::Ready(match answer.result {
+                            Err(cause) => Err(Poisoned { cause }),
+                            Ok(_) if state.cancel.load(Ordering::Acquire) => Err(Poisoned {
+                                cause: Fault::Abandoned,
+                            }),
+                            Ok(sample) => Ok(Ok(sample)),
+                        }),
+                        Poll::Pending if state.cancel.load(Ordering::Acquire) => {
+                            Poll::Ready(Err(Poisoned {
+                                cause: Fault::Abandoned,
+                            }))
+                        }
+                        Poll::Pending => Poll::Pending,
+                    }
                 })
                 .unwrap_or(Poll::Ready(Ok(Err(ClockError::Unavailable))))
         })
