@@ -53,6 +53,12 @@ quarantined radio ends the service through the existing fail-stop path; the
 controller cannot obtain a reusable radio owner. The backend grants one group
 slot, retaining its fail-stop GTK rollback policy.
 
+The personal image's `stack-wifi-station.toml` names the five measured P1
+frames that exceed the move limit, each with its own checked ceiling. IRQ
+stacks retain the normal per-hart guard and percentage margin and are sized
+from the actual P2/ISR bound. Polling and destruction of placed worker futures
+stay outside the small Embassy task shells.
+
 ## Panic and exception records
 
 The agent's panic hook, which the platform's panic entry calls through its

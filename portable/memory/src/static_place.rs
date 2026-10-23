@@ -115,6 +115,9 @@ impl<F: Future> Future for PlacedFuture<'_, F> {
 }
 
 impl<F> Drop for PlacedFuture<'_, F> {
+    // Keep a large future's state-dependent cleanup out of its executor's
+    // task poll, just as polling itself stays behind the boundary above.
+    #[inline(never)]
     fn drop(&mut self) {
         // SAFETY: this sole owner destroys the initialized future at its
         // pinned address before its borrowed inputs may expire.

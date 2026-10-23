@@ -232,4 +232,4 @@ stack-policy = "firmware/hil/esp32s31-phy/stack.toml"
 [hil.images.wifi-station]
 package = "oer-firmware-hil-esp32s31"
 manifest = "firmware/hil/esp32s31/Cargo.toml"
-stack-policy = "firmware/hil/esp32s31/stack.toml"
+stack-policy = "firmware/hil/esp32s31/stack-wifi-station.toml"

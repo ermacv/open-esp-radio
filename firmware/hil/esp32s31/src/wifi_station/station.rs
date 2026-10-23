@@ -194,11 +194,11 @@ pub struct Body {
     pub ssid: heapless::Vec<u8, 32>,
     pub password: SaePassword,
     pub pmk: Pmk,
-    pub nonces: SNonceSource,
+    pub nonces: Placed<'static, SNonceSource>,
     pub attempt: Attempt,
 }
 
-struct Callbacks(SNonceSource);
+struct Callbacks(Placed<'static, SNonceSource>);
 impl machine::StaCallbacks for Callbacks {
     fn nonce(&mut self) -> [u8; 32] {
         self.0

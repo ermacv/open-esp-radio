@@ -23,7 +23,10 @@ use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{InterruptExecutor, LevelOrder};
 
-use static_cell::StaticCell;
+use oer_memory::{Placed, StaticPlace};
+use static_cell::{ConstStaticCell, StaticCell};
+static NONCES: ConstStaticCell<StaticPlace<SNonceSource>> =
+    ConstStaticCell::new(StaticPlace::new());
 
 #[derive(Clone, Copy)]
 pub struct RadioConfig {
@@ -129,7 +132,11 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     if !rng.status().is_healthy() {
         crate::fail("entropy-source");
     }
-    let nonces = SNonceSource::from_entropy(|seed| rng.read(seed).expect("station LP TRNG seed"));
+    let nonces = Placed::init(NONCES.take().uninit(), |place| {
+        place.write(SNonceSource::from_entropy(|seed| {
+            rng.read(seed).expect("station LP TRNG seed")
+        }))
+    });
     let mut boot_bytes = [0; 8];
     rng.read(&mut boot_bytes).expect("station boot entropy");
     let seed = u64::from_le_bytes(boot_bytes);
@@ -167,7 +174,8 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (usb, _pads) = crate::transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
-        spawner.spawn(console(usb, boot).expect("station console task"));
+        let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));
+        spawner.spawn(console(console_work).expect("station console task"));
         spawner
             .spawn(station_task(frontend_channel, station, seed, nonces).expect("station P1 task"));
     })
@@ -216,8 +224,28 @@ static STARTS: Starts = Starts::new();
 oer_hil_agent::requests! {
     pub enum Requests (sessions = false) { Start(oer_hil_protocol::wifi::StartStation) }
 }
-#[embassy_executor::task]
-async fn console(usb: crate::transport::Usb, boot: u64) {
+type ConsoleWork = impl core::future::Future<Output = ()>;
+static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =
+    ConstStaticCell::new(StaticPlace::new());
+#[define_opaque(ConsoleWork)]
+fn console_future(usb: crate::transport::Usb, boot: u64) -> ConsoleWork {
+    console_work(usb, boot)
+}
+type ConsoleTaskFuture = impl core::future::Future<Output = ()>;
+static CONSOLE_TASK: embassy_executor::raw::TaskStorage<ConsoleTaskFuture> =
+    embassy_executor::raw::TaskStorage::new();
+fn console(
+    work: oer_memory::PlacedFuture<'static, ConsoleWork>,
+) -> Result<embassy_executor::SpawnToken<impl Sized>, embassy_executor::SpawnError> {
+    CONSOLE_TASK.spawn(move || console_task_future(work))
+}
+#[define_opaque(ConsoleTaskFuture)]
+fn console_task_future(work: oer_memory::PlacedFuture<'static, ConsoleWork>) -> ConsoleTaskFuture {
+    async move {
+        work.await;
+    }
+}
+async fn console_work(usb: crate::transport::Usb, boot: u64) {
     use oer_hil_protocol::base::{Accepted, RejectReason, Rejected};
     let mut configured = false;
     crate::transport::serve(
@@ -256,59 +284,76 @@ fn station_task(
     channel: radio::FrontendChannel,
     address: [u8; 6],
     seed: u64,
-    nonces: SNonceSource,
+    nonces: Placed<'static, SNonceSource>,
 ) -> Result<embassy_executor::SpawnToken<impl Sized>, embassy_executor::SpawnError> {
-    STATION_TASK.spawn(move || station_task_future(channel, address, seed, nonces))
+    let work = STATION_WORK
+        .take()
+        .future(|| station_work_future(channel, address, seed, nonces));
+    STATION_TASK.spawn(move || station_task_future(work))
 }
-#[define_opaque(StationTaskFuture)]
-fn station_task_future(
+type StationWork = impl core::future::Future<Output = ()>;
+static STATION_WORK: ConstStaticCell<StaticPlace<StationWork>> =
+    ConstStaticCell::new(StaticPlace::new());
+#[define_opaque(StationWork)]
+fn station_work_future(
     channel: radio::FrontendChannel,
     address: [u8; 6],
     seed: u64,
-    nonces: SNonceSource,
-) -> StationTaskFuture {
+    nonces: Placed<'static, SNonceSource>,
+) -> StationWork {
+    station_work(channel, address, seed, nonces)
+}
+#[define_opaque(StationTaskFuture)]
+fn station_task_future(work: oer_memory::PlacedFuture<'static, StationWork>) -> StationTaskFuture {
     async move {
-        let (request, mut start) = STARTS.receive().await;
-        let attempt = Attempt { request };
-        attempt.advance();
-        let ssid = heapless::Vec::from_slice(start.credentials.ssid()).expect("decoded SSID fits");
-        let password = SaePassword::new(start.credentials.passphrase())
-            .expect("decoded personal password fits");
-        let mut derive =
-            PmkDerivation::new(start.credentials.passphrase(), start.credentials.ssid())
-                .expect("decoded personal credentials fit");
-        // All retained copies now have their own zeroizing owner. Erase the
-        // received command before the first cooperative cancellation point.
-        start.credentials.clear_passphrase();
-        drop(start);
-        let begin = EmbassyClock.now();
-        let pmk = loop {
-            if let Some(pmk) = derive.step() {
-                break pmk;
-            }
-            embassy_futures::yield_now().await;
-        };
-        let elapsed = EmbassyClock
-            .now()
-            .as_micros()
-            .saturating_sub(begin.as_micros());
-        CONSOLE
-            .note_reliably(&oer_diagnostics::Note::station_pmk(elapsed))
-            .await;
-        radio::serve(
-            channel,
-            station::Body {
-                address,
-                seed,
-                ssid,
-                password,
-                pmk,
-                nonces,
-                attempt,
-            },
-        )
-        .await;
+        work.await;
     }
+}
+async fn station_work(
+    channel: radio::FrontendChannel,
+    address: [u8; 6],
+    seed: u64,
+    nonces: Placed<'static, SNonceSource>,
+) {
+    let (request, mut start) = STARTS.receive().await;
+    let attempt = Attempt { request };
+    attempt.advance();
+    let ssid = heapless::Vec::from_slice(start.credentials.ssid()).expect("decoded SSID fits");
+    let password =
+        SaePassword::new(start.credentials.passphrase()).expect("decoded personal password fits");
+    let mut derive = PmkDerivation::new(start.credentials.passphrase(), start.credentials.ssid())
+        .expect("decoded personal credentials fit");
+    // All retained copies now have their own zeroizing owner. Erase the
+    // received command before the first cooperative cancellation point.
+    start.credentials.clear_passphrase();
+    drop(start);
+    let begin = EmbassyClock.now();
+    let pmk = loop {
+        if let Some(pmk) = derive.step() {
+            break pmk;
+        }
+        embassy_futures::yield_now().await;
+    };
+    let elapsed = EmbassyClock
+        .now()
+        .as_micros()
+        .saturating_sub(begin.as_micros());
+    CONSOLE
+        .note_reliably(&oer_diagnostics::Note::station_pmk(elapsed))
+        .await;
+    radio::serve(
+        channel,
+        station::Body {
+            address,
+            seed,
+            ssid,
+            password,
+            pmk,
+            nonces,
+            attempt,
+        },
+    )
+    .await;
 }
 
 use oer_ieee80211_arbiter::{
