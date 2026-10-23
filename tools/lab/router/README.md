@@ -128,14 +128,14 @@ and the host refuses any line outside the allowlist. In order:
 2. The wireless configuration: only `wifi-device` and `wifi-iface` section
    lines and the options `device`, `mode`, `disabled`, `hidden`, `ssid`,
    `band`, `hwmode`, `channel`, `htmode`, `beacon_int`, `country`, `encryption`,
-   `ieee80211ax`. `<radio>`
+   `ieee80211ax`, `ieee80211r`, `ieee80211w`, `wpa_group_rekey`. `<radio>`
    must be a 2.4 GHz `wifi-device` (`band='2g'`, or `hwmode` `11b`/`11g`),
    `<ap_section>` a `wifi-iface` of it in mode `ap`, and no other enabled
    `wifi-iface` of the radio may carry the stand's SSID (the refusal names
    those sections only).
 
    ```sh
-   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax)='
+   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax|ieee80211r|ieee80211w|wpa_group_rekey)='
    ```
 
 3. The radio's channels in its regulatory domain: the profile's channel
@@ -159,7 +159,7 @@ and the host refuses any line outside the allowlist. In order:
    `wifi-iface` of the radio.
 
    ```sh
-   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax)='
+   config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax|ieee80211r|ieee80211w|wpa_group_rekey)='
    ```
 
 6. The AP interface, up to 16 times 2 s apart (30 s), until it is an AP on
@@ -242,6 +242,35 @@ The AX211 station belongs to the installed `linux-net` fixture, while
 NetworkManager's unmanaged rule remains enabled. The strict firmware
 contract and offline checker are documented in
 [w3](../../../firmware/apps/w3/README.md).
+
+## W4 WPA2 station
+
+`router::Profile::w4` uses the same isolated station network as W3 and sets
+only the selected BSS to `encryption=psk2+ccmp`, `ieee80211r=0` and
+`ieee80211w=0`: WPA2-Personal with CCMP, no SAE/transition, FT or PMF. The
+radio stays at HT20 with HE disabled. It sets `wpa_group_rekey=30` seconds
+for the run's GTK-change gate. These lab settings are committed without
+restoration. The [OpenWrt wireless options](https://openwrt.org/docs/guide-user/network/wifi/basic)
+define the encryption and PMF values.
+
+Generate both SSID and passphrase for each run with `credentials::ssid`
+and `credentials::passphrase`. The passphrase must be 8–63 printable ASCII
+bytes. **Keys are write-only:** the key is sent in the SSH script on stdin,
+then in a quoted heredoc to `uci batch` on stdin. Neither the local SSH
+command nor the remote UCI command receives the key in argv. Shell tracing
+is disabled and both output streams of the mutation stay on the router;
+the batch must succeed with empty diagnostics, since UCI batch mode does not
+propagate individual command failures. Raw remote errors are replaced by a
+secret-free W4 failure. The profile,
+quoted key, script, generated credentials and random-source buffers are
+zeroized when dropped. Configuration reads admit the security/rekey options
+above and continue to exclude every key option; the key is never read back.
+
+`w4::deauthenticate` takes the selected AP interface and a typed `Mac` for
+the station. It sends `hostapd_cli -i <interface> deauthenticate <station>`
+through the stdin script and requires an exact `OK` reply on the router.
+Replies, errors and the full MAC are kept out of evidence. Callers hold
+router and exclusive air ownership for the complete run.
 
 ## Stand notes
 

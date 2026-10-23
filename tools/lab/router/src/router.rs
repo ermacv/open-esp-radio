@@ -25,7 +25,9 @@
 //!    SSID; its `addr` is the stand's BSSID.
 //!
 //! W1 leaves encryption unchanged. W3 sets encryption to none and disables
-//! HE; keys are never set and never leave the router. Every
+//! HE. W4 sets WPA2-PSK/CCMP without PMF and a short GTK rekey interval.
+//! Keys are write-only: the generated passphrase reaches `uci batch` on
+//! stdin, never an argument list, and secret buffers are zeroized. Every
 //! read is filtered there by an allowlist, and the host refuses any line
 //! outside it. An SSID is kept only as whether it is the stand's. The SSH
 //! target, the interface, every SSID and the full BSSID appear in no
@@ -33,6 +35,8 @@
 //! Values reach the remote shell quoted by shlex, inside the script on stdin.
 
 use std::{fmt, time::Duration};
+
+use zeroize::Zeroizing;
 
 pub use crate::ssh::{Remote, Result};
 use crate::{mac::Mac, ssh::token};
@@ -49,7 +53,7 @@ pub const SETTLE_PAUSE: Duration = Duration::from_secs(2);
 /// The options of the wireless configuration that leave the router; every
 /// other one (`key`, `sae_password`, `auth_secret`, `wpa_psk_file`, …) stays
 /// there.
-pub const ALLOWED_OPTIONS: [&str; 13] = [
+pub const ALLOWED_OPTIONS: [&str; 16] = [
     "device",
     "mode",
     "disabled",
@@ -63,6 +67,9 @@ pub const ALLOWED_OPTIONS: [&str; 13] = [
     "country",
     "encryption",
     "ieee80211ax",
+    "ieee80211r",
+    "ieee80211w",
+    "wpa_group_rekey",
 ];
 /// The section types whose lines leave the router.
 pub const ALLOWED_TYPES: [&str; 2] = ["wifi-device", "wifi-iface"];
@@ -97,14 +104,20 @@ pub fn show_script() -> String {
     )
 }
 
-/// The profile W1 runs against.
+enum Security {
+    Unchanged,
+    Open,
+    Wpa2(Zeroizing<String>),
+}
+
+/// A run's wireless profile; W3 and W4 share the isolated station network.
 pub struct Profile {
     radio: String,
     ap_section: String,
     interface: String,
     channel: u8,
-    ssid: String,
-    open_station: bool,
+    ssid: Zeroizing<String>,
+    security: Security,
 }
 
 impl fmt::Debug for Profile {
@@ -162,8 +175,8 @@ impl Profile {
             ap_section: ap_section.to_owned(),
             interface: interface.to_owned(),
             channel,
-            ssid: ssid.to_owned(),
-            open_station: false,
+            ssid: Zeroizing::new(ssid.to_owned()),
+            security: Security::Unchanged,
         })
     }
 
@@ -177,8 +190,33 @@ impl Profile {
         ssid: &str,
     ) -> Result<Self> {
         let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
-        profile.open_station = true;
+        profile.security = Security::Open;
         Ok(profile)
+    }
+
+    /// W4's WPA2-Personal/CCMP HT20 profile, with PMF and HE disabled.
+    /// Callers generate the SSID and passphrase with [`crate::credentials`]
+    /// for each run. The passphrase is write-only and zeroized on drop.
+    pub fn w4(
+        radio: &str,
+        ap_section: &str,
+        interface: &str,
+        channel: u8,
+        ssid: &str,
+        passphrase: &str,
+    ) -> Result<Self> {
+        if !(8..=63).contains(&passphrase.len())
+            || !passphrase.bytes().all(|byte| (0x20..=0x7e).contains(&byte))
+        {
+            return Err("the WPA2 passphrase must be 8 to 63 printable ASCII bytes".to_owned());
+        }
+        let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
+        profile.security = Security::Wpa2(Zeroizing::new(passphrase.to_owned()));
+        Ok(profile)
+    }
+
+    fn station_network(&self) -> bool {
+        !matches!(self.security, Security::Unchanged)
     }
 
     /// The one line that may be shown of the profile.
@@ -202,14 +240,14 @@ impl Profile {
     }
 
     /// Step 4: the profile, committed and reloaded.
-    fn apply_script(&self) -> Result<String> {
+    fn apply_script(&self) -> Result<Zeroizing<String>> {
         let set = |section: &str, option: &str, value: &str| -> Result<String> {
             Ok(format!(
                 "uci set {}",
                 quote(&format!("wireless.{section}.{option}={value}"))?
             ))
         };
-        let mut steps = vec![
+        let mut steps = Zeroizing::new(vec![
             set(&self.radio, "channel", &self.channel.to_string())?,
             set(&self.radio, "htmode", HTMODE)?,
             set(&self.radio, "beacon_int", &BEACON_INTERVAL_TU.to_string())?,
@@ -217,15 +255,28 @@ impl Profile {
             set(&self.ap_section, "ssid", &self.ssid)?,
             set(&self.ap_section, "disabled", "0")?,
             set(&self.ap_section, "hidden", "0")?,
-        ];
-        if self.open_station {
-            steps.push(set(&self.ap_section, "encryption", "none")?);
+        ]);
+        match &self.security {
+            Security::Unchanged => {}
+            Security::Open => steps.push(set(&self.ap_section, "encryption", "none")?),
+            Security::Wpa2(_) => {
+                steps.push(set(&self.ap_section, "encryption", "psk2+ccmp")?);
+                steps.push(set(&self.ap_section, "ieee80211r", "0")?);
+                steps.push(set(&self.ap_section, "ieee80211w", "0")?);
+                steps.push(set(
+                    &self.ap_section,
+                    "wpa_group_rekey",
+                    &crate::w4::GROUP_REKEY_SECONDS.to_string(),
+                )?);
+            }
+        }
+        if self.station_network() {
             steps.push(set(&self.radio, "ieee80211ax", "0")?);
             steps.push(set(&self.ap_section, "network", crate::w3::network::NAME)?);
             steps.push(set(&self.ap_section, "isolate", "1")?);
         }
         steps.push("uci commit wireless".to_owned());
-        if self.open_station {
+        if self.station_network() {
             // Recreate the selected AP: a hot reload can update the SSID while
             // retaining the previous bridge membership of its live netdev.
             steps.push(format!("wifi down {}", quote(&self.radio)?));
@@ -233,7 +284,25 @@ impl Profile {
         } else {
             steps.push("wifi reload".to_owned());
         }
-        Ok(steps.join(" && "))
+        let settings = Zeroizing::new(steps.join(" && "));
+        if let Security::Wpa2(passphrase) = &self.security {
+            let key = Zeroizing::new(quote(passphrase)?);
+            // A heredoc feeds libuci's batch parser directly. Even on the
+            // router, no process gets the key in argv. Printable ASCII
+            // validation excludes newlines and delimiter injection.
+            // UCI's cli.c::uci_batch returns 0 even on a command error;
+            // require empty diagnostics as well, without reading back the key.
+            Ok(Zeroizing::new(format!(
+                "set +x\n{{\ndiagnostic=$(uci batch 2>&1 <<'OER_W4_KEY'\n\
+                 set wireless.{}.key={}\nOER_W4_KEY\n) && test -z \"$diagnostic\" &&\n\
+                 {}\n}} >/dev/null 2>&1",
+                self.ap_section,
+                key.as_str(),
+                settings.as_str()
+            )))
+        } else {
+            Ok(settings)
+        }
     }
 
     /// Step 6: the AP interface, filtered on the router to the lines read.
@@ -254,8 +323,8 @@ pub fn plan() -> Result<Vec<String>> {
         ap_section: "<ap_section>".to_owned(),
         interface: "<wireless_interface>".to_owned(),
         channel: 0,
-        ssid: "<ssid>".to_owned(),
-        open_station: false,
+        ssid: Zeroizing::new("<ssid>".to_owned()),
+        security: Security::Unchanged,
     };
     Ok(vec![
         CHANGES.to_owned(),
@@ -290,6 +359,20 @@ impl Applied {
 /// channel. Run twice, it changes nothing the second time and verifies the
 /// same.
 pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
+    let result = apply_inner(remote, profile);
+    if matches!(profile.security, Security::Wpa2(_)) {
+        // A Remote implementation or a corrupt answer may echo its input.
+        // No raw error from a credential-setting run crosses this boundary.
+        result.map_err(|error| {
+            let _hidden = Zeroizing::new(error);
+            "router: applying or verifying the W4 profile failed".to_owned()
+        })
+    } else {
+        result
+    }
+}
+
+fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     let changes = remote
         .run(CHANGES)
         .map_err(step("reading the staged changes"))?;
@@ -306,7 +389,7 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         .run(&profile.channels_script()?)
         .map_err(step("reading the radio's channels"))?;
     check_channel(&channels, profile.channel, radio.option("country"))?;
-    let previous_network = if profile.open_station {
+    let previous_network = if profile.station_network() {
         let fingerprint = crate::w3::network::prepare(remote)?;
         remote
             .run(&crate::w3::network::render()?)
@@ -315,9 +398,11 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
     } else {
         None
     };
-    remote
-        .run(&profile.apply_script()?)
-        .map_err(step("applying the profile"))?;
+    let _output = Zeroizing::new(
+        remote
+            .run(&profile.apply_script()?)
+            .map_err(step("applying the profile"))?,
+    );
     let after = Wireless::parse(
         &remote
             .run(&show)
@@ -692,10 +777,24 @@ impl Wireless {
                 ap.name
             ));
         }
-        if profile.open_station
+        if matches!(profile.security, Security::Open)
             && (ap.option("encryption") != Some("none") || radio.option("ieee80211ax") != Some("0"))
         {
             return Err("the committed W3 profile is not open with HE disabled".to_owned());
+        }
+        if matches!(profile.security, Security::Wpa2(_))
+            && (ap.option("encryption") != Some("psk2+ccmp")
+                || ap.option("ieee80211r") != Some("0")
+                || ap.option("ieee80211w") != Some("0")
+                || ap.option("wpa_group_rekey")
+                    != Some(crate::w4::GROUP_REKEY_SECONDS.to_string().as_str())
+                || radio.option("ieee80211ax") != Some("0"))
+        {
+            return Err(
+                "the committed W4 profile is not WPA2/CCMP with FT, PMF and HE disabled \
+                 and the run's GTK rekey interval"
+                    .to_owned(),
+            );
         }
         self.refuse_others(profile)
     }

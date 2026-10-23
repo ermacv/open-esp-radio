@@ -366,6 +366,206 @@ fn w3_applies_and_verifies_open_security_and_disables_he() {
     }
 }
 
+fn w4_profile() -> Profile {
+    Profile::w4("radio9", "lab_ap", INTERFACE, 6, SSID, PASSPHRASE).unwrap()
+}
+
+fn show_w4() -> String {
+    show_profiled().replace("encryption='psk2'", "encryption='psk2+ccmp'")
+        + "wireless.radio9.ieee80211ax='0'\nwireless.lab_ap.ieee80211r='0'\n\
+           wireless.lab_ap.ieee80211w='0'\n\
+           wireless.lab_ap.wpa_group_rekey='30'\n"
+}
+
+fn w4_router() -> Canned {
+    let mut remote = profiled_router();
+    remote.answer(SHOW_PREFIX, vec![Ok(show_before()), Ok(show_w4())]);
+    remote.answers.extend([
+        ("set -e\nfor package", vec![Ok(String::new())]),
+        (
+            "set -e\ncommand -v",
+            vec![Ok("default\n192.168.178.0/24\n".to_owned())],
+        ),
+        ("set -e\nconfig=", vec![Ok("a".repeat(64))]),
+        ("set -e\nuci -q delete", vec![Ok(String::new())]),
+        // Even an unexpected echo of the key must not escape apply().
+        ("set +x\n", vec![Ok(PASSPHRASE.to_owned())]),
+        ("/etc/init.d/firewall reload", vec![Ok(String::new())]),
+        ("set -e\ntest \"$(uci", vec![Ok("verified\n".to_owned())]),
+        ("/etc/init.d/dnsmasq reload", vec![Ok(String::new())]),
+        ("set -e\ntest -r", vec![Ok("ready\n".to_owned())]),
+    ]);
+    remote
+}
+
+#[test]
+fn w4_scripted_router_applies_wpa2_ccmp_ht20_without_pmf_and_short_gtk_rekey() {
+    let mut remote = w4_router();
+    let profile = w4_profile();
+    let applied = apply(&mut remote, &profile).unwrap();
+    assert_eq!(applied.channel, 6);
+    let script = remote
+        .scripts
+        .iter()
+        .find(|s| s.starts_with("set +x\n"))
+        .unwrap();
+    for setting in [
+        "wireless.lab_ap.encryption=psk2+ccmp",
+        "wireless.lab_ap.ieee80211r=0",
+        "wireless.lab_ap.ieee80211w=0",
+        "wireless.lab_ap.wpa_group_rekey=30",
+        "wireless.radio9.htmode=HT20",
+        "wireless.radio9.ieee80211ax=0",
+        "wireless.lab_ap.network=oer_w3",
+        "wireless.lab_ap.isolate=1",
+    ] {
+        assert!(script.contains(setting));
+    }
+    assert!(script.contains("uci commit wireless"));
+    assert!(script.contains("wifi down radio9"));
+    assert!(script.contains("wifi up radio9"));
+    assert!(remote.scripts.iter().any(|s| s.contains("fw4 check")));
+    assert!(remote.scripts.iter().any(|s| s.contains("/master")));
+    assert_eq!(remote.pauses, 0);
+    for shown in [
+        profile.describe(),
+        format!("{profile:?}"),
+        applied.describe(),
+        format!("{applied:?}"),
+    ] {
+        assert!(!shown.contains(PASSPHRASE));
+        assert!(!shown.contains(SSID));
+        assert!(!shown.contains(INTERFACE));
+        assert!(!shown.contains(BSSID));
+    }
+}
+
+#[test]
+fn w4_key_is_only_in_uci_stdin_and_is_quoted_without_shell_expansion() {
+    // Include every shell-sensitive character that shlex may quote differently.
+    for passphrase in [PASSPHRASE, "space ' \" $ ` \\ ; # $(false)"] {
+        let profile = Profile::w4("radio9", "lab_ap", INTERFACE, 6, SSID, passphrase).unwrap();
+        let script = profile.apply_script().unwrap();
+        let (prefix, rest) = script
+            .split_once("uci batch 2>&1 <<'OER_W4_KEY'\n")
+            .unwrap();
+        let (batch, suffix) = rest.split_once("\nOER_W4_KEY\n").unwrap();
+        assert_eq!(prefix, "set +x\n{\ndiagnostic=$(");
+        assert_eq!(
+            shlex::split(batch).unwrap(),
+            [
+                "set".to_owned(),
+                format!("wireless.lab_ap.key={passphrase}")
+            ]
+        );
+        assert!(!prefix.contains(passphrase));
+        assert!(!suffix.contains(passphrase));
+        assert!(suffix.starts_with(") && test -z \"$diagnostic\" &&\n"));
+        assert!(suffix.ends_with("} >/dev/null 2>&1"));
+    }
+}
+
+#[test]
+fn w4_configuration_reads_exclude_the_key_and_refuse_a_leaked_key() {
+    let config = show_w4();
+    assert!(!config.contains(PASSPHRASE));
+    assert!(!config.contains(".key="));
+    assert!(
+        Wireless::parse(&config, SSID)
+            .unwrap()
+            .check_after(&w4_profile())
+            .is_ok()
+    );
+    // The exact remote grep and the host parser share this allowlist.
+    assert!(!ALLOWED_OPTIONS.contains(&"key"));
+    assert!(!ALLOWED_OPTIONS.contains(&"sae_password"));
+    assert!(show_script().contains(&format!("({})=", ALLOWED_OPTIONS.join("|"))));
+    let mut remote = w4_router();
+    remote.answer(
+        SHOW_PREFIX,
+        vec![Ok(format!("{config}wireless.lab_ap.key='{PASSPHRASE}'\n"))],
+    );
+    let error = apply(&mut remote, &w4_profile()).unwrap_err();
+    assert!(!error.contains(PASSPHRASE));
+    assert!(!remote.scripts.iter().any(|s| s.starts_with("set +x\n")));
+}
+
+#[test]
+fn w4_refuses_incorrect_committed_security_width_and_rekey() {
+    let config = show_w4();
+    for broken in [
+        config.replace("encryption='psk2+ccmp'", "encryption='sae-mixed'"),
+        config.replace("encryption='psk2+ccmp'", "encryption='psk2+tkip'"),
+        config.replace("ieee80211r='0'", "ieee80211r='1'"),
+        config.replace("ieee80211w='0'", "ieee80211w='1'"),
+        config.replace("ieee80211w='0'", "ieee80211w='2'"),
+        config.replace("htmode='HT20'", "htmode='HT40'"),
+        config.replace("ieee80211ax='0'", "ieee80211ax='1'"),
+        config.replace("wpa_group_rekey='30'", "wpa_group_rekey='0'"),
+        config.replace("wireless.lab_ap.wpa_group_rekey='30'\n", ""),
+    ] {
+        let mut remote = w4_router();
+        remote.answer(SHOW_PREFIX, vec![Ok(show_before()), Ok(broken)]);
+        assert!(apply(&mut remote, &w4_profile()).is_err());
+    }
+}
+
+#[test]
+fn w4_remote_failures_never_repeat_the_key_in_errors_or_debug() {
+    for prefix in [
+        CHANGES_PREFIX,
+        SHOW_PREFIX,
+        CHANNELS_PREFIX,
+        "set +x\n",
+        IW_PREFIX,
+    ] {
+        let mut remote = w4_router();
+        remote.answer(
+            prefix,
+            vec![Err(format!(
+                "script stdout stderr log: {PASSPHRASE} {SSID}"
+            ))],
+        );
+        let error = apply(&mut remote, &w4_profile()).unwrap_err();
+        assert_eq!(error, "router: applying or verifying the W4 profile failed");
+        assert!(!format!("{error:?}").contains(PASSPHRASE));
+    }
+    let mut remote = w4_router();
+    remote.answer(
+        SHOW_PREFIX,
+        vec![
+            Ok(show_before()),
+            Ok(show_w4().replace("htmode='HT20'", &format!("htmode='{PASSPHRASE}'"))),
+        ],
+    );
+    assert!(
+        !apply(&mut remote, &w4_profile())
+            .unwrap_err()
+            .contains(PASSPHRASE)
+    );
+}
+
+#[test]
+fn w4_passphrase_admission_is_bounded_and_never_quotes_rejected_input() {
+    for length in [8, 63] {
+        assert!(Profile::w4("radio9", "lab_ap", INTERFACE, 6, SSID, &"x".repeat(length)).is_ok());
+    }
+    for passphrase in [
+        String::new(),
+        "x".repeat(7),
+        "x".repeat(64),
+        "bad\npassword".into(),
+        "bad\0password".into(),
+        "non-ascii-ä".into(),
+    ] {
+        let error = Profile::w4("radio9", "lab_ap", INTERFACE, 6, SSID, &passphrase).unwrap_err();
+        assert_eq!(
+            error,
+            "the WPA2 passphrase must be 8 to 63 printable ASCII bytes"
+        );
+    }
+}
+
 #[test]
 fn staged_changes_refuse_before_anything_is_set() {
     let mut remote = first_run();
