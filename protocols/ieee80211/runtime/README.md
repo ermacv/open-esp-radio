@@ -13,6 +13,11 @@ This permits a composition to select station buffers and resource types without
 implementing a foreign trait for a foreign backend or replacing its body-loan
 identity. The radio and lower-MAC port contracts remain the common boundary.
 
+`StationService` retains the station's concrete `StaCallbacks` provider with
+its resource bank across stop/restart. `ServiceIo` borrows a concrete
+`ServiceOutputSink`; closures implement that trait without erasing their type.
+Each output still transfers its original command or frame owner by value.
+
 The image lends `StationService` a placed `RxBlockAckStorage`. Its const generic
 bank count selects existing shared RX BA slot owners; retained frames borrow
 the port's RX buffers without copying payloads. Negotiation bounds each window

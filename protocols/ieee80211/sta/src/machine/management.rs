@@ -106,7 +106,7 @@ impl ManagementProtection {
     pub(super) fn start_query(
         &mut self,
         now: Instant,
-        nonce: fn() -> [u8; 32],
+        nonce: impl FnOnce() -> [u8; 32],
     ) -> Result<(), crate::sa_query::SaQueryDeadlineOverflow> {
         if !self.query.is_active() {
             let [a, b, c, d, ..] = nonce();

@@ -2,8 +2,8 @@
 use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_ieee80211_sta::machine::{StaRequest, StaTokens, Station};
 
-pub fn submit<'id, T: StaTokens, K: Ieee80211Capabilities>(
-    station: &mut Station<'id, T, K>,
+pub fn submit<'id, T: StaTokens, K: Ieee80211Capabilities, C: oer_ieee80211_sta::machine::StaCallbacks>(
+    station: &mut Station<'id, T, K, C>,
     now: oer_time::Instant,
     request: StaRequest<'id, T::ConfigurationPath>,
 ) {

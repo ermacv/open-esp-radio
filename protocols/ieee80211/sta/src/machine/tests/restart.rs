@@ -5,10 +5,13 @@ use oer_ieee80211_arbiter::{ArbiterEnd, ArbiterNotice, RetiredArbiter};
 fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
+        let nonce_calls = world.station.config.callbacks.nonce_calls;
+        assert!(nonce_calls > 0);
         let previous_epoch = world.station.epoch;
         let previous_lease = world.station.lease.id();
         let mut arbiter = world.arbiter.finish(ArbiterEnd::Stopped);
         let (mut bank, mut places) = world.station.finish(StaDisconnectReason::Requested);
+        assert_eq!(bank.config.callbacks.nonce_calls, nonce_calls);
         while let Some(notice) = arbiter.poll_notice() {
             if let ArbiterNotice::Station(notice) = notice {
                 places.returned(notice);
@@ -24,6 +27,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
             .unwrap()
             .into_parts();
         let (station, deferred, notice) = bank.restart(places).into_parts();
+        assert_eq!(station.config.callbacks.nonce_calls, nonce_calls);
         assert!(matches!(deferred, DeferredEapol::Empty));
         assert!(notice.is_none());
         world.station = station;
@@ -71,6 +75,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         )
         .unwrap();
         world.receive(at(85), &eapol_frame(m1.as_bytes()));
+        assert_eq!(world.station.config.callbacks.nonce_calls, nonce_calls + 1);
         let ptk = Pmk::from_bytes(PMK).derive_ptk(
             oer_ieee80211_wire::security::rsn::Akm::Psk,
             oer_ieee80211_rsn::PtkContext {

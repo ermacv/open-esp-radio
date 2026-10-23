@@ -118,7 +118,7 @@ impl StaAssociatedPeer {
         access_point: &oer_ieee80211_wire::scan::ScanRecord,
         response: &oer_ieee80211_wire::station::AssociationResponse,
         phy: PhyMode,
-        he_packet_padding: fn(&[u8]) -> oer_ieee80211_port::backend_protection::HePacketPadding,
+        he_packet_padding: impl FnOnce(&[u8]) -> oer_ieee80211_port::backend_protection::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
         use oer_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,

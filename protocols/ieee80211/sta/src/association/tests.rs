@@ -86,11 +86,17 @@ mod associated_peer {
 
     #[test]
     fn an_he_association_keeps_the_peer_s_he_state() {
+        let padding = std::boxed::Box::new(HePacketPadding::Us8);
         let peer = StaAssociatedPeer::derive(
             &he20_access_point(),
             &response(0),
             PhyMode::He20,
-            eight_microseconds,
+            move |capability| {
+                assert_eq!(capability, HE20_MCS9_CAPABILITY);
+                let result = *padding;
+                drop(padding);
+                result
+            },
         )
         .unwrap();
         assert_eq!(peer.phy, PhyMode::He20);

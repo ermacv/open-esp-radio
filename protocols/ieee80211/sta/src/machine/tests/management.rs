@@ -3,6 +3,33 @@ use super::*;
 use oer_ieee80211_rsn::{Ptk, frames::RsnTxFrame};
 use oer_ieee80211_wire::security::rsn::Akm;
 
+#[test]
+fn sa_query_requests_fresh_entropy_only_for_a_new_procedure() {
+    let mut management = ManagementProtection::new(Ccmp128Key::new(&[0x11; 16]));
+    let calls = core::cell::Cell::new(0);
+    let start = |management: &mut ManagementProtection| {
+        management
+            .start_query(at(50), || {
+                calls.set(calls.get() + 1);
+                SNONCE
+            })
+            .unwrap();
+    };
+    start(&mut management);
+    start(&mut management);
+    assert_eq!(calls.get(), 1);
+    let Some(oer_ieee80211_wire::management_protection::SaQuery::Request { transaction }) =
+        management.pending(at(50))
+    else {
+        panic!("a new procedure owes its first request");
+    };
+    management.received_query(
+        oer_ieee80211_wire::management_protection::SaQuery::Response { transaction },
+    );
+    start(&mut management);
+    assert_eq!(calls.get(), 2);
+}
+
 // Generated with Python cryptography AESCCM(tag_length=8) and AES-CMAC.
 // PTK = WPA2 PRF(PMK=[7;32], LOCAL/BSSID, SNonce=[3;32], ANonce=[4;32]);
 // CCMP nonce = 0x10 || BSSID || big-endian PN, AAD masks SN.

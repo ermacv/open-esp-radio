@@ -190,15 +190,24 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     wmm: [0; 9],
 };
 
-fn nonce() -> [u8; 32] {
-    SNONCE
+struct Callbacks;
+impl oer_ieee80211_sta::machine::StaCallbacks for Callbacks {
+    fn nonce(&mut self) -> [u8; 32] {
+        SNONCE
+    }
+    fn he_packet_padding(
+        &self,
+        _: &[u8],
+    ) -> oer_ieee80211_port::backend_protection::HePacketPadding {
+        oer_ieee80211_port::backend_protection::HePacketPadding::None
+    }
 }
 
 fn channel6() -> Channel {
     Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap()
 }
 
-type TestConfig = (StaConfig<ModelCaps24>, StaSecurity);
+type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
 
 fn config(security: StaSecurity) -> TestConfig {
     let channels = heapless::Vec::from_slice(&[SupportedChannel::new(
@@ -222,8 +231,7 @@ fn config(security: StaSecurity) -> TestConfig {
             association: &CAPABILITIES,
             listen_interval: oer_ieee80211_sta::request::StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
-            nonce,
-            he_packet_padding: |_| oer_ieee80211_port::backend_protection::HePacketPadding::None,
+            callbacks: Callbacks,
         },
         security,
     )
@@ -887,7 +895,7 @@ where
                     .unwrap();
                 self.world.air.refuse_enable();
             }
-            let service = StationService::<ServicePort<LocalId<'scope>>, _, GROUPS>::new(
+            let service = StationService::<ServicePort<LocalId<'scope>>, _, _, GROUPS>::new(
                 station,
                 StaData::new(data_tickets, large, MODEL_TX_QUEUE_DEPTH),
                 arbiter,

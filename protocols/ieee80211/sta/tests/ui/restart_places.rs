@@ -3,8 +3,8 @@ use oer_ieee80211_arbiter::{StationPlaces, StationPlaceReturns};
 use oer_ieee80211_port::Ieee80211Capabilities;
 use oer_ieee80211_sta::machine::{RetiredStation, StaTokens};
 
-pub fn restart<'id, T: StaTokens, K: Ieee80211Capabilities>(
-    station: RetiredStation<'id, T, K>,
+pub fn restart<'id, T: StaTokens, K: Ieee80211Capabilities, C: oer_ieee80211_sta::machine::StaCallbacks>(
+    station: RetiredStation<'id, T, K, C>,
     complete: StationPlaces<'id, T::GatePath>,
     pending: StationPlaceReturns<'id, T::GatePath>,
 ) {

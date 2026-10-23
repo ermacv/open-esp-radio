@@ -157,7 +157,7 @@ pub(super) fn unprotected_action(
     parse_block_ack_action(header.body())
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
+impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
     /// Attempt a response using the station's existing control credits and,
     /// when negotiated, its management protection. Busy returns the owner.
     #[inline(never)]
