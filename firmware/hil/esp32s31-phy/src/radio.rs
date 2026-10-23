@@ -366,7 +366,9 @@ impl Radio {
             registration_config = registration_config.with_calibration_cache(candidate);
         }
         let began = EmbassyClock.now();
-        let registered = register_concurrent_phy::<_, (), RomShortDelay, _>(
+        // Consume the native result before awaiting diagnostics: its failure
+        // variant retains the complete registration transition.
+        let outcome = register_concurrent_phy::<_, (), RomShortDelay, _>(
             &EmbassyClock,
             &mut self.domain,
             &mut (),
@@ -374,9 +376,11 @@ impl Radio {
             registration_config,
             NoopPhyTargetObserver,
         )
-        .await;
-        let registration = match registered {
-            Ok(registration) => registration,
+        .await
+        .map(|registration| registration.outcome())
+        .map_err(|_| RejectReason::Internal);
+        let outcome = match outcome {
+            Ok(outcome) => outcome,
             Err(_) => {
                 crate::transport::CONSOLE
                     .line_reliably(format_args!("OPEN_RADIO_HIL phy=FAIL step=registration"))
@@ -385,7 +389,6 @@ impl Radio {
             }
         };
 
-        let outcome = registration.outcome();
         let registration_us = u32::try_from(
             EmbassyClock
                 .now()
