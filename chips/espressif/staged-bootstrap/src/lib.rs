@@ -168,7 +168,7 @@ pub unsafe fn stage(
 #[allow(unsafe_code, reason = "publishes and enters the stage-two image")]
 pub fn hand_off<const ENTRY: usize>(staged: Staged) -> ! {
     if staged.entry != ENTRY {
-        fail(c"OER_BOOT bootstrap=FAIL reason=entry-mismatch\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=entry-mismatch\r\n");
     }
     // SAFETY: the bytes are the checked stage-two image, which nothing
     // modifies or executes until the jump below; the other hart, if any,

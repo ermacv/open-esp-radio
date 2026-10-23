@@ -2,8 +2,7 @@
 use crate::*;
 
 pub(crate) fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_esp32s31_board::rom::install_usb_printf();
-    oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL runtime=START diagnostic=phy");
+    oer_espressif_usb_fifo::note(&oer_diagnostics::Note::diagnostic_start("phy"));
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(
         INTERRUPT_TABLE,
