@@ -155,6 +155,11 @@ fn composition(baselines: &[Summary], head: &Summary) -> Result<Comparison> {
             );
             let total = sum.entry(elf.clone()).or_default();
             for (name, section) in &measurements.sections {
+                // Empty linker placeholders have no budget or placement;
+                // their ELF flags can differ from a populated section.
+                if section.bytes == 0 {
+                    continue;
+                }
                 if let Some(previous) = total.sections.get_mut(name) {
                     if (
                         previous.memory.as_str(),

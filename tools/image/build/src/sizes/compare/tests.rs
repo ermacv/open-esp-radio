@@ -634,3 +634,28 @@ fn a_composition_uses_the_sum_without_weakening_same_image_provenance() {
     head.provenance.rustc = "different compiler".into();
     assert!(composition(&[a, b], &head).is_err());
 }
+
+#[test]
+fn empty_composition_placeholders_do_not_change_storage_class_or_budget() {
+    let a = summary();
+    let mut b = a.clone();
+    let placeholder = runtime(&mut b).sections.get_mut(".data").unwrap();
+    placeholder.bytes = 0;
+    placeholder.memory = "psram".into();
+    placeholder.class = SectionClass::ReadOnly;
+    let head = a.clone();
+    assert_eq!(
+        composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
+        Verdict::Report
+    );
+    let mut larger = head;
+    runtime(&mut larger)
+        .sections
+        .get_mut(".data")
+        .unwrap()
+        .bytes += 1;
+    assert_eq!(
+        composition(&[a, b], &larger).unwrap().verdict,
+        Verdict::Stop
+    );
+}
