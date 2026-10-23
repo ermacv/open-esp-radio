@@ -161,7 +161,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                 Some(deadline) => {
                     if let Either::Second(()) = select(rung, self.timer.wait_until(deadline)).await
                     {
-                        self.tick().await;
+                        boundary::shared(self.tick()).await;
                     }
                 }
             }
@@ -176,12 +176,10 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         &mut self.backend
     }
 
-    fn tick(&mut self) -> impl core::future::Future<Output = ()> {
-        boundary::shared(async move {
-            if self.backend.track_tick().await.is_err() {
-                self.core.poison();
-            }
-        })
+    async fn tick(&mut self) {
+        if self.backend.track_tick().await.is_err() {
+            self.core.poison();
+        }
     }
 
     async fn serve<Q: Client>(&mut self, request: Request<Q>) -> Answer<Q>
@@ -252,7 +250,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 cause: Failure::Refused,
             });
         }
-        let phy = match self.backend.prepare().await {
+        let phy = match boundary::shared(self.backend.prepare()).await {
             Ok(phy) => phy,
             Err(Fault) => {
                 self.core.poison();
@@ -274,7 +272,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
             }
             Err(Failed { returned, cause }) => {
                 if matches!(self.core.failed_enter(cause), Action::CloseRf) {
-                    self.close_rf().await;
+                    boundary::shared(self.close_rf()).await;
                 }
                 Err(Failed {
                     returned,
@@ -292,7 +290,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         self.core.mint.retire(member);
         let (payload, exit) = self.backend.exit(leave).await;
         if matches!(self.core.exited(exit), Action::CloseRf) {
-            self.close_rf().await;
+            boundary::shared(self.close_rf()).await;
         }
         Left {
             payload,
@@ -300,11 +298,9 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         }
     }
 
-    fn close_rf(&mut self) -> impl core::future::Future<Output = ()> {
-        boundary::shared(async move {
-            let result = self.backend.close_rf(LastClientLeft(())).await;
-            self.core.closed(result);
-        })
+    async fn close_rf(&mut self) {
+        let result = self.backend.close_rf(LastClientLeft(())).await;
+        self.core.closed(result);
     }
 }
 
