@@ -1,5 +1,6 @@
 //! The P2 DTM executor. Its complete branded engine stays inside this owner.
-use super::guard::guard;
+use super::event::{Finish, successful};
+use super::guard::{guard, step};
 use super::{Cause, Fault, PacketCount, Start, Started};
 use crate::{
     ControllerSchedulerEpoch,
@@ -22,8 +23,7 @@ use oer_bluetooth_le_radio::{LeInstant, LeWindow, RadioDuration, RadioTiming, Te
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerStop,
     engine::{
-        ArenaMemory, DtmSchedulerFrequency, DtmSchedulerItemCompletionStatus, LeTxPower,
-        SchedulerRoleInstance,
+        ArenaMemory, DtmSchedulerFrequency, LeTxPower, SchedulerRoleInstance,
         scheduler::{SchedulerNext, SchedulerRawWindow, interrupt::SchedulerDoorbell},
     },
 };
@@ -45,15 +45,33 @@ pub type Memory<'pool, 'epoch> = ArenaMemory<'pool, 'epoch, 0, 0, 0, 0, 0, 0, 1>
 #[derive(Clone, Copy)]
 pub struct Limits {
     recheck: Duration,
+    command_turn: Duration,
     operation: Duration,
+}
+#[derive(Clone, Copy)]
+struct PendingEvent {
+    window: LeWindow,
+    receiver: bool,
+    deadline: Instant,
 }
 impl Limits {
     /// No zero-delay loops or unbounded waits.
-    pub const fn new(recheck: Duration, operation: Duration) -> Option<Self> {
-        if recheck.as_micros() == 0 || operation.as_micros() <= recheck.as_micros() {
+    pub const fn new(
+        recheck: Duration,
+        command_turn: Duration,
+        operation: Duration,
+    ) -> Option<Self> {
+        if recheck.as_micros() == 0
+            || command_turn.as_micros() < recheck.as_micros()
+            || operation.as_micros() <= command_turn.as_micros()
+        {
             None
         } else {
-            Some(Self { recheck, operation })
+            Some(Self {
+                recheck,
+                command_turn,
+                operation,
+            })
         }
     }
 }
@@ -74,6 +92,7 @@ pub struct Runner<'pool, 'epoch, X: SignalExecutor, D, T, C> {
     config: Option<Start>,
     phase: DtmEventPhase,
     previous: Option<LeWindow>,
+    pending: Option<PendingEvent>,
     payload: [u8; 255],
     count: PacketCount,
     epoch: Option<ControllerSchedulerEpoch>,
@@ -110,6 +129,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             config: None,
             phase: DtmEventPhase::Initial,
             previous: None,
+            pending: None,
             payload: [0; 255],
             count: PacketCount::default(),
             epoch: None,
@@ -162,8 +182,9 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                         .poll_stop(&self.doorbell, &mut self.stop, cx)
                 }),
             )
-            .await?
-            .map_err(|_| Fault::Hardware)?;
+            .await
+            .map_err(|fault| timeout_at(fault, Fault::StopTimeout))?
+            .map_err(|_| Fault::SchedulerStop)?;
             if step {
                 self.stop = BluetoothSchedulerStop::default();
                 return Ok(());
@@ -179,7 +200,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                 deadline,
                 self.timer.wait_until(at.min(deadline)),
             )
-            .await?;
+            .await
+            .map_err(|fault| timeout_at(fault, Fault::StopTimeout))?;
         }
     }
     async fn sample(
@@ -188,18 +210,18 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
     ) -> Result<(ControllerSchedulerEpoch, ControllerTimeSample, u64), Fault> {
         self.check()?;
         let request = match self.task.controller_time_access() {
-            ControllerTimeAccess::Idle(i) => i.request().map_err(|_| Fault::Hardware)?,
-            _ => return Err(Fault::Hardware),
+            ControllerTimeAccess::Idle(i) => i.request().map_err(|_| Fault::ClockBegin)?,
+            _ => return Err(Fault::ClockBusy),
         };
         loop {
             if self.cancel.load(Ordering::Acquire) || self.timer.now() >= deadline {
                 let _ = self.task.cancel_owned_controller_time(request);
-                return Err(Fault::Hardware);
+                return Err(Fault::ClockTimeout);
             }
             match self
                 .task
                 .recheck_owned_controller_time(request)
-                .map_err(|_| Fault::Hardware)?
+                .map_err(|_| Fault::ClockRead)?
             {
                 ControllerTimeEventStep::Sample { sample, .. } => {
                     let epoch = self.epoch.unwrap_or_else(|| {
@@ -289,13 +311,9 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         self.phase = DtmEventPhase::Initial;
         self.previous = None;
         self.count = PacketCount::default();
-        let outcome = self.event().await;
+        let outcome = self.publish_event().await;
         match outcome {
-            Ok(Started::Executed) => Ok(Started::Executed),
-            Ok(other) => {
-                self.end().await?;
-                Ok(other)
-            }
+            Ok(()) => Ok(Started::Executed),
             Err(fault) => {
                 self.faulted = true;
                 Err(fault)
@@ -307,13 +325,19 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         if self.config.is_none() {
             return Ok(());
         }
-        let outcome = self.event().await;
+        let outcome = async {
+            if self.pending.is_none() {
+                self.publish_event().await?;
+            }
+            self.poll_event().await
+        }
+        .await;
         if outcome.is_err() {
             self.faulted = true;
         }
         outcome.map(|_| ())
     }
-    async fn event(&mut self) -> Result<Started, Fault> {
+    async fn publish_event(&mut self) -> Result<(), Fault> {
         self.check()?;
         let deadline = self.deadline()?;
         self.stop(deadline).await?;
@@ -418,40 +442,66 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             deadline,
             engine.resume(&self.doorbell),
         )
-        .await?
-        .map_err(|_| Fault::Hardware)?;
+        .await
+        .map_err(|fault| timeout_at(fault, Fault::ResumeTimeout))?
+        .map_err(|_| Fault::SchedulerResume)?;
         let (_, next) = guard(
             self.cancel,
             &self.timer,
             deadline,
             engine.submit_dtm(instance, &self.doorbell),
         )
-        .await?
-        .map_err(|_| Fault::Hardware)?;
+        .await
+        .map_err(|fault| timeout_at(fault, Fault::SubmitTimeout))?
+        .map_err(|_| Fault::SchedulerSubmit)?;
         if !matches!(next, SchedulerNext::Finished) {
-            return Err(Fault::Hardware);
+            return Err(Fault::SchedulerSubmit);
         }
+        self.pending = Some(PendingEvent {
+            window,
+            receiver,
+            deadline,
+        });
+        Ok(())
+    }
+    /// Keep a listening receiver durable while returning to the command queue
+    /// after one finite wait. Test End must not wait for a packet to arrive.
+    async fn poll_event(&mut self) -> Result<(), Fault> {
+        let event = self.pending.ok_or(Fault::Accounting)?;
+        let deadline = if event.receiver {
+            self.deadline()?
+        } else {
+            event.deadline
+        };
         while self.task.task_owner().engine().scheduled_count() != 0 {
-            let input = guard(
+            let recheck = self
+                .timer
+                .now()
+                .checked_add(self.limits.command_turn)
+                .ok_or(Fault::Hardware)?;
+            let input = step(
                 self.cancel,
                 &self.timer,
                 deadline,
+                recheck,
                 select(self.wake.wait(), poll_fn(|cx| self.clock.poll_request(cx))),
             )
-            .await?;
+            .await
+            .map_err(|fault| timeout_at(fault, Fault::WakeTimeout))?;
             let captured = match input {
-                Either::First(captured) => captured.map_err(|_| Fault::Hardware)?,
-                Either::Second(request) => {
+                None => return Ok(()),
+                Some(Either::First(captured)) => captured.map_err(|_| Fault::SchedulerWake)?,
+                Some(Either::Second(request)) => {
                     let sample = self.now().await;
                     C::answer(request, sample);
                     sample?;
                     continue;
                 }
             };
-            let batch = captured.classify().map_err(|_| Fault::Hardware)?;
+            let batch = captured.classify().map_err(|_| Fault::SchedulerWake)?;
             self.task
                 .capture_scheduler_finished_lists(batch)
-                .map_err(|_| Fault::Hardware)?;
+                .map_err(|_| Fault::SchedulerWake)?;
             loop {
                 match self.task.scheduler_finished_lists().step() {
                     SchedulerFinishedListWorkerStep::List { observed, .. } => {
@@ -459,38 +509,42 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                             .task_owner()
                             .engine()
                             .complete(observed)
-                            .map_err(|_| Fault::Hardware)?;
+                            .map_err(|_| Fault::SchedulerComplete)?;
                     }
                     SchedulerFinishedListWorkerStep::Complete
                     | SchedulerFinishedListWorkerStep::Idle => break,
                 }
             }
         }
-        self.stop(deadline).await?;
+        self.stop(self.deadline()?).await?;
+        self.finish_event(Finish::Natural)
+    }
+    fn finish_event(&mut self, finish: Finish) -> Result<(), Fault> {
+        let pending = self.pending.ok_or(Fault::Accounting)?;
         let event = self
             .task
             .task_owner()
             .engine()
             .dtm()
             .map_err(|_| Fault::Hardware)?
-            .finish_event(self.instance.as_ref().ok_or(Fault::Accounting)?, receiver)
-            .map_err(|_| Fault::Hardware)?;
-        self.previous = Some(window);
+            .finish_event(
+                self.instance.as_ref().ok_or(Fault::Accounting)?,
+                pending.receiver,
+            )
+            .map_err(|_| Fault::DtmFinish)?;
+        self.previous = Some(pending.window);
+        self.pending = None;
         self.phase = DtmEventPhase::Recurring;
-        match event.status {
-            DtmSchedulerItemCompletionStatus::Zero => {
-                if receiver && matches!(event.received, Some(Ok(_))) {
-                    if let Some(n) = self.count.packets.checked_add(1) {
-                        self.count.packets = n;
-                    } else {
-                        self.count.saturated = true;
-                    }
+        if successful(event.status, finish)? {
+            if pending.receiver && matches!(event.received, Some(Ok(_))) {
+                if let Some(n) = self.count.packets.checked_add(1) {
+                    self.count.packets = n;
+                } else {
+                    self.count.saturated = true;
                 }
-                Ok(Started::Executed)
             }
-            DtmSchedulerItemCompletionStatus::Aborted => Ok(Started::Aborted),
-            DtmSchedulerItemCompletionStatus::NonZero(_) => Err(Fault::Hardware),
         }
+        Ok(())
     }
     /// Normal End reclaims exactly this session's graph after confirmed stop.
     pub async fn end(&mut self) -> Result<PacketCount, Fault> {
@@ -503,9 +557,29 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
     async fn end_inner(&mut self) -> Result<PacketCount, Fault> {
         self.check()?;
         let deadline = self.deadline()?;
+        if let Some(captured) = self.wake.take().map_err(|_| Fault::SchedulerWake)? {
+            // Captured P3 faults still preempt the ordinary End path.
+            let _ = captured.classify().map_err(|_| Fault::SchedulerWake)?;
+        }
         self.stop(deadline).await?;
+        if let Some(captured) = self.wake.take().map_err(|_| Fault::SchedulerWake)? {
+            let _ = captured.classify().map_err(|_| Fault::SchedulerWake)?;
+        }
         if self.task.task_owner().engine().scheduled_count() != 0 {
-            return Err(Fault::Hardware);
+            let next = guard(
+                self.cancel,
+                &self.timer,
+                deadline,
+                self.task.task_owner().engine().flush(&self.doorbell),
+            )
+            .await?
+            .map_err(|_| Fault::SchedulerComplete)?;
+            if !matches!(next, SchedulerNext::Finished) {
+                return Err(Fault::SchedulerComplete);
+            }
+        }
+        if self.pending.is_some() {
+            self.finish_event(Finish::Stopped)?;
         }
         let pool = self
             .task
@@ -535,6 +609,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             || self.instance.is_some()
             || self.etm.is_some()
             || self.config.is_some()
+            || self.pending.is_some()
             || self.faulted
             || self.cancel.load(Ordering::Acquire)
         {
@@ -542,5 +617,12 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         } else {
             Ok(self.task)
         }
+    }
+}
+fn timeout_at(fault: Fault, stage: Fault) -> Fault {
+    if fault == Fault::Deadline {
+        stage
+    } else {
+        fault
     }
 }

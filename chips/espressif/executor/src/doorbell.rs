@@ -83,6 +83,18 @@ pub struct DoorbellAcknowledger<const SWI: u8> {
 }
 
 impl<const SWI: u8> DoorbellAcknowledger<SWI> {
+    /// Separate handler acknowledgement from task-owned route authority.
+    /// The image must install the returned acknowledger before enabling the
+    /// route, and mask the route before a task transfers handler storage.
+    pub fn into_parts(
+        self,
+    ) -> (
+        SoftwareInterruptAcknowledger<'static, SWI>,
+        oer_espressif_esp_hal_irq::Route,
+    ) {
+        (self.interrupt, self.bell)
+    }
+
     /// Enable the route after this owner has reached the ISR's storage.
     pub fn enable(&mut self) -> Result<(), oer_espressif_esp_hal_irq::Error> {
         oer_espressif_esp_hal_irq::enable_route(&self.bell)

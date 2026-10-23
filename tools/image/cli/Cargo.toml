@@ -19,6 +19,7 @@ oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio" 
 jiff = { version = "=0.2.37", default-features = false, features = ["std"] }
 hex = "=0.4.3"
 oer-hil-lab = { path = "../../hil/lab" }
+oer-hil-link = { path = "../../hil/link" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }

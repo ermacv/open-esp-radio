@@ -96,7 +96,7 @@ impl<H> BluetoothAttachment<H> {
 impl<C, T, O, H> crate::BluetoothBackend<Esp32s31Radio<C, T, O>, RcSlow> for BluetoothAttachment<H>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
     H: RadioController<C::Backend>,
 {

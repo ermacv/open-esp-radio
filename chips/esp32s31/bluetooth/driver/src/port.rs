@@ -26,8 +26,12 @@ use oer_time::{Clock, Duration, Instant, Timer};
 
 mod capacity;
 #[cfg(any(target_arch = "riscv32", test))]
+mod event;
+#[cfg(any(target_arch = "riscv32", test))]
 mod guard;
 mod lifecycle;
+/// Durable command and clock endpoints for the separately retained P2 worker.
+pub mod mailbox;
 mod owned;
 /// Physical DTM session worker, kept in the image's permanently placed P2 future.
 #[cfg(target_arch = "riscv32")]
@@ -59,6 +63,26 @@ pub enum Fault {
     Accounting,
     Abandoned,
     RejectedTerminal,
+    ClockBusy,
+    ClockBegin,
+    ClockTimeout,
+    ClockRead,
+    Deadline,
+    SchedulerStop,
+    SchedulerResume,
+    SchedulerSubmit,
+    SchedulerWake,
+    SchedulerComplete,
+    DtmFinish,
+    DtmStatus,
+    TimerInterrupt,
+    TimerBegin,
+    TimerStep,
+    TimerRearm,
+    StopTimeout,
+    ResumeTimeout,
+    SubmitTimeout,
+    WakeTimeout,
 }
 /// Notification from P1 to P2. The image uses its priority-safe static signal.
 pub trait Notify {
@@ -69,15 +93,19 @@ pub trait Notify {
 /// Independent, generation-keyed controller-clock request endpoint.
 #[allow(async_fn_in_trait)]
 pub trait ClockClient {
+    /// P1 opens bookkeeping before enabling the physical installation.
+    fn activate(&mut self) -> Result<(), Fault>;
+    /// P1 drains an abandoned clock response before uninstall can join.
+    async fn retire(&mut self) -> Result<(), Fault>;
     async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault>;
 }
 /// A complete start description copied only after the request is retained.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Start {
     Transmit(Transmit),
     Receive(Receive),
 }
-/// Definite pre-publication refusal or a completed first physical event.
+/// Definite pre-publication refusal or an admitted physical test session.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Started {
     Executed,
@@ -166,6 +194,8 @@ impl<N: Notify> Shared<N> {
             fault: OnceValue::new(),
         }
     }
+    // Keep the notification's typed Waker scope out of generated poll frames.
+    #[inline(never)]
     fn poison(&self, fault: Fault) {
         let _ = self.fault.set(fault);
         self.enabled.store(false, Ordering::Release);
@@ -201,8 +231,8 @@ pub struct Frontend<'s, Id: SlotIdentity, D: Device, X> {
         [Seat<'static, CommandCapacity, Child<Path<Id>, 0>>; WAITERS],
         OwnedSession<Path<Id>, Idle>,
     )>,
-    credits: &'s Pool<Id>,
-    outstanding: &'s Cell<Option<LeOperationId>>,
+    credits: &'s mut Pool<Id>,
+    outstanding: &'s mut Cell<Option<LeOperationId>>,
     wakes: SlotWakes<'s, Id>,
     timer: D::Timer,
     clock: &'s mut D::Clock,

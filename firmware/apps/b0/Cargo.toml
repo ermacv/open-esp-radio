@@ -1,0 +1,45 @@
+[package]
+name = "oer-firmware-apps-b0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+build = "build.rs"
+[dependencies]
+oer-bluetooth-hci = { path = "../../../protocols/bluetooth/hci" }
+
+nb = "1.1.0"
+oer-time = { path = "../../../portable/time" }
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+embassy-executor = { version = "0.10.0", default-features = false, features = ["nightly"] }
+esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["bluetooth-engine"] }
+oer-esp32s31-bluetooth-driver = { path = "../../../chips/esp32s31/bluetooth/driver" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-memory = { path = "../../../portable/memory" }
+static_cell = "2.1.1"
+oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+embassy-futures = "0.1.2"
+oer-bluetooth-le-port = { path = "../../../protocols/bluetooth/le/port" }
+oer-bluetooth-le-radio = { path = "../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-le-controller = { path = "../../../protocols/bluetooth/le/controller" }
+oer-radio-port = { path = "../../../protocols/radio/port" }
+oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", features = ["bluetooth"] }
+oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", features = ["bluetooth"] }
+oer-espressif-esp-hal-irq = { workspace = true }
+oer-espressif-usb-fifo = { workspace = true, features = ["esp32s31"] }
+[dev-dependencies]
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+[build-dependencies]
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+[lints]
+workspace = true

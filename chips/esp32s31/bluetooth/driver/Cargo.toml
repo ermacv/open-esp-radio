@@ -14,6 +14,7 @@ oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
 oer-bluetooth-le-ll = { path = "../../../../protocols/bluetooth/le/ll" }
 oer-radio-port = { path = "../../../../protocols/radio/port" }
 oer-memory = { path = "../../../../portable/memory" }
+oer-sync = { path = "../../../../portable/sync" }
 oer-esp32s31-radio-client = { path = "../../radio/client", features = ["bluetooth"] }
 embassy-futures = "0.1.2"
 oer-esp32s31-hal = { path = "../../hal", features = ["bluetooth-engine"] }

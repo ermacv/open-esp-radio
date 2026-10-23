@@ -125,6 +125,7 @@ jobs:
               | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | select(.metadata."open-radio".instrumentation == null)
+              | select(.name != "oer-firmware-apps-b0")
               | "-p " + .name' <<<"$meta"
           }
           # HIL classes use their build recipes for features and cfgs.
@@ -141,7 +142,9 @@ jobs:
                   | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
               | join(" ")' <<<"$meta"
           }
-          # W3 keeps its large futures in typed static PSRAM, as HIL images do.
+          # B0 selects Embassy's nightly macro feature; keep it out of the
+          # other images' feature-unified invocation.
+          RUSTC_BOOTSTRAP=oer_firmware_apps_b0 cargo clippy --locked --target riscv32imafc-unknown-none-elf -p oer-firmware-apps-b0
           RUSTC_BOOTSTRAP=oer_firmware_apps_w3 cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo clippy --locked --target riscv32imac-unknown-none-elf $(firmware true)
           # Each in a target directory of its own, as `cargo fw` keeps the
@@ -163,8 +166,10 @@ jobs:
               | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | select(.metadata."open-radio".instrumentation == null)
+              | select(.name != "oer-firmware-apps-b0")
               | "-p " + .name' <<<"$meta"
           }
+          RUSTC_BOOTSTRAP=oer_firmware_apps_b0 cargo check --locked --target riscv32imafc-unknown-none-elf -p oer-firmware-apps-b0
           RUSTC_BOOTSTRAP=oer_firmware_apps_w3 cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Shared words with esp-hal
@@ -185,11 +190,13 @@ jobs:
         run: |
           cargo fw build boot-smoke
           cargo fw build radio-root
+          cargo fw build b0
           cargo fw build w0
           cargo fw build w1
           cargo fw build w2
           cargo fw build w3
           cargo fw build w0 --analysis
+          cargo fw build b0 --analysis
           cargo fw build w1 --analysis
           cargo fw build w2 --analysis
           cargo fw build w3 --analysis

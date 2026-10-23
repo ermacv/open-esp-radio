@@ -37,7 +37,7 @@ impl Role {
     }
 }
 
-/// Initial reset versus a recurring event that retains the live session image.
+/// Event phase selects receiver wait policy and recurring item power.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DtmEventPhase {
     Initial,
@@ -119,16 +119,17 @@ impl DtmImageBuilder {
     /// separately verifies every bound pointer before changing live memory.
     pub fn build(self, seed: DtmPositionalEventSeed) -> DtmPositionalEventWords {
         let words = seed.words();
-        let link_state = match self.phase {
-            DtmEventPhase::Initial => words.link_state().apply_reset(
-                Some(seed.tx_header_head_projection()),
-                Some(seed.rx_header_tail_projection()),
-                self.power,
-                self.configuration,
-                self.role == DtmRole::Receiver,
-            ),
-            DtmEventPhase::Recurring => words.link_state(),
-        };
+        // SOURCE: pinned dtm_4.o's recurring C15 body calls the same
+        // 7gOG link-state reset as the initial path. Hardware consumes the
+        // ready/profile fields; retain the current private links while
+        // restoring the event policy before every publication.
+        let link_state = words.link_state().apply_reset(
+            Some(seed.tx_header_head_projection()),
+            Some(seed.rx_header_tail_projection()),
+            self.power,
+            self.configuration,
+            self.role == DtmRole::Receiver,
+        );
         let item = words
             .scheduler_item()
             .apply_event(

@@ -185,7 +185,12 @@ faults the runner. The independent clock-request hook is served during IRQ
 waits as well as between operations. Pool and epoch brands stay in the P2
 owner; they do not cross static queues.
 
-`firmware/apps/b0` composes actor join/tracking, P3 publication, one 1M RX
-event, End, IRQ detachment, leave/reset and arena return. This composition has
-no mailbox binding between `Backend` and `Runner`, no HCI transport or Reset
-loop, and no hardware/RF qualification.
+`port::mailbox` binds the supervisor to the retained physical worker. P1 alone
+owns clock bookkeeping, including activation before enable and retirement
+after drain. Retirement waits for an abandoned clock answer before returning
+the poster. P2 constructs an epoch-keyed endpoint without entering that cell
+and serves correlated clock requests through the mailbox.
+
+`firmware/apps/b0` composes actor join/tracking, P3 publication, H4 Reset/Rand
+and 1M DTM commands, End, IRQ detachment, leave/reset and arena return. Its
+two-boot RF/count gate is qualified; hardware port conformance is unqualified.

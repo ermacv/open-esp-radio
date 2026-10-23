@@ -66,8 +66,8 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 failed_request: &q.failed_request,
                 failed_terminal: &q.failed_terminal,
                 resources: &mut q.resources,
-                credits: q.credits.as_ref().expect("prepared command credit"),
-                outstanding: &q.outstanding,
+                credits: q.credits.as_mut().expect("prepared command credit"),
+                outstanding: &mut q.outstanding,
                 wakes,
                 timer: q.timer.as_ref().expect("prepared timer").clone(),
                 clock: q.clock.as_mut().expect("prepared clock endpoint"),
@@ -313,6 +313,10 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
         if v.shared.draining.load(Ordering::Acquire) {
             return Ok(Err(Refusal::Unavailable));
         }
+        if let Err(cause) = v.clock.get_mut().activate() {
+            v.shared.poison(cause);
+            return Err(Poisoned { cause });
+        }
         v.shared.enabled.store(true, Ordering::Release);
         v.shared.drained.store(false, Ordering::Release);
         v.shared.notify.notify();
@@ -382,7 +386,12 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
                 Poll::Pending
             }
         })
-        .await
+        .await?;
+        if let Err(cause) = v.clock.get_mut().retire().await {
+            v.shared.poison(cause);
+            return Err(Poisoned { cause });
+        }
+        Ok(())
     }
     async fn now<'a, 'p>(
         _: Call,

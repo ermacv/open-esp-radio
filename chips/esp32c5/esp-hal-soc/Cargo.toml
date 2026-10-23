@@ -14,7 +14,7 @@ esp32c5 = ["dep:esp-hal"]
 [dependencies]
 oer-esp32c5-hal = { path = "../hal" }
 oer-time = { path = "../../../portable/time" }
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "d1167e740b3ec947d56f97b5091ebcb67a0cebfa", default-features = false, features = ["esp32c5", "unstable"], optional = true }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "bdc9b49032d97a5884df4e4f8dfbfe00a31af9ba", default-features = false, features = ["esp32c5", "unstable"], optional = true }
 
 [lints]
 workspace = true

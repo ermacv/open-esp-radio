@@ -8,6 +8,7 @@
 use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};
+mod b0;
 mod command;
 mod diagnostics;
 mod image;
@@ -26,6 +27,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Run the two-boot B0 1M DTM stand procedure against the pinned C5 peer.
+    B0 {
+        #[arg(long)]
+        board: String,
+        #[arg(long)]
+        peer_board: String,
+        /// Common-image sizes.json used for the owner's full SRAM accounting.
+        #[arg(long)]
+        base_sizes: std::path::PathBuf,
+    },
     /// Render typed boot diagnostics from a captured console file; no board I/O.
     DecodeConsole { console: std::path::PathBuf },
     /// W3 host observations and strict report checking, independent of firmware.
@@ -149,6 +160,11 @@ fn main() -> ExitCode {
     let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
+            Command::B0 {
+                board,
+                peer_board,
+                base_sizes,
+            } => return b0::run(&root, &board, &peer_board, &base_sizes),
             Command::DecodeConsole { console } => diagnostics::decode_file(&console)?,
             #[cfg(target_os = "linux")]
             Command::W3 {

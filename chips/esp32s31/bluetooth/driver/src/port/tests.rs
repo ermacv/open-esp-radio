@@ -28,6 +28,12 @@ impl Notify for Notification {
 }
 struct TestClock(TestTimer);
 impl ClockClient for TestClock {
+    fn activate(&mut self) -> Result<(), Fault> {
+        Ok(())
+    }
+    async fn retire(&mut self) -> Result<(), Fault> {
+        Ok(())
+    }
     async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault> {
         Ok(Ok(oer_time::RadioInstant::from_micros(
             self.0.now().as_micros(),
@@ -364,7 +370,7 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
             .ok()
             .expect("fresh capacity fixture");
         let p = front.ports();
-        let pool = p.credits;
+        let pool = &*p.credits;
         let first = pool.take(0).await;
         {
             let mut cancelled = std::boxed::Box::pin(pool.take(1));
