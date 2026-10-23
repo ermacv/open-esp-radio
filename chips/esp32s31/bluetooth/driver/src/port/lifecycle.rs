@@ -328,15 +328,16 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
         })
         .await
     }
-    async fn disable<'a, 'p>(
+    async fn disable<'a, 'p, S>(
         _: Call,
         v: &'a mut Self::View<'p>,
-        sink: &'a mut dyn FnMut(Self::Terminal<'p>) -> ControlFlow<Self::Terminal<'p>>,
+        sink: &'a mut S,
     ) -> Result<(), Poisoned<Fault>>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
+        S: FnMut(Self::Terminal<'p>) -> ControlFlow<Self::Terminal<'p>>,
     {
         v.shared.draining.store(true, Ordering::Release);
         v.shared.notify.notify();
