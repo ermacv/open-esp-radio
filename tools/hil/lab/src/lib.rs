@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 pub mod air;
+pub mod calibration_cache;
 pub mod config;
 mod dut;
 pub use dut::{attach_console, peer_console};
