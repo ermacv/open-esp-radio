@@ -323,10 +323,12 @@ impl Server {
             radio::PortEnd::FailStopped { output, outcome }
                 if case == catalog::Case::Group(
                     oer_ieee80211_port::conformance::group_keys::ProgressCase::ReplacementRollback,
-                ) && matches!(outcome.outcome(), radio::Abandon::Stopped(_)) =>
+                ) =>
             {
                 // Last case: emit its captured evidence without resurrecting
-                // a reusable radio owner after fail-stop.
+                // a reusable radio owner after fail-stop. Real hardware's
+                // abandonment has no walker/ISR stop proof and remains
+                // quarantined until reset; evidence does not grant reuse.
                 drop(outcome);
                 output
             }
