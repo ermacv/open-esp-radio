@@ -71,6 +71,15 @@ projected as the CONTROL subject. Reported bounds and margins remain measured.
 including an excluded one, must be read in every production boot. A missing
 or unreadable production sample yields INCOMPLETE.
 
+The typed `reference = "same-run-control"` review for XTAL duty bytes
+`analog-i2c.61.09` and `analog-i2c.61.0a` requires the vendor CONTROL from the
+same complete alternating run. It uses the existing spread formula and the
+unchanged masks; every byte must still be read. The vendor has shifted between
+44–47, 2–17 and 43–58 on one board at overlapping 23–25 °C temperatures; the
+physical cause is unknown. Other recorded bounds remain fixed. Recorded-only
+comparison without CONTROL leaves these bytes explicitly INCOMPLETE and never
+builds or flashes a vendor image to supply the missing control.
+
 Each run retains per-boot captures, console evidence, image digests, reference
 ESP-IDF revision, readable/unreadable registers and the complete comparison
 ranges. Calibration fields outside the committed relation remain uncovered.
