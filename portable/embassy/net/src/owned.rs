@@ -21,9 +21,11 @@ use xarxa_driver::{
 
 use oer_ieee80211_datapath::{DestinationTxHead, DestinationTxQueues};
 
+#[cfg(feature = "external-rx")]
 mod external_rx;
 mod tx_budget;
 mod tx_queue;
+#[cfg(feature = "external-rx")]
 pub use external_rx::{
     ExternalRxAdmission, ExternalRxCounters, ExternalRxOrigin, ExternalRxRefusal,
 };
