@@ -137,6 +137,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
 
     /// Queues `body` without making the caller wait for the endpoint; a full
     /// queue drops it and counts the loss. Returns the message's sequence.
+    // Keep the publication guard's wake in this frame: inlining its drop
+    // into Intake loses the typed Waker scope needed by stack analysis.
+    #[inline(never)]
     pub fn publish<M: Message>(&self, session_id: u64, request_id: u32, body: &M) -> Option<u32> {
         let Ok(_publishing) = self.publishing.try_lock() else {
             self.dropped_messages.fetch_add(1, Ordering::Relaxed);
