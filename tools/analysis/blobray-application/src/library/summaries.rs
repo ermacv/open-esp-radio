@@ -598,7 +598,7 @@ pub(super) fn analyze<'a>(
                                 && objects.get(object).ok_or_else(integrity)?.safe
                                 && eligible(summary.coverage, summary.semantics, &records, c)?;
                             if publish || assumptions.signatures.is_some() {
-                                let facts = function_facts(&function, &records, memory, c)?;
+                                let facts = function_facts(function, &records, memory, c)?;
                                 let links = CallLinks::new(&facts, function, catalog, memory, c)?;
                                 let entry_required =
                                     applied_signature.is_some_and(|s| s.arguments < 8);
@@ -692,7 +692,7 @@ pub(super) fn analyze<'a>(
                                     c,
                                 )?;
                                 if publish {
-                                    let facts = function_facts(&function, &records, memory, c)?;
+                                    let facts = function_facts(function, &records, memory, c)?;
                                     let links =
                                         CallLinks::new(&facts, function, catalog, memory, c)?;
                                     contract = produce(
@@ -710,7 +710,7 @@ pub(super) fn analyze<'a>(
                                 }
                             }
                             {
-                                let facts = function_facts(&function, &records, memory, c)?;
+                                let facts = function_facts(function, &records, memory, c)?;
                                 let mut sites = CallSites::new(&facts, memory);
                                 for raw in raw_conflicts.iter() {
                                     c.checkpoint(1)?;

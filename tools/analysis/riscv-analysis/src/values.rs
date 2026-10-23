@@ -1296,7 +1296,9 @@ pub(super) fn analyze_with<'m>(
                         // yet, such as one through a jump table whose base a
                         // register holds: a caller that reads the table from
                         // them can supply its targets.
-                        if !return_pattern && !operations[i].opaque_call {
+                        // Mixed local/external targets also produce a transfer
+                        // below. That path owns their single pre-jump state.
+                        if local && !return_pattern && !operations[i].opaque_call {
                             sink.record(
                                 &FunctionRecord::CallInputs {
                                     offset: node.offset,
@@ -2430,6 +2432,159 @@ mod tests {
                 .iter()
                 .any(|r| matches!(r, FunctionRecord::CallInputs { offset: 6, .. }))
         );
+    }
+    #[test]
+    fn mixed_local_and_external_targets_have_one_canonical_input_state() {
+        struct Image;
+        impl ImageMemory for Image {
+            fn read_constant(&self, _: u32, _: &mut [u8], _: &mut dyn RunControl) -> Result<bool> {
+                Ok(false)
+            }
+        }
+        // Fan-in reaches one jalr with local, mixed or external exact targets.
+        // Nine alternatives reproduce the profile sensitivity: widening at 8,
+        // but a mixed finite target at 16. Both paths own one pre-jump state.
+        for targets in [
+            vec![2, 4],
+            vec![2, 0x1000],
+            vec![0x1000, 0x2000],
+            vec![2, 4, 6, 8, 10, 12, 14, 16, 0x1000],
+        ] {
+            for link in [false, true] {
+                let last = targets.len() + 1;
+                let ops: Vec<_> = std::iter::once(SemanticOp::None)
+                    .chain(targets.iter().map(|&target| set(6, target)))
+                    .chain([SemanticOp::None])
+                    .collect();
+                let bytes: Vec<_> = (0..ops.len()).flat_map(|i| [i as u8, 0]).collect();
+                let nodes: Vec<_> = (0..ops.len())
+                    .map(|i| Node {
+                        offset: i as u64 * 2,
+                        decoded: DecodedOp {
+                            length: 2,
+                            text: String::new(),
+                            flow: if i == last {
+                                InstructionFlow::Indirect {
+                                    base: 6,
+                                    offset: 0,
+                                    link,
+                                }
+                            } else {
+                                InstructionFlow::Next
+                            },
+                        },
+                        conflict: false,
+                    })
+                    .collect();
+                let edges: Vec<_> = (1..last)
+                    .map(|i| (0, i))
+                    .chain((1..last).map(|i| (i, last)))
+                    .map(|(a, b)| Edge {
+                        from: a as u64 * 2,
+                        target: Some(b as u64 * 2),
+                        relation: EdgeKind::Jump,
+                        external: false,
+                    })
+                    .collect();
+                let input = FunctionInput {
+                    traps: crate::TrapSemantics::Unknown,
+                    image: Some(&Image),
+                    section: 1,
+                    extent: CodeRange {
+                        start: 0,
+                        length: bytes.len() as u64,
+                    },
+                    bytes: &bytes,
+                    relocations: &PreparedReferences::empty(),
+                    data_ranges: &[],
+                    jumps: &[],
+                    returns: &NoSummaries,
+                    call_behavior: &UnknownCallBehavior,
+                };
+                let memory = WorkingMemory::new(1024 * 1024).expect("value fixture");
+                let mut sink = Records::default();
+                analyze_with(
+                    &input,
+                    &nodes,
+                    &edges,
+                    &Isa(ops),
+                    &memory,
+                    &mut || Ok(()),
+                    &mut sink,
+                    true,
+                    None,
+                    false,
+                    None,
+                    None,
+                    &mut AdmittedVec::new(&memory),
+                    true,
+                    None,
+                )
+                .expect("mixed target analysis");
+                let facts =
+                    FunctionIndex::new(&sink.0, RecordPolicy::Canonical, &memory, &mut || Ok(()))
+                        .expect("one canonical state at each instruction");
+                let site = last as u64 * 2;
+                let finite = targets.len() <= MAX_VALUE_ALTERNATIVES;
+                let inputs = facts
+                    .call_inputs(site, &mut || Ok(()))
+                    .expect("call inputs")
+                    .expect("jump register state");
+                assert_eq!(
+                    inputs.registers[6],
+                    if finite {
+                        AbstractValue::Alternatives {
+                            values: ValueAlternatives::new(
+                                targets
+                                    .iter()
+                                    .map(|&value| ValueAlternative::Constant { value })
+                                    .collect(),
+                            )
+                            .expect("exact targets"),
+                        }
+                    } else {
+                        AbstractValue::Unknown
+                    }
+                );
+                let transfer = facts
+                    .transfer(site, &mut || Ok(()))
+                    .expect("transfer lookup");
+                let local = |&target: &u32| u64::from(target) < input.extent.length;
+                if link || !finite || !targets.iter().all(local) {
+                    let transfer = transfer.expect("external or call transfer");
+                    assert_eq!(transfer.call, link);
+                    assert_eq!(
+                        *transfer.target,
+                        if finite {
+                            AbstractValue::Alternatives {
+                                values: ValueAlternatives::new(
+                                    targets
+                                        .iter()
+                                        .map(|&address| ValueAlternative::ImageAddress { address })
+                                        .collect(),
+                                )
+                                .expect("all jump alternatives preserved"),
+                            }
+                        } else {
+                            AbstractValue::Unknown
+                        }
+                    );
+                } else {
+                    assert!(transfer.is_none());
+                }
+                assert_eq!(
+                    sink.0
+                        .iter()
+                        .filter(|r| matches!(r,
+                            FunctionRecord::SemanticGap {
+                                offset, reason: SemanticGapReason::UnexpandedControlFlow
+                            } if *offset == site
+                        ))
+                        .count(),
+                    usize::from(!link && finite && targets.iter().any(local))
+                );
+            }
+        }
     }
     #[test]
     fn an_object_dispatch_through_a_loaded_register_records_its_registers() {
