@@ -527,11 +527,11 @@ impl Gates {
         input: &CheckInput<'_>,
         mut image: crate::stack::Image,
     ) -> Result<CheckOutcome> {
-        let mut outcome = CheckOutcome::default();
-        outcome.sizes = Some(sizes::Measurements::of(&image, input.profile)?);
-        outcome
-            .rom_summaries
-            .extend(image.analysis.summaries.iter().cloned());
+        let mut outcome = CheckOutcome {
+            sizes: Some(sizes::Measurements::of(&image, input.profile)?),
+            rom_summaries: image.analysis.summaries.iter().cloned().collect(),
+            ..CheckOutcome::default()
+        };
         if self.frames {
             self.frames_of(&image, input, CheckedElf::Bootstrap, &mut outcome);
         }
