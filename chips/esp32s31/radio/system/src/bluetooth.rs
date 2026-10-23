@@ -15,8 +15,7 @@ impl<S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<Wifi, S, B, T> {
             lp: self.lp,
             doorbell: self.doorbell,
             inbox: self.inbox,
-            mint: self.mint,
-            state: self.state,
+            core: self.core,
             extra: inbox,
         }
     }
@@ -44,7 +43,7 @@ where
             if served {
                 continue;
             }
-            let deadline = (!self.state.poisoned && self.state.tracked > 0)
+            let deadline = (!self.core.state.poisoned && self.core.state.tracked > 0)
                 .then(|| self.backend.tracking_deadline())
                 .flatten();
             let doorbell = self.doorbell;
