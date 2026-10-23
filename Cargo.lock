@@ -3138,6 +3138,7 @@ version = "0.1.0"
 dependencies = [
  "embassy-executor",
  "esp-hal",
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-hal",

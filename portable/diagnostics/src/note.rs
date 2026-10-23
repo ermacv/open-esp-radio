@@ -560,6 +560,45 @@ topics! {
         ("lines" lines: dec);
     W2Pass = 129, w2_pass, "OER-RESULT: pass w2" ();
     W2Fail = 130, w2_fail, "OER-RESULT: fail w2" ();
+    /// W0 console: the Wi-Fi client's bring-up evidence.
+    W0Identity = 140, w0_identity, "OER w0 identity"
+        ("rf_cal_version" rf_cal_version: dec, "base_mac" base_mac: bytes8,
+         "mac_ext" mac_ext: hexa);
+    W0Join = 141, w0_join, "OER w0 join registered"
+        ("epoch" epoch: dec, "calibration_path" calibration_path: name,
+         "registration_us" registration_us: wide);
+    W0JoinPhy = 142, w0_join_phy, "OER w0 join"
+        ("phy" phy: name, "micros" micros: wide);
+    W0ReadyWaits = 143, w0_ready_waits, "OER w0 ready_waits"
+        ("tx_dc_max_not_ready" tx_dc_max_not_ready: dec,
+         "pwdet_sar_max_not_ready" pwdet_sar_max_not_ready: dec);
+    W0RfCalibration = 144, w0_rf_calibration, "OER w0 rf_calibration"
+        ("charge_pump_locked" charge_pump_locked: flag, "frequency" frequency: flag,
+         "table_entries" table_entries: dec);
+    W0RfCalibrationNone = 145, w0_rf_calibration_none, "OER w0 rf_calibration None" ();
+    W0RfPoint = 146, w0_rf_point, "OER w0 rf_calibration_point"
+        ("point" point: name, "lock_observed" lock_observed: flag, "initial_cap" initial_cap: dec,
+         "final_cap" final_cap: dec, "accepted_cap_samples" accepted_cap_samples: dec);
+    W0Track = 147, w0_track, "OER w0 track mac_prepared=true"
+        ("tracking_due" tracking_due: flag, "tracking_us" tracking_us: wide,
+         "mac_handshake_samples" mac_handshake_samples: dec,
+         "mac_handshake_observations" mac_handshake_observations: dec);
+    W0Temperature = 148, w0_temperature, "OER w0 temperature"
+        ("value" value: signed, "acquisition" acquisition: name, "started_us" started_us: wide,
+         "completed_us" completed_us: wide);
+    W0Leave = 149, w0_leave, "OER w0 leave"
+        ("domain" domain: name, "cold" cold: flag);
+    W0ReleaseRefused = 150, w0_release_refused, "OER w0 release refused"
+        ("error" error: name, "state" state: dec);
+    W0JoinFailed = 151, w0_join_failed, "OER w0 join failed"
+        ("cause" cause: name);
+    W0TrackFailed = 155, w0_track_failed, "OER w0 track failed"
+        ("cause" cause: name);
+    W0TakeRadioFail = 152, w0_take_radio_fail, "OER-RESULT: fail w0 take_radio="
+        ("" error: name);
+    W0Fail = 153, w0_fail, "OER-RESULT: fail w0 "
+        ("" reason: name);
+    W0Pass = 154, w0_pass, "OER-RESULT: pass w0" ();
     /// The smoke image's Embassy timer rearming.
     Rearm = 7, rearm, "OPEN_RADIO_HIL rearm"
         ("step" step: dec, "delay_ms" delay_ms: wide, "elapsed_us" elapsed_us: wide);
