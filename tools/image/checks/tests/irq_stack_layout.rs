@@ -9,6 +9,15 @@ use object::{
 };
 
 fn link(harts: u32, allocations: [u32; 2], origin: u32) -> Result<Vec<u8>, String> {
+    link_with_task_stack(harts, allocations, origin, 196608)
+}
+
+fn link_with_task_stack(
+    harts: u32,
+    allocations: [u32; 2],
+    origin: u32,
+    task_stack: u32,
+) -> Result<Vec<u8>, String> {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path();
     fs::write(
@@ -70,7 +79,7 @@ fn link(harts: u32, allocations: [u32; 2], origin: u32) -> Result<Vec<u8>, Strin
         ("STAGE_TWO_HEADER_BYTES", 44),
         ("IRQ_STACK_HART0_BYTES", allocations[0]),
         ("IRQ_STACK_HART1_BYTES", allocations[1]),
-        ("CPU0_PSRAM_TASK_STACK_BYTES", 196608),
+        ("CPU0_PSRAM_TASK_STACK_BYTES", task_stack),
         ("HART_COUNT", harts),
         ("__runtime_cpu0_irq_stack_guard_bytes", 4096),
     ] {
@@ -177,5 +186,20 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
             object.section_by_name(".irq_stacks").unwrap().size(),
             sizes.iter().map(|&x| u64::from(x)).sum::<u64>()
         );
+    }
+}
+
+#[test]
+fn a_task_stack_sized_from_its_bound_is_an_exact_range_below_bss() {
+    for task_stack in [17264, 196608] {
+        let bytes = link_with_task_stack(1, [32768; 2], 0x20000000, task_stack).unwrap();
+        let elf = object::File::parse(&*bytes).unwrap();
+        let address = |name: &str| elf.symbol_by_name(name).unwrap().address();
+        let bottom = address("__runtime_cpu0_task_stack_bottom");
+        let top = address("__runtime_cpu0_task_stack_top");
+        assert_eq!(top - bottom, u64::from(task_stack));
+        assert_eq!(bottom % 64, 0);
+        assert_eq!(address("_stack_end"), bottom);
+        assert_eq!(address("_stack_start"), top);
     }
 }

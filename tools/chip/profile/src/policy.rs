@@ -110,6 +110,25 @@ pub enum Storage<'a> {
 }
 
 impl TaskStack {
+    /// The allocation of a stack whose bound is proven: the bound plus the
+    /// reserve, rounded up to the 16-byte stack-pointer alignment. The
+    /// stack's bottom is the 64-byte aligned start of its section and
+    /// carries the watchpoint, so the size has no further constraint.
+    pub fn proven_allocation_bytes(&self, bound: u64) -> Result<u32> {
+        let bytes = bound
+            .checked_add(u64::from(self.minimum_free_bytes))
+            .and_then(|bytes| bytes.checked_add(15))
+            .map(|bytes| bytes / 16 * 16)
+            .ok_or("task stack allocation overflows u64")?;
+        u32::try_from(bytes).map_err(|_| {
+            format!(
+                "task stack bound {bound} + {} free bytes does not fit a u32 allocation",
+                self.minimum_free_bytes
+            )
+            .into()
+        })
+    }
+
     pub fn storage(&self) -> Storage<'_> {
         match (&self.storage_symbol, &self.bottom_symbol, &self.top_symbol) {
             (Some(symbol), None, None) => Storage::Symbol(symbol),
@@ -350,6 +369,55 @@ impl StackPolicy {
         variables
     }
 
+    /// Set the exact size of the CPU0 task stack's placement range: an
+    /// explicit allocation, or the size the image linker chose from the
+    /// stack's proven bound.
+    pub fn set_task_stack_bytes(profile: &mut crate::Profile, bytes: u32) -> Result<()> {
+        let memory = profile
+            .memory
+            .as_ref()
+            .ok_or("a task stack allocation requires the chip memory map")?;
+        if bytes
+            >= memory
+                .psram
+                .ok_or("a task stack allocation requires PSRAM")?
+                .length
+        {
+            return Err("task stack allocation does not fit PSRAM".into());
+        }
+        let placement = profile
+            .placement
+            .as_mut()
+            .ok_or("a task stack allocation requires exact placement rules")?;
+        let rule = placement
+            .range
+            .iter_mut()
+            .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+            .ok_or("the chip has no staged CPU0 task stack placement rule")?;
+        if rule.region != "psram" || rule.bytes.is_none() {
+            return Err("the CPU0 task stack requires an exact PSRAM placement rule".into());
+        }
+        rule.bytes = Some(u64::from(bytes));
+        Ok(())
+    }
+
+    /// The CPU0 task stack of an image that declares it proven. Its size
+    /// comes from the proven bound, so the policy must not also name one.
+    pub fn proven_task_stack(&self) -> Result<&TaskStack> {
+        let stack = self
+            .cpu0_task_stack
+            .as_ref()
+            .ok_or("the image declares its task stack proven, but its policy names none")?;
+        if stack.allocation_bytes.is_some() {
+            return Err(
+                "the image declares its task stack proven and its policy sets \
+                        `allocation_bytes`: the size has two sources"
+                    .into(),
+            );
+        }
+        Ok(stack)
+    }
+
     /// Apply an image's explicit allocation to both its exact placement
     /// ranges and its interrupt-stack budget. SRAM, guards and margins stay
     /// those of the chip; the placement gate verifies the linked ranges.
@@ -361,31 +429,7 @@ impl StackPolicy {
             .as_ref()
             .and_then(|stack| stack.allocation_bytes)
         {
-            let memory = profile
-                .memory
-                .as_ref()
-                .ok_or("a task stack allocation requires the chip memory map")?;
-            if bytes
-                >= memory
-                    .psram
-                    .ok_or("a task stack allocation requires PSRAM")?
-                    .length
-            {
-                return Err("task stack allocation does not fit PSRAM".into());
-            }
-            let placement = profile
-                .placement
-                .as_mut()
-                .ok_or("a task stack allocation requires exact placement rules")?;
-            let rule = placement
-                .range
-                .iter_mut()
-                .find(|rule| rule.range == ["_stack_end", "_stack_start"])
-                .ok_or("the chip has no staged CPU0 task stack placement rule")?;
-            if rule.region != "psram" || rule.bytes.is_none() {
-                return Err("the CPU0 task stack requires an exact PSRAM placement rule".into());
-            }
-            rule.bytes = Some(u64::from(bytes));
+            Self::set_task_stack_bytes(&mut profile, bytes)?;
         }
         let Some(bytes) = self
             .interrupt_stacks
@@ -572,6 +616,41 @@ mod tests {
             policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(bytes);
             assert!(policy.runtime_profile(&base).is_err(), "{bytes}");
         }
+    }
+    #[test]
+    fn a_proven_task_stack_is_the_bound_plus_the_reserve_aligned_up() {
+        let stack = policy(None).cpu0_task_stack.unwrap();
+        assert_eq!(stack.minimum_free_bytes, 4096);
+        assert_eq!(stack.proven_allocation_bytes(880).unwrap(), 4976);
+        assert_eq!(stack.proven_allocation_bytes(881).unwrap(), 4992);
+        assert_eq!(stack.proven_allocation_bytes(0).unwrap(), 4096);
+        assert!(stack.proven_allocation_bytes(u64::MAX).is_err());
+        assert!(stack.proven_allocation_bytes(u64::from(u32::MAX)).is_err());
+    }
+    #[test]
+    fn a_proven_task_stack_and_an_explicit_allocation_are_two_sources() {
+        let mut policy = policy(None);
+        policy.proven_task_stack().unwrap();
+        policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(1 << 20);
+        let error = policy.proven_task_stack().unwrap_err().to_string();
+        assert!(error.contains("two sources"), "{error}");
+        policy.cpu0_task_stack = None;
+        assert!(policy.proven_task_stack().is_err());
+    }
+    #[test]
+    fn the_linked_task_stack_size_replaces_the_exact_range() {
+        let mut profile = profile();
+        StackPolicy::set_task_stack_bytes(&mut profile, 17264).unwrap();
+        let rule = profile
+            .placement
+            .as_ref()
+            .unwrap()
+            .range
+            .iter()
+            .find(|rule| rule.range == ["_stack_end", "_stack_start"])
+            .unwrap();
+        assert_eq!(rule.bytes, Some(17264));
+        assert!(StackPolicy::set_task_stack_bytes(&mut profile, 1 << 24).is_err());
     }
     fn policy(bytes: Option<u32>) -> StackPolicy {
         StackPolicy {

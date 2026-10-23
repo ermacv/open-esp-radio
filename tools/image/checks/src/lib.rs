@@ -282,7 +282,13 @@ impl Gates {
     /// contract, never "not applicable".
     pub fn runtime(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
-        let image_profile = input.policy.runtime_profile(input.profile)?;
+        let mut image_profile = input.policy.runtime_profile(input.profile)?;
+        // The image linker sized a proven task stack; its range is exactly
+        // that size.
+        let linked_task_stack = linker::strict::Placement::read(input.output)?.task_stack;
+        if let Some(allocation) = &linked_task_stack {
+            StackPolicy::set_task_stack_bytes(&mut image_profile, allocation.bytes)?;
+        }
         let profile = &image_profile;
         let chip =
             |table: &str| format!("chips/{}/platform/chip.toml names no {table}", profile.id);
@@ -399,6 +405,10 @@ impl Gates {
                                     &input.policy.runtime_task_stacks(),
                                 )?;
                                 audit.declared_proven = input.task_stack_proven;
+                                audit.size_source = Some(linker::task_stack::SizeSource::of(
+                                    input.policy,
+                                    linked_task_stack.as_ref(),
+                                ));
                                 if let Some(sizes) = &mut outcome.sizes {
                                     for stack in &audit.stacks {
                                         sizes.task(&image, stack)?;

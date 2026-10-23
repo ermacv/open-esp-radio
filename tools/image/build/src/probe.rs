@@ -144,6 +144,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         chip: chip.to_owned(),
         stack_policy: profile.stack_policy(),
         diagnostic: true,
+        task_stack_proven: false,
     };
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
     let mut cargo = command(cargo, root, package, target, jobs);

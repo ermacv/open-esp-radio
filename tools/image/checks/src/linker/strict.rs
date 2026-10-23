@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 use crate::interrupts::{InterruptPlacement, interrupt_stacks_of};
-use crate::stack::Image;
+use crate::stack::{Image, StackAudit};
+use oer_chip_profile::policy::StackPolicy;
 use oer_os_durable::inputs::Inputs;
 
 mod fingerprint;
@@ -30,6 +31,10 @@ pub struct Spec {
     /// Diagnostic/probe images retain the contract maximum on every hart.
     #[serde(default)]
     pub diagnostic: bool,
+    /// The image declares its CPU0 task stack proven: the link sizes it from
+    /// the bound of the first ELF.
+    #[serde(default)]
+    pub task_stack_proven: bool,
 }
 
 impl Spec {
@@ -41,7 +46,7 @@ impl Spec {
         &self,
         elf: &Path,
         inputs: &mut Inputs,
-    ) -> Result<Option<(Image, oer_chip_profile::Profile)>> {
+    ) -> Result<Option<(Image, oer_chip_profile::Profile, StackPolicy)>> {
         let profile = oer_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
         if profile.memory.is_none() || profile.interrupts.is_none() {
             return Ok(None);
@@ -50,7 +55,7 @@ impl Spec {
             oer_chip_profile::policy::StackPolicy::load_with_inputs(&self.stack_policy, inputs)?;
         let profile = policy.runtime_profile(&profile)?;
         let image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
-        Ok(Some((image, profile)))
+        Ok(Some((image, profile, policy)))
     }
 }
 
@@ -94,6 +99,9 @@ pub struct Placement {
     pub functions: Vec<PlacedFunction>,
     #[serde(default)]
     pub irq_stacks: Vec<super::irq_stacks::Allocation>,
+    /// The CPU0 task stack of an image that declares it proven.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_stack: Option<super::task_stack::Allocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<Fingerprint>,
 }
@@ -181,6 +189,7 @@ impl Placement {
         Ok(Self {
             functions,
             irq_stacks: Vec::new(),
+            task_stack: None,
             fingerprint: None,
         })
     }
@@ -276,7 +285,10 @@ pub(super) fn analyze(
     sections: &[InputSection],
     inputs: &mut Inputs,
 ) -> Result<Placement> {
-    let Some((image, profile)) = spec.image(output, inputs)? else {
+    let Some((image, profile, policy)) = spec.image(output, inputs)? else {
+        if spec.task_stack_proven {
+            return Err("the image declares its task stack proven, but its chip has no memory map and interrupt contract".into());
+        }
         return Ok(Placement::default());
     };
     let stacks = interrupt_stacks_of(&image)?;
@@ -313,6 +325,10 @@ pub(super) fn analyze(
     })?;
     let mut placement = Placement::select(&requested, sections, placement.free_sram() + released)?;
     placement.irq_stacks = irq_stacks;
+    if spec.task_stack_proven {
+        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
+        placement.task_stack = Some(super::task_stack::select(&audit, &policy)?);
+    }
     Ok(placement)
 }
 
@@ -323,10 +339,15 @@ pub(super) fn verify(
     placement: &Placement,
     inputs: &mut Inputs,
 ) -> Result<()> {
-    let Some((image, _)) = spec.image(output, inputs)? else {
+    let Some((image, _, policy)) = spec.image(output, inputs)? else {
         return Ok(());
     };
-    super::irq_stacks::verify(&interrupt_stacks_of(&image)?, &placement.irq_stacks)
+    super::irq_stacks::verify(&interrupt_stacks_of(&image)?, &placement.irq_stacks)?;
+    if let Some(planned) = &placement.task_stack {
+        let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
+        super::task_stack::verify(&audit, planned)?;
+    }
+    Ok(())
 }
 
 /// Finish the selection record after at most one additional link.
