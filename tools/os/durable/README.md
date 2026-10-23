@@ -4,6 +4,8 @@
 
 - `atomic_write` and `atomic_json` replace a file atomically (a temporary
   file in the same directory, synced, renamed, then the directory synced);
+- `atomic_write_private` uses the same durable sequence with a mode-0600
+  temporary and replacement; callers own directory permissions;
 - `sha256_file` and `sha256_bytes`, lowercase hex; `digests::DigestCache`
   remembers a file's digest by its identity and times (device, inode, size,
   modification and status-change time) in a cache file, so an immutable
