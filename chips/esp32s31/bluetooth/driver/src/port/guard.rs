@@ -31,6 +31,23 @@ pub(super) async fn guard<T: Timer, F: Future>(
     }
 }
 
+/// Return an unfinished event to its durable owner at the next command turn.
+pub(super) async fn step<T: Timer, F: Future>(
+    cancel: &AtomicBool,
+    timer: &T,
+    deadline: Instant,
+    recheck: Instant,
+    event: F,
+) -> Result<Option<F::Output>, Fault> {
+    guard(cancel, timer, deadline, async {
+        match select(event, timer.wait_until(recheck)).await {
+            Either::First(result) => Some(result),
+            Either::Second(()) => None,
+        }
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +97,45 @@ mod tests {
             Poll::Ready(Err(Fault::Deadline))
         );
         assert_eq!(polls.get(), 0);
+    }
+    #[test]
+    fn a_quiet_receiver_yields_command_turns_until_end_or_a_packet() {
+        let timer = VirtualClock::<8>::new();
+        let cancel = AtomicBool::new(false);
+        let mut cx = Context::from_waker(Waker::noop());
+        // A receiver remains active beyond one containment interval, without
+        // retaining a borrowed wait or preventing the caller from ending it.
+        for _ in 0..200 {
+            let recheck = timer
+                .now()
+                .checked_add(Duration::from_millis(1))
+                .expect("recheck");
+            let deadline = timer
+                .now()
+                .checked_add(Duration::from_millis(100))
+                .expect("deadline");
+            let mut turn = pin!(step(
+                &cancel,
+                &timer,
+                deadline,
+                recheck,
+                core::future::pending::<()>()
+            ));
+            assert!(turn.as_mut().poll(&mut cx).is_pending());
+            timer.advance_to(recheck);
+            assert_eq!(turn.as_mut().poll(&mut cx), Poll::Ready(Ok(None)));
+        }
+        let deadline = timer
+            .now()
+            .checked_add(Duration::from_millis(100))
+            .expect("deadline");
+        let mut packet = pin!(step(
+            &cancel,
+            &timer,
+            deadline,
+            deadline,
+            core::future::ready(19)
+        ));
+        assert_eq!(packet.as_mut().poll(&mut cx), Poll::Ready(Ok(Some(19))));
     }
 }
