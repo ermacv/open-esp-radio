@@ -389,6 +389,10 @@ impl Sentry<'_> {
     }
 }
 impl Drop for Sentry<'_> {
+    // Stack analysis resolves wake callbacks through their typed Waker scope.
+    // Inlining this destructor into future drop glue loses that scope; the
+    // resulting hole is rejected when an image requires a proven task stack.
+    #[inline(never)]
     fn drop(&mut self) {
         if self.armed {
             self.signals.quarantine();
