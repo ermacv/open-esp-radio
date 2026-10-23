@@ -283,6 +283,15 @@ pub fn run(
     let cleanup = peer.command("RESET", "RESET", TIMEOUT, &[]);
     transcript.save(&output.join("peer.log"))?;
     if result.is_err() {
+        let elf = fs::read(bundle.runtime_elf()).ok();
+        if let Some(access) = grant.device(&selected.device_id()?) {
+            oer_hil_lab::post_mortem::jtag_snapshot_through_stand_openocd(
+                "esp32s31",
+                access,
+                &output,
+                elf.as_deref(),
+            );
+        }
         let _ = target.reset_into_console();
     }
     report["error"] = result.as_ref().err().map(|e| e.to_string()).into();
