@@ -512,7 +512,12 @@ pub(super) fn analyze<'a>(
                 visit,
             )?;
             for edge in 0..table.entry(id)?.edges.len() {
-                let target = table.entry(id)?.edges[edge];
+                let target = table
+                    .entry(id)?
+                    .edges
+                    .get(edge)
+                    .copied()
+                    .ok_or_else(integrity)?;
                 if !table.entry(target)?.required {
                     table.entry_mut(target)?.required = true;
                     pending.push(target, c.position())?;
