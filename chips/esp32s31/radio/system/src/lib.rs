@@ -152,18 +152,8 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
             let deadline = (self.core.tracking_active())
                 .then(|| self.backend.tracking_deadline())
                 .flatten();
-            let doorbell = self.doorbell;
-            let rung = poll_fn(|cx| doorbell.poll_rung(cx));
-            match deadline {
-                None => {
-                    rung.await;
-                }
-                Some(deadline) => {
-                    if let Either::Second(()) = select(rung, self.timer.wait_until(deadline)).await
-                    {
-                        boundary::shared(self.tick()).await;
-                    }
-                }
+            if boundary::shared(self.wait(deadline)).await {
+                boundary::shared(self.tick()).await;
             }
         }
     }
@@ -174,6 +164,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     /// The mutable borrow prevents the actor from running concurrently.
     pub fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
+    }
+
+    // Independent of the next composition future and attached controller.
+    #[inline(always)]
+    async fn wait(&self, deadline: Option<oer_time::Instant>) -> bool {
+        let rung = poll_fn(|cx| self.doorbell.poll_rung(cx));
+        let timer = boundary::Deadline::new(deadline.map(|at| self.timer.wait_until(at)));
+        matches!(select(rung, timer).await, Either::Second(()))
     }
 
     async fn tick(&mut self) {
