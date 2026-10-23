@@ -185,7 +185,10 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                     Accepted::Port => {
                         {
                             let phase = owner.phase();
-                            service.submit(&*phase).await.map_err(|_| Fault::Hardware)?;
+                            service.submit(&*phase).await.map_err(|error| match error {
+                                dtm::SubmitError::Backend(poisoned) => poisoned.cause,
+                                _ => Fault::Accounting,
+                            })?;
                         }
                         // Exercise the independent physical latch before
                         // removing this command's mandatory terminal.

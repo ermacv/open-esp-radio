@@ -210,11 +210,16 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 async fn hold<T>(owner: &mut T) -> ! {
     core::hint::black_box(owner);
     irq::FAULT.store(true, core::sync::atomic::Ordering::Release);
-    bridge::fail_clock();
+    bridge::fail_clock(Fault::Hardware);
     pending().await
 }
 async fn fail<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Response)>) -> ! {
     bridge::complete(reply, Err(Fault::Hardware));
+    hold(owner).await
+}
+async fn fault<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Response)>, cause: Fault) -> ! {
+    bridge::complete(reply, Err(cause));
+    bridge::fail_clock(cause);
     hold(owner).await
 }
 mod task {

@@ -116,12 +116,12 @@ pub fn clock_state() -> RuntimeClock {
         .expect("one P2 clock responder owner");
     RuntimeClock { epoch: 0 }
 }
-pub fn fail_clock() {
+pub fn fail_clock(cause: Fault) {
     let _ = REPLY_OWNER.with(|state| {
         if let Some((request, reply)) = state.pending.take() {
             reply.answer(rpc::ClockAnswer {
                 request,
-                result: Err(Fault::Hardware),
+                result: Err(cause),
             });
         }
     });
