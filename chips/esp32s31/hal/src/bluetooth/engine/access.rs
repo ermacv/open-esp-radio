@@ -11,14 +11,8 @@ impl<
     const R: usize,
     const O: usize,
     const Q: usize,
-> Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>
+> Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>
 {
-    pub fn dtm(&mut self) -> Result<&mut DtmPool<'pool, 'epoch, 1>, EngineFault> {
-        if self.is_quarantined() {
-            return Err(EngineFault);
-        }
-        Ok(&mut self.memory.dtm)
-    }
     pub fn advertising(
         &mut self,
     ) -> Result<&mut LegacyAdvertisingPool<'pool, 'epoch, A>, EngineFault> {
@@ -27,6 +21,7 @@ impl<
         }
         Ok(&mut self.memory.advertising)
     }
+
     pub fn connectable_advertising(
         &mut self,
     ) -> Result<&mut LegacyConnectableAdvertisingPool<'pool, 'epoch, C>, EngineFault> {
@@ -35,12 +30,14 @@ impl<
         }
         Ok(&mut self.memory.connectable)
     }
+
     pub fn scanning(&mut self) -> Result<&mut LegacyScanPool<'pool, 'epoch, 1>, EngineFault> {
         if self.is_quarantined() {
             return Err(EngineFault);
         }
         Ok(&mut self.memory.scanning)
     }
+
     pub fn connections(
         &mut self,
     ) -> Result<&mut PeripheralConnectionPool<'pool, 'epoch, N>, EngineFault> {
@@ -49,12 +46,7 @@ impl<
         }
         Ok(&mut self.memory.connections)
     }
-    pub fn devices(&mut self) -> Result<&mut LeDeviceTable, EngineFault> {
-        if self.is_quarantined() {
-            return Err(EngineFault);
-        }
-        Ok(&mut self.memory.devices)
-    }
+
     pub fn receive(
         &mut self,
         source: LeRxSource,
@@ -63,11 +55,12 @@ impl<
             return Err(EngineReceiveError::Quarantined);
         }
         match source.class() {
-            RxMemoryListClass::Scanning => self.memory.scanning_rx.take(source),
-            RxMemoryListClass::NonScanning => self.memory.other_rx.take(source),
+            RxMemoryListClass::Scanning => self.memory.scanning_rx[0].take(source),
+            RxMemoryListClass::NonScanning => self.memory.other_rx[0].take(source),
         }
         .map_err(EngineReceiveError::Receive)
     }
+
     pub fn reset_scanning(
         &mut self,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
@@ -78,9 +71,10 @@ impl<
         }
         self.memory
             .scanning
-            .reset(lease, &self.memory.scanning_rx, image)
+            .reset(lease, &self.memory.scanning_rx[0], image)
             .map_err(EnginePrepareError::Role)
     }
+
     pub fn prepare_connectable_advertising(
         &mut self,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
@@ -93,9 +87,10 @@ impl<
         }
         self.memory
             .connectable
-            .prepare(lease, input, &self.memory.other_rx, power, priority)
+            .prepare(lease, input, &self.memory.other_rx[0], power, priority)
             .map_err(EnginePrepareError::Role)
     }
+
     pub fn prepare_first_connection(
         &mut self,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
@@ -109,6 +104,32 @@ impl<
             .connections
             .prepare_first_event(lease, event, workspace)
             .map_err(EnginePrepareError::Role)
+    }
+}
+
+impl<
+    'pool,
+    'epoch,
+    const A: usize,
+    const C: usize,
+    const N: usize,
+    const S: usize,
+    const R: usize,
+    const O: usize,
+    const Q: usize,
+> Engine<ArenaMemory<'pool, 'epoch, A, C, N, S, R, O, Q>>
+{
+    pub fn dtm(&mut self) -> Result<&mut DtmPool<'pool, 'epoch, 1>, EngineFault> {
+        if self.is_quarantined() {
+            return Err(EngineFault);
+        }
+        Ok(&mut self.memory.dtm)
+    }
+    pub fn devices(&mut self) -> Result<&mut LeDeviceTable, EngineFault> {
+        if self.is_quarantined() {
+            return Err(EngineFault);
+        }
+        Ok(&mut self.memory.devices)
     }
     pub fn publish_device_table(&mut self) -> Result<(), EngineFault> {
         use crate::bluetooth::ControllerHalBorrow;
@@ -139,6 +160,21 @@ impl<
             SchedulerRoleKind::ConnectableAdvertising => self.memory.connectable.retire(id),
             SchedulerRoleKind::LegacyScanning => self.memory.scanning.retire(id),
             SchedulerRoleKind::PeripheralConnection => self.memory.connections.retire(id),
+        }
+    }
+
+    /// Busy insertion may retain a listed item only in the shared-list mode.
+    /// DTM refuses before a transaction or publication and returns CPU custody.
+    #[inline(always)]
+    pub(super) fn allow_busy_insertion<const LIVE: bool>(
+        &mut self,
+        id: SchedulerItemId,
+    ) -> Result<bool, SchedulerPoolError> {
+        if LIVE {
+            Ok(true)
+        } else {
+            self.return_item(id)?;
+            Ok(false)
         }
     }
 

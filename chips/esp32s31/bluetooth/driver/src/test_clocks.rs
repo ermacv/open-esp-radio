@@ -17,7 +17,7 @@ impl PlatformClockBackend for TestClockBackend {
 }
 
 pub(crate) type ModelMemory =
-    oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'static, 'static, 0, 1, 2, 4, 4, 8>;
+    oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'static, 'static, 0, 1, 2, 1, 4, 4, 8>;
 
 pub(crate) fn engine(
     clocked: oer_esp32s31_hal::bluetooth::ClockedOwner,
@@ -28,7 +28,7 @@ pub(crate) fn engine(
     use bytemuck::Zeroable;
     use oer_esp32s31_hal::{bluetooth::engine::*, dma_static::Placed};
     use std::boxed::Box;
-    let arena = Box::leak(Box::new(BluetoothArena::<0, 1, 2, 4, 4>::zeroed()));
+    let arena = Box::leak(Box::new(BluetoothArena::<0, 1, 2, 1, 4, 4>::zeroed()));
     Engine::for_host_test::<HostDma<0x2f00_1000>>(
         clocked,
         Placed::host(arena),

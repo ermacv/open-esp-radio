@@ -226,6 +226,34 @@ fn receiver_events_rotate_both_headers() {
 }
 
 #[test]
+fn dtm_only_arena_receives_and_rotates_without_global_rx_chains() {
+    use crate::bluetooth::engine::{ArenaMemory, BluetoothArena, Engine, HostDma};
+    type Memory = ArenaMemory<'static, 'static, 0, 0, 0, 0, 0, 0, 1>;
+    let (_, partitions) = crate::root::RadioHardware::for_host_test()
+        .split::<crate::power::test_clocks::CountingBackend, _>(());
+    let clocked = crate::bluetooth::ClockedOwner::for_host_test(partitions.bluetooth);
+    let backing = Box::leak(Box::new(BluetoothArena::<0, 0, 0, 0, 0, 0>::zeroed()));
+    let (mut engine, _) = Engine::<Memory>::for_host_test::<HostDma<0x2f00_1000>>(
+        clocked,
+        crate::dma_static::Placed::host(backing),
+        SchedulerAllocationConfig::new(0, 0, 0).unwrap(),
+    )
+    .ok()
+    .expect("the DTM profile has no global RX graphs");
+    let pool = engine.dtm().unwrap();
+    let instance = pool.acquire().unwrap();
+    for _ in 0..3 {
+        run_event(pool, &instance, 0);
+        return_packet(pool, &instance, 0xa500_0000, 0);
+        assert_eq!(
+            pool.finish_event(&instance, true).unwrap().received,
+            Some(Ok(DtmRxResultProjection::from_word(0xa500_0000).unwrap())),
+        );
+    }
+    pool.release(instance).unwrap();
+}
+
+#[test]
 fn a_returned_packet_with_a_sentinel_is_refused_unchanged() {
     let mut pool = pool();
     let instance = pool.acquire().unwrap();

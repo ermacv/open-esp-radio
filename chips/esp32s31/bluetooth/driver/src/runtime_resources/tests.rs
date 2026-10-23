@@ -58,7 +58,7 @@ fn a_pending_notification_keeps_the_next_epoch_from_starting_until_reset_clears_
     assert_eq!(task.retirement_ready(), Ok(()));
     interrupt
         .scheduler_wake()
-        .publish_from_interrupt(crate::interrupt::SchedulerWorkerWakeClass::Ordinary);
+        .publish_class_for_test(crate::interrupt::SchedulerWorkerWakeClass::Ordinary);
     assert_eq!(task.retirement_ready(), Ok(()));
     assert_eq!(
         task.scheduler_wake().is_pending(),
@@ -84,7 +84,7 @@ fn a_foreign_context_neither_observes_nor_clears_the_cells() {
     let (interrupt, _task, _timer) = ControllerRuntimeResources::<2, _>::new(&cells).split();
     let _ = interrupt
         .scheduler_wake()
-        .publish_from_interrupt(crate::interrupt::SchedulerWorkerWakeClass::Ordinary);
+        .publish_class_for_test(crate::interrupt::SchedulerWorkerWakeClass::Ordinary);
     assert_eq!(cells.is_quiet(), Err(ForeignContext));
     assert_eq!(
         ControllerRuntimeResources::<2, _>::new(&cells).is_pristine(),

@@ -7,12 +7,12 @@ use oer_esp32s31_hal::{
 
 pub fn install<'pool, 'epoch>(
     clocked: ClockedOwner,
-    arena: Placed<BluetoothArena<0, 1, 2, 4, 4>>,
+    arena: Placed<BluetoothArena<0, 1, 2, 1, 4, 4>>,
     pool: PoolScope<'pool>,
     epoch: EpochScope<'epoch>,
     config: SchedulerAllocationConfig,
 ) {
-    let _result = Engine::<ArenaMemory<'pool, 'epoch, 0, 1, 2, 4, 4, 8>>::new::<HostDma<0x2f00_1000>>(
+    let _result = Engine::<ArenaMemory<'pool, 'epoch, 0, 1, 2, 1, 4, 4, 8>>::new::<HostDma<0x2f00_1000>>(
         clocked, arena, pool, epoch, config,
     );
     #[cfg(ui_reject)]

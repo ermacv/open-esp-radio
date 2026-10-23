@@ -8,7 +8,7 @@ use super::ControllerInterruptHalf;
 use oer_esp32s31_hal::bluetooth::ModemLpTimerInterruptReadyOwner;
 use oer_interrupt_table::signal::SignalExecutor;
 
-use super::{NrtDefaultInterruptEpoch, PrimaryInterruptStep};
+use super::{NrtDefaultInterruptEpoch, PrimaryInterruptCapture};
 
 /// Platform boundary that publishes both disjoint owners in stable ISR slots.
 ///
@@ -46,8 +46,8 @@ pub trait SharedInterruptDispatchStorage {
     /// Exact reason the shared owner could not service an entry.
     type Error;
 
-    /// Capture, acknowledge and classify one primary source-124 epoch.
-    fn service_primary_interrupt(&self) -> Result<PrimaryInterruptStep, Self::Error>;
+    /// Capture and acknowledge one primary source-124 epoch for the P2 latch.
+    fn service_primary_interrupt(&self) -> Result<PrimaryInterruptCapture, Self::Error>;
 
     /// Capture and acknowledge one default-profile NRT source-133 epoch.
     fn service_nrt_default_interrupt(&self) -> Result<NrtDefaultInterruptEpoch, Self::Error>;

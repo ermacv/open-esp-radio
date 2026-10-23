@@ -89,6 +89,13 @@ index in byte `+0x61`. A receiver stores
 `r_sched_timer_convertDiffToTicks(0)`, which is zero, in `+0x34`; a
 transmitter leaves that word alone. The body does not write `+0x04`.
 
+The standalone configuration selection is three. In the pinned archive,
+`controller_1.o::r_sym_controller_2IrfuGZXubzdQy56qp1S` copies the 72-byte
+constant `sym_controller_jqcSm1kAtUzAMoyGlaKq` into the Controller options;
+its byte `+0x2b` is three. The reset body loads that byte and uses its low
+six bits for the link-state configuration. The driver carries this software
+profile value; HAL retains the physical encoding.
+
 The power index comes from `r_sym_ble_5YIHPyqYswSaQs7KMvEA`, which searches the
 BLE PHY environment's provider level table for the highest level not above the
 request; an implementation outside this repository carries it in `LeTxPower`

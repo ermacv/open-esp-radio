@@ -3,8 +3,8 @@
 use oer_esp32s31_hal::bluetooth::engine::*;
 
 pub fn release<'pool, 'old, 'next>(
-    old: &mut Engine<ArenaMemory<'pool, 'old, 0, 1, 2, 4, 4, 8>>,
-    next: &mut Engine<ArenaMemory<'pool, 'next, 0, 1, 2, 4, 4, 8>>,
+    old: &mut Engine<ArenaMemory<'pool, 'old, 0, 1, 2, 1, 4, 4, 8>>,
+    next: &mut Engine<ArenaMemory<'pool, 'next, 0, 1, 2, 1, 4, 4, 8>>,
     lease: SchedulerRoleInstance<'pool, 'old>,
 ) {
     #[cfg(not(ui_reject))]

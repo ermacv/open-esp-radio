@@ -2,7 +2,8 @@ use core::task::{Context, Poll, Waker};
 
 use oer_interrupt_table::signal::{ForeignContext, host};
 
-use super::{SchedulerWakeCell, SchedulerWakePublication, SchedulerWorkerWakeClass};
+use super::{SchedulerWakeCell, SchedulerWakePublication};
+use crate::interrupt::SchedulerWorkerWakeClass;
 
 fn cell() -> SchedulerWakeCell<oer_interrupt_table::signal::host::Deferred> {
     SchedulerWakeCell::new(host::deferred_signal())
@@ -13,11 +14,11 @@ fn first_publication_pends_and_ordinary_duplicates_coalesce() {
     let cell = cell();
 
     assert_eq!(
-        cell.publish_from_interrupt(SchedulerWorkerWakeClass::Ordinary),
+        cell.publish_class_for_test(SchedulerWorkerWakeClass::Ordinary),
         SchedulerWakePublication::Pended
     );
     assert_eq!(
-        cell.publish_from_interrupt(SchedulerWorkerWakeClass::Ordinary),
+        cell.publish_class_for_test(SchedulerWorkerWakeClass::Ordinary),
         SchedulerWakePublication::Coalesced
     );
     assert_eq!(cell.is_pending(), Ok(true));
@@ -26,6 +27,8 @@ fn first_publication_pends_and_ordinary_duplicates_coalesce() {
             .take()
             .expect("the host executor's context")
             .expect("one batch must be pending")
+            .classify()
+            .expect("fault-free capture")
             .is_marked()
     );
     assert_eq!(cell.is_pending(), Ok(false));
@@ -45,17 +48,19 @@ fn marker_is_sticky_for_both_publication_orders() {
     ] {
         let cell = cell();
         assert_eq!(
-            cell.publish_from_interrupt(classes[0]),
+            cell.publish_class_for_test(classes[0]),
             SchedulerWakePublication::Pended
         );
         assert_eq!(
-            cell.publish_from_interrupt(classes[1]),
+            cell.publish_class_for_test(classes[1]),
             SchedulerWakePublication::Coalesced
         );
         assert!(
             cell.take()
                 .expect("the host executor's context")
                 .expect("one batch must be pending")
+                .classify()
+                .expect("fault-free capture")
                 .is_marked()
         );
     }
@@ -65,19 +70,21 @@ fn marker_is_sticky_for_both_publication_orders() {
 fn dequeue_closes_the_epoch_and_the_next_publication_pends_again() {
     let cell = cell();
     assert_eq!(
-        cell.publish_from_interrupt(SchedulerWorkerWakeClass::Marked),
+        cell.publish_class_for_test(SchedulerWorkerWakeClass::Marked),
         SchedulerWakePublication::Pended
     );
     assert!(
         cell.take()
             .expect("the host executor's context")
             .expect("first batch must be pending")
+            .classify()
+            .expect("fault-free capture")
             .is_marked()
     );
     assert_eq!(cell.take(), Ok(None));
 
     assert_eq!(
-        cell.publish_from_interrupt(SchedulerWorkerWakeClass::Ordinary),
+        cell.publish_class_for_test(SchedulerWorkerWakeClass::Ordinary),
         SchedulerWakePublication::Pended
     );
     assert!(
@@ -85,6 +92,8 @@ fn dequeue_closes_the_epoch_and_the_next_publication_pends_again() {
             .take()
             .expect("the host executor's context")
             .expect("second batch must be pending")
+            .classify()
+            .expect("fault-free capture")
             .is_marked()
     );
 }
@@ -94,16 +103,18 @@ fn the_worker_waits_for_a_batch_in_its_executor_only() {
     let cell = SchedulerWakeCell::new(host::signal());
     let mut cx = Context::from_waker(Waker::noop());
     assert_eq!(cell.poll_take(&mut cx), Poll::Pending);
-    let _ = cell.publish_from_interrupt(SchedulerWorkerWakeClass::Marked);
+    let _ = cell.publish_class_for_test(SchedulerWorkerWakeClass::Marked);
     match cell.poll_take(&mut cx) {
-        Poll::Ready(Ok(batch)) => assert!(batch.is_marked()),
+        Poll::Ready(Ok(batch)) => {
+            assert!(batch.classify().expect("fault-free capture").is_marked())
+        }
         other => panic!("one marked batch must be ready: {other:?}"),
     }
     assert_eq!(cell.poll_take(&mut cx), Poll::Pending);
 
     let foreign = SchedulerWakeCell::new(host::foreign_signal());
     assert_eq!(
-        foreign.publish_from_interrupt(SchedulerWorkerWakeClass::Ordinary),
+        foreign.publish_class_for_test(SchedulerWorkerWakeClass::Ordinary),
         SchedulerWakePublication::Pended
     );
     assert_eq!(foreign.poll_take(&mut cx), Poll::Ready(Err(ForeignContext)));

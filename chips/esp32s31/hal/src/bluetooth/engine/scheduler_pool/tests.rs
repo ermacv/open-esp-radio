@@ -95,6 +95,36 @@ fn pool() -> Pool {
 }
 
 #[test]
+fn an_empty_pool_cannot_hide_a_populated_pools_submitted_item() {
+    let mut populated = pool();
+    let instance = populated.acquire().expect("test pool has room");
+    prepare(&mut populated, &instance);
+    let id = populated.submit(&instance, 0).expect("prepared item");
+    let empty = SchedulerRolePool::<'static, 'static, TestStorage, 0>::place::<
+        crate::bluetooth::engine::HostDma<0x2f00_2000>,
+    >(
+        crate::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
+            TestStorage,
+            0,
+        >::zeroed()))),
+        config().connections(),
+    )
+    .expect("empty pool fits");
+    let initial = SchedulerItemSpace::new().with(&populated);
+    let link = initial.link(id);
+    assert_eq!(initial.listed_item(link), Some(id));
+    let with_empty = initial.with(&empty);
+    assert_eq!(with_empty.listed_item(link), Some(id));
+    assert_eq!(with_empty.link(id), link);
+    assert!(
+        SchedulerItemSpace::new()
+            .with(&empty)
+            .listed_item(link)
+            .is_none()
+    );
+}
+
+#[test]
 fn instances_are_bound_at_their_offsets_and_reinitialized() {
     let mut pool = pool();
     let first = pool.acquire().unwrap();
