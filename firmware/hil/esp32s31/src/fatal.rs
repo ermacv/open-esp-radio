@@ -9,7 +9,6 @@
 
 use esp_hal::system::Cpu;
 use oer_diagnostics::Note;
-use oer_esp32s31_board::rom;
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
@@ -190,19 +189,19 @@ pub(crate) fn report_previous() {
         ..
     } = *slot;
     if slot.kind == EXCEPTION {
-        rom::note(&Note::fatal_exception(
+        oer_espressif_usb_fifo::note(&Note::fatal_exception(
             hart, mcause, mepc, mtval, ra, mscratch,
         ));
     } else {
-        rom::note(&Note::fatal_panic(hart, stage, mcause, mepc, mtval));
+        oer_espressif_usb_fifo::note(&Note::fatal_panic(hart, stage, mcause, mepc, mtval));
     }
-    rom::note(&Note::fatal_irq_vector(
+    oer_espressif_usb_fifo::note(&Note::fatal_irq_vector(
         mcause & 0x0fff,
         line,
         mtvec,
         mtvt,
         mtvt_slot,
     ));
-    rom::note(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5));
-    rom::note(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5));
+    oer_espressif_usb_fifo::note(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5));
+    oer_espressif_usb_fifo::note(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5));
 }

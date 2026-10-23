@@ -327,8 +327,12 @@ needs:
   CSRs (`trap`) and the linked sections (`layout`). Images and HIL agents
   reach these through safe APIs and forbid unsafe code. The image linker
   places strict code in SRAM from interrupt, exception and panic analysis.
-- Each board implements `AdoptsBootstrapMapping` for its PSRAM and wraps the
-  mask ROM's console output (`rom`), a C variadic.
+- Each board implements `AdoptsBootstrapMapping` for its PSRAM.
+- `oer-espressif-usb-fifo` captures `USB_DEVICE` with `steal` for the early
+  USB Serial/JTAG writer, which owns the peripheral until `hand_over` gives
+  the token to the driver, and once more in `fatal_note`, the single named
+  capture of a path that never returns, under a critical section; it writes
+  the data register through the PAC's raw 8-bit field.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.
 - A probe image is entered by the Blobray verifier through the exported

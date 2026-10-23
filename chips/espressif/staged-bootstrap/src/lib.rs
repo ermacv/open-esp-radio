@@ -9,39 +9,33 @@
 //! PSRAM load address, clears its PSRAM BSS and checks the copy; the chip may
 //! then retune its Flash, and [`hand_off`] publishes the copied code to
 //! instruction fetch and enters it. Every step reports an `OER_BOOT
-//! bootstrap=` line through the ROM's `ets_printf`, which the host's boot
+//! bootstrap=` line through the early USB writer, which the host's boot
 //! observation reads; a failure halts the hart with its reason.
 //!
 //! The library also owns the bootstrap's panic entry: a panic prints
 //! `OER_BOOT bootstrap=PANIC` and halts.
 
-use core::{arch::asm, ffi::CStr, mem::size_of, ptr};
+use core::{arch::asm, mem::size_of, ptr};
 
 use oer_espressif_staged_layout::{
     Layout,
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };
 
-#[allow(unsafe_code, reason = "the ROM console and the stack guard symbol")]
+#[allow(unsafe_code, reason = "the stack guard symbol")]
 unsafe extern "C" {
-    fn ets_install_usb_printf();
-    fn ets_printf(format: *const core::ffi::c_char, ...);
     static __stack_chk_guard: u32;
 }
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
-    print(c"OER_BOOT bootstrap=PANIC\r\n");
+    print("OER_BOOT bootstrap=PANIC\r\n");
     halt()
 }
 
-/// Route the ROM's `ets_printf` to the USB Serial/JTAG console and report the
-/// bootstrap's start. Call first.
-#[allow(unsafe_code, reason = "the ROM console is a C ABI")]
+/// Report the bootstrap's start on the USB Serial/JTAG console. Call first.
 pub fn start() {
-    // SAFETY: the ROM function only selects the console of its own printf.
-    unsafe { ets_install_usb_printf() };
-    print(c"OER_BOOT bootstrap=START\r\n");
+    print("OER_BOOT bootstrap=START\r\n");
 }
 
 /// A stage-two payload that [`stage`] copied and checked in PSRAM.
@@ -96,35 +90,35 @@ pub unsafe fn stage(
     if psram_base as usize != layout.psram.origin as usize
         || psram_size != layout.psram.length as usize
     {
-        fail(c"OER_BOOT bootstrap=FAIL reason=psram-init\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=psram-init\r\n");
     }
     // SAFETY: `stage`'s `# Safety` contract: the whole region, the probe
     // page included, is initialized, writable and exclusively the caller's.
     unsafe { verify_psram_probe(psram_base) };
-    print(c"OER_BOOT bootstrap=PSRAM\r\n");
+    print("OER_BOOT bootstrap=PSRAM\r\n");
 
     let source = payload.as_ptr();
     let source_address = source as usize;
     let xip = layout.flash_xip;
     let source_end = source_address
         .checked_add(payload.len())
-        .unwrap_or_else(|| fail(c"OER_BOOT bootstrap=FAIL reason=source-overflow\r\n"));
+        .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=source-overflow\r\n"));
     if !(xip.origin as usize..xip.end() as usize).contains(&source_address)
         || source_end > xip.end() as usize
     {
-        fail(c"OER_BOOT bootstrap=FAIL reason=source-not-xip\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=source-not-xip\r\n");
     }
 
     let header = read_header(payload);
     let layout = validate_header(header, layout, psram_base as usize, psram_size);
     if layout.payload_len != payload.len() {
-        fail(c"OER_BOOT bootstrap=FAIL reason=payload-length\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=payload-length\r\n");
     }
     let source_crc = payload_crc32(source, layout.payload_len);
     if source_crc != layout.expected_crc32 {
-        print_crc_failure(c"source-crc", layout.expected_crc32, source_crc);
+        print_crc_failure("source-crc", layout.expected_crc32, source_crc);
     }
-    print(c"OER_BOOT bootstrap=SOURCE_CRC\r\n");
+    print("OER_BOOT bootstrap=SOURCE_CRC\r\n");
 
     // SAFETY: the header names a load address and length inside
     // `psram_base..psram_base + psram_size` (checked above), which `stage`'s
@@ -142,9 +136,9 @@ pub unsafe fn stage(
     };
     if payload_crc32(layout.load_address as *const u8, layout.payload_len) != layout.expected_crc32
     {
-        fail(c"OER_BOOT bootstrap=FAIL reason=destination-crc\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=destination-crc\r\n");
     }
-    print(c"OER_BOOT bootstrap=DESTINATION_CRC\r\n");
+    print("OER_BOOT bootstrap=DESTINATION_CRC\r\n");
     Staged {
         load_address: layout.load_address,
         entry: layout.entry,
@@ -163,9 +157,9 @@ pub fn hand_off(staged: Staged) -> ! {
     if unsafe { esp_hal::psram::prepare_code(staged.load_address as *const u8, staged.payload_len) }
         .is_err()
     {
-        fail(c"OER_BOOT bootstrap=FAIL reason=psram-code\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=psram-code\r\n");
     }
-    print(c"OER_BOOT bootstrap=PASS handoff=stage2\r\n");
+    print("OER_BOOT bootstrap=PASS handoff=stage2\r\n");
     // SAFETY: the bootstrap is about to leave its stack for good.
     unsafe { release_bootstrap_stack_watchpoint() };
     // SAFETY: the entry lies in the checked executable range of the image.
@@ -185,7 +179,7 @@ struct ValidatedLayout {
 #[allow(unsafe_code, reason = "an unaligned header read from the payload")]
 fn read_header(payload: &[u8]) -> RuntimeHeader {
     if payload.len() < size_of::<RuntimeHeader>() {
-        fail(c"OER_BOOT bootstrap=FAIL reason=short-header\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=short-header\r\n");
     }
     // SAFETY: the payload holds at least one header, read without alignment.
     unsafe { payload.as_ptr().cast::<RuntimeHeader>().read_unaligned() }
@@ -206,7 +200,7 @@ fn validate_header(
     let text_end = header.text_end as usize;
     let psram_end = psram_base
         .checked_add(psram_size)
-        .unwrap_or_else(|| fail(c"OER_BOOT bootstrap=FAIL reason=psram-range\r\n"));
+        .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=psram-range\r\n"));
     if !header.is_compatible()
         || load_address != layout.runtime_psram().origin as usize
         || payload_end <= load_address
@@ -221,7 +215,7 @@ fn validate_header(
         || payload_end > psram_end
         || bss_end > psram_end
     {
-        fail(c"OER_BOOT bootstrap=FAIL reason=header\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=header\r\n");
     }
 
     ValidatedLayout {
@@ -251,7 +245,7 @@ unsafe fn verify_psram_probe(base: *mut u8) {
         unsafe { probe.add(index).write_volatile(expected) };
         // SAFETY: as above.
         if unsafe { probe.add(index).read_volatile() } != expected {
-            fail(c"OER_BOOT bootstrap=FAIL reason=psram-probe\r\n");
+            fail("OER_BOOT bootstrap=FAIL reason=psram-probe\r\n");
         }
     }
 }
@@ -314,29 +308,39 @@ unsafe fn jump_to_runtime(entry: usize) -> ! {
     }
 }
 
-/// Print one `OER_BOOT` line through the ROM.
-#[allow(unsafe_code, reason = "the ROM console is a C ABI")]
-pub fn print(message: &'static CStr) {
-    // SAFETY: a NUL-terminated format without arguments.
-    unsafe { ets_printf(message.as_ptr()) };
+/// Print one `OER_BOOT` line through the early USB writer, which drops what
+/// the FIFO has no room for and counts it. The bootstrap never hands the
+/// peripheral to a driver, so the writer owns it throughout.
+pub fn print(message: &'static str) {
+    oer_espressif_usb_fifo::text(message.as_bytes());
 }
 
-#[allow(unsafe_code, reason = "the ROM console is a C ABI")]
-fn print_crc_failure(reason: &'static CStr, expected: u32, observed: u32) -> ! {
-    // SAFETY: the format consumes one string and two words.
-    unsafe {
-        ets_printf(
-            c"OER_BOOT bootstrap=FAIL reason=%s expected=%08x observed=%08x\r\n".as_ptr(),
-            reason.as_ptr(),
-            expected,
-            observed,
-        )
-    };
+fn print_crc_failure(reason: &'static str, expected: u32, observed: u32) -> ! {
+    print("OER_BOOT bootstrap=FAIL reason=");
+    print(reason);
+    print(" expected=");
+    print_hex(expected);
+    print(" observed=");
+    print_hex(observed);
+    print("\r\n");
     halt()
 }
 
+/// Print `word` as eight lower-case hexadecimal digits.
+fn print_hex(word: u32) {
+    let mut digits = [0; 8];
+    for (index, digit) in digits.iter_mut().enumerate() {
+        let nibble = (word >> (28 - 4 * index)) & 0xf;
+        *digit = b"0123456789abcdef"
+            .get(nibble as usize)
+            .copied()
+            .unwrap_or(b'?');
+    }
+    oer_espressif_usb_fifo::text(&digits);
+}
+
 /// Print `message` and halt.
-pub fn fail(message: &'static CStr) -> ! {
+pub fn fail(message: &'static str) -> ! {
     print(message);
     halt()
 }

@@ -2793,7 +2793,6 @@ name = "oer-esp32s31-board"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
- "oer-diagnostics",
  "oer-esp32s31-layout",
  "oer-espressif-staged-layout",
  "oer-radio-regulatory",
@@ -3083,6 +3082,7 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-espressif-staged-layout",
+ "oer-espressif-usb-fifo",
 ]
 
 [[package]]
@@ -3099,6 +3099,15 @@ dependencies = [
  "oer-espressif-staged-layout",
  "oer-interrupt-table",
  "oer-memory",
+]
+
+[[package]]
+name = "oer-espressif-usb-fifo"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "esp-hal",
+ "oer-diagnostics",
 ]
 
 [[package]]
@@ -3302,6 +3311,7 @@ dependencies = [
  "oer-espressif-esp-hal-irq",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-fifo",
  "oer-hil-agent",
  "oer-hil-protocol",
  "static_cell",
@@ -3324,6 +3334,7 @@ dependencies = [
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-fifo",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-memory",
@@ -3355,6 +3366,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-fifo",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-port",
@@ -3394,6 +3406,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-staged-runtime",
+ "oer-espressif-usb-fifo",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-wire",

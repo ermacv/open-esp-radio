@@ -17,12 +17,21 @@ use oer_diagnostics::Note;
 
 const BOOT: u64 = 77;
 
-/// Keeps what is written immediately, per test thread.
+/// The early writer of a test thread: it keeps the words of the notes it
+/// is given while it owns the peripheral.
 struct Captured;
 
 impl Immediate for Captured {
-    fn print(line: &CStr) {
-        IMMEDIATE.with(|lines| lines.borrow_mut().push(line.to_bytes().to_vec()));
+    fn note(note: &Note<'_>) -> bool {
+        if !EARLY_OWNS.get() {
+            return false;
+        }
+        EARLY.with(|notes| notes.borrow_mut().push(note.words().to_vec()));
+        true
+    }
+
+    fn take_lost() -> u32 {
+        EARLY_LOST.replace(0)
     }
 }
 
@@ -33,7 +42,9 @@ fn console() -> &'static TestConsole {
 }
 
 std::thread_local! {
-    static IMMEDIATE: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
+    static EARLY: RefCell<Vec<Vec<u32>>> = const { RefCell::new(Vec::new()) };
+    static EARLY_OWNS: core::cell::Cell<bool> = const { core::cell::Cell::new(true) };
+    static EARLY_LOST: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
 
 struct Chip;
@@ -270,29 +281,58 @@ fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
 }
 
 #[test]
-fn a_note_before_the_console_runs_is_written_immediately() {
+fn a_note_before_the_transport_owns_the_peripheral_goes_to_the_early_writer() {
     let console = console();
-    IMMEDIATE.with(|lines| lines.borrow_mut().clear());
+    EARLY.with(|notes| notes.borrow_mut().clear());
     console.note_immediately(&rearm(1));
-    IMMEDIATE.with(|lines| {
-        let lines = lines.borrow();
-        assert_eq!(lines.len(), 1);
-        assert!(lines[0].starts_with(b"OER-DIAG:01"));
-        assert!(!lines[0].ends_with(b"\r\n"), "the printer ends the line");
-    });
+    block_on(console.note_reliably(&rearm(2)));
+    EARLY.with(|notes| assert_eq!(notes.borrow().len(), 2));
+    assert!(console.notes.try_receive().is_err(), "nothing was queued");
     assert_eq!(console.dropped_notes(), 0);
 }
 
 #[test]
-fn an_immediate_note_is_dropped_and_counted_while_a_frame_is_written() {
+fn a_note_after_the_early_writer_gave_up_the_peripheral_is_queued() {
     let console = console();
-    IMMEDIATE.with(|lines| lines.borrow_mut().clear());
-    let writing = console.writer.try_acquire().expect("the writer is free");
+    EARLY.with(|notes| notes.borrow_mut().clear());
+    EARLY_OWNS.set(false);
     console.note_immediately(&rearm(1));
-    drop(writing);
-    IMMEDIATE.with(|lines| assert!(lines.borrow().is_empty()));
+    block_on(console.note_reliably(&rearm(2)));
+    EARLY_OWNS.set(true);
+    EARLY.with(|notes| assert!(notes.borrow().is_empty()));
+    assert_eq!(console.notes.try_receive().expect("queued").words()[0], 1);
+    assert_eq!(console.notes.try_receive().expect("queued").words()[0], 2);
+}
+
+#[test]
+fn an_immediate_note_is_dropped_and_counted_when_the_queue_is_full() {
+    let console = console();
+    console.running.store(true, Ordering::Release);
+    for step in 0..4 {
+        console.note_immediately(&rearm(step));
+    }
+    assert_eq!(console.dropped_notes(), 0);
+    console.note_immediately(&rearm(9));
     assert_eq!(console.dropped_notes(), 1);
     assert_eq!(console.link_health().notes_dropped, 1);
+}
+
+#[test]
+fn the_bytes_the_early_writer_dropped_are_reported_when_the_console_starts() {
+    let console = console();
+    EARLY_LOST.set(37);
+    let host = Host::default();
+    run_until(
+        console,
+        &host,
+        |_, _| {},
+        |host| {
+            decoded(&host.from_device.borrow())
+                .iter()
+                .any(|(_, words)| words == &[37])
+        },
+    );
+    assert_eq!(EARLY_LOST.get(), 0);
 }
 
 #[test]

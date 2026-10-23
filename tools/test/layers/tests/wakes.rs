@@ -60,7 +60,6 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("chips/esp32s31/ieee80211/driver/src/rx/control.rs", 7),
         ("chips/esp32s31/ieee80211/driver/src/rx/upper.rs", 7),
         ("portable/embassy/net/src/owned.rs", 5),
-        ("portable/hil-agent/src/console/writer.rs", 4),
         ("portable/sync/src/lib.rs", 6),
         (
             "protocols/ieee80211/runtime/src/station_service/msdu_queue.rs",

@@ -20,9 +20,9 @@ compile_error!("system-watchdog requires an exclusive image");
 ))]
 compile_error!("system-panic-reset requires an exclusive image with the product panic entry");
 
-use core::ffi::CStr;
 use core::ops::Range;
 use core::sync::atomic::{AtomicU32, Ordering};
+use oer_diagnostics::Note;
 
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
@@ -61,7 +61,7 @@ const PROFILE_CODE_START: u32 = oer_esp32s31_layout::LAYOUT.runtime_psram().orig
 const PROFILE_CODE_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
 const PROFILE_DATA_START: u32 = oer_esp32s31_layout::LAYOUT.psram.origin;
 const PROFILE_DATA_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
-const PROFILE_NAME: &core::ffi::CStr = c"psram-code-psram-data-psram-stack";
+const PROFILE_NAME: &str = "psram-code-psram-data-psram-stack";
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 /// Layout probes: each lives in the section it checks and reads back its
@@ -106,10 +106,7 @@ fn panic_hook(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_esp32s31_board::rom::install_usb_printf();
-    print(c"OPEN_RADIO_HIL runtime=START profile=");
-    print(PROFILE_NAME);
-    print(c"\r\n");
+    early(&Note::runtime_start(PROFILE_NAME));
     // Before anything can fail and overwrite it.
     fatal::report_previous();
 
@@ -164,7 +161,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         let Ok(task) = boot_smoke(boot_smoke_console::BootSmokeConsole::new(
             peripherals.USB_DEVICE,
         )) else {
-            fail(c"OPEN_RADIO_HIL runtime=FAIL reason=task-allocation\r\n");
+            fail("task-allocation");
         };
         spawner.spawn(task);
     });
@@ -243,9 +240,9 @@ fn validate_runtime_layout() {
         || dma_probe != 0x444d_4131
         || dma_bss_probe != 0
     {
-        fail(c"OPEN_RADIO_HIL runtime=FAIL reason=layout\r\n");
+        fail("layout");
     }
-    print(c"OPEN_RADIO_HIL placement=PASS isr=SRAM dma_probes=SRAM task_stack=PSRAM irq_stack=SRAM\r\n");
+    early(&Note::placement_pass());
 }
 
 fn range_in_internal_sram(start: u32, end: u32) -> bool {
@@ -264,19 +261,25 @@ fn bounds(range: &Range<usize>) -> [u32; 2] {
 #[cfg(feature = "system-watchdog")]
 pub(crate) fn check_entropy_source(entropy: &oer_espressif_esp_hal_soc::entropy::Entropy<'_>) {
     if entropy.source_status().is_healthy() {
-        print(c"OPEN_RADIO_HIL entropy=PASS\r\n");
+        transport::CONSOLE.note_immediately(&Note::entropy_pass());
     } else {
-        fail(c"OPEN_RADIO_HIL runtime=FAIL reason=entropy-source\r\n");
+        fail("entropy-source");
     }
 }
 
-fn print(message: &'static CStr) {
-    oer_esp32s31_board::rom::print(message);
+/// Writes `note` before the console's transport owns the USB peripheral.
+fn early(note: &Note<'_>) {
+    oer_espressif_usb_fifo::note(note);
 }
 
-fn fail(message: &'static CStr) -> ! {
-    print(message);
-    halt()
+/// Reports a failed boot check and halts. It takes the peripheral from the
+/// console for the report; the critical section keeps the console's transport
+/// from running meanwhile.
+fn fail(reason: &'static str) -> ! {
+    critical_section::with(|section| {
+        oer_espressif_usb_fifo::fatal_note(&Note::runtime_fail(reason), section);
+        halt()
+    })
 }
 
 fn halt() -> ! {

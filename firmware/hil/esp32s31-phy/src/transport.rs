@@ -2,16 +2,20 @@ use esp_hal::usb::usb_serial_jtag::{UsbSerialJtag, UsbSerialJtagRx, UsbSerialJta
 use oer_hil_agent::console::{Console, Immediate};
 use oer_hil_protocol::base::{BootEvidence, PostMortemCheckpoints, ResetReason};
 
-pub(crate) struct RomLine;
+pub(crate) struct EarlyUsb;
 
-impl Immediate for RomLine {
-    fn print(line: &core::ffi::CStr) {
-        oer_esp32s31_board::rom::line(line);
+impl Immediate for EarlyUsb {
+    fn note(note: &oer_diagnostics::Note<'_>) -> bool {
+        oer_espressif_usb_fifo::note(note)
+    }
+
+    fn take_lost() -> u32 {
+        oer_espressif_usb_fifo::take_lost()
     }
 }
 
 oer_espressif_staged_runtime::placed_static! {
-    pub(crate) static CONSOLE: Console<8, 8, RomLine> = Console::new(), in critical_data "logging";
+    pub(crate) static CONSOLE: Console<8, 8, EarlyUsb> = Console::new(), in critical_data "logging";
 }
 
 pub struct Chip;
@@ -47,7 +51,9 @@ impl Usb {
         route: crate::ConsoleUsb,
     ) -> Self {
         oer_espressif_esp_hal_irq::enable(&route).expect("diagnostic console route");
-        let (rx, tx) = UsbSerialJtag::new(device).into_async().split();
+        let (rx, tx) = UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(device))
+            .into_async()
+            .split();
         Self { rx, tx }
     }
 }

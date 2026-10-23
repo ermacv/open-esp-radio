@@ -10,9 +10,6 @@
 //! runtime's handoff takes. This profile does not
 //! describe every ESP32-C5 board.
 
-#[allow(unsafe_code, reason = "the mask ROM's console is a C ABI")]
-pub mod rom;
-
 use oer_esp32c5_layout::LAYOUT;
 
 use esp_hal::{

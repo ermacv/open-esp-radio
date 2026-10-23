@@ -9,9 +9,6 @@
 //! through [`BootstrapPsram`], which the staged runtime's handoff takes: the
 //! board does not link the runtime.
 
-#[allow(unsafe_code, reason = "the mask ROM's console is a C ABI")]
-pub mod rom;
-
 use oer_esp32s31_layout::LAYOUT;
 
 use esp_hal::{

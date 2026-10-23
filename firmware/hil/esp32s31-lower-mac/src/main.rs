@@ -69,8 +69,7 @@ type Actor = RadioSystem<
 
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    board::rom::install_usb_printf();
-    board::rom::line(c"OPEN_RADIO_HIL runtime=START diagnostic=lower-mac");
+    oer_espressif_usb_fifo::note(&oer_diagnostics::Note::diagnostic_start("lower-mac"));
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
     let interrupts = Interrupts::take().expect("conformance interrupt table claimed once");

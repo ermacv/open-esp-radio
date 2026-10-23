@@ -155,6 +155,7 @@ members = [
     "chips/espressif/staged-bootstrap",
     "chips/espressif/staged-layout",
     "chips/espressif/staged-runtime",
+    "chips/espressif/usb-fifo",
     "chips/esp32s31/board",
     "firmware/bootstrap/esp32s31",
     "chips/esp32s31/layout",
@@ -327,6 +328,7 @@ esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "d1167e740b3ec947d5
 esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "d1167e740b3ec947d56f97b5091ebcb67a0cebfa", default-features = false }
 static_cell = "2.1.1"
 oer-espressif-staged-layout = { path = "chips/espressif/staged-layout" }
+oer-espressif-usb-fifo = { path = "chips/espressif/usb-fifo" }
 oer-espressif-esp-hal-irq = { path = "chips/espressif/esp-hal-irq" }
 oer-esp32s31-layout = { path = "chips/esp32s31/layout" }
 oer-espressif-esp-hal-soc = { path = "chips/espressif/esp-hal/soc", features = ["esp32s31"] }

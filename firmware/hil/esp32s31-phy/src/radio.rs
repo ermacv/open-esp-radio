@@ -383,7 +383,7 @@ impl Radio {
         let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(_) => {
-                oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=FAIL step=registration");
+                crate::transport::CONSOLE.note_immediately(&Note::phy_fail("registration"));
                 return Err(RejectReason::Internal);
             }
         };
