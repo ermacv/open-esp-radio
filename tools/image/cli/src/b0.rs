@@ -148,6 +148,33 @@ fn sram_accounting(base: &Path, head: &Path) -> Result<serde_json::Value> {
     )
 }
 
+fn dma_snapshot(
+    access: &oer_lab_board::lock::DeviceAccess,
+    bundle: &Path,
+    output: &Path,
+) -> Result<()> {
+    let sizes: serde_json::Value = serde_json::from_slice(&fs::read(bundle.join("sizes.json"))?)?;
+    let section = &sizes["elfs"]["runtime"]["sections"][".dma.bss"];
+    let address = section["address"].as_u64().ok_or("DMA section address")?;
+    let bytes = section["bytes"].as_u64().ok_or("DMA section size")?;
+    let path = output.join("post-mortem/dma.bin");
+    let path = path.to_str().ok_or("DMA snapshot path encoding")?;
+    if path.contains(['{', '}']) {
+        return Err("DMA snapshot path contains Tcl braces".into());
+    }
+    let openocd = oer_lab_board::openocd::Openocd::locate()?;
+    let mut arguments = openocd.word_arguments("esp32s31", access.id(), 0);
+    *arguments.last_mut().ok_or("OpenOCD command argument")? =
+        format!("init; halt; dump_image {{{path}}} {address:#x} {bytes}; resume; shutdown");
+    let operation = access.operation()?;
+    let mut command = oer_os_process::command(&openocd.program);
+    command.args(arguments);
+    operation.lifetime().pin(&mut command)?;
+    let result = oer_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
+    fs::write(output.join("post-mortem/dma-openocd.log"), result.stderr)?;
+    Ok(())
+}
+
 pub fn run(
     root: &Path,
     selector: &str,
@@ -291,6 +318,9 @@ pub fn run(
                 &output,
                 elf.as_deref(),
             );
+            if let Err(error) = dma_snapshot(access, &bundle.directory, &output) {
+                eprintln!("fw: no DMA post-mortem: {error}");
+            }
         }
         let _ = target.reset_into_console();
     }
