@@ -1,5 +1,26 @@
 use super::*;
 
+/// The console text the host reads for `image`: its notes in the wire format,
+/// decoded and rendered the way `cargo fw` does.
+fn console_of(image: &oer_firmware_apps_w3::report::Report) -> String {
+    let mut wire = Vec::new();
+    let mut console = oer_diagnostics::Console::new(|bytes: &[u8]| {
+        wire.extend_from_slice(bytes);
+        Ok::<(), core::convert::Infallible>(())
+    });
+    image.notes(|note| console.note(note)).unwrap();
+    let mut decoder = crate::diagnostics::Decoder::default();
+    let mut text = String::new();
+    for line in wire.split(|&byte| byte == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if !line.is_empty() {
+            text.push_str(&decoder.line(line).unwrap());
+            text.push_str("\r\n");
+        }
+    }
+    text
+}
+
 #[test]
 fn image_report_round_trips_through_the_host_contract_on_success_and_failure() {
     use oer_firmware_apps_w3::report::{Lease as ImageLease, Report as ImageReport};
@@ -17,8 +38,7 @@ fn image_report_round_trips_through_the_host_contract_on_success_and_failure() {
     image.peer_replies = 100;
     image.irq_free = 4096;
     image.deauth_sent = true;
-    let mut console = String::new();
-    image.print(&mut console).unwrap();
+    let mut console = console_of(&image);
     assert!(
         check(&parse(&console).unwrap(), &evidence())
             .unwrap()
@@ -26,8 +46,7 @@ fn image_report_round_trips_through_the_host_contract_on_success_and_failure() {
     );
 
     image.received = 99;
-    console.clear();
-    image.print(&mut console).unwrap();
+    console = console_of(&image);
     let mut observations = evidence();
     observations.echoes.retain(|echo| {
         !(echo.source == image.lease.unwrap().router

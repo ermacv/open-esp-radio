@@ -20,3 +20,23 @@ where
         message: record.message(),
     })
 }
+
+/// Writes the retained panic as one frame of the shared note sequence, for an
+/// image that writes its other diagnostics with [`oer_diagnostics::emit_note`].
+pub fn emit_previous_panic<F, E>(write: F, record: &crate::panic::PanicRecord) -> Result<(), E>
+where
+    F: FnMut(&[u8]) -> Result<(), E>,
+{
+    oer_diagnostics::emit_previous_panic(
+        &oer_diagnostics::PreviousPanic {
+            hart: record.hart,
+            in_interrupt: record.in_interrupt,
+            interrupted_pc: record.interrupted_pc,
+            line: record.line,
+            column: record.column,
+            file: record.file(),
+            message: record.message(),
+        },
+        write,
+    )
+}

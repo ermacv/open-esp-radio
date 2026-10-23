@@ -13,7 +13,9 @@ pub mod record;
 #[cfg(feature = "render")]
 pub mod render;
 
-pub use console::{Console, DecodeError, MAX_NOTE_LINE, PREFIX, decode, emit_note};
+pub use console::{
+    Console, DecodeError, MAX_NOTE_LINE, PREFIX, decode, emit_note, emit_previous_panic,
+};
 pub use fifo::{Fifo, FifoWriter, Lost, Patience};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};

@@ -1,7 +1,8 @@
 //! Version 1 console block consumed by `cargo fw w3 check`.
 
-use core::fmt::{self, Write};
 use core::net::Ipv4Addr;
+
+use oer_diagnostics::Note;
 
 use crate::echo::{ECHO_COUNT, INTERVAL_MS};
 
@@ -77,27 +78,22 @@ impl Report {
         ]
     }
 
-    /// All twelve body rows are emitted on success and on failure.
-    pub fn print(&self, out: &mut impl Write) -> fmt::Result {
+    /// All twelve body rows are emitted on success and on failure, as typed
+    /// notes: the host renders the console text `cargo fw w3 check` reads.
+    pub fn notes<E>(&self, mut emit: impl FnMut(&Note<'static>) -> Result<(), E>) -> Result<(), E> {
         if self.service_rx_queue_full != 0
             || self.service_rx_rejected != 0
             || self.port_events_lost != 0
         {
-            writeln!(
-                out,
-                "w3.rx queue_full={} rejected={} reasons={} port_events_lost={}\r",
+            emit(&Note::w3_rx(
                 self.service_rx_queue_full,
                 self.service_rx_rejected,
-                self.service_rx_reasons,
-                self.port_events_lost
-            )?;
+                u32::from(self.service_rx_reasons),
+                self.port_events_lost,
+            ))?;
         }
         if self.malformed_ip != 0 || self.queue_drops != 0 {
-            writeln!(
-                out,
-                "w3.diag malformed_ip={} queue_drops={}\r",
-                self.malformed_ip, self.queue_drops
-            )?;
+            emit(&Note::w3_diag(self.malformed_ip, self.queue_drops))?;
         }
         let gates = self.gates();
         let lease = self.lease.unwrap_or(Lease {
@@ -105,59 +101,40 @@ impl Report {
             router: Ipv4Addr::UNSPECIFIED,
             prefix: 0,
         });
-        writeln!(out, "OER-W3-BEGIN v=1\r")?;
-        writeln!(
-            out,
-            "w3.config channel={} target=xx:xx:xx:xx:{:02X}:{:02X} stand=xx:xx:xx:xx:{:02X}:{:02X}\r",
-            self.channel, self.target[0], self.target[1], self.stand[0], self.stand[1]
-        )?;
-        writeln!(
-            out,
-            "w3.association authenticated={} associated={}\r",
-            u8::from(self.authenticated),
-            u8::from(self.associated)
-        )?;
-        writeln!(
-            out,
-            "w3.lease acquired={} address={} router={} prefix={}\r",
-            u8::from(self.lease.is_some()),
-            lease.address,
-            lease.router,
-            lease.prefix
-        )?;
-        writeln!(
-            out,
-            "w3.ping sent={} received={} interval_ms={INTERVAL_MS}\r",
-            self.sent, self.received
-        )?;
-        writeln!(
-            out,
-            "w3.peer_ping requests={} replies={}\r",
-            self.peer_requests, self.peer_replies
-        )?;
-        writeln!(
-            out,
-            "w3.stats tx_timeout={} queue_collision={} irq_free={}\r",
-            self.tx_timeout, self.queue_collision, self.irq_free
-        )?;
-        writeln!(
-            out,
-            "w3.departure deauth_sent={}\r",
-            u8::from(self.deauth_sent)
-        )?;
-        for (id, pass) in ['a', 'b', 'c', 'd', 'f'].into_iter().zip(gates) {
-            writeln!(out, "w3.gate id={id} pass={}\r", u8::from(pass))?;
+        emit(&Note::w3_begin())?;
+        emit(&Note::w3_config(
+            u32::from(self.channel),
+            self.target,
+            self.stand,
+        ))?;
+        emit(&Note::w3_association(self.authenticated, self.associated))?;
+        emit(&Note::w3_lease(
+            self.lease.is_some(),
+            lease.address.octets(),
+            lease.router.octets(),
+            u32::from(lease.prefix),
+        ))?;
+        emit(&Note::w3_ping(
+            self.sent,
+            self.received,
+            u32::from(INTERVAL_MS),
+        ))?;
+        emit(&Note::w3_peer_ping(self.peer_requests, self.peer_replies))?;
+        emit(&Note::w3_stats(
+            self.tx_timeout,
+            self.queue_collision,
+            self.irq_free as u32,
+        ))?;
+        emit(&Note::w3_departure(self.deauth_sent))?;
+        for (id, pass) in ["a", "b", "c", "d", "f"].into_iter().zip(gates) {
+            emit(&Note::w3_gate(id, pass))?;
         }
-        writeln!(out, "OER-W3-END lines=12\r")?;
-        writeln!(
-            out,
-            "OER-RESULT: {} w3\r",
-            if gates.into_iter().all(|gate| gate) {
-                "pass"
-            } else {
-                "fail"
-            }
-        )
+        emit(&Note::w3_end())?;
+        emit(&if gates.into_iter().all(|gate| gate) {
+            Note::w3_pass()
+        } else {
+            Note::w3_fail()
+        })
     }
 }
 
@@ -166,6 +143,19 @@ mod tests {
     extern crate std;
     use super::*;
     use std::{string::String, vec::Vec};
+
+    /// The console text the host renders from the report's notes.
+    fn text(report: &Report) -> String {
+        let mut text = String::new();
+        report
+            .notes(|note| {
+                oer_diagnostics::render::note(note, &mut text)?;
+                text.push_str("\r\n");
+                Ok::<(), core::fmt::Error>(())
+            })
+            .expect("String accepts writes");
+        text
+    }
 
     fn passed() -> Report {
         let mut report = Report::new(6, [2, 0, 0, 0, 0, 8], [2, 0, 0, 0, 0, 1]);
@@ -187,8 +177,7 @@ mod tests {
     #[test]
     fn failures_still_emit_a_complete_masked_block_and_zero_lease() {
         let report = Report::new(6, [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff], [2, 1, 2, 3, 4, 5]);
-        let mut text = String::new();
-        report.print(&mut text).expect("String accepts writes");
+        let text = text(&report);
         let lines: Vec<_> = text.lines().collect();
         assert_eq!(lines.len(), 15);
         assert_eq!(lines[0], "OER-W3-BEGIN v=1");
@@ -223,8 +212,7 @@ mod tests {
         report.deauth_sent = false;
         assert!(!report.gates()[4]);
         report.deauth_sent = true;
-        let mut text = String::new();
-        report.print(&mut text).expect("String accepts writes");
+        let text = text(&report);
         assert!(text.ends_with("OER-RESULT: pass w3\r\n"));
     }
 
@@ -235,8 +223,7 @@ mod tests {
         report.service_rx_rejected = 2;
         report.service_rx_reasons = 4;
         report.port_events_lost = 3;
-        let mut text = String::new();
-        report.print(&mut text).expect("String accepts writes");
+        let text = text(&report);
         assert!(text.starts_with(
             "w3.rx queue_full=1 rejected=2 reasons=4 port_events_lost=3\r\nOER-W3-BEGIN v=1\r\n"
         ));

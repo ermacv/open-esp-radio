@@ -24,6 +24,12 @@ pub enum Field {
     PrefixedHex(u8),
     /// `true` or `false`.
     Flag,
+    /// `1` or `0`.
+    Bit,
+    /// A MAC address's last two bytes as `xx:xx:xx:xx:EE:FF`, the rest masked.
+    MacTail,
+    /// An IPv4 address in the word, most significant byte first.
+    Ipv4,
     /// A 64-bit decimal in two words, low word first.
     Wide,
     /// A signed decimal.
@@ -163,6 +169,9 @@ macro_rules! argument {
     (hexa4) => { u32 };
     (hexa10) => { u32 };
     (flag) => { bool };
+    (bit) => { bool };
+    (mactail) => { [u8; 2] };
+    (ipv4) => { [u8; 4] };
     (wide) => { u64 };
     (name) => { &'a str };
 }
@@ -200,6 +209,15 @@ macro_rules! push {
     };
     ($note:ident, $value:ident, flag) => {
         $note.word($value as u32)
+    };
+    ($note:ident, $value:ident, bit) => {
+        $note.word($value as u32)
+    };
+    ($note:ident, $value:ident, mactail) => {
+        $note.word(u32::from(u16::from_be_bytes($value)))
+    };
+    ($note:ident, $value:ident, ipv4) => {
+        $note.word(u32::from_be_bytes($value))
     };
     ($note:ident, $value:ident, wide) => {
         $note.wide($value)
@@ -276,6 +294,15 @@ macro_rules! field_of {
     };
     (flag) => {
         Field::Flag
+    };
+    (bit) => {
+        Field::Bit
+    };
+    (mactail) => {
+        Field::MacTail
+    };
+    (ipv4) => {
+        Field::Ipv4
     };
     (wide) => {
         Field::Wide
@@ -406,6 +433,34 @@ topics! {
     /// A physical-layer step failed without an error to report.
     PhyFail = 15, phy_fail, "OPEN_RADIO_HIL phy=FAIL"
         ("step" step: name);
+    /// W3 console block: the service's receive diagnostics.
+    W3Rx = 100, w3_rx, "w3.rx"
+        ("queue_full" queue_full: dec, "rejected" rejected: dec, "reasons" reasons: dec,
+         "port_events_lost" port_events_lost: dec);
+    W3Diag = 101, w3_diag, "w3.diag"
+        ("malformed_ip" malformed_ip: dec, "queue_drops" queue_drops: dec);
+    W3Begin = 102, w3_begin, "OER-W3-BEGIN v=1" ();
+    W3Config = 103, w3_config, "w3.config"
+        ("channel" channel: dec, "target" target: mactail, "stand" stand: mactail);
+    W3Association = 104, w3_association, "w3.association"
+        ("authenticated" authenticated: bit, "associated" associated: bit);
+    W3Lease = 105, w3_lease, "w3.lease"
+        ("acquired" acquired: bit, "address" address: ipv4, "router" router: ipv4,
+         "prefix" prefix: dec);
+    W3Ping = 106, w3_ping, "w3.ping"
+        ("sent" sent: dec, "received" received: dec, "interval_ms" interval_ms: dec);
+    W3PeerPing = 107, w3_peer_ping, "w3.peer_ping"
+        ("requests" requests: dec, "replies" replies: dec);
+    W3Stats = 108, w3_stats, "w3.stats"
+        ("tx_timeout" tx_timeout: dec, "queue_collision" queue_collision: dec,
+         "irq_free" irq_free: dec);
+    W3Departure = 109, w3_departure, "w3.departure"
+        ("deauth_sent" deauth_sent: bit);
+    W3Gate = 110, w3_gate, "w3.gate"
+        ("id" id: name, "pass" pass: bit);
+    W3End = 111, w3_end, "OER-W3-END lines=12" ();
+    W3Pass = 112, w3_pass, "OER-RESULT: pass w3" ();
+    W3Fail = 113, w3_fail, "OER-RESULT: fail w3" ();
     /// The smoke image's Embassy timer rearming.
     Rearm = 7, rearm, "OPEN_RADIO_HIL rearm"
         ("step" step: dec, "delay_ms" delay_ms: wide, "elapsed_us" elapsed_us: wide);

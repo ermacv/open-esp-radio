@@ -68,7 +68,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
     let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
     if let Some(record) = previous {
-        let _ = write!(console, "OER-PANIC previous {record}\r\n");
+        let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
+            |bytes| console.write(bytes),
+            &record,
+        );
     }
     let Some(config) = CONFIG else {
         let _ = console.write(b"OER-RESULT: fail w2 unconfigured\r\n");

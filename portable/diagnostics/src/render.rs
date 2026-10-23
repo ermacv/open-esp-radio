@@ -28,6 +28,15 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
                 write!(out, "{:#0width$x}", next()?, width = usize::from(width))?
             }
             Field::Flag => out.write_str(if next()? != 0 { "true" } else { "false" })?,
+            Field::Bit => out.write_str(if next()? != 0 { "1" } else { "0" })?,
+            Field::MacTail => {
+                let [high, low] = (next()? as u16).to_be_bytes();
+                write!(out, "xx:xx:xx:xx:{high:02X}:{low:02X}")?
+            }
+            Field::Ipv4 => {
+                let [a, b, c, d] = next()?.to_be_bytes();
+                write!(out, "{a}.{b}.{c}.{d}")?
+            }
             Field::Wide => {
                 let low = u64::from(next()?);
                 write!(out, "{}", low | u64::from(next()?) << 32)?

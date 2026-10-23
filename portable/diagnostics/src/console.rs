@@ -18,8 +18,21 @@ pub const MAX_NOTE_LINE: usize = 2 + PREFIX.len() + 2 * (4 + record::MAX_RECORD_
 /// which must not each count from zero. `write` has the contract of
 /// [`Console::new`]'s.
 pub fn emit_note<E>(note: &Note<'_>, write: impl FnMut(&[u8]) -> Result<(), E>) -> Result<(), E> {
+    Console::starting_at(write, next_sequence()).note(note)
+}
+
+/// Writes the previous boot's panic as one frame of the same shared sequence
+/// as [`emit_note`].
+pub fn emit_previous_panic<E>(
+    panic: &PreviousPanic<'_>,
+    write: impl FnMut(&[u8]) -> Result<(), E>,
+) -> Result<(), E> {
+    Console::starting_at(write, next_sequence()).previous_panic(panic)
+}
+
+fn next_sequence() -> u32 {
     static SEQUENCE: AtomicU32 = AtomicU32::new(0);
-    Console::starting_at(write, SEQUENCE.fetch_add(1, Ordering::Relaxed)).note(note)
+    SEQUENCE.fetch_add(1, Ordering::Relaxed)
 }
 
 /// One synchronous CPU0 boot console. `write` must write all the supplied
