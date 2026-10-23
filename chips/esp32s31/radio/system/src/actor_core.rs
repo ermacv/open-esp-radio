@@ -20,6 +20,7 @@ pub(super) enum Action {
     CloseRf,
 }
 impl ActorCore {
+    #[inline(always)]
     pub(super) fn new(mint: MemberMint) -> Self {
         let epoch = mint.next_epoch(None);
         Self {
@@ -35,26 +36,33 @@ impl ActorCore {
             attached: false,
         }
     }
+    #[inline(always)]
     pub(super) fn is_poisoned(&self) -> bool {
         self.state.poisoned
     }
+    #[inline(always)]
     pub(super) fn tracking_active(&self) -> bool {
         !self.state.poisoned && self.state.tracked > 0
     }
+    #[inline(always)]
     pub(super) fn poison(&mut self) {
         self.state.poisoned = true;
     }
+    #[inline(always)]
     pub(super) fn joined(&mut self) {
         self.state.members += 1;
     }
+    #[inline(always)]
     pub(super) fn tracked(&mut self) {
         self.state.tracked += 1;
     }
+    #[inline(always)]
     pub(super) fn failed(&mut self, cause: Failure) {
         if cause == Failure::Poisoned {
             self.poison();
         }
     }
+    #[inline(always)]
     pub(super) fn failure(&self, cause: Failure) -> Failure {
         if self.state.poisoned {
             Failure::Poisoned
@@ -62,6 +70,7 @@ impl ActorCore {
             cause
         }
     }
+    #[inline(always)]
     pub(super) fn health(&self) -> DomainHealth {
         if self.state.poisoned {
             DomainHealth::Poisoned
@@ -69,6 +78,7 @@ impl ActorCore {
             DomainHealth::Healthy
         }
     }
+    #[inline(always)]
     pub(super) fn failed_enter(&mut self, cause: Failure) -> Action {
         // Both joins admit and prepare from a healthy core before entering;
         // no other actor operation runs during that entered transaction.
@@ -81,11 +91,13 @@ impl ActorCore {
             Action::Continue
         }
     }
+    #[inline(always)]
     pub(super) fn leaving(&mut self, tracked: bool) {
         if tracked {
             self.state.tracked = self.state.tracked.saturating_sub(1);
         }
     }
+    #[inline(always)]
     pub(super) fn exited(&mut self, exit: Exit) -> Action {
         self.state.members = self.state.members.saturating_sub(1);
         if exit.health == DomainHealth::Poisoned {
@@ -97,6 +109,7 @@ impl ActorCore {
             Action::Continue
         }
     }
+    #[inline(always)]
     pub(super) fn prepared(&mut self, phy: &PhyPreparation) -> RfEpoch {
         if *phy != PhyPreparation::AlreadyOpen && self.state.has_epoch {
             self.state.epoch = self.mint.next_epoch(Some(self.state.epoch));
@@ -104,6 +117,7 @@ impl ActorCore {
         self.state.has_epoch = true;
         self.state.epoch
     }
+    #[inline(always)]
     pub(super) fn closed(&mut self, result: Result<(), CloseFault>) {
         if matches!(result, Err(CloseFault::Poisoned)) {
             self.state.poisoned = true;
