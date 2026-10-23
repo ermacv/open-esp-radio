@@ -162,7 +162,6 @@ struct RestoreObligation {
     registers: bool,
     bus: bool,
 }
-crate::rx_health_program! {
 /// Complete RX calibration and gain publication with one retained program PC.
 /// Only the enclosing physical owner may run it or publish its terminal result.
 ///
@@ -188,7 +187,11 @@ pub struct RxProgram {
     restore: RestoreObligation,
     failure: Option<PhyRxGainInitFailure>,
     fault: Option<RxError>,
-}}
+    #[cfg(feature = "radio-health")]
+    health_frequency: Option<u16>,
+    #[cfg(feature = "radio-health")]
+    health_correction: Option<crate::tracking::observation::health::Correction>,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ControlCommand {
@@ -252,7 +255,7 @@ impl RxProgram {
     pub fn new(parameters: PhyRxGainInitParameters) -> Self {
         let initialized = parameters.tables_initialized;
         let dc_required = !parameters.dc_calibrated && !initialized;
-        crate::rx_health_init!(Self {
+        Self {
             inputs: parameters.dc,
             dc_required,
             generated_tables: !initialized,
@@ -285,7 +288,11 @@ impl RxProgram {
             restore: RestoreObligation::default(),
             failure: None,
             fault: None,
-        })
+            #[cfg(feature = "radio-health")]
+            health_frequency: None,
+            #[cfg(feature = "radio-health")]
+            health_correction: None,
+        }
     }
 
     pub fn with_initialized_tables() -> Self {
@@ -578,13 +585,17 @@ impl RxProgram {
         }
         result
     }
-    #[rustfmt::skip]
     fn start_frequency(&mut self) {
-        self.work = Work::Frequency(RfpllFrequencyTransition::channel(crate::rx_health_frequency!(self, RfpllFrequencyRequest {
+        let request = RfpllFrequencyRequest {
             crystal_selector: self.inputs.crystal_selector,
             frequency_code: 0x9b4,
             offset: 0,
-        })));
+        };
+        #[cfg(feature = "radio-health")]
+        {
+            self.health_frequency = Some(request.frequency_code);
+        }
+        self.work = Work::Frequency(RfpllFrequencyTransition::channel(request));
         self.cursor.pc = Pc::Frequency;
     }
     fn frequency_completed(&mut self, completion: RfpllFrequencyCompletion) -> Result<(), RxError> {
@@ -701,19 +712,27 @@ impl RxProgram {
         self.cursor.pc = Pc::Estimate;
         Ok(())
     }
-    #[rustfmt::skip]
     fn finish_calibration(&mut self) -> Result<(), RxError> {
         let Work::Calibration(cal) = &self.work else {
             return Err(RxError::WrongCompletion);
         };
         let terminal = cal.terminal.ok_or(RxError::WrongCompletion)?;
-        let outcome = crate::rx_health_correction!(self, match terminal {
+        let outcome = match terminal {
             Ok(outcome) => outcome,
             Err(failure) => {
                 self.fail_dc(PhyRxGainDcFailure::Calibration(failure));
                 return Ok(());
             }
-        });
+        };
+        #[cfg(feature = "radio-health")]
+        {
+            self.health_correction = Some(crate::tracking::observation::health::Correction {
+                context: self.measurement_context()?,
+                configuration: outcome.configuration,
+                iterations: outcome.iterations,
+                converged: outcome.converged,
+            });
+        }
         if let Some(index) = self.cursor.fine {
             let slot = self
                 .memory
@@ -1204,59 +1223,4 @@ impl EstimatorStep<'_> {
     ) -> Result<crate::tracking::observation::health::Context, RxError> {
         self.program.measurement_context()
     }
-}
-
-// Keep disabled code and its existing caller locations unchanged.
-#[macro_export]
-macro_rules! rx_health_program {
-    ($(#[$meta:meta])* pub struct $name:ident { $($fields:tt)* }) => {
-        $(#[$meta])* pub struct $name { $($fields)*
-            #[cfg(feature = "radio-health")] health_frequency: Option<u16>,
-            #[cfg(feature = "radio-health")] health_correction: Option<$crate::tracking::observation::health::Correction>,
-        }
-    };
-}
-#[macro_export]
-macro_rules! rx_health_init {
-    (Self { $($fields:tt)* }) => {{
-        #[cfg(feature = "radio-health")]
-        { Self { $($fields)* health_frequency: None, health_correction: None } }
-        #[cfg(not(feature = "radio-health"))]
-        { Self { $($fields)* } }
-    }};
-}
-#[macro_export]
-macro_rules! rx_health_frequency {
-    ($owner:expr, $request:expr) => {{
-        #[cfg(feature = "radio-health")]
-        {
-            let request = $request;
-            $owner.health_frequency = Some(request.frequency_code);
-            request
-        }
-        #[cfg(not(feature = "radio-health"))]
-        {
-            $request
-        }
-    }};
-}
-#[macro_export]
-macro_rules! rx_health_correction {
-    ($owner:expr, $outcome:expr) => {{
-        #[cfg(feature = "radio-health")]
-        {
-            let outcome = $outcome;
-            $owner.health_correction = Some($crate::tracking::observation::health::Correction {
-                context: $owner.measurement_context()?,
-                configuration: outcome.configuration,
-                iterations: outcome.iterations,
-                converged: outcome.converged,
-            });
-            outcome
-        }
-        #[cfg(not(feature = "radio-health"))]
-        {
-            $outcome
-        }
-    }};
 }
