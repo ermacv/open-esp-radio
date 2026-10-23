@@ -10089,6 +10089,59 @@ bit-width = 3
 access = "read-write"
 
 [[registers]]
+address = 1611308044
+width = 32
+access = "read-write"
+identity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST"
+peripheral = "MODEM_SYSCON_RADIO"
+peripheral-type = "ModemSysconRadio"
+peripheral-module = "modem_syscon_radio"
+scope = []
+register-method = "clk_conf_power_st"
+
+[[registers.fields]]
+svd-name = "CLK_ZB_ST_MAP"
+method = "clk_zb_st_map"
+bit-offset = 8
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_FE_ST_MAP"
+method = "clk_fe_st_map"
+bit-offset = 12
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_BT_ST_MAP"
+method = "clk_bt_st_map"
+bit-offset = 16
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_WIFI_ST_MAP"
+method = "clk_wifi_st_map"
+bit-offset = 20
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_MODEM_PERI_ST_MAP"
+method = "clk_modem_peri_st_map"
+bit-offset = 24
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_MODEM_APB_ST_MAP"
+method = "clk_modem_apb_st_map"
+bit-offset = 28
+bit-width = 4
+access = "read-write"
+
+[[registers]]
 address = 1611308048
 width = 32
 access = "read-write"

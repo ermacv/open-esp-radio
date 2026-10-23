@@ -66,6 +66,53 @@ name = "BITS_29_31_OPAQUE"
 description = "Observed source use; the individual hardware meaning is unknown."
 bitOffset = 29
 bitWidth = 3
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF_POWER_ST"
+description = "Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET."
+addressOffset = 0x0C
+size = 32
+access = "read-write"
+resetValue = 0
+resetMask = 0xFFFFFF00
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ZB_ST_MAP"
+description = "Power states that enable the IEEE 802.15.4 clock domain."
+bitOffset = 8
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_ST_MAP"
+description = "Power states that enable the front-end clock domain."
+bitOffset = 12
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "CLK_BT_ST_MAP"
+description = "Power states that enable the Bluetooth clock domain."
+bitOffset = 16
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFI_ST_MAP"
+description = "Power states that enable the Wi-Fi clock domain."
+bitOffset = 20
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_PERI_ST_MAP"
+description = "Power states that enable the modem peripheral clock domain."
+bitOffset = 24
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_APB_ST_MAP"
+description = "Power states that enable the modem APB clock domain."
+bitOffset = 28
+bitWidth = 4
+
 [[peripherals.registers]]
 [peripherals.registers.register]
 name = "MODEM_RST_CONF"
@@ -132,6 +179,14 @@ naming = "vendor"
 [peripheral-review.field]
 sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
 naming = "vendor"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET"]
+naming = "vendor"
+provenance = "imported"
+accuracy = "exact"
+completeness = "partial"
 
 [[review]]
 entity = "MODEM_SYSCON_RADIO.CLK_CONF1.BITS_0_15_OPAQUE"
