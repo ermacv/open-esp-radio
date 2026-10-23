@@ -923,6 +923,46 @@ pub(super) fn analyze_with<'m>(
     closed_graph: bool,
     context: Option<&mut writes::context::ContextRun<'_, 'm>>,
 ) -> Result<SemanticSummary> {
+    let symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
+    analyze_with_symbols(
+        input,
+        nodes,
+        edges,
+        isa,
+        memory,
+        control,
+        sink,
+        symbolic,
+        abi,
+        symbolic_spills,
+        stack_calls,
+        stack_context,
+        noreturn,
+        closed_graph,
+        context,
+        symbols,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn analyze_with_symbols<'m, 's>(
+    input: &FunctionInput<'_>,
+    nodes: &[Node],
+    edges: &[Edge],
+    isa: &dyn FunctionSemantics,
+    memory: &'m WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn FunctionSink,
+    symbolic: bool,
+    abi: Option<CallAbi>,
+    symbolic_spills: bool,
+    stack_calls: Option<&'s writes::StackCalls<'s>>,
+    stack_context: Option<&'s crate::stack_context::StackContext<'s>>,
+    noreturn: &mut AdmittedVec<'_, u64>,
+    closed_graph: bool,
+    context: Option<&mut writes::context::ContextRun<'_, 'm>>,
+    mut symbols: Symbols<'s>,
+) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
     let bytes_per_node = std::mem::size_of::<Option<State>>()
         + std::mem::size_of::<Operation>()
@@ -944,7 +984,6 @@ pub(super) fn analyze_with<'m>(
         32 * (std::mem::size_of::<AbstractValue>() as u64 + public_value_bytes),
         control.position(),
     )?;
-    let mut symbols = Symbols::new(if symbolic { nodes.len() } else { 0 }, memory, control)?;
     symbols.symbolic_spills = symbolic_spills;
     symbols.memory_words = symbolic_spills && closed_graph;
     // Saved call proofs require all incoming paths to be modeled again in
@@ -1433,6 +1472,17 @@ pub(super) fn analyze_with<'m>(
         control.checkpoint(1)?;
         sink.record(relation, control)?;
     }
+    if symbols.exhausted {
+        summary.complete = false;
+        summary.gaps += 1;
+        sink.record(
+            &FunctionRecord::SemanticGap {
+                offset: input.extent.start,
+                reason: SemanticGapReason::ExpressionLimit,
+            },
+            control,
+        )?;
+    }
     Ok(summary)
 }
 
@@ -1448,6 +1498,7 @@ struct Symbols<'a> {
     payloads: AdmittedVec<'a, MemoryReservation<'a>>,
     memory: &'a WorkingMemory,
     limit: usize,
+    exhausted: bool,
 }
 impl<'a> Symbols<'a> {
     fn new(nodes: usize, memory: &'a WorkingMemory, _c: &mut dyn RunControl) -> Result<Self> {
@@ -1473,6 +1524,7 @@ impl<'a> Symbols<'a> {
             payloads: AdmittedVec::new(memory),
             memory,
             limit,
+            exhausted: false,
         })
     }
     fn expression(
@@ -1487,10 +1539,8 @@ impl<'a> Symbols<'a> {
             return Ok(Value::Expr(id));
         }
         if self.records.len() >= self.limit {
-            return Err(Error::new(
-                ErrorCode::ResourceLimited,
-                "expression capacity exhausted",
-            ));
+            self.exhausted = true;
+            return Ok(Value::Unknown);
         }
         let id = u32::try_from(self.records.len())
             .map_err(|_| Error::new(ErrorCode::ResourceLimited, "expression ID overflow"))?;
@@ -2277,6 +2327,125 @@ mod tests {
         .unwrap();
         sink.0
     }
+    #[test]
+    fn expression_exhaustion_converges_to_unknown_and_stays_local() {
+        let bytes = [0, 0, 1, 0, 2, 0];
+        let ops = vec![
+            SemanticOp::Integer {
+                op: IntegerOp::Add,
+                dest: 5,
+                left: Operand::Register(10),
+                right: Operand::Register(11),
+            },
+            SemanticOp::Integer {
+                op: IntegerOp::Add,
+                dest: 6,
+                left: Operand::Register(5),
+                right: Operand::Immediate(1),
+            },
+            set(7, 42),
+        ];
+        let nodes: Vec<_> = (0..3)
+            .map(|i| Node {
+                offset: i * 2,
+                decoded: DecodedOp {
+                    length: 2,
+                    text: String::new(),
+                    flow: InstructionFlow::Next,
+                },
+                conflict: false,
+            })
+            .collect();
+        // The last node loops: publishing facts still waits for convergence.
+        let edges: Vec<_> = [(0, 2), (2, 4), (4, 2)]
+            .into_iter()
+            .map(|(from, to)| Edge {
+                from,
+                target: Some(to),
+                relation: EdgeKind::Jump,
+                external: false,
+            })
+            .collect();
+        let references = PreparedReferences::empty();
+        let input = FunctionInput {
+            traps: crate::TrapSemantics::Unknown,
+            image: None,
+            section: 1,
+            extent: CodeRange {
+                start: 0,
+                length: bytes.len() as u64,
+            },
+            bytes: &bytes,
+            relocations: &references,
+            data_ranges: &[],
+            jumps: &[],
+            returns: &NoSummaries,
+            call_behavior: &UnknownCallBehavior,
+        };
+        let memory = WorkingMemory::new(1024 * 1024).unwrap();
+        for (limit, limited) in [(31, true), (56, false)] {
+            let mut c = || Ok(());
+            let mut symbols = Symbols::new(nodes.len(), &memory, &mut c).unwrap();
+            symbols.limit = limit;
+            let mut sink = Records::default();
+            let summary = analyze_with_symbols(
+                &input,
+                &nodes,
+                &edges,
+                &Isa(ops.clone()),
+                &memory,
+                &mut c,
+                &mut sink,
+                true,
+                None,
+                false,
+                None,
+                None,
+                &mut AdmittedVec::new(&memory),
+                true,
+                None,
+                symbols,
+            )
+            .unwrap();
+            assert_eq!(summary.complete, !limited);
+            assert_eq!(
+                sink.0
+                    .iter()
+                    .filter(|record| matches!(
+                        record,
+                        FunctionRecord::SemanticGap {
+                            reason: SemanticGapReason::ExpressionLimit,
+                            ..
+                        }
+                    ))
+                    .count(),
+                usize::from(limited)
+            );
+            for register in [5, 6] {
+                let value = sink
+                    .0
+                    .iter()
+                    .find_map(|record| match record {
+                        FunctionRecord::Value {
+                            register: r, value, ..
+                        } if *r == register => Some(value),
+                        _ => None,
+                    })
+                    .unwrap();
+                assert_eq!(*value == AbstractValue::Unknown, limited);
+            }
+            assert!(sink.0.iter().any(|record| matches!(
+                record,
+                FunctionRecord::Value {
+                    register: 7,
+                    value: AbstractValue::Constant { value: 42 },
+                    ..
+                }
+            )));
+            assert_eq!(memory.used(), 0, "function scratch must be released");
+        }
+    }
+
     fn set(dest: u8, n: u32) -> SemanticOp {
         SemanticOp::Integer {
             op: IntegerOp::Add,

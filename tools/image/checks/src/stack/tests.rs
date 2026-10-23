@@ -692,6 +692,31 @@ fn audit_of(policy: &StackPolicy, image: &Image) -> StackAudit {
 }
 
 #[test]
+fn stack_report_counts_functions_with_expression_limits() {
+    let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
+    let mut image = image_with_stack(256);
+    assert_eq!(image.analysis.expression_limited_functions(), 0);
+    assert!(
+        !audit_of(&policy, &image)
+            .render()
+            .contains("expression limits:")
+    );
+    image
+        .analysis
+        .functions
+        .values_mut()
+        .next()
+        .unwrap()
+        .expression_limited = true;
+    assert_eq!(image.analysis.expression_limited_functions(), 1);
+    assert!(
+        audit_of(&policy, &image)
+            .render()
+            .contains("expression limits: 1 functions")
+    );
+}
+
+#[test]
 fn a_range_stack_takes_its_capacity_from_its_bounds() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     let image = image(

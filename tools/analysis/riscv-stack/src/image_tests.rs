@@ -7,6 +7,7 @@ fn observation(records: &[FunctionRecord]) -> Observation {
         ledger: &mut ledger,
         deepest: 0,
         dynamic: false,
+        expression_limited: false,
         unexpanded: Vec::new(),
         site_depths: BTreeMap::new(),
         site_registers: BTreeMap::new(),
@@ -20,6 +21,7 @@ fn observation(records: &[FunctionRecord]) -> Observation {
     Observation {
         depth: Some(0),
         complete: false,
+        expression_limited: observer.expression_limited,
         resolved: observer.transfers,
         local_jumps: observer.unexpanded,
         site_depths: observer.site_depths,
@@ -36,6 +38,17 @@ fn edge(from: u64, target: Option<u64>, relation: EdgeKind, external: bool) -> F
         relation,
         external,
     }
+}
+
+#[test]
+fn expression_limit_is_retained_by_the_stack_observer() {
+    let records = [FunctionRecord::SemanticGap {
+        offset: 0x1000,
+        reason: SemanticGapReason::ExpressionLimit,
+    }];
+    let observed = observation(&records);
+    assert!(observed.expression_limited);
+    assert!(!observation(&[]).expression_limited);
 }
 
 #[test]

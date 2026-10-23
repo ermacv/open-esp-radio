@@ -742,6 +742,7 @@ fn coverage_and_assumptions_survive_the_report() {
     }
     let mut summary = summary(&records);
     summary.partial_causes.control_flow = 1;
+    summary.partial_causes.expression_limits = 2;
     let report = check.finish(summary);
     assert_eq!(report.coverage_gaps, records);
     assert_eq!(report.corpus.abi, assumptions.abi);
@@ -750,6 +751,12 @@ fn coverage_and_assumptions_survive_the_report() {
     let rendered = report.render("fixture");
     assert!(rendered.contains("gaps 1"));
     assert!(rendered.contains("control_flow"));
+    assert!(rendered.contains("\"expression_limits\":2"));
+    let encoded = serde_json::to_value(&report).unwrap();
+    assert_eq!(
+        encoded["corpus"]["summary"]["partial_causes"]["expression_limits"],
+        2
+    );
     assert!(rendered.contains(&format!("sha256 {}", inputs[0].sha256)));
     assert!(rendered.contains("RiscvInteger"));
     assert!(rendered.contains("cargo blobray --format json register-accesses"));

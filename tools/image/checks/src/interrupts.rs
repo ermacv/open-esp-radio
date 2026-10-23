@@ -32,6 +32,7 @@ pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
+    pub expression_limited_functions: usize,
     pub witness_memory_peak: u64,
     pub traps: oer_analysis_riscv_stack::TrapFact,
     pub harts: Vec<HartStack>,
@@ -341,6 +342,13 @@ impl InterruptStacks {
     fn render_report(&self, placement: Option<&InterruptPlacement>) -> String {
         let name = |address: u32| self.name(address);
         let mut out = format!("{}\n", self.traps);
+        if self.expression_limited_functions != 0 {
+            let _ = writeln!(
+                out,
+                "expression limits: {} functions",
+                self.expression_limited_functions
+            );
+        }
         out.push_str(&self.render_guards());
         if self.level_writers.is_empty() {
             let _ = writeln!(
@@ -623,6 +631,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         None => Vec::new(),
     };
     Ok(InterruptStacks {
+        expression_limited_functions: analysis.expression_limited_functions(),
         witness_memory_peak: memory.peak().max(image.usage.memory_bytes),
         traps: image.traps.clone(),
         harts,
@@ -850,6 +859,7 @@ mod tests {
 
     pub(super) fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
         InterruptStacks {
+            expression_limited_functions: 0,
             witness_memory_peak: 0,
             traps: Default::default(),
             harts: Vec::new(),
@@ -886,6 +896,7 @@ mod tests {
             bound,
         };
         InterruptStacks {
+            expression_limited_functions: 0,
             witness_memory_peak: 0,
             traps: Default::default(),
             harts: vec![HartStack {
@@ -952,6 +963,7 @@ mod tests {
             source: Some(FrameSource::Observed),
             observed: Some(0),
             complete: true,
+            expression_limited: false,
             terminal_recursive_callees: false,
             target_loads: BTreeMap::new(),
             open_exit_target_loads: BTreeMap::new(),

@@ -107,12 +107,15 @@ fn index_admission_cancellation_and_record_failure_preserve_usable_owner() {
     assert_eq!(memory.used(), before);
     assert_eq!(symbols.records.len(), 32);
     let hold = memory.reserve(1024 * 1024 - before, c.position()).unwrap();
-    assert_eq!(
-        symbols
-            .expression(128, expression(32), &mut c)
-            .unwrap_err()
-            .code,
-        ErrorCode::ResourceLimited
+    let error = symbols.expression(128, expression(32), &mut c).unwrap_err();
+    assert_eq!(error.code, ErrorCode::ResourceLimited);
+    assert!(
+        error.memory.is_some(),
+        "growth retains the operation's memory failure"
+    );
+    assert!(
+        !symbols.exhausted,
+        "memory refusal is not the expression limit"
     );
     assert_eq!(
         symbols.expression(0, expression(0), &mut c).unwrap(),
@@ -176,12 +179,30 @@ fn index_admission_cancellation_and_record_failure_preserve_usable_owner() {
         Value::Expr(8)
     );
     assert_eq!(
-        symbols
-            .expression(9, expression(9), &mut c)
-            .unwrap_err()
-            .code,
-        ErrorCode::ResourceLimited
+        symbols.expression(9, expression(9), &mut c).unwrap(),
+        Value::Unknown
     );
+    assert!(symbols.exhausted);
+    for code in [
+        ErrorCode::ResourceLimited,
+        ErrorCode::TimedOut,
+        ErrorCode::Cancelled,
+    ] {
+        let expected = code.clone();
+        let mut failure = || Err(Error::new(code.clone(), "caller failure"));
+        assert_eq!(
+            symbols
+                .expression(10, expression(10), &mut failure)
+                .unwrap_err()
+                .code,
+            expected
+        );
+    }
+    assert_eq!(
+        symbols.expression(8, expression(8), &mut c).unwrap(),
+        Value::Expr(8)
+    );
+    assert_eq!(symbols.records.len(), 9);
     drop(symbols);
     assert_eq!(memory.used(), 0);
 }

@@ -13,6 +13,7 @@ pub enum LocalBudgetScope {
     ReadFlow,
     ArgumentSummary,
     SignatureAudit,
+    FunctionExpressions,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -116,15 +117,20 @@ mod library_tests {
 
     #[test]
     fn local_budget_transport_keeps_scope_and_limit_without_parsing_prose() {
-        let budget = LocalBudgetExceeded {
-            limit: 100_000,
-            scope: LocalBudgetScope::ArgumentSummary,
-        };
-        let error = Error::new(ErrorCode::LocalBudgetExceeded(budget), "arbitrary prose");
-        let bytes = serde_json::to_vec(&error).expect("serialize local error");
-        let recovered: Error = serde_json::from_slice(&bytes).expect("deserialize local error");
-        assert_eq!(recovered, error);
-        assert_eq!(recovered.code, ErrorCode::LocalBudgetExceeded(budget));
+        for scope in [
+            LocalBudgetScope::ArgumentSummary,
+            LocalBudgetScope::FunctionExpressions,
+        ] {
+            let budget = LocalBudgetExceeded {
+                limit: 100_000,
+                scope,
+            };
+            let error = Error::new(ErrorCode::LocalBudgetExceeded(budget), "arbitrary prose");
+            let bytes = serde_json::to_vec(&error).expect("serialize local error");
+            let recovered: Error = serde_json::from_slice(&bytes).expect("deserialize local error");
+            assert_eq!(recovered, error);
+            assert_eq!(recovered.code, ErrorCode::LocalBudgetExceeded(budget));
+        }
     }
 
     #[test]

@@ -153,7 +153,10 @@ Constants propagate through any acyclic call depth in these two analyses.
 
 A summary requires complete CFG, decoding and references, with no blocked
 function or gaps. Partial functions qualify only for `OpaqueCall` and
-`AlternativeLimit`; every other partial reason prevents a summary. Each of
+`AlternativeLimit`; every other partial reason prevents a summary. An exhausted
+expression pool reports `expression-limit`, increments
+`partial_causes.expression_limits`, and gives the summary outcome
+`LocalBudgetExceeded` (`function-expressions`). Each of
 `a0` and `a1` has a constant result set only when every return proves at most
 eight constants there. Known tail callees supply their result contracts.
 Callees are named by image address or relocatable symbol. Incompatible definitions,

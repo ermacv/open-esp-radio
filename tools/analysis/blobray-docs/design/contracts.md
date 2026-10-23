@@ -294,7 +294,12 @@ absorb exact information. Distinct expression IDs and incomplete relocation
 uppers are not exact alternative leaves. Overflow emits `SemanticGap::AlternativeLimit`
 and unknown, never a truncated set or a chosen target. Work/cancellation admission
 includes set lookup/growth and each candidate evaluation. Cycles converge under
-the finite-height lattice; resource exhaustion fails the analysis.
+the finite-height lattice. A function holds at most `8*N+32` expressions for
+`N` instructions. Once full, existing interned expressions remain usable and
+new expressions become unknown. Analysis continues to convergence and emits
+`SemanticGap::ExpressionLimit`; such a function cannot publish a call summary
+and its summary outcome is `LocalBudgetExceeded` in scope `FunctionExpressions`.
+Working-memory and caller run-control failures still fail the operation.
 
 Register accesses match each possible address without changing the analyzed
 facts. CFG edges and original instruction/relocation records remain provenance;

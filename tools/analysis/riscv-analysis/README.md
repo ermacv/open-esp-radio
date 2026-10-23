@@ -58,6 +58,10 @@ An operation-owned, capacity-admitted hash index interns full `(site, expression
 keys with stable record IDs and provenance. Hash collisions use full equality;
 lookup, replacement-index construction and payload ownership share the analysis
 budget. Failed admission or cancellation leaves retained IDs usable.
+The local pool holds `8*N+32` expressions for `N` instructions. When full,
+new expressions become unknown and existing IDs remain usable. The solver
+continues to convergence and marks the function partial with `ExpressionLimit`;
+working-memory and caller run-control failures still fail the operation.
 
 `PreparedReferences` retains one normalized reference table per prepared section. Sorted offset, symbol and physical-pair indexes replace repeated whole-table scans while preserving nonadjacent HI/LO ambiguity and exact physical identities.
 

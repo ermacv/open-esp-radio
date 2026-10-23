@@ -150,6 +150,7 @@ pub(crate) struct Observation {
     /// The deepest entry-relative `sp`, unless some `sp` value is not entry-relative.
     pub depth: Option<u64>,
     pub complete: bool,
+    pub expression_limited: bool,
     /// Transfers whose target the value analysis resolved.
     pub resolved: Vec<(u32, u32, TransferKind)>,
     /// Sites of indirect jumps whose targets the analysis found inside the
@@ -231,6 +232,7 @@ struct Observer<'l, 'm> {
     ledger: &'l mut Ledger<'m>,
     deepest: i64,
     dynamic: bool,
+    expression_limited: bool,
     unexpanded: Vec<u32>,
     site_depths: BTreeMap<u32, u64>,
     site_registers: BTreeMap<u32, [Option<u32>; 32]>,
@@ -309,6 +311,10 @@ impl FunctionSink for Observer<'_, '_> {
             } => self
                 .ledger
                 .push(&mut self.unexpanded, *offset as u32, control)?,
+            FunctionRecord::SemanticGap {
+                reason: SemanticGapReason::ExpressionLimit,
+                ..
+            } => self.expression_limited = true,
             FunctionRecord::CallInputs { offset, registers } => {
                 if let Some(AbstractValue::EntryStack { offset: sp }) = registers.get(SP as usize) {
                     self.ledger.insert(
@@ -388,6 +394,7 @@ pub(crate) fn observing<R>(
             ledger,
             deepest: 0,
             dynamic: false,
+            expression_limited: false,
             unexpanded: Vec::new(),
             site_depths: BTreeMap::new(),
             site_registers: BTreeMap::new(),
@@ -422,7 +429,8 @@ pub(crate) fn observing<R>(
         let complete = summary.coverage.decoding
             && summary.coverage.control_flow
             && observer.unexpanded.is_empty()
-            && !observer.dynamic;
+            && !observer.dynamic
+            && !observer.expression_limited;
         let depth = (!observer.dynamic).then_some(observer.deepest.unsigned_abs());
         let mut local_jumps = observer.unexpanded;
         for table in &followed.tables {
@@ -431,6 +439,7 @@ pub(crate) fn observing<R>(
                 .push(&mut local_jumps, table.site() as u32, control)?;
         }
         Ok(Observation {
+            expression_limited: observer.expression_limited,
             depth,
             complete,
             resolved: observer.transfers,
