@@ -273,7 +273,8 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
     loop {
         radio.expire_cache();
         if radio.registration_pending() {
-            radio.service_registration().await;
+            let mut registration = core::pin::pin!(radio.service_registration());
+            poll_fn(|cx| radio::poll_registration(registration.as_mut(), cx)).await;
             continue;
         }
         if let Some(deadline) = radio.deadline() {

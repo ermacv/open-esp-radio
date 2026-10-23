@@ -351,7 +351,6 @@ impl Radio {
     }
 
     /// Once started, the native registration future runs to its terminal result.
-    #[inline(never)]
     pub async fn service_registration(&mut self) {
         if let Err(_reason) = self.register().await {
             self.poisoned = true;
@@ -771,6 +770,15 @@ impl Radio {
         }
         Err(RejectReason::Internal)
     }
+}
+
+/// Keep the registration poll's scratch frame off unrelated request paths.
+#[inline(never)]
+pub fn poll_registration<F: core::future::Future>(
+    future: core::pin::Pin<&mut F>,
+    context: &mut core::task::Context<'_>,
+) -> core::task::Poll<F::Output> {
+    future.poll(context)
 }
 
 #[inline(never)]
