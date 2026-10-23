@@ -1,0 +1,35 @@
+# S31 semantic calibration record
+
+`calibration_cache` is the hardware-free codec for `S31SemanticV1`, format
+identifier `0x31433353` (little-endian ASCII `S3C1`). It preserves every field
+of PHY snapshot schema 8 in exactly 261 bytes. The firmware maps fields
+explicitly between this record and its native snapshot. The codec depends
+on neither PHY nor HAL and does not authorize replay.
+
+| Part | Bytes |
+| --- | ---: |
+| Schema (`u16`) | 2 |
+| Identity: RF ABI (`u32`), base MAC (`[u8; 6]`), extension (`u16`) | 12 |
+| Common calibration | 32 |
+| Wi-Fi calibration | 182 |
+| Bluetooth calibration | 33 |
+
+Field declaration order in `calibration_cache/mod.rs` is wire order. Arrays
+are row-major. Integers are fixed-width little-endian; signed integers use
+two's complement; booleans are exactly 0 or 1. There is no padding, native
+pointer, enum discriminant or `usize`. `golden.bin` and its field-complete
+semantic fixture fix that encoding independently of Rust memory layout.
+Decode rejects unknown formats/schemas, any wrong length and noncanonical
+booleans. Foreign identities, incomplete guards and invalid RX table values
+are preserved for the native registration boundary to reject before replay.
+
+`CALIBRATION_ALGORITHM_REVISION` and `CALIBRATION_PROFILE_ID` identify the
+reviewed calibration/replay implementation and `PhyConfig::production()`.
+They are independent of RF ABI 102, snapshot schema and producing commit.
+The host-only `revision_guard` embeds the production PHY sources listed in
+that test, including state/profile, cold registration and replay/publication
+adapters. It hashes sorted relative paths and source bytes, each terminated
+with NUL, using SHA-256. It embeds no digest in the image. A changed input
+fails until a new reviewed revision/profile pair and digest are recorded;
+the failure prints the actual digest and rerun command. Previously reviewed
+pairs stay immutable. New production inputs belong in that explicit list.

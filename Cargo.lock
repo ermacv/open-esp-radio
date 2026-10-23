@@ -2857,6 +2857,7 @@ name = "oer-esp32s31-knowledge"
 version = "0.1.0"
 dependencies = [
  "oer-espressif-ieee802154-engine",
+ "sha2 0.10.9",
 ]
 
 [[package]]
