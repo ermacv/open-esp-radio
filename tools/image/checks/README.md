@@ -118,13 +118,15 @@ Run host regressions with `cargo test -p oer-image-checks`.
 
 `sizes.json` schema 2 is published by `oer-image-build` beside the image's
 ELFs. The check outcome carries `sizes::Measurements` from the same `Image`
-used for checking. Task bounds and context-specific interrupt bounds are
-captured when the checks compute them; neither a second analysis nor a second
-firmware compilation is run.
+used for checking. During a normal build, task bounds and context-specific
+interrupt bounds are captured when the checks compute them; no second analysis
+or firmware compilation is run. The explicit refresh command reanalyses saved
+ELFs without compiling or changing the original reports.
 
 The top level contains `schema`, `type_min_bytes` (the constant
-`oer_image_checks::sizes::TYPE_MIN_BYTES`, **256 B**), `provenance`, and `elfs`
-(`runtime` and `bootstrap`). Provenance contains commit/dirty status, rustc's
+`oer_image_checks::sizes::TYPE_MIN_BYTES`, **256 B**), `provenance`, `elfs`
+(`runtime` and `bootstrap`), `image_files` and `embedded_payloads`. The latter
+records the byte-verified runtime copy excluded from the image code total. Provenance contains commit/dirty status, rustc's
 verbose version, chip, target, profile/settings, application/features, purpose,
 layout seed, configuration digests, compiler flags and stack policy source
 paths/digests. Values that may contain stand credentials are hashed.
@@ -132,18 +134,20 @@ paths/digests. Values that may contain stand credentials are hashed.
 Each ELF contains:
 
 - `sections`: every `SHF_ALLOC` section, keyed by name, with memory kind from
-  the chip map, `executable`, `writable`, address and byte size. `totals` gives
-  executable code and allocated RAM separately per memory kind (`sram`,
-  `psram`, `flash`; a ROM companion is analysed but allocates no image section).
-  Totals sum section sizes; overlapping NOLOAD sections remain separately
-  visible and are not a physical free-memory estimate.
+  the chip map, content class, input-free filler ranges, `executable`, `writable`,
+  `nobits`, address and byte size. `totals` gives executable/read-only contents,
+  filler and owned RAM separately per memory kind (`sram`, `psram`, `flash`;
+  a ROM companion allocates no image section). Content totals exclude filler;
+  image-level accounting also subtracts the embedded payload copy. Overlapping
+  NOLOAD RAM sections remain separately visible, so RAM totals are not a
+  physical free-memory estimate.
 - `allocated_stacks`: linked CPU0 task stack, each hart's linked IRQ range and
   the bootstrap stack, in bytes.
 - `bounds`: each task root, IRQ hart/level/exception and nested IRQ total, with
   byte bound (or resolved partial bytes), `complete`, all holes and assumptions,
   and the largest reachable own frame (including off-critical-path frames).
-  A hole retains its demangled containing function, full DWARF inline chain, function-relative offset
-  and reason; address movement alone does not turn it into a different hole.
+  A hole retains its demangled containing function, full DWARF inline chain,
+  function-relative offset and reason; address movement alone does not turn it into a different hole.
 - `frames`: every `.stack_sizes` record under each full demangled function
   alias, preserving concrete generic arguments. Repeated names retain sorted
   individual sizes instead of silently overwriting an implementation.

@@ -396,7 +396,8 @@ The command never asks a question itself: the agent takes a `stop` to the owner.
 
 The thresholds have one definition in
 [`sizes/compare.rs`](src/sizes/compare.rs), following
-[the owner's rule #375](https://github.com/ermacv/open-esp-radio/issues/375):
+[the owner's rule #375](https://github.com/ermacv/open-esp-radio/issues/375)
+and its [accounting clarifications in #396](https://github.com/ermacv/open-esp-radio/issues/396):
 
 > Тип/future/кадр ≤ +64 B, вычисленная граница стека ≤ +64 B (выделенные стеки без изменений), код ≤ ~1 KiB на PR — только сообщить; RAM-секции, выделенные стеки или больше — стоп и вопрос владельцу.
 
@@ -406,7 +407,8 @@ bootstrap, excluding linker filler and byte-verified embedded copies of the
 runtime. The allowance is +1024 B per image; shrinking contents offsets growth
 elsewhere, including a move between sections. Each SRAM section (code,
 read-only data and writable data) and each writable PSRAM section is RAM;
-individual RAM-section growth stops. An allocated stack growing stops;
+individual RAM-section growth stops. Input-free linker filler carries no owned
+RAM or image-content budget. An allocated stack growing stops;
 shrinking/removal is `report`. Executable/read-only SRAM also contributes to
 net code. `NOBITS` reserves occupy RAM where applicable but are not image
 contents.
