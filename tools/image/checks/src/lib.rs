@@ -215,7 +215,7 @@ impl Gates {
 }
 
 /// The names of the checks.
-const STACK: &str = "stack";
+pub const STACK: &str = "stack";
 const FRAMES: &str = "frames";
 const INTERRUPTS: &str = "interrupts";
 const PLACEMENT: &str = "placement";

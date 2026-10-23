@@ -303,12 +303,15 @@ mod tests;
 /// warnings beside it. A requested check without a result, or with one that
 /// does not pass, fails the build if it is enforced (a warning otherwise),
 /// after the results are written to
-/// [`files::CHECKS`](crate::bundle::files::CHECKS) in its directory.
+/// [`files::CHECKS`](crate::bundle::files::CHECKS) in its directory. An image
+/// that declares its task stacks proven (`enforce_stack`) is also held to its
+/// stack check.
 pub(crate) fn apply_outcome(
     checks: &Gates,
     elf: CheckedElf,
     outcome: CheckOutcome,
     bundle: &mut crate::bundle::ImageBundle,
+    enforce_stack: bool,
 ) -> Result<()> {
     let mut failed = Vec::new();
     for name in checks.requested(elf) {
@@ -324,7 +327,8 @@ pub(crate) fn apply_outcome(
                 .push(format!("check `{name}` does not apply: {reason}"));
         }
         if !result.passes() {
-            if checks.enforced.requires(&name) {
+            if checks.enforced.requires(&name) || (enforce_stack && name == oer_image_checks::STACK)
+            {
                 failed.push(format!("{name} ({elf:?}): {result}"));
             } else {
                 bundle.warnings.push(format!(

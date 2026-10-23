@@ -102,7 +102,14 @@ fn passed_and_not_applicable_checks_are_recorded_and_pass() {
             CheckResult::NotApplicable("the image has no static interrupt table".into()),
         ),
     ];
-    apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle).unwrap();
+    apply_outcome(
+        &checks,
+        CheckedElf::Runtime,
+        outcome(&results),
+        &mut bundle,
+        false,
+    )
+    .unwrap();
     assert_eq!(bundle.checks.len(), 2);
     assert_eq!(bundle.checks[1].check, "interrupts");
     // The reason a property does not apply is kept, in the record and as
@@ -131,9 +138,15 @@ fn a_requested_check_with_missing_data_or_no_result_fails_the_build() {
             CheckResult::MissingContract("the chip data has no [placement]".into()),
         ),
     ];
-    let error = apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle)
-        .unwrap_err()
-        .to_string();
+    let error = apply_outcome(
+        &checks,
+        CheckedElf::Runtime,
+        outcome(&results),
+        &mut bundle,
+        false,
+    )
+    .unwrap_err()
+    .to_string();
     assert!(
         error.contains("placement") && error.contains("missing contract"),
         "{error}"
@@ -166,7 +179,14 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
         ..requested(false)
     };
     let results = [("stack", CheckResult::Failed("no bound".into()))];
-    apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle).unwrap();
+    apply_outcome(
+        &checks,
+        CheckedElf::Runtime,
+        outcome(&results),
+        &mut bundle,
+        false,
+    )
+    .unwrap();
     assert_eq!(bundle.checks.len(), 2);
     assert!(
         bundle
@@ -296,9 +316,15 @@ fn only_interrupts_rejects_failed_missing_and_absent_results() {
         if let Some(result) = result {
             results.push(("interrupts", result));
         }
-        let error = apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle)
-            .unwrap_err()
-            .to_string();
+        let error = apply_outcome(
+            &checks,
+            CheckedElf::Runtime,
+            outcome(&results),
+            &mut bundle,
+            false,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(
             error.starts_with("requested checks did not pass: interrupts (Runtime):"),
             "{error}"
@@ -339,7 +365,7 @@ fn app_frame_enforcement_also_rejects_bootstrap_and_missing_results() {
             if let Some(result) = frame_result {
                 results.push(("frames", result));
             }
-            let error = apply_outcome(&checks, elf, outcome(&results), &mut bundle)
+            let error = apply_outcome(&checks, elf, outcome(&results), &mut bundle, false)
                 .unwrap_err()
                 .to_string();
             assert!(error.contains(&format!("frames ({elf:?})")), "{error}");
@@ -362,7 +388,7 @@ fn only_interrupts_reports_failed_runtime_and_bootstrap_stacks() {
             ("interrupts", CheckResult::Passed),
             ("placement", CheckResult::Failed("outside SRAM".into())),
         ];
-        apply_outcome(&checks, elf, outcome(&results), &mut bundle).unwrap();
+        apply_outcome(&checks, elf, outcome(&results), &mut bundle, false).unwrap();
         assert!(
             bundle
                 .warnings
@@ -396,7 +422,7 @@ fn only_interrupts_passes_with_the_executor_invariant_warning() {
     let warning = "hart 0's interrupt stack is conditional on the executor invariant";
     let mut result = outcome(&[("interrupts", CheckResult::Passed)]);
     result.warnings.push(warning.into());
-    apply_outcome(&checks, CheckedElf::Runtime, result, &mut bundle).unwrap();
+    apply_outcome(&checks, CheckedElf::Runtime, result, &mut bundle, false).unwrap();
     assert_eq!(bundle.warnings, [warning]);
     assert_eq!(bundle.checks[0].result, CheckResult::Passed);
 }
@@ -417,9 +443,53 @@ fn only_all_enforces_the_callers_audit() {
             ..Gates::default()
         };
         let results = [("audit", CheckResult::Failed("audit failed".into()))];
-        let result = apply_outcome(&checks, CheckedElf::Runtime, outcome(&results), &mut bundle);
+        let result = apply_outcome(
+            &checks,
+            CheckedElf::Runtime,
+            outcome(&results),
+            &mut bundle,
+            false,
+        );
         assert_eq!(result.is_err(), all);
         assert_eq!(bundle.warnings.is_empty(), all);
         assert_eq!(bundle.checks[0].result, results[0].1);
     }
+}
+
+#[test]
+fn a_failed_stack_check_fails_the_build_only_when_the_image_declares_its_task_stacks_proven() {
+    let directory = tempfile::tempdir().unwrap();
+    let results = [("stack", CheckResult::Failed("unresolved sites".into()))];
+    let checks = Gates {
+        enforced: Enforced::Only([Check::Frames].into()),
+        ..requested(false)
+    };
+    let mut bundle = empty_bundle(directory.path());
+    apply_outcome(
+        &checks,
+        CheckedElf::Runtime,
+        outcome(&results),
+        &mut bundle,
+        false,
+    )
+    .unwrap();
+    assert!(
+        bundle
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("unresolved sites")),
+        "{:?}",
+        bundle.warnings
+    );
+    let mut bundle = empty_bundle(directory.path());
+    let error = apply_outcome(
+        &checks,
+        CheckedElf::Runtime,
+        outcome(&results),
+        &mut bundle,
+        true,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("unresolved sites"), "{error}");
 }

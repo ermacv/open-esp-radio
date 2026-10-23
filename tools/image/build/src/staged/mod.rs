@@ -164,7 +164,13 @@ pub(crate) fn build(
         if let Some(measured) = &outcome.sizes {
             sizes.elfs.insert("runtime".into(), measured.clone());
         }
-        crate::apply_outcome(checks, crate::CheckedElf::Runtime, outcome, &mut bundle)?;
+        crate::apply_outcome(
+            checks,
+            crate::CheckedElf::Runtime,
+            outcome,
+            &mut bundle,
+            task_stack_proven,
+        )?;
     }
 
     // The bootstrap embeds the runtime with `include_bytes!`; a stable path
@@ -235,7 +241,13 @@ pub(crate) fn build(
         if let Some(measured) = &outcome.sizes {
             sizes.elfs.insert("bootstrap".into(), measured.clone());
         }
-        crate::apply_outcome(checks, crate::CheckedElf::Bootstrap, outcome, &mut bundle)?;
+        crate::apply_outcome(
+            checks,
+            crate::CheckedElf::Bootstrap,
+            outcome,
+            &mut bundle,
+            false,
+        )?;
     }
 
     let elf = std::fs::read(&bootstrap_elf)?;
