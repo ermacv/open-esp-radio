@@ -37,6 +37,7 @@ pub(crate) struct ReadObservations<'f, 'a, 'm> {
     links: Option<CallLinks<'m>>,
     result_names: &'f [String],
     result_sources: AdmittedVec<'m, (u64, u8)>,
+    symbolic_stores: bool,
 }
 
 impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
@@ -51,6 +52,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         function: &'f LibraryFunction,
         summaries: &'f dyn CallSummaries,
         result_names: &'f [String],
+        symbolic_stores: bool,
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
@@ -71,6 +73,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             links: None,
             result_names,
             result_sources: AdmittedVec::new(memory),
+            symbolic_stores,
         }
     }
 
@@ -215,7 +218,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         candidate: &Candidate<'_>,
         c: &mut dyn RunControl,
     ) -> Result<Option<Vec<StoredBits>>> {
-        if candidate.address.is_none() && candidate.indexed.is_none() {
+        if !self.symbolic_stores && candidate.address.is_none() && candidate.indexed.is_none() {
             return Ok(None);
         }
         if let FunctionRecord::MemoryAccess {

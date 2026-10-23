@@ -6,8 +6,8 @@ Analyze captured code and inspect coverage, symbolic values and explicit gaps.
 
 ## Function analysis contract
 
-`oer_analysis_blobray_application::library::analyze_library(inputs, decoder, memory,
-control, visit)` analyzes every function of the given executables in process
+`oer_analysis_blobray_application::library::analyze_library(inputs, assumptions, decoder, memory,
+control, visit)` analyzes the selected functions of the given executables in process
 and visits one `LibraryOutcome` per function, in input, object and symbol
 order:
 
@@ -18,6 +18,13 @@ order:
 - `Gap`: code no function is selected from, such as an object that is not a
   supported RV32 ELF, an unavailable thin member or an executable section with
   no function symbol.
+
+`Assumptions.functions` selects exact names before function analysis; an empty
+list selects every definition. With call summaries, analysis includes the
+transitive callee groups the selected functions need, including every definition
+of an ambiguous callee. Only selected outcomes are emitted, while the work and
+limit events of the analyzed dependencies remain accounted for. The named
+`function-records` query uses this selection.
 
 ### Function records
 

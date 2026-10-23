@@ -30,6 +30,9 @@ pub struct RegisterAccessDocument {
     /// Selected callee names; absent for the load-only query.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub call_results: Vec<String>,
+    /// Opt-in provenance through symbolic pointers; absent in ordinary reports.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub symbolic_stores: bool,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -45,6 +48,10 @@ pub struct RegisterAccessDocument {
     pub groups: Option<Vec<oer_analysis_blobray_application::access_groups::AccessGroup>>,
     /// The whole analysis, independent of the filter.
     pub summary: RegisterAccessSummary,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// Schema of the `function-records` document

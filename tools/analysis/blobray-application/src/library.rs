@@ -352,6 +352,9 @@ pub struct Assumptions<'a> {
     /// With call summaries, the selected functions also need their transitive
     /// callees' summaries, but only selected outcomes are presented to the caller.
     pub functions: &'a [String],
+    /// Also expose stored-bit provenance for symbolic addresses. Numeric
+    /// ranges and indexed candidates keep their usual behavior without it.
+    pub symbolic_stores: bool,
     /// With it, a call the analysis cannot follow keeps the registers this
     /// calling convention preserves; without it, every register is unknown
     /// after such a call.
@@ -891,6 +894,7 @@ pub fn register_accesses(
                 analyzed.function,
                 analyzed.summaries,
                 assumptions.call_results,
+                assumptions.symbolic_stores,
             );
             crate::registers::observe(analyzed.records, &facts, memory, ranges, c, &mut |o, c| {
                 let stored = reads.stored(&o, c)?;

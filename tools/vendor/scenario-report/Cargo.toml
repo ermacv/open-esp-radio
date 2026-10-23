@@ -13,10 +13,14 @@ oer-analysis-elf = { path = "../../analysis/elf" }
 oer-os-process = { path = "../../os/process" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
+oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
+oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
 oer-vendor-scenario = { path = "../scenario" }
 clap = { version = "=4.5.48", features = ["derive"] }
-sha2 = "=0.10.9"
 serde_json = "=1.0.151"
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
 
 [lints]
 workspace = true

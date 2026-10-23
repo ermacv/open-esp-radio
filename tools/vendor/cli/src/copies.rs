@@ -297,6 +297,7 @@ pub fn compare(
                     .collect::<Vec<_>>(),
                 Assumptions {
                     functions: &[],
+                    symbolic_stores: false,
                     abi: Some(CallAbi::RiscvInteger),
                     call_summaries: false,
                     signatures: None,

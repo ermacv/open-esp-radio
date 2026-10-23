@@ -191,3 +191,90 @@ fn a_missing_name_decodes_no_function() {
     assert!(records(&[fixture()], &["missing".into()], true, &decoder).is_empty());
     assert!(decoder.0.borrow().is_empty());
 }
+
+#[test]
+fn symbolic_store_provenance_is_opt_in_and_preserves_the_same_word() {
+    let mut object = Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
+    let text = object.add_section(Vec::new(), b".text.field".to_vec(), SectionKind::Text);
+    // Load the pointer at a0+0x34, set its word's bit 22, then store it.
+    let mut bytes: Vec<_> = [
+        0x0345_2783u32,
+        0x0007_a703,
+        0x0040_06b7,
+        0x00d7_6733,
+        0x00e7_a023,
+    ]
+    .iter()
+    .flat_map(|word| word.to_le_bytes())
+    .collect();
+    bytes.extend(0x8082u16.to_le_bytes());
+    assert_eq!(bytes.len(), 22);
+    object.append_section_data(text, &bytes, 2);
+    object.add_symbol(Symbol {
+        name: b"field".to_vec(),
+        value: 0,
+        size: bytes.len() as u64,
+        kind: SymbolKind::Text,
+        scope: SymbolScope::Linkage,
+        weak: false,
+        section: SymbolSection::Section(text),
+        flags: SymbolFlags::None,
+    });
+    let inputs = [Executable::new(object.write().expect("symbolic fixture"))];
+    let memory = WorkingMemory::new(64 << 20).expect("fixture capacity");
+    let mut reports = Vec::new();
+    for symbolic_stores in [false, true] {
+        let mut observations = Vec::new();
+        register_accesses(
+            &inputs,
+            Assumptions {
+                symbolic_stores,
+                ..Default::default()
+            },
+            &[],
+            &RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |r, _| {
+                observations.push(r.clone());
+                Ok(())
+            },
+        )
+        .expect("symbolic access report");
+        reports.push(observations);
+    }
+    let default = reports.first().expect("default report");
+    let enabled = reports.get(1).expect("opt-in report");
+    let mut projected = enabled.clone();
+    let mut stores = 0;
+    for record in &mut projected {
+        if let RegisterAccess::Observation {
+            stored, mask, fact, ..
+        } = record
+            && matches!(
+                fact.as_ref(),
+                FunctionRecord::MemoryAccess {
+                    access: MemoryKind::Store,
+                    ..
+                }
+            )
+        {
+            let runs = stored.as_ref().expect("requested symbolic provenance");
+            assert!(runs.iter().any(|run| run.low == 22
+                && run.width == 1
+                && run.source == StoredBitsSource::Constant { value: 1 }));
+            let kept = runs.iter().filter(|run| matches!(run.source, StoredBitsSource::Load { same_word: true, low, .. } if low == run.low)).map(|run| u32::from(run.width)).sum::<u32>();
+            assert_eq!(kept, 31);
+            *stored = None;
+            *mask = None;
+            stores += 1;
+        }
+    }
+    assert_eq!(stores, 1);
+    assert_eq!(
+        serde_json::to_vec(default).expect("default records"),
+        serde_json::to_vec(&projected).expect("opt-in projected records")
+    );
+    assert!(!Assumptions::default().symbolic_stores);
+    assert_eq!(memory.used(), 0);
+}

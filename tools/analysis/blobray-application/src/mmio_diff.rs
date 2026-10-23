@@ -272,6 +272,7 @@ fn collect<'m>(
                     analyzed.function,
                     analyzed.summaries,
                     &[],
+                    assumptions.symbolic_stores,
                 );
                 crate::registers::observe(
                     analyzed.records,

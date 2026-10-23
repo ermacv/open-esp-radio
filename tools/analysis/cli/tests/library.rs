@@ -574,6 +574,7 @@ fn a_call_takes_the_constants_its_callee_returns() {
             }],
             Assumptions {
                 functions: &[],
+                symbolic_stores: false,
                 abi: None,
                 call_summaries,
                 signatures: None,
@@ -667,6 +668,7 @@ fn returned_addresses(inputs: &[Executable], name: &str) -> Vec<u32> {
         }],
         Assumptions {
             functions: &[],
+            symbolic_stores: false,
             abi: None,
             call_summaries: true,
             signatures: None,

@@ -67,6 +67,7 @@ fn accesses(
     // --abi riscv-integer --call-summaries --timeout-secs 3600.
     let assumptions = Assumptions {
         functions: &[],
+        symbolic_stores: false,
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
         signatures: Some(signatures),

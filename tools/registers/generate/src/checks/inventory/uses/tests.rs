@@ -133,6 +133,7 @@ fn inputs() -> [Input; 1] {
 fn assumptions() -> Assumptions<'static> {
     Assumptions {
         functions: &[],
+        symbolic_stores: false,
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
         signatures: None,
