@@ -1259,6 +1259,13 @@ bit-offset = 0
 bit-width = 7
 access = "read-write"
 
+[[registers.fields]]
+svd-name = "BIT_7_OPAQUE"
+method = "bit_7_opaque"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
 [[registers]]
 address = 1611280460
 width = 32
