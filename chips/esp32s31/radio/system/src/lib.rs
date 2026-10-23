@@ -177,7 +177,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     }
 
     fn tick(&mut self) -> impl core::future::Future<Output = ()> {
-        boundary::Boundary::new(async {
+        boundary::Boundary::new(async move {
             if self.backend.track_tick().await.is_err() {
                 self.core.poison();
             }
@@ -252,16 +252,17 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 cause: Failure::Refused,
             });
         }
-        let preparation = self.backend.prepare().await;
-        let (phy, epoch) = match self.core.prepared(preparation) {
-            Ok(prepared) => prepared,
-            Err(cause) => {
+        let phy = match self.backend.prepare().await {
+            Ok(phy) => phy,
+            Err(Fault) => {
+                self.core.poison();
                 return Err(Failed {
                     returned: Q::join_returned(join),
-                    cause,
+                    cause: Failure::Poisoned,
                 });
             }
         };
+        let epoch = self.core.prepared(&phy);
         match self.backend.enter(join, phy, &self.lp).await {
             Ok(payload) => {
                 self.core.joined();
@@ -300,7 +301,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     }
 
     fn close_rf(&mut self) -> impl core::future::Future<Output = ()> {
-        boundary::Boundary::new(async {
+        boundary::Boundary::new(async move {
             let result = self.backend.close_rf(LastClientLeft(())).await;
             self.core.closed(result);
         })

@@ -106,11 +106,11 @@ where
             let mut served = false;
             if let Some((request, responder)) = self.actor.inbox.take() {
                 // Same receiver/backend type as a Wi-Fi-only composition.
-                responder.answer(self.actor.serve(request).await);
+                responder.answer(boundary::Boundary::new(self.actor.serve(request)).await);
                 served = true;
             }
             if let Some((request, responder)) = self.inbox.take() {
-                responder.answer(self.serve(request).await);
+                responder.answer(boundary::Boundary::new(self.serve(request)).await);
                 served = true;
             }
             if served {
@@ -209,16 +209,17 @@ where
                 cause: Failure::Refused,
             });
         }
-        let preparation = self.actor.backend.prepare().await;
-        let (phy, epoch) = match self.actor.core.prepared(preparation) {
-            Ok(p) => p,
-            Err(cause) => {
+        let phy = match self.actor.backend.prepare().await {
+            Ok(phy) => phy,
+            Err(Fault) => {
+                self.actor.core.poison();
                 return Err(Failed {
                     returned: join,
-                    cause,
+                    cause: Failure::Poisoned,
                 });
             }
         };
+        let epoch = self.actor.core.prepared(&phy);
         match self
             .attachment
             .enter(&mut self.actor.backend, join, phy, &self.actor.lp)
