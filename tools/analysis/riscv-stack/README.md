@@ -239,7 +239,9 @@ PC-specific pointer/aggregate locations and complete reaching target loads.
 These APIs intentionally recognize different sites; neither discovery rule
 is extended by the shared audit.
 
-Both use `audit_function_addresses` and exactly one candidate rule. Each
+Both use `audit_function_addresses` and exactly one candidate rule: a
+function leaves a call site's candidates only when every place that takes its
+address provably keeps its type. Each
 relocated use of a function address retains its original index and either
 all proven storage types or a specific `UnknownUse` reason. An absolute word
 can prove a unique global function-pointer field. Code materializations use a
