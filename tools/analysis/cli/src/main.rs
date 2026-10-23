@@ -255,11 +255,14 @@ struct InProcessOptions {
 }
 
 fn parse_analysis_profile(name: &str) -> std::result::Result<AnalysisProfile, String> {
-    match name {
-        "blobray-cli" => Ok(AnalysisProfile::BlobrayCli),
-        "signature-corpus" => Ok(AnalysisProfile::SignatureCorpus),
-        _ => Err("expected blobray-cli or signature-corpus".into()),
-    }
+    [
+        AnalysisProfile::BlobrayCli,
+        AnalysisProfile::SignatureCorpus,
+        AnalysisProfile::RegisterInventory,
+    ]
+    .into_iter()
+    .find(|profile| profile.name() == name)
+    .ok_or_else(|| "expected blobray-cli, signature-corpus or register-inventory".into())
 }
 
 impl InProcessOptions {
@@ -1189,15 +1192,9 @@ fn register_accesses(
             Ok(())
         },
     )?;
-    for failure in summary
-        .rom_signature_summary_unavailable
-        .iter()
-        .chain(&summary.signature_audit_incomplete)
-    {
-        if let ErrorCode::LocalBudgetExceeded(budget) = failure.reason.code {
-            projected.result(LimitReason::LocalBudget(budget.scope));
-        }
-    }
+    // Failed summaries and audits are counted as the library counted them;
+    // the failure rows keep only their code, which drops a ROM summary's budget.
+    projected.add_results(&summary.summary_failure_results);
     limited.project_results(&projected);
     if json {
         out.write_all(b"]").map_err(io_error)?;
@@ -1606,6 +1603,36 @@ mod input_tests {
 mod cli_tests {
     use super::*;
     use clap::CommandFactory as _;
+
+    #[test]
+    fn the_inventory_profile_is_a_profile_of_the_command_line() {
+        for name in ["blobray-cli", "signature-corpus", "register-inventory"] {
+            let cli = Cli::try_parse_from([
+                "blobray",
+                "register-accesses",
+                "--analysis-profile",
+                name,
+                "--input",
+                "library=a.elf",
+            ])
+            .unwrap();
+            let Command::RegisterAccesses { limits, .. } = cli.command else {
+                panic!("register-accesses");
+            };
+            assert_eq!(limits.analysis_profile.name(), name);
+        }
+        assert!(
+            Cli::try_parse_from([
+                "blobray",
+                "register-accesses",
+                "--analysis-profile",
+                "image-checks",
+                "--input",
+                "library=a.elf",
+            ])
+            .is_err()
+        );
+    }
 
     #[test]
     fn grammar_and_successful_format_are_owned_by_clap() {

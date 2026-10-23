@@ -170,6 +170,7 @@ fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
         observations: 0,
         unresolved_addresses: 0,
         indexed_addresses: 0,
+        summary_failure_results: Default::default(),
         ranges: vec![ImageRegion {
             start: 0x1000,
             length: 256,
@@ -237,6 +238,21 @@ fn reserved_and_absent_uses_are_distinct_errors_with_cited_masks() {
     let clean = check_records(&[preserved, constant(0)], &declared).unwrap();
     assert_eq!(clean.violations(), 0);
     assert_eq!(clean.words[0].reserved_bits, 2);
+}
+
+#[test]
+fn the_reproduce_command_names_the_profile_and_the_chips_signatures() {
+    let report = check_records(&[], &declaration(None, 1)).unwrap();
+    let text = report.render("fixture");
+    let command = text
+        .lines()
+        .find(|line| line.contains("Reproduce JSON"))
+        .unwrap();
+    assert!(
+        command.contains(" --analysis-profile register-inventory --signatures chips/fixture/vendor/facts/idf-function-signatures.toml "),
+        "{command}"
+    );
+    assert!(!command.contains("--timeout-secs"), "{command}");
 }
 
 #[test]

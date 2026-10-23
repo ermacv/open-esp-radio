@@ -13,7 +13,7 @@ use oer_analysis_blobray_application::{
 use oer_analysis_blobray_domain::ImageRegion;
 use oer_analysis_riscv_lift::RiscvDecoder;
 use oer_analysis_riscv_model::{
-    AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, Error, ErrorCode, WorkingMemory,
+    AnalysisResources, AnalysisUsage, CallAbi, Error, ErrorCode, WorkingMemory,
 };
 use oer_os_process::Checkout;
 use std::{
@@ -63,8 +63,9 @@ fn accesses(
         "register-inventory: analyzing every function of {} vendor binaries",
         inputs.len()
     );
-    // The same assumptions and resource bounds as the CLI invocation:
-    // --abi riscv-integer --call-summaries --timeout-secs 3600.
+    // The same assumptions and resource bounds as the CLI invocation the
+    // report prints: the register-inventory profile, the chip's signatures,
+    // --abi riscv-integer --call-summaries.
     let assumptions = Assumptions {
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
@@ -79,7 +80,7 @@ fn accesses(
             length: u64::from(r.end - r.start),
         })
         .collect();
-    let profile = AnalysisProfile::RegisterInventory;
+    let profile = inventory::uses::PROFILE;
     let limits = profile.limits();
     let memory = WorkingMemory::new(limits.working_memory_bytes)?;
     let mut control = Limits::new(limits.work_units, Duration::from_millis(limits.timeout_ms));
@@ -118,13 +119,9 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
     fs::create_dir_all(&directory)?;
     let (inputs, executables) = inputs(ctx, chip)?;
     let (registers, regions) = inventory::model(&ctx.root, chip)?;
-    let signatures =
-        oer_analysis_blobray_application::signatures::Signatures::parse(&fs::read_to_string(
-            ctx.root
-                .join("chips")
-                .join(chip)
-                .join("vendor/facts/idf-function-signatures.toml"),
-        )?)?;
+    let signatures = oer_analysis_blobray_application::signatures::Signatures::parse(
+        &fs::read_to_string(ctx.root.join(inventory::uses::signatures_file(chip)))?,
+    )?;
     let (mut report, resources) = accesses(
         chip,
         &signatures,

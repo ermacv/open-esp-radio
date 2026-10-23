@@ -528,6 +528,11 @@ pub struct RegisterAccessSummary {
     pub unresolved_addresses: u64,
     /// Unresolved addresses with an indexed progression.
     pub indexed_addresses: u64,
+    /// The `results` of the summary and audit failures above, by limit
+    /// reason. They belong to no emitted record, so a projection of the
+    /// records adds them; they are not part of the report.
+    #[serde(skip)]
+    pub summary_failure_results: oer_analysis_riscv_model::AnalysisLimited,
 }
 
 #[cfg(test)]
