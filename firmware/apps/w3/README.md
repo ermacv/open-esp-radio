@@ -14,8 +14,9 @@ incoming requests use native `icmp-ping-reply`. The image validates observations
 before reading echo identities, counts malformed packets and queue drops, and
 checks each adjacent outgoing request against the 750–1250 ms cadence window.
 The bridge checks the owned endpoint's RX publisher readiness before removing
-an RX input. Each turn publishes at most one RX frame and advances one TX
-owner, then yields. RX pool exhaustion waits for capacity while TX remains
+an RX input. Each turn drains ready RX frames up to the RX input
+queue capacity and advances TX owners up to the TX input queue capacity, then
+yields. RX pool exhaustion waits for capacity while TX remains
 eligible to return those same pool owners. The packet ownership and copy
 boundaries are unchanged.
 
@@ -24,7 +25,11 @@ and is counted separately, without marking the link failed or ending the
 series early. The next probe keeps its one-second schedule. Nonzero counters
 and the last socket error appear in a `w3.probes` diagnostic before the
 unchanged version 1 console block; missing probes still fail gate c. The
-normal final deauthentication and gate f remain required.
+normal final deauthentication and gate f remain required. A `w3.bridge`
+diagnostic records whole-workload turns (including empty RX phases), total RX
+frames dequeued and the maximum RX batch; the host derives the mean from the
+sum and turn count. Probe and bridge diagnostics are typed notes like the
+version 1 report and do not format text on the target.
 
 It uses no power save, hardware AID or fixed PHY rate. A software beacon-loss
 deadline disconnects after six seconds without a matching BSS beacon.

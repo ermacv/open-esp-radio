@@ -25,6 +25,7 @@ pub struct Report {
     pub lease: Option<Lease>,
     pub malformed_ip: u32,
     pub queue_drops: u32,
+    pub bridge: crate::bridge::Counters,
     pub probes: crate::probe::ProbeCounters,
     pub service_rx_queue_full: u32,
     pub service_rx_rejected: u32,
@@ -52,6 +53,7 @@ impl Report {
             lease: None,
             malformed_ip: 0,
             queue_drops: 0,
+            bridge: crate::bridge::Counters::new(),
             probes: crate::probe::ProbeCounters {
                 socket_errors: 0,
                 timeouts: 0,
@@ -106,6 +108,13 @@ impl Report {
                 self.probes.socket_errors,
                 self.probes.timeouts,
                 self.probes.last_socket_error_text(),
+            ))?;
+        }
+        if self.bridge.turns != 0 {
+            emit(&Note::w3_bridge(
+                self.bridge.turns,
+                self.bridge.rx_frames,
+                self.bridge.rx_max,
             ))?;
         }
         let gates = self.gates();

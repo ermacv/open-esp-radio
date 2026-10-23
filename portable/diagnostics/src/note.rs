@@ -763,7 +763,9 @@ topics! {
     W3Pass = 112, w3_pass, "OER-RESULT: pass w3" ();
     W3Fail = 113, w3_fail, "OER-RESULT: fail w3" ();
     W3Probes = 114, w3_probes, "w3.probes"
-        (socket_errors: dec, timeouts: dec, last_socket_error: name);
+        ("socket_errors" socket_errors: dec, "timeouts" timeouts: dec, "last_socket_error" last_socket_error: name);
+    W3Bridge = 115, w3_bridge, "w3.bridge"
+        ("turns" turns: dec, "rx_frames" rx_frames: dec, "rx_max" rx_max: dec);
 
     /// W2 console block.
     W2Begin = 120, w2_begin, "OER-W2-BEGIN v=1" ();
