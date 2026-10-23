@@ -20,7 +20,7 @@ with the BLE routes removed and moves the complete IRQ half by value.
 and stays idle. `cargo fw build b0 --analysis` selects the fictitious DE/0 dBm
 profile; its Analysis bundle cannot be flashed. The configured composition
 passes the ordinary frame and IRQ-stack checks. `cargo fw b0 --board s31-a
---peer-board c5-a` builds a Flash bundle with the laboratory country and an
+--peer-board c5-a --base-sizes <common-image/sizes.json>` builds a Flash bundle with the laboratory country and an
 explicit 0 dBm cap, leases both boards and exclusive air, and runs the
 two-boot 1M DTM procedure against the pinned ESP-IDF peer. Its evidence goes
 to the user's XDG data directory. Hardware conformance is separate from
