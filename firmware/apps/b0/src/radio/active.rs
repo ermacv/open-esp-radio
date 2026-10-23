@@ -62,24 +62,24 @@ pub(super) fn timer_step(
     task: &mut ControllerModemTimerTask<'_, irq::TimerPort, 1, X>,
 ) -> Result<(), Fault> {
     if irq::FAULT.load(core::sync::atomic::Ordering::Acquire) {
-        return Err(Fault::Hardware);
+        return Err(Fault::TimerInterrupt);
     }
     match task.readiness().class() {
         ControllerModemTimerReadinessClass::Interrupt => match task.begin() {
             ControllerModemTimerBegin::Started
             | ControllerModemTimerBegin::NotReady
             | ControllerModemTimerBegin::AlreadyActive => Ok(()),
-            _ => Err(Fault::Hardware),
+            _ => Err(Fault::TimerBegin),
         },
         ControllerModemTimerReadinessClass::Step => match task.step() {
             ControllerModemTimerStep::ExpirationPending(_)
-            | ControllerModemTimerStep::Backpressured(_) => Err(Fault::Hardware),
+            | ControllerModemTimerStep::Backpressured(_) => Err(Fault::TimerStep),
             _ => Ok(()),
         },
-        ControllerModemTimerReadinessClass::EventCapacity => Err(Fault::Hardware),
+        ControllerModemTimerReadinessClass::EventCapacity => Err(Fault::TimerStep),
         ControllerModemTimerReadinessClass::Rearm => match task.rearm() {
             ControllerModemTimerRearm::Rearmed | ControllerModemTimerRearm::NotReady => Ok(()),
-            _ => Err(Fault::Hardware),
+            _ => Err(Fault::TimerRearm),
         },
     }
 }
@@ -93,7 +93,7 @@ async fn maintenance(
         ) {
             poll_fn(|cx| irq::TIMER_SIGNAL.poll_pending(cx))
                 .await
-                .map_err(|_| Fault::Hardware)?;
+                .map_err(|_| Fault::TimerInterrupt)?;
         }
         timer_step(task)?;
         let _ = EmbassyClock.wait_for(Duration::from_micros(10)).await;

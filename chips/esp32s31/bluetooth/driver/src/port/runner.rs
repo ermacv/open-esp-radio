@@ -163,7 +163,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                 }),
             )
             .await?
-            .map_err(|_| Fault::Hardware)?;
+            .map_err(|_| Fault::SchedulerStop)?;
             if step {
                 self.stop = BluetoothSchedulerStop::default();
                 return Ok(());
@@ -419,7 +419,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             engine.resume(&self.doorbell),
         )
         .await?
-        .map_err(|_| Fault::Hardware)?;
+        .map_err(|_| Fault::SchedulerResume)?;
         let (_, next) = guard(
             self.cancel,
             &self.timer,
@@ -427,9 +427,9 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             engine.submit_dtm(instance, &self.doorbell),
         )
         .await?
-        .map_err(|_| Fault::Hardware)?;
+        .map_err(|_| Fault::SchedulerSubmit)?;
         if !matches!(next, SchedulerNext::Finished) {
-            return Err(Fault::Hardware);
+            return Err(Fault::SchedulerSubmit);
         }
         while self.task.task_owner().engine().scheduled_count() != 0 {
             let input = guard(
@@ -440,7 +440,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             )
             .await?;
             let captured = match input {
-                Either::First(captured) => captured.map_err(|_| Fault::Hardware)?,
+                Either::First(captured) => captured.map_err(|_| Fault::SchedulerWake)?,
                 Either::Second(request) => {
                     let sample = self.now().await;
                     C::answer(request, sample);
@@ -448,10 +448,10 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                     continue;
                 }
             };
-            let batch = captured.classify().map_err(|_| Fault::Hardware)?;
+            let batch = captured.classify().map_err(|_| Fault::SchedulerWake)?;
             self.task
                 .capture_scheduler_finished_lists(batch)
-                .map_err(|_| Fault::Hardware)?;
+                .map_err(|_| Fault::SchedulerWake)?;
             loop {
                 match self.task.scheduler_finished_lists().step() {
                     SchedulerFinishedListWorkerStep::List { observed, .. } => {
@@ -459,7 +459,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                             .task_owner()
                             .engine()
                             .complete(observed)
-                            .map_err(|_| Fault::Hardware)?;
+                            .map_err(|_| Fault::SchedulerComplete)?;
                     }
                     SchedulerFinishedListWorkerStep::Complete
                     | SchedulerFinishedListWorkerStep::Idle => break,
@@ -474,7 +474,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             .dtm()
             .map_err(|_| Fault::Hardware)?
             .finish_event(self.instance.as_ref().ok_or(Fault::Accounting)?, receiver)
-            .map_err(|_| Fault::Hardware)?;
+            .map_err(|_| Fault::DtmFinish)?;
         self.previous = Some(window);
         self.phase = DtmEventPhase::Recurring;
         match event.status {
@@ -489,7 +489,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                 Ok(Started::Executed)
             }
             DtmSchedulerItemCompletionStatus::Aborted => Ok(Started::Aborted),
-            DtmSchedulerItemCompletionStatus::NonZero(_) => Err(Fault::Hardware),
+            DtmSchedulerItemCompletionStatus::NonZero(_) => Err(Fault::DtmStatus),
         }
     }
     /// Normal End reclaims exactly this session's graph after confirmed stop.

@@ -20,14 +20,14 @@ pub(super) async fn guard<T: Timer, F: Future>(
         if cancel.load(Ordering::Acquire) {
             Poll::Ready(Err(Fault::Abandoned))
         } else if timer.now() >= deadline {
-            Poll::Ready(Err(Fault::Hardware))
+            Poll::Ready(Err(Fault::Deadline))
         } else {
             future.as_mut().poll(cx).map(Ok)
         }
     });
     match select(poll, timer.wait_until(deadline)).await {
         Either::First(result) => result,
-        Either::Second(()) => Err(Fault::Hardware),
+        Either::Second(()) => Err(Fault::Deadline),
     }
 }
 
@@ -77,7 +77,7 @@ mod tests {
         let mut wait = pin!(guard(&cancel, &timer, timer.now(), hardware));
         assert_eq!(
             wait.as_mut().poll(&mut Context::from_waker(Waker::noop())),
-            Poll::Ready(Err(Fault::Hardware))
+            Poll::Ready(Err(Fault::Deadline))
         );
         assert_eq!(polls.get(), 0);
     }

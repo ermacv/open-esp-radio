@@ -65,6 +65,18 @@ pub enum Fault {
     ClockBegin,
     ClockTimeout,
     ClockRead,
+    Deadline,
+    SchedulerStop,
+    SchedulerResume,
+    SchedulerSubmit,
+    SchedulerWake,
+    SchedulerComplete,
+    DtmFinish,
+    DtmStatus,
+    TimerInterrupt,
+    TimerBegin,
+    TimerStep,
+    TimerRearm,
 }
 /// Notification from P1 to P2. The image uses its priority-safe static signal.
 pub trait Notify {

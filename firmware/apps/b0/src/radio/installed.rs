@@ -98,8 +98,8 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
             ));
             operation.as_mut().await
         };
-        if result.is_err() {
-            fail(&mut runner, &mut boot.reply).await;
+        if let Err(cause) = result {
+            fault(&mut runner, &mut boot.reply, cause).await;
         }
         let routes = active.disable();
         let deadline = EmbassyClock
