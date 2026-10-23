@@ -31,6 +31,7 @@ pub(crate) fn build(
     spec: &ImageSpec,
     profile: &oer_chip_profile::Profile,
     instrumentation: &Instrumentation,
+    task_stack_proven: bool,
 ) -> Result<ImageBundle> {
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
@@ -157,12 +158,19 @@ pub(crate) fn build(
                 elf: &runtime_elf,
                 flat: Some(&runtime_bin),
                 output: &output,
+                task_stack_proven,
             })
             .map_err(|error| log.failed("runtime checks", error))?;
         if let Some(measured) = &outcome.sizes {
             sizes.elfs.insert("runtime".into(), measured.clone());
         }
-        crate::apply_outcome(checks, crate::CheckedElf::Runtime, outcome, &mut bundle)?;
+        crate::apply_outcome(
+            checks,
+            crate::CheckedElf::Runtime,
+            outcome,
+            &mut bundle,
+            task_stack_proven,
+        )?;
     }
 
     // The bootstrap embeds the runtime with `include_bytes!`; a stable path
@@ -227,12 +235,19 @@ pub(crate) fn build(
                 elf: &bootstrap_elf,
                 flat: None,
                 output: &output,
+                task_stack_proven: false,
             })
             .map_err(|error| log.failed("bootstrap checks", error))?;
         if let Some(measured) = &outcome.sizes {
             sizes.elfs.insert("bootstrap".into(), measured.clone());
         }
-        crate::apply_outcome(checks, crate::CheckedElf::Bootstrap, outcome, &mut bundle)?;
+        crate::apply_outcome(
+            checks,
+            crate::CheckedElf::Bootstrap,
+            outcome,
+            &mut bundle,
+            false,
+        )?;
     }
 
     let elf = std::fs::read(&bootstrap_elf)?;

@@ -74,36 +74,13 @@ impl Instrumentation {
     /// `cargo metadata` fails, the workspace has no `package`, or its
     /// declaration is malformed.
     pub fn declared(root: &Path, package: &str) -> Result<Self> {
-        let output = crate::cargo::command()
-            .current_dir(root)
-            .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
-            .output()
-            .map_err(|error| format!("run cargo metadata: {error}"))?;
-        if !output.status.success() {
-            return Err(format!(
-                "cargo metadata failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            )
-            .into());
-        }
-        Self::of_metadata(&serde_json::from_slice(&output.stdout)?, package)
+        Self::of_metadata(&crate::manifest::workspace_metadata(root)?, package)
     }
 
     /// The classes `package` declares in `metadata`, the output of
     /// `cargo metadata --format-version 1`.
     fn of_metadata(metadata: &Value, package: &str) -> Result<Self> {
-        let entry = metadata
-            .get("packages")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .find(|entry| entry.get("name").and_then(Value::as_str) == Some(package))
-            .ok_or_else(|| format!("the workspace has no package {package}"))?;
-        let Some(declared) = entry
-            .get("metadata")
-            .and_then(|metadata| metadata.get("open-radio"))
-            .and_then(|open_radio| open_radio.get("instrumentation"))
-            .filter(|declared| !declared.is_null())
+        let Some(declared) = crate::manifest::declared(metadata, package, "instrumentation")?
         else {
             return Ok(Self::default());
         };

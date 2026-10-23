@@ -27,10 +27,12 @@ pub mod esp_idf;
 pub mod exclusion;
 pub mod instrumentation;
 mod large_values;
+mod manifest;
 pub mod probe;
 pub mod sizes;
 pub mod staged;
 mod strict;
+pub mod task_stack;
 mod test_support;
 
 use std::{
@@ -103,12 +105,13 @@ impl Application {
 }
 
 /// Build `spec`: the staged pipeline of its chip, with the instrumentation
-/// classes its application declares.
+/// classes and the task-stack declaration its application makes.
 pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
-    staged::build(spec, &profile, &instrumentation)
+    let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
+    staged::build(spec, &profile, &instrumentation, task_stack_proven)
 }
 
 /// A runtime check that produces no image for the link-time gates.
@@ -300,12 +303,15 @@ mod tests;
 /// warnings beside it. A requested check without a result, or with one that
 /// does not pass, fails the build if it is enforced (a warning otherwise),
 /// after the results are written to
-/// [`files::CHECKS`](crate::bundle::files::CHECKS) in its directory.
+/// [`files::CHECKS`](crate::bundle::files::CHECKS) in its directory. An image
+/// that declares its task stacks proven (`enforce_stack`) is also held to its
+/// stack check.
 pub(crate) fn apply_outcome(
     checks: &Gates,
     elf: CheckedElf,
     outcome: CheckOutcome,
     bundle: &mut crate::bundle::ImageBundle,
+    enforce_stack: bool,
 ) -> Result<()> {
     let mut failed = Vec::new();
     for name in checks.requested(elf) {
@@ -321,7 +327,8 @@ pub(crate) fn apply_outcome(
                 .push(format!("check `{name}` does not apply: {reason}"));
         }
         if !result.passes() {
-            if checks.enforced.requires(&name) {
+            if checks.enforced.requires(&name) || (enforce_stack && name == oer_image_checks::STACK)
+            {
                 failed.push(format!("{name} ({elf:?}): {result}"));
             } else {
                 bundle.warnings.push(format!(

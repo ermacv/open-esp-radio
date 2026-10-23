@@ -35,7 +35,11 @@ App builds still report task-stack bounds, the bootstrap-stack bound and placeme
 `cargo fw flash` uses an existing bundle without rerunning its checks.
 For app `build`, a `partial + ?` interrupt stack, an exceeded budget or an
 unadmitted assumption fails the build and CI; a bound conditional only on
-the admitted executor invariant passes with a warning. HIL retains its
+the admitted executor invariant passes with a warning. An image that declares
+`task-stack = "proven"` under its `[package.metadata.open-radio]` is held to
+more: any unresolved path in a task stack's bound fails its build, with the
+unresolved sites listed, and `runtime-stack.txt` says the stacks are declared
+proven. Any other value of the key is an error. HIL retains its
 `Product`/`Diagnostic` interrupt policy according to image class: diagnostic
 images report large unexcepted frames and strict/P2 code placement violations as warnings; other images
 enforce them.
@@ -191,7 +195,8 @@ many bytes. The runtime's root is `runtime_main` on CPU0's task stack, which
 the platform runtime's assembly enters at the stack's top; the bootstrap's is
 riscv-rt's `_start_rust`. A root the image lacks fails, as does a stack
 without storage.
-A task stack's bound may be `partial + ?`: an executor's task polls and trait
+Unless the image declares `task-stack = "proven"`, a task stack's bound may
+be `partial + ?`: an executor's task polls and trait
 objects leave sites no fact resolves. It passes with a warning when the part
 it proves fits, and the report lists every unresolved site with its reason
 and function; runtime stack painting, with the same reserves (the build hands

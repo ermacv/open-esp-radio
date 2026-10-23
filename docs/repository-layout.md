@@ -138,6 +138,7 @@ and runs is a thin wrapper over `cargo fw` and the program.
 | compare a HAL leaf with the vendor | `cargo fw probe <package>`, then `cargo vendor-check` with the probe ELF | hook under `cfg(oer_probe)` in `chips/`; catalog code in `tools/probe/` |
 | trace, profile or force a path in an image | declare `instrumentation = ["trace" \| "profile" \| "debug-control"]` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | code under `cfg(oer_trace)`, `cfg(oer_profile)` or `cfg(oer_debug_control)`; `tools/image/build/src/instrumentation.rs` |
 | run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare <scenario>` | vendor driver and `chips/espressif/ieee802154-engine` meet at the low-level boundary |
+| declare an image's task stacks proven | `task-stack = "proven"` under the image's `[package.metadata.open-radio]`, then `cargo fw build <image>` | `tools/image/build/src/task_stack.rs`; the check in `tools/image/checks/src/stack.rs` |
 | check an image's stack | `cargo fw build <image>` | `tools/image/checks` reads the ELF |
 | add a register field | edit `chips/<chip>/registers/`, `cargo registers generate` | `chips/<chip>/pac` |
 

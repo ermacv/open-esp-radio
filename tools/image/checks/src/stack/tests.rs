@@ -673,6 +673,39 @@ fn a_partial_bound_passes_with_its_unresolved_sites_reported() {
     assert!(error.contains("16 + ? bytes"), "{error}");
 }
 
+#[test]
+fn a_stack_declared_proven_fails_on_an_unresolved_path_and_otherwise_passes() {
+    let partial = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
+    let (_directory, partial_policy) = policy_with(&partial, ASM_REVIEW);
+    let image = image_with_stack(1024);
+    let mut audit = audit_of(&partial_policy, &image);
+    audit.declared_proven = true;
+    let error = audit.check().unwrap_err().to_string();
+    assert!(
+        error.contains("image declares task-stack proven"),
+        "{error}"
+    );
+    let site = TEXT + 4 * (6 + 3 + 3);
+    assert!(
+        error.contains(&format!("{site:#010x} in indirect+0xc")),
+        "{error}"
+    );
+    // Undeclared, the same bound passes with a warning.
+    audit.declared_proven = false;
+    assert_eq!(audit.check().unwrap().len(), 1);
+    // A fully resolved bound passes, and the report says it is declared.
+    let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
+    let mut full = audit_of(&policy, &image);
+    full.declared_proven = true;
+    assert_eq!(full.check().unwrap(), Vec::<String>::new());
+    assert!(full.render().contains("the image declares them proven"));
+    assert!(
+        !audit_of(&policy, &image)
+            .render()
+            .contains("declares them proven")
+    );
+}
+
 fn image_with_stack(bytes: u32) -> Image {
     image(&program(false), &[("cpu0_stack", 0, bytes)])
 }
