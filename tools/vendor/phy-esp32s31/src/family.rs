@@ -63,8 +63,11 @@ impl Comparison for Esp32s31 {
             images,
             board,
             0,
-            identity,
-            production,
+            crate::baseline::Captures {
+                identity,
+                production,
+                control: None,
+            },
         );
         Ok(Compared {
             mismatch: (checked.verdict != compare::Verdict::Match)
@@ -106,17 +109,7 @@ impl Comparison for Esp32s31 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_composition_reads_the_published_images_of_its_chip() {
-        let repository = crate::registers::repository();
-        let root = repository.path();
-        let images = Esp32s31::images(&root).unwrap();
-        assert!(!images.registers.is_empty() && !images.analog.is_empty());
-    }
-}
+mod tests;
 
 /// The executable S31 comparison family; the generic workload names no chip.
 pub const FAMILY: oer_hil_scenario::workload::family::Kind =

@@ -9,12 +9,24 @@
 # Every vendor-readable register, including an excluded one, must have a
 # readable production sample in every boot; otherwise the result is INCOMPLETE.
 # A field without an entry leaves the cross-check INCOMPLETE.
-# Schema 3 adds `initial-pair = "rx-dc-gain0"`: a later RX-DC gain pair
+# Schema 4 includes `initial-pair = "rx-dc-gain0"`: a later RX-DC gain pair
 # may also pass when BOTH codes equal gain0 of that same capture. Applies
 # only to shared gains 1..10 and Wi-Fi gains 1..7; gain0 and the five Wi-Fi
 # fine-calibration pairs retain the range rule. Each out-of-range acceptance
 # is reported as "initial pair, vendor-faithful" with capture/gain/pair.
-schema = 3
+# `reference = "same-run-control"` requires the complete alternating series;
+# absent CONTROL is INCOMPLETE, never an exclusion or a fixed-range fallback.
+schema = 4
+
+# SOURCE: #439, authenticated same-board vendor captures at overlapping 23–25 C.
+# The physical cause of the drift remains unknown.
+[registers."analog-i2c.61.09"]
+reference = "same-run-control"
+reason = "XTAL duty drifted 44–47 -> 2–17 -> 43–58 on one board at 23–25 C; physical cause unknown; requires vendor CONTROL of this complete alternating run"
+
+[registers."analog-i2c.61.0a"]
+reference = "same-run-control"
+reason = "XTAL duty drifted 44–47 -> 2–17 -> 43–58 on one board at 23–25 C; physical cause unknown; requires vendor CONTROL of this complete alternating run"
 
 # SOURCE: complete rev0 ROM phy_set_cca_cnt / phy_get_cca_cnt (#240), and
 # s31-b E1/E3/E4/E5 (#254); chips/esp32s31/notes/phy/cca-counter.md.

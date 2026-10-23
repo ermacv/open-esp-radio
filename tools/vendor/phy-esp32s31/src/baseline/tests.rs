@@ -1,6 +1,102 @@
 use super::*;
 use oer_vendor_phy::calibration_capture::space::Register;
 
+#[test]
+fn recipe_fingerprint_ignores_external_tests_and_tracks_production_cache_inputs() {
+    let root = tempfile::tempdir().unwrap();
+    for input in RECIPE_INPUTS {
+        let path = root.path().join(input);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"production recipe").unwrap();
+    }
+    let before = digest(root.path(), RECIPE_INPUTS).unwrap();
+    let test = root
+        .path()
+        .join("tools/vendor/phy/src/workload/calibration/tests.rs");
+    std::fs::create_dir_all(test.parent().unwrap()).unwrap();
+    std::fs::write(&test, b"first test body").unwrap();
+    assert_eq!(digest(root.path(), RECIPE_INPUTS).unwrap(), before);
+    std::fs::write(test, b"changed test body").unwrap();
+    assert_eq!(digest(root.path(), RECIPE_INPUTS).unwrap(), before);
+    for input in [
+        "tools/vendor/phy/src/workload.rs",
+        "tools/vendor/phy/src/cache.rs",
+    ] {
+        let path = root.path().join(input);
+        std::fs::write(&path, b"changed production recipe").unwrap();
+        assert_ne!(digest(root.path(), RECIPE_INPUTS).unwrap(), before);
+        std::fs::write(path, b"production recipe").unwrap();
+    }
+}
+
+#[test]
+fn same_run_bounds_override_only_the_reviewed_bytes_and_recorded_only_is_incomplete() {
+    let mut image = images();
+    image.analog.extend([
+        Register {
+            name: "analog-i2c.61.09".into(),
+            address: 9,
+            mask: 0xff,
+        },
+        Register {
+            name: "analog-i2c.61.0a".into(),
+            address: 10,
+            mask: 0xff,
+        },
+    ]);
+    let mut fixed = vec![vendor(0, 4); 10];
+    let mut paired = fixed.clone();
+    for (i, boot) in fixed.iter_mut().enumerate() {
+        boot.analog.values.extend([
+            (9, if i % 2 == 0 { 2 } else { 26 }),
+            (10, if i % 2 == 0 { 2 } else { 26 }),
+        ]);
+    }
+    for (i, boot) in paired.iter_mut().enumerate() {
+        boot.analog.values.extend([
+            (9, if i % 2 == 0 { 43 } else { 58 }),
+            (10, if i % 2 == 0 { 43 } else { 58 }),
+        ]);
+        // A different CONTROL value for an ordinary register must not replace fixed bounds.
+        boot.registers.values.insert(4, 99);
+    }
+    let reference = generate(signature(), vec![input("s31-a", fixed.clone())], &image).unwrap();
+    let control =
+        compare::SameRunControl::alternating(Lifecycle::Cold, &identity(), paired, 10).unwrap();
+    let mut subject = production(&fixed[0]);
+    subject.analog.values.extend([(9, 44), (10, 58)]);
+    let subjects = vec![subject.clone(); 10];
+    let identity = identity();
+    let run = |subjects: &[ProductionBoot], control| {
+        reference.check(
+            &signature(),
+            &image,
+            "s31-a",
+            0,
+            Captures {
+                identity: &identity,
+                production: subjects,
+                control,
+            },
+        )
+    };
+    let matched = run(&subjects, Some(&control));
+    assert_eq!(matched.verdict, Verdict::Match);
+    assert_eq!(matched.comparison.unwrap().analog.same_run_control.len(), 2);
+    let missing = run(&subjects, None);
+    assert_eq!(missing.verdict, Verdict::Incomplete);
+    assert_eq!(
+        missing.comparison.unwrap().analog.same_run_control[0].verdict,
+        Verdict::Incomplete
+    );
+    let mut outside = subjects.clone();
+    outside[0].analog.values.insert(9, 74);
+    assert_eq!(run(&outside, Some(&control)).verdict, Verdict::Diff);
+    let mut changed = subjects;
+    changed[0].registers.values.insert(4, 99);
+    assert_eq!(run(&changed, Some(&control)).verdict, Verdict::Diff);
+}
+
 fn signature() -> Signature {
     Signature {
         idf_revision: "pin".into(),
@@ -166,7 +262,17 @@ fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
             (&image.registers, &image.analog),
         )
         .unwrap();
-        let recorded = reference.check(&signature(), &image, "s31-a", 0, &identity(), &[p]);
+        let recorded = reference.check(
+            &signature(),
+            &image,
+            "s31-a",
+            0,
+            Captures {
+                identity: &identity(),
+                production: &[p],
+                control: None,
+            },
+        );
         assert_eq!(recorded.verdict, verdict);
         assert_eq!(recorded.comparison.unwrap(), live);
     }
@@ -205,8 +311,11 @@ fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_ex
                     &images(),
                     board,
                     0,
-                    &identity(),
-                    std::slice::from_ref(&p),
+                    Captures {
+                        identity: &identity(),
+                        production: std::slice::from_ref(&p),
+                        control: None,
+                    },
                 );
                 assert_eq!(
                     frozen.comparison.unwrap(),
@@ -228,15 +337,28 @@ fn the_selected_board_never_uses_the_other_boards_range() {
                 &images(),
                 "s31-a",
                 0,
-                &identity(),
-                std::slice::from_ref(&p)
+                Captures {
+                    identity: &identity(),
+                    production: std::slice::from_ref(&p),
+                    control: None
+                }
             )
             .verdict,
         Verdict::Match
     );
     assert_eq!(
         reference
-            .check(&signature(), &images(), "s31-b", 0, &identity(), &[p])
+            .check(
+                &signature(),
+                &images(),
+                "s31-b",
+                0,
+                Captures {
+                    identity: &identity(),
+                    production: &[p],
+                    control: None
+                }
+            )
             .verdict,
         Verdict::Diff
     );
@@ -249,7 +371,17 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
     p.analog.values.clear();
     assert_eq!(
         reference
-            .check(&signature(), &images(), "s31-a", 0, &identity(), &[p])
+            .check(
+                &signature(),
+                &images(),
+                "s31-a",
+                0,
+                Captures {
+                    identity: &identity(),
+                    production: &[p],
+                    control: None
+                }
+            )
             .verdict,
         Verdict::Incomplete
     );
@@ -261,8 +393,11 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
                 &images(),
                 "other",
                 0,
-                &identity(),
-                std::slice::from_ref(&p)
+                Captures {
+                    identity: &identity(),
+                    production: std::slice::from_ref(&p),
+                    control: None
+                }
             )
             .verdict,
         Verdict::Incomplete
@@ -276,8 +411,11 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
                 &images(),
                 "s31-a",
                 0,
-                &identity(),
-                std::slice::from_ref(&p)
+                Captures {
+                    identity: &identity(),
+                    production: std::slice::from_ref(&p),
+                    control: None
+                }
             )
             .verdict,
         Verdict::Incomplete
@@ -291,15 +429,28 @@ fn stale_or_missing_coverage_is_incomplete_even_when_another_value_differs() {
                 &images(),
                 "s31-a",
                 0,
-                &identity(),
-                std::slice::from_ref(&p)
+                Captures {
+                    identity: &identity(),
+                    production: std::slice::from_ref(&p),
+                    control: None
+                }
             )
             .verdict,
         Verdict::Incomplete
     );
     assert_eq!(
         reference
-            .check(&signature(), &images(), "s31-a", 1, &identity(), &[p])
+            .check(
+                &signature(),
+                &images(),
+                "s31-a",
+                1,
+                Captures {
+                    identity: &identity(),
+                    production: &[p],
+                    control: None
+                }
+            )
             .verdict,
         Verdict::Incomplete
     );
@@ -316,7 +467,17 @@ fn excluded_counter_still_requires_readable_recorded_production_coverage() {
         }
         assert_eq!(
             reference
-                .check(&signature(), &images(), "s31-a", 0, &identity(), &[p])
+                .check(
+                    &signature(),
+                    &images(),
+                    "s31-a",
+                    0,
+                    Captures {
+                        identity: &identity(),
+                        production: &[p],
+                        control: None
+                    }
+                )
                 .verdict,
             Verdict::Incomplete
         );
@@ -358,8 +519,11 @@ fn missing_one_production_boot_is_not_hidden_by_another_boots_registers() {
                 &images(),
                 "s31-a",
                 0,
-                &identity(),
-                &[first, second]
+                Captures {
+                    identity: &identity(),
+                    production: &[first, second],
+                    control: None
+                }
             )
             .verdict,
         Verdict::Incomplete
@@ -399,8 +563,11 @@ fn out_of_width_external_bounds_are_incomplete_without_arithmetic_overflow() {
                 &images(),
                 "s31-a",
                 0,
-                &identity(),
-                &[production(&a[0])]
+                Captures {
+                    identity: &identity(),
+                    production: &[production(&a[0])],
+                    control: None
+                }
             )
             .verdict,
         Verdict::Incomplete
@@ -430,6 +597,16 @@ fn recorded_bounds_use_masked_samples_before_computing_spread() {
     assert_eq!(reference.entries["control"].shared, Some(9));
     let mut primary = production(&boots[0]);
     primary.registers.values.insert(4, 0x2000_0009);
-    let result = reference.check(&signature(), &images, "s31-a", 0, &identity(), &[primary]);
+    let result = reference.check(
+        &signature(),
+        &images,
+        "s31-a",
+        0,
+        Captures {
+            identity: &identity(),
+            production: &[primary],
+            control: None,
+        },
+    );
     assert_eq!(result.verdict, Verdict::Match);
 }

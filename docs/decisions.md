@@ -427,6 +427,11 @@ bounds) live in the code that applies them.
   throughput blocks the change.
 - **PHY calibration** matches the vendor when each field's difference stays
   within the vendor's own spread for that field.
+  XTAL duty bytes `61.09` and `61.0a` use the unchanged spread formula and
+  masks against vendor CONTROL of the same complete alternating run. Without
+  that CONTROL their qualification is incomplete; all other recorded bounds
+  remain fixed. Test bodies are external to the conservative production
+  capture recipe fingerprint; changed production recipes require new captures.
   Hardware measurement results that the vendor leaves unconsumed (the PHY
   CCA counter result words, whose window restarts at each Wi-Fi baseband
   reset release) are checked for readability, not compared by value.

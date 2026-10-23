@@ -137,7 +137,7 @@ fn rule_requires_complete_unsigned_rx_dc_fields_and_the_current_schema() {
     }
     for table in ["fields.common-reference", "registers.A"] {
         let text =
-            format!("schema=3\n[{table}]\ninitial-pair=\"rx-dc-gain0\"\nreason=\"review\"\n");
+            format!("schema=4\n[{table}]\ninitial-pair=\"rx-dc-gain0\"\nreason=\"review\"\n");
         assert!(
             toml::from_str::<ReviewFile>(&text)
                 .unwrap()
@@ -145,7 +145,7 @@ fn rule_requires_complete_unsigned_rx_dc_fields_and_the_current_schema() {
                 .is_err()
         );
     }
-    for schema in [1, 2, 4] {
+    for schema in [1, 2, 3] {
         let text = format!("schema={schema}\n");
         assert!(
             toml::from_str::<ReviewFile>(&text)
