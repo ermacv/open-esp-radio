@@ -27,7 +27,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use atomic_waker::AtomicWaker;
+use oer_sync::PriorityWaker;
 
 const IDLE: u8 = 0;
 const POSTED: u8 = 1;
@@ -37,14 +37,14 @@ const ANSWERED: u8 = 3;
 /// The server's wake source: one bit per slot that has a request posted.
 pub struct Doorbell {
     pending: AtomicU32,
-    waker: AtomicWaker,
+    waker: PriorityWaker,
 }
 
 impl Doorbell {
     pub const fn new() -> Self {
         Self {
             pending: AtomicU32::new(0),
-            waker: AtomicWaker::new(),
+            waker: PriorityWaker::new(),
         }
     }
 
@@ -75,7 +75,7 @@ pub struct RequestSlot<Req, Ans> {
     state: AtomicU8,
     request: UnsafeCell<MaybeUninit<Req>>,
     answer: UnsafeCell<MaybeUninit<Ans>>,
-    client: AtomicWaker,
+    client: PriorityWaker,
     doorbell: &'static Doorbell,
     bit: u32,
 }
@@ -98,7 +98,7 @@ impl<Req, Ans> RequestSlot<Req, Ans> {
             state: AtomicU8::new(IDLE),
             request: UnsafeCell::new(MaybeUninit::uninit()),
             answer: UnsafeCell::new(MaybeUninit::uninit()),
-            client: AtomicWaker::new(),
+            client: PriorityWaker::new(),
             doorbell,
             bit,
         }

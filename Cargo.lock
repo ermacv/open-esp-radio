@@ -2825,6 +2825,7 @@ dependencies = [
  "oer-memory",
  "oer-radio-port",
  "oer-radio-regulatory",
+ "oer-sync",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -3126,7 +3127,6 @@ dependencies = [
 name = "oer-firmware-apps-w1"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "crc",
  "embassy-executor",
  "embassy-futures",
@@ -3152,6 +3152,7 @@ dependencies = [
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-regulatory",
+ "oer-sync",
  "oer-time",
  "static_cell",
 ]
@@ -4052,8 +4053,8 @@ dependencies = [
 name = "oer-memory"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "bytemuck",
+ "oer-sync",
  "oer-test-ui-cases",
 ]
 
@@ -4150,6 +4151,7 @@ version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "oer-memory",
+ "oer-sync",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -4235,6 +4237,13 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.19",
  "toml_edit",
+]
+
+[[package]]
+name = "oer-sync"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
 ]
 
 [[package]]
