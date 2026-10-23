@@ -111,6 +111,7 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
 
     /// Transfer the initialized graph to the BLE backend once, between actor
     /// run borrows. The shared PHY membership remains in the actor backend.
+    #[inline(never)]
     pub fn take_runtime(
         &mut self,
         installation: u32,
@@ -173,6 +174,7 @@ where
                 .is_some_and(|runtime| matches!(runtime.is_pristine(), Ok(true)))
     }
 
+    #[inline(never)]
     fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, PreparationFailure> {
         if !<Self as RadioController<B>>::can_prepare(self) {
             return Err(PreparationFailure {
@@ -230,6 +232,7 @@ where
         }
     }
 
+    #[inline(never)]
     fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault> {
         let controller = match &mut self.state {
             State::Prepared(controller) => controller.take().ok_or(ControllerFault)?,
@@ -251,6 +254,7 @@ where
         self.installation == Some(installation) && matches!(self.state, State::Retired(Some(_)))
     }
 
+    #[inline(never)]
     fn reset(
         &mut self,
         radio: &mut RadioDomain<B, ConcurrentPhy>,
