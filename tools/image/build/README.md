@@ -375,7 +375,7 @@ then converted to shared for the builds).
 
 Run host regressions with `cargo test -p oer-image-build`.
 
-## Size summaries and owner thresholds
+## Size summaries and verdicts
 
 App builds (including `--analysis`) and HIL image builds publish `sizes.json`
 next to `runtime.elf` and `bootstrap.elf`, listed in `bundle.json`'s reports.
@@ -400,28 +400,29 @@ The comparison prints a table per image, byte changes for each ELF, new and
 removed functions/types, analysis resource use, per-image verdicts and the
 overall verdict. `same` means no size, allocation, bound, hole, assumption or
 section change; differing provenance commits and resource consumption alone do
-not change it. `report` means changes within the owner's allowance. `stop`
+not change it. `report` means changes that are only reported. `stop`
 returns exit 1; errors (including incompatible provenance) also return exit 1.
 The command never asks a question itself: the agent takes a `stop` to the owner.
 
-The thresholds have one definition in
-[`sizes/compare.rs`](src/sizes/compare.rs), following
-[the owner's rule #375](https://github.com/ermacv/open-esp-radio/issues/375)
-and its [accounting clarifications in #396](https://github.com/ermacv/open-esp-radio/issues/396):
+The verdicts follow the "Size budgets" rule in
+[`docs/decisions.md`](../../../docs/decisions.md) and are decided in
+[`sizes/compare.rs`](src/sizes/compare.rs). Only growth of an SRAM section or
+of an allocated stack (task or interrupt) is a `stop`. Growth of code,
+read-only data, writable PSRAM, types, frames, computed bounds and root frames, and a new
+stack-bound hole, are `report`: the numbers stay in the table, nothing stops.
 
-> Тип/future/кадр ≤ +64 B, вычисленная граница стека ≤ +64 B (выделенные стеки без изменений), код ≤ ~1 KiB на PR — только сообщить; RAM-секции, выделенные стеки или больше — стоп и вопрос владельцу.
-
-Values/frames and bounds allow at most +64 B each. Code growth is the **net**
-change in executable and read-only image contents across the runtime and
-bootstrap, excluding linker filler and byte-verified embedded copies of the
-runtime. The allowance is +1024 B per image; shrinking contents offsets growth
-elsewhere, including a move between sections. Each SRAM section (code,
-read-only data and writable data) and each writable PSRAM section is RAM;
-individual RAM-section growth stops. Input-free linker filler carries no owned
-RAM or image-content budget. An allocated stack growing stops;
-shrinking/removal is `report`. Executable/read-only SRAM also contributes to
-net code. `NOBITS` reserves occupy RAM where applicable but are not image
-contents.
+Code growth is the **net** change in executable and read-only image contents
+across the runtime and bootstrap, excluding linker filler and byte-verified
+embedded copies of the runtime; shrinking contents offsets growth elsewhere,
+including a move between sections. Growth of an individual SRAM section
+(code, read-only data or writable data) stops, and so does a section moving
+into SRAM; a writable PSRAM section is RAM in the table but its growth is
+`report`.
+Input-free linker filler carries no owned RAM or image-content budget. An
+allocated stack growing stops; shrinking or removal is `report`. A new hole
+on an interrupt path already fails `cargo fw build`. Executable and read-only
+SRAM also contribute to net code. `NOBITS` reserves occupy RAM where
+applicable but are not image contents.
 
 Schema 2 records each section's class (`code`, `read_only`, `writable`, or
 `filler`), memory kind and flags. The staged runtime's input-free zero tail is
@@ -442,10 +443,10 @@ and `application.bin` sizes are printed separately.
 A hole's identity is its demangled function, complete DWARF inline chain and
 reason. Comparison retains the count of each identity: offsets only order
 repeated sites. Moving a call inside a function adds no new hole; adding a
-second call of an existing identity does. Every new occurrence stops.
+second call of an existing identity does. Every new occurrence is reported.
 Completeness and assumptions remain visible in the report. New functions/types
 are listed separately as additions/removals; a missing baseline is not a measured
-zero-byte layout. Growth thresholds compare matching keys. Types crossing the
+zero-byte layout. Growth comparisons use matching keys. Types crossing the
 256 B inventory boundary are therefore visible as new/removed. Multiple frame
 implementations sharing a demangled name retain their sorted individual sizes.
 
@@ -463,7 +464,8 @@ each directory. Then run:
 cargo fw sizes target/size-base target/size-head
 ```
 
-Include its table and verdict in the PR, and take any real `stop` to the owner.
+Include its table and verdict in the PR, and take any real `stop` (SRAM or
+stack growth) to the owner.
 Different summary schemas are incompatible, even if both files would otherwise
 have matching provenance. To reanalyse saved bundles without compiling or
 linking, write new summaries to a separate directory:

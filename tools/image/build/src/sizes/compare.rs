@@ -1,4 +1,4 @@
-//! The owner's thresholds, verbatim rule and examples: issue #375.
+//! The owner's size rule: `docs/decisions.md`, "Size budgets".
 use super::{Provenance, Summary};
 use crate::Result;
 use oer_image_checks::sizes::{Measurements, Section};
@@ -7,12 +7,6 @@ use std::{
     fmt::Write as _,
     path::Path,
 };
-
-/// All owner thresholds live here. Allocated stacks and individual RAM
-/// sections have no growth allowance. See the README's link to rule #375.
-pub const VALUE_GROWTH_BYTES: u64 = 64;
-pub const BOUND_GROWTH_BYTES: u64 = 64;
-pub const CODE_GROWTH_BYTES: u64 = 1024;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Verdict {
@@ -183,11 +177,6 @@ fn compare(a: &Summary, b: &Summary) -> Result<(Verdict, i128, String)> {
             a.embedded_payloads, b.embedded_payloads
         );
     }
-    if code_growth > i128::from(CODE_GROWTH_BYTES) {
-        diff.stop(format!(
-            "code growth +{code_growth} B exceeds {CODE_GROWTH_BYTES} B"
-        ));
-    }
     Ok((diff.verdict, code_growth, diff.output))
 }
 
@@ -216,7 +205,9 @@ impl Diff {
         self.verdict = Verdict::Stop;
         let _ = writeln!(self.output, "STOP: {reason}");
     }
-    fn change(&mut self, elf: &str, kind: &str, name: &str, before: u64, after: u64, limit: u64) {
+    /// Growth of a `stops` entry (an SRAM section or an allocated stack) stops;
+    /// growth of any other entry is only reported in the table.
+    fn change(&mut self, elf: &str, kind: &str, name: &str, before: u64, after: u64, stops: bool) {
         if before == after {
             return;
         }
@@ -226,10 +217,8 @@ impl Diff {
             self.output,
             "| {elf} | {kind} | `{name}` | {before} | {after} | {delta:+} |"
         );
-        if after.saturating_sub(before) > limit {
-            self.stop(format!(
-                "{elf} {kind} `{name}` grows {delta:+} B (limit +{limit} B)"
-            ));
+        if stops && after > before {
+            self.stop(format!("{elf} {kind} `{name}` grows {delta:+} B"));
         }
     }
     fn inventory<T: std::fmt::Debug>(
@@ -271,11 +260,7 @@ impl Diff {
                 name,
                 before.map_or(0, |s| s.bytes),
                 after.map_or(0, |s| s.bytes),
-                if after.is_some_and(Section::is_ram) {
-                    0
-                } else {
-                    u64::MAX
-                },
+                after.is_some_and(Section::is_sram),
             );
             self.change(
                 elf,
@@ -283,7 +268,7 @@ impl Diff {
                 name,
                 before.map_or(0, |s| s.filler.iter().map(|r| r.bytes).sum()),
                 after.map_or(0, |s| s.filler.iter().map(|r| r.bytes).sum()),
-                u64::MAX,
+                false,
             );
             if before != after {
                 self.verdict = self.verdict.max(Verdict::Report);
@@ -292,10 +277,10 @@ impl Diff {
                 {
                     let _ = writeln!(self.output, "section `{name}`: {:?} → {:?}", before, after);
                     if before.is_some()
-                        && after.is_some_and(Section::is_ram)
-                        && !before.is_some_and(Section::is_ram)
+                        && after.is_some_and(Section::is_sram)
+                        && !before.is_some_and(Section::is_sram)
                     {
-                        self.stop(format!("{elf} `{name}` moved into RAM"));
+                        self.stop(format!("{elf} `{name}` moved into SRAM"));
                     }
                 }
             }
@@ -309,7 +294,7 @@ impl Diff {
                 name,
                 before.copied().unwrap_or(0),
                 after.copied().unwrap_or(0),
-                0,
+                true,
             );
         }
         self.values(elf, "type", &a.types, &b.types);
@@ -336,7 +321,7 @@ impl Diff {
                     name,
                     before.get(index).copied().unwrap_or(0),
                     after.get(index).copied().unwrap_or(0),
-                    VALUE_GROWTH_BYTES,
+                    false,
                 );
             }
         }
@@ -349,7 +334,7 @@ impl Diff {
                 name,
                 before.map_or(0, |s| s.bytes),
                 after.map_or(0, |s| s.bytes),
-                BOUND_GROWTH_BYTES,
+                false,
             );
             self.change(
                 elf,
@@ -357,7 +342,7 @@ impl Diff {
                 name,
                 before.map_or(0, |s| s.maximum_frame),
                 after.map_or(0, |s| s.maximum_frame),
-                VALUE_GROWTH_BYTES,
+                false,
             );
             if before != after {
                 self.verdict = self.verdict.max(Verdict::Report);
@@ -378,10 +363,12 @@ impl Diff {
                     if *remaining != 0 {
                         *remaining -= 1;
                     } else {
-                        self.stop(format!(
-                            "{elf} bound `{name}` new hole: {}+{:#x}: {}; inline chain {:?}",
+                        self.verdict = self.verdict.max(Verdict::Report);
+                        let _ = writeln!(
+                            self.output,
+                            "new hole: {}+{:#x}: {}; inline chain {:?} ({elf} bound `{name}`)",
                             hole.function, hole.offset, hole.reason, hole.inline_chain
-                        ));
+                        );
                     }
                 }
                 if before.is_some_and(|b| {
@@ -425,7 +412,7 @@ impl Diff {
             let (Some(&before), Some(&after)) = (a.get(name), b.get(name)) else {
                 continue;
             };
-            self.change(elf, kind, name, before, after, VALUE_GROWTH_BYTES);
+            self.change(elf, kind, name, before, after, false);
         }
     }
 }
