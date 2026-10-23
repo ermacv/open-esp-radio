@@ -135,6 +135,10 @@ fn compiler_flags(
                         !matches!(
                             key.as_str(),
                             "OPEN_RADIO_CPU0_TASK_STACK_BYTES" | "OPEN_RADIO_IRQ_STACK_BYTES"
+                            // Retired IRQ policy reserve: no firmware consumed
+                            // this variable. The percentage margin is now the
+                            // contract; old summaries still record the variable.
+                            | "OPEN_RADIO_IRQ_STACK_MINIMUM_FREE_BYTES"
                         )
                     })
                     .map(|(key, value)| (key.as_str(), value.as_str()))

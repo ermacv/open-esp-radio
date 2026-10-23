@@ -23,6 +23,7 @@ use std::{
     path::PathBuf,
 };
 
+pub(crate) mod irq_stacks;
 pub mod strict;
 use strict::InputSection;
 
@@ -138,15 +139,41 @@ fn link(
         return Ok(code);
     }
     let placement = strict::analyze(&spec, &output, sections, &mut inputs)?;
-    if !placement.functions.is_empty() {
+    if !placement.functions.is_empty() || !placement.irq_stacks.is_empty() {
         std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
+        for allocation in &placement.irq_stacks {
+            set_defsym(
+                arguments,
+                &format!("IRQ_STACK_HART{}_BYTES", allocation.hart),
+                allocation.bytes,
+            );
+            set_defsym(
+                arguments,
+                &format!(
+                    "__runtime_cpu{}_irq_stack_sized_from_bound",
+                    allocation.hart
+                ),
+                u32::from(allocation.from_bound),
+            );
+        }
         let code = run_linker(arguments);
         if code != 0 {
             return Ok(code);
         }
     }
+    strict::verify(&spec, &output, &placement, &mut inputs)?;
     strict::save(placement, directory, &output, inputs)?;
     Ok(0)
+}
+
+fn set_defsym(arguments: &mut Vec<OsString>, name: &str, value: u32) {
+    let prefix = format!("--defsym={name}=");
+    arguments.retain(|argument| {
+        !argument
+            .to_str()
+            .is_some_and(|text| text.starts_with(&prefix))
+    });
+    arguments.push(format!("{prefix}{value}").into());
 }
 
 fn uses_runtime_script(arguments: &[OsString]) -> bool {

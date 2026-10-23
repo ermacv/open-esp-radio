@@ -156,8 +156,7 @@ when it refuses.
   `ring-order`; the host recomputes `order_breaks=` from
   `first_after_release=` and the `arena=` ring size, validates
   `discards=<reason>:<n>,…` and in the summary sets the descriptors the
-  list skips against the runner's drops in it), `irq_stack` (4096 bytes
-  free), `service_errors` and `unserviced` (zero), `timer_wake` (no
+  list skips against the runner's drops in it), `service_errors` and `unserviced` (zero), `timer_wake` (no
   timer wait of the image returned before its deadline, `woke_early=` of
   every `w1.timer` and `w1.wake` line; `woke-early`), `base_writes` (the
   epoch wrote `RX_DESCRIPTOR_BASE` once, `w1.reload base_writes=1`;
@@ -220,3 +219,7 @@ owner thresholds](../build/README.md#size-summaries-and-owner-thresholds).
 saved ELF bundles into a separate schema-2 summary tree without compiling or
 linking. Inputs remain read-only; the source root must supply the original
 image configuration. See the [refresh workflow](../build/README.md#pr-size-table-for-an-agent).
+
+For W1, the host additionally reads the built runtime ELF and checks that
+`w1.stack` reports its actual capacity and an observed depth no greater than
+its proven IRQ bound. This replaces the fixed 4096-byte `irq_stack` gate.

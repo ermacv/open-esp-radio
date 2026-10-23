@@ -28,8 +28,6 @@ use crate::{
 
 /// The survey's table size.
 pub const BSS: usize = 64;
-/// The interrupt stack the `irq_stack` gate requires to stay free.
-pub const MIN_IRQ_STACK_FREE: usize = 4096;
 /// Microseconds per time unit.
 const TU_US: u64 = 1024;
 
@@ -449,7 +447,7 @@ fn ownership(cycles: &[Cycle]) -> Outcome {
 }
 
 /// The number of gates.
-pub const GATES: usize = 13;
+pub const GATES: usize = 12;
 
 /// Every gate, in the block's order, and the beacon figures.
 pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
@@ -488,10 +486,6 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
         Gate {
             name: "ownership",
             outcome: ownership(run.cycles),
-        },
-        Gate {
-            name: "irq_stack",
-            outcome: check(run.irq_free >= MIN_IRQ_STACK_FREE, "irq-stack-low"),
         },
         Gate {
             name: "service_errors",
@@ -886,7 +880,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         }
     }
     block.line(format_args!(
-        "w1.stack irq_bytes={} irq_free={} min_free={MIN_IRQ_STACK_FREE}",
+        "w1.stack irq_bytes={} irq_free={}",
         run.irq_bytes, run.irq_free
     ))?;
     for timer in run.timers {

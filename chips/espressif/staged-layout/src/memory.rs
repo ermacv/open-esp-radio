@@ -76,7 +76,7 @@ pub struct Layout {
     pub retained_reserved_tail: u32,
     /// Stage two's CPU0 task stack in PSRAM.
     pub cpu0_task_stack_bytes: u32,
-    /// Each hart's dedicated SRAM interrupt stack; task stacks live in PSRAM.
+    /// Maximum IRQ allocation per hart; proven images are sized at link time.
     pub irq_stack_bytes: u32,
     /// The harts stage two runs on: 1 or 2.
     pub harts: u32,

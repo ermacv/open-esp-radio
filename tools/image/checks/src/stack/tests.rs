@@ -402,7 +402,6 @@ storage_symbol = "cpu0_stack"
 minimum_free_bytes = 512
 
 [interrupt_stacks]
-minimum_free_bytes = 256
 
 [bootstrap_stack]
 root = "runtime_main"
@@ -466,10 +465,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
     );
     assert_eq!(
         base.runtime_environment(),
-        [
-            ("OPEN_RADIO_CPU0_STACK_MINIMUM_FREE_BYTES", "512".to_owned()),
-            ("OPEN_RADIO_IRQ_STACK_MINIMUM_FREE_BYTES", "256".to_owned()),
-        ]
+        [("OPEN_RADIO_CPU0_STACK_MINIMUM_FREE_BYTES", "512".to_owned()),]
     );
     // An extension reuses its base unchanged.
     let nested = directory.path().join("hil");

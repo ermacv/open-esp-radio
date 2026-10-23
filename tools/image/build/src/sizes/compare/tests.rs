@@ -174,6 +174,34 @@ fn incompatible_origins_are_errors() {
         assert!(compare(&a, &b).is_err(), "{field}");
     }
 }
+
+#[test]
+fn removing_the_unused_irq_reserve_does_not_change_compiler_provenance() {
+    let mut a = summary();
+    a.provenance.flags.insert(
+        "runtime".into(),
+        BTreeMap::from([
+            ("RUSTFLAGS".into(), "same".into()),
+            (
+                "OPEN_RADIO_IRQ_STACK_MINIMUM_FREE_BYTES".into(),
+                "4096".into(),
+            ),
+        ]),
+    );
+    let mut b = a.clone();
+    b.provenance
+        .flags
+        .get_mut("runtime")
+        .unwrap()
+        .remove("OPEN_RADIO_IRQ_STACK_MINIMUM_FREE_BYTES");
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Same);
+    b.provenance
+        .flags
+        .get_mut("runtime")
+        .unwrap()
+        .insert("RUSTFLAGS".into(), "different".into());
+    assert!(compare(&a, &b).is_err());
+}
 #[test]
 fn new_and_removed_functions_and_types_are_named_even_at_zero_size() {
     let a = summary();

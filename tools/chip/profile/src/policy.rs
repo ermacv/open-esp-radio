@@ -150,12 +150,11 @@ impl TaskStack {
 }
 
 /// The dedicated SRAM interrupt stacks: their bound and margin are the
-/// interrupt-stack gate's contract; this is the runtime painting's reserve.
+/// interrupt-stack gate's contract, without an independent free-byte reserve.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct InterruptStacks {
-    pub minimum_free_bytes: u32,
-    /// This image's allocation per hart. Absent uses the chip layout.
+    /// This image's maximum allocation per hart. Absent uses the chip layout.
     #[serde(default)]
     pub allocation_bytes: Option<u32>,
 }
@@ -286,20 +285,11 @@ impl StackPolicy {
             return Ok(());
         }
         let stacks = self.stacks()?;
-        if stacks
-            .interrupt_stacks
-            .is_some_and(|interrupts| interrupts.minimum_free_bytes == 0)
-        {
-            return Err("the interrupt stacks' reserve must be positive".into());
-        }
         if let Some(interrupts) = stacks.interrupt_stacks
             && let Some(bytes) = interrupts.allocation_bytes
-            && (bytes % 16 != 0 || bytes <= interrupts.minimum_free_bytes)
+            && (bytes == 0 || bytes % 16 != 0)
         {
-            return Err(
-                "interrupt stack allocation must be aligned to 16 bytes and exceed its reserve"
-                    .into(),
-            );
+            return Err("interrupt stack maximum must be positive and aligned to 16 bytes".into());
         }
         stacks.cpu0_task_stack.validate("cpu0_task_stack")?;
         if let Some(bootstrap) = stacks.bootstrap_stack {
@@ -353,10 +343,6 @@ impl StackPolicy {
             }
         }
         if let Some(interrupts) = &self.interrupt_stacks {
-            variables.push((
-                "OPEN_RADIO_IRQ_STACK_MINIMUM_FREE_BYTES",
-                interrupts.minimum_free_bytes.to_string(),
-            ));
             if let Some(bytes) = interrupts.allocation_bytes {
                 variables.push(("OPEN_RADIO_IRQ_STACK_BYTES", bytes.to_string()));
             }
@@ -416,20 +402,13 @@ impl StackPolicy {
             .interrupts
             .as_mut()
             .ok_or("an interrupt stack allocation requires the interrupt contract")?;
-        let reserve = self
-            .interrupt_stacks
-            .as_ref()
-            .ok_or("interrupt stack policy missing")?
-            .minimum_free_bytes;
         if interrupts
             .irq_stack_guard_bytes
             .values()
-            .any(|guard| bytes <= guard.saturating_add(reserve))
+            .any(|guard| bytes <= *guard || bytes % *guard != 0)
             || u64::from(bytes) * interrupts.harts.len() as u64 >= u64::from(memory.sram.length)
         {
-            return Err(
-                "interrupt stack allocation does not fit the SRAM/guard/reserve contract".into(),
-            );
+            return Err("interrupt stack allocation does not fit the SRAM/guard contract".into());
         }
         let placement = profile
             .placement
@@ -445,10 +424,13 @@ impl StackPolicy {
                 .iter_mut()
                 .find(|rule| rule.range == names)
                 .ok_or("the chip has no exact placement rule for an interrupt stack")?;
-            if rule.region != "sram" || rule.bytes != Some(u64::from(interrupts.irq_stack_bytes)) {
+            if rule.region != "sram"
+                || rule.bytes.is_some()
+                || rule.maximum_bytes != Some(u64::from(interrupts.irq_stack_bytes))
+            {
                 return Err("interrupt stack placement and budget disagree".into());
             }
-            rule.bytes = Some(u64::from(bytes));
+            rule.maximum_bytes = Some(u64::from(bytes));
         }
         interrupts.irq_stack_bytes = bytes;
         Ok(profile)
@@ -607,7 +589,6 @@ mod tests {
                 allocation_bytes: None,
             }),
             interrupt_stacks: Some(InterruptStacks {
-                minimum_free_bytes: 4096,
                 allocation_bytes: bytes,
             }),
             bootstrap_stack: None,
@@ -640,7 +621,7 @@ mod tests {
                 .iter()
                 .find(|rule| rule.range[0] == bottom)
                 .unwrap();
-            assert_eq!(range.bytes, Some(u64::from(requested)));
+            assert_eq!(range.maximum_bytes, Some(u64::from(requested)));
             assert_eq!(range.region, "sram");
         }
         assert_eq!(base, before);

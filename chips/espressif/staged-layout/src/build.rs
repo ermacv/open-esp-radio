@@ -100,7 +100,11 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         ("STAGE_TWO_ABI_VERSION", stage_two::ABI_VERSION),
         ("STAGE_TWO_HEADER_BYTES", stage_two::HEADER_BYTES as u32),
         ("CPU0_PSRAM_TASK_STACK_BYTES", task_stack_bytes),
-        ("IRQ_STACK_BYTES", irq_stack_bytes),
+        ("IRQ_STACK_HART0_BYTES", irq_stack_bytes),
+        (
+            "IRQ_STACK_HART1_BYTES",
+            if layout.harts > 1 { irq_stack_bytes } else { 0 },
+        ),
         ("HART_COUNT", layout.harts),
         ("RETAINED_RESERVED_TAIL", layout.retained_reserved_tail),
     ] {

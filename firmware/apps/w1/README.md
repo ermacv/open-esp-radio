@@ -33,8 +33,7 @@ SSID it fails `stand-mismatch`, not heard `stand-absent`, however many other
 BSSIDs carry the SSID), the applied channel, a clean exit, the walker's
 restart (in the first cycle a full hold, no unit received during the 1 s
 hold, frames after the release; `w1.hold cycle=0`), the
-ownership experiment (`w1.own`, below), at least 4096 free bytes of the
-interrupt stack, no service error, no MAC or WDEVPWR entry without the line,
+ownership experiment (`w1.own`, below), no service error, no MAC or WDEVPWR entry without the line,
 no timer wait of the image (P1, and P2's stress task) returning before
 its deadline (`waits=`/`woke_early=` in `w1.timer` and `w1.wake`), one
 `RX_DESCRIPTOR_BASE` write in the epoch (`base_writes`: the cold
@@ -182,3 +181,8 @@ their last two octets, SSIDs only as their length and `ssid_ok=`, and the
 base MAC never.
 
 Nothing is transmitted. eFuse is only read, as in W0.
+
+The `w1.stack irq_bytes=… irq_free=…` watermark is checked on the host against
+the final runtime ELF: observed depth must not exceed its proven IRQ bound.
+There is no fixed 4096-byte free-space gate; the image linker supplies the
+contract's 10% sizing margin and the hart's guard.

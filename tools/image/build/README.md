@@ -77,8 +77,12 @@ An `ImageBundle` is one directory with a `bundle.json`:
 The manifest uses schema 7 and records `purpose: Flash` or `Analysis`.
 Every link using the staged runtime script (`-Truntime/link.x` from
 `configure_runtime`) requires an `OER_IMAGE_INTERRUPTS` specification and
-runs the final check's analysis after the first link. It may link once more
-to place strict cached code in SRAM. Without the specification the linker
+runs the final check's analysis after the first link. It links once more
+to place strict cached code in SRAM and size IRQ stacks independently by hart
+([image linker](../linker/README.md)). The final ELF is analysed again before
+fingerprinting; its bound plus the rounded-up contract margin must fit the
+actual allocation minus its guard. A bound change above 64 bytes fails,
+without another link or fallback to the maximum. Without the specification the linker
 fails with the bin name and instructions to use `cargo fw build`,
 `cargo fw probe` or `cargo hil`. Links using another script ignore a supplied
 specification and produce no analysis fragment or placement record.
@@ -238,8 +242,14 @@ The IRQ stacks occupy a separate NOLOAD section at the start of internal
 SRAM, before ISR code. Linker assertions require each stack bottom to align
 to its guard; the runtime also rejects misalignment and programs the guard
 at that exact bottom.
-There is no shared guard-size constant. Allocated stacks keep their sizes;
-the usable budget is the allocation minus that hart's guard.
+There is no shared guard-size constant. `irq-stack-bytes` is a maximum:
+proven product stacks use `align16(ceil(bound * 1.10)) + guard`, with S31
+hart 0 additionally aligned to hart 1's guard. Partial, diagnostic and probe
+stacks retain the effective contract maximum. `interrupt-stack.txt` reports
+the bound, percentage margin, guard, allocated bytes and source per hart;
+the usable budget is the actual linked allocation minus that hart's guard.
+The independent IRQ `minimum_free_bytes` reserve was removed from stack
+policies; the chip contract's percentage is the sizing margin.
 The debug trigger
 catches a write into the guard, not a change of `sp`: a function may lower
 `sp` by its whole frame before writing, or skip the guard with a larger frame.

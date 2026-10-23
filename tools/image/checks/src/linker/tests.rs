@@ -363,6 +363,7 @@ fn a_runtime_link_gets_each_guard_from_the_chip_contract_before_its_first_pass()
                 root: root.to_owned(),
                 chip: chip.to_owned(),
                 stack_policy: root.join("unused.toml"),
+                diagnostic: false,
             })
             .unwrap(),
         )

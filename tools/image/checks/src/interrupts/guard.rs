@@ -33,7 +33,7 @@ impl InterruptStacks {
         frames
     }
 
-    pub(super) fn guard_problem(&self, hart: &HartStack) -> Option<String> {
+    pub(crate) fn guard_problem(&self, hart: &HartStack) -> Option<String> {
         let frames = self.hart_frames(hart);
         let guard = u64::from(self.contract.interrupts.irq_stack_guard_bytes[&hart.core]);
         let exception = hart.exception.bytes.unwrap_or(hart.exception.partial);

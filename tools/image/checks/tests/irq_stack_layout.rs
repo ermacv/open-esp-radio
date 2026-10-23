@@ -8,7 +8,7 @@ use object::{
     write::{Object, Symbol, SymbolSection},
 };
 
-fn link(harts: u32, allocation: u32, origin: u32) -> Result<Vec<u8>, String> {
+fn link(harts: u32, allocations: [u32; 2], origin: u32) -> Result<Vec<u8>, String> {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path();
     fs::write(
@@ -68,7 +68,8 @@ fn link(harts: u32, allocation: u32, origin: u32) -> Result<Vec<u8>, String> {
         ("STAGE_TWO_MAGIC", 0x32475453),
         ("STAGE_TWO_ABI_VERSION", 1),
         ("STAGE_TWO_HEADER_BYTES", 44),
-        ("IRQ_STACK_BYTES", allocation),
+        ("IRQ_STACK_HART0_BYTES", allocations[0]),
+        ("IRQ_STACK_HART1_BYTES", allocations[1]),
         ("CPU0_PSRAM_TASK_STACK_BYTES", 196608),
         ("HART_COUNT", harts),
         ("__runtime_cpu0_irq_stack_guard_bytes", 4096),
@@ -92,7 +93,7 @@ fn exact_noload_stacks_precede_isr_code_and_leave_only_state_in_critical_bss() {
     let origin = 0x20000000;
     for harts in [1, 2] {
         for allocation in [32768, 65536] {
-            let bytes = link(harts, allocation, origin).unwrap();
+            let bytes = link(harts, [allocation; 2], origin).unwrap();
             let elf = object::File::parse(&*bytes).unwrap();
             let address = |name: &str| elf.symbol_by_name(name).unwrap().address();
             let stacks = elf.section_by_name(".irq_stacks").unwrap();
@@ -118,7 +119,7 @@ fn exact_noload_stacks_precede_isr_code_and_leave_only_state_in_critical_bss() {
 
 #[test]
 fn refuses_an_unaligned_hart_zero_bottom() {
-    let error = link(1, 32768, 0x20000040).unwrap_err();
+    let error = link(1, [32768; 2], 0x20000040).unwrap_err();
     assert!(
         error.contains("hart 0 IRQ stack bottom must be guard aligned"),
         "{error}"
@@ -129,10 +130,52 @@ fn refuses_an_unaligned_hart_zero_bottom() {
 fn checks_hart_one_alignment_only_when_it_exists() {
     // The first stack fits its contract, but its nonstandard length puts
     // the second bottom 16 bytes beyond its guard's alignment.
-    let error = link(2, 32768 + 16, 0x20000000).unwrap_err();
+    let error = link(2, [32768 + 16; 2], 0x20000000).unwrap_err();
     assert!(
         error.contains("hart 1 IRQ stack bottom must be guard aligned"),
         "{error}"
     );
-    link(1, 32768 + 16, 0x20000000).unwrap();
+    link(1, [32768 + 16; 2], 0x20000000).unwrap();
+}
+
+#[test]
+fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_state() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    for chip in ["esp32s31", "esp32c5"] {
+        let profile = oer_chip_profile::Profile::load(&root, chip).unwrap();
+        let contract = profile.interrupts.unwrap();
+        let mut sizes = [0; 2];
+        for &hart in &contract.harts {
+            sizes[hart as usize] = contract
+                .irq_stack_size(hart, Some(if hart == 0 { 16192 } else { 1008 }))
+                .unwrap();
+        }
+        let bytes = link(
+            contract.harts.len() as u32,
+            sizes,
+            profile.memory.as_ref().unwrap().sram.origin,
+        )
+        .unwrap();
+        let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();
+        for &hart in &contract.harts {
+            let bottom = elf
+                .address(&format!("__runtime_cpu{hart}_irq_stack_bottom"))
+                .unwrap();
+            let top = elf
+                .address(&format!("__runtime_cpu{hart}_irq_stack_top"))
+                .unwrap();
+            assert_eq!(bottom % u64::from(contract.irq_stack_guard_bytes[&hart]), 0);
+            assert_eq!(top - bottom, u64::from(sizes[hart as usize]));
+        }
+        let object = object::File::parse(&*bytes).unwrap();
+        let stacks = object.section_by_name(".irq_stacks").unwrap();
+        let code = object.section_by_name(".isr.text").unwrap();
+        assert_eq!(code.address() % 256, 0);
+        assert!(code.address() - (stacks.address() + stacks.size()) <= 255);
+        assert_eq!(object.section_by_name(".critical.bss").unwrap().size(), 64);
+        assert_eq!(
+            object.section_by_name(".irq_stacks").unwrap().size(),
+            sizes.iter().map(|&x| u64::from(x)).sum::<u64>()
+        );
+    }
 }

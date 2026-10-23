@@ -139,6 +139,7 @@ bounds) live in the code that applies them.
   type. `cargo fw build` fails an app image, and so CI, when an interrupt stack
   has no proven bound, exceeds its budget or rests on an assumption other than
   the admitted ones; its analysis build is held to the same rule.
+  Each hart's interrupt stack is sized at link time to its proven bound plus the contract margin (10 %), rounded up to 16 bytes, plus its guard; an image without a proven interrupt bound gets the contract's maximum.
   Each hart's exception path plus the largest frame on that hart fits the
   interrupt stack's guard, so an overflow the guard catches is recorded.
   The guard is per hart in the chip contract: 4096 bytes on S31 hart 0 and
