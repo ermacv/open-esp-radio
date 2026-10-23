@@ -448,6 +448,9 @@ pub struct StackAudit {
     pub witness_memory_peak: u64,
     /// Independent task roots, reported without changing the stack gate.
     pub task_bounds: Vec<Bound>,
+    /// The image declares these stacks proven: [`Self::check`] fails on any
+    /// unresolved path in them.
+    pub declared_proven: bool,
 }
 
 /// One stack's budget and its root's bound.
@@ -556,6 +559,7 @@ impl StackAudit {
             resources: image.resources.clone(),
             witness_memory_peak,
             task_bounds,
+            declared_proven: false,
         })
     }
 
@@ -592,6 +596,15 @@ impl StackAudit {
                 return Err(format!(
                     "the {}'s bound assumes {assumption}, which the gate does not admit",
                     stack.name
+                )
+                .into());
+            }
+            if self.declared_proven && (bound.bytes.is_none() || !stack.unresolved.is_empty()) {
+                return Err(format!(
+                    "image declares task-stack proven, but the {} has {} unresolved sites:\n{}",
+                    stack.name,
+                    stack.unresolved.len(),
+                    stack.render()
                 )
                 .into());
             }
@@ -642,6 +655,9 @@ impl StackAudit {
                 ));
         }
         let mut out = budget::header(&resources, resources.usage.peak_admitted_bytes);
+        if self.declared_proven {
+            out.push_str("task stacks: the image declares them proven\n");
+        }
         if self.expression_limited_functions != 0 {
             let _ = writeln!(
                 out,

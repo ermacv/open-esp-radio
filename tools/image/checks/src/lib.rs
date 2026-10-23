@@ -95,6 +95,9 @@ pub struct CheckInput<'a> {
     pub flat: Option<&'a Path>,
     /// The bundle's directory, where reports go.
     pub output: &'a Path,
+    /// The image declares its task stacks proven: an unresolved path in one
+    /// fails the stack check.
+    pub task_stack_proven: bool,
 }
 
 /// What the checks passed with.
@@ -390,11 +393,12 @@ impl Gates {
                     if stack_runs {
                         let result = ran((|| -> Result<()> {
                             let warnings = (|| -> Result<Vec<String>> {
-                                let audit = crate::stack::StackAudit::of(
+                                let mut audit = crate::stack::StackAudit::of(
                                     &image,
                                     input.policy,
                                     &input.policy.runtime_task_stacks(),
                                 )?;
+                                audit.declared_proven = input.task_stack_proven;
                                 if let Some(sizes) = &mut outcome.sizes {
                                     for stack in &audit.stacks {
                                         sizes.task(&image, stack)?;

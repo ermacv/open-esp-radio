@@ -27,10 +27,12 @@ pub mod esp_idf;
 pub mod exclusion;
 pub mod instrumentation;
 mod large_values;
+mod manifest;
 pub mod probe;
 pub mod sizes;
 pub mod staged;
 mod strict;
+pub mod task_stack;
 mod test_support;
 
 use std::{
@@ -103,12 +105,13 @@ impl Application {
 }
 
 /// Build `spec`: the staged pipeline of its chip, with the instrumentation
-/// classes its application declares.
+/// classes and the task-stack declaration its application makes.
 pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
-    staged::build(spec, &profile, &instrumentation)
+    let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
+    staged::build(spec, &profile, &instrumentation, task_stack_proven)
 }
 
 /// A runtime check that produces no image for the link-time gates.

@@ -31,6 +31,7 @@ pub(crate) fn build(
     spec: &ImageSpec,
     profile: &oer_chip_profile::Profile,
     instrumentation: &Instrumentation,
+    task_stack_proven: bool,
 ) -> Result<ImageBundle> {
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
@@ -157,6 +158,7 @@ pub(crate) fn build(
                 elf: &runtime_elf,
                 flat: Some(&runtime_bin),
                 output: &output,
+                task_stack_proven,
             })
             .map_err(|error| log.failed("runtime checks", error))?;
         if let Some(measured) = &outcome.sizes {
@@ -227,6 +229,7 @@ pub(crate) fn build(
                 elf: &bootstrap_elf,
                 flat: None,
                 output: &output,
+                task_stack_proven: false,
             })
             .map_err(|error| log.failed("bootstrap checks", error))?;
         if let Some(measured) = &outcome.sizes {
