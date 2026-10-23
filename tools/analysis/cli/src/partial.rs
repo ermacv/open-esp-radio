@@ -10,6 +10,7 @@ pub fn human(causes: &PartialCauses) -> String {
         (causes.references, "references"),
         (causes.opaque_calls, "opaque calls"),
         (causes.value_limits, "value limits"),
+        (causes.expression_limits, "expression limits"),
         (causes.other, "other"),
     ];
     let listed: Vec<String> = named
@@ -35,11 +36,12 @@ mod tests {
         let causes = PartialCauses {
             control_flow: 2,
             opaque_calls: 5,
+            expression_limits: 3,
             ..PartialCauses::default()
         };
         assert_eq!(
             human(&causes),
-            " (by cause: 2 control flow, 5 opaque calls)"
+            " (by cause: 2 control flow, 5 opaque calls, 3 expression limits)"
         );
     }
 }

@@ -452,7 +452,7 @@ pub(super) fn analyze<'a>(
                     memory,
                     c,
                 ) {
-                    Ok((records, _, _)) => records,
+                    Ok((records, _, _, _)) => records,
                     Err(e) if blocks_function(&e) => {
                         table.entry_mut(id)?.object = None;
                         visit(
@@ -586,7 +586,7 @@ pub(super) fn analyze<'a>(
                         memory,
                         c,
                     ) {
-                        Ok((mut records, mut summary, mut found)) => {
+                        Ok((mut records, mut summary, mut found, mut expression_budget)) => {
                             let mut conflicts = AdmittedVec::new(memory);
                             let mut rom_diagnostics = AdmittedVec::new(memory);
                             let mut conflict_names = Ledger::new(memory, c)?;
@@ -594,7 +594,8 @@ pub(super) fn analyze<'a>(
                             let mut applied_audit = false;
                             let mut entry_complete = None;
                             let mut audit_outcome = None;
-                            let publish = !recursive
+                            let publish = expression_budget.is_none()
+                                && !recursive
                                 && objects.get(object).ok_or_else(integrity)?.safe
                                 && eligible(summary.coverage, summary.semantics, &records, c)?;
                             if publish || assumptions.signatures.is_some() {
@@ -681,7 +682,7 @@ pub(super) fn analyze<'a>(
                                 scoped.current = None;
                                 scoped.table = &computed;
                                 drop(records);
-                                (records, summary, found) = research(
+                                (records, summary, found, expression_budget) = research(
                                     &mut objects,
                                     object,
                                     function,
@@ -691,7 +692,7 @@ pub(super) fn analyze<'a>(
                                     memory,
                                     c,
                                 )?;
-                                if publish {
+                                if publish && expression_budget.is_none() {
                                     let facts = function_facts(function, &records, memory, c)?;
                                     let links =
                                         CallLinks::new(&facts, function, catalog, memory, c)?;
@@ -847,6 +848,9 @@ pub(super) fn analyze<'a>(
                                     })
                                 });
                             }
+                            if let Some(reason) = expression_budget {
+                                contract = SummaryOutcome::LocalBudgetExceeded(reason);
+                            }
                             let analyzed = AnalyzedFunction {
                                 function,
                                 records: &records,
@@ -903,6 +907,7 @@ fn research<'a>(
     RecordBuffer<'a>,
     AnalysisSummary,
     ProvenTables<'a, JumpDispatch>,
+    Option<LocalBudgetExceeded>,
 )> {
     let object = objects.get_mut(object).ok_or_else(integrity)?;
     let image_tables = object
@@ -915,6 +920,11 @@ fn research<'a>(
         _ => &NoTables,
     };
     let mut records = RecordBuffer::new(memory);
+    let mut sink = SummaryRecords {
+        records: Records(&mut records),
+        expressions: 0,
+        exhausted: false,
+    };
     let (summary, found) = research_function(
         &mut object.prepared,
         &mut object.references,
@@ -927,10 +937,44 @@ fn research<'a>(
         decoder,
         memory,
         c,
-        &mut Records(&mut records),
+        &mut sink,
     )?;
-    Ok((records, summary, found))
+    let budget = sink.expression_budget();
+    Ok((records, summary, found, budget))
 }
+/// Capture expression-limit provenance in the existing charged record visit.
+/// Counting interned records gives the exhausted capacity without duplicating
+/// the pool's policy formula or scanning an ineligible function again.
+struct SummaryRecords<'a, 'm> {
+    records: Records<'a, 'm>,
+    expressions: u64,
+    exhausted: bool,
+}
+impl SummaryRecords<'_, '_> {
+    fn expression_budget(&self) -> Option<LocalBudgetExceeded> {
+        self.exhausted.then_some(LocalBudgetExceeded {
+            limit: self.expressions,
+            scope: LocalBudgetScope::FunctionExpressions,
+        })
+    }
+}
+impl FunctionSink for SummaryRecords<'_, '_> {
+    fn record(&mut self, record: &FunctionRecord, c: &mut dyn RunControl) -> Result<()> {
+        self.records.record(record, c)?;
+        match record {
+            FunctionRecord::Expression { .. } => self.expressions += 1,
+            FunctionRecord::SemanticGap {
+                reason: SemanticGapReason::ExpressionLimit,
+                ..
+            } => {
+                self.exhausted = true;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
 fn eligible(
     coverage: FunctionCoverage,
     semantics: SemanticSummary,
@@ -1147,6 +1191,7 @@ mod tests {
             SemanticGapReason::UnexpandedControlFlow,
             SemanticGapReason::ConflictingBoundary,
             SemanticGapReason::UnresolvedRelocation,
+            SemanticGapReason::ExpressionLimit,
         ] {
             let records = [
                 FunctionRecord::SemanticGap {
@@ -1176,6 +1221,86 @@ mod tests {
             .expect("incomplete CFG")
         );
     }
+    #[test]
+    fn expression_limit_keeps_its_budget_even_with_other_gaps() {
+        let memory = WorkingMemory::new(1024 * 1024).unwrap();
+        let mut records = RecordBuffer::new(&memory);
+        let mut sink = SummaryRecords {
+            records: Records(&mut records),
+            expressions: 0,
+            exhausted: false,
+        };
+        sink.record(
+            &FunctionRecord::SemanticGap {
+                offset: 0,
+                reason: SemanticGapReason::UnsupportedInstruction,
+            },
+            &mut || Ok(()),
+        )
+        .unwrap();
+        for id in 0..3 {
+            sink.record(
+                &FunctionRecord::Expression {
+                    id,
+                    offset: u64::MAX,
+                    expression: Expression::EntryRegister {
+                        register: id as u8 + 1,
+                    },
+                },
+                &mut || Ok(()),
+            )
+            .unwrap();
+        }
+        assert_eq!(sink.expression_budget(), None);
+        sink.record(
+            &FunctionRecord::SemanticGap {
+                offset: 0,
+                reason: SemanticGapReason::ExpressionLimit,
+            },
+            &mut || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(
+            sink.expression_budget(),
+            Some(LocalBudgetExceeded {
+                limit: 3,
+                scope: LocalBudgetScope::FunctionExpressions
+            })
+        );
+        assert_eq!(
+            sink.record(
+                &FunctionRecord::SemanticGap {
+                    offset: 0,
+                    reason: SemanticGapReason::ExpressionLimit
+                },
+                &mut || Err(Error::new(ErrorCode::Cancelled, "caller cancellation"))
+            )
+            .unwrap_err()
+            .code,
+            ErrorCode::Cancelled
+        );
+        assert!(
+            !eligible(
+                FunctionCoverage::default(),
+                SemanticSummary::default(),
+                &records,
+                &mut || Ok(())
+            )
+            .unwrap()
+        );
+        let mut other = RecordBuffer::new(&memory);
+        let sink = SummaryRecords {
+            records: Records(&mut other),
+            expressions: 0,
+            exhausted: false,
+        };
+        assert_eq!(
+            sink.expression_budget(),
+            None,
+            "the other function has its own pool"
+        );
+    }
+
     fn returning_records() -> Vec<FunctionRecord> {
         vec![FunctionRecord::Instruction {
             offset: 0,

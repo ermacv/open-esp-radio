@@ -335,6 +335,10 @@ pub struct PartialCauses {
     pub opaque_calls: u64,
     /// Values whose alternatives exceeded their bound.
     pub value_limits: u64,
+    /// Functions whose expression pool was exhausted. Omitted when zero so
+    /// reports without this degradation keep their existing encoding.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub expression_limits: u64,
     /// Partial for no named cause.
     pub other: u64,
 }
@@ -347,8 +351,13 @@ impl PartialCauses {
         self.references += other.references;
         self.opaque_calls += other.opaque_calls;
         self.value_limits += other.value_limits;
+        self.expression_limits += other.expression_limits;
         self.other += other.other;
     }
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 /// Functions whose summary is unavailable, separated by the cause of absence.

@@ -121,6 +121,8 @@ pub struct FunctionFacts {
     pub observed: Option<u64>,
     /// Whether the control-flow graph covered the function without gaps.
     pub complete: bool,
+    /// This function reached its local expression capacity.
+    pub expression_limited: bool,
     /// Every direct self-call constructs inputs that execute no further
     /// direct self-call, proved from instructions and stack payload bytes.
     pub terminal_recursive_callees: bool,
@@ -796,6 +798,7 @@ fn function_facts(
         table_bases,
         unresolved_registers,
         complete: observation.complete,
+        expression_limited: observation.expression_limited,
         terminal_recursive_callees,
         target_loads,
         open_exit_target_loads,
@@ -839,6 +842,14 @@ impl FunctionFacts {
 }
 
 impl Analysis {
+    /// Number of distinct functions that reached their expression capacity.
+    pub fn expression_limited_functions(&self) -> usize {
+        self.functions
+            .values()
+            .filter(|facts| facts.expression_limited)
+            .count()
+    }
+
     /// The worst-case bound of the function at `root`. First-discovery
     /// predecessor storage is admitted in `keep`, which the caller holds
     /// while the bound counts against its operation's working memory.

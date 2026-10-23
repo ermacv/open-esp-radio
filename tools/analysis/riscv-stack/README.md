@@ -29,7 +29,10 @@ instruction-pattern proofs remain in their consumers. The callback audit is shar
 
 `analyze` works in the caller's `WorkingMemory` and charges the caller's
 `RunControl`, as Blobray's analyses do: running out of either fails it with
-`ResourceLimited` instead of running on. The queries over an image's facts
+`ResourceLimited` instead of running on. A local expression-pool limit instead
+marks the function partial and retains `FunctionFacts::expression_limited`.
+`Analysis::expression_limited_functions` counts these functions; image stack
+reports print the count when nonzero. The queries over an image's facts
 (`stack_sizes`, `taken_addresses`, `waker_vtables`, `interrupt_table`,
 `vector_table`, `trap_entry`) charge the same control for each relocation,
 word, entry or step they read. The caller decides both; the image

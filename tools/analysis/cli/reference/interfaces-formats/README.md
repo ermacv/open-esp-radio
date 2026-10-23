@@ -69,11 +69,14 @@ schema.
 | Errors | 1 | `{schema:1, error:{code, message, memory}}` on stderr |
 
 `partial_causes` is `{decoding, control_flow, references, opaque_calls,
-value_limits, other}`: each the number of partial functions with that cause
+value_limits, expression_limits?, other}`: `expression_limits` is omitted when
+zero and defaults to zero on input. Each field is the number of partial
+functions with that cause
 (an undecodable instruction; an unexpanded indirect jump, conflicting
 boundaries or an instruction with an unknown relocation; an unresolved
 relocation; a call whose callee is not analyzed; a value whose alternatives
-exceeded their bound; none of these). A function with several causes counts
+exceeded their bound; an exhausted function expression pool; none of these).
+A function with several causes counts
 under each, so the causes can sum to more than `partial`, and every partial
 function counts under at least one. The human summaries list the nonzero
 causes as `(by cause: …)`.

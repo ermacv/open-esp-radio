@@ -418,6 +418,7 @@ impl Image {
 /// The frame coverage and task stack bounds of one image.
 #[derive(Debug)]
 pub struct StackAudit {
+    pub expression_limited_functions: usize,
     pub traps: oer_analysis_riscv_stack::TrapFact,
     pub coverage: Coverage,
     pub stacks: Vec<StackBound>,
@@ -527,6 +528,7 @@ impl StackAudit {
             Ok((bounds, task_bounds))
         })?;
         Ok(Self {
+            expression_limited_functions: image.analysis.expression_limited_functions(),
             traps: image.traps.clone(),
             coverage,
             stacks: bounds,
@@ -614,6 +616,13 @@ impl StackAudit {
             "analysis: {} of {WORK_UNITS} work units, {} of {MEMORY_LIMIT} bytes of working memory\n",
             self.usage.work_units, self.usage.memory_bytes
         );
+        if self.expression_limited_functions != 0 {
+            let _ = writeln!(
+                out,
+                "expression limits: {} functions",
+                self.expression_limited_functions
+            );
+        }
         let _ = writeln!(out, "{}", self.traps);
         let _ = writeln!(
             out,

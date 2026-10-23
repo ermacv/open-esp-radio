@@ -61,6 +61,7 @@ impl AnalyzedFunction<'_> {
                 SemanticGapReason::UnresolvedRelocation => &mut causes.references,
                 SemanticGapReason::OpaqueCall => &mut causes.opaque_calls,
                 SemanticGapReason::AlternativeLimit => &mut causes.value_limits,
+                SemanticGapReason::ExpressionLimit => &mut causes.expression_limits,
             };
             *cause = 1;
         }
@@ -908,6 +909,31 @@ mod tests {
     }
 
     #[test]
+    fn expression_limit_counts_round_trip_and_zero_keeps_existing_reports() {
+        let mut causes = PartialCauses::default();
+        let old = serde_json::to_value(causes).unwrap();
+        assert!(old.get("expression_limits").is_none());
+        assert_eq!(
+            serde_json::from_value::<PartialCauses>(old).unwrap(),
+            causes
+        );
+        causes.add(PartialCauses {
+            expression_limits: 2,
+            ..Default::default()
+        });
+        let encoded = serde_json::to_value(causes).unwrap();
+        assert_eq!(encoded["expression_limits"], 2);
+        assert_eq!(
+            serde_json::from_value::<PartialCauses>(encoded).unwrap(),
+            causes
+        );
+        assert_eq!(
+            serde_json::to_value(SemanticGapReason::ExpressionLimit).unwrap(),
+            "expression-limit"
+        );
+    }
+
+    #[test]
     fn navigation_integrity_errors_name_the_physical_function_and_records() {
         let mut function = function();
         function.name = Some(b"mixed_targets".to_vec());
@@ -1002,6 +1028,8 @@ mod tests {
                 &[
                     gap(SemanticGapReason::AlternativeLimit),
                     gap(SemanticGapReason::AlternativeLimit),
+                    gap(SemanticGapReason::ExpressionLimit),
+                    gap(SemanticGapReason::ExpressionLimit),
                     gap(SemanticGapReason::UnsupportedInstruction),
                 ],
                 &mut || Ok(())
@@ -1009,6 +1037,7 @@ mod tests {
             .unwrap(),
             PartialCauses {
                 value_limits: 1,
+                expression_limits: 1,
                 decoding: 1,
                 ..PartialCauses::default()
             },

@@ -403,6 +403,8 @@ pub enum SemanticGapReason {
     UnresolvedRelocation,
     UnexpandedControlFlow,
     AlternativeLimit,
+    /// This function's expression pool is full; new expressions are unknown.
+    ExpressionLimit,
 }
 /// None in an old manifest means analysis was not performed, not zero coverage.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
