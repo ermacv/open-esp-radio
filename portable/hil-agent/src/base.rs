@@ -68,8 +68,7 @@ pub enum Request<C> {
 pub struct Sent {
     pub frames: u32,
     pub dropped: u32,
-    pub text_dropped: u32,
-    pub text_truncated: u32,
+    pub notes_dropped: u32,
 }
 
 /// The link health of a console that decoded `received` and sent `sent`.
@@ -88,8 +87,7 @@ pub fn link_health(received: DecodeCounters, sent: Sent) -> LinkHealth {
         rx_overflows: received.overflows,
         tx_frames: sent.frames,
         tx_dropped: sent.dropped,
-        text_dropped: sent.text_dropped,
-        text_truncated: sent.text_truncated,
+        notes_dropped: sent.notes_dropped,
     }
 }
 

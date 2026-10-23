@@ -17,7 +17,7 @@ base/hello 8e2dcdd3a6a11774 topic
 base/hello/get c394eef0bb216fb5 endpoint
 base/image-keys c080126d58dbddbb topic
 base/image-keys/get 45176bd69cd3a2e0 endpoint
-base/link-health 61450aa5777ec66c topic
+base/link-health b81b96106a1b0547 topic
 base/link-health/get 0dd30f36b23d5822 endpoint
 base/post-mortem 8fb903806319fddc topic
 base/post-mortem/get f38ae4a399d00557 endpoint
@@ -56,7 +56,7 @@ network/service/ready 8f749642585cb71a topic
 network/session/arm cc0e3f4201755cd8 endpoint
 network/session/cancel 8b66718b41b66b3a endpoint
 network/session/configure 9bb753b11758b09e endpoint
-network/session/evidence fc5835ae720bd56b topic
+network/session/evidence c318c8cd3bed6980 topic
 network/session/failed d8f73091a4e96394 topic
 network/session/finished 143d79baf65edd89 topic
 network/session/ready 2b5a9e3b088969ad topic

@@ -292,7 +292,7 @@ fn an_immediate_note_is_dropped_and_counted_while_a_frame_is_written() {
     drop(writing);
     IMMEDIATE.with(|lines| assert!(lines.borrow().is_empty()));
     assert_eq!(console.dropped_notes(), 1);
-    assert_eq!(console.link_health().text_dropped, 1);
+    assert_eq!(console.link_health().notes_dropped, 1);
 }
 
 #[test]

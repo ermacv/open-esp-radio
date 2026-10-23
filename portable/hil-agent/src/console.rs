@@ -226,8 +226,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         Sent {
             frames: self.sent_frames.load(Ordering::Acquire),
             dropped: self.dropped_messages.load(Ordering::Acquire),
-            text_dropped: self.dropped_notes(),
-            text_truncated: 0,
+            notes_dropped: self.dropped_notes(),
         }
     }
 

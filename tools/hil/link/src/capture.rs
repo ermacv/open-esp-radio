@@ -38,8 +38,33 @@ fn boot_smoke_complete(bytes: &[u8]) -> Result<bool> {
     Ok(passed)
 }
 
+/// The warning for diagnostic notes the target's console lost, if any.
+fn notes_lost(health: LinkHealth) -> Option<String> {
+    (health.notes_dropped != 0)
+        .then(|| format!("diagnostic_notes_dropped={}", health.notes_dropped))
+}
+
 #[cfg(test)]
 mod boot_smoke_tests {
+    #[test]
+    fn lost_notes_are_reported() {
+        let health = |notes_dropped| oer_hil_protocol::base::LinkHealth {
+            rx_frames: 0,
+            rx_cobs_errors: 0,
+            rx_checksum_errors: 0,
+            rx_decode_errors: 0,
+            rx_overflows: 0,
+            tx_frames: 0,
+            tx_dropped: 0,
+            notes_dropped,
+        };
+        assert_eq!(super::notes_lost(health(0)), None);
+        assert_eq!(
+            super::notes_lost(health(3)).as_deref(),
+            Some("diagnostic_notes_dropped=3")
+        );
+    }
+
     use super::boot_smoke_complete;
 
     #[test]
@@ -351,6 +376,9 @@ impl SerialCapture {
             let health = result?;
             if qualify_target_health {
                 protocol::validate_target_link_health(health)?;
+            }
+            if let Some(warning) = notes_lost(health) {
+                eprintln!("{warning}");
             }
         }
         Ok(uart)

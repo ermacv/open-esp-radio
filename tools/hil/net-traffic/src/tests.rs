@@ -60,8 +60,7 @@ fn session_with_rx(rx: RxRadioEvidence) -> SessionEvidence {
             rx_overflows: 0,
             tx_frames: 1,
             tx_dropped: 0,
-            text_dropped: 0,
-            text_truncated: 0,
+            notes_dropped: 0,
         },
         finished: Finished {
             summary: ResultSummary {
