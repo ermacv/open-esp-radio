@@ -78,11 +78,15 @@ fn program(asm_record: bool) -> Vec<Code> {
 /// records in `.stack_sizes` and `data` symbols (name, offset, size; size 0
 /// is a label) in a `.rodata` at `RODATA`.
 fn executable(code: &[Code], data: &[(&str, u32, u32)]) -> Vec<u8> {
+    executable_at(TEXT, code, data)
+}
+
+fn executable_at(text_address: u32, code: &[Code], data: &[(&str, u32, u32)]) -> Vec<u8> {
     let mut text = Vec::new();
     let mut sizes = Vec::new();
     let mut symbols = Vec::new();
     for symbol in code {
-        let address = TEXT + text.len() as u32;
+        let address = text_address + text.len() as u32;
         for word in &symbol.words {
             text.extend_from_slice(&word.to_le_bytes());
         }
@@ -146,7 +150,18 @@ fn executable(code: &[Code], data: &[(&str, u32, u32)]) -> Vec<u8> {
     // name, type, flags, address, offset, size, link, info, align, entry size
     let headers: [[u32; 10]; 7] = [
         [0; 10],
-        [1, 1, 6, TEXT, text_offset, text.len() as u32, 0, 0, 4, 0],
+        [
+            1,
+            1,
+            6,
+            text_address,
+            text_offset,
+            text.len() as u32,
+            0,
+            0,
+            4,
+            0,
+        ],
         [7, 1, 0, 0, sizes_offset, sizes.len() as u32, 0, 0, 1, 0],
         [20, 2, 0, 0, symtab_offset, symtab.len() as u32, 4, 1, 4, 16],
         [28, 3, 0, 0, strtab_offset, strtab.len() as u32, 0, 0, 1, 0],
@@ -174,14 +189,14 @@ fn executable(code: &[Code], data: &[(&str, u32, u32)]) -> Vec<u8> {
     elf.extend_from_slice(b"\x7fELF\x01\x01\x01\0\0\0\0\0\0\0\0\0");
     elf.extend_from_slice(&2_u16.to_le_bytes());
     elf.extend_from_slice(&243_u16.to_le_bytes());
-    for word in [1_u32, TEXT, 52, sections, 0] {
+    for word in [1_u32, text_address, 52, sections, 0] {
         elf.extend_from_slice(&word.to_le_bytes());
     }
     for half in [52_u16, 32, 2, 40, 7, 5] {
         elf.extend_from_slice(&half.to_le_bytes());
     }
     for (offset, address, size, flags) in [
-        (text_offset, TEXT, text.len() as u32, 5_u32),
+        (text_offset, text_address, text.len() as u32, 5_u32),
         (rodata_offset, RODATA, rodata_len, 4),
     ] {
         for word in [1_u32, offset, address, address, size, size, flags, 4] {
@@ -437,6 +452,100 @@ fn policy_with(policy: &str, reviews: &str) -> (tempfile::TempDir, StackPolicy) 
     .unwrap();
     let loaded = StackPolicy::load(&directory.path().join("stack.toml")).unwrap();
     (directory, loaded)
+}
+
+#[test]
+fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply() {
+    use crate::{Check, CheckInput, Gates};
+
+    const ROM: u32 = 0x3000;
+    let rom = executable_at(
+        ROM,
+        &[Code {
+            name: "rom_dispatch",
+            words: vec![LOAD_SLOT, CALL_A5, RET],
+            frame: Some(0),
+        }],
+        &[],
+    );
+    let summaries = [Summary {
+        name: "rom_dispatch".into(),
+        address: ROM,
+        frame: 0,
+        calls: vec![],
+    }];
+    let runtime = Image::new(
+        executable(
+            &[Code {
+                name: "runtime_main",
+                words: vec![RET],
+                frame: Some(0),
+            }],
+            &[],
+        ),
+        &[&rom],
+        &summaries,
+        None,
+    )
+    .expect("the synthetic runtime is valid");
+    assert!(runtime.analysis.summaries.is_empty());
+
+    let bootstrap = executable(
+        &[Code {
+            name: "runtime_main",
+            words: vec![
+                SP_DOWN_16,
+                SAVE_RA,
+                call(TEXT + 8, ROM),
+                LOAD_RA,
+                SP_UP_16,
+                RET,
+            ],
+            frame: Some(16),
+        }],
+        &[("stack_bottom", 0, 0), ("stack_top", 0x100, 0)],
+    );
+    let profile: oer_chip_profile::Profile = toml::from_str(
+        r#"
+schema = 1
+id = "esp32c5"
+family = "espressif"
+rust-target = "riscv32imac-unknown-none-elf"
+boot = "staged"
+espflash-chip = "esp32c5"
+revisions = ["test"]
+[properties]
+wifi-bands = []
+bluetooth = []
+ieee802154 = false
+cores = 1
+[memory]
+sram = { origin = 0x1000, length = 0x2000 }
+flash-xip = { origin = 0x10000, length = 0x1000 }
+task-stacks = "sram"
+"#,
+    )
+    .expect("the synthetic chip profile is valid");
+    let (directory, policy) = policy_with(BASE, "");
+    let input = CheckInput {
+        root: directory.path(),
+        profile: &profile,
+        policy: &policy,
+        elf: &directory.path().join("bootstrap.elf"),
+        flat: None,
+        output: directory.path(),
+        task_stack_proven: false,
+        stage_two_elf: None,
+    };
+    for checks in [&[Check::Stack][..], &[Check::Frames][..]] {
+        let image = Image::new(bootstrap.clone(), &[&rom], &summaries, None)
+            .expect("the synthetic bootstrap is valid");
+        let outcome = Gates::of(checks)
+            .bootstrap_image(&input, image)
+            .expect("the bootstrap checks run");
+        assert!(outcome.results.iter().all(|(_, result)| result.passes()));
+        assert_eq!(outcome.rom_summaries, ["rom_dispatch".to_owned()].into());
+    }
 }
 
 fn audit(
