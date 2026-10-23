@@ -64,15 +64,19 @@ impl ReadyState {
     // One checked CAS loop serves both hooks; failed bounds never mutate state.
     #[inline(never)]
     fn change_ready(&self, delta: i8) {
-        self.0
+        if self
+            .0
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
                 u8::try_from(i16::from(state) + i16::from(delta)).ok()
             })
-            .expect(if delta > 0 {
-                "executor ready-token capacity exceeded"
+            .is_err()
+        {
+            if delta > 0 {
+                panic!("executor ready-token capacity exceeded");
             } else {
-                "executor dequeued an uncounted ready token"
-            });
+                panic!("executor dequeued an uncounted ready token");
+            }
+        }
     }
 
     pub(crate) fn ready(&self) -> bool {

@@ -149,8 +149,9 @@ fn with_slot<R>(swi: u8, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
     Some(f(slot))
 }
 
-#[inline]
-fn now() -> u64 {
+// Share the same clock read with cooperative admission and poll stamping.
+#[inline(never)]
+pub(crate) fn now() -> u64 {
     Instant::now().duration_since_epoch().as_micros()
 }
 
@@ -470,6 +471,8 @@ pub(crate) fn begin_observation() -> bool {
 }
 
 #[cfg(oer_profile)]
+// Keep the recorder snapshot's temporary report out of the UART caller frame.
+#[inline(never)]
 pub(crate) fn finish_observation() -> crate::timer_observation::Report {
     with_slot(running(), |slot| slot.observation.finish(now())).unwrap_or_default()
 }

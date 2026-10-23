@@ -84,6 +84,28 @@ fn failed_ready_updates_preserve_a_pending_work_flag() {
 }
 
 #[test]
+fn accounting_failure_reports_the_violated_capacity_or_dequeue_invariant() {
+    let state = ReadyState::new();
+    let message = |failure: std::thread::Result<()>| {
+        *failure
+            .expect_err("invalid accounting must fail")
+            .downcast::<&'static str>()
+            .expect("accounting failure has a static message")
+    };
+    assert_eq!(
+        message(std::panic::catch_unwind(|| state.exec_begin())),
+        "executor dequeued an uncounted ready token"
+    );
+    for _ in 0..127 {
+        state.ready_begin();
+    }
+    assert_eq!(
+        message(std::panic::catch_unwind(|| state.ready_begin())),
+        "executor ready-token capacity exceeded"
+    );
+}
+
+#[test]
 fn registry_lookup_rejects_zero_and_finds_only_the_registered_context() {
     let ids = [0, 101, 0, 202];
     let lookup = |id| find_executor(id, |slot| ids[slot.index()]);
