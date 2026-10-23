@@ -279,10 +279,10 @@ impl<M: ControllerMemory> Engine<M> {
         !self.is_quarantined() && self.memory.scheduler_stopped()
     }
 
-    pub fn release_controller_output(
+    pub fn release_controller_output<C: oer_time::Clock>(
         &mut self,
         output: bluetooth::InterruptOutputAfterRoutesOwner,
-        settle: crate::settle::Settle<'_, dyn oer_time::Clock + '_>,
+        settle: crate::settle::Settle<'_, C>,
     ) -> Result<
         bluetooth::InterruptOutputReleasedOwner,
         (

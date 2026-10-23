@@ -276,15 +276,24 @@ impl SchedulerTaskHalf {
         !self.pending
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the unique P2 endpoint owns EMPTY and consumes only RESPONSE"
-    )]
     async fn exchange(
         &mut self,
         bell: &impl SchedulerDoorbell,
         command: Command,
     ) -> Result<(Command, Reply), SchedulerInterruptError> {
+        self.begin(bell, command)?;
+        poll_fn(|cx| self.poll_exchange(bell, cx)).await
+    }
+
+    #[allow(
+        unsafe_code,
+        reason = "the unique P2 endpoint owns EMPTY and publishes REQUEST"
+    )]
+    fn begin(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        command: Command,
+    ) -> Result<(), SchedulerInterruptError> {
         if self.pending {
             return Err(SchedulerInterruptError::Abandoned);
         }
@@ -311,21 +320,58 @@ impl SchedulerTaskHalf {
         }
         self.channel.state.store(REQUEST, Ordering::Release);
         bell.ring();
-        poll_fn(|cx| {
-            if let Some(reply) = self.take_reply() {
-                return Poll::Ready(reply);
-            }
-            if let Poll::Ready(Err(error)) = bell.poll_reply(cx) {
-                return Poll::Ready(Err(error));
-            }
-            // Check after registering: P3 can reply between the first load
-            // and registration. The static signal also retains that wake.
-            match self.take_reply() {
-                Some(reply) => Poll::Ready(reply),
-                None => Poll::Pending,
-            }
+        Ok(())
+    }
+
+    fn poll_exchange(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(Command, Reply), SchedulerInterruptError>> {
+        if let Some(reply) = self.take_reply() {
+            return Poll::Ready(reply);
+        }
+        if let Poll::Ready(Err(error)) = bell.poll_reply(cx) {
+            return Poll::Ready(Err(error));
+        }
+        // P3 may reply between the first load and P2's waker registration.
+        match self.take_reply() {
+            Some(reply) => Poll::Ready(reply),
+            None => Poll::Pending,
+        }
+    }
+
+    pub(crate) fn begin_busy(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+    ) -> Result<(), SchedulerInterruptError> {
+        self.begin(bell, Command::Busy)
+    }
+    pub(crate) fn poll_busy(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError>> {
+        self.poll_exchange(bell, cx).map(|result| match result? {
+            (Command::Busy, Reply::Busy(busy)) => Ok(busy),
+            _ => Err(SchedulerInterruptError::ForeignReply),
         })
-        .await
+    }
+    pub(crate) fn begin_mask_run(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+    ) -> Result<(), SchedulerInterruptError> {
+        self.begin(bell, Command::MaskRun)
+    }
+    pub(crate) fn poll_mask_run(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), SchedulerInterruptError>> {
+        self.poll_exchange(bell, cx).map(|result| match result? {
+            (Command::MaskRun, Reply::Done) => Ok(()),
+            _ => Err(SchedulerInterruptError::ForeignReply),
+        })
     }
 
     #[allow(
