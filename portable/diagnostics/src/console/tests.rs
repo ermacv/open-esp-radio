@@ -1,4 +1,6 @@
 use super::*;
+use crate::BootSmokePassed;
+use oer_trace::{Channel, Domain, Kind};
 use std::{format, vec, vec::Vec};
 
 fn encode(panic: &PreviousPanic<'_>) -> Vec<u8> {
@@ -178,4 +180,83 @@ fn failed_write_consumes_sequence_and_the_next_record_resynchronizes() {
             }
         )))
     );
+}
+
+#[test]
+fn line_frames_remain_byte_identical_to_the_saved_stand_records() {
+    struct PlatformEvent([u32; 2]);
+    impl Event for PlatformEvent {
+        const KIND: Kind = Kind::new(Domain::Platform, 1);
+        const CHANNEL: Channel = Channel::new(Domain::Platform, 0);
+        fn encode(&self) -> [u32; 2] {
+            self.0
+        }
+        fn decode(words: [u32; 2]) -> Option<Self> {
+            Some(Self(words))
+        }
+    }
+    for fixture in [
+        include_str!("fixtures/boot-smoke-static.txt"),
+        include_str!("fixtures/boot-smoke-formatted-irq.txt"),
+        include_str!("fixtures/radio-root-static.txt"),
+        include_str!("fixtures/radio-root-formatted-irq.txt"),
+    ] {
+        let mut bytes = Vec::new();
+        let mut console = Console::new(|part: &[u8]| {
+            bytes.extend_from_slice(part);
+            Ok::<_, ()>(())
+        });
+        let mut expected = Vec::new();
+        for (sequence, line) in fixture.lines().enumerate() {
+            let mut scratch = [0; MAX_PAYLOAD + 7];
+            let (received, record) = decode(line.as_bytes(), &mut scratch).unwrap().unwrap();
+            assert_eq!(received, sequence as u32);
+            match record {
+                Record::PreviousPanic(panic) => console.previous_panic(&panic).unwrap(),
+                Record::Event { kind, words } if kind == BootSmokePassed::KIND => {
+                    assert_eq!(words, [0, 0]);
+                    console.event(&BootSmokePassed).unwrap();
+                }
+                Record::Event { kind, words } => {
+                    assert_eq!(kind, PlatformEvent::KIND);
+                    console.event(&PlatformEvent(words)).unwrap();
+                }
+            }
+            expected.extend_from_slice(format!("\r\n{line}\r\n").as_bytes());
+        }
+        assert_eq!(bytes, expected);
+    }
+}
+
+#[test]
+fn failed_header_does_not_encode_or_sample_the_event() {
+    use core::cell::Cell;
+    struct Counted<'a>(&'a Cell<u32>);
+    impl Event for Counted<'_> {
+        const KIND: Kind = BootSmokePassed::KIND;
+        const CHANNEL: Channel = BootSmokePassed::CHANNEL;
+        fn encode(&self) -> [u32; 2] {
+            self.0.set(self.0.get() + 1);
+            [0, 0]
+        }
+        fn decode(_: [u32; 2]) -> Option<Self> {
+            None
+        }
+    }
+    // Prefix, sequence, tag and kind are sent before reading the event's
+    // words, preserving the original writer-error behavior too.
+    for failed_write in 1..=5 {
+        let calls = Cell::new(0);
+        let mut writes = 0;
+        let mut console = Console::new(|_: &[u8]| {
+            writes += 1;
+            if writes == failed_write {
+                Err(())
+            } else {
+                Ok(())
+            }
+        });
+        assert!(console.event(&Counted(&calls)).is_err());
+        assert_eq!(calls.get(), u32::from(failed_write == 5));
+    }
 }
