@@ -1411,17 +1411,17 @@ impl PhyTxDcPwdetSearchPbusBinding {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -1552,17 +1552,17 @@ impl PhyTxDcPwdetPbusBinding {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_completed(
         &mut self,
         completed: bool,

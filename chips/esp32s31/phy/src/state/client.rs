@@ -351,7 +351,7 @@ impl PhyClientState {
         Self::empty(period_micros, None)
     }
 
-    #[cfg(any(target_arch = "riscv32", test, oer_probe))]
+    #[cfg(any(target_arch = "riscv32", test))]
     fn empty(
         period_micros: u64,
         epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,

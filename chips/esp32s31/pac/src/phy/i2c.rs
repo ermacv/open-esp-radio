@@ -264,12 +264,6 @@ pub enum PhyAdcRate {
 }
 
 impl PhyAdcRate {
-    /// Decode the low selector bit accepted by the complete vendor leaf.
-    #[cfg(oer_probe)]
-    pub const fn from_vendor_rate(rate: u32) -> Self {
-        if rate & 1 == 0 { Self::Low } else { Self::High }
-    }
-
     const fn analog_configuration_field_value(self) -> u8 {
         match self {
             Self::Low => 2,

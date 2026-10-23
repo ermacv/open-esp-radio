@@ -59,7 +59,7 @@ pub struct PhyFrequencyMemoryRecord {
 }
 
 impl PhyFrequencyMemoryRecord {
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn words(self) -> [u32; 3] {
         self.words
     }
@@ -504,7 +504,7 @@ impl PhyFrequencyCapMemoryExternalBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyFrequencyCapMemoryAction {
         self.action
     }

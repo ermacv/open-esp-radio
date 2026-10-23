@@ -1589,17 +1589,17 @@ impl PhyTxCalibrationEnvironmentPbusBinding {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -1846,17 +1846,3 @@ impl PhyTxCapExternalBinding {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(oer_probe)]
-impl PhyTxCalibrationEnvironmentMmioBinding {
-    pub const fn action(&self) -> PhyTxCalibrationEnvironmentAction {
-        self.action
-    }
-}
-
-#[cfg(oer_probe)]
-impl PhyTxCapSearchMmioBinding {
-    pub const fn action(&self) -> PhyTxCapSearchAction {
-        self.action
-    }
-}

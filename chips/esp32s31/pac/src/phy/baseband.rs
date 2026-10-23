@@ -8,12 +8,6 @@
 
 use crate::{RadioPhyRegisters, generated::PhyTxPowerTrackingState};
 
-#[cfg(oer_probe)]
-fn vendor_register_argument(input: u32) -> crate::generated::PhyVendorRegisterArgument {
-    crate::generated::PhyVendorRegisterArgument::new(input)
-        .expect("every u32 fits the complete generated vendor-argument domain")
-}
-
 /// Opaque capture of the two fields owned by TX-DC PWDET calibration.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct TxDcPwdetFields {
@@ -48,7 +42,7 @@ impl RxDcoControlField {
     }
 
     /// Construct one distinguishable capture for a host test.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_host_test(value: u8) -> Self {
         Self(value)
@@ -57,7 +51,7 @@ impl RxDcoControlField {
 
 impl TxDcPwdetFields {
     /// Construct one distinguishable capture for a host test.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn for_host_test(table_low: u8, calibration: u8) -> Self {
         Self {
@@ -204,29 +198,6 @@ impl RadioPhyRegisters {
         crate::generated::configure_tx_power_tracking_value_6(bb);
     }
 
-    /// Apply complete rev0 ROM `phy_btbb_wifi_bb_cfg2`.
-    #[cfg(oer_probe)]
-    pub fn configure_bt_wifi_baseband(&mut self) {
-        crate::generated::configure_bt_wifi_baseband_fields(
-            &self.peripherals.phy_baseband_config_oracle,
-        );
-    }
-
-    /// Apply complete rev0 ROM `phy_chan_dump_cfg`.
-    #[cfg(oer_probe)]
-    pub fn configure_channel_dump(&mut self, value: u32, enabled: u32, mode: u32) {
-        let bb = &self.peripherals.phy_baseband_config_oracle;
-        crate::generated::configure_phy_channel_dump_value(bb, vendor_register_argument(value));
-        crate::generated::configure_phy_channel_dump_mode(bb, vendor_register_argument(mode));
-        crate::generated::configure_phy_channel_dump_enabled(bb, vendor_register_argument(enabled));
-    }
-
-    /// Apply complete rev0 ROM `phy_dac_rate_set`.
-    #[cfg(oer_probe)]
-    pub fn configure_dac_rate(&mut self, rate: crate::PhyAdcRate) {
-        self.configure_adc_rate(rate);
-    }
-
     /// Configure both I²C TX-rate fields and the four gain-compensation bytes.
     pub fn configure_i2c_tx_rate(&mut self) {
         let bb = &self.peripherals.phy_baseband_config_oracle;
@@ -240,93 +211,6 @@ impl RadioPhyRegisters {
         let bb = &self.peripherals.phy_baseband_config_oracle;
         crate::generated::configure_phy_baseband_watchdog_control(bb);
         crate::generated::enable_phy_baseband_watchdog(bb);
-    }
-
-    /// Replace the standalone PHY VHT-support bit through one fresh RMW.
-    #[cfg(oer_probe)]
-    pub fn set_vht_support(&mut self, input: u32) {
-        crate::generated::configure_phy_vht_support(
-            &self.peripherals.phy_frequency_channel_oracle,
-            vendor_register_argument(input),
-        );
-    }
-
-    /// Replace the PHY CSI-dump force-LLTF bit through one fresh RMW.
-    #[cfg(oer_probe)]
-    pub fn set_csi_dump_force_lltf(&mut self, input: u32) {
-        crate::generated::configure_phy_csi_dump_force_lltf(
-            &self.peripherals.phy_agc_oracle,
-            vendor_register_argument(input),
-        );
-    }
-
-    /// Apply complete ROM `phy_hemu_ru26_good_res`.
-    #[cfg(oer_probe)]
-    pub fn configure_he_ru26_good_response(&mut self) {
-        let bb = &self.peripherals.phy_baseband_config_oracle;
-        crate::generated::enable_phy_he_ru26_good_response(bb);
-        crate::generated::clear_phy_he_ru26_good_response_disable(bb);
-    }
-
-    /// Apply complete ROM `phy_freq_band_reg_set` and its VHT tail.
-    #[cfg(oer_probe)]
-    pub fn set_frequency_band(&mut self, input: u32) {
-        crate::generated::configure_phy_frequency_band_inverse(
-            &self.peripherals.phy_agc_oracle,
-            vendor_register_argument(input),
-        );
-        self.set_vht_support(input);
-    }
-
-    /// Apply the three fresh RMWs of complete ROM `phy_bbtx_outfilter`.
-    #[cfg(oer_probe)]
-    pub fn configure_tx_output_filter(&mut self, input_0: u32, input_1: u32, input_2: u32) {
-        let bb = &self.peripherals.phy_baseband_config_oracle;
-        crate::generated::configure_phy_tx_output_filter_0(bb, vendor_register_argument(input_0));
-        crate::generated::configure_phy_tx_output_filter_1(bb, vendor_register_argument(input_1));
-        crate::generated::configure_phy_tx_output_filter_2(bb, vendor_register_argument(input_2));
-    }
-
-    /// Replace the baseband watchdog reset-enable bit.
-    #[cfg(oer_probe)]
-    pub fn set_baseband_watchdog_reset_enabled(&mut self, input: u32) {
-        crate::generated::configure_phy_baseband_watchdog_reset(
-            &self.peripherals.phy_baseband_config_oracle,
-            vendor_register_argument(input),
-        );
-    }
-
-    /// Replace the baseband watchdog interrupt-enable bit.
-    #[cfg(oer_probe)]
-    pub fn set_baseband_watchdog_interrupt_enabled(&mut self, input: u32) {
-        crate::generated::configure_phy_baseband_watchdog_interrupt(
-            &self.peripherals.phy_baseband_config_oracle,
-            vendor_register_argument(input),
-        );
-    }
-
-    /// Set the baseband watchdog timeout-clear bit through one fresh RMW.
-    #[cfg(oer_probe)]
-    pub fn clear_baseband_watchdog_timeout(&mut self) {
-        crate::generated::clear_phy_baseband_watchdog_timeout(
-            &self.peripherals.phy_baseband_config_oracle,
-        );
-    }
-
-    /// Return the complete standalone baseband watchdog status word.
-    #[cfg(oer_probe)]
-    pub fn baseband_watchdog_status(&mut self) -> u32 {
-        crate::svd::field_read::observe_phy_baseband_watchdog_status(
-            &self.peripherals.phy_baseband_config_oracle,
-        )
-    }
-
-    /// Apply both fresh RMWs of complete ROM `phy_lltf_mask_en`.
-    #[cfg(oer_probe)]
-    pub fn configure_lltf_mask(&mut self, input_0: u32, input_1: u32) {
-        let bb = &self.peripherals.phy_baseband_config_oracle;
-        crate::generated::configure_phy_lltf_mask_0(bb, vendor_register_argument(input_0));
-        crate::generated::configure_phy_lltf_mask_1(bb, vendor_register_argument(input_1));
     }
 
     /// Enable all four recovered automatic noise-floor controls.

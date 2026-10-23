@@ -75730,15 +75730,6 @@ pub mod interrupt_snapshot {
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
     }
-    /// An event image of the vendor comparison's choosing, for a probe
-    /// image that replays a vendor acknowledgement.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub const fn bluetooth_interrupt_bank_0_for_probe(
-        bits: u32,
-    ) -> BluetoothInterruptBank0Snapshot {
-        BluetoothInterruptBank0Snapshot(bits)
-    }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_SNAPSHOT_1`.
     #[must_use = "an interrupt snapshot must be inspected and acknowledged"]
@@ -75782,15 +75773,6 @@ pub mod interrupt_snapshot {
                 .irq_clear_1()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    /// An event image of the vendor comparison's choosing, for a probe
-    /// image that replays a vendor acknowledgement.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub const fn bluetooth_interrupt_bank_1_for_probe(
-        bits: u32,
-    ) -> BluetoothInterruptBank1Snapshot {
-        BluetoothInterruptBank1Snapshot(bits)
     }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_0`.
@@ -75865,15 +75847,6 @@ pub mod interrupt_snapshot {
                 .irq_clear_0()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    /// An event image of the vendor comparison's choosing, for a probe
-    /// image that replays a vendor acknowledgement.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub const fn bluetooth_primary_interrupt_bank_0_for_probe(
-        bits: u32,
-    ) -> BluetoothPrimaryInterruptBank0Snapshot {
-        BluetoothPrimaryInterruptBank0Snapshot(bits)
     }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_1`.
@@ -75953,15 +75926,6 @@ pub mod interrupt_snapshot {
                 .irq_clear_1()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    /// An event image of the vendor comparison's choosing, for a probe
-    /// image that replays a vendor acknowledgement.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub const fn bluetooth_primary_interrupt_bank_1_for_probe(
-        bits: u32,
-    ) -> BluetoothPrimaryInterruptBank1Snapshot {
-        BluetoothPrimaryInterruptBank1Snapshot(bits)
     }
 }
 

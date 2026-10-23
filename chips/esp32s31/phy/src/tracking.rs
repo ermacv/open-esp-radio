@@ -14,9 +14,6 @@ pub mod observation;
 pub mod parameters;
 #[cfg(not(oer_probe))]
 pub(crate) mod parameters;
-#[cfg(oer_probe)]
-pub mod power;
-#[cfg(not(oer_probe))]
 pub(crate) mod power;
 #[cfg(oer_probe)]
 pub mod rfpll;

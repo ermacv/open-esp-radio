@@ -52,12 +52,10 @@
 extern crate std;
 
 pub mod executor;
+#[cfg(target_arch = "riscv32")]
+mod target_executor;
 // A probe image (`cfg(oer_probe)`) compares the PHY's internal children with
 // the vendor's, so they are public there and private everywhere else.
-#[cfg(all(target_arch = "riscv32", oer_probe))]
-pub mod target_executor;
-#[cfg(all(target_arch = "riscv32", not(oer_probe)))]
-mod target_executor;
 #[cfg(all(target_arch = "riscv32", oer_probe))]
 pub mod target_port;
 #[cfg(all(target_arch = "riscv32", not(oer_probe)))]
@@ -110,11 +108,6 @@ pub use calibration::registration::{
 pub use calibration::registration::{
     PhyCalibrationIdentity, PhyCalibrationPath, PhyRegisterBindingError, PhyRegisterFailure,
     PhyRegisterOutcome, PhyRegisterStage, RegisteredPhyState,
-};
-#[cfg(oer_probe)]
-pub use calibration::registration::{
-    PhyRegisterAction, PhyRegisterCompletion, PhyRegisterExternalBinding, PhyRegisterLocalStep,
-    PhyRegisterTransition,
 };
 #[cfg(oer_probe)]
 pub use executor::{

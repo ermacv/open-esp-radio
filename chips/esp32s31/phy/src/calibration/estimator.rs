@@ -812,7 +812,7 @@ impl PhyDcIqReadinessBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn execute_target(
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,

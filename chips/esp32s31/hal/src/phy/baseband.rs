@@ -57,18 +57,6 @@ pub fn configure_hccfr(registers: &mut impl SharedPhyAccess, enabled: bool, valu
     registers.configure_hccfr(enabled, value);
 }
 
-/// Apply complete pinned `phy_config_hccfr` from its unmodified vendor ABI.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_hccfr_from_vendor_arguments(
-    registers: &mut impl SharedPhyAccess,
-    enabled: u32,
-    value: u32,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_hccfr_from_vendor_arguments(enabled, value);
-}
-
 /// Apply either complete branch of pinned `libphy.a[phy_reg.o]::phy_iccfr_en`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_iccfr_gate(registers: &mut impl SharedPhyAccess, enabled: bool) {
@@ -86,51 +74,6 @@ pub fn configure_forced_iccfr(
 ) {
     let registers = phy_pac_mut(registers);
     registers.configure_forced_iccfr(mode, enabled, value);
-}
-
-/// Apply complete pinned `phy_force_iccfr` from its unmodified vendor ABI.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_forced_iccfr_from_vendor_arguments(
-    registers: &mut impl SharedPhyAccess,
-    mode: u32,
-    enabled: u32,
-    value: u32,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_forced_iccfr_from_vendor_arguments(mode, enabled, value);
-}
-
-/// Apply complete rev0 ROM `phy_btbb_wifi_bb_cfg2`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_bt_wifi_baseband(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_bt_wifi_baseband();
-}
-
-/// Apply complete rev0 ROM `phy_chan_dump_cfg`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_channel_dump(
-    registers: &mut impl SharedPhyAccess,
-    value: u32,
-    enabled: u32,
-    mode: u32,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_channel_dump(value, enabled, mode);
-}
-
-/// Apply complete rev0 ROM `phy_dac_rate_set`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_dac_rate(
-    registers: &mut impl SharedPhyAccess,
-    rate: oer_esp32s31_pac::PhyAdcRate,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_dac_rate(rate);
 }
 
 /// Apply complete rev0 ROM `phy_fe_reg_init`.
@@ -156,17 +99,6 @@ pub fn reset_frontend_txrx(registers: &mut impl SharedPhyAccess) {
 pub fn update_front_end(registers: &mut impl SharedPhyAccess) {
     let registers = phy_pac_mut(registers);
     registers.update_front_end();
-}
-
-/// Apply complete pinned `libphy.a[phy_reg.o]::phy_stop_tx_tone_new`.
-///
-/// This leaf intentionally does not restore the two DAC-scale fields owned by
-/// the longer ROM `phy_stop_tx_tone(1)` operation.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn stop_tx_tone(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.stop_calibration_tone_paths();
 }
 
 /// Configure PHY I²C TX-rate fields and TX-gain compensation bytes.
@@ -195,91 +127,6 @@ pub fn restore_tx_gain_compensation(registers: &mut impl SharedPhyAccess) {
 pub fn configure_watchdog(registers: &mut impl SharedPhyAccess) {
     let registers = phy_pac_mut(registers);
     registers.configure_baseband_watchdog();
-}
-
-/// Apply complete ROM `phy_vht_support`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn set_vht_support(registers: &mut impl SharedPhyAccess, input: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.set_vht_support(input);
-}
-
-/// Apply complete ROM `phy_csidump_force_lltf_cfg`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn set_csi_dump_force_lltf(registers: &mut impl SharedPhyAccess, input: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.set_csi_dump_force_lltf(input);
-}
-
-/// Apply complete ROM `phy_hemu_ru26_good_res`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_he_ru26_good_response(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_he_ru26_good_response();
-}
-
-/// Apply complete ROM `phy_freq_band_reg_set`, including its VHT tail.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn set_frequency_band(registers: &mut impl SharedPhyAccess, input: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.set_frequency_band(input);
-}
-
-/// Apply complete ROM `phy_bbtx_outfilter`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_tx_output_filter(
-    registers: &mut impl SharedPhyAccess,
-    input_0: u32,
-    input_1: u32,
-    input_2: u32,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_tx_output_filter(input_0, input_1, input_2);
-}
-
-/// Apply complete ROM `phy_bb_wdt_rst_enable`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn set_watchdog_reset_enabled(registers: &mut impl SharedPhyAccess, input: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.set_baseband_watchdog_reset_enabled(input);
-}
-
-/// Apply complete ROM `phy_bb_wdt_int_enable`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn set_watchdog_interrupt_enabled(registers: &mut impl SharedPhyAccess, input: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.set_baseband_watchdog_interrupt_enabled(input);
-}
-
-/// Apply complete ROM `phy_bb_wdt_timeout_clear`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn clear_watchdog_timeout(registers: &mut impl SharedPhyAccess) {
-    let registers = phy_pac_mut(registers);
-    registers.clear_baseband_watchdog_timeout();
-}
-
-/// Apply complete ROM `phy_bb_wdt_get_status`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn watchdog_status(registers: &mut impl SharedPhyAccess) -> u32 {
-    let registers = phy_pac_mut(registers);
-    registers.baseband_watchdog_status()
-}
-
-/// Apply complete ROM `phy_lltf_mask_en`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_lltf_mask(registers: &mut impl SharedPhyAccess, input_0: u32, input_1: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_lltf_mask(input_0, input_1);
 }
 
 /// Enable the four recovered automatic noise-floor controls.

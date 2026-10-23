@@ -312,7 +312,7 @@ impl Ieee802154Pib {
 
     /// `ieee802154_pib_get_power_table`: requested power of channels 11
     /// through 26.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn power_table(&self) -> [i8; CHANNEL_COUNT] {
         self.power_dbm
     }

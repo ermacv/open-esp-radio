@@ -282,7 +282,7 @@ impl WifiClocked {
 
     /// A clocked owner over a host-test partition, without MMIO and without
     /// claiming any clock state.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn for_host_test(cold: WifiCold) -> Self {
         Self {

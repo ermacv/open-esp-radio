@@ -664,7 +664,7 @@ pub struct Ieee802154Operational {
     pub interrupts: Ieee802154InterruptSetupOwner,
 }
 
-#[cfg(any(test, feature = "test-support", oer_probe))]
+#[cfg(any(test, feature = "test-support"))]
 impl Ieee802154Clocked {
     /// Enter the clocked phase without the modem clock planner, for host
     /// tests of the later stages. It proves no clock.

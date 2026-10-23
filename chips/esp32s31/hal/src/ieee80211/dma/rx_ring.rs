@@ -627,7 +627,7 @@ impl<'a, const COUNT: usize> RxRingPrepared<'a, COUNT> {
     }
 
     /// Synthetic MAC core edge for DMA/driver models and probe setup only.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn core_ready_for_test(self) -> RxRingCoreReady<'a, COUNT> {
         self.core_ready()
     }

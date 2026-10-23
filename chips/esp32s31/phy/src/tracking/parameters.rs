@@ -59,7 +59,7 @@ pub enum PhyTrackingDiagnostics {
 }
 
 impl PhyTrackingDiagnostics {
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn enabled(self) -> bool {
         matches!(self, Self::Enabled)
     }
@@ -563,7 +563,7 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
         self.parent_action
     }
@@ -577,7 +577,7 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         self.child.action()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     #[inline(always)]
     pub fn advance(
         &mut self,
@@ -651,7 +651,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
         self.parent_action
     }
@@ -757,7 +757,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         crate::tracking::calibration::PhyCalibrationTrackingExternalBinding::lower(self.action())
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
@@ -843,7 +843,7 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
         let request = self.child.request();
         match request.class {
@@ -892,7 +892,7 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         crate::tracking::power::PhyTxPowerTrackingExternalBinding::lower(self.action(), self.state)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
@@ -978,7 +978,7 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
         self.child.lower_external()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
@@ -1051,14 +1051,14 @@ impl<'state> PhyParamTrackingTemperatureTransition<'state> {
         crate::analog::temperature::PhyTemperatureExternalBinding::lower(self.action())
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
 
     /// Commit a successful sensor outcome and mint the exact parent
     /// completion. Failed and incomplete children are returned unchanged.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn commit(self) -> Result<PhyParamTrackingCompletion, Self> {
         self.commit_observed(None, None)
     }

@@ -83,7 +83,7 @@ impl WifiPowerBaseline {
     }
 
     /// Construct one distinguishable baseline for a host test.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn for_host_test(modem_register_bus_clock_enabled: bool) -> Self {
         Self::new(

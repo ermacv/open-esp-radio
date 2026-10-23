@@ -961,7 +961,7 @@ impl PhyCalibrationTxGainBinding {
         Ok(Self { publication })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyCalibrationTrackingAction {
         match self.publication {
             PhyCalibrationTxGainPublication::Wifi { channel, .. } => {
@@ -1032,7 +1032,7 @@ impl PhyCalibrationTxDcPwdetTransition {
         Ok(Self { class, child })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn class(&self) -> PhyCalibrationTrackClass {
         self.class
     }
@@ -1044,7 +1044,7 @@ impl PhyCalibrationTxDcPwdetTransition {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn advance(
         &mut self,
         completion: crate::tx::dc_power_detector::PhyTxDcPwdetCompletion,
@@ -1055,7 +1055,7 @@ impl PhyCalibrationTxDcPwdetTransition {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn lower_external(
         &self,
     ) -> Result<
@@ -1207,7 +1207,7 @@ impl PhyCalibrationDcodeTransition {
         self.child.advance(completion)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn lower_external(
         &self,
     ) -> Result<
@@ -1252,7 +1252,7 @@ impl PhyCalibrationPbusClearTransition {
         self.child.advance(completion)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn advance_external(
         &mut self,
         completion: crate::analog::i2c::PhyRfInitPrefixCompletion,
@@ -1264,7 +1264,7 @@ impl PhyCalibrationPbusClearTransition {
         self.advance(completion)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn lower_external(
         &self,
     ) -> Result<
@@ -1299,7 +1299,7 @@ impl PhyCalibrationForceTxRxTransition {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyCalibrationTrackingAction {
         PhyCalibrationTrackingAction::ForceTxRxOff {
             enabled: self.enabled,
@@ -1378,7 +1378,7 @@ impl PhyCalibrationTrackingRegisterBinding {
         Ok(Self { action })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyCalibrationTrackingAction {
         match self.action {
             RegisterAction::SetForcedDigitalGain { enabled } => {
@@ -1445,7 +1445,7 @@ impl PhyCalibrationTrackingMacBasebandBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyCalibrationTrackingAction {
         if self.enabled {
             PhyCalibrationTrackingAction::EnableMacBaseband
