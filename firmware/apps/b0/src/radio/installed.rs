@@ -10,7 +10,7 @@ fn installed<'p, 'e>(
     epoch: EpochScope<'e>,
 ) -> Installed<'p, 'e> {
     async move {
-        let mut common = boot.actor.take().expect("one actor handover");
+        let common = boot.actor.as_mut().expect("one actor handover");
         let inbox = boot.inbox.take().expect("one BLE inbox");
         let cold = boot.cold.take().expect("one cold client");
         let coex = boot.coex.take().expect("one coex client");
@@ -164,7 +164,7 @@ fn installed<'p, 'e>(
         };
         let mut returned = (inbox, cell, cold, coex, arena);
         let _ = RESULT.set(true);
-        hold_success(&mut common, &mut returned).await;
+        hold_success(common, &mut returned).await;
 
     }
 }
