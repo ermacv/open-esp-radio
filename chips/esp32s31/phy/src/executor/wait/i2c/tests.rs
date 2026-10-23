@@ -125,3 +125,55 @@ fn terminal_states_and_errors_do_not_issue_another_hardware_edge() {
         Ok(true)
     );
 }
+
+#[test]
+fn publication_crossing_the_deadline_still_gets_its_first_ready_or_busy_observation() {
+    for busy in [false, true] {
+        let clock: VirtualClock = VirtualClock::default();
+        let started = clock.now();
+        let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_byte(
+            registers::RFPLL_CAPACITOR_LOW,
+            13,
+        ));
+        let mut samples = 0;
+        let result = complete(
+            &clock,
+            &mut state,
+            PhyColdI2cTransaction::action,
+            |state, action| {
+                match action {
+                    PhyColdI2cAction::StartWrite { .. } => {
+                        state.write_started()?;
+                        clock
+                            .advance(Duration::from_micros(21))
+                            .expect("virtual time fits");
+                    }
+                    PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                        samples += 1;
+                        state.observe_write_result(if busy {
+                            Err(PhyI2cError::Busy)
+                        } else {
+                            Ok(())
+                        })?;
+                    }
+                    _ => panic!("only this write is admitted"),
+                }
+                Ok::<_, crate::calibration::cold::PhyColdI2cError>(())
+            },
+        );
+        assert_eq!(result, Ok(!busy));
+        assert_eq!(samples, 1);
+        assert_eq!(
+            clock.now().saturating_duration_since(started).as_micros(),
+            21,
+            "deadline never restarts"
+        );
+        assert_eq!(
+            matches!(
+                state.action(),
+                PhyColdI2cAction::AwaitWriteCompletionEdge { .. }
+            ),
+            busy
+        );
+    }
+}

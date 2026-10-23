@@ -895,7 +895,7 @@ pub struct PhyCalibrationDcodeTransition {
 /// Non-cloneable calibration-child owner for complete RX-gain recalibration.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyCalibrationRxGainTransition {
-    child: crate::rx::gain::PhyRxGainInitTransition,
+    child: crate::rx::gain::RxProgram,
 }
 
 /// Non-cloneable calibration-child owner for complete channel restoration.
@@ -1147,8 +1147,7 @@ impl PhyCalibrationChannelTransition {
 }
 
 impl PhyCalibrationRxGainTransition {
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn transition_mut(&mut self) -> &mut crate::rx::gain::PhyRxGainInitTransition {
+    pub(crate) fn transition_mut(&mut self) -> &mut crate::rx::gain::RxProgram {
         &mut self.child
     }
 
@@ -1160,31 +1159,8 @@ impl PhyCalibrationRxGainTransition {
             return Err(PhyCalibrationTrackingChildError::UnsupportedAction);
         }
         Ok(Self {
-            child: crate::rx::gain::PhyRxGainInitTransition::new(parameters),
+            child: crate::rx::gain::RxProgram::new(parameters),
         })
-    }
-
-    #[cfg(any(test, oer_probe))]
-    pub fn action(&self) -> crate::rx::gain::PhyRxGainInitAction {
-        self.child.action()
-    }
-
-    #[cfg(any(test, oer_probe))]
-    pub fn advance(
-        &mut self,
-        completion: crate::rx::gain::PhyRxGainInitCompletion,
-    ) -> Result<(), crate::rx::gain::PhyRxGainInitTransitionError> {
-        self.child.advance(completion)
-    }
-
-    #[cfg(any(test, oer_probe))]
-    pub fn lower_external(
-        &self,
-    ) -> Result<
-        crate::rx::gain::PhyRxGainInitExternalBinding,
-        crate::rx::gain::PhyRxGainExternalBindingError,
-    > {
-        crate::rx::gain::PhyRxGainInitExternalBinding::lower(self.action())
     }
 
     #[expect(

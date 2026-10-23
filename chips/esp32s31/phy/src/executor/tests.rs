@@ -28,6 +28,13 @@ struct StopAfterFirstMmio {
 impl PhyRegisterPort for StopAfterFirstMmio {
     type Error = u8;
 
+    fn rx_gain<'a>(
+        &'a mut self,
+        _program: &'a mut crate::rx::gain::RxProgram,
+    ) -> impl Future<Output = Result<(), Self::Error>> + 'a {
+        ready(Err(0xff))
+    }
+
     fn complete(
         &mut self,
         binding: PhyRegisterExternalBinding,

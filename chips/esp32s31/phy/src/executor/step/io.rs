@@ -184,32 +184,6 @@ impl Io<'_, '_> {
         *completion = Some(result);
         Ok(waiting)
     }
-    #[inline(never)]
-    pub(super) fn rx_gain<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
-        &mut self,
-        clock: &C,
-        binding: &mut Option<crate::rx::gain::PhyRxGainInitExternalBinding>,
-        completion: &mut Option<crate::rx::gain::PhyRxGainInitCompletion>,
-    ) -> Result<bool, Failure> {
-        let binding = binding.take().ok_or(Failure::Binding)?;
-        #[cfg(not(target_arch = "riscv32"))]
-        let _ = clock;
-        let result = match self {
-            #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => {
-                super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
-            }
-            #[cfg(all(target_arch = "riscv32", oer_probe))]
-            Self::Validation(registers) => {
-                super::rx_gain::execute::<D, _>(clock, *registers, binding).map_err(Failure::Target)
-            }
-            #[cfg(test)]
-            Self::Test(io, _) => io.rx_gain::<D>(binding),
-        }?;
-        let waiting = super::rx_gain::waiting(result);
-        *completion = Some(result);
-        Ok(waiting)
-    }
     pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
         &mut self,
         clock: &C,
@@ -219,7 +193,14 @@ impl Io<'_, '_> {
         let _ = (clock, binding);
         #[cfg(test)]
         if let crate::analog::rfpll::RfpllFrequencyExternalBinding::I2c(mut binding) = binding {
-            super::rfpll::direct_i2c(self, clock, binding.transaction_mut(), None, false)?;
+            super::rfpll::direct_i2c(
+                self,
+                clock,
+                binding.transaction_mut(),
+                None,
+                false,
+                super::rfpll::I2cBoundary::Transaction,
+            )?;
             return binding.into_completion().map_err(|_| Failure::Binding);
         }
         match self {
@@ -313,7 +294,14 @@ impl Io<'_, '_> {
         };
         match binding {
             Binding::I2c(mut binding) => {
-                super::rfpll::direct_i2c(self, clock, binding.transaction_mut(), None, false)?;
+                super::rfpll::direct_i2c(
+                    self,
+                    clock,
+                    binding.transaction_mut(),
+                    None,
+                    false,
+                    super::rfpll::I2cBoundary::Transaction,
+                )?;
                 binding.into_completion().map_err(|_| Failure::Binding)
             }
             Binding::Timer(binding) => {
@@ -436,7 +424,14 @@ impl Io<'_, '_> {
                 if let Self::Test(io, _) = self {
                     io.prepare_rfpll_command(kind);
                 }
-                sample = super::rfpll::direct_i2c(self, clock, transaction, Some(kind), observed)?;
+                sample = super::rfpll::direct_i2c(
+                    self,
+                    clock,
+                    transaction,
+                    Some(kind),
+                    observed,
+                    super::rfpll::I2cBoundary::Command,
+                )?;
                 let outcome = match transaction.action() {
                     I2c::Complete(outcome) => outcome,
                     // A masked read owns its captured byte until the next poll

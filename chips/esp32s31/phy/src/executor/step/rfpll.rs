@@ -8,7 +8,7 @@ use oer_time::{Clock, Instant};
 
 /// Outline the platform clock conversion once without changing its identity,
 /// read count or time semantics in the direct observation loop.
-pub(super) struct OutlinedClock<'a, C: ?Sized>(pub(super) &'a C);
+pub(crate) struct OutlinedClock<'a, C: ?Sized>(pub(crate) &'a C);
 #[inline(never)]
 pub(super) fn clock_now<C: Clock + ?Sized>(clock: &C) -> Instant {
     clock.now()
@@ -74,8 +74,15 @@ impl<'a> Run<'a> {
     }
 }
 
-/// One shared direct observation policy. Runtime helper commands stop at
-/// their completion edge; synchronous direct callers finish the transaction.
+/// Completion boundary of a direct I2C call.
+#[derive(Clone, Copy)]
+pub(super) enum I2cBoundary {
+    Command,
+    Transaction,
+}
+
+/// One shared direct observation policy. Command callers stop at one byte's
+/// completion edge; transaction callers finish the complete retained RMW.
 #[inline(never)]
 pub(super) fn direct_i2c<C: Clock + ?Sized>(
     io: &mut Io<'_, '_>,
@@ -83,6 +90,7 @@ pub(super) fn direct_i2c<C: Clock + ?Sized>(
     transaction: &mut PhyColdI2cTransaction,
     command: Option<crate::tracking::observation::RfpllCommand>,
     observed: bool,
+    boundary: I2cBoundary,
 ) -> Result<crate::tracking::observation::RfpllCommandSample, Failure> {
     let clock = &OutlinedClock(clock);
     use crate::tracking::observation::{RfpllCommand, RfpllCommandSample};
@@ -106,8 +114,16 @@ pub(super) fn direct_i2c<C: Clock + ?Sized>(
         if consumed && start && observed {
             published = clock.now();
         }
-        Ok(if command.is_some() {
-            consumed && !start
+        // Publication and its first readiness observation are one attempt.
+        // The common settle deadline is unchanged: busy still expires, but
+        // an already-ready write cannot be lost immediately after starting it.
+        let completed = if consumed && start {
+            io.i2c(transaction, false)? == PhyColdI2cObservation::EdgeConsumed
+        } else {
+            consumed
+        };
+        Ok(if matches!(boundary, I2cBoundary::Command) {
+            completed
         } else {
             matches!(transaction.action(), PhyColdI2cAction::Complete(_))
         })

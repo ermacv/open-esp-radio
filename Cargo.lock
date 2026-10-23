@@ -3002,6 +3002,8 @@ dependencies = [
  "oer-memory",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
  "portable-atomic",
  "riscv",
  "static_cell",

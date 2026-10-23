@@ -5,6 +5,7 @@ use embassy_time_queue_utils::Queue;
 pub(crate) struct WakeQueue {
     queue: Queue,
     next_deadline: u64,
+    armed: u64,
 }
 
 impl WakeQueue {
@@ -12,11 +13,23 @@ impl WakeQueue {
         Self {
             queue: Queue::new(),
             next_deadline: u64::MAX,
+            armed: u64::MAX,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn next_deadline(&self) -> u64 {
         self.next_deadline
+    }
+
+    /// Reconcile a changed queue or an alarm that actually fired. An unrelated
+    /// executor wake leaves a retained future alarm programmed as it was.
+    pub(crate) fn alarm_deadline(&mut self, fired: bool) -> Option<u64> {
+        if !fired && self.next_deadline == self.armed {
+            return None;
+        }
+        self.armed = self.next_deadline;
+        Some(self.next_deadline)
     }
 
     /// Return the sampled time when the hardware alarm needs reconciliation.

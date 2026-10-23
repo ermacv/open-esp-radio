@@ -233,26 +233,34 @@ fn minimum_outcome(
 }
 
 #[test]
-fn rx_dc_minimum_completes_immediately_below_36() {
-    let mut transition = PhyRxDcMinimumTransition::new(MINIMUM_REQUEST);
-    transition.accept_outcome(minimum_outcome(0, 35, 0));
-    assert_eq!(
-        transition.action(),
-        PhyRxDcMinimumAction::Complete(PhyRxDcMinimumOutcome {
-            request: MINIMUM_REQUEST,
-            estimate: PhyDcIqEstimate {
-                i: 0,
-                q: 0,
-                power: 35,
-            },
-            attempts: 1,
-            readiness_activity_edges: 0,
-        })
-    );
+fn minimum_accepts_a_first_low_power_or_a_third_mid_power_estimate() {
+    let mut policy = PhyRxDcMinimumPolicyState::new(MINIMUM_REQUEST.previous);
+    let PhyRxDcMinimumDecision::Complete(outcome) =
+        policy.accept(MINIMUM_REQUEST, minimum_outcome(0, 35, 0))
+    else {
+        panic!("low power must complete")
+    };
+    assert_eq!(outcome.attempts, 1);
+    assert_eq!(outcome.estimate.power, 35);
+    let mut policy = PhyRxDcMinimumPolicyState::new(MINIMUM_REQUEST.previous);
+    assert!(matches!(
+        policy.accept(MINIMUM_REQUEST, minimum_outcome(0, 40, 0)),
+        PhyRxDcMinimumDecision::Continue
+    ));
+    assert!(matches!(
+        policy.accept(MINIMUM_REQUEST, minimum_outcome(1, 42, 0)),
+        PhyRxDcMinimumDecision::Continue
+    ));
+    let PhyRxDcMinimumDecision::Complete(outcome) =
+        policy.accept(MINIMUM_REQUEST, minimum_outcome(2, 41, 0))
+    else {
+        panic!("third mid power must complete")
+    };
+    assert_eq!(outcome.attempts, 3);
+    assert_eq!(outcome.estimate.power, 40);
 }
-
 #[test]
-fn unadmitted_minimum_returns_the_previous_slot_with_the_sentinel_power() {
+fn rejected_searches_preserve_the_previous_slot_and_exhaust_after_eight() {
     let previous = PhyDcIqEstimate {
         i: 17,
         q: -9,
@@ -262,96 +270,39 @@ fn unadmitted_minimum_returns_the_previous_slot_with_the_sentinel_power() {
         previous,
         ..MINIMUM_REQUEST
     };
-    let mut transition = PhyRxDcMinimumTransition::new(request);
-    // Readiness activity without a detected saturation admits no estimate,
-    // however low its power.
-    for attempt in 0..8 {
-        transition.accept_outcome(minimum_outcome(attempt, 1, 1));
-    }
-    let PhyRxDcMinimumAction::Complete(outcome) = transition.action() else {
-        panic!("RX-DC minimum did not exhaust its attempts");
-    };
-    assert_eq!(outcome.attempts, 8);
-    assert_eq!(
-        outcome.estimate,
-        PhyDcIqEstimate {
-            i: 17,
-            q: -9,
-            power: 0x38,
+    let mut policy = PhyRxDcMinimumPolicyState::new(previous);
+    for attempt in 0..RX_DC_MINIMUM_MAX_ATTEMPTS {
+        let result = policy.accept(request, minimum_outcome(attempt, 1, 1));
+        if attempt + 1 < RX_DC_MINIMUM_MAX_ATTEMPTS {
+            assert!(matches!(result, PhyRxDcMinimumDecision::Continue));
+        } else {
+            let PhyRxDcMinimumDecision::Complete(outcome) = result else {
+                panic!("finite search must complete")
+            };
+            assert_eq!(outcome.attempts, 8);
+            assert_eq!(outcome.readiness_activity_edges, 8);
+            assert_eq!(
+                outcome.estimate,
+                PhyDcIqEstimate {
+                    i: 17,
+                    q: -9,
+                    power: 0x38
+                }
+            );
         }
-    );
+    }
 }
-
 #[test]
-fn rx_dc_minimum_requires_three_attempts_between_36_and_47() {
-    let mut transition = PhyRxDcMinimumTransition::new(MINIMUM_REQUEST);
-    transition.accept_outcome(minimum_outcome(0, 40, 0));
-    transition.accept_outcome(minimum_outcome(1, 42, 0));
-    transition.accept_outcome(minimum_outcome(2, 41, 0));
-    let PhyRxDcMinimumAction::Complete(outcome) = transition.action() else {
-        panic!("RX-DC minimum did not complete after three attempts");
-    };
-    assert_eq!(outcome.attempts, 3);
-    assert_eq!(outcome.estimate.power, 40);
-}
-
-#[test]
-fn direct_minimum_does_not_start_an_estimator_without_a_complete_budget() {
-    let mut called = false;
-    let result: Result<Option<PhyRxDcMinimumTargetCompletion>, ()> =
-        PhyRxDcMinimumTargetTransaction::new(MINIMUM_REQUEST).execute_with(
-            u32::from(crate::HARDWARE_EDGE_LIMIT) + 7,
-            |_, _| {
-                called = true;
-                panic!("an inadmissible estimator touched hardware")
-            },
-        );
-
-    assert_eq!(result, Ok(None));
-    assert!(!called);
-}
-
-#[test]
-fn direct_minimum_admits_the_exact_complete_estimator_budget() {
-    let mut allowance = 0;
-    let result: Result<Option<PhyRxDcMinimumTargetCompletion>, ()> =
-        PhyRxDcMinimumTargetTransaction::new(MINIMUM_REQUEST).execute_with(
-            u32::from(crate::HARDWARE_EDGE_LIMIT) + 8,
-            |estimator, maximum_samples| {
-                allowance = maximum_samples;
-                estimator.execute_with(
-                    maximum_samples,
-                    &mut (),
-                    |_, _| {},
-                    |_, _, _| {},
-                    |_, _| Ok(()),
-                    |_| PhyDcIqReadinessSnapshot {
-                        ready: true,
-                        activity: false,
-                    },
-                    |_| PhyDcIqAccumulatorSnapshot {
-                        i: 0,
-                        q: 0,
-                        power: 0,
-                    },
-                )
-            },
-        );
-
-    let completion = result.unwrap().expect("exact budget admits estimator");
-    assert_eq!(allowance, crate::HARDWARE_EDGE_LIMIT);
-    assert_eq!(completion.operations(), 9);
-    assert_eq!(completion.estimators(), 1);
-    assert!(completion.into_terminal().is_ok());
-}
-
-#[test]
-fn rx_dc_minimum_accepts_a_clean_attempt_after_prior_activity() {
-    let mut transition = PhyRxDcMinimumTransition::new(MINIMUM_REQUEST);
-    transition.accept_outcome(minimum_outcome(0, 20, 1));
-    transition.accept_outcome(minimum_outcome(1, 35, 0));
-    let PhyRxDcMinimumAction::Complete(outcome) = transition.action() else {
-        panic!("clean second attempt was not accepted");
+fn a_clean_attempt_after_activity_is_admitted_and_saturation_can_admit_activity() {
+    let mut policy = PhyRxDcMinimumPolicyState::new(MINIMUM_REQUEST.previous);
+    assert!(matches!(
+        policy.accept(MINIMUM_REQUEST, minimum_outcome(0, 20, 1)),
+        PhyRxDcMinimumDecision::Continue
+    ));
+    let PhyRxDcMinimumDecision::Complete(outcome) =
+        policy.accept(MINIMUM_REQUEST, minimum_outcome(1, 35, 0))
+    else {
+        panic!("clean sample must be admitted")
     };
     assert_eq!(outcome.attempts, 2);
     assert_eq!(
@@ -359,85 +310,17 @@ fn rx_dc_minimum_accepts_a_clean_attempt_after_prior_activity() {
         PhyDcIqEstimate {
             i: 1,
             q: -1,
-            power: 35,
+            power: 35
         }
     );
     assert_eq!(outcome.readiness_activity_edges, 1);
-}
-
-#[test]
-fn rx_dc_minimum_uses_rom_power_sentinel_after_eight_rejected_samples() {
-    let mut transition = PhyRxDcMinimumTransition::new(MINIMUM_REQUEST);
-    for attempt in 0..RX_DC_MINIMUM_MAX_ATTEMPTS {
-        transition.accept_outcome(minimum_outcome(attempt, 20, 1));
-    }
-    let PhyRxDcMinimumAction::Complete(outcome) = transition.action() else {
-        panic!("bounded RX-DC minimum did not complete");
+    let request = PhyRxDcMinimumRequest {
+        rx_saturation_detected: true,
+        ..MINIMUM_REQUEST
     };
-    assert_eq!(outcome.attempts, RX_DC_MINIMUM_MAX_ATTEMPTS);
-    assert_eq!(
-        outcome.estimate,
-        PhyDcIqEstimate {
-            i: 0,
-            q: 0,
-            power: 0x38
-        }
-    );
-    assert_eq!(
-        outcome.readiness_activity_edges,
-        u16::from(RX_DC_MINIMUM_MAX_ATTEMPTS)
-    );
-}
-
-#[test]
-fn rx_dc_minimum_propagates_child_timeout_after_disable_tail() {
-    let mut transition = PhyRxDcMinimumTransition::new(MINIMUM_REQUEST);
-    while let PhyRxDcMinimumAction::DcIq(action) = transition.action() {
-        let completion = match action {
-            PhyDcIqAction::Configure(request) => PhyDcIqCompletion::Configured(request),
-            PhyDcIqAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            } => PhyDcIqCompletion::EnableSet {
-                request,
-                phase,
-                enabled,
-            },
-            PhyDcIqAction::DelayMicros {
-                request,
-                phase,
-                micros,
-            } => PhyDcIqCompletion::DelayElapsed {
-                request,
-                phase,
-                micros,
-            },
-            PhyDcIqAction::AwaitReadinessEdge { request, .. } => {
-                PhyDcIqCompletion::ReadinessTimedOut(request)
-            }
-            action => panic!("unexpected child action: {action:?}"),
-        };
-        transition
-            .advance(PhyRxDcMinimumCompletion::DcIq(completion))
-            .unwrap();
-    }
-    let PhyRxDcMinimumAction::Failed(PhyRxDcMinimumFailure::DcIq(
-        PhyDcIqFailure::ReadinessTimedOut {
-            request,
-            readiness_activity_edges: 0,
-        },
-    )) = transition.action()
-    else {
-        panic!("typed child timeout was not propagated");
-    };
-    assert_eq!(
-        request,
-        PhyDcIqEstimateRequest {
-            iteration: 0,
-            chain: 1,
-            control: MINIMUM_REQUEST.control,
-            mode: MINIMUM_REQUEST.mode,
-        }
-    );
+    let mut policy = PhyRxDcMinimumPolicyState::new(request.previous);
+    assert!(matches!(
+        policy.accept(request, minimum_outcome(0, 20, 1)),
+        PhyRxDcMinimumDecision::Complete(_)
+    ));
 }

@@ -11,8 +11,7 @@ use crate::{
     executor::wait::PhyShortDelay,
     tracking::calibration::{
         PhyCalibrationChannelTransition, PhyCalibrationDcodeTransition,
-        PhyCalibrationPbusClearTransition, PhyCalibrationRxGainTransition,
-        PhyCalibrationTrackingCompletion,
+        PhyCalibrationPbusClearTransition, PhyCalibrationTrackingCompletion,
     },
 };
 use oer_esp32s31_hal::owner::{SharedPhyAccess, SharedPhyContext};
@@ -147,120 +146,29 @@ fn dcode_poll<
     }
 }
 
-/// Run RX-DC calibration and publish both gain banks using the admitted owner.
-pub async fn rx_gain<D: PhyShortDelay, P, T: oer_time::Timer>(
+/// Advance the retained coefficient owner; only its caller publishes the result.
+pub async fn rx_gain_init<D: PhyShortDelay, T: oer_time::Timer>(
     clock: &T,
-    child: &mut PhyCalibrationRxGainTransition,
-    platform: &mut P,
-    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
+    child: &mut crate::rx::gain::RxProgram,
+    registers: &mut impl SharedPhyContext,
     observe: impl FnMut(crate::tracking::observation::Operation, crate::tracking::observation::Event),
-    summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
+    mut summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
     timing: Option<&mut crate::tracking::observation::EngineTiming>,
 ) -> Result<(), PhyTargetPortError> {
-    rx_gain_init::<D, _, _>(
-        clock,
-        child.transition_mut(),
-        platform,
+    let mut execution = crate::tracking::observation::RxGainExecution::default();
+    let result = crate::executor::rx::drive::<D, _, _, _>(
+        child,
         registers,
-        observe,
-        summarize,
+        clock,
+        &mut execution,
         timing,
+        observe,
     )
     .await
-}
-
-/// Advance the retained coefficient owner; only its caller publishes the result.
-pub async fn rx_gain_init<D: PhyShortDelay, P, T: oer_time::Timer>(
-    clock: &T,
-    child: &mut crate::rx::gain::PhyRxGainInitTransition,
-    _platform: &mut P,
-    registers: &mut (impl SharedPhyContext + crate::executor::step::Registers),
-    mut observe: impl FnMut(
-        crate::tracking::observation::Operation,
-        crate::tracking::observation::Event,
-    ),
-    mut summarize: impl FnMut(crate::tracking::observation::RxGainExecution),
-    mut timing: Option<&mut crate::tracking::observation::EngineTiming>,
-) -> Result<(), PhyTargetPortError> {
-    use crate::{
-        rx::gain::Phase,
-        tracking::observation::{Event, Operation},
-    };
-    let mut execution = crate::tracking::observation::RxGainExecution::default();
-    for _ in 0..RF_OPERATION_LIMIT {
-        let Some(phase) = child.phase() else {
-            execution.quality = child
-                .terminal()
-                .and_then(Result::ok)
-                .and_then(|outcome| outcome.dc)
-                .map(|outcome| outcome.quality);
-            summarize(execution);
-            return Ok(());
-        };
-        let operation = match phase {
-            Phase::Control => Operation::RxGainControlPhase,
-            Phase::Dc => Operation::RxGainDcPhase,
-            Phase::Publish => Operation::RxGainPublishPhase,
-        };
-        observe(operation, Event::Started);
-        let result = rx_gain_phase::<D, _, _>(
-            clock,
-            child,
-            registers,
-            &mut execution,
-            timing.as_deref_mut(),
-        )
-        .await;
-        observe(operation, terminal_event(&result));
-        result?;
-    }
-    Err(PhyTargetPortError::RfOperationLimit)
-}
-
-pin_project_lite::pin_project! {
-    struct RxGain<F> { #[pin] inner: F }
-}
-impl<F: core::future::Future<Output = Result<(), PhyTargetPortError>>> core::future::Future
-    for RxGain<F>
-{
-    type Output = Result<(), PhyTargetPortError>;
-    #[inline(never)]
-    fn poll(
-        self: core::pin::Pin<&mut Self>,
-        cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Self::Output> {
-        self.project().inner.poll(cx)
-    }
-}
-fn rx_gain_phase<
-    'a,
-    D: PhyShortDelay + 'a,
-    R: crate::executor::step::Registers,
-    T: oer_time::Timer,
->(
-    clock: &'a T,
-    child: &'a mut crate::rx::gain::PhyRxGainInitTransition,
-    registers: &'a mut R,
-    execution: &'a mut crate::tracking::observation::RxGainExecution,
-    timing: Option<&'a mut crate::tracking::observation::EngineTiming>,
-) -> impl core::future::Future<Output = Result<(), PhyTargetPortError>> + 'a {
-    RxGain {
-        inner: async move {
-            use crate::executor::step::{Job, drive_calibration};
-            let mut scratch = crate::executor::step::rx_gain::Scratch::default();
-            let mut job = Job::rx_gain(
-                child,
-                &mut scratch,
-                execution,
-                clock.now(),
-                timing.is_some(),
-            )
-            .map_err(super::step::port_error)?;
-            drive_calibration::<D, _, _>(&mut job, registers, clock, timing)
-                .await
-                .map_err(super::step::port_error)
-        },
-    }
+    .map_err(crate::executor::rx::port_error);
+    execution.quality = child.quality();
+    summarize(execution);
+    result
 }
 
 fn short_settle<D: PhyShortDelay>(micros: u32) -> Result<(), PhyTargetPortError> {

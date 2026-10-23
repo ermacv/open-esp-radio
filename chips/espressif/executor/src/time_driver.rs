@@ -84,8 +84,6 @@ const TICK_MASK: u64 = 0xF_FFFF_FFFF_FFFF;
 /// One executor's timers. Only that executor's context touches it.
 struct Slot {
     queue: WakeQueue,
-    /// The deadline last published to the writer, or programmed by it.
-    armed: u64,
     /// The writer's view of each comparator it programs for another
     /// executor: the generation of the deadline it programmed.
     programmed: [Option<u32>; COMPARATOR_COUNT],
@@ -107,7 +105,6 @@ unsafe impl Sync for SlotCell {}
 static SLOTS: [SlotCell; SOFTWARE_INTERRUPT_COUNT] = [const {
     SlotCell(UnsafeCell::new(Slot {
         queue: WakeQueue::new(),
-        armed: u64::MAX,
         programmed: [None; COMPARATOR_COUNT],
         #[cfg(oer_profile)]
         observation: crate::timer_observation::Recorder::new(),
@@ -296,12 +293,10 @@ fn program(comparator: Comparator, deadline: u64) {
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
-fn rearm(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64) {
-    let next = slot.queue.next_deadline();
-    if next == slot.armed {
+fn rearm(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64, fired: bool) {
+    let Some(next) = slot.queue.alarm_deadline(fired) else {
         return;
-    }
-    slot.armed = next;
+    };
     let writer = WRITER.load(Ordering::Relaxed);
     #[cfg(oer_profile)]
     let start = now;
@@ -341,13 +336,12 @@ pub(crate) fn service(swi: u8) {
                     .interrupt(entered.value, acknowledged.value);
             }
         }
-        let _ = fired;
         slot.queue.dispatch_expired(start);
         #[cfg(oer_profile)]
         slot.observation.dispatch(start, now());
-        // A dispatched alarm leaves the comparator idle: arm it again.
-        slot.armed = u64::MAX - 1;
-        rearm(swi, comparator, slot, start);
+        // Only an actual alarm leaves the comparator idle. A task's self-wake
+        // must not disable and program an unchanged comparator on every poll.
+        rearm(swi, comparator, slot, start, fired);
         if swi == WRITER.load(Ordering::Relaxed) {
             program_published(slot);
         }
@@ -458,7 +452,7 @@ impl Driver for EmbassyTimeDriver {
             #[cfg(oer_profile)]
             slot.observation.registration(at, now());
             if let Some(now) = slot.queue.schedule_wake(at, waker, now) {
-                rearm(swi, comparator, slot, now);
+                rearm(swi, comparator, slot, now, false);
             }
         });
         if registered.is_none() {

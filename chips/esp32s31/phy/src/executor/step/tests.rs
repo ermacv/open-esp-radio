@@ -3,7 +3,6 @@ mod channel_gain;
 mod dc_iq;
 mod dcode;
 mod power;
-mod rx_gain;
 mod wifi_i2c;
 pub(crate) struct TestDelay;
 impl crate::executor::wait::PhyShortDelay for TestDelay {
@@ -48,14 +47,16 @@ pub(crate) struct Io {
     rfpll_actions: Vec<crate::tracking::rfpll::Action>,
     frequency_actions: Vec<crate::analog::rfpll::RfpllFrequencyAction>,
     frequency_failure: bool,
+    i2c_write_publication: Option<(Rc<VirtualClock<1>>, u64)>,
+    i2c_busy_after_write: bool,
+    i2c_observation_clock: Option<Rc<VirtualClock<1>>>,
+    i2c_observations: std::collections::VecDeque<(u64, bool)>,
     dc_iq_pending: usize,
     dc_iq_events: Vec<&'static str>,
-    rx_i2c_failure: bool,
-    rx_i2c_clock: Option<Rc<VirtualClock<1>>>,
-    rx_i2c_calls: usize,
     rfpll_clock: Option<Rc<VirtualClock<1>>>,
     rfpll_times: Vec<Instant>,
     rfpll_write_micros: u64,
+    rfpll_command_micros: u64,
     rfpll_initial: u16,
     rfpll_statuses: Vec<crate::tracking::rfpll::search::Status>,
     rfpll_samples: usize,
@@ -71,127 +72,6 @@ pub(crate) struct Io {
     pub(crate) atoms: Rc<Cell<usize>>,
 }
 impl Io {
-    pub(super) fn rx_gain<D: crate::executor::wait::PhyShortDelay>(
-        &mut self,
-        binding: crate::rx::gain::PhyRxGainInitExternalBinding,
-    ) -> Result<crate::rx::gain::PhyRxGainInitCompletion, Failure> {
-        use crate::rx::gain::{
-            PhyRxGainInitAction as Action, PhyRxGainInitCompletion as Done,
-            PhyRxGainInitExternalBinding as Binding, PhyRxGainPublishAction as PubAction,
-            PhyRxGainPublishCompletion as PubDone, PhyRxGainPublishExternalBinding as Publish,
-        };
-        let binding = match binding {
-            Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::I2c(
-                mut binding,
-            )) => {
-                if self.rx_i2c_failure {
-                    return Err(Failure::Binding);
-                }
-                self.atom();
-                self.actions.push(binding.action());
-                match binding.action() {
-                    PhyColdI2cAction::StartRead { .. } => {
-                        binding.read_started().map_err(|_| Failure::Binding)?;
-                        self.actions.push(binding.action());
-                        binding
-                            .observe_read_result(Ok(0))
-                            .map_err(|_| Failure::Binding)?;
-                    }
-                    PhyColdI2cAction::StartWrite { .. } => {
-                        binding.write_started().map_err(|_| Failure::Binding)?;
-                        self.actions.push(binding.action());
-                        binding
-                            .observe_write_result(Ok(()))
-                            .map_err(|_| Failure::Binding)?;
-                    }
-                    _ => return Err(Failure::Binding),
-                }
-                if let Some(clock) = &self.rx_i2c_clock {
-                    clock
-                        .advance(Duration::from_micros(if self.rx_i2c_calls == 0 {
-                            10
-                        } else {
-                            3
-                        }))
-                        .expect("test clock fits");
-                }
-                self.rx_i2c_calls += 1;
-                return binding
-                    .into_completion()
-                    .map(|done| {
-                        Done::Dc(crate::rx::gain_calibration::PhyRxGainDcCompletion::I2c(
-                            done,
-                        ))
-                    })
-                    .map_err(|_| Failure::Binding);
-            }
-            Binding::Dc(crate::rx::gain_calibration::PhyRxGainDcExternalBinding::Calibration(
-                crate::rx::gain_calibration::PhyRxDcCalibrationExternalBinding::Minimum(
-                    crate::rx::dc_offset::PhyRxDcMinimumExternalBinding::DcIq(
-                        crate::calibration::estimator::PhyDcIqExternalBinding::Readiness(binding),
-                    ),
-                ),
-            )) => {
-                return self.dc_iq::<D>(binding).map(|completion| {
-                    Done::Dc(
-                        crate::rx::gain_calibration::PhyRxGainDcCompletion::Calibration(
-                            crate::rx::gain_calibration::PhyRxDcCalibrationCompletion::Minimum(
-                                crate::rx::dc_offset::PhyRxDcMinimumCompletion::DcIq(completion),
-                            ),
-                        ),
-                    )
-                });
-            }
-            binding => binding,
-        };
-        self.atom();
-        Ok(match binding {
-            Binding::Mmio(binding) => match binding.action() {
-                Action::PrepareDcControlRestore => Done::DcControlRestorePrepared,
-                Action::RestoreDcControl => Done::DcControlRestored,
-                Action::ConfigureLimits { wifi_last_index } => {
-                    Done::LimitsConfigured { wifi_last_index }
-                }
-                Action::EnableIqCorrection => Done::IqCorrectionEnabled,
-                _ => return Err(Failure::Binding),
-            },
-            Binding::Publish(Publish::Mmio(binding)) => Done::Publish(match binding.action() {
-                PubAction::ConfigurePbusDebugMode { bank } => {
-                    PubDone::PbusDebugModeConfigured { bank }
-                }
-                PubAction::ConfigureClock {
-                    bank,
-                    clock,
-                    enabled,
-                } => PubDone::ClockConfigured {
-                    bank,
-                    clock,
-                    enabled,
-                },
-                PubAction::ProgramEntry { bank, entry } => {
-                    self.power_gain_entries.push(entry);
-                    PubDone::EntryProgrammed { bank, entry }
-                }
-                PubAction::ConfigurePbusWorkMode { bank } => PubDone::PbusWorkModeRestored { bank },
-                _ => return Err(Failure::Binding),
-            }),
-            Binding::Publish(Publish::Pbus(binding)) => {
-                let crate::analog::pbus::PhyPbusHardwareAction::Start(transaction) =
-                    binding.action()
-                else {
-                    return Err(Failure::Binding);
-                };
-                let mut binding = binding;
-                binding.started().map_err(|_| Failure::Binding)?;
-                binding
-                    .observe_completed(true)
-                    .map_err(|_| Failure::Binding)?;
-                let _ = transaction;
-                Done::Publish(binding.into_completion().map_err(|_| Failure::Binding)?)
-            }
-            _ => return Err(Failure::Binding),
-        })
-    }
     pub(super) fn dc_iq<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
         binding: crate::calibration::estimator::PhyDcIqReadinessBinding,
@@ -408,6 +288,14 @@ impl Io {
             PhyColdI2cAction::StartRead { .. } => transaction.read_started(),
             PhyColdI2cAction::StartWrite { value, .. } => {
                 self.byte = value;
+                if let Some((clock, micros)) = &self.i2c_write_publication {
+                    clock
+                        .advance(Duration::from_micros(*micros))
+                        .expect("publication fits virtual time");
+                }
+                if self.i2c_busy_after_write {
+                    self.busy.set(true);
+                }
                 transaction.write_started()
             }
             _ => return Err(Failure::Binding),
@@ -421,20 +309,31 @@ impl Io {
     ) -> Result<PhyColdI2cObservation, Failure> {
         self.atom();
         self.actions.push(transaction.action());
+        if let Some(clock) = &self.rfpll_clock {
+            clock
+                .advance(Duration::from_micros(self.rfpll_command_micros))
+                .expect("test command time fits");
+        }
+        let busy = if let Some((micros, busy)) = self.i2c_observations.pop_front() {
+            self.i2c_observation_clock
+                .as_ref()
+                .expect("fixture clock")
+                .advance(Duration::from_micros(micros))
+                .expect("observation fits virtual time");
+            busy
+        } else {
+            self.busy.get()
+        };
         match transaction.action() {
             PhyColdI2cAction::AwaitReadCompletionEdge { .. } => {
-                transaction.observe_read_result(if self.busy.get() {
+                transaction.observe_read_result(if busy {
                     Err(PhyI2cError::Busy)
                 } else {
                     Ok(self.byte)
                 })
             }
             PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                transaction.observe_write_result(if self.busy.get() {
-                    Err(PhyI2cError::Busy)
-                } else {
-                    Ok(())
-                })
+                transaction.observe_write_result(if busy { Err(PhyI2cError::Busy) } else { Ok(()) })
             }
             _ => return Err(Failure::Binding),
         }
@@ -1468,13 +1367,11 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
         let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
             &mut job, &mut io, &clock, None, None, None
         ));
-        for _ in 0..7 {
-            assert!(driver.as_mut().poll(&mut cx).is_pending());
-        }
+        assert!(driver.as_mut().poll(&mut cx).is_pending());
     }
     assert_eq!(
         correction.action(),
-        Action::Search(crate::tracking::rfpll::search::Action::DelayMicros(5))
+        Action::Search(crate::tracking::rfpll::search::Action::WriteCap(0))
     );
     assert!(!io.rfpll_actions.contains(&Action::Search(
         crate::tracking::rfpll::search::Action::ReadStatus
@@ -1541,7 +1438,16 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
             }
         }
         assert_eq!(timer.constructed.get(), 0);
-        assert_eq!(pending, 247); // Initial/enable commands, four polls per candidate, final write.
+        // Per-command tracing retains individual checkpoints. The quiet route
+        // batches four commands, including terminal recognition in the last poll.
+        assert_eq!(
+            pending,
+            if observed {
+                247
+            } else {
+                247 / usize::from(BATCH_COMMANDS)
+            }
+        );
         assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
         assert_eq!(
             (stats.pending as usize, stats.polls as usize, stats.resumes),
@@ -1553,6 +1459,56 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
         ));
         assert!(!trace.invalid);
     }
+}
+
+#[test]
+fn rfpll_batch_stops_at_elapsed_budget_before_its_command_count_limit() {
+    let clock = Rc::new(VirtualClock::<1>::new());
+    let mut io = Io {
+        rfpll_clock: Some(clock.clone()),
+        rfpll_command_micros: 10,
+        rfpll_initial: 100,
+        ..Io::default()
+    };
+    let mut search = crate::tracking::rfpll::search::Search::new();
+    let mut timing = EngineTiming::default();
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut job =
+            Job::rfpll(rfpll::Cursor::Search(&mut search), clock.now()).expect("clock fits");
+        let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job,
+            &mut io,
+            clock.as_ref(),
+            Some(&mut timing),
+            None,
+            None
+        ));
+        for _ in 0..3 {
+            let before = clock.now();
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+            assert_eq!(
+                clock.now().saturating_duration_since(before).as_micros(),
+                20
+            );
+            clock
+                .advance(Duration::from_micros(500))
+                .expect("clock fits");
+        }
+    }
+    // The third batch contains the low-byte write and the masked high-byte
+    // read. Dropping it cannot publish the high byte or finish the model.
+    assert_eq!(io.actions.len(), 12);
+    assert_eq!(io.rfpll_samples, 0);
+    assert!(matches!(
+        search.action(),
+        crate::tracking::rfpll::search::Action::WriteCap(100)
+    ));
+    assert_eq!(
+        (timing.polls, timing.pending, timing.maximum_micros),
+        (3, 3, 20)
+    );
 }
 
 #[test]
@@ -1625,6 +1581,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
         direct_binding.transaction_mut(),
         None,
         false,
+        rfpll::I2cBoundary::Transaction,
     )
     .expect("direct command completes");
     let expected = direct_binding

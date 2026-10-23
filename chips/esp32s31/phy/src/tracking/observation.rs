@@ -236,79 +236,77 @@ pub struct EngineTiming {
     pub invalid: bool,
 }
 impl EngineTiming {
-    oer_esp32s31_hal::place_phy_engine_hot_path! {
-        /// Update the bounded event counters before taking the final poll stamp.
-        /// Only the final duration sum/max stores follow that stamp.
-        #[inline(never)]
-        pub(crate) fn poll_finished<C: oer_time::Clock>(
-            &mut self,
-            clock: &C,
-            started: oer_time::Instant,
-            pending: bool,
-            resumed: Option<(oer_time::Instant, oer_time::Instant)>,
-            ready_elapsed: Option<oer_time::Duration>,
-            rfpll: Option<(&mut RfpllEngineTrace, RfpllCommandSample)>,
-        ) -> oer_time::Instant {
-            fn increment(total: &mut u16, invalid: &mut bool) {
-                if let Some(next) = total.checked_add(1) {
-                    *total = next;
-                } else {
-                    *invalid = true;
-                }
+    /// Update the bounded event counters before taking the final poll stamp.
+    /// Only the final duration sum/max stores follow that stamp.
+    #[inline(never)]
+    pub(crate) fn poll_finished<C: oer_time::Clock>(
+        &mut self,
+        clock: &C,
+        started: oer_time::Instant,
+        pending: bool,
+        resumed: Option<(oer_time::Instant, oer_time::Instant)>,
+        ready_elapsed: Option<oer_time::Duration>,
+        rfpll: Option<(&mut RfpllEngineTrace, RfpllCommandSample)>,
+    ) -> oer_time::Instant {
+        fn increment(total: &mut u16, invalid: &mut bool) {
+            if let Some(next) = total.checked_add(1) {
+                *total = next;
+            } else {
+                *invalid = true;
             }
-            fn add(total: &mut u32, amount: u32, invalid: &mut bool) {
-                if let Some(next) = total.checked_add(amount) {
-                    *total = next;
-                } else {
-                    *invalid = true;
-                }
+        }
+        fn add(total: &mut u32, amount: u32, invalid: &mut bool) {
+            if let Some(next) = total.checked_add(amount) {
+                *total = next;
+            } else {
+                *invalid = true;
             }
-            increment(&mut self.polls, &mut self.invalid);
-            if pending {
-                increment(&mut self.pending, &mut self.invalid);
-            }
-            if let Some((deadline, at)) = resumed {
-                if let Some(late) = at
-                    .checked_duration_since(deadline)
-                    .and_then(|d| u32::try_from(d.as_micros()).ok())
-                {
-                    increment(&mut self.resumes, &mut self.invalid);
-                    add(&mut self.lateness_micros, late, &mut self.invalid);
-                    self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
-                } else {
-                    self.invalid = true;
-                }
-            }
-            if let Some(elapsed) = ready_elapsed {
-                if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
-                    increment(&mut self.ready_edges, &mut self.invalid);
-                    self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
-                } else {
-                    self.invalid = true;
-                }
-            }
-            let command = rfpll.map(|(trace, sample)| (trace.prepare(sample), sample));
-            // Includes the event/overflow/ready/command accounting above. No observer,
-            // formatter or report runs inside this measured interval.
-            let finished = clock.now();
-            if let Some(elapsed) = finished
-                .checked_duration_since(started)
+        }
+        increment(&mut self.polls, &mut self.invalid);
+        if pending {
+            increment(&mut self.pending, &mut self.invalid);
+        }
+        if let Some((deadline, at)) = resumed {
+            if let Some(late) = at
+                .checked_duration_since(deadline)
                 .and_then(|d| u32::try_from(d.as_micros()).ok())
             {
-                add(&mut self.total_micros, elapsed, &mut self.invalid);
-                self.maximum_micros = self.maximum_micros.max(elapsed);
-                if let Some((row, sample)) = command {
-                    if let Ok(elapsed) = u16::try_from(elapsed) {
-                        row.record(sample, elapsed);
-                    } else {
-                        self.invalid = true;
-                    }
-                }
+                increment(&mut self.resumes, &mut self.invalid);
+                add(&mut self.lateness_micros, late, &mut self.invalid);
+                self.maximum_lateness_micros = self.maximum_lateness_micros.max(late);
             } else {
                 self.invalid = true;
             }
-            finished
         }
+        if let Some(elapsed) = ready_elapsed {
+            if let Ok(elapsed) = u32::try_from(elapsed.as_micros()) {
+                increment(&mut self.ready_edges, &mut self.invalid);
+                self.maximum_ready_micros = self.maximum_ready_micros.max(elapsed);
+            } else {
+                self.invalid = true;
+            }
+        }
+        let command = rfpll.map(|(trace, sample)| (trace.prepare(sample), sample));
+        // Includes the event/overflow/ready/command accounting above. No observer,
+        // formatter or report runs inside this measured interval.
+        let finished = clock.now();
+        if let Some(elapsed) = finished
+            .checked_duration_since(started)
+            .and_then(|d| u32::try_from(d.as_micros()).ok())
+        {
+            add(&mut self.total_micros, elapsed, &mut self.invalid);
+            self.maximum_micros = self.maximum_micros.max(elapsed);
+            if let Some((row, sample)) = command {
+                if let Ok(elapsed) = u16::try_from(elapsed) {
+                    row.record(sample, elapsed);
+                } else {
+                    self.invalid = true;
+                }
+            }
+        } else {
+            self.invalid = true;
+        }
+        finished
     }
 }
 
@@ -507,14 +505,16 @@ pub struct Timing {
 /// RX-gain root actions.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxGainExecution {
-    /// Per-atom maximum: lowering, hardware transaction, model commit (microseconds).
+    /// Per-atom maximum: cursor/descriptor, hardware transaction, commit (microseconds).
     pub maximum_parts_micros: [u32; 3],
     /// Same action/first-entry tags as the engine maxima, correlated per part.
     pub maximum_parts_actions: [u8; 3],
     pub maximum_engine_micros: [u32; 2],
     pub maximum_engine_actions: [u8; 2],
-    /// Poll maxima by I2C stage (pure preparation, complete helper+commit),
+    /// Poll maxima by I2C stage (separate preparation, complete helper+commit),
     /// then first/repeated action within the same retained RX phase.
+    /// The retained program folds preparation into its descriptor step, so
+    /// there is no separate preparation poll to record in the first row.
     pub i2c_poll_micros: [[u32; 2]; 2],
     /// Completed helper polls, first/repeated within the RX phase.
     pub i2c_samples: [u32; 2],
