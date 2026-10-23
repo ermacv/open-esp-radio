@@ -30,7 +30,7 @@ fn link(bin: &str, layout: &Layout, chip_linker_dir: &Path, scripts: &[&str], en
         rom.display()
     );
     println!("cargo:rerun-if-changed={}", rom.display());
-    for script in scripts {
+    for script in std::iter::once(&"dwarf.x").chain(scripts) {
         let path = shared.join(script);
         assert!(
             path.is_file(),
@@ -45,7 +45,13 @@ fn link(bin: &str, layout: &Layout, chip_linker_dir: &Path, scripts: &[&str], en
     // analysis reads jump tables, function addresses and calls from them
     // instead of reconstructing them from machine code.
     let rom = std::format!("-T{}", layout.rom_script);
-    for argument in [rom.as_str(), entry, "--nmagic", "--emit-relocs"] {
+    for argument in [
+        rom.as_str(),
+        "-Tdwarf.x",
+        entry,
+        "--nmagic",
+        "--emit-relocs",
+    ] {
         println!("cargo:rustc-link-arg-bin={bin}={argument}");
     }
     for (name, region) in [
