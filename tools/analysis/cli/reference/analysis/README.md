@@ -26,6 +26,12 @@ of an ambiguous callee. Only selected outcomes are emitted, while the work and
 limit events of the analyzed dependencies remain accounted for. The named
 `function-records` query uses this selection.
 
+The in-process `Assumptions.pointer_chains` option retains symbolic values from
+resolved relocated loads and permits field chains rooted in a pointer loaded
+from an absolute address. It is disabled by default and keeps the existing
+expression, depth and operation budgets. Scenario inspection enables it for
+`fields` and `show`; ordinary CLI analysis retains its default behavior.
+
 ### Function records
 
 `function-records` runs that analysis in its own process and prints the complete
