@@ -65,3 +65,30 @@ fn poll_stamp_preserves_core_and_guard_survives_counter_wrap() {
     assert_eq!(assigned_core(usize::MAX), None);
     assert_ne!(poll_stamp(1, u64::from(STAMP_MASK)), usize::MAX);
 }
+
+#[test]
+fn failed_ready_updates_preserve_a_pending_work_flag() {
+    let state = ReadyState::new();
+    state.mark_work();
+    for _ in 0..127 {
+        state.ready_begin();
+    }
+    assert!(std::panic::catch_unwind(|| state.ready_begin()).is_err());
+    assert!(state.ready() && state.work());
+    for _ in 0..127 {
+        state.exec_begin();
+    }
+    assert!(!state.ready() && state.work());
+    assert!(std::panic::catch_unwind(|| state.exec_begin()).is_err());
+    assert!(!state.ready() && state.work());
+}
+
+#[test]
+fn registry_lookup_rejects_zero_and_finds_only_the_registered_context() {
+    let ids = [0, 101, 0, 202];
+    let lookup = |id| find_executor(id, |slot| ids[slot.index()]);
+    assert_eq!(lookup(0), None);
+    assert_eq!(lookup(99), None);
+    assert_eq!(lookup(101), Some(ExecutorIndex::One));
+    assert_eq!(lookup(202), Some(ExecutorIndex::Three));
+}
