@@ -142,7 +142,56 @@ where
     }
     async fn serve(&mut self, request: Request<Bluetooth>) -> Answer<Bluetooth> {
         match request {
-            Request::Join(join) => Answer::Join(self.join(join).await),
+            Request::Join(join) => {
+                if self.actor.core.is_poisoned() {
+                    return Answer::Join(Err(Failed {
+                        returned: join,
+                        cause: Failure::Poisoned,
+                    }));
+                }
+                if !self.attachment.admits(&self.actor.backend, &join) {
+                    return Answer::Join(Err(Failed {
+                        returned: join,
+                        cause: Failure::Refused,
+                    }));
+                }
+                let phy = match boundary::shared(self.actor.backend.prepare()).await {
+                    Ok(phy) => phy,
+                    Err(Fault) => {
+                        self.actor.core.poison();
+                        return Answer::Join(Err(Failed {
+                            returned: join,
+                            cause: Failure::Poisoned,
+                        }));
+                    }
+                };
+                let epoch = self.actor.core.prepared(&phy);
+                Answer::Join(
+                    match self
+                        .attachment
+                        .enter(&mut self.actor.backend, join, phy, &self.actor.lp)
+                        .await
+                    {
+                        Ok(payload) => {
+                            self.actor.core.joined();
+                            Ok(Joined {
+                                member: self.actor.core.mint.untracked(),
+                                epoch,
+                                payload,
+                            })
+                        }
+                        Err(Failed { returned, cause }) => {
+                            if matches!(self.actor.core.failed_enter(cause), Action::CloseRf) {
+                                boundary::shared(self.actor.close_rf()).await;
+                            }
+                            Err(Failed {
+                                returned,
+                                cause: self.actor.core.failure(cause),
+                            })
+                        }
+                    },
+                )
+            }
             Request::Track(member, installation) => {
                 if self.actor.core.is_poisoned() {
                     return Answer::Track(Err(Failed {
@@ -189,57 +238,6 @@ where
                 Answer::Leave(Left {
                     payload,
                     domain: self.actor.core.health(),
-                })
-            }
-        }
-    }
-    async fn join(
-        &mut self,
-        join: BluetoothJoin,
-    ) -> oer_esp32s31_radio_client::JoinAnswer<Bluetooth> {
-        if self.actor.core.is_poisoned() {
-            return Err(Failed {
-                returned: join,
-                cause: Failure::Poisoned,
-            });
-        }
-        if !self.attachment.admits(&self.actor.backend, &join) {
-            return Err(Failed {
-                returned: join,
-                cause: Failure::Refused,
-            });
-        }
-        let phy = match boundary::shared(self.actor.backend.prepare()).await {
-            Ok(phy) => phy,
-            Err(Fault) => {
-                self.actor.core.poison();
-                return Err(Failed {
-                    returned: join,
-                    cause: Failure::Poisoned,
-                });
-            }
-        };
-        let epoch = self.actor.core.prepared(&phy);
-        match self
-            .attachment
-            .enter(&mut self.actor.backend, join, phy, &self.actor.lp)
-            .await
-        {
-            Ok(payload) => {
-                self.actor.core.joined();
-                Ok(Joined {
-                    member: self.actor.core.mint.untracked(),
-                    epoch,
-                    payload,
-                })
-            }
-            Err(Failed { returned, cause }) => {
-                if matches!(self.actor.core.failed_enter(cause), Action::CloseRf) {
-                    boundary::shared(self.actor.close_rf()).await;
-                }
-                Err(Failed {
-                    returned,
-                    cause: self.actor.core.failure(cause),
                 })
             }
         }
