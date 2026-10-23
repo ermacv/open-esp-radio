@@ -18,7 +18,7 @@ pub fn message_info(key: Key) -> Option<&'static MessageInfo> {
 }
 
 /// One device message: its header, its key and its payload.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Received {
     pub boot_id: u64,
     pub message_sequence: u32,
@@ -26,6 +26,26 @@ pub struct Received {
     pub request_id: u32,
     pub key: Key,
     payload: Vec<u8>,
+}
+
+impl std::fmt::Debug for Received {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Received")
+            .field("boot_id", &self.boot_id)
+            .field("message_sequence", &self.message_sequence)
+            .field("session_id", &self.session_id)
+            .field("request_id", &self.request_id)
+            .field("key", &self.key)
+            .field("payload_length", &self.payload.len())
+            .finish()
+    }
+}
+
+impl Drop for Received {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.payload);
+    }
 }
 
 impl Received {

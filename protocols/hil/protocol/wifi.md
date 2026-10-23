@@ -1,5 +1,25 @@
 # Wi-Fi HIL lifecycle and traffic
 
+## Station wire module
+
+The `wifi` feature defines `wifi/station/start`, answered by `base::Accepted`
+for admission, and `wifi/station/link` for `Associated`, `Authorized` and typed
+`Disconnected` states. A link event carries a station-attempt epoch within its
+boot. `Authorized` means installed RSN keys and an open controlled port.
+`StationPowerSave` admits only `Off`.
+
+`NetworkCredentials` owns an SSID of 1..=32 bytes and a passphrase of 8..=63
+bytes. Construction and binary decoding both enforce these bounds. It has no
+`Clone` or `Copy`; drop erases its storage. `clear_passphrase` erases the entire
+passphrase buffer, preserves the SSID, and prevents reusing the cleared owner
+in another wire command. Debug and human-readable serialization replace the
+credentials with `<redacted>`; human-readable decoding is rejected. The host
+records command identity and time, never command payloads. Transport Debug
+prints metadata and payload length only. A target must not echo credential
+wire bytes into UART evidence.
+
+## Lifecycle and traffic contract
+
 Boot is role-neutral:
 
 ```text

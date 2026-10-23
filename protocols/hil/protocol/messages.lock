@@ -10,6 +10,7 @@ network base system
 phy
 system
 telemetry
+wifi base
 [messages]
 base/accepted 1ac686128bebf3dd topic
 base/boot 472a6c8ee83e5591 topic
@@ -131,3 +132,6 @@ telemetry/profile/control ae68ada13f2e14ba endpoint
 telemetry/profile/samples afa02b2ba450762d topic
 telemetry/profile/samples/get 118d9de14439dfd5 endpoint
 telemetry/profile/state d074cf5350d6d74e topic
+wifi/station ad7cdfe0a7c257e4 property
+wifi/station/link f74daf907e20c60c topic
+wifi/station/start 0bded670f6ef9188 endpoint

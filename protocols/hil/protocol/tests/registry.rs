@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use oer_hil_protocol::{FRAMING_VERSION, Key, Kind, MESSAGES_LOCK, MessageInfo, registry};
 
-const MODULES: [&str; 8] = [
+const MODULES: [&str; 9] = [
     "base",
     "system",
     "network",
@@ -13,6 +13,7 @@ const MODULES: [&str; 8] = [
     "phy",
     "lower-mac",
     "health",
+    "wifi",
 ];
 
 #[test]
@@ -165,6 +166,12 @@ const SOURCES: &[(&str, &str)] = &[
         "telemetry/profile.rs",
         include_str!("../src/telemetry/profile.rs"),
     ),
+    ("wifi/mod.rs", include_str!("../src/wifi/mod.rs")),
+    (
+        "wifi/credentials.rs",
+        include_str!("../src/wifi/credentials.rs"),
+    ),
+    ("wifi/link.rs", include_str!("../src/wifi/link.rs")),
 ];
 
 /// Read only source text embedded at compile time, excluding test modules.

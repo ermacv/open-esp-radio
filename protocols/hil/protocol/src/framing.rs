@@ -213,7 +213,7 @@ struct Header {
 /// One message its producer serialized, waiting for the sender's single
 /// [`FrameEncoder`], which adds the boot and completes the frame. A queue of
 /// these carries messages of every type.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Outbound {
     pub kind: WireKind,
     pub key: Key,
@@ -221,6 +221,20 @@ pub struct Outbound {
     pub session_id: u64,
     pub request_id: u32,
     pub payload: heapless::Vec<u8, MAX_POSTCARD_BYTES>,
+}
+
+impl fmt::Debug for Outbound {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Outbound")
+            .field("kind", &self.kind)
+            .field("key", &self.key)
+            .field("message_sequence", &self.message_sequence)
+            .field("session_id", &self.session_id)
+            .field("request_id", &self.request_id)
+            .field("payload_length", &self.payload.len())
+            .finish()
+    }
 }
 
 impl Outbound {
@@ -440,7 +454,7 @@ impl FrameDecoder {
 
 /// One intact frame: its header and its still encoded payload. The key
 /// names the payload's type; the receiver decodes the types it serves.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Frame<'a> {
     pub boot_id: u64,
     pub message_sequence: u32,
@@ -448,6 +462,20 @@ pub struct Frame<'a> {
     pub request_id: u32,
     pub key: Key,
     pub payload: &'a [u8],
+}
+
+impl fmt::Debug for Frame<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Frame")
+            .field("boot_id", &self.boot_id)
+            .field("key", &self.key)
+            .field("message_sequence", &self.message_sequence)
+            .field("session_id", &self.session_id)
+            .field("request_id", &self.request_id)
+            .field("payload_length", &self.payload.len())
+            .finish()
+    }
 }
 
 impl Frame<'_> {
