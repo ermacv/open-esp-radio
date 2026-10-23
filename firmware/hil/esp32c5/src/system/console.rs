@@ -14,16 +14,21 @@ use oer_hil_protocol::feature_keys::{ImageKeys, image_keys};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use static_cell::StaticCell;
 
-/// Writes one line through the ROM, independently of the USB driver.
-pub(crate) struct RomLine;
+/// Writes a note through the early USB writer, until the driver owns the
+/// peripheral.
+pub(crate) struct EarlyUsb;
 
-impl Immediate for RomLine {
-    fn print(line: &core::ffi::CStr) {
-        oer_esp32c5_board::rom::line(line);
+impl Immediate for EarlyUsb {
+    fn note(note: &oer_diagnostics::Note<'_>) -> bool {
+        oer_espressif_usb_fifo::note(note)
+    }
+
+    fn take_lost() -> u32 {
+        oer_espressif_usb_fifo::take_lost()
     }
 }
 
-pub(crate) static CONSOLE: HilConsole<8, 8, RomLine> = HilConsole::new();
+pub(crate) static CONSOLE: HilConsole<8, 8, EarlyUsb> = HilConsole::new();
 
 /// Watchdog tests the console handed over, one at a time.
 static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMode), 1> =
@@ -73,7 +78,7 @@ impl Console {
 pub(crate) async fn run(mut console: Console) {
     oer_espressif_esp_hal_irq::enable(&console.route)
         .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
-    let usb = UsbSerialJtag::new(console.usb).into_async();
+    let usb = UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(console.usb)).into_async();
     // The boot identity only has to differ between boots.
     let boot = ((u64::from(console.rng.random()) << 32) | u64::from(console.rng.random())).max(1);
     CONSOLE.start(boot);

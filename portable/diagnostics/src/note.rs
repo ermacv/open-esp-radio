@@ -386,6 +386,26 @@ topics! {
         ("" w0: hex8, "" w1: hex8, "" w2: hex8, "" w3: hex8, "" w4: hex8, "" w5: hex8);
     FatalIrqRouted = 6, fatal_irq_routed, "fatal irq_routed words="
         ("" w0: hex8, "" w1: hex8, "" w2: hex8, "" w3: hex8, "" w4: hex8, "" w5: hex8);
+    /// Bytes the synchronous USB writer had to drop because the FIFO was full.
+    DiagLost = 9, diag_lost, "OPEN_RADIO_HIL diag-lost"
+        ("bytes" bytes: dec);
+    /// A HIL runtime started on a placement profile.
+    RuntimeStart = 10, runtime_start, "OPEN_RADIO_HIL runtime=START"
+        ("profile" profile: name);
+    /// A diagnostic image's runtime started.
+    DiagnosticStart = 11, diagnostic_start, "OPEN_RADIO_HIL runtime=START"
+        ("diagnostic" diagnostic: name);
+    /// A HIL runtime stopped at a failed boot check.
+    RuntimeFail = 12, runtime_fail, "OPEN_RADIO_HIL runtime=FAIL"
+        ("reason" reason: name);
+    /// The runtime's placement probes passed.
+    PlacementPass = 13, placement_pass,
+        "OPEN_RADIO_HIL placement=PASS isr=SRAM dma_probes=SRAM task_stack=PSRAM irq_stack=SRAM" ();
+    /// The entropy source passed its health test.
+    EntropyPass = 14, entropy_pass, "OPEN_RADIO_HIL entropy=PASS" ();
+    /// A physical-layer step failed without an error to report.
+    PhyFail = 15, phy_fail, "OPEN_RADIO_HIL phy=FAIL"
+        ("step" step: name);
     /// The smoke image's Embassy timer rearming.
     Rearm = 7, rearm, "OPEN_RADIO_HIL rearm"
         ("step" step: dec, "delay_ms" delay_ms: wide, "elapsed_us" elapsed_us: wide);

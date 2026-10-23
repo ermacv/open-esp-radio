@@ -43,7 +43,7 @@ fn main() -> ! {
     staged::start();
 
     let peripherals = esp_hal::init(esp_hal::Config::default());
-    print(c"OER_BOOT bootstrap=INIT\r\n");
+    print("OER_BOOT bootstrap=INIT\r\n");
 
     let psram = board::initialize_psram(peripherals.PSRAM);
     let (psram_base, psram_size) = psram.raw_parts();

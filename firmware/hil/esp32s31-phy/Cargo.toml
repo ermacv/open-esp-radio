@@ -28,6 +28,7 @@ embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-usb-fifo = { workspace = true, features = ["esp32s31"] }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31"] }
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }

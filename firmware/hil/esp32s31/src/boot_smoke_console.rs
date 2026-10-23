@@ -1,8 +1,8 @@
 //! Sole output owner for the minimal boot-smoke image.
 //!
 //! The normal HIL image uses the framed transport in `console`. The smoke
-//! image intentionally does not link that protocol, but it must not keep using
-//! the ROM printf backend after ESP-HAL has initialized the USB peripheral.
+//! image intentionally does not link that protocol, and the early USB writer
+//! gives it the peripheral before it starts.
 
 use esp_hal::{Blocking, peripherals::USB_DEVICE, usb::usb_serial_jtag::UsbSerialJtag};
 
@@ -17,7 +17,7 @@ pub(crate) struct BootSmokeConsole {
 impl BootSmokeConsole {
     pub(crate) fn new(peripheral: USB_DEVICE<'static>) -> Self {
         Self {
-            usb: UsbSerialJtag::new(peripheral),
+            usb: UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(peripheral)),
         }
     }
 

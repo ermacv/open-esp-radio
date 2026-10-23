@@ -6,6 +6,7 @@
 //! frame; only the host renders text. No storage or transport is installed.
 
 pub mod console;
+pub mod fifo;
 pub mod note;
 pub mod path;
 pub mod record;
@@ -13,6 +14,7 @@ pub mod record;
 pub mod render;
 
 pub use console::{Console, DecodeError, MAX_NOTE_LINE, PREFIX, decode, emit_note};
+pub use fifo::{Fifo, FifoWriter, Lost, Patience};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};
 pub use record::{BootSmokePassed, MAX_PAYLOAD, PreviousPanic, Record};

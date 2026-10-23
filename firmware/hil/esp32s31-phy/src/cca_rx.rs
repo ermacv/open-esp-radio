@@ -48,7 +48,7 @@ pub struct Prepared {
     stopped: RxRingStopped<'static, COUNT>,
 }
 
-fn failure(step: &str, error: RxRingError) -> RejectReason {
+fn failure(step: &'static str, error: RxRingError) -> RejectReason {
     crate::transport::CONSOLE.note_immediately(&Note::cca_rx_fail(step, &DiagPath::of(&error)));
     RejectReason::Internal
 }
@@ -189,7 +189,8 @@ async fn experiment<B: PlatformClockBackend, T>(
     while runtime.mac_runtime_active_state() != 0 {
         if EmbassyClock.now() >= deadline {
             ring.require_reset();
-            oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=cca-rx FAIL step=mac-idle");
+            crate::transport::CONSOLE
+                .note_immediately(&Note::cca_rx_fail("mac-idle", &DiagPath::new()));
             return Err(RejectReason::Internal);
         }
         EmbassyClock
@@ -322,7 +323,8 @@ async fn sample<B: PlatformClockBackend, T>(
             .await;
     }
     if beacons == 0 {
-        oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=cca-rx FAIL step=no-beacons");
+        crate::transport::CONSOLE
+            .note_immediately(&Note::cca_rx_fail("no-beacons", &DiagPath::new()));
         return Err(RejectReason::Internal);
     }
     Ok(())

@@ -9,7 +9,6 @@ publish.workspace = true
 [dependencies]
 oer-espressif-staged-layout.workspace = true
 oer-esp32s31-layout.workspace = true
-oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "unstable"] }
 

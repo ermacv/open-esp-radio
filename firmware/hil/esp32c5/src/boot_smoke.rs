@@ -13,7 +13,7 @@ const TIMER_WAKE: Duration = Duration::from_millis(100);
 /// The console, opened before the executor starts, so a fault while it
 /// starts still leaves the lines before it on the console.
 pub(crate) fn start(device: USB_DEVICE<'static>) -> UsbSerialJtag<'static, Blocking> {
-    let mut console = UsbSerialJtag::new(device);
+    let mut console = UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(device));
     let _ = console.write(b"OPEN_RADIO_HIL hal=INIT\r\n");
     console
 }

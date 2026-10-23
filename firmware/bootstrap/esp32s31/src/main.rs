@@ -64,14 +64,14 @@ fn main() -> ! {
     staged::start();
 
     let mut peripherals = esp_hal::init(esp_hal::Config::default());
-    print(c"OER_BOOT bootstrap=INIT\r\n");
+    print("OER_BOOT bootstrap=INIT\r\n");
     apply_brownout_policy(&mut peripherals.I2C_ANA_MST);
-    print(c"OER_BOOT bootstrap=BROWNOUT\r\n");
+    print("OER_BOOT bootstrap=BROWNOUT\r\n");
     let mut flash_mmu = FlashMmu::new(peripherals.SPI0);
     let mut flash =
         match esp_hal::flash::Flash::new(peripherals.FLASH, esp_hal::flash::Config::default()) {
             Ok(flash) => flash,
-            Err(_) => fail(c"OER_BOOT bootstrap=FAIL reason=flash-init\r\n"),
+            Err(_) => fail("OER_BOOT bootstrap=FAIL reason=flash-init\r\n"),
         };
 
     let psram = board::initialize_psram(peripherals.PSRAM);
@@ -85,7 +85,7 @@ fn main() -> ! {
     let tuning_address = FLASH_TUNING_REFERENCE.as_ptr() as usize;
     let tuning_physical_start = flash_mmu
         .physical_address(tuning_address)
-        .unwrap_or_else(|| fail(c"OER_BOOT bootstrap=FAIL reason=tuning-physical\r\n"));
+        .unwrap_or_else(|| fail("OER_BOOT bootstrap=FAIL reason=tuning-physical\r\n"));
     // SAFETY: the reference span is this bootstrap's own cold Flash rodata,
     // read by nothing else; stage two was copied from a disjoint range first.
     if unsafe {
@@ -100,9 +100,9 @@ fn main() -> ! {
     }
     .is_err()
     {
-        fail(c"OER_BOOT bootstrap=FAIL reason=flash-tune\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=flash-tune\r\n");
     }
-    print(c"OER_BOOT bootstrap=FLASH_TUNED\r\n");
+    print("OER_BOOT bootstrap=FLASH_TUNED\r\n");
     // Do not read the tuning span again. Every candidate deliberately fetches
     // a distinct page, and rejected timings can leave corrupted cache lines
     // behind until a future S31 cache-invalidate primitive is available. The
@@ -145,7 +145,7 @@ fn apply_brownout_policy(analog_bus: &mut esp_hal::peripherals::I2C_ANA_MST<'_>)
         && mode0.bod_mode0_reset_wait().bits() == 0x3ff
         && mode0.bod_mode0_intr_wait().bits() == 2;
     if !configured {
-        fail(c"OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n");
+        fail("OER_BOOT bootstrap=FAIL reason=brownout-policy\r\n");
     }
 }
 

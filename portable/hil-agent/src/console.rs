@@ -1,8 +1,9 @@
 //! The target's one HIL console.
 //!
 //! Every chip and image uses this console. The chip supplies its byte
-//! transport (the halves of an `embedded-io-async` endpoint) and a way to
-//! write one line immediately; the image supplies its [`crate::base::Platform`] and
+//! transport (the halves of an `embedded-io-async` endpoint) and the early
+//! writer of its USB FIFO for the time before the transport owns the
+//! peripheral; the image supplies its [`crate::base::Platform`] and
 //! serves its own requests. The console owns everything between: the ordered
 //! queue of outgoing messages, the queue of diagnostic notes, the request
 //! intake with the base module, and the link counters.
@@ -16,10 +17,8 @@
 //! no text.
 
 pub mod progress;
-pub mod writer;
 
 use core::cell::RefCell;
-use core::ffi::CStr;
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -42,19 +41,22 @@ const HELLO_SEQUENCE: u32 = 0;
 /// Bytes read from the endpoint at once.
 const RX_CHUNK: usize = 128;
 
-/// How a chip writes one line synchronously, independently of its USB
-/// driver: for the time before [`Console::run`] starts and for notes that
-/// cannot wait. A type, not a pointer, so that the call is a direct one.
+/// How a chip writes a note before its transport owns the USB peripheral:
+/// the early writer, which drops what the FIFO has no room for and counts it.
+/// A type, not a pointer, so that the call is a direct one.
 pub trait Immediate {
-    /// Writes `line` and a line end.
-    fn print(line: &CStr);
+    /// Writes `note` now. Returns `false` when the early writer no longer
+    /// owns the peripheral, which the transport has taken.
+    fn note(note: &Note<'_>) -> bool;
+
+    /// The bytes the early writer dropped since the last call.
+    fn take_lost() -> u32;
 }
 
 /// One console. `NOTES` bounds the queued notes and `MESSAGES` the queued
-/// messages; `P` writes its immediate lines.
+/// messages; `P` is the chip's early writer.
 pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
     immediate: PhantomData<P>,
-    writer: writer::Writer,
     running: AtomicBool,
     boot_low: AtomicU32,
     boot_high: AtomicU32,
@@ -78,7 +80,6 @@ pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
 /// What the note queue lost.
 struct NoteLoss {
     dropped: AtomicU32,
-    writer_busy: AtomicU32,
     write_errors: AtomicU32,
 }
 
@@ -86,7 +87,6 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     pub const fn new() -> Self {
         Self {
             immediate: PhantomData,
-            writer: writer::Writer::new(),
             running: AtomicBool::new(false),
             boot_low: AtomicU32::new(0),
             boot_high: AtomicU32::new(0),
@@ -112,7 +112,6 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             })),
             lost: NoteLoss {
                 dropped: AtomicU32::new(0),
-                writer_busy: AtomicU32::new(0),
                 write_errors: AtomicU32::new(0),
             },
         }
@@ -180,12 +179,12 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         self.written.wait_for(sequence).await;
     }
 
-    /// Queues `note`, waiting for room instead of losing it; before
-    /// [`Console::run`] starts, writes it immediately. Only for reporting
+    /// Writes `note` through the early writer while it owns the USB
+    /// peripheral, and queues it for [`Console::run`] once the transport
+    /// does, waiting for room instead of losing it. Only for reporting
     /// outside measured hot paths, which must not depend on USB progress.
     pub async fn note_reliably(&self, note: &Note<'static>) {
-        if !self.running.load(Ordering::Acquire) {
-            self.note_immediately(note);
+        if !self.running.load(Ordering::Acquire) && P::note(note) {
             return;
         }
         loop {
@@ -201,23 +200,19 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         self.dropped_messages.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Writes `note` now, for the time before [`Console::run`] starts and
-    /// for synchronous callers. It never interleaves with a frame: while the
-    /// task writes, the note is dropped and counted.
-    pub fn note_immediately(&self, note: &Note<'_>) {
-        let Some(_writing) = self.writer.try_acquire() else {
-            self.lost.writer_busy.fetch_add(1, Ordering::Relaxed);
-            self.lost.dropped.fetch_add(1, Ordering::Relaxed);
+    /// Reports `note` without waiting: through the early writer while it
+    /// owns the USB peripheral, otherwise in the note queue, where a full
+    /// queue drops it and counts the loss. For synchronous callers.
+    pub fn note_immediately(&self, note: &Note<'static>) {
+        if !self.running.load(Ordering::Acquire) && P::note(note) {
             return;
-        };
-        let mut line = NoteLine::new();
-        line.encode(note);
-        if let Some(text) = line.text() {
-            P::print(text);
+        }
+        if self.notes.try_send(*note).is_err() {
+            self.lost.dropped.fetch_add(1, Ordering::Relaxed);
         }
     }
 
-    /// Notes lost to a busy writer or a failed write.
+    /// Notes lost to a full queue or a failed write.
     pub fn dropped_notes(&self) -> u32 {
         self.lost.dropped.load(Ordering::Relaxed)
     }
@@ -275,6 +270,12 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             Ok(hello) => self.write_message(&mut tx, &hello).await,
             Err(_) => self.lose_message(),
         }
+        // What the early writer dropped before it gave up the peripheral: a
+        // loss is never silent.
+        let lost = P::take_lost();
+        if lost != 0 {
+            self.write_note(&mut tx, &Note::diag_lost(lost)).await;
+        }
         let mut chunk = [0_u8; RX_CHUNK];
         loop {
             match select3(
@@ -322,7 +323,6 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             self.dropped_messages.fetch_add(1, Ordering::Relaxed);
             return;
         };
-        let _writing = self.writer.acquire_async().await;
         if tx.write_all(frame).await.is_ok() && tx.write_all(b"\r\n").await.is_ok() {
             self.sent_frames.fetch_add(1, Ordering::Relaxed);
             self.written
@@ -332,9 +332,8 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         }
     }
 
-    /// Numbers and writes one note as a whole line, under the writer.
+    /// Numbers and writes one note as a whole line.
     async fn write_note(&self, tx: &mut impl Write, note: &Note<'_>) {
-        let _writing = self.writer.acquire_async().await;
         let mut line = NoteLine::new();
         line.encode(note);
         if tx.write_all(line.framed()).await.is_err() {
@@ -381,16 +380,6 @@ impl NoteLine {
     /// The whole line with its framing.
     fn framed(&self) -> &[u8] {
         self.bytes.get(..self.length).unwrap_or(&[])
-    }
-
-    /// The line without its framing, for a printer that ends lines itself.
-    fn text(&mut self) -> Option<&CStr> {
-        let end = self.length.checked_sub(2)?;
-        if !self.framed().starts_with(b"\r\n") || !self.framed().ends_with(b"\r\n") {
-            return None;
-        }
-        *self.bytes.get_mut(end)? = 0;
-        CStr::from_bytes_until_nul(self.bytes.get(2..=end)?).ok()
     }
 }
 

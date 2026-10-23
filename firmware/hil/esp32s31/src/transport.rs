@@ -13,17 +13,22 @@ use oer_hil_protocol::base::{BootEvidence, ImageKeySet, PostMortemCheckpoints};
 const NOTES: usize = 8;
 const MESSAGES: usize = 8;
 
-/// Writes one line through the ROM, independently of the USB driver.
-pub(crate) struct RomLine;
+/// Writes a note through the early USB writer, until the driver owns the
+/// peripheral.
+pub(crate) struct EarlyUsb;
 
-impl Immediate for RomLine {
-    fn print(line: &core::ffi::CStr) {
-        oer_esp32s31_board::rom::line(line);
+impl Immediate for EarlyUsb {
+    fn note(note: &oer_diagnostics::Note<'_>) -> bool {
+        oer_espressif_usb_fifo::note(note)
+    }
+
+    fn take_lost() -> u32 {
+        oer_espressif_usb_fifo::take_lost()
     }
 }
 
 oer_espressif_staged_runtime::placed_static! {
-    pub(crate) static CONSOLE: Console<NOTES, MESSAGES, RomLine> = Console::new(), in critical_data "logging";
+    pub(crate) static CONSOLE: Console<NOTES, MESSAGES, EarlyUsb> = Console::new(), in critical_data "logging";
 }
 
 struct Chip;
@@ -52,7 +57,7 @@ impl Usb {
     ) -> (Self, UsbPadControl<'static>) {
         oer_espressif_esp_hal_irq::enable(&route)
             .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
-        let (rx, tx, pads) = UsbSerialJtag::new(device)
+        let (rx, tx, pads) = UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(device))
             .into_async()
             .split_with_pad_control();
         (Self { rx, tx }, pads)
