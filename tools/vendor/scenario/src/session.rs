@@ -94,6 +94,7 @@ pub struct Session {
     projections: Vec<LayoutProjection>,
     /// Guest instructions executed in process, and the time spent executing.
     pub executed: std::cell::Cell<(u64, f64)>,
+    resources: std::cell::RefCell<Vec<OperationResources>>,
 }
 
 /// A linked image and its resolved roots, including the entry.
@@ -107,6 +108,31 @@ const IMAGE_ELF: &str = "image.elf";
 
 /// Input index of the compiled production probe ELF.
 const PROBE_INPUT: usize = 2;
+
+/// Each operation keeps its own budget and counts; functions can recur in
+/// later executions, so these documents are never merged as disjoint inputs.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct OperationResources {
+    pub operation: String,
+    pub resources: oer_analysis_riscv_model::AnalysisResources,
+}
+
+fn operation<T>(
+    budget: &Budget,
+    resources: &std::cell::RefCell<Vec<OperationResources>>,
+    name: &str,
+    run: impl FnOnce(
+        &oer_analysis_riscv_model::WorkingMemory,
+        &mut oer_analysis_blobray_application::in_process::Limits,
+    ) -> Result<T>,
+) -> Result<T> {
+    let (result, report) = budget.run(run)?;
+    resources.borrow_mut().push(OperationResources {
+        operation: name.into(),
+        resources: report,
+    });
+    Ok(result)
+}
 
 impl Session {
     /// Retain `value` as the request document `name` next to the evidence.
@@ -130,12 +156,14 @@ impl Session {
     ) -> Result<DataExport> {
         self.doc(name, request)?;
         let executables = self.executables();
-        Ok(oer_analysis_blobray_application::data::export(
-            request,
-            &executables,
-            &self.budget.memory()?,
-            &mut self.budget.control(),
-        )?)
+        operation(&self.budget, &self.resources, name, |memory, control| {
+            Ok(oer_analysis_blobray_application::data::export(
+                request,
+                &executables,
+                memory,
+                control,
+            )?)
+        })
     }
 
     /// Create a fresh `run-*` directory, authenticate the inputs and read
@@ -150,17 +178,20 @@ impl Session {
             &serde_json::json!({"sha256": identities, "roles": roles, "scope": scope}),
         )?;
         let inputs: Vec<Executable> = contents.into_iter().map(Executable::new).collect();
+        let resources = Default::default();
         let inventory = inputs
             .iter()
             .map(|input| {
-                oer_analysis_blobray_application::captured::inventory(
-                    input,
-                    &budget.memory()?,
-                    &mut budget.control(),
-                )
+                operation(&budget, &resources, "inventory", |memory, control| {
+                    Ok(oer_analysis_blobray_application::captured::inventory(
+                        input, memory, control,
+                    )?)
+                })
             })
-            .collect::<oer_analysis_riscv_model::Result<Vec<_>>>()?;
-        let probes = ProbeCatalog::capture(&inventory, &inputs, PROBE_INPUT, &budget)?;
+            .collect::<Result<Vec<_>>>()?;
+        let probes = operation(&budget, &resources, "probe-catalog", |memory, control| {
+            ProbeCatalog::capture(&inventory, &inputs, PROBE_INPUT, memory, control)
+        })?;
         if let Some(rom) = roles.iter().position(|role| *role == "rom") {
             verify_rom_symbols(&inventory, rom)?;
         }
@@ -176,6 +207,7 @@ impl Session {
             reviewed: vec![],
             projections: vec![],
             executed: Default::default(),
+            resources,
         })
     }
 
@@ -323,21 +355,27 @@ impl Session {
         oer_analysis_blobray_application::in_process::InProcessResult,
     > {
         let executables = self.executables();
-        let memory = self.budget.memory()?;
-        oer_analysis_blobray_application::in_process::verify(
-            &oer_analysis_blobray_application::in_process::InProcessComparison {
-                request,
-                executables: &executables,
-                effects: &self.effects,
-                projections: &self.projections,
-                vendor_results: None,
-                dependence: Some(&oer_analysis_riscv_lift::RiscvDecoder),
-                patches: &[],
-            },
-            crate::chip().isa.executor(),
-            &memory,
-            &mut self.budget.control(),
-        )
+        let (result, resources) = self.budget.run(|memory, control| {
+            oer_analysis_blobray_application::in_process::verify(
+                &oer_analysis_blobray_application::in_process::InProcessComparison {
+                    request,
+                    executables: &executables,
+                    effects: &self.effects,
+                    projections: &self.projections,
+                    vendor_results: None,
+                    dependence: Some(&oer_analysis_riscv_lift::RiscvDecoder),
+                    patches: &[],
+                },
+                crate::chip().isa.executor(),
+                memory,
+                control,
+            )
+        })?;
+        self.resources.borrow_mut().push(OperationResources {
+            operation: "execute".into(),
+            resources,
+        });
+        Ok(result)
     }
 
     /// Every companion the request's closure needs, proposed by a trial link
@@ -354,15 +392,24 @@ impl Session {
             .iter()
             .map(|index| self.input_id(*index as usize))
             .collect::<Result<Vec<_>>>()?;
-        let proposal = oer_analysis_blobray_application::linking::propose_companions(
-            request,
-            &candidates,
-            &self.inputs,
-            &std::path::absolute(linker)?,
-            &ElfLinker,
-            &self.run,
-            &self.budget.memory()?,
-            &mut self.budget.control(),
+        let proposal = operation(
+            &self.budget,
+            &self.resources,
+            "propose",
+            |memory, control| {
+                Ok(
+                    oer_analysis_blobray_application::linking::propose_companions(
+                        request,
+                        &candidates,
+                        &self.inputs,
+                        &std::path::absolute(linker)?,
+                        &ElfLinker,
+                        &self.run,
+                        memory,
+                        control,
+                    )?,
+                )
+            },
         )?;
         // The proposal is retained even when names stay unresolved.
         fs::write(
@@ -395,15 +442,17 @@ impl Session {
             .companions
             .extend(self.propose(&request, linker, candidates)?);
         self.doc("plan", &request)?;
-        let linked = oer_analysis_blobray_application::linking::link(
-            &request,
-            &self.inputs,
-            &std::path::absolute(linker)?,
-            &ElfLinker,
-            &self.run,
-            &self.budget.memory()?,
-            &mut self.budget.control(),
-        )?;
+        let linked = operation(&self.budget, &self.resources, "link", |memory, control| {
+            Ok(oer_analysis_blobray_application::linking::link(
+                &request,
+                &self.inputs,
+                &std::path::absolute(linker)?,
+                &ElfLinker,
+                &self.run,
+                memory,
+                control,
+            )?)
+        })?;
         let directory = self.run.join("image");
         fs::create_dir_all(&directory)?;
         fs::write(directory.join(IMAGE_ELF), linked.elf.bytes())?;
@@ -519,7 +568,14 @@ impl Session {
             .and_then(|cases| {
                 // Every undeclared access, not only the first one per side.
                 let missing = self.discover(request, &result.records)?;
-                crate::failure::write(&self.run, label, verdict, &cases, &missing)
+                crate::failure::write(
+                    &self.run,
+                    label,
+                    verdict,
+                    &cases,
+                    &missing,
+                    &self.resources.borrow(),
+                )
             })
             .map_or_else(
                 |e| format!("no failure report: {e}"),
@@ -820,9 +876,14 @@ impl Session {
             "{suite} interpreter {steps} guest instructions in {seconds:.2} s ({:.1} M/s)",
             steps as f64 / seconds.max(f64::EPSILON) / 1e6
         );
+        let resources = self.resources.borrow();
+        self.doc(&format!("{suite}-report"), &serde_json::json!({
+            "schema": 1, "analysis_resources": &*resources, "suite": suite, "unclaimed": unclaimed,
+        }))?;
         report.report(&crate::findings::Findings {
             suite,
             unclaimed: &unclaimed,
+            analysis_resources: &resources,
         })?;
         let rules = crate::rule_use::check(&self.run, suite, &self.reviewed)?;
         println!("{suite} effect rule selections: {}", rules.display());

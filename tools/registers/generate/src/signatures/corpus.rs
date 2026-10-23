@@ -3,6 +3,7 @@
 //! names are candidates too: only Blobray decides whether a call targets one.
 use crate::Result;
 use oer_analysis_elf::SymbolKind;
+use oer_analysis_riscv_model::{AnalysisProfile, AnalysisResources};
 use oer_os_process::Checkout;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -42,6 +43,7 @@ struct Document {
 
 #[derive(Debug, Serialize)]
 pub(super) struct Corpus {
+    pub analysis_resources: AnalysisResources,
     pub inputs: Vec<Input>,
     pub partial: u64,
     pub partial_causes: serde_json::Value,
@@ -107,15 +109,22 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
     let names: Vec<_> = names.into_iter().collect();
     let host = oer_os_toolchain::workspace::build(&ctx.root, "oer-tool-analysis-cli", "blobray")?;
     let mut command = ctx.command(host);
+    let limits = AnalysisProfile::SignatureCorpus.limits();
     command.args([
         "call-arguments",
+        "--analysis-profile",
+        "signature-corpus",
         "--format",
         "json",
         "--abi",
         "riscv-integer",
         "--call-summaries",
         "--timeout-secs",
-        "3600",
+        &(limits.timeout_ms / 1000).to_string(),
+        "--working-memory-mib",
+        &(limits.working_memory_bytes >> 20).to_string(),
+        "--max-work-units",
+        &limits.work_units.to_string(),
     ]);
     for input in &inputs {
         command
@@ -141,9 +150,17 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
     let path = output.join("calls.json");
     fs::rename(partial, &path)?;
     let document: Document = serde_json::from_slice(&fs::read(path)?)?;
+    finish(document, inputs, &names, &defined)
+}
+
+fn finish(
+    document: Document,
+    inputs: Vec<Input>,
+    names: &[String],
+    defined: &BTreeSet<String>,
+) -> Result<Corpus> {
     if document.schema != 7
-        || document.analysis_resources.profile
-            != oer_analysis_riscv_model::AnalysisProfile::BlobrayCli
+        || document.analysis_resources.profile != AnalysisProfile::SignatureCorpus
         || document.inputs != inputs
         || document.symbols != names
         || document.abi.as_deref() != Some("riscv-integer")
@@ -167,6 +184,7 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
         .collect();
     let named_sites = calls.values().sum();
     Ok(Corpus {
+        analysis_resources: document.analysis_resources,
         inputs,
         partial: document.partial,
         partial_causes: document.partial_causes,
@@ -177,4 +195,53 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
         calls,
         without_definition,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_analysis_riscv_model::{
+        AnalysisLimited, AnalysisUsage, FunctionLimits, LimitReason, LocalBudgetScope,
+    };
+
+    #[test]
+    fn corpus_preserves_the_child_resource_document_without_recounting() {
+        let mut function = FunctionLimits::default();
+        let reason = LimitReason::LocalBudget(LocalBudgetScope::ArgumentSummary);
+        function.event(reason);
+        function.result(&[reason]);
+        let mut limited = AnalysisLimited::default();
+        limited.function(&function);
+        let mut limits = AnalysisProfile::SignatureCorpus.limits();
+        limits.work_units = 12345;
+        let resources = AnalysisResources::new(
+            AnalysisProfile::SignatureCorpus,
+            limits,
+            AnalysisUsage {
+                work_units: 123,
+                peak_admitted_bytes: 456,
+            },
+            limited,
+        );
+        let document = Document {
+            analysis_resources: resources.clone(),
+            schema: 7,
+            inputs: vec![],
+            abi: Some("riscv-integer".into()),
+            call_summaries: true,
+            symbols: vec![],
+            callers: vec![],
+            blocked: vec![],
+            partial: 0,
+            partial_causes: serde_json::json!({}),
+            gaps: 0,
+        };
+        let corpus = finish(document, vec![], &[], &BTreeSet::new()).unwrap();
+        assert_eq!(corpus.analysis_resources, resources);
+        let json = serde_json::to_value(corpus).unwrap();
+        assert_eq!(
+            json["analysis_resources"],
+            serde_json::to_value(resources).unwrap()
+        );
+    }
 }

@@ -760,8 +760,13 @@ fn coverage_and_assumptions_survive_the_report() {
 fn violations_are_errors_after_both_reports_are_written() {
     let report = run(vec![constant(1)], Some(0), 0);
     let directory = tempfile::tempdir().expect("test report directory");
-    let error = crate::checks::inventory::run::write_report(directory.path(), "fixture", &report)
-        .expect_err("absent-bit use fails the check");
+    let error = crate::checks::inventory::run::write_report(
+        directory.path(),
+        "fixture",
+        &report,
+        &resources(),
+    )
+    .expect_err("absent-bit use fails the check");
     assert!(
         error
             .to_string()
@@ -781,6 +786,7 @@ fn violations_are_errors_after_both_reports_are_written() {
         directory.path(),
         "fixture",
         &run(vec![constant(0)], None, 0),
+        &resources(),
     )
     .expect("unknown alone is not a use violation");
 }
@@ -890,8 +896,13 @@ fn signature_conflicts_fail_only_after_complete_reports_are_written() {
         })
         .to_vec();
     let directory = tempfile::tempdir().unwrap();
-    let error = crate::checks::inventory::run::write_report(directory.path(), "fixture", &report)
-        .unwrap_err();
+    let error = crate::checks::inventory::run::write_report(
+        directory.path(),
+        "fixture",
+        &report,
+        &resources(),
+    )
+    .unwrap_err();
     assert!(error.to_string().contains("2 signature conflicts"));
     let json: Value =
         serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
@@ -948,7 +959,8 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
             ),
         });
     let directory = tempfile::tempdir().unwrap();
-    crate::checks::inventory::run::write_report(directory.path(), "fixture", &report).unwrap();
+    crate::checks::inventory::run::write_report(directory.path(), "fixture", &report, &resources())
+        .unwrap();
     let json: Value =
         serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
             .unwrap();
@@ -964,4 +976,61 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
     assert!(text.contains("ROM/HEADER synthetic_rom"));
     assert!(text.contains("Exact"));
     assert!(text.contains("UNAVAILABLE ROM SUMMARY large_synthetic_rom"));
+}
+
+fn resources() -> oer_analysis_riscv_model::AnalysisResources {
+    use oer_analysis_riscv_model::{AnalysisProfile, AnalysisResources};
+    AnalysisResources::new(
+        AnalysisProfile::RegisterInventory,
+        AnalysisProfile::RegisterInventory.limits(),
+        Default::default(),
+        Default::default(),
+    )
+}
+
+#[test]
+fn independent_input_limits_are_summed_and_retained_in_inventory_json() {
+    use oer_analysis_riscv_model::{
+        AnalysisLimited, FunctionLimits, LimitReason, LocalBudgetExceeded, LocalBudgetScope,
+        SummaryOutcome,
+    };
+    let reason = LimitReason::LocalBudget(LocalBudgetScope::ReadFlow);
+    let mut total = AnalysisLimited::default();
+    for events in [2, 3] {
+        let mut function = FunctionLimits::default();
+        for _ in 0..events {
+            function.outcome(&SummaryOutcome::<()>::LocalBudgetExceeded(
+                LocalBudgetExceeded {
+                    scope: LocalBudgetScope::ReadFlow,
+                    limit: 100000,
+                },
+            ));
+        }
+        for _ in 0..events + 1 {
+            function.result(&[reason]);
+        }
+        let mut input = AnalysisLimited::default();
+        input.function(&function);
+        total.merge(&input);
+    }
+    let mut resources = resources();
+    resources.limited = Box::new(total);
+    let directory = tempfile::tempdir().unwrap();
+    crate::checks::inventory::run::write_report(
+        directory.path(),
+        "fixture",
+        &run(vec![], None, 0),
+        &resources,
+    )
+    .unwrap();
+    let json: Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("report.json")).unwrap())
+            .unwrap();
+    assert_eq!(json["schema"], 1);
+    let limited = &json["analysis_resources"]["limited"];
+    assert_eq!(limited["functions"], 2);
+    assert_eq!(limited["results"], 7);
+    assert_eq!(limited["events_by_reason"][0]["events"], 5);
+    assert_eq!(limited["events_by_reason"][0]["functions"], 2);
+    assert_eq!(limited["events_by_reason"][0]["results"], 7);
 }

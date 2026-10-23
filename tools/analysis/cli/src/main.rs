@@ -243,15 +243,34 @@ const MIB: u64 = 1024 * 1024;
 /// Cooperative limits of an operation that runs in this process.
 #[derive(clap::Args)]
 struct InProcessOptions {
-    #[arg(long, default_value_t = AnalysisProfile::BlobrayCli.limits().working_memory_bytes / MIB)]
-    working_memory_mib: u64,
-    #[arg(long, default_value_t = AnalysisProfile::BlobrayCli.limits().timeout_ms / 1000)]
-    timeout_secs: u64,
-    #[arg(long, default_value_t = AnalysisProfile::BlobrayCli.limits().work_units)]
-    max_work_units: u64,
+    /// Resource profile; explicit limit flags override its defaults.
+    #[arg(long, default_value = "blobray-cli", value_parser = parse_analysis_profile)]
+    analysis_profile: AnalysisProfile,
+    #[arg(long)]
+    working_memory_mib: Option<u64>,
+    #[arg(long)]
+    timeout_secs: Option<u64>,
+    #[arg(long)]
+    max_work_units: Option<u64>,
+}
+
+fn parse_analysis_profile(name: &str) -> std::result::Result<AnalysisProfile, String> {
+    match name {
+        "blobray-cli" => Ok(AnalysisProfile::BlobrayCli),
+        "signature-corpus" => Ok(AnalysisProfile::SignatureCorpus),
+        _ => Err("expected blobray-cli or signature-corpus".into()),
+    }
 }
 
 impl InProcessOptions {
+    fn work_units(&self) -> u64 {
+        self.max_work_units
+            .unwrap_or(self.analysis_profile.limits().work_units)
+    }
+    fn timeout_secs(&self) -> u64 {
+        self.timeout_secs
+            .unwrap_or(self.analysis_profile.limits().timeout_ms / 1000)
+    }
     fn resources(
         &self,
         memory: &oer_analysis_riscv_model::WorkingMemory,
@@ -259,12 +278,12 @@ impl InProcessOptions {
         limited: AnalysisLimited,
     ) -> Result<AnalysisResources> {
         Ok(AnalysisResources::new(
-            AnalysisProfile::BlobrayCli,
+            self.analysis_profile,
             OperationLimits {
-                work_units: self.max_work_units,
+                work_units: self.work_units(),
                 working_memory_bytes: memory.observation().limit_bytes,
                 timeout_ms: self
-                    .timeout_secs
+                    .timeout_secs()
                     .checked_mul(1000)
                     .ok_or_else(|| invalid("timeout milliseconds overflow"))?,
             },
@@ -278,14 +297,15 @@ impl InProcessOptions {
     fn memory(&self) -> Result<oer_analysis_riscv_model::WorkingMemory> {
         oer_analysis_riscv_model::WorkingMemory::new(
             self.working_memory_mib
+                .unwrap_or(self.analysis_profile.limits().working_memory_bytes / MIB)
                 .checked_mul(MIB)
                 .ok_or_else(|| invalid("working memory limit overflow"))?,
         )
     }
     fn control(&self) -> app::in_process::Limits {
         app::in_process::Limits::new(
-            self.max_work_units,
-            std::time::Duration::from_secs(self.timeout_secs),
+            self.work_units(),
+            std::time::Duration::from_secs(self.timeout_secs()),
         )
     }
 }
@@ -1624,6 +1644,29 @@ mod cli_tests {
             .resources(&memory, &limits.control(), AnalysisLimited::default())
             .expect("resource report");
         assert_eq!(resources.profile, AnalysisProfile::BlobrayCli);
+        for (name, profile) in [
+            ("blobray-cli", AnalysisProfile::BlobrayCli),
+            ("signature-corpus", AnalysisProfile::SignatureCorpus),
+        ] {
+            let cli = Cli::try_parse_from([
+                "blobray",
+                "symbols",
+                "--input",
+                "library=a.elf",
+                "--analysis-profile",
+                name,
+            ])
+            .expect("profile");
+            let Command::Symbols { limits, .. } = cli.command else {
+                panic!("symbols command")
+            };
+            let memory = limits.memory().expect("memory");
+            let report = limits
+                .resources(&memory, &limits.control(), AnalysisLimited::default())
+                .expect("report");
+            assert_eq!(report.profile, profile);
+            assert_eq!(report.limits.operation, profile.limits());
+        }
         assert_eq!(
             resources.limits.operation,
             OperationLimits {

@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 /// [`crate::session::Session::claims`].
 pub struct Findings<'a> {
     pub suite: &'a str,
+    pub analysis_resources: &'a [crate::session::OperationResources],
     /// Compared (vendor, production) pairs no claim names.
     pub unclaimed: &'a BTreeSet<(String, String)>,
 }

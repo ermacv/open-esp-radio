@@ -63,7 +63,8 @@ links, such as the vendor scenarios, does not depend on the command line.
 
 Resource provenance is `oer-analysis-riscv-model::AnalysisResources`, under
 `analysis_resources` in CLI JSON and the first line of image analysis reports.
-The named `blobray-cli` and `image-checks` profiles select existing defaults;
+The named `blobray-cli`, `image-checks`, `register-inventory`,
+`signature-corpus`, `vendor-scenario` and `vendor-copies` profiles select defaults;
 the report records effective work units (work policy 1), admitted working-memory
 bytes and timeout milliseconds, local function-budget formulas and the value
 alternative capacity. Admission is not process RSS. An event is each fresh
@@ -82,6 +83,17 @@ infer a limit from an unknown value or
 from prose. `unaccounted` explicitly lists limits without typed local reasons;
 these are not zero-count claims. Operation work, memory and timeout exhaustion
 remain errors and never produce an ordinary resource-marked result.
+
+The register inventory folds existing typed counters by input with
+`AnalysisLimited::merge`; call summaries retain the whole corpus. Its JSON
+envelope and signature coverage are schema 1. The signature corpus selects the
+child CLI's `signature-corpus` profile and carries its resource document intact.
+Scenario suite/failure JSON (schema 1) and copies JSON (schema 3) retain one
+resource document per operation. Repeated comparisons can analyze the same
+function again, so those operations are not merged as disjoint function sets.
+Concrete scenario execution has no function-local widening outcomes; its
+operation exhaustion remains an error. Standalone scenario inspection uses a
+separate interpreter outside that comparison budget.
 
 Local formulas are data from `LocalLimit::of(scope)`; report construction and
 budget admission use those same values. `limit(N)` preserves saturating work

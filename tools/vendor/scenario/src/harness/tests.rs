@@ -210,3 +210,67 @@ fn a_missing_input_names_its_role_and_path() {
     assert!(error.contains("phy-sdk: cannot read"), "{error}");
     assert!(error.contains("absent.elf"), "{error}");
 }
+
+#[derive(clap::Parser)]
+struct BudgetCli {
+    #[command(flatten)]
+    budget: Budget,
+}
+
+#[test]
+fn operator_flags_and_usage_reach_the_scenario_report() {
+    use clap::Parser;
+    use oer_analysis_riscv_model::{RunControl, RunPosition};
+    let budget = BudgetCli::parse_from([
+        "scenario",
+        "--timeout-secs",
+        "19",
+        "--working-memory-mib",
+        "7",
+        "--max-work-units",
+        "1234567",
+    ])
+    .budget;
+    let (value, report) = budget
+        .run(|memory, control| -> oer_analysis_riscv_model::Result<_> {
+            control.checkpoint(23)?;
+            let _reservation = memory.reserve(41, RunPosition::default())?;
+            Ok(17)
+        })
+        .unwrap();
+    assert_eq!(value, 17);
+    assert_eq!(report.profile, AnalysisProfile::VendorScenario);
+    assert_eq!(
+        report.limits.operation,
+        OperationLimits {
+            work_units: 1234567,
+            working_memory_bytes: 7 << 20,
+            timeout_ms: 19000
+        }
+    );
+    assert_eq!(
+        (report.usage.work_units, report.usage.peak_admitted_bytes),
+        (23, 41)
+    );
+    assert_eq!(*report.limited, AnalysisLimited::default());
+    let defaults = BudgetCli::parse_from(["scenario"]).budget;
+    let (_, report) = defaults
+        .run(|_, _| Ok::<_, oer_analysis_riscv_model::Error>(()))
+        .unwrap();
+    assert_eq!(
+        report.limits.operation,
+        AnalysisProfile::VendorScenario.limits()
+    );
+}
+
+#[test]
+fn operation_work_exhaustion_returns_an_error_without_resources() {
+    use oer_analysis_riscv_model::{ErrorCode, RunControl};
+    let budget = Budget {
+        timeout_secs: 600,
+        working_memory_mib: 256,
+        max_work_units: 0,
+    };
+    let result = budget.run(|_, control| control.checkpoint(1));
+    assert_eq!(result.unwrap_err().code, ErrorCode::ResourceLimited);
+}

@@ -836,3 +836,63 @@ fn summary_order_preserves_valid_functions_before_a_malformed_archive_suffix() {
         );
     }
 }
+
+#[test]
+fn independent_inputs_merge_typed_local_exhaustion_without_reanalysis() {
+    // Distinct loads accumulate around a cycle, growing dependency sets on
+    // repeated visits until the existing per-function read-flow cap is reached.
+    let executable = |extra: bool| {
+        let mut code = vec![0x0002_02b7]; // lui t0, 0x20
+        if extra {
+            code.push(0x0017_0713); // addi a4, a4, 1: a distinct input identity
+        }
+        let start = code.len() * 4;
+        for _ in 0..128 {
+            code.extend([0x0002_a303, 0x0063_e3b3]); // lw t1,0(t0); or t2,t2,t1
+        }
+        let offset = (start as i32 - (code.len() * 4) as i32) as u32;
+        code.push(
+            ((offset & 0x1000) << 19)
+                | ((offset & 0x7e0) << 20)
+                | ((offset & 0x1e) << 7)
+                | ((offset & 0x800) >> 4)
+                | 0x0005_1063, // bne a0,zero,cycle
+        );
+        code.push(0x0000_8067);
+        Executable::new(object(&code, (code.len() * 4) as u64))
+    };
+    let inputs = [executable(false), executable(true)];
+    let ranges = [ImageRegion {
+        start: 0x20000,
+        length: 4,
+    }];
+    let analyze = |inputs: &[Executable]| {
+        let memory = WorkingMemory::new(64 << 20).unwrap();
+        register_accesses(
+            inputs,
+            Assumptions::default(),
+            &ranges,
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut WorkBudget::new(),
+            &mut |_, _| Ok(()),
+        )
+        .unwrap()
+        .1
+    };
+    let mut merged = AnalysisLimited::default();
+    for input in &inputs {
+        let local = analyze(std::slice::from_ref(input));
+        assert!(
+            local.events_by_reason.iter().any(|count| {
+                count.reason == LimitReason::LocalBudget(LocalBudgetScope::ReadFlow)
+                    && count.events > 0
+                    && count.results > 0
+            }),
+            "{local:?}"
+        );
+        merged.merge(&local);
+    }
+    assert_eq!(merged.functions, 2);
+    assert_eq!(analyze(&inputs), merged);
+}

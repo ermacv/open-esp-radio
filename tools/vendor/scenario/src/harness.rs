@@ -9,7 +9,10 @@ use oer_analysis_blobray_domain::{
     MemorySeed, MemorySelection, ObjectInventory, RegionLifetime, ReturnWords, SectionRecord,
     SessionReset, SymbolRecord, TimelineCapture,
 };
-use oer_analysis_riscv_model::{CallAbi, WorkingMemory};
+use oer_analysis_riscv_model::{
+    AnalysisLimited, AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, OperationLimits,
+    WorkingMemory,
+};
 use oer_probe_codegen::Catalog;
 use std::{collections::BTreeMap, fs, path::Path};
 
@@ -44,17 +47,46 @@ pub struct Input<'a> {
 #[derive(Clone, Copy, Debug, clap::Args)]
 pub struct Budget {
     /// Wall-clock deadline of each Blobray operation.
-    #[arg(long, default_value_t = 600)]
+    #[arg(long, default_value_t = AnalysisProfile::VendorScenario.limits().timeout_ms / 1000)]
     pub timeout_secs: u64,
     /// Algorithm working memory of each operation.
-    #[arg(long, default_value_t = 256)]
+    #[arg(long, default_value_t = AnalysisProfile::VendorScenario.limits().working_memory_bytes >> 20)]
     pub working_memory_mib: u64,
     /// Work-unit budget of each operation.
-    #[arg(long, default_value_t = 2_000_000_000)]
+    #[arg(long, default_value_t = AnalysisProfile::VendorScenario.limits().work_units)]
     pub max_work_units: u64,
 }
 
 impl Budget {
+    /// Retain resources only after a successful operation. Concrete scenario
+    /// execution has no typed function-local widening outcomes.
+    pub fn run<T, E: From<oer_analysis_riscv_model::Error>>(
+        &self,
+        operation: impl FnOnce(&WorkingMemory, &mut Limits) -> std::result::Result<T, E>,
+    ) -> std::result::Result<(T, AnalysisResources), E> {
+        let memory = self.memory()?;
+        let mut control = self.control();
+        let result = operation(&memory, &mut control)?;
+        let resources = AnalysisResources::new(
+            AnalysisProfile::VendorScenario,
+            OperationLimits {
+                work_units: self.max_work_units,
+                working_memory_bytes: memory.observation().limit_bytes,
+                timeout_ms: self.timeout_secs.checked_mul(1000).ok_or_else(|| {
+                    oer_analysis_riscv_model::Error::new(
+                        oer_analysis_riscv_model::ErrorCode::InvalidRequest,
+                        "timeout milliseconds overflow",
+                    )
+                })?,
+            },
+            AnalysisUsage {
+                work_units: control.used(),
+                peak_admitted_bytes: memory.peak(),
+            },
+            AnalysisLimited::default(),
+        );
+        Ok((result, resources))
+    }
     /// Working memory of one operation.
     pub fn memory(&self) -> oer_analysis_riscv_model::Result<WorkingMemory> {
         WorkingMemory::new(self.working_memory_mib << 20)
@@ -460,7 +492,8 @@ impl ProbeCatalog {
         inventory: &[ArtifactInventory],
         executables: &[Executable],
         input: usize,
-        budget: &Budget,
+        memory: &WorkingMemory,
+        control: &mut Limits,
     ) -> Result<Self> {
         let matches: Vec<_> = objects(inventory, input)
             .iter()
@@ -483,13 +516,9 @@ impl ProbeCatalog {
                 length: section.size,
             },
         );
-        let bytes = oer_analysis_blobray_application::data::export(
-            &request,
-            executables,
-            &budget.memory()?,
-            &mut budget.control(),
-        )?
-        .bytes;
+        let bytes =
+            oer_analysis_blobray_application::data::export(&request, executables, memory, control)?
+                .bytes;
         let catalog: Catalog = serde_json::from_slice(&bytes)?;
         Self::new(catalog, |name| {
             let selected = symbol(inventory, input, name)?;
