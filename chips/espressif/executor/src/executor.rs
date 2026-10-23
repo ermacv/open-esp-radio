@@ -104,6 +104,8 @@ pub fn ready_peers() -> bool {
         .ready()
 }
 
+// Share registration validation between both trace hooks.
+#[inline(never)]
 fn trace_executor(executor_id: u32) -> crate::ready::ExecutorIndex {
     executor_of(executor_id as usize).expect("trace event requires a registered executor")
 }
@@ -122,28 +124,26 @@ pub(crate) fn task_exec_begin(executor_id: u32) {
 #[inline(never)]
 fn stamp_poll(swi: crate::ready::ExecutorIndex) {
     let state = &EMBASSY_EXECUTOR_CORE[swi.index()];
-    // This driver reports the same HAL clock in microseconds; reuse its
-    // outlined ABI instead of duplicating the hardware clock read here.
-    let now = embassy_time_driver::now();
+    let now = crate::time_driver::now();
     state.store(
         crate::ready::poll_stamp(state.load(Ordering::Relaxed), now),
         Ordering::Release,
     );
 }
 
+// Admission is shared by the task wrapper and all PHY leaf boundaries.
+#[inline(never)]
 pub(crate) fn should_yield() -> bool {
     let swi = usize::from(running());
     let state = EMBASSY_EXECUTOR_CORE
         .get(swi)
         .expect("cooperative admission requires a running executor");
-    ready_peers()
+    EMBASSY_WORK_PENDING.0[swi].ready()
         || esp_hal::interrupt::InterruptStatus::is_pending(software_interrupt_source(swi as u8))
         || esp_hal::interrupt::InterruptStatus::is_pending(Interrupt::FROM_CPU_INTR3)
         || signal_pending(swi)
         || {
-            let now = esp_hal::time::Instant::now()
-                .duration_since_epoch()
-                .as_micros();
+            let now = crate::time_driver::now();
             crate::ready::poll_elapsed(state.load(Ordering::Acquire), now)
                 >= crate::ready::POLL_ADMISSION_MICROS
         }
@@ -152,13 +152,16 @@ fn signal_pending(swi: usize) -> bool {
     if !EMBASSY_EXECUTORS_MODE[swi].load(Ordering::Acquire) {
         return false;
     }
-    match swi {
+    let pending = match swi {
         0 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
         1 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
         2 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
         _ => oer_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
+    };
+    match pending {
+        Ok(pending) => pending,
+        Err(_) => panic!("signals are queried from their owning executor"),
     }
-    .expect("signals are queried from their owning executor")
 }
 
 /// Run `poll` as executor `swi`'s context and restore the preempted one.
