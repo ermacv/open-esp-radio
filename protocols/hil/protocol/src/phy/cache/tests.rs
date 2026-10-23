@@ -158,15 +158,45 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
     });
     round_trip(GetCalibrationStartStatus { ticket: u32::MAX });
     for (decision, path, full) in [
-        (CalibrationCacheDecision::FullRequested, super::super::CalibrationPath::FullForCache, true),
-        (CalibrationCacheDecision::TimedOut, super::super::CalibrationPath::FullForCache, true),
-        (CalibrationCacheDecision::NoCache(CalibrationCacheMiss::Missing), super::super::CalibrationPath::FullForCache, true),
-        (CalibrationCacheDecision::Rejected(CalibrationCacheRejection::Decode), super::super::CalibrationPath::FullForCache, true),
-        (CalibrationCacheDecision::CandidateSupplied, super::super::CalibrationPath::FullAfterRejectedCache, true),
-        (CalibrationCacheDecision::CandidateSupplied, super::super::CalibrationPath::PartialFromCache, false),
+        (
+            CalibrationCacheDecision::FullRequested,
+            super::super::CalibrationPath::FullForCache,
+            true,
+        ),
+        (
+            CalibrationCacheDecision::TimedOut,
+            super::super::CalibrationPath::FullForCache,
+            true,
+        ),
+        (
+            CalibrationCacheDecision::NoCache(CalibrationCacheMiss::Missing),
+            super::super::CalibrationPath::FullForCache,
+            true,
+        ),
+        (
+            CalibrationCacheDecision::Rejected(CalibrationCacheRejection::Decode),
+            super::super::CalibrationPath::FullForCache,
+            true,
+        ),
+        (
+            CalibrationCacheDecision::CandidateSupplied,
+            super::super::CalibrationPath::FullAfterRejectedCache,
+            true,
+        ),
+        (
+            CalibrationCacheDecision::CandidateSupplied,
+            super::super::CalibrationPath::PartialFromCache,
+            false,
+        ),
     ] {
-        round_trip(CalibrationStartStatus {ticket: u32::MAX, state: CalibrationStartState::Registering {decision}});
-        round_trip(CalibrationStartStatus {ticket: u32::MAX, state: CalibrationStartState::Failed {decision}});
+        round_trip(CalibrationStartStatus {
+            ticket: u32::MAX,
+            state: CalibrationStartState::Registering { decision },
+        });
+        round_trip(CalibrationStartStatus {
+            ticket: u32::MAX,
+            state: CalibrationStartState::Failed { decision },
+        });
         round_trip(CalibrationStartStatus {
             ticket: u32::MAX,
             state: CalibrationStartState::Ready {

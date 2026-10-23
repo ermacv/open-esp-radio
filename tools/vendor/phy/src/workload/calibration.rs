@@ -813,9 +813,12 @@ mod tests {
 
     #[test]
     fn full_capture_contract_rejects_every_other_native_path() {
-        for path in [CalibrationPath::FullUncached, CalibrationPath::FullAfterRejectedCache,
-            CalibrationPath::PartialFromCache] {
-            assert!(validate_ready(&CaptureReady {path, ..ready()}, 3, 2).is_err());
+        for path in [
+            CalibrationPath::FullUncached,
+            CalibrationPath::FullAfterRejectedCache,
+            CalibrationPath::PartialFromCache,
+        ] {
+            assert!(validate_ready(&CaptureReady { path, ..ready() }, 3, 2).is_err());
         }
     }
 

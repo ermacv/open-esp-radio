@@ -223,6 +223,9 @@ impl CalibrationRecord {
         }
         let mut input = bytes;
         let record = Self::take(&mut input)?;
+        if !input.is_empty() {
+            return Err(CodecError::Length);
+        }
         if record.schema != SNAPSHOT_SCHEMA {
             return Err(CodecError::Schema);
         }
