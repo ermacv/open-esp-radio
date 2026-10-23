@@ -6,6 +6,7 @@ use oer_chip_profile::{Profile, policy::Storage};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod padding;
 mod types;
 
 /// Aggregate and array layouts smaller than this are omitted from the inventory.
@@ -15,7 +16,8 @@ pub const TYPE_MIN_BYTES: u64 = 256;
 #[serde(deny_unknown_fields)]
 pub struct Measurements {
     pub sections: BTreeMap<String, Section>,
-    /// Executable section bytes and all allocated RAM bytes, by memory kind.
+    /// Raw executable, read-only and filler bytes, and owned RAM, by memory kind.
+    /// Embedded payload deduplication is recorded by the bundle summary.
     pub totals: BTreeMap<String, Totals>,
     pub allocated_stacks: BTreeMap<String, u64>,
     pub bounds: BTreeMap<String, StackBound>,
@@ -30,16 +32,59 @@ pub struct Measurements {
 #[serde(deny_unknown_fields)]
 pub struct Section {
     pub memory: String,
+    pub class: SectionClass,
+    pub filler: Vec<Filler>,
+    pub nobits: bool,
     pub executable: bool,
     pub writable: bool,
     pub address: u64,
     pub bytes: u64,
 }
 
+/// An input-free range defined by a canonical linker alignment contract.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Filler {
+    pub address: u64,
+    pub bytes: u64,
+    pub contract: String,
+}
+
+/// Contents and storage are independent: executable/read-only SRAM is also RAM.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SectionClass {
+    Code,
+    Writable,
+    ReadOnly,
+    Filler,
+}
+
+impl Section {
+    pub fn is_ram(&self) -> bool {
+        self.class != SectionClass::Filler
+            && (self.memory == "sram" || (self.memory == "psram" && self.writable))
+    }
+
+    pub fn image_content_bytes(&self) -> u64 {
+        if self.is_image_content() {
+            self.bytes - self.filler.iter().map(|r| r.bytes).sum::<u64>()
+        } else {
+            0
+        }
+    }
+
+    pub fn is_image_content(&self) -> bool {
+        !self.nobits && matches!(self.class, SectionClass::Code | SectionClass::ReadOnly)
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Totals {
     pub code: u64,
+    pub read_only: u64,
+    pub filler: u64,
     pub ram: u64,
 }
 
@@ -63,7 +108,8 @@ pub struct StackBound {
     pub root: String,
     pub bytes: u64,
     pub complete: bool,
-    /// Function-relative sites survive movement of the function in the ELF.
+    /// Offsets retain separate machine sites; comparison uses source identity
+    /// and multiplicity rather than these layout-dependent offsets.
     pub holes: BTreeSet<Hole>,
     pub assumptions: BTreeSet<String>,
     pub maximum_frame: u64,
@@ -74,10 +120,48 @@ pub struct StackBound {
 pub struct Hole {
     pub function: String,
     pub offset: u32,
+    pub inline_chain: Vec<String>,
     pub reason: String,
 }
 
 impl Measurements {
+    /// Reobserve an existing ELF with the normal, unchanged analysis budget.
+    /// No compilation, linking or check reports are produced.
+    pub fn remeasure(
+        root: &std::path::Path,
+        profile: &Profile,
+        policy: &oer_chip_profile::policy::StackPolicy,
+        elf: &std::path::Path,
+        bootstrap: bool,
+    ) -> Result<Self> {
+        let runtime;
+        let profile = if bootstrap {
+            profile
+        } else {
+            runtime = policy.runtime_profile(profile)?;
+            &runtime
+        };
+        let image = Image::read(root, profile, elf)?;
+        let mut measured = Self::of(&image, profile)?;
+        let tasks = if bootstrap {
+            policy
+                .stacks()?
+                .bootstrap_stack
+                .map(|s| vec![("bootstrap stack", s)])
+                .unwrap_or_default()
+        } else {
+            policy.runtime_task_stacks()
+        };
+        let audit = crate::stack::StackAudit::of(&image, policy, &tasks)?;
+        for stack in &audit.stacks {
+            measured.task(&image, stack)?;
+        }
+        if !bootstrap && profile.interrupts.is_some() {
+            measured.interrupts(&image, &crate::interrupts::interrupt_stacks_of(&image)?)?;
+        }
+        Ok(measured)
+    }
+
     pub(crate) fn of(image: &Image, profile: &Profile) -> Result<Self> {
         let file = oer_analysis_elf::Elf::parse(&image.elf)?;
         let memory = profile
@@ -118,27 +202,44 @@ impl Measurements {
                 )
                 .into());
             };
+            let filler = padding::ranges(&file, &section);
+            let measured = Section {
+                memory: kind.into(),
+                class: if filler
+                    .iter()
+                    .any(|r| r.address == section.address && r.bytes == section.size)
+                {
+                    SectionClass::Filler
+                } else if section.executable {
+                    SectionClass::Code
+                } else if section.writable {
+                    SectionClass::Writable
+                } else {
+                    SectionClass::ReadOnly
+                },
+                filler,
+                nobits: section.nobits,
+                executable: section.executable,
+                writable: section.writable,
+                address: section.address,
+                bytes: section.size,
+            };
             let total = out.totals.entry(kind.into()).or_default();
-            if section.executable {
-                total.code += section.size;
+            match measured.class {
+                SectionClass::Code if !measured.nobits => {
+                    total.code += measured.image_content_bytes()
+                }
+                SectionClass::ReadOnly if !measured.nobits => {
+                    total.read_only += measured.image_content_bytes()
+                }
+                SectionClass::Filler => {}
+                _ => {}
             }
-            if matches!(kind, "sram" | "psram") {
-                total.ram += section.size;
+            total.filler += measured.filler.iter().map(|r| r.bytes).sum::<u64>();
+            if measured.is_ram() {
+                total.ram += measured.bytes;
             }
-            if out
-                .sections
-                .insert(
-                    section.name.into(),
-                    Section {
-                        memory: kind.into(),
-                        executable: section.executable,
-                        writable: section.writable,
-                        address: section.address,
-                        bytes: section.size,
-                    },
-                )
-                .is_some()
-            {
+            if out.sections.insert(section.name.into(), measured).is_some() {
                 return Err(format!("sizes: duplicate section {}", section.name).into());
             }
         }
@@ -175,10 +276,10 @@ impl Measurements {
         Ok(out)
     }
 
-    pub(crate) fn task(&mut self, image: &Image, stack: &crate::stack::StackBound) {
+    pub(crate) fn task(&mut self, image: &Image, stack: &crate::stack::StackBound) -> Result<()> {
         self.allocated_stacks
             .insert(stack.name.into(), stack.linked.0);
-        self.bound(image, stack.name, &stack.linked.1, 0);
+        self.bound(image, stack.name, &stack.linked.1, 0)
     }
 
     pub(crate) fn interrupts(
@@ -201,7 +302,7 @@ impl Measurements {
             let mut maximum_frame = 0;
             for level in hart.levels.iter().chain([&hart.exception]) {
                 let key = format!("{name} level {}", level.level);
-                self.bound(image, &key, &level.bound, level.frame);
+                self.bound(image, &key, &level.bound, level.frame)?;
                 let bound = &self.bounds[&key];
                 holes.extend(bound.holes.iter().cloned());
                 maximum_frame = maximum_frame.max(bound.maximum_frame);
@@ -221,7 +322,7 @@ impl Measurements {
         Ok(())
     }
 
-    fn bound(&mut self, image: &Image, name: &str, bound: &Bound, entry_frame: u64) {
+    fn bound(&mut self, image: &Image, name: &str, bound: &Bound, entry_frame: u64) -> Result<()> {
         let mut holes = BTreeSet::new();
         for &(site, reason) in &bound.unresolved {
             let (function, offset) = match image.analysis.functions.range(..=site).next_back() {
@@ -234,6 +335,7 @@ impl Measurements {
             holes.insert(Hole {
                 function,
                 offset,
+                inline_chain: image.dwarf.inline_chain(site)?,
                 reason: reason.to_string(),
             });
         }
@@ -260,6 +362,7 @@ impl Measurements {
                     .max(entry_frame),
             },
         );
+        Ok(())
     }
 
     fn insert_bound(&mut self, name: String, bound: StackBound) {

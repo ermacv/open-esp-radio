@@ -116,7 +116,7 @@ Run host regressions with `cargo test -p oer-image-checks`.
 
 ## Size summary format
 
-`sizes.json` schema 1 is published by `oer-image-build` beside the image's
+`sizes.json` schema 2 is published by `oer-image-build` beside the image's
 ELFs. The check outcome carries `sizes::Measurements` from the same `Image`
 used for checking. Task bounds and context-specific interrupt bounds are
 captured when the checks compute them; neither a second analysis nor a second
@@ -142,7 +142,7 @@ Each ELF contains:
 - `bounds`: each task root, IRQ hart/level/exception and nested IRQ total, with
   byte bound (or resolved partial bytes), `complete`, all holes and assumptions,
   and the largest reachable own frame (including off-critical-path frames).
-  A hole retains its demangled containing function, function-relative offset
+  A hole retains its demangled containing function, full DWARF inline chain, function-relative offset
   and reason; address movement alone does not turn it into a different hole.
 - `frames`: every `.stack_sizes` record under each full demangled function
   alias, preserving concrete generic arguments. Repeated names retain sorted
@@ -221,3 +221,10 @@ deepest stack path. Reporting does not traverse call edges again. Predecessor
 storage is admitted through `Ledger` beside the retained image analysis,
 using the existing memory limit. The new reports state the accounted peak
 with witnesses and the original image-analysis peak.
+
+Schema 2 additionally records section classes (`code`, `read_only`, `writable`,
+`filler`), input-free filler ranges within sections, `NOBITS`, totals by class/memory, final binary sizes, and the
+byte-verified embedded-runtime range in bootstrap. Net code excludes filler
+and that duplicate payload. Hole comparison uses the multiset of function,
+inline chain and reason; offsets order repeated sites. See the
+[comparison and refresh rules](../build/README.md#size-summaries-and-owner-thresholds).

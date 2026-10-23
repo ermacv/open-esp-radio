@@ -47,6 +47,14 @@ enum Command {
         base: std::path::PathBuf,
         head: std::path::PathBuf,
     },
+    /// Reanalyse saved ELF bundles into a separate summary tree; never builds.
+    SizesRefresh {
+        input: std::path::PathBuf,
+        output: std::path::PathBuf,
+        /// Checkout supplying the original image configuration.
+        #[arg(long)]
+        source_root: Option<std::path::PathBuf>,
+    },
     /// Build a probe image of firmware/probes (a package named
     /// `oer-firmware-probes-<chip>-…`) with `cfg(oer_probe)` into
     /// target/fw-probe/ and print its path.
@@ -155,6 +163,18 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 });
             }
+            Command::SizesRefresh {
+                input,
+                output,
+                source_root,
+            } => {
+                let count = oer_image_build::sizes::refresh(
+                    &input,
+                    &output,
+                    source_root.as_deref().unwrap_or(&root),
+                )?;
+                println!("refreshed {count} image summaries");
+            }
             Command::Probe { package, jobs } => {
                 println!("{}", probe::build(&root, &package, jobs)?.display());
             }
@@ -232,6 +252,20 @@ mod tests {
             Command::Router
         ));
         assert!(parse("fw router --channel 6").is_err());
+    }
+
+    #[test]
+    fn saved_size_refresh_has_an_explicit_output_and_configuration_root() {
+        assert!(matches!(
+            parse("fw sizes-refresh saved output --source-root configuration")
+                .unwrap()
+                .command,
+            Command::SizesRefresh {
+                source_root: Some(_),
+                ..
+            }
+        ));
+        assert!(parse("fw sizes-refresh saved").is_err());
     }
 
     #[test]
