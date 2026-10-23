@@ -461,9 +461,9 @@ Build main and the PR head in two output directories, with the same compiler,
 flags, image configuration and profile. For example, from clean main build
 `cargo fw build w3 --analysis`, then copy `target/fw/w3-analysis` to
 `target/size-base/w3-analysis`. Switch to the PR head, repeat the build and copy
-the output to `target/size-head/w3-analysis`. For a complete chip table include
-every app/analysis bundle and the outputs of `cargo hil images check --all` in
-each directory. Then run:
+the output to `target/size-head/w3-analysis`. Include the bundles of every
+image the change reaches (app/analysis bundles, and `cargo hil images check`
+outputs for HIL classes it touches), not the whole chip. Then run:
 
 ```console
 cargo fw sizes target/size-base target/size-head

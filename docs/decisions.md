@@ -482,7 +482,8 @@ bounds) live in the code that applies them.
   Growth of an SRAM section, an allocated task stack or an interrupt stack,
   including type growth that grows one, stops the pull request until the
   owner answers. A size or step-cost reduction is tasked only when a hard
-  limit or a timing contract (the PHY response bound) is reached.
+  limit or a timing contract (the PHY response bound) is reached. The table
+  covers the images the change reaches; CI on main covers the rest.
 - **Documents** state the current state. Plans, work lists and notes live
   outside the repository.
 - **English** in the repository.
