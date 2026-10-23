@@ -1,4 +1,9 @@
-//! Diagnostic calibration capture. No endpoint writes arbitrary registers.
+//! Diagnostic calibration capture and opaque calibration-cache exchange. No endpoint writes arbitrary registers.
+
+#[cfg(feature = "phy")]
+mod cache;
+#[cfg(feature = "phy")]
+pub use cache::*;
 
 #[cfg(feature = "phy")]
 mod capture;
@@ -12,6 +17,20 @@ pub use hold::*;
 
 #[cfg(feature = "phy")]
 crate::messages! {
+    endpoint GetCalibrationCacheIdentity = "phy/cache/identity/get" => CalibrationCacheIdentity;
+    topic CalibrationCacheIdentity = "phy/cache/identity";
+    endpoint StartCalibration = "phy/calibration/start" => CalibrationStarted;
+    topic CalibrationStarted = "phy/calibration/started";
+    endpoint WriteCalibrationCachePage = "phy/cache/write" => CalibrationCachePageWritten;
+    topic CalibrationCachePageWritten = "phy/cache/written";
+    endpoint CompleteCalibrationCache = "phy/cache/complete" => CalibrationCacheCompleted;
+    topic CalibrationCacheCompleted = "phy/cache/completed";
+    endpoint GetCalibrationStartStatus = "phy/calibration/status/get" => CalibrationStartStatus;
+    topic CalibrationStartStatus = "phy/calibration/status";
+    endpoint ReadCalibrationSnapshot = "phy/cache/read" => CalibrationSnapshot;
+    topic CalibrationSnapshot = "phy/cache/snapshot";
+    topic CalibrationCacheRequested = "phy/cache/requested";
+    property HostCalibrationCache = "phy/cache/host";
     endpoint StartTrackingHold = "phy/hold/start" => HoldStarted;
     topic HoldStarted = "phy/hold/started";
     endpoint GetTrackingHold = "phy/hold/get" => TrackingHold;

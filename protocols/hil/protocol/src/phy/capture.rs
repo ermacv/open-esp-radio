@@ -42,6 +42,9 @@ pub enum CaptureLifecycle {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum CalibrationPath {
     FullForCache,
+    FullUncached,
+    FullAfterRejectedCache,
+    PartialFromCache,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
