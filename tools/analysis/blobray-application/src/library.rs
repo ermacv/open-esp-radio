@@ -201,6 +201,30 @@ fn analyze_without_summaries(
     Ok(())
 }
 
+/// Attach the physical function identity where the library owns it; the
+/// shared index reports the conflicting class, site and original records.
+fn function_facts<'a, 'm>(
+    function: &LibraryFunction,
+    records: &'a [FunctionRecord],
+    memory: &'m WorkingMemory,
+    control: &mut dyn RunControl,
+) -> Result<Facts<'a, 'm>> {
+    Facts::new(records, memory, control).map_err(|mut error| {
+        if error.code == ErrorCode::Integrity {
+            error.message = format!(
+                "function {:?}, name {:?}: {}",
+                function.symbol,
+                function
+                    .name
+                    .as_ref()
+                    .map(|name| name.escape_ascii().to_string()),
+                error.message
+            );
+        }
+        error
+    })
+}
+
 /// The constants a complete function's `records` leave in `a0` and `a1` at
 /// every return; none for a register any return leaves something else in,
 /// and none at all when the function has no return or leaves other than by
@@ -774,7 +798,7 @@ pub fn register_accesses(
             summary.partial_functions += u64::from(!analyzed.complete());
             summary.partial_causes.add(analyzed.partial_causes(c)?);
             c.phase(RunPhase::AnalyzeValues)?;
-            let facts = Facts::new(analyzed.records, memory, c)?;
+            let facts = function_facts(analyzed.function, analyzed.records, memory, c)?;
             let mut reads = crate::registers::ReadObservations::new(
                 &facts,
                 memory,
@@ -881,6 +905,32 @@ mod tests {
             },
             name: None,
         }
+    }
+
+    #[test]
+    fn navigation_integrity_errors_name_the_physical_function_and_records() {
+        let mut function = function();
+        function.name = Some(b"mixed_targets".to_vec());
+        let records = [1, 2].map(|value| FunctionRecord::CallInputs {
+            offset: 0x40,
+            registers: vec![AbstractValue::Constant { value }],
+        });
+        let memory = WorkingMemory::new(8192).expect("navigation fixture");
+        let error = match function_facts(&function, &records, &memory, &mut || Ok(())) {
+            Err(error) => error,
+            Ok(_) => panic!("duplicate inputs must fail"),
+        };
+        assert_eq!(error.code, ErrorCode::Integrity);
+        for expected in [
+            format!("function {:?}", function.symbol),
+            "mixed_targets".into(),
+            "class=call-inputs offset=0x40".into(),
+            format!("first record[0]={:?}", records[0]),
+            format!("second record[1]={:?}", records[1]),
+        ] {
+            assert!(error.message.contains(&expected), "{error}");
+        }
+        assert_eq!(memory.used(), 0);
     }
 
     fn causes(

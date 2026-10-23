@@ -121,8 +121,8 @@ impl<'a, 'm> FunctionIndex<'a, 'm> {
                     out.capture_id = Some(*capture_id);
                     out.extent = Some(*extent);
                 }
-                FunctionRecord::Instruction { offset, .. } if policy == RecordPolicy::Canonical => {
-                    instructions.push(*offset, c.position())?
+                FunctionRecord::Instruction { .. } if policy == RecordPolicy::Canonical => {
+                    instructions.push(record, c.position())?
                 }
                 FunctionRecord::Expression { id, expression, .. } => {
                     if policy == RecordPolicy::Canonical {
@@ -168,24 +168,51 @@ impl<'a, 'm> FunctionIndex<'a, 'm> {
             .sort_unstable_by_key(|&r| (call_input(records, r).offset, r));
         out.transfers
             .sort_unstable_by_key(|&r| (transfer(records, r).offset, r));
-        instructions.sort_unstable();
-        if policy == RecordPolicy::Canonical
-            && (instructions.windows(2).any(|w| w[0] == w[1])
-                || out
-                    .inputs
-                    .windows(2)
-                    .any(|w| call_input(records, w[0]).offset == call_input(records, w[1]).offset)
-                || out
-                    .transfers
-                    .windows(2)
-                    .any(|w| transfer(records, w[0]).offset == transfer(records, w[1]).offset)
-                || out.references.windows(2).any(|w| {
-                    let a = reference(records, w[0]);
-                    let b = reference(records, w[1]);
-                    a.symbol == b.symbol && a != b
-                }))
-        {
-            return Err(integrity("duplicate or inconsistent navigation facts"));
+        let instruction_offset = |r: usize| match records[r] {
+            FunctionRecord::Instruction { offset, .. } => offset,
+            _ => unreachable!("instruction index contains only instruction positions"),
+        };
+        instructions.sort_unstable_by_key(|&r| (instruction_offset(r), r));
+        if policy == RecordPolicy::Canonical {
+            let conflict = |class: &str, offset: u64, a: usize, b: usize| {
+                integrity(&format!(
+                    "duplicate or inconsistent navigation facts: class={class} offset={offset:#x}; \
+                     first record[{a}]={:?}; second record[{b}]={:?}; function extent={:?}; position={:?}",
+                    records[a],
+                    records[b],
+                    out.extent,
+                    c.position()
+                ))
+            };
+            for pair in instructions.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
+                if instruction_offset(a) == instruction_offset(b) {
+                    return Err(conflict("instruction", instruction_offset(a), a, b));
+                }
+            }
+            for pair in out.inputs.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
+                if call_input(records, a).offset == call_input(records, b).offset {
+                    return Err(conflict("call-inputs", call_input(records, a).offset, a, b));
+                }
+            }
+            for pair in out.transfers.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
+                if transfer(records, a).offset == transfer(records, b).offset {
+                    return Err(conflict("transfer", transfer(records, a).offset, a, b));
+                }
+            }
+            for pair in out.references.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
+                let (left, right) = (reference(records, a), reference(records, b));
+                if left.symbol == right.symbol && left != right {
+                    let offset = match records[a] {
+                        FunctionRecord::Reference { ref raw, .. } => raw.offset,
+                        _ => unreachable!("reference index contains only reference positions"),
+                    };
+                    return Err(conflict("reference", offset, a, b));
+                }
+            }
         }
         Ok(out)
     }
