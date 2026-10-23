@@ -258,6 +258,7 @@ fn an_ieee802154_point_compares_register_state_only() {
         &images,
         &vendor,
         &production,
+        None,
         ReviewFile::reviewed().unwrap(),
         (&image, &image),
     )
@@ -279,8 +280,9 @@ fn an_ieee802154_point_compares_register_state_only() {
             &images,
             &vendor,
             &production,
+            None,
             ReviewFile::reviewed().unwrap(),
-            (&image, &image),
+            (&image, &image)
         )
         .is_err()
     );

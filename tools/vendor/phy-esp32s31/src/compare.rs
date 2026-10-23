@@ -582,8 +582,10 @@ impl ReviewFile {
     }
 }
 
-/// Compare the `vendor` and `production` boots captured at `lifecycle`
-/// under `reviews`, over the register image `image` and the analog image
+/// Compare fixed `vendor` bounds and `production` boots at `lifecycle`.
+/// Reviewed condition-dependent bytes require explicit same-run `control`;
+/// a reference series never implicitly supplies it, even when counts agree.
+/// Apply `reviews` over the register image `image` and the analog image
 /// `analog`. An IEEE 802.15.4 point compares register state only: the
 /// reference firmware reports no calibration object.
 pub fn compare(
@@ -591,9 +593,13 @@ pub fn compare(
     images: &Images,
     vendor: &[VendorBoot],
     production: &[ProductionBoot],
+    control: Option<&SameRunControl>,
     reviews: ReviewFile,
     (image, analog_image): (&[Register], &[Register]),
 ) -> Result<Summary> {
+    if control.is_some_and(|c| !c.belongs_to(images, production.len())) {
+        return Err("CONTROL belongs to a different capture identity or series length".into());
+    }
     let tolerances = reviews.at(lifecycle)?;
     let calibrated = !lifecycle.ieee802154();
     if vendor.is_empty() || production.is_empty() {
@@ -623,14 +629,12 @@ pub fn compare(
     } else {
         (vec![], vec![])
     };
-    let control = SameRunControl::alternating(lifecycle, images, vendor.to_vec(), production.len());
     let registers = compare_registers(
         image,
         vendor.iter().map(|b| &b.registers),
         production.iter().map(|b| &b.registers),
         &tolerances.registers,
         control
-            .as_ref()
             .map(|c| c.boots.iter().map(|b| &b.registers).collect::<Vec<_>>())
             .as_deref(),
     );
@@ -640,7 +644,6 @@ pub fn compare(
         production.iter().map(|b| &b.analog),
         &tolerances.registers,
         control
-            .as_ref()
             .map(|c| c.boots.iter().map(|b| &b.analog).collect::<Vec<_>>())
             .as_deref(),
     );

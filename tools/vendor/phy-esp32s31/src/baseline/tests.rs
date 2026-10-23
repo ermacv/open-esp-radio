@@ -83,6 +83,29 @@ fn same_run_bounds_override_only_the_reviewed_bytes_and_recorded_only_is_incompl
     let matched = run(&subjects, Some(&control));
     assert_eq!(matched.verdict, Verdict::Match);
     assert_eq!(matched.comparison.unwrap().analog.same_run_control.len(), 2);
+    // A frozen vendor series is not implicitly a CONTROL, even when N matches.
+    let frozen = compare::compare(
+        Lifecycle::Cold,
+        &identity,
+        &fixed,
+        &subjects,
+        None,
+        compare::ReviewFile::reviewed().unwrap(),
+        (&image.registers, &image.analog),
+    )
+    .unwrap();
+    assert_eq!(frozen.verdict, Verdict::Incomplete);
+    let paired = compare::compare(
+        Lifecycle::Cold,
+        &identity,
+        &fixed,
+        &subjects,
+        Some(&control),
+        compare::ReviewFile::reviewed().unwrap(),
+        (&image.registers, &image.analog),
+    )
+    .unwrap();
+    assert_eq!(paired.verdict, Verdict::Match);
     let missing = run(&subjects, None);
     assert_eq!(missing.verdict, Verdict::Incomplete);
     assert_eq!(
@@ -258,6 +281,7 @@ fn recorded_and_live_bounds_accept_only_the_same_boot_whole_initial_pair() {
             &identity(),
             &boots,
             std::slice::from_ref(&p),
+            None,
             compare::ReviewFile::reviewed().unwrap(),
             (&image.registers, &image.analog),
         )
@@ -302,6 +326,7 @@ fn frozen_bounds_preserve_live_comparison_including_signed_fields_and_counter_ex
                     &identity(),
                     boots,
                     std::slice::from_ref(&p),
+                    None,
                     compare::ReviewFile::reviewed().unwrap(),
                     (&images().registers, &images().analog),
                 )

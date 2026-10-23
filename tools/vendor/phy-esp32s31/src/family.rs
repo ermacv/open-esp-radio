@@ -83,11 +83,18 @@ impl Comparison for Esp32s31 {
         production: &[ProductionBoot],
         images: &RegisterImages,
     ) -> Result<Compared> {
+        let control = compare::SameRunControl::alternating(
+            lifecycle,
+            identity,
+            vendor.to_vec(),
+            production.len(),
+        );
         let summary = compare::compare(
             lifecycle,
             identity,
             vendor,
             production,
+            control.as_ref(),
             compare::ReviewFile::reviewed()?,
             (&images.registers, &images.analog),
         )?;
