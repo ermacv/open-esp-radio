@@ -101,7 +101,54 @@ fn peer_end<L: oer_hil_link::peer::PeerLink>(peer: &mut PeerConsole<L>) -> Resul
         .parse()?)
 }
 
-pub fn run(root: &Path, selector: &str, peer_selector: &str) -> Result<ExitCode> {
+fn sram_accounting(base: &Path, head: &Path) -> Result<serde_json::Value> {
+    use serde_json::Value;
+    let base: Value = serde_json::from_slice(&fs::read(base)?)?;
+    let head: Value = serde_json::from_slice(&fs::read(head)?)?;
+    let runtime = |value: &Value| value["elfs"]["runtime"].clone();
+    let a = runtime(&base);
+    let b = runtime(&head);
+    let value = |v: &Value, path: &str| -> Result<i64> {
+        v.pointer(path)
+            .and_then(Value::as_i64)
+            .ok_or_else(|| format!("sizes.json has no {path}").into())
+    };
+    let span = |v: &Value| -> Result<i64> {
+        let sections = v["sections"].as_object().ok_or("runtime has no sections")?;
+        let mut low = i64::MAX;
+        let mut high = 0;
+        for (name, section) in sections {
+            if section["memory"] != "sram" || name == ".rtc_fast.persistent" {
+                continue;
+            }
+            let bytes = value(section, "/bytes")?;
+            if bytes == 0 {
+                continue;
+            }
+            let address = value(section, "/address")?;
+            low = low.min(address);
+            high = high.max(address.checked_add(bytes).ok_or("SRAM extent overflow")?);
+        }
+        high.checked_sub(low)
+            .ok_or_else(|| "no valid SRAM span".into())
+    };
+    let text = value(&b, "/totals/sram/code")? - value(&a, "/totals/sram/code")?;
+    let owned = value(&b, "/totals/sram/ram")? - value(&a, "/totals/sram/ram")?;
+    let irq = value(&b, "/sections/.irq_stacks/bytes")? - value(&a, "/sections/.irq_stacks/bytes")?;
+    let full = span(&b)? - span(&a)?;
+    Ok(
+        json!({"base_provenance":base["provenance"],"head_provenance":head["provenance"],
+        "sram_text":text,"sram_rw":owned-text-irq,"allocated_irq_stacks":irq,"alignment":full-owned,
+        "full_sram":full,"limit":7360,"passed":full<=7360}),
+    )
+}
+
+pub fn run(
+    root: &Path,
+    selector: &str,
+    peer_selector: &str,
+    base_sizes: &Path,
+) -> Result<ExitCode> {
     let _signals = oer_os_process::install_signal_handlers()?;
     let stand = oer_lab_model::Stand::load(&oer_lab_model::path()?)?;
     let selected = stand.resolve(selector)?;
@@ -122,6 +169,11 @@ pub fn run(root: &Path, selector: &str, peer_selector: &str) -> Result<ExitCode>
         false,
         Enforced::Only([Check::Frames, Check::Interrupts].into()),
     )?;
+    let budget = sram_accounting(base_sizes, &bundle.directory.join("sizes.json"))?;
+    eprintln!("fw: B0 full SRAM {}", serde_json::to_string(&budget)?);
+    if budget["passed"] != true {
+        return Err("B0 exceeds the owner's full 7360 B SRAM ceiling; stop before RF".into());
+    }
     let peer_build = catalog::build(root, "ble-dtm-peer")?;
     let entries = catalog::entries(root)?;
     let entry = catalog::entry(&entries, "ble-dtm-peer")?;
@@ -141,7 +193,7 @@ pub fn run(root: &Path, selector: &str, peer_selector: &str) -> Result<ExitCode>
         "source_commit":oer_os_process::git::text(root,["rev-parse","HEAD"])?,
         "source_dirty":!oer_os_process::git::text(root,["status","--porcelain"])?.is_empty(),
         "firmware":serde_json::from_slice::<serde_json::Value>(&fs::read(bundle.directory.join("bundle.json"))?)?,
-        "peer_build":peer_build});
+        "peer_build":peer_build,"budget":budget});
     fs::write(
         output.join("manifest.json"),
         serde_json::to_vec_pretty(&report)?,
