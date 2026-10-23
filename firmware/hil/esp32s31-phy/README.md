@@ -33,7 +33,7 @@ path are reported separately. A failed hardware registration stays poisoned.
 The sole P2 radio owner keeps a bounded inbox, reuses it for an immutable export
 after successful full registration, and does not export a new record after
 partial calibration or retained RF wake. P1 reaches it through RequestSlot and
-publishes the initial/sealing answer before releasing registration. A sealed
+waits for the initial/sealing answer to reach the endpoint before releasing registration. A sealed
 operation cannot wait past the original deadline for console publication.
 Calibration temperature is reported in degrees Celsius, as the native snapshot
 defines it. The [host store](../../../tools/hil/lab/CALIBRATION_CACHE.md) owns
@@ -150,3 +150,7 @@ record actual branch occurrences, bracket durations and engine maxima.
 Natural-policy investigations retain polls above 50 microseconds; the forced
 hold scenarios enforce that poll limit. Policy checks and RF cleanup apply
 to both modes. Batch handshakes add time to the 600 one-second tick intervals.
+
+Registration and bring-up checkpoints use the console's reliable text queue;
+the console owns USB writes for both frames and checkpoint lines. Reporting
+runs after the native registration result and outside its measured duration.

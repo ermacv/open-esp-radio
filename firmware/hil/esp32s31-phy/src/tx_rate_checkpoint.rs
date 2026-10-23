@@ -20,7 +20,7 @@ pub enum Point {
     AfterWifiCommonPower,
 }
 
-pub fn observe<B: PlatformClockBackend, T>(
+pub async fn observe<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     point: Point,
 ) -> Result<(), RejectReason> {
@@ -30,9 +30,9 @@ pub fn observe<B: PlatformClockBackend, T>(
             .ok_or(RejectReason::Internal)?,
     );
     // This is outside the calibration/hold brackets; it adds no PHY writes.
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=tx-rate-checkpoint point={point:?} raw={:#010x} low={:#x} high={:#x}\n",
+    crate::transport::CONSOLE.line_reliably(format_args!(
+        "OPEN_RADIO_HIL phy=tx-rate-checkpoint point={point:?} raw={:#010x} low={:#x} high={:#x}",
         value.raw, value.low, value.high
-    ));
+    )).await;
     Ok(())
 }

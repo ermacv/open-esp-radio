@@ -51,7 +51,7 @@ actually implements; compiling the `phy` feature alone grants no capability.
 
 The diagnostic image serves Start/Status;
 `PrepareCapture` is the embedded capture configuration. Its P1 dispatcher
-publishes Started/Completed before an internal request releases the P2 owner.
+waits for Started/Completed to be written before an internal request releases the P2 owner.
 An already sealed decision still reaches registration at the original deadline
 if console publication stalls; its caller decision does not change. Automatic
 `CalibrationCacheRequested` is not advertised by this manual image.

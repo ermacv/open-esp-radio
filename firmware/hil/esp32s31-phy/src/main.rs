@@ -209,56 +209,57 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
             };
         }
         let release = matches!(&answer, Answer::Started(_) | Answer::CacheCompleted(_));
-        match answer {
+        let sequence = match answer {
             Answer::CacheIdentity(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Started(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::CacheWritten(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::CacheCompleted(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::CacheStatus(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::CacheSnapshot(value) => {
-                send!(value);
+                send!(value)
             }
-            Answer::Proceeded => {}
+            Answer::Proceeded => continue,
 
             Answer::HoldStarted(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::HoldPage(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::HoldStopped(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Restarted(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Stopped(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Calibration(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Registers(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Analog(value) => {
-                send!(value);
+                send!(value)
             }
             Answer::Rejected(reason) => {
-                send!(Rejected(reason));
+                send!(Rejected(reason))
             }
-        }
+        };
         if release {
+            transport::CONSOLE.written(sequence).await;
             let mut pending = poster.post(Request::Proceed);
             let (returned, _answer) = poll_fn(|cx| pending.poll_answer(cx)).await;
             poster = returned;

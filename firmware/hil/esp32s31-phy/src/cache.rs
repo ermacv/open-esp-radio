@@ -115,7 +115,7 @@ impl Cache {
     pub fn pending(&self) -> bool {
         self.phase == Phase::Pending && self.released
     }
-    /// P1 has published Started/Completed and returned the shared request slot.
+    /// P1 has written Started/Completed and returned the shared request slot.
     pub fn release(&mut self) {
         if self.phase == Phase::Pending {
             self.released = true;

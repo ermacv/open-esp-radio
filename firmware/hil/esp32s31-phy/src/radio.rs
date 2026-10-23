@@ -245,7 +245,7 @@ impl Radio {
                 };
                 self.enter_capture(config).await?;
                 if config.radio == CaptureRadio::Wifi {
-                    self.prepare_capture_rx(capture_rx)?;
+                    self.prepare_capture_rx(capture_rx).await?;
                 }
                 let lifecycle = match config.radio {
                     CaptureRadio::Wifi => CaptureLifecycle::Restart,
@@ -274,7 +274,7 @@ impl Radio {
                     Ok(())
                 };
                 let closed = self.exit_capture(current.radio).await;
-                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed());
+                report_capture_stop(&observed, &closed, self.domain.attachment().rf_closed()).await;
                 closed?;
                 observed?;
                 Ok(Answer::Stopped(CaptureStopped {
@@ -366,7 +366,7 @@ impl Radio {
             registration_config = registration_config.with_calibration_cache(candidate);
         }
         let began = EmbassyClock.now();
-        let registration = register_concurrent_phy::<_, (), RomShortDelay, _>(
+        let registered = register_concurrent_phy::<_, (), RomShortDelay, _>(
             &EmbassyClock,
             &mut self.domain,
             &mut (),
@@ -374,11 +374,17 @@ impl Radio {
             registration_config,
             NoopPhyTargetObserver,
         )
-        .await
-        .map_err(|_| {
-            oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=FAIL step=registration");
-            RejectReason::Internal
-        })?;
+        .await;
+        let registration = match registered {
+            Ok(registration) => registration,
+            Err(_) => {
+                crate::transport::CONSOLE
+                    .line_reliably(format_args!("OPEN_RADIO_HIL phy=FAIL step=registration"))
+                    .await;
+                return Err(RejectReason::Internal);
+            }
+        };
+
         let outcome = registration.outcome();
         let registration_us = u32::try_from(
             EmbassyClock
@@ -387,10 +393,12 @@ impl Radio {
                 .as_micros(),
         )
         .unwrap_or(u32::MAX);
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL phy=registration full={} path={:?}\n",
-            outcome.full_calibration_performed, outcome.calibration_path
-        ));
+        crate::transport::CONSOLE
+            .line_reliably(format_args!(
+                "OPEN_RADIO_HIL phy=registration full={} path={:?}",
+                outcome.full_calibration_performed, outcome.calibration_path
+            ))
+            .await;
         self.full_calibration_performed = outcome.full_calibration_performed;
         self.calibration_path = match outcome.calibration_path {
             PhyCalibrationPath::FullForCache => CalibrationPath::FullForCache,
@@ -401,7 +409,8 @@ impl Radio {
         crate::tx_rate_checkpoint::observe(
             &self.domain,
             crate::tx_rate_checkpoint::Point::AfterPhyRegistration,
-        )?;
+        )
+        .await?;
         crate::sar2_checkpoint::observe(
             &mut self.domain,
             crate::sar2_checkpoint::Point::AfterPhyRegistration,
@@ -425,9 +434,9 @@ impl Radio {
             *cache.snapshot(),
             registration_us,
         )?;
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL phy=enter config={config:?}\n"
-        ));
+        crate::transport::CONSOLE
+            .line_reliably(format_args!("OPEN_RADIO_HIL phy=enter config={config:?}"))
+            .await;
         self.enter_capture(config).await?;
         let lifecycle = match config.radio {
             CaptureRadio::Wifi => CaptureLifecycle::Cold,
@@ -574,12 +583,12 @@ impl Radio {
         Ok(ready)
     }
 
-    fn prepare_capture_rx(
+    async fn prepare_capture_rx(
         &mut self,
         capture_rx: &mut Option<crate::cca_rx::Prepared>,
     ) -> Result<()> {
         let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
-        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take());
+        let (wifi, prepared) = crate::cca_rx::prepare(&self.domain, wifi, capture_rx.take()).await;
         self.clocked = Some(wifi);
         *capture_rx = Some(prepared?);
         Ok(())
@@ -615,7 +624,8 @@ impl Radio {
         crate::tx_rate_checkpoint::observe(
             &self.domain,
             crate::tx_rate_checkpoint::Point::AfterWifiCommonPower,
-        )?;
+        )
+        .await?;
         let mut wifi = powered
             .enable_clocks(&mut self.domain, &self.clocks)
             .map_err(|_| RejectReason::Internal)?;
@@ -640,14 +650,14 @@ impl Radio {
             .map_err(|_| RejectReason::Internal)?;
         }
         use crate::cca_checkpoint::{Point, observe};
-        wifi = observe(&self.domain, wifi, Point::BeforeRx)?;
+        wifi = observe(&self.domain, wifi, Point::BeforeRx).await?;
         set_wifi_rx(
             &mut self.domain,
             self.member.as_ref().ok_or(RejectReason::Internal)?,
             true,
         );
-        wifi = observe(&self.domain, wifi, Point::AfterRx)?;
-        wifi = observe(&self.domain, wifi, Point::BeforeChannel)?;
+        wifi = observe(&self.domain, wifi, Point::AfterRx).await?;
+        wifi = observe(&self.domain, wifi, Point::BeforeChannel).await?;
         {
             let mut platform = ();
             let (mut port, phy) = wifi.channel_hal_with_attachment(&mut platform, &mut self.domain);
@@ -662,7 +672,7 @@ impl Radio {
             .await
             .map_err(|_| RejectReason::Internal)?;
         }
-        wifi = observe(&self.domain, wifi, Point::AfterChannel)?;
+        wifi = observe(&self.domain, wifi, Point::AfterChannel).await?;
         let tx = self
             .domain
             .attachment()
@@ -683,7 +693,7 @@ impl Radio {
                     .expect("generated coexistence PTI fits")
             }),
         };
-        wifi = observe(&self.domain, wifi, Point::BeforeMac)?;
+        wifi = observe(&self.domain, wifi, Point::BeforeMac).await?;
         initialize_wifi_mac(
             &mut sources,
             &mut wifi.cold_mac_hal(&mut self.domain),
@@ -696,7 +706,7 @@ impl Radio {
         )
         .await
         .map_err(|_| RejectReason::Internal)?;
-        wifi = observe(&self.domain, wifi, Point::AfterMac)?;
+        wifi = observe(&self.domain, wifi, Point::AfterMac).await?;
         // Diagnostic observation window only: allow live CCA state time to
         // evolve without changing the radio, MAC, calibration or DMA setup.
         for sample in 0..5 {
@@ -707,7 +717,7 @@ impl Radio {
                         .saturating_add(oer_time::Duration::from_micros(200_000)),
                 )
                 .await;
-            wifi = observe(&self.domain, wifi, Point::Settled(sample))?;
+            wifi = observe(&self.domain, wifi, Point::Settled(sample)).await?;
         }
         self.clocked = Some(wifi);
         Ok(())
@@ -782,10 +792,10 @@ pub fn poll_registration<F: core::future::Future>(
 }
 
 #[inline(never)]
-fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}\n"
-    ));
+async fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
+    crate::transport::CONSOLE.line_reliably(format_args!(
+        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}"
+    )).await;
 }
 
 struct Sources<'a> {

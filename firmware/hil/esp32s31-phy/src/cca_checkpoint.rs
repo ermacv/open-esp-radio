@@ -25,20 +25,20 @@ pub enum Point {
     RingClosed,
 }
 
-pub fn observe<B: PlatformClockBackend, T>(
+pub async fn observe<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     wifi: WifiClocked,
     point: Point,
 ) -> Result<WifiClocked, RejectReason> {
     // Both ownership transitions perform no MMIO.
     let (runtime, interrupts, clocks) = wifi.into_running();
-    let result = observe_running(domain, &runtime, point);
+    let result = observe_running(domain, &runtime, point).await;
     let wifi = WifiClocked::from_running(runtime, interrupts, clocks);
     result?;
     Ok(wifi)
 }
 
-pub fn observe_running<B: PlatformClockBackend, T>(
+pub async fn observe_running<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     runtime: &oer_esp32s31_hal::owner::RadioAccess,
     point: Point,
@@ -48,28 +48,30 @@ pub fn observe_running<B: PlatformClockBackend, T>(
         Point::Settled(sample) | Point::RingSample(sample) => Some(sample),
         _ => None,
     };
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=cca-checkpoint point={point:?} sample={sample:?} micros={} mac_rx={} reload={} base={:#x} next={:#x} last={:#x}\n",
+    crate::transport::CONSOLE.line_reliably(format_args!(
+        "OPEN_RADIO_HIL phy=cca-checkpoint point={point:?} sample={sample:?} micros={} mac_rx={} reload={} base={:#x} next={:#x} last={:#x}",
         EmbassyClock.now().as_micros(),
         dma.walker_enabled,
         dma.reload_pending,
         dma.descriptor_base,
         dma.next_descriptor_low,
         dma.last_descriptor_low,
-    ));
+    )).await;
     for &(name, index) in REGISTERS {
         let raw = domain
             .phy_register_image(index)
             .ok_or(RejectReason::Internal)?;
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL phy=cca-register point={point:?} name={name} raw={raw:#010x}\n",
-        ));
+        crate::transport::CONSOLE
+            .line_reliably(format_args!(
+                "OPEN_RADIO_HIL phy=cca-register point={point:?} name={name} raw={raw:#010x}",
+            ))
+            .await;
     }
     Ok(())
 }
 
 /// Read-only core preparation and post-capture RX observations.
-pub fn observe_enables<B: PlatformClockBackend, T>(
+pub async fn observe_enables<B: PlatformClockBackend, T>(
     domain: &RadioDomain<B, T>,
     runtime: &mut oer_esp32s31_hal::owner::RadioAccess,
     point: Point,
@@ -77,17 +79,19 @@ pub fn observe_enables<B: PlatformClockBackend, T>(
     // This existing read-only projection samples the shared CCA force fields
     // without publishing or acknowledging anything on the unused TX queue.
     let mac = runtime.wifi_mac_hal().ordinary_tx_queue_snapshot(0);
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=cca-enable point={point:?} force={} aux_force={} mac_active={}\n",
-        mac.cca_force, mac.cca_aux_force, mac.mac_active_state,
-    ));
+    crate::transport::CONSOLE
+        .line_reliably(format_args!(
+            "OPEN_RADIO_HIL phy=cca-enable point={point:?} force={} aux_force={} mac_active={}",
+            mac.cca_force, mac.cca_aux_force, mac.mac_active_state,
+        ))
+        .await;
     for &(name, index) in ENABLE_REGISTERS {
         let raw = domain
             .phy_register_image(index)
             .ok_or(RejectReason::Internal)?;
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL phy=cca-enable-register point={point:?} name={name} raw={raw:#010x}\n",
-        ));
+        crate::transport::CONSOLE.line_reliably(format_args!(
+            "OPEN_RADIO_HIL phy=cca-enable-register point={point:?} name={name} raw={raw:#010x}",
+        )).await;
     }
     Ok(())
 }
