@@ -44,7 +44,7 @@ pub fn write_mask(width: u8, stored: &[StoredBits]) -> Option<RegisterMask> {
     })
 }
 
-/// One load or entry-register source's bit dependencies in a register or stack byte.
+/// One load, entry-register or call-result source's bit dependencies in a register or stack byte.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct ReadDependency {
     source: usize,
@@ -1708,7 +1708,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
     }
 }
 
-/// Selected load uses, using the original dependency domain and work budget.
+/// Selected load and call-result uses, sharing the dependency domain and work budget.
 pub struct ReadUsesEvaluator<'f, 'a, 'm> {
     engine: FlowEngine<'f, 'a, 'm, Reads<'m>>,
 }

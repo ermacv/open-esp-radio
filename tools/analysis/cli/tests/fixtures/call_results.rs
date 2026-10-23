@@ -41,6 +41,17 @@ begin unchanged_result
     call write_word
 finish unchanged_result
 
+begin opaque_result
+    mv a3, a0
+    li a0, 0
+    call write_external
+finish opaque_result
+
+begin masked_result
+    andi a3, a0, -2
+    call write_word
+finish masked_result
+
 begin shifted_result
     slli a3, a0, 4
     call write_word

@@ -145,8 +145,9 @@ and bit uses. With this flag the JSON envelope also records `call_results`.
 
 With result tracking, `call-argument` can carry `shift`: `Some(n)` means every
 reported source bit i reaches argument bit i + n as pure, uninverted Exact
-wiring. Masks may remove bits; arithmetic, mixing, inversion, duplicated bits or
-nonuniform positions do not establish a shift. Missing `shift` decodes as
+wiring in the caller. Callee consumption can still have `may` precision; it does
+not erase proved caller-side positions. Masks may remove bits; arithmetic,
+mixing, inversion, duplicated bits or nonuniform positions do not establish a shift. Missing `shift` decodes as
 `None`. This metadata is enabled only for the opt-in query; without the flag the
 records and summary retain their load-only encoding and meaning. Blobray never
 decides whether an analog register was preserved: a consumer can correlate the

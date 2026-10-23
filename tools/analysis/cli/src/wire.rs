@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Schema of the `register-accesses` document
 /// (`{"schema":12,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
-/// `groups` only with `--group-by`).
+/// `groups` only with `--group-by`, `call_results` only for selected result sources).
 pub const REGISTER_ACCESSES_SCHEMA: u32 = 12;
 
 /// One analyzed input of a `register-accesses` document, by position.
@@ -26,6 +26,7 @@ pub struct RegisterAccessInput {
 #[serde(deny_unknown_fields)]
 pub struct RegisterAccessDocument {
     pub schema: u32,
+    /// Selected callee names; absent for the load-only query.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub call_results: Vec<String>,
     pub inputs: Vec<RegisterAccessInput>,

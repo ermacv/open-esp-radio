@@ -2,7 +2,7 @@
 use crate::*;
 
 /// For a load or selected call-result word: what happens to each bit of the loaded value inside the function.
-/// Every bit of the access width is in exactly one class:
+/// Every bit of the access or result-word width is in exactly one class:
 /// used > unknown > preserved > unused.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,7 +25,7 @@ pub struct ReadUse {
     pub precision: ReadPrecision,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ReadSink {
     /// Condition operand.
@@ -50,10 +50,56 @@ pub enum ReadSink {
         register: u8,
         callee: Option<CallTarget>,
         /// Pure, uninverted wiring: source bit i arrives at argument bit i + shift.
+        /// Caller wiring is independent of May consumption inside the callee.
         /// Omitted when unknown or when call-result tracking was not requested.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shift: Option<i8>,
     },
+}
+
+// Inventory reasons include Debug text. Optional query metadata must not alter
+// the load-only report's diagnostics merely by adding an absent field.
+impl std::fmt::Debug for ReadSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Branch { site } => f.debug_struct("Branch").field("site", site).finish(),
+            Self::Dispatch { site } => f.debug_struct("Dispatch").field("site", site).finish(),
+            Self::IndirectTarget { site } => f
+                .debug_struct("IndirectTarget")
+                .field("site", site)
+                .finish(),
+            Self::Address { site } => f.debug_struct("Address").field("site", site).finish(),
+            Self::Return { register } => f
+                .debug_struct("Return")
+                .field("register", register)
+                .finish(),
+            Self::Store {
+                site,
+                address,
+                same_word,
+            } => f
+                .debug_struct("Store")
+                .field("site", site)
+                .field("address", address)
+                .field("same_word", same_word)
+                .finish(),
+            Self::CallArgument {
+                site,
+                register,
+                callee,
+                shift,
+            } => {
+                let mut out = f.debug_struct("CallArgument");
+                out.field("site", site)
+                    .field("register", register)
+                    .field("callee", callee);
+                if let Some(shift) = shift {
+                    out.field("shift", &Some(shift));
+                }
+                out.finish()
+            }
+        }
+    }
 }
 
 /// The callee of a call or tail call, as far as the analysis resolves it.
@@ -477,6 +523,7 @@ pub struct RegisterAccessSummary {
     pub partial_causes: PartialCauses,
     pub blocked_functions: u64,
     pub gaps: u64,
+    /// Memory-address observations plus the selected call-result words.
     pub observations: u64,
     pub unresolved_addresses: u64,
     /// Unresolved addresses with an indexed progression.
@@ -523,5 +570,29 @@ mod tests {
             count: None,
         };
         assert_eq!(odd.at(odd.index_of(0x2010_0001).unwrap()), 0x2010_0001);
+    }
+
+    #[test]
+    fn absent_wiring_keeps_inventory_diagnostic_text() {
+        let sink = ReadSink::CallArgument {
+            site: 4,
+            register: 10,
+            callee: None,
+            shift: None,
+        };
+        assert_eq!(
+            format!("{sink:?}"),
+            "CallArgument { site: 4, register: 10, callee: None }"
+        );
+        let shifted = ReadSink::CallArgument {
+            site: 4,
+            register: 10,
+            callee: None,
+            shift: Some(-4),
+        };
+        assert_eq!(
+            format!("{shifted:?}"),
+            "CallArgument { site: 4, register: 10, callee: None, shift: Some(-4) }"
+        );
     }
 }

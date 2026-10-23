@@ -2314,10 +2314,15 @@ source = "synthetic"
         ("shifted_result", 4, 0x0fff_ffff),
         ("right_shifted_result", -4, 0xffff_fff0),
         ("spilled_result", 0, u32::MAX),
+        ("masked_result", 0, 0xffff_fffe),
     ] {
         assert!(read(name).uses.iter().any(|usage| usage.bits == bits && usage.precision == ReadPrecision::Exact && matches!(&usage.sink,
             ReadSink::CallArgument { register: 13, shift: Some(by), callee: Some(callee), .. } if *by == shift && callee.name.as_deref() == Some("write_word"))), "{name}: {:?}", read(name));
     }
+    assert!(read("opaque_result").uses.iter().any(|usage| usage.precision == ReadPrecision::May
+        && matches!(&usage.sink, ReadSink::CallArgument { register: 13, shift: Some(0), callee: Some(callee), .. }
+            if callee.name.as_deref() == Some("write_external"))), "{:?}", read("opaque_result"));
+    assert_eq!(read("masked_result").unused, 1);
     for name in ["mixed_result", "inverted_result"] {
         assert!(
             read(name)

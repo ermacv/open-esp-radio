@@ -494,7 +494,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
             self.use_dependency(
                 dependency,
                 outputs & !preserved,
-                ReadSink::Store {
+                &ReadSink::Store {
                     site: instruction.site,
                     address: instruction.address.and_then(exact_address),
                     same_word: same,
@@ -563,7 +563,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
                 .get(index)
                 .copied()
                 .ok_or_else(read_integrity)?;
-            self.use_dependency(dependency, outputs, sink.clone(), c)?;
+            self.use_dependency(dependency, outputs, &sink, c)?;
         }
         Ok(())
     }
@@ -572,7 +572,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
         &mut self,
         dependency: ReadDependency,
         outputs: u32,
-        sink: ReadSink,
+        sink: &ReadSink,
         c: &mut dyn RunControl,
     ) -> Result<()> {
         let (exact, may) = dependency.selected(outputs);
@@ -580,14 +580,25 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
             if bits == 0 {
                 continue;
             }
-            let mut sink = sink.clone();
+            let mut wiring = None;
             if !self.result_sources.is_empty()
                 && !self.audit_results
-                && let ReadSink::CallArgument { shift, .. } = &mut sink
                 && precision == ReadPrecision::Exact
+                && let ReadSink::CallArgument {
+                    site,
+                    register,
+                    callee,
+                    ..
+                } = sink
             {
-                *shift = dependency.shift(outputs, bits);
+                wiring = Some(ReadSink::CallArgument {
+                    site: *site,
+                    register: *register,
+                    callee: callee.clone(),
+                    shift: dependency.shift(outputs, bits),
+                });
             }
+            let sink = wiring.as_ref().unwrap_or(sink);
             let head = self
                 .sources
                 .get(dependency.source)
@@ -602,7 +613,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
                     .events
                     .get_mut(event - 1)
                     .ok_or_else(read_integrity)?;
-                if existing.usage.sink == sink && existing.usage.precision == precision {
+                if &existing.usage.sink == sink && existing.usage.precision == precision {
                     existing.usage.bits |= bits;
                     found = true;
                     break;
@@ -755,11 +766,36 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
                 .values(flow)?
                 .get(index)
                 .ok_or_else(read_integrity)?;
+            // Consumption inside the callee may be unproved even when the
+            // caller's physical argument positions are exact. Keep the two facts.
+            let mut wiring = None;
+            if !self.result_sources.is_empty()
+                && !self.audit_results
+                && let ReadSink::CallArgument {
+                    site,
+                    register,
+                    callee,
+                    ..
+                } = &sink
+            {
+                let (exact, may) = dependency.selected(consumed.may);
+                wiring = Some(ReadSink::CallArgument {
+                    site: *site,
+                    register: *register,
+                    callee: callee.clone(),
+                    shift: dependency.shift(consumed.may, exact | may),
+                });
+            }
             for (exact, may) in dependency.exact.iter_mut().zip(&mut dependency.may) {
                 *may |= *exact;
                 *exact = 0;
             }
-            self.use_dependency(dependency, consumed.may, sink.clone(), c)?;
+            self.use_dependency(
+                dependency,
+                consumed.may,
+                wiring.as_ref().unwrap_or(&sink),
+                c,
+            )?;
         }
         Ok(())
     }
