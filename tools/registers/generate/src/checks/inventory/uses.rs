@@ -417,7 +417,6 @@ impl<'a> Accumulator<'a> {
             return Ok(());
         };
         let (offset, load, width) = match fact.as_ref() {
-            FunctionRecord::Expression { .. } => return Ok(()),
             FunctionRecord::MemoryAccess {
                 offset,
                 access,

@@ -452,7 +452,7 @@ fn field_accesses(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_summaries,
+                call_summaries: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 offset,
                 width,
@@ -622,7 +622,7 @@ fn function_records(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_summaries,
+                call_summaries: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 functions,
                 missing,
@@ -726,7 +726,7 @@ fn mmio_diff(
                 old: described(&old_inputs, &old),
                 new: described(&new_inputs, &new),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_summaries,
+                call_summaries: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 diff,
             };
@@ -1037,7 +1037,7 @@ fn register_accesses(
             .collect();
         write!(
             out,
-            "{{\"schema\":{},\"inputs\":{},\"abi\":{},\"call_returns\":{},\"read_only\":{},\"records\":[",
+            "{{\"schema\":{},\"inputs\":{},\"abi\":{},\"call_summaries\":{},\"read_only\":{},\"records\":[",
             oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA,
             serde_json::to_string(&described).map_err(json_error)?,
             serde_json::to_string(&assumptions.abi).map_err(json_error)?,
@@ -1212,7 +1212,7 @@ fn call_arguments(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_summaries,
+                call_summaries: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 symbols,
                 callers,
@@ -1348,7 +1348,7 @@ fn callers(
                     )
                     .collect(),
                 abi: assumptions.abi,
-                call_returns: assumptions.call_summaries,
+                call_summaries: assumptions.call_summaries,
                 read_only: assumptions.read_only.to_vec(),
                 symbols,
                 callers,

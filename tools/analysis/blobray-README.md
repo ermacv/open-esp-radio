@@ -37,7 +37,7 @@ Real input needs your own identified vendor artifacts.
 
 ## Loaded bit uses
 
-`register-accesses` schema 10 includes signature narrowing counts and `reads` to each load observation. Source bit
+`register-accesses` schema 11 includes signature narrowing counts and `reads` to each load observation. Source bit
 positions belong to that load's access width. Each bit is in exactly one class,
 with precedence `uses` > `unknown` > `preserved` > `unused`:
 
@@ -100,8 +100,8 @@ provenance requires one word or entry tag across all incoming paths; loads of
 the same word agree independently of their instruction sites.
 
 Grouped human output prints `reads[used=... unknown=... preserved=... unused=...]`
-with sink sites, precision and limit reasons. `read-selection` remains an
-expression observation. Blobray reports these paths; register checker policy,
+with sink sites, precision and limit reasons. Read selection comes only from
+this dataflow; no expression observations duplicate it. Blobray reports these paths; register checker policy,
 reset comparison and field-model intersections belong to `cargo registers`.
 Unresolved addresses remain in the output and cannot identify a register bit.
 

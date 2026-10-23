@@ -30,7 +30,7 @@ struct Document {
     schema: u32,
     inputs: Vec<Input>,
     abi: Option<String>,
-    call_returns: bool,
+    call_summaries: bool,
     symbols: Vec<String>,
     callers: Vec<Caller>,
     blocked: Vec<serde_json::Value>,
@@ -140,11 +140,11 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
     let path = output.join("calls.json");
     fs::rename(partial, &path)?;
     let document: Document = serde_json::from_slice(&fs::read(path)?)?;
-    if document.schema != 5
+    if document.schema != 6
         || document.inputs != inputs
         || document.symbols != names
         || document.abi.as_deref() != Some("riscv-integer")
-        || !document.call_returns
+        || !document.call_summaries
     {
         return Err(
             "call-arguments schema, pins, names or ABI differ from the requested full corpus"

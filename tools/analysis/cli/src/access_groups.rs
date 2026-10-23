@@ -45,7 +45,6 @@ pub fn human(groups: &AccessGroups) -> Vec<String> {
             let mask = entry
                 .mask
                 .map(|mask| match mask.kind {
-                    RegisterMaskKind::ReadSelection => format!(" read {:#010x}", mask.bits),
                     RegisterMaskKind::WriteReplacement => {
                         format!(" replace {:#010x}", mask.bits)
                     }

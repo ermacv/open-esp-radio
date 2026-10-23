@@ -138,7 +138,7 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
         assert!(records.iter().any(|record| matches!(record,
             oer_analysis_riscv_model::FunctionRecord::Dispatch { displacement: d, .. } if *d == displacement
         )));
-        assert_eq!(oer_tool_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA, 9);
+        assert_eq!(oer_tool_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA, 10);
         let expected = if alternative {
             JumpDispatch::TargetSet {
                 site: 0x2c,

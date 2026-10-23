@@ -24,7 +24,7 @@ use serde::Serialize;
 use crate::Result;
 
 /// Schema of `target/verification/<chip>/copies.json`.
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 /// What the comparison of one function's copies shows.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -199,7 +199,7 @@ fn verdict(
 /// How the differing accesses of two complete analyses differ: a store one
 /// side lacks, or whose known bits differ, is a write difference; a store
 /// the other side makes to the same word with unknown bits is only a value
-/// the analysis does not resolve; loads and read selections are reads.
+/// the analysis does not resolve; loads carry their read-use masks.
 fn writes(removed: &[MmioAccess], added: &[MmioAccess]) -> Verdict {
     let store = |access: &MmioAccess| access.operation == MmioOperation::Store;
     let unknown = |access: &MmioAccess| {

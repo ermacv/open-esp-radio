@@ -259,15 +259,6 @@ pub(crate) fn observe<'a, 'm>(
     facts.accesses(c, &mut |access, c| {
         observe(access.record, access.width, access.address, None, c)
     })?;
-    for (record, fact) in records.iter().enumerate() {
-        c.checkpoint(1)?;
-        if let FunctionRecord::Expression { expression, .. } = fact
-            && let Some((address, width, mask)) =
-                oer_analysis_blobray_analysis::registers::read_mask(facts, expression)
-        {
-            observe(record as u64, width, address, Some(mask), c)?;
-        }
-    }
     Ok(())
 }
 

@@ -84,6 +84,94 @@ fn copies_that_store_other_bits_differ_and_equal_ones_show_no_difference() {
     assert!(human(&report).contains("f Differs rom[]::f via archives, cited lib[]::f"));
 }
 
+#[test]
+fn read_selection_compares_flow_instead_of_and_or_shift_instructions() {
+    // lui a5,0x20000; lw a0,0(a5); select low byte; ret.
+    let masked = [0x2000_07b7, 0x0007_a503, 0x0ff5_7513, RET];
+    let shifted = [0x2000_07b7, 0x0007_a503, 0x0185_1513, 0x0185_5513, RET];
+    let fewer_bits = [0x2000_07b7, 0x0007_a503, 0x07f5_7513, RET];
+    for (other, expected) in [
+        (shifted.as_slice(), Verdict::NoDifferenceSeen),
+        (fewer_bits.as_slice(), Verdict::ReadsDiffer),
+    ] {
+        let report = compare(
+            "chip",
+            &[input("rom", object(&[("read", &masked)]))],
+            &[input("lib", object(&[("read", other)]))],
+            &[],
+            &[ImageRegion {
+                start: 0x2000_0000,
+                length: 0x1000,
+            }],
+            &[],
+            &BTreeMap::new(),
+            &BUDGET,
+        )
+        .unwrap();
+        assert_eq!(report.functions.len(), 1);
+        let function = &report.functions[0];
+        assert_eq!(function.verdict, expected, "{function:?}");
+        assert_eq!(function.complete, [true, true]);
+        if expected == Verdict::ReadsDiffer {
+            assert_eq!(function.rom_only[0].reads.as_ref().unwrap().exact, 0xff);
+            assert_eq!(function.library_only[0].reads.as_ref().unwrap().exact, 0x7f);
+        }
+    }
+}
+
+#[test]
+fn rmw_preservation_compares_equally_after_masking_or_shifting() {
+    // Keep the low byte in the same word and clear the remaining bits.
+    let masked = [0x2000_07b7, 0x0007_a503, 0x0ff5_7513, 0x00a7_a023, RET];
+    let shifted = [
+        0x2000_07b7,
+        0x0007_a503,
+        0x0185_1513,
+        0x0185_5513,
+        0x00a7_a023,
+        RET,
+    ];
+    let report = compare(
+        "chip",
+        &[input("rom", object(&[("rmw", &masked)]))],
+        &[input("lib", object(&[("rmw", &shifted)]))],
+        &[],
+        &[ImageRegion {
+            start: 0x2000_0000,
+            length: 0x1000,
+        }],
+        &[],
+        &BTreeMap::new(),
+        &BUDGET,
+    )
+    .unwrap();
+    assert_eq!(report.functions[0].verdict, Verdict::NoDifferenceSeen);
+    assert_eq!(report.functions[0].complete, [true, true]);
+}
+
+#[test]
+fn zero_extension_and_shift_selection_compare_equally() {
+    // lui a5,0x20000; lw a0,0(a5); zext.h a0,a0 / slli 16; srli 16; ret.
+    let extended = [0x2000_07b7, 0x0007_a503, 0x0805_4533, RET];
+    let shifted = [0x2000_07b7, 0x0007_a503, 0x0105_1513, 0x0105_5513, RET];
+    let report = compare(
+        "chip",
+        &[input("rom", object(&[("read", &extended)]))],
+        &[input("lib", object(&[("read", &shifted)]))],
+        &[],
+        &[ImageRegion {
+            start: 0x2000_0000,
+            length: 0x1000,
+        }],
+        &[],
+        &BTreeMap::new(),
+        &BUDGET,
+    )
+    .unwrap();
+    assert_eq!(report.functions[0].verdict, Verdict::NoDifferenceSeen);
+    assert_eq!(report.functions[0].complete, [true, true]);
+}
+
 fn change(state: [MmioFunctionState; 2], complete: [bool; 2], differs: bool) -> MmioFunctionChange {
     let access: MmioAccess = serde_json::from_value(serde_json::json!({
         "location": {"kind": "at", "address": 0x2000_0000u32},

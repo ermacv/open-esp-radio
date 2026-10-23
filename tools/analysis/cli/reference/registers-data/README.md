@@ -92,7 +92,7 @@ an indexed observation whose progression may reach it, and
 names, every gap and the summary are never filtered, so a selection cannot
 hide an incomplete analysis. `--group-by address|function` groups the selected
 observations: one group per word (unresolved addresses first) listing each
-function by access kind (a masked expression is `expression`), width and mask
+function by memory access kind, width and write-replacement mask
 with a count, or one group per
 function listing each word the same way. A group's function carries its
 symbol identity, so same-named functions of different archive members or
@@ -221,20 +221,20 @@ with a reason and are nonfatal. Applicable contract audits remain distinct.
 No `noreturn` facts are inferred or added.
 The typed summary schema is 4.
 
-The register-access schema is 10.
+The register-access schema is 11.
 See [loaded bit uses](../../../blobray-README.md#loaded-bit-uses).
 
 Human groups show the four classes, sinks, precision and reasons; observations
-with different `reads` remain separate entries. Selection masks retain their
-expression meaning and do not by themselves indicate a read use.
+with different `reads` remain separate entries. Write-replacement masks retain their expression meaning.
+Read selection comes only from the load's `reads` dataflow.
 
-The JSON document streams `{"schema":10,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+The JSON document streams `{"schema":11,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 `records` holds the selected records and `groups` appears only with
 `--group-by`.
 `inputs` lists each input's role and SHA-256. A record is an `observation` (the
 function, the record ordinal and exact original fact, the address or null, its
 alternative index, an unresolved address's `indexed` progression when it has
-one and a read-selection or write-replacement mask), a `blocked`
+one and a write-replacement mask for a preserving store), a `blocked`
 function whose analysis stopped (for example an unknown extent), or a `gap`
 naming code no function was selected from: an unsupported object, a thin
 archive member, a malformed container or an ELF diagnostic. The summary counts
@@ -270,9 +270,11 @@ blobray mmio-diff --abi riscv-integer --range 0x20000000:0x1000000 --old image=m
 Each build is analyzed as `register-accesses` analyzes it (`--old` and
 `--new` repeat `ROLE=PATH`; at least one `--range` window is required). A
 function's accesses inside the windows are its loads and stores at an exact
-address or an indexed progression, each with its width, the bits a loaded
-value keeps (`keeps`) and, for a store, where each run of the stored bits
-comes from; a run loaded from outside the windows keeps its position but not
+address or an indexed progression, each with its width. A load's `reads` carries
+`exact` and `may` used-bit masks, `preserved` and `unknown`, without sink sites
+or limit reasons; `unused` is the remainder of the load width. AND, shifts and
+zero extension that select the same bits therefore compare alike. A store
+carries where each run of its stored bits comes from; a run loaded from outside the windows keeps its position but not
 its data address. A whole stored word that lies inside a sized function or
 data object of a static image (a DMA descriptor, a handler) also names that
 symbol's stable name and offset (`0x…(&name+offset)`). Identical accesses

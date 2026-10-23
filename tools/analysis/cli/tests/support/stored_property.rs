@@ -28,7 +28,7 @@ pub struct JoinedBits<'a> {
     pub bits: u32,
 }
 
-/// Pair source and sink before calling: schema 9 omits load-site ids. The
+/// Pair source and sink before calling: stored provenance omits load-site ids. The
 /// caller proves joined_bits from the fixture's paths, not from Unknown alone.
 pub fn missing_preserved_bits(reads: &ReadUses, stored: &[StoredBits], joined_bits: u32) -> u32 {
     reads.preserved & !(identity_bits(stored) | (joined_bits & unknown_bits(stored)))
