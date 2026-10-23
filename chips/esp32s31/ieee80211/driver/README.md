@@ -25,6 +25,10 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   through the abandonment protocol in its own context, and the installation
   stays quarantined until reset. Packet-number exhaustion is a typed refusal
   before backend handoff. No retry after a hardware TX timeout.
+- **GTK replacement.** The station keeps one physical group-key slot. A key
+  table write failure poisons the port even when an internal rollback restores
+  the old material; no success terminal or reusable old GTK is returned.
+  Recovery starts a new association.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
 - **HE trigger-based and beamformee** paths stay fail-closed until a hardware
