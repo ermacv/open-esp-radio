@@ -10,8 +10,6 @@ pub struct Profile {
     pub cap_dbm: i8,
 }
 include!(concat!(env!("OUT_DIR"), "/profile.rs"));
-mod bridge;
-mod host;
 mod irq;
 mod radio;
 
@@ -21,14 +19,11 @@ oer_espressif_staged_runtime::interrupt_table! {
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu;
     doorbell: DoorbellToken = FROM_CPU_INTR3 => irq::doorbell, Priority3, ProCpu;
-    primary: PrimaryToken = MODEM_BT_MAC => irq::primary, Priority3, ProCpu;
-    nrt: NrtToken = MODEM_BT_MAC_INT1 => irq::nrt, Priority3, ProCpu;
-    timer: TimerToken = MODEM_LP_TIMER => irq::timer, Priority3, ProCpu;
 }
 type X = InterruptExecutor<2>;
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 static RADIO_EXECUTOR: StaticCell<X> = StaticCell::new();
-const LEVELS: LevelOrder<PrimaryToken, RadioToken, WakeToken> = LevelOrder::new();
+const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     radio::boot(handoff)
