@@ -5,6 +5,8 @@
 
 use std::{fmt, io::Read as _};
 
+use zeroize::{Zeroize, Zeroizing};
+
 /// A generated credential.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Generated(String);
@@ -22,12 +24,18 @@ impl fmt::Debug for Generated {
     }
 }
 
+impl Drop for Generated {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 fn random_hex(bytes: usize) -> crate::Result<String> {
-    let mut buffer = vec![0; bytes];
+    let mut buffer = Zeroizing::new(vec![0; bytes]);
     std::fs::File::open("/dev/urandom")
         .and_then(|mut source| source.read_exact(&mut buffer))
         .map_err(|error| format!("read the host's random source: {error}"))?;
-    Ok(hex::encode(buffer))
+    Ok(hex::encode(&*buffer))
 }
 
 /// An SSID for a run: `prefix`, a dash and 8 random hex digits.
