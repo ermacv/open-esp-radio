@@ -80,7 +80,7 @@ phy/cache/identity 920fd5e776ac5f85 topic
 phy/cache/identity/get fdf8202c8b4188b0 endpoint
 phy/cache/read ed770dd0fb84c68d endpoint
 phy/cache/requested c3af7e416e4e3477 topic
-phy/cache/snapshot d693eae541f240c3 topic
+phy/cache/snapshot 28f602654df98f52 topic
 phy/cache/write 68c366934c8d1d03 endpoint
 phy/cache/written 1df833a3d4fc266f topic
 phy/calibration/start 1920e0613a13d92e endpoint

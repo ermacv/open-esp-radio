@@ -9,6 +9,7 @@ source. Image keys, current-state admission and
 product qualification are separate contracts.
 
 - [Wire contract](wire.md): framing, version checks, discovery and boot identity.
+- [Calibration cache exchange](phy-cache.md): bounded opaque records and caller/native evidence.
 - [Platform diagnostics](diagnostics.md): watchdog, program-counter profile and stack measurements.
 
 Source types define the accepted wire layout; these references explain its

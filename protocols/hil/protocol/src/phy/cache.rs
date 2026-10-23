@@ -210,9 +210,23 @@ impl ReadCalibrationSnapshot {
     }
 }
 
+/// Temperature provenance; its value never grants or rejects replay.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CalibrationTemperature {
+    pub value: i16,
+    pub scale: CalibrationTemperatureScale,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum CalibrationTemperatureScale {
+    RawSensor { profile: u32 },
+    DegreesCelsius,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct CalibrationSnapshot {
     pub ticket: u32,
+    pub temperature: CalibrationTemperature,
     pub first: u16,
     pub metadata: CalibrationCacheMetadata,
     pub bytes: heapless::Vec<u8, CALIBRATION_CACHE_PAGE>,

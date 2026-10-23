@@ -1,6 +1,7 @@
 //! ESP32-S31 chip knowledge: the tables and pure functions the HAL, the
 //! drivers and the host tools share, without hardware access.
 //!
+//! - [`calibration_cache`]: the hardware-free S31 calibration record codec.
 //! - [`tx_power`]: the BTBB provider's transmit-power levels.
 #![no_std]
 #![forbid(unsafe_code)]

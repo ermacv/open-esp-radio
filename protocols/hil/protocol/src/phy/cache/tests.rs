@@ -157,13 +157,16 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
         decision: CalibrationCacheDecision::CandidateSupplied,
     });
     round_trip(GetCalibrationStartStatus { ticket: u32::MAX });
-    for decision in [
-        CalibrationCacheDecision::FullRequested,
-        CalibrationCacheDecision::TimedOut,
-        CalibrationCacheDecision::NoCache(CalibrationCacheMiss::Missing),
-        CalibrationCacheDecision::Rejected(CalibrationCacheRejection::Decode),
-        CalibrationCacheDecision::CandidateSupplied,
+    for (decision, path, full) in [
+        (CalibrationCacheDecision::FullRequested, super::super::CalibrationPath::FullForCache, true),
+        (CalibrationCacheDecision::TimedOut, super::super::CalibrationPath::FullForCache, true),
+        (CalibrationCacheDecision::NoCache(CalibrationCacheMiss::Missing), super::super::CalibrationPath::FullForCache, true),
+        (CalibrationCacheDecision::Rejected(CalibrationCacheRejection::Decode), super::super::CalibrationPath::FullForCache, true),
+        (CalibrationCacheDecision::CandidateSupplied, super::super::CalibrationPath::FullAfterRejectedCache, true),
+        (CalibrationCacheDecision::CandidateSupplied, super::super::CalibrationPath::PartialFromCache, false),
     ] {
+        round_trip(CalibrationStartStatus {ticket: u32::MAX, state: CalibrationStartState::Registering {decision}});
+        round_trip(CalibrationStartStatus {ticket: u32::MAX, state: CalibrationStartState::Failed {decision}});
         round_trip(CalibrationStartStatus {
             ticket: u32::MAX,
             state: CalibrationStartState::Ready {
@@ -171,8 +174,8 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
                 capture: super::super::CaptureReady {
                     epoch: u32::MAX,
                     lifecycle: super::super::CaptureLifecycle::Cold,
-                    full_calibration_performed: true,
-                    path: super::super::CalibrationPath::FullAfterRejectedCache,
+                    full_calibration_performed: full,
+                    path,
                     projection_schema: u16::MAX,
                     calibration_words: u16::MAX,
                     registers: u16::MAX,
@@ -181,7 +184,7 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
                     radio: super::super::CaptureRadio::Wifi,
                 },
                 registration_us: u32::MAX,
-                snapshot: Some(metadata),
+                snapshot: full.then_some(metadata),
             },
         });
     }
@@ -191,6 +194,10 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
         count: 32,
     });
     round_trip(CalibrationSnapshot {
+        temperature: CalibrationTemperature {
+            value: i16::MIN,
+            scale: CalibrationTemperatureScale::RawSensor { profile: u32::MAX },
+        },
         ticket: u32::MAX,
         first: u16::MAX,
         metadata,

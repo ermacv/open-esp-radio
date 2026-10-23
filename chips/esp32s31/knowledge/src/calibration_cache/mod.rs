@@ -51,11 +51,11 @@ macro_rules! record {
 record! {
     /// Physical RF ABI and eFuse identity, encoded in 12 bytes.
     CalibrationIdentity {
-        /// Rf cal version.
+        /// RF calibration data ABI, independent of the OER algorithm revision.
         rf_cal_version: u32,
-        /// Base mac address.
+        /// Six eFuse base-MAC bytes in their original order.
         base_mac_address: [u8; 6],
-        /// Mac extension.
+        /// eFuse MAC extension, little-endian.
         mac_extension: u16,
     }
 }
@@ -63,15 +63,15 @@ record! {
 record! {
     /// Common analog calibration products and reference temperatures.
     CommonCalibration {
-        /// Temperature.
+        /// Most recently observed temperature in degrees Celsius; not a replay guard.
         temperature: i16,
-        /// Rfpll reference temperature.
+        /// RFPLL tracking reference temperature in degrees Celsius.
         rfpll_reference_temperature: i16,
-        /// Rxcal reference temperature.
+        /// Common RX tracking reference temperature in degrees Celsius.
         rxcal_reference_temperature: i16,
-        /// Txcal reference temperature.
+        /// Transmit tracking reference temperature in degrees Celsius.
         txcal_reference_temperature: i16,
-        /// Power reference temperature.
+        /// TX-power calibration reference temperature in degrees Celsius.
         power_reference_temperature: i16,
         /// Sensor index.
         sensor_index: u8,
@@ -97,7 +97,7 @@ record! {
 record! {
     /// Wi-Fi calibration products, completion guards and RX table shape.
     WifiCalibration {
-        /// Tx gain adjustment.
+        /// Independent signed additive Wi-Fi gain input.
         tx_gain_adjustment: i8,
         /// Baseband calibrated.
         baseband_calibrated: bool,
@@ -145,7 +145,7 @@ record! {
         shared_rx_table_last_index: u8,
         /// Wifi index dc.
         wifi_index_dc: [[u16; 2]; 8],
-        /// Wifi fine dc.
+        /// I/Q DC pairs for the five fine-gain codes.
         wifi_fine_dc: [[u16; 2]; 5],
         /// Shared index dc.
         shared_index_dc: [[u16; 2]; 11],
@@ -173,7 +173,7 @@ record! {
 record! {
     /// Complete S31 semantic record; every schema-8 snapshot field is preserved.
     CalibrationRecord {
-        /// Schema.
+        /// Native snapshot schema; V1 accepts only schema 8.
         schema: u16,
         /// Identity.
         identity: CalibrationIdentity,

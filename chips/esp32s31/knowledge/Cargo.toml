@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "ESP32-S31 chip knowledge: the BTBB transmit-power levels and the IEEE 802.15.4 coexistence priorities"
+description = "ESP32-S31 chip knowledge: hardware-free calibration records, PHY relations and transmit-power levels"
 
 [dependencies]
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }

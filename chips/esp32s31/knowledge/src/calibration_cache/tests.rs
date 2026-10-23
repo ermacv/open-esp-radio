@@ -170,3 +170,29 @@ fn structurally_valid_incomplete_or_foreign_records_are_not_silently_repaired() 
         Ok(record)
     );
 }
+
+#[test]
+fn canonical_flags_and_integer_extremes_round_trip_without_clamping() {
+    for offset in [32, 45, 47, 48, 49, 50, 51, 52, 53, 228, 229] {
+        for value in [0, 1] {
+            let mut bytes = *GOLDEN;
+            bytes[offset] = value;
+            let decoded =
+                CalibrationRecord::decode(S31_SEMANTIC_V1, &bytes).expect("canonical flag");
+            assert_eq!(decoded.encode().expect("schema"), bytes);
+        }
+    }
+    let mut record = fixture();
+    record.identity.rf_cal_version = u32::MAX;
+    record.common.temperature = i16::MIN;
+    record.common.rfpll_reference_temperature = i16::MAX;
+    record.wifi.tx_gain_adjustment = i8::MIN;
+    record.wifi.tx_power_adjustment = i8::MAX;
+    record.wifi.tx_dco = [[u16::MAX; 4]; 5];
+    record.wifi.tx_reference_codes = [i16::MIN, i16::MAX];
+    record.wifi.tx_iq_config = 0;
+    assert_eq!(
+        CalibrationRecord::decode(S31_SEMANTIC_V1, &record.encode().expect("schema")),
+        Ok(record)
+    );
+}
