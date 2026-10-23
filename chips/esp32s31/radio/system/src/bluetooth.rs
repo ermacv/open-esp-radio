@@ -209,7 +209,8 @@ where
                 cause: Failure::Refused,
             });
         }
-        let (phy, epoch) = match self.actor.prepare().await {
+        let preparation = self.actor.backend.prepare().await;
+        let (phy, epoch) = match self.actor.core.prepared(preparation) {
             Ok(p) => p,
             Err(cause) => {
                 return Err(Failed {

@@ -192,13 +192,13 @@ where
     }
 }
 
-impl<C, T, O> PhyDomain for Esp32s31Radio<C, T, O>
+impl<C, T, O> Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
     T: oer_time::Timer,
     O: PhyTargetObserver + Clone,
 {
-    async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
+    async fn prepare_rf(&mut self) -> Result<PhyPreparation, Fault> {
         let start = self.timer.now();
         match self.rf {
             Rf::Open => Ok(PhyPreparation::AlreadyOpen),
@@ -235,6 +235,17 @@ where
                 })
             }
         }
+    }
+}
+
+impl<C, T, O> PhyDomain for Esp32s31Radio<C, T, O>
+where
+    C: PlatformClockProvider,
+    T: oer_time::Timer,
+    O: PhyTargetObserver + Clone,
+{
+    fn prepare(&mut self) -> impl core::future::Future<Output = Result<PhyPreparation, Fault>> {
+        crate::boundary::Boundary::new(self.prepare_rf())
     }
 
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {

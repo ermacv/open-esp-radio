@@ -184,15 +184,6 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         })
     }
 
-    fn prepare(
-        &mut self,
-    ) -> impl core::future::Future<Output = Result<(PhyPreparation, RfEpoch), Failure>> {
-        boundary::Boundary::new(async {
-            let phy = self.backend.prepare().await;
-            self.core.prepared(phy)
-        })
-    }
-
     async fn serve<Q: Client>(&mut self, request: Request<Q>) -> Answer<Q>
     where
         B: ClientBackend<Q, S>,
@@ -261,7 +252,8 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 cause: Failure::Refused,
             });
         }
-        let (phy, epoch) = match self.prepare().await {
+        let preparation = self.backend.prepare().await;
+        let (phy, epoch) = match self.core.prepared(preparation) {
             Ok(prepared) => prepared,
             Err(cause) => {
                 return Err(Failed {
