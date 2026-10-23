@@ -96,6 +96,7 @@ pub fn research_following_tables<'m, S: JumpTableSource + ?Sized>(
         ResearchOptions {
             abi,
             symbolic_spills: false,
+            relocated_loads: false,
             stack_calls: None,
             stack_context: None,
         },

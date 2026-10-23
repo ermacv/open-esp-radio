@@ -146,6 +146,7 @@ fn facts_in_capture<'m>(
         ResearchOptions {
             abi: ABI,
             symbolic_spills: true,
+            relocated_loads: false,
             stack_calls: Some(calls),
             stack_context: context,
         },

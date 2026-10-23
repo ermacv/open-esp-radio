@@ -250,7 +250,7 @@ fn field_accesses(
         &mut || Ok(()),
     )
     .expect("navigation fixture should succeed");
-    super::field_accesses(&facts, offset, width, &mut || Ok(()))
+    super::field_accesses(&facts, offset, width, false, &mut || Ok(()))
         .expect("navigation fixture should succeed")
 }
 
@@ -263,7 +263,7 @@ fn field_errors_during_folding_and_name_lookup_reach_the_caller() {
         .expect("navigation fixture should succeed");
     let mut checkpoints = 0;
     assert!(
-        !super::field_accesses(&facts, 148, None, &mut || {
+        !super::field_accesses(&facts, 148, None, false, &mut || {
             checkpoints += 1;
             Ok(())
         })
@@ -278,7 +278,7 @@ fn field_errors_during_folding_and_name_lookup_reach_the_caller() {
             ErrorCode::Integrity,
         ] {
             let mut remaining = fail_at;
-            let error = super::field_accesses(&facts, 148, None, &mut || {
+            let error = super::field_accesses(&facts, 148, None, false, &mut || {
                 if remaining == 0 {
                     return Err(Error::new(code, "stop"));
                 }

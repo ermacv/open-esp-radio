@@ -85,6 +85,7 @@ fn try_facts_calls<'m>(
         ResearchOptions {
             abi: Some(CallAbi::RiscvInteger),
             symbolic_spills,
+            relocated_loads: false,
             stack_calls,
             stack_context: None,
         },

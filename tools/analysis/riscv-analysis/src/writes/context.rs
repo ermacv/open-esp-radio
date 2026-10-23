@@ -179,6 +179,7 @@ pub(super) fn specialized<'m>(
         true,
         Some(context.abi),
         true,
+        false,
         None,
         None,
         Some(&mut run),

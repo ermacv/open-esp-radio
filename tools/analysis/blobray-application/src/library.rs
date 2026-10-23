@@ -198,6 +198,7 @@ fn analyze_without_summaries(
                 assumptions.abi,
                 assumptions.read_only,
                 assumptions.functions,
+                assumptions.pointer_chains,
                 &NoSummaries,
                 decoder,
                 memory,
@@ -355,6 +356,9 @@ pub struct Assumptions<'a> {
     /// Also expose stored-bit provenance for symbolic addresses. Numeric
     /// ranges and indexed candidates keep their usual behavior without it.
     pub symbolic_stores: bool,
+    /// Retain symbolic relocated loads and fields reached through pointers
+    /// loaded from absolute addresses. Disabled by default.
+    pub pointer_chains: bool,
     /// With it, a call the analysis cannot follow keeps the registers this
     /// calling convention preserves; without it, every register is unknown
     /// after such a call.
@@ -440,6 +444,7 @@ fn research_function<'m>(
     input: u64,
     payload: &ArtifactId,
     abi: Option<oer_analysis_riscv_model::CallAbi>,
+    pointer_chains: bool,
     returns: &dyn CallSummaries,
     tables: &dyn TableEntries,
     decoder: &dyn FunctionSemantics,
@@ -479,7 +484,7 @@ fn research_function<'m>(
             references.push((view.section, prepared), control.position())?;
             references.len() - 1
         };
-        oer_analysis_riscv_analysis::research_following_tables(
+        oer_analysis_riscv_analysis::research_following_tables_with_options(
             oer_analysis_riscv_analysis::FunctionInput {
                 traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: view.image,
@@ -500,7 +505,11 @@ fn research_function<'m>(
             memory,
             control,
             sink,
-            abi,
+            oer_analysis_riscv_analysis::ResearchOptions {
+                abi,
+                relocated_loads: pointer_chains,
+                ..Default::default()
+            },
         )
     })
 }
@@ -521,6 +530,7 @@ fn analyze_object(
     abi: Option<oer_analysis_riscv_model::CallAbi>,
     read_only: &[ReadOnlyWindow],
     names: &[String],
+    pointer_chains: bool,
     returns: &dyn CallSummaries,
     decoder: &dyn FunctionSemantics,
     memory: &WorkingMemory,
@@ -667,6 +677,7 @@ fn analyze_object(
                     input,
                     &payload,
                     abi,
+                    pointer_chains,
                     returns,
                     tables,
                     decoder,

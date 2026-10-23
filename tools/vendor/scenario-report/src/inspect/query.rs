@@ -124,6 +124,7 @@ pub fn show(corpus: &Corpus, name: &str) -> Result<Option<String>> {
     let metadata = corpus.metadata(Some(&names), &mut budget)?;
     let mut request = assumptions(&names);
     request.symbolic_stores = true;
+    request.pointer_chains = true;
     let mut notes: BTreeMap<(LibraryFunction, u64), Vec<String>> = BTreeMap::new();
     let (_, limited) = app::library::register_accesses(
         &corpus.inputs,
@@ -176,7 +177,10 @@ pub fn show(corpus: &Corpus, name: &str) -> Result<Option<String>> {
     let mut definitions = BTreeMap::new();
     let records_limited = app::library::analyze_library(
         &corpus.inputs,
-        assumptions(&names),
+        app::library::Assumptions {
+            pointer_chains: true,
+            ..assumptions(&names)
+        },
         &RiscvDecoder,
         &budget.memory,
         &mut budget.control,
@@ -304,9 +308,11 @@ pub fn fields(corpus: &Corpus, offsets: &[i32]) -> Result<String> {
     let metadata = corpus.metadata(None, &mut budget)?;
     let wanted: Vec<_> = offsets.iter().copied().map(i64::from).collect();
     let mut selected = BTreeMap::new();
+    let mut request = assumptions(&[]);
+    request.pointer_chains = true;
     let summary = app::library::field_accesses(
         &corpus.inputs,
-        assumptions(&[]),
+        request,
         i64::from(*last),
         None,
         &RiscvDecoder,
@@ -317,6 +323,7 @@ pub fn fields(corpus: &Corpus, offsets: &[i32]) -> Result<String> {
                 for field in &function.accesses {
                     if field.path.ends_with(&wanted) {
                         let mut location = match &field.root {
+                            app::field::FieldRoot::Address { address } => format!("{address:#x}"),
                             app::field::FieldRoot::EntryRegister { register } => {
                                 oer_analysis_riscv_lift::register_name(*register).to_owned()
                             }
@@ -351,6 +358,7 @@ pub fn fields(corpus: &Corpus, offsets: &[i32]) -> Result<String> {
     let mut lines = BTreeSet::new();
     let mut request = assumptions(&names);
     request.symbolic_stores = true;
+    request.pointer_chains = true;
     let (_, limited) = app::library::register_accesses(
         &corpus.inputs,
         request,

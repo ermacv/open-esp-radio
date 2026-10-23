@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum FieldRoot {
+    /// A pointer loaded from this absolute address; its first dereference is
+    /// represented by the root itself, followed by the path's displacements.
+    Address { address: u32 },
     /// A symbol; `name` when the function's references name it.
     Symbol {
         symbol: SymbolId,
@@ -51,12 +54,14 @@ pub struct FieldAccess {
 
 /// The memory accesses of one function's indexed records whose address folds to
 /// a root and a path ending at `offset`, and, when given, of `width` bytes.
-/// An unresolved base is the [`FieldRoot::Unknown`] root; absolute addresses
-/// are not fields.
+/// An unresolved base is the [`FieldRoot::Unknown`] root. With `absolute_roots`,
+/// pointers loaded from absolute addresses can root a field chain; a direct
+/// access to an absolute address is never a field.
 pub fn field_accesses(
     facts: &FunctionIndex<'_, '_>,
     offset: i64,
     width: Option<u8>,
+    absolute_roots: bool,
     c: &mut dyn RunControl,
 ) -> Result<Vec<FieldAccess>> {
     let mut accesses = Vec::new();
@@ -64,7 +69,8 @@ pub fn field_accesses(
         if width.is_some_and(|width| width != access.width) {
             return Ok(());
         }
-        let Some((root, mut path, last)) = fold(access.address, facts, 0, c)? else {
+        let Some((root, mut path, last)) = fold(access.address, facts, absolute_roots, 0, c)?
+        else {
             return Ok(());
         };
         if last != offset {
@@ -117,6 +123,7 @@ const MAX_DEPTH: usize = 64;
 fn fold(
     value: &AbstractValue,
     facts: &FunctionIndex<'_, '_>,
+    absolute_roots: bool,
     depth: usize,
     c: &mut dyn RunControl,
 ) -> Result<Option<(FieldRoot, Vec<i64>, i64)>> {
@@ -162,7 +169,8 @@ fn fold(
             }) => match (left, right) {
                 (base, AbstractValue::Constant { value })
                 | (AbstractValue::Constant { value }, base) => {
-                    let Some((root, path, last)) = fold(base, facts, depth + 1, c)? else {
+                    let Some((root, path, last)) = fold(base, facts, absolute_roots, depth + 1, c)?
+                    else {
                         return Ok(None);
                     };
                     Some((root, path, last + i64::from(*value as i32)))
@@ -170,7 +178,19 @@ fn fold(
                 _ => Some((FieldRoot::Unknown, Vec::new(), 0)),
             },
             Some(Expression::Load { address, .. }) => {
-                let Some((root, mut path, last)) = fold(address, facts, depth + 1, c)? else {
+                if absolute_roots
+                    && let AbstractValue::Constant { value: address }
+                    | AbstractValue::ImageAddress { address } = address
+                {
+                    return Ok(Some((
+                        FieldRoot::Address { address: *address },
+                        Vec::new(),
+                        0,
+                    )));
+                }
+                let Some((root, mut path, last)) =
+                    fold(address, facts, absolute_roots, depth + 1, c)?
+                else {
                     return Ok(None);
                 };
                 path.push(last);

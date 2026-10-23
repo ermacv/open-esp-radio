@@ -1016,6 +1016,7 @@ fn research<'a>(
         function.input,
         &object.payload,
         assumptions.abi,
+        assumptions.pointer_chains,
         summaries,
         tables,
         decoder,

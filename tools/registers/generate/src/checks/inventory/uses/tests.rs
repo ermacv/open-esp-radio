@@ -134,6 +134,7 @@ fn assumptions() -> Assumptions<'static> {
     Assumptions {
         functions: &[],
         symbolic_stores: false,
+        pointer_chains: false,
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
         signatures: None,

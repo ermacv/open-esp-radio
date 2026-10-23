@@ -100,6 +100,7 @@ pub fn capture_with_calls<'m>(
         oer_analysis_riscv_analysis::ResearchOptions {
             abi: Some(CallAbi::RiscvInteger),
             symbolic_spills,
+            relocated_loads: false,
             stack_calls,
             stack_context: None,
         },

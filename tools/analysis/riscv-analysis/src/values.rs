@@ -896,6 +896,7 @@ pub(super) fn analyze(
         false,
         None,
         false,
+        false,
         None,
         None,
         &mut AdmittedVec::new(memory),
@@ -917,6 +918,7 @@ pub(super) fn analyze_with<'m>(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    relocated_loads: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
     stack_context: Option<&crate::stack_context::StackContext<'_>>,
     noreturn: &mut AdmittedVec<'_, u64>,
@@ -935,6 +937,7 @@ pub(super) fn analyze_with<'m>(
         symbolic,
         abi,
         symbolic_spills,
+        relocated_loads,
         stack_calls,
         stack_context,
         noreturn,
@@ -956,6 +959,7 @@ fn analyze_with_symbols<'m, 's>(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    relocated_loads: bool,
     stack_calls: Option<&'s writes::StackCalls<'s>>,
     stack_context: Option<&'s crate::stack_context::StackContext<'s>>,
     noreturn: &mut AdmittedVec<'_, u64>,
@@ -985,6 +989,7 @@ fn analyze_with_symbols<'m, 's>(
         control.position(),
     )?;
     symbols.symbolic_spills = symbolic_spills;
+    symbols.relocated_loads = relocated_loads;
     symbols.memory_words = symbolic_spills && closed_graph;
     // Saved call proofs require all incoming paths to be modeled again in
     // this run. Reuse the current graph's shared closure result, including
@@ -1508,6 +1513,7 @@ struct Symbols<'a> {
     stack_calls: Option<&'a writes::StackCalls<'a>>,
     stack_context: Option<&'a crate::stack_context::StackContext<'a>>,
     symbolic_spills: bool,
+    relocated_loads: bool,
     memory_words: bool,
     word_range: Option<word::Range>,
     sets: Sets<'a>,
@@ -1529,6 +1535,7 @@ impl<'a> Symbols<'a> {
             })?;
         Ok(Self {
             symbolic_spills: false,
+            relocated_loads: false,
             memory_words: false,
             word_range: None,
             stack_calls: None,
@@ -1832,15 +1839,28 @@ fn evaluate(
             source,
             signed,
             ..
-        } if op.relocation.is_none() => {
-            let address = symbols.binary(
-                node.offset,
-                IntegerOp::Add,
-                incoming[base as usize],
-                Value::Constant(displacement as u32),
-                input,
-                c,
-            )?;
+        } if op.relocation.is_none()
+            || (symbols.relocated_loads
+                && kind == MemoryKind::Load
+                && effects
+                    .memory
+                    .is_some_and(|memory| memory.2 != Value::Unknown)) =>
+        {
+            // The shared transfer has already resolved a relocated load's
+            // effective address. Never reconstruct it from an incomplete
+            // relocation upper or apply its immediate a second time.
+            let address = if op.relocation.is_some() {
+                effects.memory.map_or(Value::Unknown, |memory| memory.2)
+            } else {
+                symbols.binary(
+                    node.offset,
+                    IntegerOp::Add,
+                    incoming[base as usize],
+                    Value::Constant(displacement as u32),
+                    input,
+                    c,
+                )?
+            };
             let value = match source {
                 Some(r) if kind == MemoryKind::Store => Some(symbols.binary(
                     node.offset,
@@ -2446,6 +2466,7 @@ mod tests {
                 true,
                 None,
                 false,
+                false,
                 None,
                 None,
                 &mut AdmittedVec::new(&memory),
@@ -2742,6 +2763,7 @@ mod tests {
                     true,
                     None,
                     false,
+                    false,
                     None,
                     None,
                     &mut AdmittedVec::new(&memory),
@@ -2916,6 +2938,7 @@ mod tests {
                 &mut sink,
                 true,
                 None,
+                false,
                 false,
                 None,
                 None,
@@ -3445,6 +3468,7 @@ mod tests {
             &mut sink,
             true,
             None,
+            false,
             false,
             None,
             None,

@@ -54,6 +54,7 @@ impl Assumptions {
         app::library::Assumptions {
             functions: &[],
             symbolic_stores: false,
+            pointer_chains: false,
             abi: self.abi.map(|AbiArg::RiscvInteger| CallAbi::RiscvInteger),
             call_summaries: self.call_summaries,
             signatures: self.signatures.as_ref(),

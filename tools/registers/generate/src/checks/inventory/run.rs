@@ -68,6 +68,7 @@ fn accesses(
     let assumptions = Assumptions {
         functions: &[],
         symbolic_stores: false,
+        pointer_chains: false,
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
         signatures: Some(signatures),
