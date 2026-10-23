@@ -14,18 +14,15 @@ use embassy_futures::{
 };
 use oer_embassy_net::{
     NetworkInterfaceId, NoopRawMutex, OwnedEndpointResources, OwnedNetworkDevice,
-    OwnedNetworkRunner,
 };
 use oer_embassy_time::EmbassyClock;
 use oer_firmware_apps_w3::{
-    echo::ECHO_COUNT,
     icmp,
     observation::Observations,
     report::{Lease, Report},
 };
 use oer_ieee80211_runtime::station_service::*;
 use oer_ieee80211_sta::machine::{StaCommandCredits, StaRequest};
-use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
 use oer_radio_port::PoolPath;
 use oer_time::{Clock, Duration, Timer};
 use owned_embassy_net::{
@@ -41,7 +38,6 @@ const RX: usize = oer_firmware_apps_w3::policy::RX_DEPTH;
 const TX: usize = 4;
 type Endpoint = OwnedEndpointResources<NoopRawMutex, RX, TX>;
 type Device = OwnedNetworkDevice<'static, NoopRawMutex, RX, TX>;
-type Runner = OwnedNetworkRunner<'static, NoopRawMutex, RX, TX>;
 static ENDPOINT: StaticCell<Endpoint> = StaticCell::new();
 static DEVICE: StaticCell<Device> = StaticCell::new();
 static STACK: StaticCell<StackStorage<'static, Device>> = StaticCell::new();
@@ -139,7 +135,7 @@ fn workload_future<'a, 'id: 'a, Path: PoolPath + 'a>(
         match select(
             application,
             join3(
-                bridge(radio, tx, rx, &observations, link),
+                oer_firmware_apps_w3::bridge::run(radio, tx, rx, &observations, link, &EmbassyClock),
                 runner.run(),
                 drain(&socket),
             ),
@@ -155,81 +151,6 @@ async fn drain(socket: &RawSocket<'_, Device>) -> ! {
     loop {
         let _ = socket.recv_packet().await;
         yield_now().await;
-    }
-}
-async fn bridge(
-    radio: Runner,
-    mut tx: MsduSender<'_, TxMsdu, 2>,
-    mut rx: MsduReceiver<'_, EthernetFrame, RX>,
-    observations: &RefCell<Observations>,
-    link: &Cell<bool>,
-) -> ! {
-    let mut state = false;
-    loop {
-        if state != link.get() {
-            state = link.get();
-            radio.link_controller().set_link_up(state);
-        }
-        while let Some(frame) = rx.try_receive() {
-            let p = frame.parts();
-            observations.borrow_mut().observe(
-                p.ether_type,
-                p.payload,
-                false,
-                EmbassyClock.now().as_micros(),
-            );
-            if radio
-                .rx_publisher()
-                .try_send_parts(p.destination, p.source, p.ether_type, p.payload)
-                .is_err()
-            {
-                let mut o = observations.borrow_mut();
-                o.queue_drops = o.queue_drops.saturating_add(1);
-            }
-        }
-        if let Some(packet) = radio.try_receive_tx() {
-            let bytes = packet.ethernet();
-            if let Some((header, payload)) = bytes.split_first_chunk::<14>() {
-                let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
-                let ether_type = u16::from_be_bytes([e0, e1]);
-                match EthernetFrame::from_parts(EthernetFrameParts {
-                    destination: [d0, d1, d2, d3, d4, d5],
-                    source: [s0, s1, s2, s3, s4, s5],
-                    ether_type,
-                    payload,
-                }) {
-                    Ok(frame) => {
-                        let permit = tx.ready().await;
-                        observations.borrow_mut().observe(
-                            ether_type,
-                            payload,
-                            true,
-                            EmbassyClock.now().as_micros(),
-                        );
-                        permit.send(TxMsdu {
-                            priority: WmmUserPriority::new(0).expect("best effort priority"),
-                            frame,
-                        });
-                    }
-                    Err(_) => {
-                        let mut o = observations.borrow_mut();
-                        o.queue_drops = o.queue_drops.saturating_add(1);
-                    }
-                }
-            }
-            drop(packet);
-            yield_now().await;
-        } else {
-            // The timer also propagates a link notice when no frame is queued.
-            let _ = select(
-                rx.ready(),
-                select(
-                    radio.wait_tx_publication(),
-                    EmbassyClock.wait_for(Duration::from_millis(1)),
-                ),
-            )
-            .await;
-        }
     }
 }
 #[allow(clippy::too_many_arguments)]
@@ -285,45 +206,27 @@ async fn application<'id, Path: PoolPath>(
     let lease = observations.borrow().lease;
     if let Some(lease) = lease {
         // The host observes the lease and starts its capture in this window.
-        let mut next = EmbassyClock
+        let next = EmbassyClock
             .now()
             .checked_add(Duration::from_secs(10))
             .expect("W3 monotonic deadline");
         let failure_deadline = next
             .checked_add(Duration::from_secs(140))
             .expect("W3 ping deadline");
-        for sequence in 1..=ECHO_COUNT {
-            while EmbassyClock.now() < next && healthy(link, failed) {
-                let wake = EmbassyClock
-                    .now()
-                    .saturating_add(Duration::from_millis(10))
-                    .min(next);
-                let _ = EmbassyClock.wait_until(wake).await;
-            }
-            if !healthy(link, failed) {
-                break;
-            }
-            let packet = icmp::request(
-                lease.address,
-                lease.router,
-                observations.borrow().identifier(),
-                sequence,
-            );
-            if !matches!(
-                select(
-                    socket.send(&packet),
-                    EmbassyClock.wait_for(Duration::from_millis(250))
-                )
-                .await,
-                Either::First(Ok(()))
-            ) {
-                failed.set(true);
-                break;
-            }
-            next = next
-                .checked_add(Duration::from_secs(1))
-                .expect("W3 ping schedule");
-        }
+        report.probes = oer_firmware_apps_w3::probe::run(
+            &EmbassyClock,
+            next,
+            async |sequence| {
+                let packet = icmp::request(
+                    lease.address,
+                    lease.router,
+                    observations.borrow().identifier(),
+                    sequence,
+                );
+                socket.send(&packet).await
+            },
+            || healthy(link, failed),
+        ).await;
         while !observations.borrow().complete()
             && healthy(link, failed)
             && EmbassyClock.now() < failure_deadline

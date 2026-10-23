@@ -13,6 +13,19 @@ Outgoing ICMP uses the pinned fork's raw IPv4 socket and checked wire codecs;
 incoming requests use native `icmp-ping-reply`. The image validates observations
 before reading echo identities, counts malformed packets and queue drops, and
 checks each adjacent outgoing request against the 750–1250 ms cadence window.
+The bridge checks the owned endpoint's RX publisher readiness before removing
+an RX input. Each turn publishes at most one RX frame and advances one TX
+owner, then yields. RX pool exhaustion waits for capacity while TX remains
+eligible to return those same pool owners. The packet ownership and copy
+boundaries are unchanged.
+
+A local probe socket error or its 250 ms send deadline consumes that probe
+and is counted separately, without marking the link failed or ending the
+series early. The next probe keeps its one-second schedule. Nonzero counters
+and the last socket error appear in a `w3.probes` diagnostic before the
+unchanged version 1 console block; missing probes still fail gate c. The
+normal final deauthentication and gate f remain required.
+
 It uses no power save, hardware AID or fixed PHY rate. A software beacon-loss
 deadline disconnects after six seconds without a matching BSS beacon.
 

@@ -25,6 +25,7 @@ pub struct Report {
     pub lease: Option<Lease>,
     pub malformed_ip: u32,
     pub queue_drops: u32,
+    pub probes: crate::probe::ProbeCounters,
     pub service_rx_queue_full: u32,
     pub service_rx_rejected: u32,
     pub service_rx_reasons: u16,
@@ -51,6 +52,11 @@ impl Report {
             lease: None,
             malformed_ip: 0,
             queue_drops: 0,
+            probes: crate::probe::ProbeCounters {
+                socket_errors: 0,
+                timeouts: 0,
+                last_socket_error: None,
+            },
             service_rx_queue_full: 0,
             service_rx_rejected: 0,
             service_rx_reasons: 0,
@@ -94,6 +100,13 @@ impl Report {
         }
         if self.malformed_ip != 0 || self.queue_drops != 0 {
             emit(&Note::w3_diag(self.malformed_ip, self.queue_drops))?;
+        }
+        if self.probes.socket_errors != 0 || self.probes.timeouts != 0 {
+            emit(&Note::w3_probes(
+                self.probes.socket_errors,
+                self.probes.timeouts,
+                self.probes.last_socket_error_text(),
+            ))?;
         }
         let gates = self.gates();
         let lease = self.lease.unwrap_or(Lease {
@@ -214,6 +227,20 @@ mod tests {
         report.deauth_sent = true;
         let text = text(&report);
         assert!(text.ends_with("OER-RESULT: pass w3\r\n"));
+    }
+
+    #[test]
+    fn probe_failures_are_reported_outside_the_unchanged_console_block() {
+        let mut report = passed();
+        report.sent = 99;
+        report.received = 99;
+        report.probes.socket_errors = 1;
+        report.probes.timeouts = 2;
+        report.probes.last_socket_error = Some(owned_embassy_net::raw::SendError::Unaddressable);
+        let text = text(&report);
+        assert!(text.starts_with("w3.probes socket_errors=1 timeouts=2 last_socket_error=Some(Unaddressable)\r\nOER-W3-BEGIN v=1\r\n"));
+        assert!(text.contains("w3.departure deauth_sent=1"));
+        assert!(text.ends_with("OER-W3-END lines=12\r\nOER-RESULT: fail w3\r\n"));
     }
 
     #[test]
