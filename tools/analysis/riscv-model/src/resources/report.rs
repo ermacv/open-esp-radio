@@ -21,6 +21,18 @@ pub struct OperationLimits {
     pub timeout_ms: u64,
 }
 impl AnalysisProfile {
+    /// The profile's name on a command line and in a report.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::BlobrayCli => "blobray-cli",
+            Self::ImageChecks => "image-checks",
+            Self::RegisterInventory => "register-inventory",
+            Self::SignatureCorpus => "signature-corpus",
+            Self::VendorScenario => "vendor-scenario",
+            Self::VendorCopies => "vendor-copies",
+        }
+    }
+
     pub const fn limits(self) -> OperationLimits {
         match self {
             Self::BlobrayCli => OperationLimits {
@@ -255,6 +267,15 @@ impl AnalysisLimited {
                 functions: 0,
                 results: 1,
             });
+        }
+    }
+
+    /// Add the output counts of `other`, which counted results of its own.
+    pub fn add_results(&mut self, other: &Self) {
+        for count in &other.events_by_reason {
+            for _ in 0..count.results {
+                self.result(count.reason);
+            }
         }
     }
 
@@ -507,6 +528,53 @@ mod tests {
             ),
             (3, 2, 2)
         );
+    }
+    #[test]
+    fn failure_results_are_added_to_a_projection_by_reason() {
+        let argument = LimitReason::LocalBudget(LocalBudgetScope::ArgumentSummary);
+        let read_flow = LimitReason::LocalBudget(LocalBudgetScope::ReadFlow);
+        // The library counted a failed ROM summary as a result of its scope.
+        let mut failures = AnalysisLimited::default();
+        failures.result(argument);
+        failures.result(argument);
+        // The filtered records carry one read-flow result.
+        let mut projected = AnalysisLimited::default();
+        projected.result(read_flow);
+        projected.add_results(&failures);
+        assert_eq!(projected.results, 3);
+        let mut whole = AnalysisLimited::default();
+        whole.function(&{
+            let mut limits = FunctionLimits::default();
+            limits.event(argument);
+            limits
+        });
+        whole.project_results(&projected);
+        let by = |reason| {
+            whole
+                .events_by_reason
+                .iter()
+                .find(|count| count.reason == reason)
+                .map(|count| (count.events, count.results))
+        };
+        // The event stays; the results are the projected ones.
+        assert_eq!(whole.results, 3);
+        assert_eq!(by(argument), Some((1, 2)));
+    }
+    #[test]
+    fn profile_names_round_trip_through_the_report_encoding() {
+        for profile in [
+            AnalysisProfile::BlobrayCli,
+            AnalysisProfile::ImageChecks,
+            AnalysisProfile::RegisterInventory,
+            AnalysisProfile::SignatureCorpus,
+            AnalysisProfile::VendorScenario,
+            AnalysisProfile::VendorCopies,
+        ] {
+            assert_eq!(
+                serde_json::to_string(&profile).unwrap(),
+                format!("\"{}\"", profile.name())
+            );
+        }
     }
     #[test]
     fn profiles_keep_the_existing_operation_limits() {

@@ -101,6 +101,16 @@ pub struct Report {
     pub all_reads: read_policy::Accounting,
 }
 
+/// The analysis profile of the native inventory run.
+pub const PROFILE: oer_analysis_riscv_model::AnalysisProfile =
+    oer_analysis_riscv_model::AnalysisProfile::RegisterInventory;
+
+/// The chip's IDF function contracts, relative to the repository root, which
+/// the native run always loads.
+pub fn signatures_file(chip: &str) -> String {
+    format!("chips/{chip}/vendor/facts/idf-function-signatures.toml")
+}
+
 impl Report {
     /// Keep the inventory's cited-function priority without treating a
     /// citation as evidence of any particular bit's use.
@@ -238,8 +248,12 @@ impl Report {
                 .map(|word| word.absent_violation_bits.count_ones())
                 .sum::<u32>(),
         ));
-        let mut command = String::from(
-            "  Reproduce JSON: cargo blobray --format json register-accesses --timeout-secs 3600",
+        // The profile and the chip's IDF contracts are what the native run
+        // used (`inventory::run`); the limits come from the profile.
+        let mut command = format!(
+            "  Reproduce JSON: cargo blobray --format json register-accesses --analysis-profile {} --signatures {}",
+            PROFILE.name(),
+            signatures_file(chip),
         );
         if let Some(CallAbi::RiscvInteger) = self.corpus.abi {
             command.push_str(" --abi riscv-integer");

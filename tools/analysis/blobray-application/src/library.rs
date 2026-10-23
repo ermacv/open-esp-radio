@@ -762,6 +762,7 @@ pub fn register_accesses(
         observations: 0,
         unresolved_addresses: 0,
         indexed_addresses: 0,
+        summary_failure_results: AnalysisLimited::default(),
     };
     let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
@@ -805,6 +806,9 @@ pub fn register_accesses(
                 };
                 if let Some(SummaryOutcome::LocalBudgetExceeded(budget)) = outcome {
                     function_limits.result(&[LimitReason::LocalBudget(budget.scope)]);
+                    summary
+                        .summary_failure_results
+                        .result(LimitReason::LocalBudget(budget.scope));
                 }
                 conflict_memory.admit(
                     serde_json::to_vec(&failure)
