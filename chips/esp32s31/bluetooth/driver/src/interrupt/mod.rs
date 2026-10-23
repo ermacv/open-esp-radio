@@ -1,4 +1,4 @@
-//! CPU route policy, interrupt classification and deferred publication.
+//! CPU route policy, P3 capture and P2 classification of latched inputs.
 
 pub(crate) mod classifier;
 mod halves;
@@ -19,10 +19,7 @@ pub use classifier::{
 pub use halves::{ControllerInterruptHalf, RadioDoorbell, SchedulerDoorbell};
 pub use nrt::NrtDefaultInterruptEpoch;
 
-pub use primary::{
-    PrimaryInterruptStep, PrimaryNoSchedulerWork, PrimaryPublishedInterruptStep,
-    PrimarySchedulerEvent,
-};
+pub use primary::PrimaryInterruptCapture;
 
 #[cfg(target_arch = "riscv32")]
 pub use ports::{
@@ -30,4 +27,7 @@ pub use ports::{
 };
 pub use route::{CpuInterruptRoutePolicy, CpuInterruptSource, InterruptHandlerResidency};
 
-pub use wake::{SchedulerWakeBatch, SchedulerWakeCell, SchedulerWakePublication};
+pub use wake::{
+    CapturedWakeBatch, PrimaryWakeFault, SchedulerWakeBatch, SchedulerWakeCell,
+    SchedulerWakePublication,
+};

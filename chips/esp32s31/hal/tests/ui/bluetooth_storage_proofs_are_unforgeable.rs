@@ -3,7 +3,7 @@
 use oer_esp32s31_hal::bluetooth::{ControllerHal, RxMemoryListPublished};
 use oer_esp32s31_hal::bluetooth::engine::{LeDeviceTable, LeRxChain, ControllerDmaSpace, Engine, ArenaMemory};
 
-pub fn publish(engine: &mut Engine<ArenaMemory<'_, '_, 0, 1, 2, 4, 4, 8>>) {
+pub fn publish(engine: &mut Engine<ArenaMemory<'_, '_, 0, 1, 2, 1, 4, 4, 8>>) {
     let _ = engine.publish_device_table();
 }
 #[cfg(ui_reject)]

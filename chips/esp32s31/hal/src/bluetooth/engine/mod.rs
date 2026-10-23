@@ -35,7 +35,7 @@ mod live;
 mod owner;
 pub use arena::{ArenaError, ArenaMemory, BluetoothArena, ControllerMemory, Engine, EngineFault};
 #[cfg(target_arch = "riscv32")]
-pub use live::{EngineScheduleError, EngineStopError, EngineStopStep, ReceivePublicationError};
+pub use live::{EngineScheduleError, EngineStopError, ReceivePublicationError};
 pub use owner::{EngineInitError, EngineShutDown, EngineShutdownError, EngineShutdownFailure};
 mod coexistence;
 mod connectable_advertising;
@@ -81,6 +81,8 @@ pub use coexistence::{
     SchedulerItemCoexistencePriority,
 };
 pub use scheduler_item::{SCHEDULER_ITEM_UNEXECUTED, SchedulerItemCompletionStatus};
+
+pub(crate) use scheduler_pool::SchedulerItemSources;
 
 pub use scheduler_pool::{
     SchedulerAllocationConfig, SchedulerAllocationNumbers, SchedulerItemId, SchedulerItemSpace,

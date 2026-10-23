@@ -62,7 +62,10 @@ impl<X: SignalExecutor> ControllerInterruptHalf<X> {
         }
     }
 
-    pub fn service_primary(&mut self, clock: &dyn oer_time::Clock) -> super::PrimaryInterruptStep {
+    pub fn service_primary(
+        &mut self,
+        clock: &impl oer_time::Clock,
+    ) -> super::PrimaryInterruptCapture {
         super::primary::step_primary_interrupt(&mut self.registers, clock)
     }
 
@@ -73,7 +76,7 @@ impl<X: SignalExecutor> ControllerInterruptHalf<X> {
     /// The shared handler acknowledges FROM_CPU first, then visits each
     /// installed radio half once. A later ring remains pending for its next
     /// entry. Only readiness ORs; the channel owns the exact affine reply.
-    pub fn service_doorbell(&mut self, clock: &dyn oer_time::Clock) -> bool {
+    pub fn service_doorbell(&mut self, clock: &impl oer_time::Clock) -> bool {
         let serviced = self.scheduler.service(&mut self.registers, clock);
         if serviced {
             self.reply.raise(1);

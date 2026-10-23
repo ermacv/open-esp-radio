@@ -123,7 +123,7 @@ pub fn retire<X: SignalExecutor, M: ControllerMemory>(
     task: ControllerPoweredTaskRuntime<'static, X, M>,
     output: InterruptOutputAfterRoutesOwner,
     timer: ModemLpTimerInterruptReadyOwner,
-    clock: &dyn oer_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<ControllerRetired<M>, ControllerShutdownFailure<X, M>> {
     let mut task = match task.retire() {
         Ok(task) => task,

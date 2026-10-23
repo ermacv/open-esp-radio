@@ -1,111 +1,39 @@
-//! One bounded primary source-124 interrupt disposition.
+//! Capture/acknowledge the primary source-124 epoch and its ordered suffix.
 //!
-//! The restricted PAC owns all register geometry and acknowledgement order;
-//! the HAL owns the affine interrupt-register capability. This layer joins
-//! those finite operations with the Controller classifier without callbacks,
-//! allocation, polling or an RTOS queue.
+//! P3 performs only the hardware protocol and latches positional inputs.
+//! The P2 consumer classifies their correlated, coalesced facts. In particular,
+//! source presence and its own later deferred-work sample travel as one key;
+//! OR-ing the two inputs independently could invent a marked event.
 
-use crate::interrupt::{
-    PrimaryControllerFault, PrimaryInterruptClassification, SchedulerReferenceAction,
-    SchedulerWakeCell, SchedulerWakePublication, SchedulerWorkerWake,
-};
-use oer_interrupt_table::signal::SignalExecutor;
-
+use oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptClock;
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,
-    InterruptRegistersOwner,
+    BluetoothPrimaryInterruptEpoch, BluetoothSchedulerReferenceGateObservation,
+    BluetoothSchedulerWorkObservation, InterruptRegistersOwner,
 };
 use oer_esp32s31_hal::settle::Unsettled;
 
-use oer_esp32s31_hal::bluetooth::{
-    BluetoothPrimaryInterruptEpoch, BluetoothSchedulerHardwareListIndex,
-};
-
-/// Terminal result of one bounded primary source-124 handler step.
+/// Captured primary inputs, before P2 classification.
+/// Empty epochs carry no work. Fault-source presence and a failed diagnostic
+/// settle remain sticky in the worker's latch, without panicking in P3.
 #[derive(Debug, Eq, PartialEq)]
-#[must_use = "the acknowledged primary epoch must be retained or published"]
-pub enum PrimaryInterruptStep {
-    /// A reviewed baseline fault preempted ordinary scheduler work.
-    Fault(PrimaryControllerFault),
-    /// The reference-gate BUSY sample never settled within
-    /// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE).
-    /// The reference is preserved and no work is published.
-    DiagnosticUnsettled(PrimaryInterruptClassification),
-    /// The epoch contained no reviewed dynamic scheduler source.
-    NoSchedulerWork(PrimaryNoSchedulerWork),
-    /// A scheduler wake and matching BUSY observation are ready for publication.
-    Scheduler(PrimarySchedulerEvent),
-}
+#[must_use = "latch captured primary facts for the P2 consumer"]
+pub struct PrimaryInterruptCapture(pub(super) u32);
 
-/// Acknowledged primary epoch with no reviewed scheduler work.
-#[derive(Debug, Eq, PartialEq)]
-pub struct PrimaryNoSchedulerWork {
-    classification: PrimaryInterruptClassification,
-}
+impl PrimaryInterruptCapture {
+    pub(super) const FAULT_SHIFT: u32 = 16;
+    pub(super) const FAULT_MASK: u32 = 0x1f << Self::FAULT_SHIFT;
+    pub(super) const UNSETTLED: u32 = 1 << 21;
 
-/// One classified scheduler publication derived from a single later state read.
-#[derive(Debug, Eq, PartialEq)]
-pub struct PrimarySchedulerEvent {
-    classification: PrimaryInterruptClassification,
-    wake: SchedulerWorkerWake,
-    work: BluetoothSchedulerWorkObservation,
-}
-
-/// Durable Controller disposition of one acknowledged primary epoch.
-#[derive(Debug, Eq, PartialEq)]
-#[must_use = "fault, recovery or scheduler publication must reach the Controller owner"]
-pub enum PrimaryPublishedInterruptStep {
-    /// A baseline or unclassified fault published no ordinary work.
-    Fault(PrimaryControllerFault),
-    /// The reference-gate BUSY sample never settled; no work was published.
-    DiagnosticUnsettled(PrimaryInterruptClassification),
-    /// The epoch contained no reviewed dynamic scheduler work.
-    NoSchedulerWork(PrimaryNoSchedulerWork),
-    /// The scheduler handoff accepted the event.
-    Scheduler {
-        /// Exact classified primary event.
-        event: PrimarySchedulerEvent,
-        /// Coalescing disposition of the scheduler handoff.
-        scheduler: SchedulerWakePublication,
-    },
-}
-
-impl PrimaryInterruptStep {
-    /// Publish one classified primary result into the scheduler handoff.
-    ///
-    /// Fault and empty outcomes never publish ordinary scheduler work.
-    pub fn publish<X: SignalExecutor>(
-        self,
-        scheduler_wake: &SchedulerWakeCell<X>,
-    ) -> PrimaryPublishedInterruptStep {
-        match self {
-            Self::Fault(fault) => PrimaryPublishedInterruptStep::Fault(fault),
-            Self::DiagnosticUnsettled(classification) => {
-                PrimaryPublishedInterruptStep::DiagnosticUnsettled(classification)
-            }
-            Self::NoSchedulerWork(epoch) => PrimaryPublishedInterruptStep::NoSchedulerWork(epoch),
-            Self::Scheduler(event) => {
-                let scheduler = scheduler_wake.publish_from_interrupt(event.wake().class());
-                PrimaryPublishedInterruptStep::Scheduler { event, scheduler }
-            }
-        }
-    }
-}
-
-impl PrimarySchedulerEvent {
-    /// Return the scheduler-worker wake classification.
-    pub const fn wake(&self) -> SchedulerWorkerWake {
-        self.wake
-    }
-
-    /// Whether the same scheduler-state read found the scheduler busy.
-    pub const fn scheduler_busy(&self) -> bool {
-        self.work.is_busy()
-    }
-
-    /// Hardware-list index captured by the same scheduler-state read.
-    pub const fn current_hardware_list(&self) -> BluetoothSchedulerHardwareListIndex {
-        self.work.current_hardware_list()
+    /// Fault-free positional sources paired with this event's work sample.
+    fn work(
+        epoch: &BluetoothPrimaryInterruptEpoch,
+        work: BluetoothSchedulerWorkObservation,
+    ) -> Self {
+        let key = u32::from(epoch.bank_0_source_21_pending())
+            | (u32::from(epoch.bank_0_sources_27_or_28_pending()) << 1)
+            | (u32::from(epoch.bank_1_source_3_pending()) << 2)
+            | (u32::from(work.deferred_work_requested()) << 3);
+        Self(1 << key)
     }
 }
 
@@ -118,76 +46,75 @@ trait PrimaryInterruptBackend {
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation;
 }
 
-/// The interrupt owner and the clock of its diagnostic settle.
-struct PrimaryHardware<'a> {
+struct PrimaryHardware<'a, C: oer_time::Clock> {
     interrupts: &'a mut InterruptRegistersOwner,
-    clock: &'a dyn oer_time::Clock,
+    clock: SchedulerInterruptClock<'a, C>,
 }
 
-impl PrimaryInterruptBackend for PrimaryHardware<'_> {
+impl<C: oer_time::Clock> PrimaryInterruptBackend for PrimaryHardware<'_, C> {
     fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
         self.interrupts.capture_primary_and_acknowledge()
     }
-
     fn capture_scheduler_reference_gate(
         &mut self,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled> {
         self.interrupts
-            .capture_scheduler_reference_gate(crate::diagnostic_settle(self.clock))
+            .capture_scheduler_reference_gate(crate::diagnostic_settle(&self.clock))
     }
-
     fn clear_scheduler_reference(&mut self) {
         let _cleared = self.interrupts.clear_scheduler_reference();
     }
-
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation {
         self.interrupts.capture_scheduler_work()
     }
 }
 
-fn execute_primary_interrupt_step(
+fn execute_primary_interrupt_capture(
     backend: &mut impl PrimaryInterruptBackend,
-) -> PrimaryInterruptStep {
-    let classification =
-        match PrimaryInterruptClassification::from_epoch(backend.capture_primary_and_acknowledge())
-        {
-            Ok(classification) => classification,
-            Err(fault) => return PrimaryInterruptStep::Fault(fault),
+) -> PrimaryInterruptCapture {
+    let epoch = backend.capture_primary_and_acknowledge();
+    let fault = epoch.fault_sources();
+    // These positional captures also gate the hardware suffix: baseline or
+    // unreviewed sources must not perform its diagnostic/read/write protocol.
+    if fault.is_fault() {
+        let sources = u32::from(fault.bank_0_source_15_pending())
+            | (u32::from(fault.bank_1_source_8_pending()) << 1)
+            | (u32::from(fault.bank_1_source_9_pending()) << 2)
+            | (u32::from(fault.bank_1_source_12_pending()) << 3)
+            | (u32::from(fault.unclassified_pending()) << 4);
+        return PrimaryInterruptCapture(sources << PrimaryInterruptCapture::FAULT_SHIFT);
+    }
+    if epoch.bank_1_source_3_pending() {
+        let Ok(gate) = backend.capture_scheduler_reference_gate() else {
+            return PrimaryInterruptCapture(PrimaryInterruptCapture::UNSETTLED);
         };
-
-    if let Some(gate) = classification.reference_gate() {
-        let Ok(observation) = backend.capture_scheduler_reference_gate() else {
-            return PrimaryInterruptStep::DiagnosticUnsettled(classification);
-        };
-        if gate.classify(observation) == SchedulerReferenceAction::ClearReferenceAndContinue {
+        if !gate.is_busy() {
             backend.clear_scheduler_reference();
         }
     }
-
-    let Some(work_classifier) = classification.work_classifier() else {
-        return PrimaryInterruptStep::NoSchedulerWork(PrimaryNoSchedulerWork { classification });
-    };
-    let work = backend.capture_scheduler_work();
-    let wake = work_classifier.classify(&work);
-    PrimaryInterruptStep::Scheduler(PrimarySchedulerEvent {
-        classification,
-        wake,
-        work,
-    })
+    if epoch.bank_0_source_21_pending()
+        || epoch.bank_0_sources_27_or_28_pending()
+        || epoch.bank_1_source_3_pending()
+    {
+        // A distinct read after the optional reference clear, never the
+        // earlier diagnostic sample reused as a work observation.
+        PrimaryInterruptCapture::work(&epoch, backend.capture_scheduler_work())
+    } else {
+        PrimaryInterruptCapture(0)
+    }
 }
 
-/// Capture, acknowledge and classify one primary source-124 interrupt epoch.
-///
-/// This function is finite. It performs at most the PAC acknowledgement
-/// transaction, one reference-gate sample that settles within
-/// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE)
-/// on `clock`, and one later work read. It never invokes a callback, waits
-/// for hardware beyond that settle, allocates or wakes an executor.
+/// Capture/ack/latch inputs without scheduler classification, accounting,
+/// formatting or task callbacks. The only conditional hardware suffix is
+/// the existing bounded reference-gate protocol, in its original order.
 pub(crate) fn step_primary_interrupt(
     interrupts: &mut InterruptRegistersOwner,
-    clock: &dyn oer_time::Clock,
-) -> PrimaryInterruptStep {
-    execute_primary_interrupt_step(&mut PrimaryHardware { interrupts, clock })
+    clock: &impl oer_time::Clock,
+) -> PrimaryInterruptCapture {
+    execute_primary_interrupt_capture(&mut PrimaryHardware {
+        interrupts,
+        clock: SchedulerInterruptClock::new(clock),
+    })
 }
 
 #[cfg(test)]

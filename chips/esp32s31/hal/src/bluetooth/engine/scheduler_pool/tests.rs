@@ -14,7 +14,7 @@ use crate::bluetooth::engine::{
 /// Two items and a marker word that reinitialization writes.
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
-struct TestStorage {
+struct TestStorage<const DTM: bool = false> {
     items: [BleSchedulerItem; 2],
     marker: u32,
 }
@@ -25,10 +25,14 @@ struct TestBinding {
     number: u16,
 }
 
-impl sealed::Sealed for TestStorage {}
+impl<const DTM: bool> sealed::Sealed for TestStorage<DTM> {}
 
-impl SchedulerRoleStorage for TestStorage {
-    const KIND: SchedulerRoleKind = SchedulerRoleKind::LegacyScanning;
+impl<const DTM: bool> SchedulerRoleStorage for TestStorage<DTM> {
+    const KIND: SchedulerRoleKind = if DTM {
+        SchedulerRoleKind::DirectTestMode
+    } else {
+        SchedulerRoleKind::LegacyScanning
+    };
     const ITEMS: usize = 2;
     const NUMBERS: usize = 1;
     const NEW: Self = Self {
@@ -92,6 +96,36 @@ fn pool() -> Pool {
         config().connections(),
     )
     .expect("test pool binds")
+}
+
+#[test]
+fn an_empty_pool_cannot_hide_a_populated_pools_submitted_item() {
+    let mut populated = pool();
+    let instance = populated.acquire().expect("test pool has room");
+    prepare(&mut populated, &instance);
+    let id = populated.submit(&instance, 0).expect("prepared item");
+    let empty = SchedulerRolePool::<'static, 'static, TestStorage, 0>::place::<
+        crate::bluetooth::engine::HostDma<0x2f00_2000>,
+    >(
+        crate::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
+            TestStorage,
+            0,
+        >::zeroed()))),
+        config().connections(),
+    )
+    .expect("empty pool fits");
+    let initial = SchedulerItemSpace::new().with(&populated);
+    let link = initial.link(id);
+    assert_eq!(initial.listed_item(link), Some(id));
+    let with_empty = initial.with(&empty);
+    assert_eq!(with_empty.listed_item(link), Some(id));
+    assert_eq!(with_empty.link(id), link);
+    assert!(
+        SchedulerItemSpace::new()
+            .with(&empty)
+            .listed_item(link)
+            .is_none()
+    );
 }
 
 #[test]
@@ -275,4 +309,61 @@ fn only_submitted_items_resolve_from_their_link() {
     pool.retire(listed).unwrap();
     let space = SchedulerItemSpace::new().with(&pool);
     assert_eq!(space.listed_item(space.link(listed)), None);
+}
+
+#[test]
+fn the_last_populated_pool_of_a_kind_resolves_without_falling_back() {
+    let mut first = pool();
+    let storage = Box::leak(Box::new(
+        SchedulerRolePoolStorage::<TestStorage, 2>::zeroed(),
+    ));
+    let mut last = Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_3000>>(
+        crate::dma_static::Placed::host(storage),
+        config().connections(),
+    )
+    .expect("second pool fits");
+    let a = first.acquire().expect("first slot");
+    let b = last.acquire().expect("last slot");
+    prepare(&mut first, &a);
+    prepare(&mut last, &b);
+    let a = first.submit(&a, 0).expect("prepared first");
+    let b = last.submit(&b, 0).expect("prepared last");
+    let a_link = SchedulerItemSpace::new().with(&first).link(a);
+    let b_link = SchedulerItemSpace::new().with(&last).link(b);
+    let space = SchedulerItemSpace::new().with(&first).with(&last);
+    assert_eq!(space.listed_item(b_link), Some(b));
+    assert_eq!(space.link(b), b_link);
+    assert_eq!(space.listed_item(a_link), None);
+    let reversed = SchedulerItemSpace::new().with(&last).with(&first);
+    assert_eq!(reversed.listed_item(a_link), Some(a));
+    assert_eq!(reversed.listed_item(b_link), None);
+}
+
+#[test]
+fn lookup_follows_role_order_independent_of_composition_order() {
+    let mut scanner = pool();
+    let instance = scanner.acquire().expect("scanner slot");
+    prepare(&mut scanner, &instance);
+    let scan = scanner.submit(&instance, 0).expect("scanner prepared");
+    // Two independent host models intentionally give their storage the same
+    // controller link, to make the tie-breaking order observable.
+    let mut dtm = SchedulerRolePool::<'static, 'static, TestStorage<true>, 1>::place::<
+        crate::bluetooth::engine::HostDma<0x2f00_1000>,
+    >(
+        crate::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
+            TestStorage<true>,
+            1,
+        >::zeroed()))),
+        config().direct_test_mode(),
+    )
+    .expect("DTM pool fits");
+    let instance = dtm.acquire().expect("DTM slot");
+    *dtm.cpu(&instance).expect("quiescent").state = 1;
+    let test = dtm.submit(&instance, 0).expect("DTM prepared");
+    let forward = SchedulerItemSpace::new().with(&dtm).with(&scanner);
+    let reverse = SchedulerItemSpace::new().with(&scanner).with(&dtm);
+    let link = forward.link(test);
+    assert_eq!(forward.link(scan), link);
+    assert_eq!(forward.listed_item(link), Some(test));
+    assert_eq!(reverse.listed_item(link), Some(test));
 }

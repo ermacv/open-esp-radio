@@ -44,7 +44,7 @@ impl<
     const R: usize,
     const O: usize,
     const Q: usize,
-> Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>
+> Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>
 {
     pub fn publish_receive_chains(&mut self) -> Result<(), ReceivePublicationError> {
         if self.is_quarantined() {
@@ -59,13 +59,15 @@ impl<
         self.memory.scanning_publication = Some(
             self.registers
                 .borrow_bluetooth_controller()
-                .publish_rx_memory_list_initial_head(&self.memory.scanning_rx.publication_head()),
+                .publish_rx_memory_list_initial_head(
+                    &self.memory.scanning_rx[0].publication_head(),
+                ),
         );
         let _ = self
             .registers
             .borrow_bluetooth_controller()
             .publish_software_connection_rx_memory_list_initial_head(
-                &self.memory.other_rx.publication_head(),
+                &self.memory.other_rx[0].publication_head(),
             );
         Ok(())
     }
@@ -85,7 +87,20 @@ impl<
             .map(|_| ())
             .map_err(ReceivePublicationError::Scan)
     }
+}
 
+impl<
+    'pool,
+    'epoch,
+    const A: usize,
+    const C: usize,
+    const N: usize,
+    const S: usize,
+    const R: usize,
+    const O: usize,
+    const Q: usize,
+> Engine<ArenaMemory<'pool, 'epoch, A, C, N, S, R, O, Q>>
+{
     fn list_item(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
@@ -140,11 +155,21 @@ impl<
     }
 
     /// Admit one prepared item. No raw head or physical action escapes HAL.
-    pub async fn submit<S: SchedulerDoorbell>(
+    pub async fn submit<D: SchedulerDoorbell>(
         &mut self,
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
         item: usize,
-        storage: &S,
+        storage: &D,
+    ) -> Result<(SchedulerItemId, SchedulerNext), EngineScheduleError> {
+        self.submit_with_live_insertion::<D, true>(instance, item, storage)
+            .await
+    }
+
+    async fn submit_with_live_insertion<D: SchedulerDoorbell, const LIVE: bool>(
+        &mut self,
+        instance: &SchedulerRoleInstance<'pool, 'epoch>,
+        item: usize,
+        storage: &D,
     ) -> Result<(SchedulerItemId, SchedulerNext), EngineScheduleError> {
         if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
@@ -205,6 +230,13 @@ impl<
             }
         };
         if snapshot.busy.is_busy() {
+            if !LIVE {
+                self.allow_busy_insertion::<LIVE>(id)
+                    .map_err(EngineScheduleError::Pool)?;
+                return Err(EngineScheduleError::Submit(
+                    SchedulerSubmitError::SchedulerBusy,
+                ));
+            }
             let step =
                 match self
                     .memory
@@ -258,9 +290,9 @@ impl<
 
     /// One finite observation and publication step; the caller retains the
     /// deadline and waits on the existing timer/IRQ wake between steps.
-    pub async fn advance<S: SchedulerDoorbell>(
+    pub async fn advance<D: SchedulerDoorbell>(
         &mut self,
-        storage: &S,
+        storage: &D,
         wait: SchedulerWait,
     ) -> Result<SchedulerNext, EngineScheduleError> {
         if self.is_quarantined() {
@@ -340,9 +372,9 @@ impl<
         self.perform(storage, &step).await
     }
 
-    pub async fn cancel<S: SchedulerDoorbell>(
+    pub async fn cancel<D: SchedulerDoorbell>(
         &mut self,
-        storage: &S,
+        storage: &D,
         ids: &[SchedulerItemId],
     ) -> Result<SchedulerNext, EngineScheduleError> {
         if self.is_quarantined() {
@@ -385,9 +417,9 @@ impl<
         self.perform(storage, &step).await
     }
 
-    pub async fn flush<S: SchedulerDoorbell>(
+    pub async fn flush<D: SchedulerDoorbell>(
         &mut self,
-        storage: &S,
+        storage: &D,
     ) -> Result<SchedulerNext, EngineScheduleError> {
         if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
@@ -430,51 +462,52 @@ impl<
     }
 
     /// Keep the stop receipt inside the engine that produced it.
-    pub async fn step_stop<S: SchedulerDoorbell>(
+    /// Poll the retained stop transaction; pending P3 commands stay in its
+    /// channel and `stop`, independent of the lifetime of this borrow.
+    #[inline(never)]
+    pub fn poll_stop<D: SchedulerDoorbell>(
         &mut self,
-        storage: &S,
-        stop: crate::bluetooth::BluetoothSchedulerStop,
-    ) -> Result<EngineStopStep, EngineStopError> {
+        storage: &D,
+        stop: &mut crate::bluetooth::BluetoothSchedulerStop,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Result<bool, EngineStopError>> {
         if self.is_quarantined() {
-            return Err(EngineStopError::Quarantined);
+            return core::task::Poll::Ready(Err(EngineStopError::Quarantined));
         }
-        let result = self
-            .memory
-            .hardware
-            .step_stop_live(
-                &mut self.registers.borrow_bluetooth_controller(),
-                self.scheduler_interrupts
-                    .as_mut()
-                    .ok_or(EngineStopError::Hardware(
-                        super::scheduler::SchedulerStopError::Interrupt(
-                            SchedulerInterruptError::NotInstalled,
-                        ),
-                    ))?,
-                storage,
-                stop,
-            )
-            .await
-            .map_err(|error| {
+        let interrupts = self
+            .scheduler_interrupts
+            .as_mut()
+            .ok_or(EngineStopError::Hardware(
+                super::scheduler::SchedulerStopError::Interrupt(
+                    SchedulerInterruptError::NotInstalled,
+                ),
+            ))?;
+        let result = core::task::ready!(
+            self.registers
+                .borrow_bluetooth_controller()
+                .poll_scheduler_stop(interrupts, stop, storage, cx)
+        );
+        core::task::Poll::Ready(match result {
+            Err(error) => {
                 self.faulted = true;
-                EngineStopError::Hardware(error)
-            })?;
-        match result {
-            crate::bluetooth::BluetoothSchedulerStopStep::Pending(stop) => {
-                Ok(EngineStopStep::Pending(stop))
+                Err(EngineStopError::Hardware(
+                    super::scheduler::SchedulerStopError::Interrupt(error),
+                ))
             }
-            crate::bluetooth::BluetoothSchedulerStopStep::Stopped(stopped) => {
+            Ok(crate::bluetooth::scheduler_stop::Progress::Pending) => Ok(false),
+            Ok(crate::bluetooth::scheduler_stop::Progress::Stopped(stopped)) => {
                 self.memory
                     .scheduler
                     .enter_stopped(stopped)
                     .map_err(EngineStopError::Rejected)?;
-                Ok(EngineStopStep::Stopped)
+                Ok(true)
             }
-        }
+        })
     }
 
-    pub async fn restart_if_idle<S: SchedulerDoorbell>(
+    pub async fn restart_if_idle<D: SchedulerDoorbell>(
         &mut self,
-        storage: &S,
+        storage: &D,
     ) -> Result<(), EngineScheduleError> {
         if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
@@ -537,9 +570,9 @@ impl<
         Ok(())
     }
 
-    pub async fn resume<S: SchedulerDoorbell>(
+    pub async fn resume<D: SchedulerDoorbell>(
         &mut self,
-        storage: &S,
+        storage: &D,
     ) -> Result<(), EngineScheduleError> {
         if self.is_quarantined() {
             return Err(EngineScheduleError::Quarantined);
@@ -586,11 +619,21 @@ impl<
     }
 }
 
-#[derive(Debug)]
-pub enum EngineStopStep {
-    Pending(crate::bluetooth::BluetoothSchedulerStop),
-    Stopped,
+impl<'pool, 'epoch, const Q: usize> Engine<ArenaMemory<'pool, 'epoch, 0, 0, 0, 0, 0, 0, Q>> {
+    /// Publish the DTM profile's single head after the caller's stop/resume.
+    /// A fresh P3 snapshot must prove idle. Busy returns the item to its pool
+    /// and refuses publication without starting a lock/modify transaction.
+    /// The DTM-only image therefore does not link live multi-role insertion.
+    pub async fn submit_dtm<D: SchedulerDoorbell>(
+        &mut self,
+        instance: &SchedulerRoleInstance<'pool, 'epoch>,
+        storage: &D,
+    ) -> Result<(SchedulerItemId, SchedulerNext), EngineScheduleError> {
+        self.submit_with_live_insertion::<D, false>(instance, 0, storage)
+            .await
+    }
 }
+
 #[derive(Debug)]
 pub enum EngineStopError {
     Quarantined,

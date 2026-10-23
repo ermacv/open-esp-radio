@@ -31,11 +31,13 @@ pub mod controller_hal;
 /// Event-driven controller-time latch and scheduler-epoch projection.
 pub mod controller_time;
 pub mod interrupt;
+/// Owned P1/P2 queues for the S31 DTM backend and its supervised lifecycle.
+pub mod port;
 
 /// The named settle of a scheduler diagnostic sample on `clock`.
-pub(crate) fn diagnostic_settle(
-    clock: &dyn oer_time::Clock,
-) -> oer_esp32s31_hal::settle::Settle<'_, dyn oer_time::Clock + '_> {
+pub(crate) fn diagnostic_settle<C: oer_time::Clock>(
+    clock: &C,
+) -> oer_esp32s31_hal::settle::Settle<'_, C> {
     oer_esp32s31_hal::settle::Settle::new(
         oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE,
         clock,

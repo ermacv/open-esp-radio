@@ -49,7 +49,7 @@ pub use controller_time::{
 };
 pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
 pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
-pub use scheduler_stop::{BluetoothSchedulerStop, BluetoothSchedulerStopStep};
+pub use scheduler_stop::BluetoothSchedulerStop;
 pub use shutdown::{BluetoothControllerReset, BluetoothShutdownError, BluetoothShutdownFailure};
 
 pub use oer_esp32s31_pac::{
@@ -2051,14 +2051,20 @@ impl ControllerHal<'_> {
     /// serialization. Pending retains the request; the caller owns its deadline.
     /// Each BUSY sample settles within `settle`.
     #[cfg(feature = "bluetooth-engine")]
-    pub(crate) async fn step_scheduler_stop<D: engine::scheduler::interrupt::SchedulerDoorbell>(
+    #[cfg(feature = "bluetooth-engine")]
+    pub(crate) fn poll_scheduler_stop<D: engine::scheduler::interrupt::SchedulerDoorbell>(
         &mut self,
         interrupts: &mut engine::scheduler::interrupt::SchedulerTaskHalf,
-        stop: BluetoothSchedulerStop,
+        stop: &mut BluetoothSchedulerStop,
         bell: &D,
-    ) -> Result<BluetoothSchedulerStopStep, engine::scheduler::interrupt::SchedulerInterruptError>
-    {
-        scheduler_stop::step_hardware(self.registers, interrupts, stop, bell).await
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<
+        Result<
+            scheduler_stop::Progress<BluetoothSchedulerStopped>,
+            engine::scheduler::interrupt::SchedulerInterruptError,
+        >,
+    > {
+        scheduler_stop::poll_hardware(self.registers, interrupts, stop, bell, cx)
     }
 
     /// Retire the exact stopped RUN head without clearing a foreign item.

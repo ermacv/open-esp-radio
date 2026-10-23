@@ -7,12 +7,12 @@ list-zero hardware execution and finished lists. Role value builders select
 the physical profiles through typed HAL operations. It also
 keeps the vendor Controller's event policy as pure values: coexistence
 priorities, the coexistence schedule status bits and the connection-event
-allowances. No radio role, runtime or composition in this repository lowers
-the portable LE radio values onto the executor, and no Controller core serves
-HCI over them.
+allowances. `port::runner` lowers the portable DTM values onto this executor.
+The generic port queue adapter and physical runner have separate ownership;
+there is no connected hardware HCI transport.
 
 Portable HCI codecs and LE Link Layer codecs live in
-[`crates/protocols/bluetooth`](../../../../protocols/bluetooth/).
+[`protocols/bluetooth`](../../../../protocols/bluetooth/).
 
 The module table below is the engine API map. `FEATURES.md` records current
 limitations.
@@ -22,6 +22,7 @@ limitations.
 | `controller_hal` | Controller HAL component initialization on the HAL's clocked Bluetooth client of the shared radio |
 | `controller_time` | Event-driven Controller-time latch and scheduler-epoch projection |
 | `ble_phy` | BLE PHY engine initialization from a settled Bluetooth membership and activation into runtime owners |
+| `port` | One-credit affine LE command/terminal queues, lifecycle supervision and the P2 physical DTM runner |
 | `radio` | Controller lifecycle parked in the shared radio backend; matching-installation runtime handover and retirement |
 | `interrupt` | Chip interrupt state and hardware handling |
 | `modem_timer` | Controller modem low-power timer task over the published timer owner |
@@ -42,6 +43,21 @@ detached values through closed HAL operations. A builder never borrows a
 controller layout; HAL checks binding anchors before committing a value.
 Affine pool and epoch scopes prevent foreign and stale leases, and release
 consumes its lease. Hardware heads resolve to logical identities inside HAL.
+
+The arena profile is selected by the `S` capacity in
+`BluetoothArena<A, C, N, S, R, O>`. The DTM-only profile uses all six
+capacities set to zero. It retains the DTM graph, PHY, direction-finding
+workspace and device table, but excludes scanner and global RX graphs and
+their packetless cursors. Other role APIs require `S = 1`; the type system
+prevents building them on the DTM-only profile. Both profiles use the same
+generated layouts, phased writers, compressed pointers and placement rules.
+
+`Engine::submit_dtm` is specific to the DTM-only profile. The caller stops
+and resumes the scheduler before submitting its single head; a fresh P3
+snapshot must prove idle. Busy refusal returns CPU custody without starting
+a live lock/modify transaction. Empty role pools contribute no scheduler
+dispatch target. Shared scheduling uses `Engine::submit` and its live-list
+protocol.
 
 `Engine::new` consumes the clocked client and one `Placed<BluetoothArena>`
 with composition-selected capacities and fresh pool/epoch scopes. The
@@ -151,3 +167,25 @@ allow a fresh scoped installation after the attachment loan is normally detached
 the shared actor and Wi-Fi membership remain in their original storage. A started RF failure poisons the
 shared domain; a local Controller reset cannot clear it. A late retirement
 returns its complete old graph and never satisfies a newer installation's leave.
+
+## DTM port adapter
+
+`port::Backend` implements the shared port contract over a P2 `Device`.
+P1 receives only command/event endpoints and an independent controller-clock
+client. One credit reserves both command and terminal storage until terminal
+dequeue. Cancelled FIFO waiters release their seat; rejected terminals and
+indeterminate physical outcomes retain their actual affine owners. An
+abandonment supplies no synchronous DMA/IRQ exclusion proof.
+
+`port::runner::Runner` owns the branded powered Controller runtime and one
+actual DTM lease. It uses the shared LL window planner, fresh generation-keyed
+Controller-time latches, fenced P3 admission/completion and exact stopped-graph
+return. RX grants no TX-power authority. Unknown hardware completion status
+faults the runner. The independent clock-request hook is served during IRQ
+waits as well as between operations. Pool and epoch brands stay in the P2
+owner; they do not cross static queues.
+
+`firmware/apps/b0` composes actor join/tracking, P3 publication, one 1M RX
+event, End, IRQ detachment, leave/reset and arena return. This composition has
+no mailbox binding between `Backend` and `Runner`, no HCI transport or Reset
+loop, and no hardware/RF qualification.

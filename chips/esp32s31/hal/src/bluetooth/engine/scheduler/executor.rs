@@ -63,7 +63,9 @@ pub(crate) trait SchedulerItemAccess<I> {
 }
 
 /// The item memory of the role instance pools.
-impl SchedulerItemAccess<SchedulerItemId> for SchedulerItemSpace<'_> {
+impl<P: crate::bluetooth::engine::SchedulerItemSources> SchedulerItemAccess<SchedulerItemId>
+    for SchedulerItemSpace<P>
+{
     fn link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
         SchedulerItemSpace::link(self, id)
     }

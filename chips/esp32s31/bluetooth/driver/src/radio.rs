@@ -45,6 +45,14 @@ pub struct PreparationFailure {
     pub returned: Option<ClockedOwner>,
 }
 
+/// A concrete, consuming factory for one branded Controller installation.
+/// Its named type can live in a placed async task without opaque closure
+/// type cycles; failed construction retains the complete returned inputs.
+pub trait ControllerFactory<M: ControllerMemory> {
+    type Error;
+    fn build(self, clocked: ClockedOwner) -> Result<(Engine<M>, InterruptSetupOwner), Self::Error>;
+}
+
 /// One generatively scoped installation, from clock setup through reset.
 /// `factory` binds a fresh pool/epoch and the placed arena after clocks exist.
 pub struct ControllerLifecycle<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
@@ -61,13 +69,16 @@ pub struct ControllerLifecycle<F, E, X: SignalExecutor, M: ControllerMemory, con
     dead_code,
     reason = "each failure retains the complete hardware graph until chip reset"
 )]
+// An in-place take moves only the active owner, never a maximum-sized
+// retained failure through Empty and back on an invalid lifecycle call.
+// None is transient while the same exclusive call owns its payload.
 enum State<E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
     Empty,
-    Prepared(ControllerLowPowerHardwareInitialized<'static, MT, X, M>),
-    Ready(ControllerBlePhyEngineInitialized<'static, MT, X, M>),
+    Prepared(Option<ControllerLowPowerHardwareInitialized<'static, MT, X, M>>),
+    Ready(Option<ControllerBlePhyEngineInitialized<'static, MT, X, M>>),
     Running,
-    Retired(ControllerRetired<M>),
-    Reset(oer_esp32s31_hal::dma_static::Placed<M::Storage>),
+    Retired(Option<ControllerRetired<M>>),
+    Reset(Option<oer_esp32s31_hal::dma_static::Placed<M::Storage>>),
     FactoryFailed(E),
     HalFailed(ControllerHalInitializationFailure<M>),
     SchedulerFailed(SchedulerInitializationFailure<'static, MT, X, M>),
@@ -86,7 +97,7 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
         address: oer_bluetooth_hci::BluetoothPublicDeviceAddress,
     ) -> Self
     where
-        F: FnOnce(ClockedOwner) -> Result<(Engine<M>, InterruptSetupOwner), E>,
+        F: ControllerFactory<M, Error = E>,
     {
         Self {
             factory: Some(factory),
@@ -100,6 +111,7 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
 
     /// Transfer the initialized graph to the BLE backend once, between actor
     /// run borrows. The shared PHY membership remains in the actor backend.
+    #[inline(never)]
     pub fn take_runtime(
         &mut self,
         installation: u32,
@@ -107,16 +119,12 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
         if self.installation != Some(installation) {
             return Err(ControllerFault);
         }
-        match core::mem::replace(&mut self.state, State::Empty) {
-            State::Ready(ready) => {
-                self.state = State::Running;
-                Ok(ready.activate())
-            }
-            other => {
-                self.state = other;
-                Err(ControllerFault)
-            }
-        }
+        let ready = match &mut self.state {
+            State::Ready(ready) => ready.take().ok_or(ControllerFault)?,
+            _ => return Err(ControllerFault),
+        };
+        self.state = State::Running;
+        Ok(ready.activate())
     }
 
     /// A late or foreign completion returns its entire old graph unchanged.
@@ -131,7 +139,7 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
         {
             return Err(retired);
         }
-        self.state = State::Retired(retired);
+        self.state = State::Retired(Some(retired));
         Ok(())
     }
 
@@ -139,12 +147,13 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
     /// the matching Controller reset. Reinstall uses fresh generative scopes.
     #[allow(clippy::result_large_err)]
     pub fn into_reset(mut self) -> Result<oer_esp32s31_hal::dma_static::Placed<M::Storage>, Self> {
-        match core::mem::replace(&mut self.state, State::Empty) {
-            State::Reset(arena) => Ok(arena),
-            other => {
-                self.state = other;
-                Err(self)
-            }
+        let arena = match &mut self.state {
+            State::Reset(arena) => arena.take(),
+            _ => None,
+        };
+        match arena {
+            Some(arena) => Ok(arena),
+            None => Err(self),
         }
     }
 }
@@ -152,7 +161,7 @@ impl<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize>
 impl<B, F, E, X, M, const MT: usize> RadioController<B> for ControllerLifecycle<F, E, X, M, MT>
 where
     B: PlatformClockBackend,
-    F: FnOnce(ClockedOwner) -> Result<(Engine<M>, InterruptSetupOwner), E>,
+    F: ControllerFactory<M, Error = E>,
     X: SignalExecutor,
     M: ControllerMemory,
 {
@@ -165,6 +174,7 @@ where
                 .is_some_and(|runtime| matches!(runtime.is_pristine(), Ok(true)))
     }
 
+    #[inline(never)]
     fn prepare(&mut self, clocked: ClockedOwner) -> Result<u32, PreparationFailure> {
         if !<Self as RadioController<B>>::can_prepare(self) {
             return Err(PreparationFailure {
@@ -175,7 +185,7 @@ where
             .factory
             .take()
             .expect("actor preflight retains the one controller factory");
-        let (engine, interrupts) = match factory(clocked) {
+        let (engine, interrupts) = match factory.build(clocked) {
             Ok(owners) => owners,
             Err(error) => {
                 self.state = State::FactoryFailed(error);
@@ -204,7 +214,7 @@ where
         };
         match scheduler.initialize_modem_lp_timer_hardware() {
             Ok(controller) => {
-                self.state = State::Prepared(controller);
+                self.state = State::Prepared(Some(controller));
                 Ok(installation)
             }
             Err(error) => {
@@ -216,23 +226,21 @@ where
 
     fn task_owner(&self) -> Option<&TaskOwner> {
         match &self.state {
-            State::Prepared(controller) => Some(controller.phy_task_owner()),
-            State::Retired(controller) => Some(controller.task_owner()),
+            State::Prepared(Some(controller)) => Some(controller.phy_task_owner()),
+            State::Retired(Some(controller)) => Some(controller.task_owner()),
             _ => None,
         }
     }
 
+    #[inline(never)]
     fn initialize_phy(&mut self, ready: BluetoothRfReady<'_, B>) -> Result<(), ControllerFault> {
-        let controller = match core::mem::replace(&mut self.state, State::Empty) {
-            State::Prepared(controller) => controller,
-            other => {
-                self.state = other;
-                return Err(ControllerFault);
-            }
+        let controller = match &mut self.state {
+            State::Prepared(controller) => controller.take().ok_or(ControllerFault)?,
+            _ => return Err(ControllerFault),
         };
         match controller.initialize_ble_phy_engine(ready, self.address) {
             Ok(controller) => {
-                self.state = State::Ready(controller);
+                self.state = State::Ready(Some(controller));
                 Ok(())
             }
             Err(error) => {
@@ -243,23 +251,21 @@ where
     }
 
     fn is_retired(&self, installation: u32) -> bool {
-        self.installation == Some(installation) && matches!(self.state, State::Retired(_))
+        self.installation == Some(installation) && matches!(self.state, State::Retired(Some(_)))
     }
 
+    #[inline(never)]
     fn reset(
         &mut self,
         radio: &mut RadioDomain<B, ConcurrentPhy>,
     ) -> Result<ClockedOwner, ControllerFault> {
-        let retired = match core::mem::replace(&mut self.state, State::Empty) {
-            State::Retired(retired) => retired,
-            other => {
-                self.state = other;
-                return Err(ControllerFault);
-            }
+        let retired = match &mut self.state {
+            State::Retired(retired) => retired.take().ok_or(ControllerFault)?,
+            _ => return Err(ControllerFault),
         };
         match retired.shut_down(radio, self.cells) {
             Ok(returned) => {
-                self.state = State::Reset(returned.arena);
+                self.state = State::Reset(Some(returned.arena));
                 Ok(returned.clocked)
             }
             Err(error) => {

@@ -110,7 +110,7 @@ impl<M: ControllerMemory> TaskResources<M> {
     pub fn release_controller_output(
         &mut self,
         output: oer_esp32s31_hal::bluetooth::InterruptOutputAfterRoutesOwner,
-        clock: &dyn oer_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<
         oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
         (

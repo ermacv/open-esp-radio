@@ -44,17 +44,13 @@ pub enum SchedulerRoleKind {
 }
 
 impl SchedulerRoleKind {
-    const COUNT: usize = 5;
-
-    const fn index(self) -> usize {
-        match self {
-            Self::DirectTestMode => 0,
-            Self::LegacyAdvertising => 1,
-            Self::ConnectableAdvertising => 2,
-            Self::LegacyScanning => 3,
-            Self::PeripheralConnection => 4,
-        }
-    }
+    const ALL: [Self; 5] = [
+        Self::DirectTestMode,
+        Self::LegacyAdvertising,
+        Self::ConnectableAdvertising,
+        Self::LegacyScanning,
+        Self::PeripheralConnection,
+    ];
 }
 
 /// Product limits that the vendor allocators turn into item numbers.
@@ -655,8 +651,6 @@ pub(crate) struct SchedulerRoleCpu<'pool, S: SchedulerRoleStorage> {
 /// Item memory of one pool, as seen by the executor.
 pub(crate) trait SchedulerItemSource: sealed::Sealed {
     #[doc(hidden)]
-    fn kind(&self) -> SchedulerRoleKind;
-    #[doc(hidden)]
     fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress;
     #[doc(hidden)]
     fn item_layout(&self, id: SchedulerItemId) -> &BleSchedulerItem;
@@ -669,10 +663,6 @@ impl<S: SchedulerRoleStorage, const N: usize> sealed::Sealed for SchedulerRolePo
 impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
     for SchedulerRolePool<'_, '_, S, N>
 {
-    fn kind(&self) -> SchedulerRoleKind {
-        S::KIND
-    }
-
     fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
         S::item_link(&self.bindings[id.instance()], id.item())
     }
@@ -701,47 +691,109 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
     }
 }
 
-/// The item memory of every pool that shares list zero.
-#[derive(Clone, Copy)]
-pub struct SchedulerItemSpace<'pools> {
-    sources: [Option<&'pools dyn SchedulerItemSource>; SchedulerRoleKind::COUNT],
+/// Sealed, statically dispatched pool set for one scheduler item space.
+#[doc(hidden)]
+pub(crate) trait SchedulerItemSources: sealed::Sealed {
+    fn item_link(&self, id: SchedulerItemId) -> Option<ControllerSramLinkAddress>;
+    fn item_layout(&self, id: SchedulerItemId) -> Option<&BleSchedulerItem>;
+    fn listed_item(
+        &self,
+        kind: SchedulerRoleKind,
+        link: ControllerSramLinkAddress,
+    ) -> Option<SchedulerItemId>;
 }
-
-impl<'pools> SchedulerItemSpace<'pools> {
-    pub const fn new() -> Self {
-        Self {
-            sources: [None; SchedulerRoleKind::COUNT],
+impl sealed::Sealed for () {}
+impl SchedulerItemSources for () {
+    fn item_link(&self, _: SchedulerItemId) -> Option<ControllerSramLinkAddress> {
+        None
+    }
+    fn item_layout(&self, _: SchedulerItemId) -> Option<&BleSchedulerItem> {
+        None
+    }
+    fn listed_item(
+        &self,
+        _: SchedulerRoleKind,
+        _: ControllerSramLinkAddress,
+    ) -> Option<SchedulerItemId> {
+        None
+    }
+}
+impl<P: SchedulerItemSources, S: SchedulerRoleStorage, const N: usize> sealed::Sealed
+    for (P, &SchedulerRolePool<'_, '_, S, N>)
+{
+}
+impl<P: SchedulerItemSources, S: SchedulerRoleStorage, const N: usize> SchedulerItemSources
+    for (P, &SchedulerRolePool<'_, '_, S, N>)
+{
+    fn item_link(&self, id: SchedulerItemId) -> Option<ControllerSramLinkAddress> {
+        if N != 0 && id.kind == S::KIND {
+            Some(self.1.item_link(id))
+        } else {
+            self.0.item_link(id)
         }
     }
-
-    /// Add the pool of one kind.
-    pub fn with<S: SchedulerItemSource + 'pools>(mut self, pool: &'pools S) -> Self {
-        self.sources[pool.kind().index()] = Some(pool);
-        self
+    fn item_layout(&self, id: SchedulerItemId) -> Option<&BleSchedulerItem> {
+        if N != 0 && id.kind == S::KIND {
+            Some(self.1.item_layout(id))
+        } else {
+            self.0.item_layout(id)
+        }
     }
-
-    fn source(&self, id: SchedulerItemId) -> &'pools dyn SchedulerItemSource {
-        self.sources[id.kind.index()].expect("the space holds the pool of every listed item")
+    fn listed_item(
+        &self,
+        kind: SchedulerRoleKind,
+        link: ControllerSramLinkAddress,
+    ) -> Option<SchedulerItemId> {
+        if N != 0 && kind == S::KIND {
+            SchedulerItemSource::listed_item(self.1, link)
+        } else {
+            self.0.listed_item(kind, link)
+        }
     }
+}
 
-    fn header(&self, id: SchedulerItemId) -> SchedulerItemHeader<'pools> {
-        SchedulerItemHeader::new(self.source(id).item_layout(id))
+/// The item memory of every pool that shares list zero.
+/// The type retains the concrete borrowed pools, without a dispatch table.
+#[derive(Clone, Copy)]
+pub struct SchedulerItemSpace<P = ()> {
+    sources: P,
+}
+
+impl SchedulerItemSpace {
+    pub const fn new() -> Self {
+        Self { sources: () }
     }
-
+}
+impl<P: SchedulerItemSources> SchedulerItemSpace<P> {
+    /// Add the populated pool of one kind. Empty pools never shadow one
+    /// already present; the last populated pool of a kind takes precedence.
+    pub fn with<'view, 'pool, 'epoch, S: SchedulerRoleStorage, const N: usize>(
+        self,
+        pool: &'view SchedulerRolePool<'pool, 'epoch, S, N>,
+    ) -> SchedulerItemSpace<(P, &'view SchedulerRolePool<'pool, 'epoch, S, N>)> {
+        SchedulerItemSpace {
+            sources: (self.sources, pool),
+        }
+    }
+    fn header(&self, id: SchedulerItemId) -> SchedulerItemHeader<'_> {
+        SchedulerItemHeader::new(
+            self.sources
+                .item_layout(id)
+                .expect("the space holds the pool of every listed item"),
+        )
+    }
     /// Controller link of the item.
     pub(crate) fn link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
-        self.source(id).item_link(id)
-    }
-
-    /// The submitted item whose controller link is `link`.
-    ///
-    /// Pool storage is bound for `'static`, so a link found here stays valid
-    /// memory for as long as hardware may follow it.
-    pub(crate) fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId> {
         self.sources
-            .iter()
-            .flatten()
-            .find_map(|source| source.listed_item(link))
+            .item_link(id)
+            .expect("the space holds the pool of every listed item")
+    }
+    /// Resolve submitted items in role-kind order, independent of insertion
+    /// order. Storage stays pinned while hardware may follow any listed link.
+    pub(crate) fn listed_item(&self, link: ControllerSramLinkAddress) -> Option<SchedulerItemId> {
+        SchedulerRoleKind::ALL
+            .into_iter()
+            .find_map(|kind| self.sources.listed_item(kind, link))
     }
 
     /// Prepare a listed item for insertion; see the scheduler item header.
@@ -787,7 +839,7 @@ impl<'pools> SchedulerItemSpace<'pools> {
     }
 }
 
-impl Default for SchedulerItemSpace<'_> {
+impl Default for SchedulerItemSpace {
     fn default() -> Self {
         Self::new()
     }

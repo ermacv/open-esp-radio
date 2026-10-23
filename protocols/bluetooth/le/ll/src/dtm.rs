@@ -240,60 +240,17 @@ impl DtmSession {
         timing: RadioTiming,
         payload: &'payload mut [u8; DTM_MAX_PAYLOAD],
     ) -> Result<Option<DtmEvent<'payload>>, DtmEpochExhausted> {
-        use DtmCalculation as C;
         let Phase::Running(test) = self.phase else {
             return Ok(None);
         };
         if self.in_progress {
             return Ok(None);
         }
-        let at = |calculation| DtmEpochExhausted { calculation };
-        let admitted = admitted_anchor(now, timing).ok_or(at(C::Admission))?;
-        let window = match test {
-            DtmTest::Transmit { phy, length, .. } => {
-                // Start admits only transmitter PHYs with a bounded airtime.
-                let air =
-                    transmit_air_time(phy, length).expect("start validated the transmitter PHY");
-                let interval = packet_interval(air.get());
-                let anchor = match self.last {
-                    None => admitted
-                        .checked_add(DTM_PLANNING_SLACK)
-                        .ok_or(at(C::InitialAnchor))?,
-                    Some(last) => {
-                        let first = last
-                            .start()
-                            .checked_add(interval)
-                            .ok_or(at(C::NextAnchor))?;
-                        let reachable = admitted
-                            .checked_add(DTM_RECURRING_TRANSMIT_SLACK)
-                            .ok_or(at(C::ReachableAnchor))?;
-                        // A grid point the request still reaches is the next
-                        // one; otherwise the first grid point after it.
-                        match reachable.checked_duration_since(first) {
-                            None => first,
-                            Some(late) => {
-                                let slots = late.as_micros().div_ceil(interval.as_micros());
-                                interval
-                                    .checked_mul(slots)
-                                    .and_then(|skipped| first.checked_add(skipped))
-                                    .ok_or(at(C::SlotAlignment))?
-                            }
-                        }
-                    }
-                };
-                LeWindow::nonempty(anchor, air).ok_or(at(C::AirWindow))?
-            }
-            DtmTest::Receive { .. } => {
-                let earliest = admitted
-                    .checked_add(DTM_PLANNING_SLACK)
-                    .ok_or(at(C::InitialAnchor))?;
-                let anchor = self.last.map_or(earliest, |last| last.end().max(earliest));
-                LeWindow::nonempty(anchor, DTM_RECEIVE_WINDOW).ok_or(at(C::AirWindow))?
-            }
+        let window = match next_window(test, now, timing, self.last) {
+            Ok(window) => window,
+            Err(DtmWindowError::OutsideEpoch(error)) => return Err(error),
+            Err(DtmWindowError::UnsupportedPhy) => unreachable!("start validated transmitter PHY"),
         };
-        timing
-            .reservation(window)
-            .map_err(|OutsideEpoch| at(C::Reservation))?;
         // All geometry is validated before payload or history state changes.
         let request = match test {
             DtmTest::Transmit {
@@ -371,6 +328,74 @@ impl DtmSession {
             _ => None,
         }
     }
+}
+
+/// Failure of a detached DTM window plan, with no state mutation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DtmWindowError {
+    /// The selected transmitter PHY has no implemented airtime calculation.
+    UnsupportedPhy,
+    /// A checked time calculation left this radio epoch.
+    OutsideEpoch(DtmEpochExhausted),
+}
+
+/// Plan one physical DTM air window without requiring TX authority for RX.
+/// Both the portable session and the S31 lower-LL worker use this geometry.
+/// Failure changes no session, payload or previous-window state.
+pub fn next_window(
+    test: DtmTest,
+    now: LeInstant,
+    timing: RadioTiming,
+    previous: Option<LeWindow>,
+) -> Result<LeWindow, DtmWindowError> {
+    use DtmCalculation as C;
+    let at = |calculation| DtmWindowError::OutsideEpoch(DtmEpochExhausted { calculation });
+    let admitted = admitted_anchor(now, timing).ok_or(at(C::Admission))?;
+    let window = match test {
+        DtmTest::Transmit { phy, length, .. } => {
+            // Start admits only transmitter PHYs with a bounded airtime.
+            let air = transmit_air_time(phy, length).ok_or(DtmWindowError::UnsupportedPhy)?;
+            let interval = packet_interval(air.get());
+            let anchor = match previous {
+                None => admitted
+                    .checked_add(DTM_PLANNING_SLACK)
+                    .ok_or(at(C::InitialAnchor))?,
+                Some(last) => {
+                    let first = last
+                        .start()
+                        .checked_add(interval)
+                        .ok_or(at(C::NextAnchor))?;
+                    let reachable = admitted
+                        .checked_add(DTM_RECURRING_TRANSMIT_SLACK)
+                        .ok_or(at(C::ReachableAnchor))?;
+                    // A grid point the request still reaches is the next
+                    // one; otherwise the first grid point after it.
+                    match reachable.checked_duration_since(first) {
+                        None => first,
+                        Some(late) => {
+                            let slots = late.as_micros().div_ceil(interval.as_micros());
+                            interval
+                                .checked_mul(slots)
+                                .and_then(|skipped| first.checked_add(skipped))
+                                .ok_or(at(C::SlotAlignment))?
+                        }
+                    }
+                }
+            };
+            LeWindow::nonempty(anchor, air).ok_or(at(C::AirWindow))?
+        }
+        DtmTest::Receive { .. } => {
+            let earliest = admitted
+                .checked_add(DTM_PLANNING_SLACK)
+                .ok_or(at(C::InitialAnchor))?;
+            let anchor = previous.map_or(earliest, |last| last.end().max(earliest));
+            LeWindow::nonempty(anchor, DTM_RECEIVE_WINDOW).ok_or(at(C::AirWindow))?
+        }
+    };
+    timing
+        .reservation(window)
+        .map_err(|OutsideEpoch| at(C::Reservation))?;
+    Ok(window)
 }
 
 fn received(test: DtmTest, counters: DtmCounters) -> u16 {

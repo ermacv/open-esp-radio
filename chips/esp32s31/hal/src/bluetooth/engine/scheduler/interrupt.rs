@@ -7,6 +7,7 @@
 use core::{
     cell::UnsafeCell,
     future::poll_fn,
+    mem::MaybeUninit,
     sync::atomic::{AtomicU32, Ordering},
     task::{Context, Poll},
 };
@@ -32,6 +33,22 @@ const RESPONSE: u32 = 4;
 pub trait SchedulerDoorbell {
     fn ring(&self);
     fn poll_reply(&self, cx: &mut Context<'_>) -> Poll<Result<(), SchedulerInterruptError>>;
+}
+
+/// Typed, out-of-line clock read for the bounded P3 diagnostic settles.
+/// It reads the exact supplied clock; the boundary prevents each command's
+/// generic settle loop from inlining another copy of its conversion code.
+pub struct SchedulerInterruptClock<'a, C: oer_time::Clock>(&'a C);
+impl<'a, C: oer_time::Clock> SchedulerInterruptClock<'a, C> {
+    pub const fn new(clock: &'a C) -> Self {
+        Self(clock)
+    }
+}
+impl<C: oer_time::Clock> oer_time::Clock for SchedulerInterruptClock<'_, C> {
+    #[inline(never)]
+    fn now(&self) -> oer_time::Instant {
+        self.0.now()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,23 +80,19 @@ enum Reply {
     Busy(BluetoothSchedulerBusyObservation),
     LockModify(BluetoothSchedulerLockModifyInterruptObservation),
     Prepared(BluetoothSchedulerRunInterruptsPrepared),
-    Cancellation(
-        BluetoothSchedulerCancellationIndexed,
-        BluetoothSchedulerCancellationSourceAcknowledged,
-    ),
+    Cancellation(BluetoothSchedulerCancellationSourceAcknowledged),
     Done,
     Flag(bool),
 }
 
-struct Envelope<T> {
+// Initialized by P2 before REQUEST. P3 borrows this one message in place,
+// writes only the reply, then publishes RESPONSE. In particular the indexed
+// cancellation owner never needs an enum/envelope move through P3.
+struct Exchange {
     epoch: u32,
     sequence: u32,
-    value: T,
-}
-
-enum Payload {
-    Request(Envelope<Command>),
-    Reply(Envelope<Result<Reply, SchedulerInterruptError>>),
+    command: Command,
+    reply: Result<Reply, SchedulerInterruptError>,
 }
 
 /// Static, allocation-free storage for one controller installation.
@@ -89,7 +102,7 @@ enum Payload {
 pub struct SchedulerInterruptChannel {
     state: AtomicU32,
     sequence: AtomicU32,
-    payload: UnsafeCell<Option<Payload>>,
+    payload: UnsafeCell<MaybeUninit<Exchange>>,
 }
 
 #[allow(
@@ -114,7 +127,7 @@ impl SchedulerInterruptChannel {
         Self {
             state: AtomicU32::new(FREE),
             sequence: AtomicU32::new(0),
-            payload: UnsafeCell::new(None),
+            payload: UnsafeCell::new(MaybeUninit::uninit()),
         }
     }
 
@@ -166,10 +179,11 @@ impl SchedulerInterruptHalf {
     pub fn service(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
-        clock: &dyn oer_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> bool {
+        let clock = SchedulerInterruptClock::new(clock);
         self.service_with(|command| {
-            let settle = crate::settle::Settle::new(super::DIAGNOSTIC_SETTLE, clock);
+            let settle = crate::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
             let unsettled = |_| SchedulerInterruptError::DiagnosticUnsettled;
             Ok(match command {
                 Command::Busy => Reply::Busy(
@@ -187,8 +201,8 @@ impl SchedulerInterruptHalf {
                 }
                 Command::AcknowledgeCancellation(indexed) => {
                     let acknowledged =
-                        interrupts.acknowledge_scheduler_cancellation_source(&indexed);
-                    Reply::Cancellation(indexed, acknowledged)
+                        interrupts.acknowledge_scheduler_cancellation_source(indexed);
+                    Reply::Cancellation(acknowledged)
                 }
                 Command::MaskRun => {
                     interrupts.mask_scheduler_run_interrupts();
@@ -222,7 +236,7 @@ impl SchedulerInterruptHalf {
     )]
     fn service_with(
         &mut self,
-        execute: impl FnOnce(Command) -> Result<Reply, SchedulerInterruptError>,
+        execute: impl FnOnce(&Command) -> Result<Reply, SchedulerInterruptError>,
     ) -> bool {
         if self.channel.state.load(Ordering::Acquire) != REQUEST {
             return false;
@@ -230,22 +244,14 @@ impl SchedulerInterruptHalf {
         self.channel.state.store(EXECUTING, Ordering::Relaxed);
         // SAFETY: REQUEST transferred the slot to this unique endpoint. P2
         // cannot touch it until RESPONSE, and no other P3 endpoint exists.
-        let payload = unsafe { &mut *self.channel.payload.get() };
-        let Some(Payload::Request(request)) = payload.take() else {
-            return false;
-        };
+        let request = unsafe { (&mut *self.channel.payload.get()).assume_init_mut() };
         let next = self.sequence.checked_add(1);
-        let value = if request.epoch != self.epoch || next != Some(request.sequence) {
+        request.reply = if request.epoch != self.epoch || next != Some(request.sequence) {
             Err(SchedulerInterruptError::ForeignReply)
         } else {
             self.sequence = request.sequence;
-            execute(request.value)
+            execute(&request.command)
         };
-        *payload = Some(Payload::Reply(Envelope {
-            epoch: request.epoch,
-            sequence: request.sequence,
-            value,
-        }));
         self.channel.state.store(RESPONSE, Ordering::Release);
         true
     }
@@ -270,15 +276,24 @@ impl SchedulerTaskHalf {
         !self.pending
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "the unique P2 endpoint owns EMPTY and consumes only RESPONSE"
-    )]
     async fn exchange(
         &mut self,
         bell: &impl SchedulerDoorbell,
         command: Command,
-    ) -> Result<Reply, SchedulerInterruptError> {
+    ) -> Result<(Command, Reply), SchedulerInterruptError> {
+        self.begin(bell, command)?;
+        poll_fn(|cx| self.poll_exchange(bell, cx)).await
+    }
+
+    #[allow(
+        unsafe_code,
+        reason = "the unique P2 endpoint owns EMPTY and publishes REQUEST"
+    )]
+    fn begin(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        command: Command,
+    ) -> Result<(), SchedulerInterruptError> {
         if self.pending {
             return Err(SchedulerInterruptError::Abandoned);
         }
@@ -294,52 +309,93 @@ impl SchedulerTaskHalf {
         self.pending = true;
         // SAFETY: this unique endpoint owns EMPTY; P3 accesses only REQUEST.
         unsafe {
-            *self.channel.payload.get() = Some(Payload::Request(Envelope {
+            (*self.channel.payload.get()).write(Exchange {
                 epoch: self.epoch,
                 sequence,
-                value: command,
-            }));
+                command,
+                // P3 replaces this before RESPONSE; P2 never interprets the
+                // request's initial reply as a hardware observation.
+                reply: Err(SchedulerInterruptError::Abandoned),
+            });
         }
         self.channel.state.store(REQUEST, Ordering::Release);
         bell.ring();
-        poll_fn(|cx| {
-            if let Some(reply) = self.take_reply() {
-                return Poll::Ready(reply);
-            }
-            if let Poll::Ready(Err(error)) = bell.poll_reply(cx) {
-                return Poll::Ready(Err(error));
-            }
-            // Check after registering: P3 can reply between the first load
-            // and registration. The static signal also retains that wake.
-            match self.take_reply() {
-                Some(reply) => Poll::Ready(reply),
-                None => Poll::Pending,
-            }
+        Ok(())
+    }
+
+    fn poll_exchange(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(Command, Reply), SchedulerInterruptError>> {
+        if let Some(reply) = self.take_reply() {
+            return Poll::Ready(reply);
+        }
+        if let Poll::Ready(Err(error)) = bell.poll_reply(cx) {
+            return Poll::Ready(Err(error));
+        }
+        // P3 may reply between the first load and P2's waker registration.
+        match self.take_reply() {
+            Some(reply) => Poll::Ready(reply),
+            None => Poll::Pending,
+        }
+    }
+
+    pub(crate) fn begin_busy(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+    ) -> Result<(), SchedulerInterruptError> {
+        self.begin(bell, Command::Busy)
+    }
+    pub(crate) fn poll_busy(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError>> {
+        self.poll_exchange(bell, cx).map(|result| match result? {
+            (Command::Busy, Reply::Busy(busy)) => Ok(busy),
+            _ => Err(SchedulerInterruptError::ForeignReply),
         })
-        .await
+    }
+    pub(crate) fn begin_mask_run(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+    ) -> Result<(), SchedulerInterruptError> {
+        self.begin(bell, Command::MaskRun)
+    }
+    pub(crate) fn poll_mask_run(
+        &mut self,
+        bell: &impl SchedulerDoorbell,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), SchedulerInterruptError>> {
+        self.poll_exchange(bell, cx).map(|result| match result? {
+            (Command::MaskRun, Reply::Done) => Ok(()),
+            _ => Err(SchedulerInterruptError::ForeignReply),
+        })
     }
 
     #[allow(
         unsafe_code,
         reason = "Acquire of RESPONSE grants the unique P2 endpoint the payload"
     )]
-    fn take_reply(&mut self) -> Option<Result<Reply, SchedulerInterruptError>> {
+    fn take_reply(&mut self) -> Option<Result<(Command, Reply), SchedulerInterruptError>> {
         if self.channel.state.load(Ordering::Acquire) != RESPONSE {
             return None;
         }
-        // SAFETY: P3 published RESPONSE and cannot access the slot again
-        // before a new REQUEST. This unique P2 endpoint consumes it once.
-        let payload = unsafe { (&mut *self.channel.payload.get()).take() };
-        let Some(Payload::Reply(reply)) = payload else {
-            return Some(Err(SchedulerInterruptError::ForeignReply));
-        };
+        // SAFETY: P3 Release-published RESPONSE after writing its reply. It
+        // cannot touch the initialized message before P2 opens a new REQUEST.
+        let reply = unsafe { (&*self.channel.payload.get()).assume_init_ref() };
         if reply.epoch != self.epoch || reply.sequence != self.sequence {
-            // Keep the endpoint poisoned; no stale response opens a new seat.
+            // Keep the actual message in place and the endpoint poisoned.
+            // Repeated observation cannot duplicate/drop its affine command.
             return Some(Err(SchedulerInterruptError::ForeignReply));
         }
+        // SAFETY: this unique P2 endpoint validated the message above and
+        // consumes it once; EMPTY grants neither P3 nor another reader access.
+        let reply = unsafe { (&*self.channel.payload.get()).assume_init_read() };
         self.pending = false;
         self.channel.state.store(EMPTY, Ordering::Release);
-        Some(reply.value)
+        Some(reply.reply.map(|value| (reply.command, value)))
     }
 
     pub(crate) async fn busy(
@@ -347,7 +403,7 @@ impl SchedulerTaskHalf {
         bell: &impl SchedulerDoorbell,
     ) -> Result<BluetoothSchedulerBusyObservation, SchedulerInterruptError> {
         match self.exchange(bell, Command::Busy).await? {
-            Reply::Busy(value) => Ok(value),
+            (_, Reply::Busy(value)) => Ok(value),
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }
@@ -356,7 +412,7 @@ impl SchedulerTaskHalf {
         bell: &impl SchedulerDoorbell,
     ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, SchedulerInterruptError> {
         match self.exchange(bell, Command::LockModify).await? {
-            Reply::LockModify(value) => Ok(value),
+            (_, Reply::LockModify(value)) => Ok(value),
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }
@@ -365,7 +421,7 @@ impl SchedulerTaskHalf {
         bell: &impl SchedulerDoorbell,
     ) -> Result<BluetoothSchedulerRunInterruptsPrepared, SchedulerInterruptError> {
         match self.exchange(bell, Command::PrepareRun).await? {
-            Reply::Prepared(value) => Ok(value),
+            (_, Reply::Prepared(value)) => Ok(value),
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }
@@ -384,7 +440,9 @@ impl SchedulerTaskHalf {
             .exchange(bell, Command::AcknowledgeCancellation(indexed))
             .await?
         {
-            Reply::Cancellation(indexed, acknowledged) => Ok((indexed, acknowledged)),
+            (Command::AcknowledgeCancellation(indexed), Reply::Cancellation(acknowledged)) => {
+                Ok((indexed, acknowledged))
+            }
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }
@@ -412,7 +470,7 @@ impl SchedulerTaskHalf {
         command: Command,
     ) -> Result<(), SchedulerInterruptError> {
         match self.exchange(bell, command).await? {
-            Reply::Done => Ok(()),
+            (_, Reply::Done) => Ok(()),
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }
@@ -434,7 +492,7 @@ impl SchedulerTaskHalf {
         command: Command,
     ) -> Result<bool, SchedulerInterruptError> {
         match self.exchange(bell, command).await? {
-            Reply::Flag(value) => Ok(value),
+            (_, Reply::Flag(value)) => Ok(value),
             _ => Err(SchedulerInterruptError::ForeignReply),
         }
     }

@@ -58,6 +58,21 @@ pub struct EngineShutDown<M: ControllerMemory> {
 }
 
 impl<M: ControllerMemory> Engine<M> {
+    /// Disable the PHY ETM route during a no-CTE DTM session. The caller
+    /// retains the token until its stopped session restores the route.
+    pub fn disable_dtm_etm_route(&mut self) -> bluetooth::BlePhyEtmRouteDisabled {
+        self.registers
+            .borrow_bluetooth_controller()
+            .disable_ble_phy_etm_route()
+    }
+
+    /// Restore the same session's route after its physical scheduler stopped.
+    pub fn restore_dtm_etm_route(&mut self, route: bluetooth::BlePhyEtmRouteDisabled) {
+        self.registers
+            .borrow_bluetooth_controller()
+            .restore_ble_phy_etm_route(route);
+    }
+
     /// Non-repeating identity of this engine installation, for lifecycle replies.
     pub const fn installation(&self) -> u32 {
         self.epoch.0
@@ -264,10 +279,10 @@ impl<M: ControllerMemory> Engine<M> {
         !self.is_quarantined() && self.memory.scheduler_stopped()
     }
 
-    pub fn release_controller_output(
+    pub fn release_controller_output<C: oer_time::Clock>(
         &mut self,
         output: bluetooth::InterruptOutputAfterRoutesOwner,
-        settle: crate::settle::Settle<'_, dyn oer_time::Clock + '_>,
+        settle: crate::settle::Settle<'_, C>,
     ) -> Result<
         bluetooth::InterruptOutputReleasedOwner,
         (
