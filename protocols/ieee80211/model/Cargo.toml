@@ -12,7 +12,7 @@ test-support = ["oer-ieee80211-port/test-support"]
 
 [dependencies]
 heapless = "0.9.3"
-oer-ieee80211-port = { path = "../port" }
+oer-ieee80211-port = { path = "../port", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../wire" }
 oer-ieee80211-cipher = { path = "../cipher" }
 oer-radio-port = { path = "../../radio/port" }
