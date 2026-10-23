@@ -85,26 +85,16 @@ impl ActorCore {
             Action::Continue
         }
     }
-    pub(super) fn prepared(
-        &mut self,
-        result: Result<PhyPreparation, Fault>,
-    ) -> Result<(PhyPreparation, RfEpoch), Failure> {
-        let phy = match result {
-            Ok(phy) => phy,
-            Err(Fault) => {
-                self.state.poisoned = true;
-                return Err(Failure::Poisoned);
-            }
+    pub(super) fn prepared(&mut self, phy: &PhyPreparation) -> RfEpoch {
+        let epoch = if *phy == PhyPreparation::AlreadyOpen {
+            self.state
+                .epoch
+                .unwrap_or_else(|| self.mint.next_epoch(None))
+        } else {
+            self.mint.next_epoch(self.state.epoch)
         };
-        if phy != PhyPreparation::AlreadyOpen {
-            self.state.epoch = Some(self.mint.next_epoch(self.state.epoch));
-        }
-        let epoch = self
-            .state
-            .epoch
-            .unwrap_or_else(|| self.mint.next_epoch(None));
         self.state.epoch = Some(epoch);
-        Ok((phy, epoch))
+        epoch
     }
     pub(super) fn closed(&mut self, result: Result<(), CloseFault>) {
         if matches!(result, Err(CloseFault::Poisoned)) {
