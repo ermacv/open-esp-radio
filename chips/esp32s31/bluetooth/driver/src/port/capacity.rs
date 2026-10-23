@@ -62,29 +62,32 @@ impl<Id: SlotIdentity> Pool<Id> {
             index: usize::from(index),
             ticket: None,
         };
-        poll_fn(|cx| {
-            let ticket = *place.ticket.get_or_insert_with(|| {
-                let n = self.next.get();
-                self.next.set(n.wrapping_add(1));
-                n
-            });
-            let mut waiters = self.waiters.borrow_mut();
-            let slot = waiters
-                .get_mut(place.index)
-                .expect("minted seat index fits its declared line");
-            *slot = Some((ticket, cx.waker().clone()));
-            drop(waiters);
-            if self.leader() != Some(ticket) {
-                return Poll::Pending;
-            }
-            let Some(credit) = self.free.borrow_mut().take() else {
-                return Poll::Pending;
-            };
-            self.leave(place.index, ticket);
-            place.ticket = None;
-            Poll::Ready(credit)
-        })
-        .await
+        poll_fn(|cx| self.poll_take(&mut place, cx)).await
+    }
+    // Keep the credit wait and its typed waker in a separate polling frame;
+    // inlining into the complete HCI body loses the stack analyser's target.
+    #[inline(never)]
+    fn poll_take(&self, place: &mut Waiting<'_, Id>, cx: &mut Context<'_>) -> Poll<Credit<Id>> {
+        let ticket = *place.ticket.get_or_insert_with(|| {
+            let n = self.next.get();
+            self.next.set(n.wrapping_add(1));
+            n
+        });
+        let mut waiters = self.waiters.borrow_mut();
+        let slot = waiters
+            .get_mut(place.index)
+            .expect("minted seat index fits its declared line");
+        *slot = Some((ticket, cx.waker().clone()));
+        drop(waiters);
+        if self.leader() != Some(ticket) {
+            return Poll::Pending;
+        }
+        let Some(credit) = self.free.borrow_mut().take() else {
+            return Poll::Pending;
+        };
+        self.leave(place.index, ticket);
+        place.ticket = None;
+        Poll::Ready(credit)
     }
 }
 struct Waiting<'a, Id: SlotIdentity> {
