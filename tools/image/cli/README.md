@@ -5,6 +5,7 @@ flash and runs them to a verdict.
 
 ```console
 cargo fw sizes <base-output-directory> <head-output-directory>
+cargo fw decode-console <console.raw.txt>
 cargo fw build <image>
 cargo fw build <w0|w1|w2> --analysis
 cargo fw flash <image> --board <id|MAC>
@@ -85,6 +86,24 @@ warning. A reported check that does not pass prints as a warning containing
 already built bundle.
 
 ## Boards
+
+`boot-smoke` and `radio-root` send typed boot diagnostics, including the
+previous panic, as `OER-DIAG:01…` lines. `run` and `monitor` decode these on
+the host; the rendered `OER-PANIC previous …`, handoff, clock and
+`OER-RESULT:` lines retain their earlier fields and order. The interrupt
+flag is explicit even if a panic has no interrupted PC. Blank separating
+lines may appear. A plain serial terminal now shows encoded records.
+`run` saves the original encoded lines in `console.raw.txt` beside its
+rendered `log.txt` (line endings are normalized to LF).
+`decode-console PATH` renders that capture without opening a board and
+rejects a diagnostic without its terminating newline at EOF.
+
+The [codec](../../../portable/diagnostics/README.md) checks the version,
+record type, lengths, UTF-8 and CRC. The host checks sequence from zero,
+including the final verdict, so missing, duplicated or reordered records
+cannot pass a run. A ROM reset line starts a new sequence. `monitor`
+reports decode errors and keeps reading; `run` and offline replay fail.
+HIL images retain their existing envelopes and console path.
 
 Boards and hubs come from the owner's stand file,
 `~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),

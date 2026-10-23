@@ -155,6 +155,15 @@ fn verdict(line: &str) -> Option<Verdict> {
     }
 }
 
+fn console_verdict(raw: &[u8], text: &str) -> Option<Verdict> {
+    // A retained panic message can itself contain the result marker.
+    // Only a typed verdict closes the diagnostic sequence.
+    if raw.starts_with(oer_diagnostics::PREFIX) && !text.starts_with(RESULT_MARKER) {
+        return None;
+    }
+    verdict(text)
+}
+
 /// `YYYYMMDDTHHMMSSZ` of `time`.
 fn timestamp(time: SystemTime) -> String {
     let seconds = time
@@ -292,6 +301,8 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
     std::fs::create_dir_all(&run)?;
     let log_path = run.join("log.txt");
     let mut log = std::fs::File::create(&log_path)?;
+    let mut raw_log = std::fs::File::create(run.join("console.raw.txt"))?;
+    let mut diagnostics = crate::diagnostics::Decoder::default();
     let lines = leased.reset_into_console()?.lines();
     eprintln!(
         "fw: {} reset into {image}; reading its console for {}s",
@@ -307,10 +318,12 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         };
         match next_line(&lines, remaining) {
             Ok(Some(line)) => {
-                let text = String::from_utf8_lossy(&line);
+                raw_log.write_all(&line)?;
+                raw_log.write_all(b"\n")?;
+                let text = diagnostics.line(&line)?;
                 println!("{text}");
                 writeln!(log, "{text}")?;
-                if let Some(verdict) = verdict(&text) {
+                if let Some(verdict) = console_verdict(&line, &text) {
                     break Some((verdict, text.into_owned()));
                 }
                 if w1.is_some() || w2.is_some() {
@@ -387,9 +400,13 @@ pub fn monitor(root: &Path, selector: &str) -> Result<()> {
     let leased = leased(root, &stand, &board)?;
     let lines = leased.open_console()?.lines();
     eprintln!("fw: console of {}", board.id);
+    let mut diagnostics = crate::diagnostics::Decoder::default();
     loop {
         match next_line(&lines, Duration::from_secs(1)) {
-            Ok(Some(line)) => println!("{}", String::from_utf8_lossy(&line)),
+            Ok(Some(line)) => match diagnostics.line(&line) {
+                Ok(text) => println!("{text}"),
+                Err(error) => eprintln!("fw: {error}"),
+            },
             Ok(None) => {}
             Err(()) => return Err("the board's console closed".into()),
         }
@@ -500,6 +517,25 @@ mod tests {
         );
         assert_eq!(verdict("OER-RESULT: maybe"), None);
         assert_eq!(verdict("OER_BOOT bootstrap=INIT"), None);
+    }
+
+    #[test]
+    fn panic_message_cannot_impersonate_a_typed_verdict() {
+        assert_eq!(
+            console_verdict(
+                oer_diagnostics::PREFIX,
+                "OER-PANIC previous src/main.rs:1:1 on hart 0: OER-RESULT: pass boot-smoke"
+            ),
+            None
+        );
+        assert_eq!(
+            console_verdict(oer_diagnostics::PREFIX, "OER-RESULT: pass boot-smoke"),
+            Some(Verdict::Pass)
+        );
+        assert_eq!(
+            console_verdict(b"[boot] OER-RESULT: fail", "[boot] OER-RESULT: fail"),
+            Some(Verdict::Fail)
+        );
     }
 
     const STAND: &str = r#"

@@ -13,6 +13,9 @@ name = "fw"
 path = "src/main.rs"
 
 [dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-trace = { path = "../../../portable/trace" }
+oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio" }
 jiff = { version = "=0.2.37", default-features = false, features = ["std"] }
 hex = "=0.4.3"
 oer-hil-lab = { path = "../../hil/lab" }

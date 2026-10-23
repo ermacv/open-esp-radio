@@ -12,6 +12,7 @@ default = []
 esp32s31 = ["dep:esp-hal"]
 
 [dependencies]
+oer-trace = { path = "../../../../portable/trace" }
 oer-esp32s31-hal = { path = "../../../esp32s31/hal" }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "d1167e740b3ec947d56f97b5091ebcb67a0cebfa", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
 

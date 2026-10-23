@@ -2673,6 +2673,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "oer-trace",
+]
+
+[[package]]
 name = "oer-embassy-net"
 version = "0.1.0"
 dependencies = [
@@ -2961,6 +2968,7 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-esp32s31-hal",
+ "oer-trace",
 ]
 
 [[package]]
@@ -3059,6 +3067,7 @@ name = "oer-espressif-staged-runtime"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
+ "oer-diagnostics",
  "oer-espressif-esp-hal-irq",
  "oer-espressif-staged-layout",
  "oer-interrupt-table",
@@ -4357,6 +4366,8 @@ dependencies = [
  "hex",
  "jiff",
  "oer-chip-profile",
+ "oer-diagnostics",
+ "oer-espressif-esp-hal-radio",
  "oer-firmware-apps-w3",
  "oer-hil-lab",
  "oer-ieee80211-port",
@@ -4374,6 +4385,7 @@ dependencies = [
  "oer-os-process",
  "oer-radio-regulatory",
  "oer-tool-lab-fixture-install",
+ "oer-trace",
  "serde",
  "serde_json",
  "tempfile",
