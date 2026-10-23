@@ -207,7 +207,7 @@ fn selected_read(
 type Observer<'a> = dyn FnMut(Candidate<'_>, &mut dyn RunControl) -> Result<()> + 'a;
 
 /// Every candidate address the analyzed function `records` access: memory
-/// accesses with the bits a read-modify-write replaces, and masked reads.
+/// accesses with load dependencies and stored provenance supplied separately.
 /// A resolved address outside every range of nonempty `ranges` is skipped.
 /// An unresolved address is always kept; it carries its indexed progression
 /// when it has one and, with nonempty `ranges`, the progression may reach a

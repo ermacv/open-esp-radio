@@ -271,7 +271,7 @@ Each build is analyzed as `register-accesses` analyzes it (`--old` and
 `--new` repeat `ROLE=PATH`; at least one `--range` window is required). A
 function's accesses inside the windows are its loads and stores at an exact
 address or an indexed progression, each with its width. A load's `reads` carries
-`exact` and `may` used-bit masks, `preserved` and `unknown`, without sink sites
+`used` (Exact and May together), `preserved` and `unknown` masks, without sink sites
 or limit reasons; `unused` is the remainder of the load width. AND, shifts and
 zero extension that select the same bits therefore compare alike. A store
 carries where each run of its stored bits comes from; a run loaded from outside the windows keeps its position but not

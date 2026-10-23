@@ -58,7 +58,7 @@ fn operation(operation: MmioOperation) -> &'static str {
 }
 
 /// One access on one line: `0x20109c18 store w4 [0..2]=0x0 [2..32]=kept`, or
-/// `0x20109c18 load w4 reads[exact=... may=... preserved=... unknown=... unused=...]`.
+/// `0x20109c18 load w4 reads[used=... preserved=... unknown=... unused=...]`.
 pub fn access(access: &MmioAccess) -> String {
     let mut out = format!(
         "{:<18} {}",
@@ -76,8 +76,8 @@ pub fn access(access: &MmioAccess) -> String {
     if let Some(reads) = access.reads {
         let _ = write!(
             out,
-            " reads[exact={:#010x} may={:#010x} preserved={:#010x} unknown={:#010x} unused={:#010x}]",
-            reads.exact, reads.may, reads.preserved, reads.unknown, reads.unused
+            " reads[used={:#010x} preserved={:#010x} unknown={:#010x} unused={:#010x}]",
+            reads.used, reads.preserved, reads.unknown, reads.unused
         );
     }
     if !access.stored.is_empty() {

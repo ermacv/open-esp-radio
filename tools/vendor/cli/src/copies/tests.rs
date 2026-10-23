@@ -113,8 +113,8 @@ fn read_selection_compares_flow_instead_of_and_or_shift_instructions() {
         assert_eq!(function.verdict, expected, "{function:?}");
         assert_eq!(function.complete, [true, true]);
         if expected == Verdict::ReadsDiffer {
-            assert_eq!(function.rom_only[0].reads.as_ref().unwrap().exact, 0xff);
-            assert_eq!(function.library_only[0].reads.as_ref().unwrap().exact, 0x7f);
+            assert_eq!(function.rom_only[0].reads.as_ref().unwrap().used, 0xff);
+            assert_eq!(function.library_only[0].reads.as_ref().unwrap().used, 0x7f);
         }
     }
 }

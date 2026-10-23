@@ -29,12 +29,11 @@ pub enum MmioOperation {
 }
 
 /// Loaded bits by their use, without sink sites or limit reasons that can
-/// change between builds. Exact and May uses may overlap across sinks.
+/// change between builds. Used includes both Exact and May dependencies.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MmioReadUses {
-    pub exact: u32,
-    pub may: u32,
+    pub used: u32,
     pub preserved: u32,
     pub unknown: u32,
     /// The remainder of the load width after used, unknown and preserved.
@@ -43,14 +42,7 @@ pub struct MmioReadUses {
 
 impl MmioReadUses {
     pub fn new(reads: &ReadUses, width: u8) -> Self {
-        let mut exact = 0;
-        let mut may = 0;
-        for usage in &reads.uses {
-            match usage.precision {
-                ReadPrecision::Exact => exact |= usage.bits,
-                ReadPrecision::May => may |= usage.bits,
-            }
-        }
+        let used = reads.uses.iter().fold(0, |bits, usage| bits | usage.bits);
         let unknown = reads
             .unknown
             .iter()
@@ -60,11 +52,10 @@ impl MmioReadUses {
             .checked_shr(32u32.saturating_sub(u32::from(width) * 8))
             .unwrap_or(0);
         Self {
-            exact,
-            may,
+            used,
             preserved,
             unknown,
-            unused: full & !(exact | may | preserved | unknown),
+            unused: full & !(used | preserved | unknown),
         }
     }
 }
@@ -244,8 +235,7 @@ mod tests {
         assert_eq!(
             projected,
             MmioReadUses {
-                exact: 1,
-                may: 3,
+                used: 3,
                 unknown: 4,
                 preserved: 8,
                 unused: 0xf0
@@ -256,7 +246,9 @@ mod tests {
         reads.unknown[0].limit = ReadLimitKind::WorkLimit;
         assert_eq!(MmioReadUses::new(&reads, 1), projected);
         reads.uses[0].precision = ReadPrecision::May;
-        assert_ne!(MmioReadUses::new(&reads, 1), projected);
+        assert_eq!(MmioReadUses::new(&reads, 1), projected);
         assert_eq!(MmioReadUses::new(&reads, 2).unused, 0xfff0);
+        reads.uses[1].bits = 0x13;
+        assert_ne!(MmioReadUses::new(&reads, 1), projected);
     }
 }
