@@ -28,6 +28,8 @@ mod capacity;
 #[cfg(any(target_arch = "riscv32", test))]
 mod guard;
 mod lifecycle;
+/// Durable command and clock endpoints for the separately retained P2 worker.
+pub mod mailbox;
 mod owned;
 /// Physical DTM session worker, kept in the image's permanently placed P2 future.
 #[cfg(target_arch = "riscv32")]
@@ -72,7 +74,7 @@ pub trait ClockClient {
     async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault>;
 }
 /// A complete start description copied only after the request is retained.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Start {
     Transmit(Transmit),
     Receive(Receive),
