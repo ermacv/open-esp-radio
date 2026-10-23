@@ -284,6 +284,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             ReadSink::CallArgument {
                 site: 12,
                 register: 10,
+                shift: None,
                 callee: Some(CallTarget {
                     address: None,
                     function: None,
@@ -498,7 +499,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
         "call results carry no dependency on the previous argument"
     );
-    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 11);
+    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 12);
     assert!(
         oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
     );
@@ -2182,4 +2183,206 @@ identity: ret
         completed,
         "sufficient memory must complete the same operation"
     );
+}
+
+#[test]
+fn selected_call_results_share_read_flow_and_report_argument_wiring() {
+    use oer_analysis_blobray_application::signatures::Signatures;
+    let signatures = Signatures::parse(
+        r#"
+[[function]]
+name = "read_word"
+arguments = 3
+result = "u32"
+source = "synthetic"
+[[function]]
+name = "read_double"
+arguments = 0
+result = "u64"
+source = "synthetic"
+[[function]]
+name = "write_word"
+arguments = 4
+result = "void"
+source = "synthetic"
+"#,
+    )
+    .expect("fixture signatures");
+    let inputs = [Executable::new(fixture(include_str!(
+        "fixtures/call_results.rs"
+    )))];
+    let names = [
+        "read_word".into(),
+        "read_double".into(),
+        "write_word".into(),
+    ];
+    let memory = WorkingMemory::new(64 * 1024 * 1024).expect("working memory");
+    let run = |names: &[String], abi| {
+        let mut records = Vec::new();
+        let summary = register_accesses(
+            &inputs,
+            Assumptions {
+                abi,
+                call_summaries: true,
+                signatures: Some(&signatures),
+                call_results: names,
+                ..Assumptions::default()
+            },
+            &[ImageRegion {
+                start: 0x2010_7000,
+                length: 4,
+            }],
+            &oer_analysis_riscv_lift::RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut |record, _| {
+                records.push(record.clone());
+                Ok(())
+            },
+        )
+        .expect("call-result analysis");
+        assert!(summary.signature_conflicts.is_empty(), "{summary:?}");
+        assert_eq!(memory.used(), 0, "flow reservations released");
+        records
+    };
+    let baseline = run(&[], Some(CallAbi::RiscvInteger));
+    assert!(
+        baseline
+            .iter()
+            .all(|record| !matches!(record, RegisterAccess::CallResult { .. }))
+    );
+    assert_eq!(
+        baseline,
+        run(&["no_such_call".into()], Some(CallAbi::RiscvInteger))
+    );
+    let records = run(&names, Some(CallAbi::RiscvInteger));
+    let mut results: BTreeMap<Vec<u8>, Vec<(u64, u8, ReadUses)>> = BTreeMap::new();
+    for record in &records {
+        if let RegisterAccess::CallResult {
+            function,
+            site,
+            callee,
+            register,
+            arguments,
+            reads,
+        } = record
+        {
+            partition(reads, 4);
+            assert_eq!(
+                reads.preserved, 0,
+                "Blobray does not infer analog preservation"
+            );
+            assert!(matches!(
+                callee.name.as_deref(),
+                Some("read_word" | "read_double")
+            ));
+            if callee.name.as_deref() == Some("read_word")
+                && function.name.as_deref() != Some(b"tail_result")
+                && function.name.as_deref() != Some(b"twice_result")
+                && function.name.as_deref() != Some(b"truncated_result")
+            {
+                assert_eq!(
+                    &arguments[..3],
+                    &[
+                        ArgumentValue::Constant { value: 7 },
+                        ArgumentValue::Constant { value: 1 },
+                        ArgumentValue::Constant { value: 3 }
+                    ]
+                );
+            }
+            let wire = serde_json::to_value(record).expect("serialize call result");
+            assert_eq!(
+                serde_json::from_value::<RegisterAccess>(wire).expect("decode call result"),
+                *record
+            );
+            results
+                .entry(function.name.clone().expect("fixture function"))
+                .or_default()
+                .push((*site, *register, reads.clone()));
+        }
+    }
+    let read = |name: &str| &results.get(name.as_bytes()).expect("selected result")[0].2;
+    assert!(
+        read("branch_result")
+            .uses
+            .iter()
+            .any(|usage| usage.bits == u32::MAX
+                && usage.precision == ReadPrecision::Exact
+                && matches!(usage.sink, ReadSink::Branch { .. }))
+    );
+    for (name, shift, bits) in [
+        ("unchanged_result", 0, u32::MAX),
+        ("shifted_result", 4, 0x0fff_ffff),
+        ("right_shifted_result", -4, 0xffff_fff0),
+        ("spilled_result", 0, u32::MAX),
+        ("masked_result", 0, 0xffff_fffe),
+    ] {
+        assert!(read(name).uses.iter().any(|usage| usage.bits == bits && usage.precision == ReadPrecision::Exact && matches!(&usage.sink,
+            ReadSink::CallArgument { register: 13, shift: Some(by), callee: Some(callee), .. } if *by == shift && callee.name.as_deref() == Some("write_word"))), "{name}: {:?}", read(name));
+    }
+    assert!(read("opaque_result").uses.iter().any(|usage| usage.precision == ReadPrecision::May
+        && matches!(&usage.sink, ReadSink::CallArgument { register: 13, shift: Some(0), callee: Some(callee), .. }
+            if callee.name.as_deref() == Some("write_external"))), "{:?}", read("opaque_result"));
+    assert_eq!(read("masked_result").unused, 1);
+    for name in ["mixed_result", "inverted_result"] {
+        assert!(
+            read(name)
+                .uses
+                .iter()
+                .any(|usage| matches!(usage.sink, ReadSink::CallArgument { shift: None, .. })),
+            "{name}: {:?}",
+            read(name)
+        );
+        assert!(
+            !read(name)
+                .uses
+                .iter()
+                .any(|usage| matches!(usage.sink, ReadSink::CallArgument { shift: Some(_), .. }))
+        );
+    }
+    assert!(read("printed_result").uses.iter().any(|usage| matches!(&usage.sink, ReadSink::CallArgument { callee: Some(callee), .. } if callee.name.as_deref() == Some("print_word"))));
+    for name in ["discarded_result", "overwritten_result"] {
+        assert_eq!(read(name).unused, u32::MAX, "{name}: {:?}", read(name));
+        assert!(read(name).uses.is_empty());
+        assert!(read(name).unknown.is_empty());
+    }
+    assert_eq!(results[b"twice_result".as_slice()].len(), 2);
+    assert_ne!(
+        results[b"twice_result".as_slice()][0].0,
+        results[b"twice_result".as_slice()][1].0
+    );
+    let double = &results[b"double_result".as_slice()];
+    assert_eq!(double.len(), 2);
+    assert_eq!((double[0].1, double[1].1), (10, 11));
+    assert_eq!(double[0].2.unused, u32::MAX);
+    assert!(
+        double[1]
+            .2
+            .uses
+            .iter()
+            .any(|usage| usage.precision == ReadPrecision::Exact
+                && matches!(usage.sink, ReadSink::Branch { .. }))
+    );
+    assert!(
+        read("tail_result")
+            .uses
+            .iter()
+            .any(|usage| usage.precision == ReadPrecision::Exact
+                && matches!(usage.sink, ReadSink::Return { register: 10 }))
+    );
+    assert_eq!(
+        read("truncated_result").unused,
+        0,
+        "a missing continuation does not discard a result"
+    );
+    assert!(
+        read("truncated_result")
+            .unknown
+            .iter()
+            .any(|limit| limit.bits == u32::MAX && limit.limit == ReadLimitKind::PartialFunction),
+        "{:?}",
+        read("truncated_result")
+    );
+    let no_abi = run(&names, None);
+    assert!(no_abi.iter().any(|record| matches!(record, RegisterAccess::CallResult { function, reads, .. } if function.name.as_deref() == Some(b"branch_result") && reads.uses.iter().any(|usage| usage.precision == ReadPrecision::Exact && matches!(usage.sink, ReadSink::Branch { .. })))));
 }

@@ -11,6 +11,10 @@ pub(super) struct ReturnedDependency {
 /// does not produce or own callee facts.
 pub trait CallAt<'s> {
     fn summary(&self, site: u64) -> Option<&'s CallSummary>;
+    /// Explicit query sources, independent of callee summary production.
+    fn result_sources(&self) -> &[(u64, u8)] {
+        &[]
+    }
     fn current(&self) -> Option<&'s CallSummary> {
         None
     }
@@ -169,7 +173,9 @@ impl<'m> ArgumentProgram<'m> {
                     ReadOrigin::MissingResult { site, register } => {
                         ArgumentSource::MissingResult { site, register }
                     }
-                    ReadOrigin::Load { .. } => return Err(read_integrity()),
+                    ReadOrigin::Load { .. } | ReadOrigin::CallResult { .. } => {
+                        return Err(read_integrity());
+                    }
                 };
                 let mut value = ArgumentConsumption::default();
                 let mut event = source.event;

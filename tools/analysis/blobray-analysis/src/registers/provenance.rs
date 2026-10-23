@@ -581,7 +581,9 @@ impl StoredProvenanceEvaluator<'_, '_, '_> {
                             .ok_or_else(read_integrity)?
                             .origin
                         {
-                            ReadOrigin::MissingResult { .. } => StoredBitsSource::Unknown,
+                            ReadOrigin::MissingResult { .. } | ReadOrigin::CallResult { .. } => {
+                                StoredBitsSource::Unknown
+                            }
                             ReadOrigin::Entry(register) => {
                                 StoredBitsSource::EntryRegister { register, low }
                             }

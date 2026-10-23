@@ -130,6 +130,29 @@ the hardware reset value. A write without identically preserved bits has no
 replacement mask; its `stored` runs still describe the whole write. These
 observations establish no hardware RMW safety or register-field meaning.
 
+`--call-results NAME...` (repeatable) makes calls of the selected names additional
+sources in the same read-use CFG pass. It needs no extra analysis or larger work
+allowance. Each `call-result` record carries `function`, the transfer `site`,
+resolved `callee`, physical result `register`, `arguments` in the same vocabulary
+as `call-arguments`, and `reads`. A result defaults to x10 (`a0`); a u64 callee
+contract adds x11 (`a1`) as a separate 32-bit observation at the same site, and a
+void contract has no result source. Tail-call results reach the function's return.
+Names without a matching call produce no observations. Address ranges select
+loads only; `--function` also selects result observations, while `--address`
+excludes them. Result observations remain in `records`; MMIO groups describe
+memory accesses only. Human output lists each result, including its arguments
+and bit uses. With this flag the JSON envelope also records `call_results`.
+
+With result tracking, `call-argument` can carry `shift`: `Some(n)` means every
+reported source bit i reaches argument bit i + n as pure, uninverted Exact
+wiring in the caller. Callee consumption can still have `may` precision; it does
+not erase proved caller-side positions. Masks may remove bits; arithmetic,
+mixing, inversion, duplicated bits or nonuniform positions do not establish a shift. Missing `shift` decodes as
+`None`. This metadata is enabled only for the opt-in query; without the flag the
+records and summary retain their load-only encoding and meaning. Blobray never
+decides whether an analog register was preserved: a consumer can correlate the
+sink's `site` with write-call arguments and interpret `shift = 0` itself.
+
 A load observation carries `reads`: `uses` (`bits`, a tagged `sink`, and
 `precision` `exact` or `may`), `unknown` (`bits`, `limit`), `preserved`, and
 `unused`. These masks partition the load width with precedence used, unknown,
@@ -228,13 +251,14 @@ Human groups show the four classes, sinks, precision and reasons; observations
 with different `reads` remain separate entries. Write-replacement masks retain their expression meaning.
 Read selection comes only from the load's `reads` dataflow.
 
-The JSON document streams `{"schema":11,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+The JSON document streams `{"schema":12,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 `records` holds the selected records and `groups` appears only with
 `--group-by`.
 `inputs` lists each input's role and SHA-256. A record is an `observation` (the
 function, the record ordinal and exact original fact, the address or null, its
 alternative index, an unresolved address's `indexed` progression when it has
-one and a write-replacement mask for a preserving store), a `blocked`
+one and a write-replacement mask for a preserving store), a `call-result`
+(as described above), a `blocked`
 function whose analysis stopped (for example an unknown extent), or a `gap`
 naming code no function was selected from: an unsupported object, a thin
 archive member, a malformed container or an ELF diagnostic. The summary counts

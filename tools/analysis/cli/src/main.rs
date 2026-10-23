@@ -54,6 +54,7 @@ impl Assumptions {
             abi: self.abi.map(|AbiArg::RiscvInteger| CallAbi::RiscvInteger),
             call_summaries: self.call_summaries,
             signatures: self.signatures.as_ref(),
+            call_results: &[],
             read_only: &self.read_only,
         }
     }
@@ -88,6 +89,9 @@ enum Command {
         /// START:LENGTH candidate interval; without one, every numeric address.
         #[arg(long = "range", value_parser = parse_range)]
         ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
+        /// Track result bits of calls to these names (repeat, or give several names).
+        #[arg(long, num_args = 1.., value_name = "NAME")]
+        call_results: Vec<String>,
         /// Keep only observations in this 32-bit word; repeat for several.
         /// Blocked functions, gaps and the summary are never filtered.
         #[arg(long = "address", value_parser = parse_number, value_name = "ADDRESS")]
@@ -307,6 +311,7 @@ fn run(command: Command, format: Format) -> Result<ExitCode> {
         Command::RegisterAccesses {
             inputs,
             ranges,
+            call_results,
             addresses,
             functions,
             group_by,
@@ -327,7 +332,10 @@ fn run(command: Command, format: Format) -> Result<ExitCode> {
                 ranges,
                 filter,
                 group_by.map(GroupKey::by),
-                assumptions.analysis(),
+                app::library::Assumptions {
+                    call_results: &call_results,
+                    ..assumptions.analysis()
+                },
                 limits,
                 format,
             )
@@ -1037,7 +1045,7 @@ fn register_accesses(
             .collect();
         write!(
             out,
-            "{{\"schema\":{},\"inputs\":{},\"abi\":{},\"call_summaries\":{},\"read_only\":{},\"records\":[",
+            "{{\"schema\":{},\"inputs\":{},\"abi\":{},\"call_summaries\":{},\"read_only\":{}",
             oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA,
             serde_json::to_string(&described).map_err(json_error)?,
             serde_json::to_string(&assumptions.abi).map_err(json_error)?,
@@ -1045,6 +1053,17 @@ fn register_accesses(
             serde_json::to_string(assumptions.read_only).map_err(json_error)?
         )
         .map_err(io_error)?;
+    }
+    if json {
+        if !assumptions.call_results.is_empty() {
+            write!(
+                out,
+                ",\"call_results\":{}",
+                serde_json::to_string(assumptions.call_results).map_err(json_error)?
+            )
+            .map_err(io_error)?;
+        }
+        out.write_all(b",\"records\":[").map_err(io_error)?;
     }
     let mut first = true;
     let summary = app::library::register_accesses(
@@ -1060,6 +1079,30 @@ fn register_accesses(
             }
             if let Some(groups) = groups.as_mut() {
                 groups.add(record);
+            }
+            if !json
+                && let oer_analysis_blobray_domain::RegisterAccess::CallResult {
+                    function,
+                    site,
+                    callee,
+                    register,
+                    arguments,
+                    reads,
+                } = record
+            {
+                let arguments = arguments
+                    .iter()
+                    .map(oer_tool_analysis_cli::call_arguments::human)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    out,
+                    "{} +{site:#x} {}({arguments}) -> x{register}: {}",
+                    String::from_utf8_lossy(function.name.as_deref().unwrap_or(b"?")),
+                    callee.name.as_deref().unwrap_or("?"),
+                    oer_tool_analysis_cli::mmio::reads(reads)
+                )
+                .map_err(io_error)?;
             }
             if json {
                 if !first {

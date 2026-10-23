@@ -1,4 +1,4 @@
-use oer_analysis_blobray_application::call_arguments::ArgumentValue;
+use oer_analysis_blobray_domain::ArgumentValue;
 
 #[test]
 fn argument_values_keep_their_exact_spelling() {

@@ -58,6 +58,40 @@ fn walk(command: &clap::Command, path: Vec<String>, nodes: &mut Vec<serde_json::
 #[cfg(test)]
 mod tests {
     #[test]
+    fn result_names_are_repeatable_and_scoped_to_register_accesses() {
+        use clap::Parser;
+        let cli = crate::Cli::try_parse_from([
+            "blobray",
+            "register-accesses",
+            "--input",
+            "fixture=fixture.o",
+            "--call-results",
+            "read_word",
+            "read_double",
+            "--call-results",
+            "third",
+        ])
+        .expect("result names");
+        let crate::Command::RegisterAccesses { call_results, .. } = cli.command else {
+            panic!("register-accesses command")
+        };
+        assert_eq!(call_results, ["read_word", "read_double", "third"]);
+        assert!(
+            crate::Cli::try_parse_from([
+                "blobray",
+                "call-arguments",
+                "--input",
+                "fixture=fixture.o",
+                "--symbol",
+                "read_word",
+                "--call-results",
+                "read_word",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
     fn the_tree_names_commands_and_global_flags() {
         let nodes: Vec<serde_json::Value> = serde_json::from_str(&super::json()).unwrap();
         assert_eq!(nodes[0]["path"], serde_json::json!(["blobray"]));

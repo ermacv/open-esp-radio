@@ -44,7 +44,7 @@ pub fn write_mask(width: u8, stored: &[StoredBits]) -> Option<RegisterMask> {
     })
 }
 
-/// One load or entry-register source's bit dependencies in a register or stack byte.
+/// One load, entry-register or call-result source's bit dependencies in a register or stack byte.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct ReadDependency {
     source: usize,
@@ -71,6 +71,25 @@ impl ReadDependency {
             }
         }
         (exact & !may, may)
+    }
+    fn shift(&self, outputs: u32, bits: u32) -> Option<i8> {
+        let mut shift = None;
+        let mut seen = 0;
+        for (output, (&exact, &may)) in self.exact.iter().zip(&self.may).enumerate() {
+            if outputs & (1 << output) == 0 || (exact | may) & bits == 0 {
+                continue;
+            }
+            if exact.count_ones() != 1 || may != 0 || self.inverted & (1 << output) != 0 {
+                return None;
+            }
+            let by = output as i8 - exact.trailing_zeros() as i8;
+            if shift.is_some_and(|previous| previous != by) || seen & exact != 0 {
+                return None;
+            }
+            shift = Some(by);
+            seen |= exact;
+        }
+        (seen == bits).then_some(shift).flatten()
     }
     fn active(&self) -> bool {
         self.exact.iter().chain(&self.may).any(|bits| *bits != 0)
@@ -465,6 +484,10 @@ enum ReadOrigin<'a> {
         width: u8,
     },
     Entry(u8),
+    CallResult {
+        site: u64,
+        register: u8,
+    },
     MissingResult {
         site: u64,
         register: u8,
@@ -680,7 +703,9 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.sources
             .binary_search_by_key(&site, |source| match source.origin {
                 ReadOrigin::Load { site, .. } => site,
-                ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => u64::MAX,
+                ReadOrigin::Entry(_)
+                | ReadOrigin::MissingResult { .. }
+                | ReadOrigin::CallResult { .. } => u64::MAX,
             })
             .ok()
     }
@@ -757,7 +782,9 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
         self.sources
             .sort_unstable_by_key(|source| match source.origin {
                 ReadOrigin::Load { site, .. } => site,
-                ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => u64::MAX,
+                ReadOrigin::Entry(_)
+                | ReadOrigin::MissingResult { .. }
+                | ReadOrigin::CallResult { .. } => u64::MAX,
             });
         D::prepare_sources(self, c)?;
         for record in records {
@@ -1094,6 +1121,31 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                     },
                 );
             }
+        }
+        for &(site, register) in calls.result_sources() {
+            c.checkpoint(1)?;
+            if self.at(site).is_none() || ![10, 11].contains(&register) {
+                return Err(read_integrity());
+            }
+            let source = self.sources.len();
+            self.sources.push(
+                ReadSource {
+                    origin: ReadOrigin::CallResult { site, register },
+                    preserved: 0,
+                    narrowed: [0; 2],
+                    limits: [0; 4],
+                    event: 0,
+                },
+                c.position(),
+            )?;
+            self.result_sources
+                .push((site, register, source), c.position())?;
+        }
+        if !self.result_sources.is_empty() {
+            let len = self.result_sources.len();
+            c.checkpoint(len as u64 * u64::from(len.max(1).ilog2() + 1))?;
+            self.result_sources
+                .sort_unstable_by_key(|&(site, register, _)| (site, register));
         }
         if self.audit_results {
             for id in 0..self.nodes.len() {
@@ -1539,6 +1591,49 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                 output.set(2, ReadCell::default());
             }
         }
+        if !self.audit_results && !self.result_sources.is_empty() && instruction.arguments {
+            for register in [10, 11] {
+                if let Ok(index) = self
+                    .result_sources
+                    .binary_search_by_key(&(instruction.site, register), |&(site, register, _)| {
+                        (site, register)
+                    })
+                {
+                    let source = self.result_sources.get(index).ok_or_else(read_integrity)?.2;
+                    let seed = D::seed(self, source, 4, false, u32::MAX, c)?;
+                    if instruction.call {
+                        let mut cell = output.register(register);
+                        cell.flow = D::join(self, cell.flow, seed, c)?;
+                        output.set(register, cell);
+                        if emit {
+                            let mut continuation = false;
+                            let mut gap = false;
+                            for index in instruction.edge_start..instruction.edge_end {
+                                c.checkpoint(1)?;
+                                let edge = self.edges.get(index).ok_or_else(read_integrity)?;
+                                continuation |= edge.target.is_some();
+                                gap |= edge.target.is_none()
+                                    && matches!(
+                                        edge.relation,
+                                        EdgeKind::Indirect
+                                            | EdgeKind::Conflict
+                                            | EdgeKind::Taken
+                                            | EdgeKind::Fallthrough
+                                            | EdgeKind::PossibleContinuation
+                                            | EdgeKind::Trap
+                                            | EdgeKind::Stop
+                                    );
+                            }
+                            if !continuation || gap {
+                                D::limit(self, seed, ReadLimitKind::PartialFunction, c)?;
+                            }
+                        }
+                    } else if emit && calls.current().is_none_or(|s| s.returns(register)) {
+                        D::return_value(self, seed, register, c)?;
+                    }
+                }
+            }
+        }
         Ok(output)
     }
     fn limit_slots(
@@ -1636,7 +1731,7 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
     }
 }
 
-/// Selected load uses, using the original dependency domain and work budget.
+/// Selected load and call-result uses, sharing the dependency domain and work budget.
 pub struct ReadUsesEvaluator<'f, 'a, 'm> {
     engine: FlowEngine<'f, 'a, 'm, Reads<'m>>,
 }
@@ -1655,6 +1750,23 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
         c: &mut dyn RunControl,
     ) -> Result<()> {
         self.engine.analyze(abi, decoder, select, calls, c)
+    }
+    pub fn result_reads(
+        &self,
+        site: u64,
+        register: u8,
+        c: &mut dyn RunControl,
+    ) -> Result<ReadUses> {
+        let source = self
+            .engine
+            .result_sources
+            .binary_search_by_key(&(site, register), |&(site, register, _)| (site, register))
+            .ok()
+            .and_then(|id| self.engine.result_sources.get(id))
+            .map(|s| s.2);
+        let source = source.filter(|&source| self.engine.sources.get(source).is_some_and(|source|
+            matches!(source.origin, ReadOrigin::CallResult { site: s, register: r } if s == site && r == register)));
+        self.engine.source_reads(source, u32::MAX, c)
     }
     pub fn work_limited(&self) -> bool {
         self.engine.work_limit
