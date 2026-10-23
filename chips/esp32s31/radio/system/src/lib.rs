@@ -292,7 +292,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
         if phy != PhyPreparation::AlreadyOpen {
             self.core.state.epoch = Some(self.core.mint.next_epoch(self.core.state.epoch));
         }
-        let epoch = self
+        let epoch = self.core
             .state
             .epoch
             .unwrap_or_else(|| self.core.mint.next_epoch(None));
