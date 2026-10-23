@@ -2279,6 +2279,7 @@ source = "synthetic"
             if callee.name.as_deref() == Some("read_word")
                 && function.name.as_deref() != Some(b"tail_result")
                 && function.name.as_deref() != Some(b"twice_result")
+                && function.name.as_deref() != Some(b"truncated_result")
             {
                 assert_eq!(
                     &arguments[..3],
@@ -2368,6 +2369,19 @@ source = "synthetic"
             .iter()
             .any(|usage| usage.precision == ReadPrecision::Exact
                 && matches!(usage.sink, ReadSink::Return { register: 10 }))
+    );
+    assert_eq!(
+        read("truncated_result").unused,
+        0,
+        "a missing continuation does not discard a result"
+    );
+    assert!(
+        read("truncated_result")
+            .unknown
+            .iter()
+            .any(|limit| limit.bits == u32::MAX && limit.limit == ReadLimitKind::PartialFunction),
+        "{:?}",
+        read("truncated_result")
     );
     let no_abi = run(&names, None);
     assert!(no_abi.iter().any(|record| matches!(record, RegisterAccess::CallResult { function, reads, .. } if function.name.as_deref() == Some(b"branch_result") && reads.uses.iter().any(|usage| usage.precision == ReadPrecision::Exact && matches!(usage.sink, ReadSink::Branch { .. })))));

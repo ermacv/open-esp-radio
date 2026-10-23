@@ -308,7 +308,7 @@ pub enum RegisterAccess {
     CallResult {
         function: LibraryFunction,
         site: u64,
-        callee: CallTarget,
+        callee: Box<CallTarget>,
         /// Physical RV32 result register (x10, or x11 for a u64 contract).
         register: u8,
         /// a0..a7 before this transfer, in the call-arguments vocabulary.

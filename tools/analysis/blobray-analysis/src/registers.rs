@@ -1605,6 +1605,29 @@ impl<'f, 'a, 'm, D: Domain<'m>> FlowEngine<'f, 'a, 'm, D> {
                         let mut cell = output.register(register);
                         cell.flow = D::join(self, cell.flow, seed, c)?;
                         output.set(register, cell);
+                        if emit {
+                            let mut continuation = false;
+                            let mut gap = false;
+                            for index in instruction.edge_start..instruction.edge_end {
+                                c.checkpoint(1)?;
+                                let edge = self.edges.get(index).ok_or_else(read_integrity)?;
+                                continuation |= edge.target.is_some();
+                                gap |= edge.target.is_none()
+                                    && matches!(
+                                        edge.relation,
+                                        EdgeKind::Indirect
+                                            | EdgeKind::Conflict
+                                            | EdgeKind::Taken
+                                            | EdgeKind::Fallthrough
+                                            | EdgeKind::PossibleContinuation
+                                            | EdgeKind::Trap
+                                            | EdgeKind::Stop
+                                    );
+                            }
+                            if !continuation || gap {
+                                D::limit(self, seed, ReadLimitKind::PartialFunction, c)?;
+                            }
+                        }
                     } else if emit && calls.current().is_none_or(|s| s.returns(register)) {
                         D::return_value(self, seed, register, c)?;
                     }

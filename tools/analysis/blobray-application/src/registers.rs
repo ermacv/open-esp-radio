@@ -200,7 +200,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 &RegisterAccess::CallResult {
                     function: self.function.clone(),
                     site,
-                    callee,
+                    callee: Box::new(callee),
                     register,
                     arguments: crate::call_arguments::arguments(self.facts, site, c)?,
                     reads,

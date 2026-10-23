@@ -107,6 +107,10 @@ function double_result
 2:
 finish double_result
 
+function truncated_result
+    call read_word
+end truncated_result
+
 function tail_result
     tail read_word
 end tail_result
