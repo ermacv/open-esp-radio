@@ -17,7 +17,10 @@ impl<F> Boundary<F> {
 }
 impl<F: Future> Future for Boundary<F> {
     type Output = F::Output;
-    #[inline(never)]
+    // Multiple client paths share one physical poll body. A Wi-Fi-only
+    // image has one caller and can inline the identical typed projection.
+    #[cfg_attr(feature = "bluetooth", inline(never))]
+    #[cfg_attr(not(feature = "bluetooth"), inline(always))]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.project().future.poll(cx)
     }
