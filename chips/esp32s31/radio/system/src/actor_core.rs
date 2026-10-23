@@ -1,12 +1,11 @@
 //! Client-neutral RF epoch, health and membership custody.
 use super::*;
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct State {
     poisoned: bool,
-    has_epoch: bool,
     members: u32,
     tracked: u32,
-    epoch: RfEpoch,
+    epoch: Option<RfEpoch>,
 }
 
 pub(super) struct ActorCore {
@@ -22,16 +21,9 @@ pub(super) enum Action {
 impl ActorCore {
     #[inline(always)]
     pub(super) fn new(mint: MemberMint) -> Self {
-        let epoch = mint.next_epoch(None);
         Self {
             mint,
-            state: State {
-                poisoned: false,
-                has_epoch: false,
-                members: 0,
-                tracked: 0,
-                epoch,
-            },
+            state: State::default(),
             #[cfg(feature = "bluetooth")]
             attached: false,
         }
@@ -111,11 +103,15 @@ impl ActorCore {
     }
     #[inline(always)]
     pub(super) fn prepared(&mut self, phy: &PhyPreparation) -> RfEpoch {
-        if *phy != PhyPreparation::AlreadyOpen && self.state.has_epoch {
-            self.state.epoch = self.mint.next_epoch(Some(self.state.epoch));
+        if *phy != PhyPreparation::AlreadyOpen {
+            self.state.epoch = Some(self.mint.next_epoch(self.state.epoch));
         }
-        self.state.has_epoch = true;
-        self.state.epoch
+        let epoch = self
+            .state
+            .epoch
+            .unwrap_or_else(|| self.mint.next_epoch(None));
+        self.state.epoch = Some(epoch);
+        epoch
     }
     #[inline(always)]
     pub(super) fn closed(&mut self, result: Result<(), CloseFault>) {

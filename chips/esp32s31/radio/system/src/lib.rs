@@ -152,8 +152,18 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
             let deadline = (self.core.tracking_active())
                 .then(|| self.backend.tracking_deadline())
                 .flatten();
-            if boundary::shared(self.wait(deadline)).await {
-                boundary::shared(self.tick()).await;
+            let doorbell = self.doorbell;
+            let rung = poll_fn(|cx| doorbell.poll_rung(cx));
+            match deadline {
+                None => {
+                    rung.await;
+                }
+                Some(deadline) => {
+                    if let Either::Second(()) = select(rung, self.timer.wait_until(deadline)).await
+                    {
+                        boundary::shared(self.tick()).await;
+                    }
+                }
             }
         }
     }
@@ -166,6 +176,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         &mut self.backend
     }
 
+    #[cfg(any(feature = "bluetooth", test))]
     // Independent of the next composition future and attached controller.
     #[inline(always)]
     async fn wait(&self, deadline: Option<oer_time::Instant>) -> bool {
@@ -259,7 +270,11 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
             }
         };
         let epoch = self.core.prepared(&phy);
-        match self.backend.enter(join, phy, &self.lp).await {
+        let entered = {
+            let enter = core::pin::pin!(self.backend.enter(join, phy, &self.lp));
+            enter.await
+        };
+        match entered {
             Ok(payload) => {
                 self.core.joined();
                 Ok(Joined {
