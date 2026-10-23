@@ -119,20 +119,7 @@ where
             let deadline = (self.actor.core.tracking_active())
                 .then(|| self.actor.backend.tracking_deadline())
                 .flatten();
-            let doorbell = self.actor.doorbell;
-            let wait = async {
-                let rung = poll_fn(|cx| doorbell.poll_rung(cx));
-                match deadline {
-                    None => {
-                        rung.await;
-                        false
-                    }
-                    Some(at) => matches!(
-                        select(rung, self.actor.timer.wait_until(at)).await,
-                        Either::Second(())
-                    ),
-                }
-            };
+            let wait = boundary::shared(self.actor.wait(deadline));
             match select(next.as_mut(), wait).await {
                 Either::First(out) => return out,
                 Either::Second(true) => boundary::shared(self.actor.tick()).await,
