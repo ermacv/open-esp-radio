@@ -15,7 +15,7 @@ use oer_interrupt_table::{
 };
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
-pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = 4;
+pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::ready::ExecutorIndex::COUNT;
 const CORE_COUNT: usize = 2;
 const THREAD_MODE_CONTEXT: usize = 16;
 const INTERRUPT_MODE_CONTEXT: usize = 32;
@@ -81,9 +81,11 @@ pub(crate) fn running() -> u8 {
 }
 
 /// The software interrupt of the executor whose raw executor has `id`.
-pub(crate) fn executor_of(id: usize) -> Option<u8> {
-    (0..SOFTWARE_INTERRUPT_COUNT as u8)
-        .find(|&swi| id != 0 && EMBASSY_EXECUTORS[swi as usize].load(Ordering::Acquire) == id)
+#[inline(never)]
+pub(crate) fn executor_of(id: usize) -> Option<crate::ready::ExecutorIndex> {
+    crate::ready::find_executor(id, |slot| {
+        EMBASSY_EXECUTORS[slot.index()].load(Ordering::Acquire)
+    })
 }
 
 /// Whether the current executor has another queued run token. A wake of the
@@ -102,22 +104,27 @@ pub fn ready_peers() -> bool {
         .ready()
 }
 
-fn trace_executor(executor_id: u32) -> usize {
-    usize::from(
-        executor_of(executor_id as usize).expect("trace event requires a registered executor"),
-    )
+fn trace_executor(executor_id: u32) -> crate::ready::ExecutorIndex {
+    executor_of(executor_id as usize).expect("trace event requires a registered executor")
 }
 
 pub(crate) fn task_ready_begin(executor_id: u32) {
-    EMBASSY_WORK_PENDING.0[trace_executor(executor_id)].ready_begin();
+    EMBASSY_WORK_PENDING.0[trace_executor(executor_id).index()].ready_begin();
 }
 pub(crate) fn task_exec_begin(executor_id: u32) {
     let swi = trace_executor(executor_id);
-    EMBASSY_WORK_PENDING.0[swi].exec_begin();
-    let state = &EMBASSY_EXECUTOR_CORE[swi];
-    let now = esp_hal::time::Instant::now()
-        .duration_since_epoch()
-        .as_micros();
+    EMBASSY_WORK_PENDING.0[swi.index()].exec_begin();
+    stamp_poll(swi);
+}
+
+// Keep the clock and timestamp publication out of the ready-counter hook.
+// The tail call avoids keeping the hook's frame across the clock read.
+#[inline(never)]
+fn stamp_poll(swi: crate::ready::ExecutorIndex) {
+    let state = &EMBASSY_EXECUTOR_CORE[swi.index()];
+    // This driver reports the same HAL clock in microseconds; reuse its
+    // outlined ABI instead of duplicating the hardware clock read here.
+    let now = embassy_time_driver::now();
     state.store(
         crate::ready::poll_stamp(state.load(Ordering::Relaxed), now),
         Ordering::Release,

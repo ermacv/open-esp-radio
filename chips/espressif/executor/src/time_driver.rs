@@ -443,6 +443,7 @@ impl Driver for EmbassyTimeDriver {
             waker.wake_by_ref();
             return;
         };
+        let swi = swi as u8;
         let Some(comparator) =
             Comparator::from_index(COMPARATOR_OF[swi as usize].load(Ordering::Acquire))
         else {

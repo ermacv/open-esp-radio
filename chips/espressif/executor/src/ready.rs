@@ -8,6 +8,38 @@
 //! poll_exited and receives exec_begin too. No TaskHeader layout is inspected.
 use core::sync::atomic::{AtomicU8, Ordering};
 
+/// The bounded selector keeps outlined registry lookups within the four slots.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExecutorIndex {
+    Zero,
+    One,
+    Two,
+    Three,
+}
+impl ExecutorIndex {
+    pub(crate) const COUNT: usize = 4;
+    pub(crate) const fn index(self) -> usize {
+        self as usize
+    }
+}
+
+pub(crate) fn find_executor(
+    id: usize,
+    mut registered: impl FnMut(ExecutorIndex) -> usize,
+) -> Option<ExecutorIndex> {
+    if id == 0 {
+        return None;
+    }
+    [
+        ExecutorIndex::Zero,
+        ExecutorIndex::One,
+        ExecutorIndex::Two,
+        ExecutorIndex::Three,
+    ]
+    .into_iter()
+    .find(|slot| registered(*slot) == id)
+}
+
 /// Bit zero is the thread-mode wake flag; the upper bits count ready tokens.
 /// An image may have at most 126 task slots on an executor: dequeue can clear
 /// one task's queued bit just before exec_begin, allowing one extra enqueue.
@@ -22,19 +54,25 @@ impl ReadyState {
     }
 
     pub(crate) fn ready_begin(&self) {
-        self.0
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
-                state.checked_add(2)
-            })
-            .expect("executor ready-token capacity exceeded");
+        self.change_ready(2);
     }
 
     pub(crate) fn exec_begin(&self) {
+        self.change_ready(-2);
+    }
+
+    // One checked CAS loop serves both hooks; failed bounds never mutate state.
+    #[inline(never)]
+    fn change_ready(&self, delta: i8) {
         self.0
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
-                state.checked_sub(2)
+                u8::try_from(i16::from(state) + i16::from(delta)).ok()
             })
-            .expect("executor dequeued an uncounted ready token");
+            .expect(if delta > 0 {
+                "executor ready-token capacity exceeded"
+            } else {
+                "executor dequeued an uncounted ready token"
+            });
     }
 
     pub(crate) fn ready(&self) -> bool {
