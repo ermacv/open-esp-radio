@@ -1,6 +1,9 @@
-//! A synchronous byte writer for a small hardware FIFO that nothing may wait
-//! on: it writes while the FIFO has room, drops the rest and counts what it
-//! dropped. The chip supplies the [`Fifo`]; the logic is host-testable.
+//! A synchronous byte writer for a small hardware FIFO: it writes while the
+//! FIFO has room, drops the rest and counts what it dropped. A writer with a
+//! [`Patience`] waits for room first, up to a budget of polls per record, for
+//! the time before an executor exists and there is nothing to yield to; a
+//! writer without it never waits. The chip supplies the [`Fifo`]; the logic is
+//! host-testable.
 //!
 //! A loss is never silent: the next note is preceded by a
 //! [`Note::diag_lost`] carrying the dropped bytes, and the count is cleared
@@ -64,15 +67,54 @@ impl Default for Lost {
     }
 }
 
+/// How long a writer may wait for room in a full FIFO: polls of
+/// [`Fifo::has_room`] per record, shared by all the bytes of the record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Patience(u32);
+
+impl Patience {
+    /// Never waits: a byte without room is dropped at once.
+    pub const NONE: Self = Self(0);
+
+    pub const fn polls(polls: u32) -> Self {
+        Self(polls)
+    }
+}
+
 /// The one writer of a FIFO at a time.
 pub struct FifoWriter<'a, F> {
     fifo: F,
     lost: &'a Lost,
+    patience: Patience,
+    /// Polls this record may still spend.
+    budget: u32,
 }
 
 impl<'a, F: Fifo> FifoWriter<'a, F> {
-    pub const fn new(fifo: F, lost: &'a Lost) -> Self {
-        Self { fifo, lost }
+    pub const fn new(fifo: F, lost: &'a Lost, patience: Patience) -> Self {
+        Self {
+            fifo,
+            lost,
+            patience,
+            budget: patience.0,
+        }
+    }
+
+    /// Waits for room within the record's budget; `false` when none came.
+    fn wait_for_room(&mut self) -> bool {
+        if self.budget == 0 {
+            return false;
+        }
+        // What is in the FIFO must be on its way to the host before room can
+        // appear.
+        self.fifo.flush();
+        while self.budget > 0 {
+            self.budget -= 1;
+            if self.fifo.has_room() {
+                return true;
+            }
+        }
+        false
     }
 
     /// Writes `bytes` as far as the FIFO has room and returns how many it
@@ -80,7 +122,7 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
     fn push_all(&mut self, bytes: &[u8]) -> usize {
         let mut dropped = 0;
         for &byte in bytes {
-            if self.fifo.has_room() {
+            if self.fifo.has_room() || self.wait_for_room() {
                 self.fifo.push(byte);
             } else {
                 dropped += 1;
@@ -92,6 +134,7 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
     /// Writes `bytes` and flushes, counting what did not fit: for text that
     /// is not a note.
     pub fn text(&mut self, bytes: &[u8]) {
+        self.budget = self.patience.0;
         let dropped = self.push_all(bytes);
         self.lost.add(dropped);
         self.fifo.flush();
@@ -112,6 +155,7 @@ impl<'a, F: Fifo> FifoWriter<'a, F> {
 
     /// Emits `note` and returns the bytes dropped.
     fn emit(&mut self, note: &Note<'_>) -> usize {
+        self.budget = self.patience.0;
         let mut dropped = 0;
         let Ok(()) = emit_note(note, |bytes: &[u8]| {
             dropped += self.push_all(bytes);

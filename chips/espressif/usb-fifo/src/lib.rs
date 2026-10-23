@@ -5,7 +5,8 @@
 //! before a USB driver owns the peripheral: the bootstrap, a runtime's early
 //! boot and the report of the previous boot's fatal record. It writes bytes
 //! while the FIFO has room, drops the rest and counts what it dropped
-//! ([`oer_diagnostics::FifoWriter`]); it never waits.
+//! ([`oer_diagnostics::FifoWriter`]). It waits for room within a budget per
+//! record, as there is no executor to yield to; [`fatal_note`] never waits.
 //!
 //! `USB_DEVICE` has one owner at a time. The writer owns it from reset until
 //! [`hand_over`] takes the peripheral's token on its way to the driver; after
@@ -16,7 +17,14 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use esp_hal::peripherals::USB_DEVICE;
-use oer_diagnostics::{Fifo, FifoWriter, Lost, Note};
+use oer_diagnostics::{Fifo, FifoWriter, Lost, Note, Patience};
+
+/// What the early writer may wait for room in the 64-byte FIFO, per record,
+/// in polls of the room flag: the host takes a packet in about a millisecond,
+/// and a poll is a register read of well under a microsecond, so the budget is
+/// some milliseconds up to tens of them at the early boot's slow clock. Before
+/// an executor exists there is nothing to yield to.
+const EARLY_PATIENCE: Patience = Patience::polls(100_000);
 
 static LOST: Lost = Lost::new();
 /// Whether a driver has taken the peripheral from the early writer.
@@ -50,15 +58,16 @@ impl Fifo for Endpoint {
     }
 }
 
-/// Runs `write` with a writer over a fresh capture of the peripheral.
+/// Runs `write` with a writer of `patience` over a fresh capture of the
+/// peripheral.
 ///
 /// # Safety
 /// Nothing else may use `USB_DEVICE` while `write` runs.
 #[allow(unsafe_code, reason = "the early boot's capture of the peripheral")]
-unsafe fn write_captured(write: impl FnOnce(&mut FifoWriter<'_, Endpoint>)) {
+unsafe fn write_captured(patience: Patience, write: impl FnOnce(&mut FifoWriter<'_, Endpoint>)) {
     // SAFETY: the caller's contract.
     let token = unsafe { USB_DEVICE::steal() };
-    write(&mut FifoWriter::new(Endpoint(token), &LOST));
+    write(&mut FifoWriter::new(Endpoint(token), &LOST, patience));
 }
 
 /// Runs `write` with the early writer, unless a driver owns the peripheral.
@@ -70,7 +79,7 @@ fn with_writer(write: impl FnOnce(&mut FifoWriter<'_, Endpoint>)) -> bool {
     // SAFETY: until `hand_over`, nothing else holds `USB_DEVICE`: the early
     // boot runs on one hart, no driver exists, and the token only goes to a
     // driver through `hand_over`, which stops this writer first.
-    unsafe { write_captured(write) };
+    unsafe { write_captured(EARLY_PATIENCE, write) };
     true
 }
 
@@ -112,5 +121,5 @@ pub fn take_lost() -> u32 {
 pub fn fatal_note(note: &Note<'_>, _transport_masked: critical_section::CriticalSection<'_>) {
     // SAFETY: the driver cannot execute while the caller's critical section
     // holds its hart, and the caller does not return to it.
-    unsafe { write_captured(|writer| writer.note(note)) };
+    unsafe { write_captured(Patience::NONE, |writer| writer.note(note)) };
 }
