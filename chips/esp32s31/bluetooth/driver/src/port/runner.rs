@@ -162,7 +162,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                         .poll_stop(&self.doorbell, &mut self.stop, cx)
                 }),
             )
-            .await?
+            .await
+            .map_err(|fault| timeout_at(fault, Fault::StopTimeout))?
             .map_err(|_| Fault::SchedulerStop)?;
             if step {
                 self.stop = BluetoothSchedulerStop::default();
@@ -179,7 +180,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                 deadline,
                 self.timer.wait_until(at.min(deadline)),
             )
-            .await?;
+            .await
+            .map_err(|fault| timeout_at(fault, Fault::StopTimeout))?;
         }
     }
     async fn sample(
@@ -418,7 +420,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             deadline,
             engine.resume(&self.doorbell),
         )
-        .await?
+        .await
+        .map_err(|fault| timeout_at(fault, Fault::ResumeTimeout))?
         .map_err(|_| Fault::SchedulerResume)?;
         let (_, next) = guard(
             self.cancel,
@@ -426,7 +429,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             deadline,
             engine.submit_dtm(instance, &self.doorbell),
         )
-        .await?
+        .await
+        .map_err(|fault| timeout_at(fault, Fault::SubmitTimeout))?
         .map_err(|_| Fault::SchedulerSubmit)?;
         if !matches!(next, SchedulerNext::Finished) {
             return Err(Fault::SchedulerSubmit);
@@ -438,7 +442,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
                 deadline,
                 select(self.wake.wait(), poll_fn(|cx| self.clock.poll_request(cx))),
             )
-            .await?;
+            .await
+            .map_err(|fault| timeout_at(fault, Fault::WakeTimeout))?;
             let captured = match input {
                 Either::First(captured) => captured.map_err(|_| Fault::SchedulerWake)?,
                 Either::Second(request) => {
@@ -542,5 +547,12 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         } else {
             Ok(self.task)
         }
+    }
+}
+fn timeout_at(fault: Fault, stage: Fault) -> Fault {
+    if fault == Fault::Deadline {
+        stage
+    } else {
+        fault
     }
 }
