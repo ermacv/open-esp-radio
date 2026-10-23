@@ -196,7 +196,50 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         B: ClientBackend<Q, S>,
     {
         match request {
-            Request::Join(join) => Answer::Join(self.join::<Q>(join).await),
+            Request::Join(join) => {
+                if self.core.is_poisoned() {
+                    return Answer::Join(Err(Failed {
+                        returned: Q::join_returned(join),
+                        cause: Failure::Poisoned,
+                    }));
+                }
+                if !self.backend.admits(&join) {
+                    return Answer::Join(Err(Failed {
+                        returned: Q::join_returned(join),
+                        cause: Failure::Refused,
+                    }));
+                }
+                let phy = match boundary::shared(self.backend.prepare()).await {
+                    Ok(phy) => phy,
+                    Err(Fault) => {
+                        self.core.poison();
+                        return Answer::Join(Err(Failed {
+                            returned: Q::join_returned(join),
+                            cause: Failure::Poisoned,
+                        }));
+                    }
+                };
+                let epoch = self.core.prepared(&phy);
+                Answer::Join(match self.backend.enter(join, phy, &self.lp).await {
+                    Ok(payload) => {
+                        self.core.joined();
+                        Ok(Joined {
+                            member: self.core.mint.untracked(),
+                            epoch,
+                            payload,
+                        })
+                    }
+                    Err(Failed { returned, cause }) => {
+                        if matches!(self.core.failed_enter(cause), Action::CloseRf) {
+                            boundary::shared(self.close_rf()).await;
+                        }
+                        Err(Failed {
+                            returned,
+                            cause: self.core.failure(cause),
+                        })
+                    }
+                })
+            }
             Request::Track(member, track) => {
                 if self.core.is_poisoned() {
                     return Answer::Track(Err(Failed {
@@ -239,75 +282,18 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                     }
                 })
             }
-            Request::Leave(member, leave) => Answer::Leave(self.leave::<Q>(member, leave).await),
-        }
-    }
-
-    async fn join<Q: Client>(&mut self, join: Q::Join) -> oer_esp32s31_radio_client::JoinAnswer<Q>
-    where
-        B: ClientBackend<Q, S>,
-    {
-        if self.core.is_poisoned() {
-            return Err(Failed {
-                returned: Q::join_returned(join),
-                cause: Failure::Poisoned,
-            });
-        }
-        if !self.backend.admits(&join) {
-            return Err(Failed {
-                returned: Q::join_returned(join),
-                cause: Failure::Refused,
-            });
-        }
-        let phy = match boundary::shared(self.backend.prepare()).await {
-            Ok(phy) => phy,
-            Err(Fault) => {
-                self.core.poison();
-                return Err(Failed {
-                    returned: Q::join_returned(join),
-                    cause: Failure::Poisoned,
-                });
-            }
-        };
-        let epoch = self.core.prepared(&phy);
-        let entered = {
-            let enter = core::pin::pin!(self.backend.enter(join, phy, &self.lp));
-            enter.await
-        };
-        match entered {
-            Ok(payload) => {
-                self.core.joined();
-                Ok(Joined {
-                    member: self.core.mint.untracked(),
-                    epoch,
-                    payload,
-                })
-            }
-            Err(Failed { returned, cause }) => {
-                if matches!(self.core.failed_enter(cause), Action::CloseRf) {
+            Request::Leave(member, leave) => {
+                self.core.leaving(matches!(member, Leaving::Tracked(_)));
+                self.core.mint.retire(member);
+                let (payload, exit) = self.backend.exit(leave).await;
+                if matches!(self.core.exited(exit), Action::CloseRf) {
                     boundary::shared(self.close_rf()).await;
                 }
-                Err(Failed {
-                    returned,
-                    cause: self.core.failure(cause),
+                Answer::Leave(Left {
+                    payload,
+                    domain: self.core.health(),
                 })
             }
-        }
-    }
-
-    async fn leave<Q: Client>(&mut self, member: Leaving<Q>, leave: Q::Leave) -> Left<Q>
-    where
-        B: ClientBackend<Q, S>,
-    {
-        self.core.leaving(matches!(member, Leaving::Tracked(_)));
-        self.core.mint.retire(member);
-        let (payload, exit) = self.backend.exit(leave).await;
-        if matches!(self.core.exited(exit), Action::CloseRf) {
-            boundary::shared(self.close_rf()).await;
-        }
-        Left {
-            payload,
-            domain: self.core.health(),
         }
     }
 
