@@ -125,6 +125,7 @@ jobs:
               | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | select(.metadata."open-radio".instrumentation == null)
+              | select(.name != "oer-firmware-apps-b0")
               | "-p " + .name' <<<"$meta"
           }
           # HIL classes use their build recipes for features and cfgs.
@@ -141,8 +142,10 @@ jobs:
                   | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
               | join(" ")' <<<"$meta"
           }
-          # W3 and B0 keep large futures in typed static PSRAM, as HIL images do.
-          RUSTC_BOOTSTRAP=oer_firmware_apps_w3,oer_firmware_apps_b0 cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
+          # B0 selects Embassy's nightly macro feature; keep it out of the
+          # other images' feature-unified invocation.
+          RUSTC_BOOTSTRAP=oer_firmware_apps_b0 cargo clippy --locked --target riscv32imafc-unknown-none-elf -p oer-firmware-apps-b0
+          RUSTC_BOOTSTRAP=oer_firmware_apps_w3 cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo clippy --locked --target riscv32imac-unknown-none-elf $(firmware true)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.
@@ -163,9 +166,11 @@ jobs:
               | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | select(.metadata."open-radio".instrumentation == null)
+              | select(.name != "oer-firmware-apps-b0")
               | "-p " + .name' <<<"$meta"
           }
-          RUSTC_BOOTSTRAP=oer_firmware_apps_w3,oer_firmware_apps_b0 cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
+          RUSTC_BOOTSTRAP=oer_firmware_apps_b0 cargo check --locked --target riscv32imafc-unknown-none-elf -p oer-firmware-apps-b0
+          RUSTC_BOOTSTRAP=oer_firmware_apps_w3 cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
