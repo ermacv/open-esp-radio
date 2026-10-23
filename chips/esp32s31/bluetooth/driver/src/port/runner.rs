@@ -1,4 +1,5 @@
 //! The P2 DTM executor. Its complete branded engine stays inside this owner.
+use super::event::{Finish, successful};
 use super::guard::{guard, step};
 use super::{Cause, Fault, PacketCount, Start, Started};
 use crate::{
@@ -22,8 +23,7 @@ use oer_bluetooth_le_radio::{LeInstant, LeWindow, RadioDuration, RadioTiming, Te
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerStop,
     engine::{
-        ArenaMemory, DtmSchedulerFrequency, DtmSchedulerItemCompletionStatus, LeTxPower,
-        SchedulerRoleInstance,
+        ArenaMemory, DtmSchedulerFrequency, LeTxPower, SchedulerRoleInstance,
         scheduler::{SchedulerNext, SchedulerRawWindow, interrupt::SchedulerDoorbell},
     },
 };
@@ -517,9 +517,9 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             }
         }
         self.stop(self.deadline()?).await?;
-        self.finish_event()
+        self.finish_event(Finish::Natural)
     }
-    fn finish_event(&mut self) -> Result<(), Fault> {
+    fn finish_event(&mut self, finish: Finish) -> Result<(), Fault> {
         let pending = self.pending.ok_or(Fault::Accounting)?;
         let event = self
             .task
@@ -535,20 +535,16 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         self.previous = Some(pending.window);
         self.pending = None;
         self.phase = DtmEventPhase::Recurring;
-        match event.status {
-            DtmSchedulerItemCompletionStatus::Zero => {
-                if pending.receiver && matches!(event.received, Some(Ok(_))) {
-                    if let Some(n) = self.count.packets.checked_add(1) {
-                        self.count.packets = n;
-                    } else {
-                        self.count.saturated = true;
-                    }
+        if successful(event.status, finish)? {
+            if pending.receiver && matches!(event.received, Some(Ok(_))) {
+                if let Some(n) = self.count.packets.checked_add(1) {
+                    self.count.packets = n;
+                } else {
+                    self.count.saturated = true;
                 }
-                Ok(())
             }
-            DtmSchedulerItemCompletionStatus::Aborted => Ok(()),
-            DtmSchedulerItemCompletionStatus::NonZero(_) => Err(Fault::DtmStatus),
         }
+        Ok(())
     }
     /// Normal End reclaims exactly this session's graph after confirmed stop.
     pub async fn end(&mut self) -> Result<PacketCount, Fault> {
@@ -561,7 +557,14 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
     async fn end_inner(&mut self) -> Result<PacketCount, Fault> {
         self.check()?;
         let deadline = self.deadline()?;
+        if let Some(captured) = self.wake.take().map_err(|_| Fault::SchedulerWake)? {
+            // Captured P3 faults still preempt the ordinary End path.
+            let _ = captured.classify().map_err(|_| Fault::SchedulerWake)?;
+        }
         self.stop(deadline).await?;
+        if let Some(captured) = self.wake.take().map_err(|_| Fault::SchedulerWake)? {
+            let _ = captured.classify().map_err(|_| Fault::SchedulerWake)?;
+        }
         if self.task.task_owner().engine().scheduled_count() != 0 {
             let next = guard(
                 self.cancel,
@@ -576,7 +579,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             }
         }
         if self.pending.is_some() {
-            self.finish_event()?;
+            self.finish_event(Finish::Stopped)?;
         }
         let pool = self
             .task
