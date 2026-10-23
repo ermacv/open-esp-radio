@@ -61,6 +61,19 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
         add(system::PanicInjected::KEY, true);
         return sorted(keys);
     }
+    #[cfg(feature = "wifi")]
+    if enabled("wifi-station") {
+        for key in [
+            crate::wifi::Station::KEY,
+            crate::wifi::StartStation::KEY,
+            crate::wifi::StationLink::KEY,
+            base::Accepted::KEY,
+        ] {
+            add(key, true);
+        }
+        #[cfg(feature = "network")]
+        add(crate::network::Ready::KEY, true);
+    }
     #[cfg(feature = "phy")]
     if enabled("diagnostic-phy") {
         for key in [
@@ -125,6 +138,7 @@ fn sorted(mut keys: ImageKeys) -> ImageKeys {
 /// Every Cargo feature [`image_keys`] reads, so the host can check that the
 /// runtime manifest declares each of them.
 pub const READ_FEATURES: &[&str] = &[
+    "wifi-station",
     "system-watchdog",
     "system-panic-reset",
     "usb-jtag-off",
@@ -159,6 +173,20 @@ mod tests {
         assert!(!has::<system::DisableUsb>(&watchdog));
         let usb_off = with(&["system-watchdog", "usb-jtag-off"]);
         assert!(has::<system::DisableUsb>(&usb_off) && has::<system::WatchdogTest>(&usb_off));
+    }
+
+    #[cfg(feature = "wifi")]
+    #[test]
+    fn station_image_reports_only_implemented_station_and_network_handlers() {
+        let station = with(&["wifi-station"]);
+        assert!(has::<crate::wifi::Station>(&station));
+        assert!(has::<crate::wifi::StartStation>(&station));
+        assert!(has::<crate::wifi::StationLink>(&station));
+        assert!(has::<base::Accepted>(&station));
+        #[cfg(feature = "network")]
+        assert!(has::<network::Ready>(&station));
+        assert!(!has::<network::Udp>(&station));
+        assert!(!has::<system::WatchdogTest>(&station));
     }
 
     #[test]

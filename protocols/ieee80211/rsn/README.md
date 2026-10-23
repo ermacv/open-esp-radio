@@ -12,6 +12,7 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | `bip`, `management_ccmp` | Management IPN allocation and replay owners over the stateless transforms in `oer-ieee80211-cipher` |
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
+| `nonce` | Boot-seeded ChaCha20 owner for fresh supplicant nonces |
 | `eapol` | Validated borrowed/owned EAPOL-Key packets and MIC verification |
 | `frames` | EAPOL-Key/Ethernet construction, GTK key data and owned security elements |
 | `state` | Station and authenticator four-way-handshake transitions |
@@ -20,6 +21,15 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 
 `oer-ieee80211-cipher` owns software CCMP, BIP-CMAC-128 and bounded RFC 3394
 AES key wrap/unwrap. It has no handshake state, replay frontier or clock.
+
+`PmkDerivation::new` validates and owns the password/SSID; `step` evaluates
+one HMAC-SHA1 and yields the PMK exactly once after 8192 steps (two blocks,
+4096 iterations each). The composition schedules between steps. Completion,
+explicit zeroization and drop erase the pending password and partial key state;
+there is no synchronous passphrase-derivation API. The synchronous `pbkdf2`
+dependency is used only by tests as an independent comparison. `SNonceSource`
+consumes one 256-bit entropy fill and advances a separate ChaCha20 stream;
+both cipher state and buffered keystream zeroize on drop.
 
 A `Ptk` records the suite that derived it, so MIC generation and verification
 cannot mix suites. The authenticator takes its suite from the station's

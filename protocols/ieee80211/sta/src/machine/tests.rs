@@ -386,7 +386,37 @@ impl<'id> World<'id> {
             match security {
                 StaSecurity::Open => Station::new_open(config, resources),
                 StaSecurity::Personal { password, pmk } => {
-                    Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
+                    #[cfg(not(feature = "placement"))]
+                    {
+                        Station::new_personal(
+                            config,
+                            password,
+                            pmk,
+                            resources,
+                            GroupCapacity::new(),
+                        )
+                    }
+                    #[cfg(feature = "placement")]
+                    {
+                        let mut storage = core::mem::MaybeUninit::uninit();
+                        let mut credits = None;
+                        let station = oer_memory::Placed::init(&mut storage, |storage| {
+                            let (station, granted) = Station::init_personal(
+                                storage,
+                                config,
+                                password,
+                                pmk,
+                                resources,
+                                GroupCapacity::new(),
+                            );
+                            credits = Some(granted);
+                            station
+                        });
+                        (
+                            station.read(),
+                            credits.expect("placed station command credits"),
+                        )
+                    }
                 }
             }
         })

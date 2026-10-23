@@ -1,6 +1,7 @@
 //! A separate, boot-seeded CSPRNG owner for supplicant nonces on P1.
 
-use chacha20::{ChaCha20, KeyIvInit, cipher::StreamCipher};
+use chacha20::{ChaCha20, KeyIvInit};
+use cipher::StreamCipher;
 use zeroize::Zeroizing;
 
 /// A ChaCha20 stream seeded once with 256 bits from the composition's sole

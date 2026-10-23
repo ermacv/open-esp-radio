@@ -9,6 +9,8 @@ description = "Allocation-free RSN (WPA2/WPA3) protocol types and four-way-hands
 readme = "README.md"
 
 [dependencies]
+# Erase the stream wrapper's buffered keystream as well as the ChaCha core.
+cipher = { version = "0.5", default-features = false, features = ["zeroize"] }
 chacha20 = { version = "0.10.2", default-features = false, features = ["cipher", "zeroize"] }
 oer-ieee80211-cipher = { path = "../cipher" }
 oer-ieee80211-wire = { path = "../wire" }
