@@ -47,40 +47,13 @@ pub(crate) enum RxError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Pc {
+    // Control phase. Keep these first: phase() uses the named endpoints.
     RootPrepare,
-    RegistersOn,
-    Frequency,
-    Debug,
-    RxOn,
-    RxClockOn,
-    TxClockOn,
-    SharedRead,
-    SharedForce,
-    SharedI2c,
-    RadioI,
-    RadioQ,
-    BasebandI,
-    BasebandQ,
-    Gain,
-    SharedMixer,
-    FineCode,
-    CalPrepare,
-    CalRead,
-    CalI,
-    CalQ,
-    CalLevel,
-    CalSettle,
-    Estimate,
-    CalCleanupI,
-    CalCleanupQ,
-    CalRestore,
-    SharedI2cRestore,
-    RxClockOff,
-    TxClockOff,
-    RxOff,
-    WorkMode,
-    RegistersOff,
     RootRestore,
+    Limits,
+    IqCorrection,
+
+    // Table publication. The final control tail uses the first group.
     PublishDebug,
     PublishRxOn,
     PublishRxClockOn,
@@ -90,8 +63,46 @@ enum Pc {
     PublishTxClockOff,
     PublishRestoreRxOn,
     PublishWorkMode,
-    Limits,
-    IqCorrection,
+
+    // Calibration control commands.
+    RegistersOn,
+    RegistersOff,
+    Debug,
+    RxClockOn,
+    TxClockOn,
+    RxClockOff,
+    TxClockOff,
+    WorkMode,
+    CalPrepare,
+    CalRestore,
+
+    // Calibration PBus commands.
+    RxOn,
+    SharedForce,
+    RadioI,
+    RadioQ,
+    BasebandI,
+    BasebandQ,
+    Gain,
+    SharedMixer,
+    FineCode,
+    CalI,
+    CalQ,
+    CalCleanupI,
+    CalCleanupQ,
+    CalLevel,
+    RxOff,
+
+    // Calibration reads, waits and retained bus transactions.
+    Frequency,
+    SharedRead,
+    SharedI2c,
+    CalRead,
+    CalSettle,
+    Estimate,
+    SharedI2cRestore,
+
+    // No observation phase remains once terminal.
     Complete,
     Failed,
 }
@@ -318,22 +329,21 @@ impl RxProgram {
         }
     }
 
+    // Grouping the PC makes phase classification small enough to inline;
+    // the action-tag switch below remains shared across poll instantiations.
+    #[inline(always)]
     pub(crate) fn phase(&self) -> Option<RxPhase> {
-        match self.cursor.pc {
-            Pc::Complete | Pc::Failed => None,
-            Pc::RootPrepare | Pc::RootRestore | Pc::Limits | Pc::IqCorrection => {
-                Some(RxPhase::Control)
-            }
-            Pc::PublishDebug
-            | Pc::PublishRxOn
-            | Pc::PublishRxClockOn
-            | Pc::PublishTxClockOn
-            | Pc::Entry
-            | Pc::PublishRxClockOff
-            | Pc::PublishTxClockOff
-            | Pc::PublishRestoreRxOn
-            | Pc::PublishWorkMode => Some(RxPhase::Publish),
-            _ => Some(RxPhase::Dc),
+        // The private PC groups keep this classification to range checks;
+        // inlining a switch here duplicates jump tables in every poll caller.
+        let pc = self.cursor.pc as u8;
+        if pc <= Pc::IqCorrection as u8 {
+            Some(RxPhase::Control)
+        } else if pc <= Pc::PublishWorkMode as u8 {
+            Some(RxPhase::Publish)
+        } else if matches!(self.cursor.pc, Pc::Complete | Pc::Failed) {
+            None
+        } else {
+            Some(RxPhase::Dc)
         }
     }
 
@@ -341,6 +351,7 @@ impl RxProgram {
         (self.dc_complete && self.cursor.pc == Pc::Complete).then_some(self.quality)
     }
 
+    #[inline(never)]
     pub(crate) fn action_tag(&self) -> u8 {
         match self.cursor.pc {
             Pc::RootPrepare => 1,

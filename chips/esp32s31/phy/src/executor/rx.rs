@@ -232,85 +232,138 @@ impl<
 > Future for Driver<'a, R, T, F, M, D, O>
 {
     type Output = Result<(), RxError>;
-    oer_esp32s31_hal::place_phy_engine_hot_path! {
-        #[inline(never)]
-        fn poll(self:Pin<&mut Self>,cx:&mut Context<'_>)->Poll<Self::Output> {
-            let mut this=self.project();
-            *this.entered=true;
-            let clock=&super::step::rfpll::OutlinedClock(*this.timer);
-            let started=clock.now();
-            let mut resumed=None;
-            let mut ready=None;
-            let mut tag=0;
-            let mut commands=0;
-            let mut i2c_tag=None;
-            let result=loop {
-                if let Some(wait)=this.wait.as_mut().as_pin_mut() {
-                    if !*this.wait_ready && wait.poll(cx).is_pending() {break Poll::Pending;}
-                    *this.wait_ready=false;
-                    resumed=Some((*this.wait_at,clock.now()));
-                    this.wait.as_mut().set(None);
+    #[inline(never)]
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        *this.entered = true;
+        let clock = &super::step::rfpll::OutlinedClock(*this.timer);
+        let started = clock.now();
+        let mut resumed = None;
+        let mut ready = None;
+        let mut tag = 0;
+        let mut commands = 0;
+        let mut i2c_tag = None;
+        let result = loop {
+            if let Some(wait) = this.wait.as_mut().as_pin_mut() {
+                if !*this.wait_ready && wait.poll(cx).is_pending() {
+                    break Poll::Pending;
                 }
-                let phase=this.program.phase();
-                if phase!=*this.phase {
-                    if let Some(old)=this.phase.take() {(this.observe)(operation(old),Event::Completed);}
-                    if let Some(new)=phase {(this.observe)(operation(new),Event::Started);}
-                    *this.phase=phase;
-                }
-                let action=this.program.action_tag();
-                let bit=1_u64<<action;
-                tag=action|if *this.seen&bit==0 {0x80}else{0};
-                *this.seen|=bit;
-                if action==11 {i2c_tag=Some(tag);}
-                if action==16 {this.execution.outer_operations+=1;}
-                let at=clock.now();
-                let step=atom::<D,_,_>(this.program,*this.registers,clock,this.execution,this.timing.is_some(),tag);
-                let finished=clock.now();
-                ready=Some(finished.saturating_duration_since(at));
-                // Phase edges are observed immediately, before any voluntary
-                // yield, while the same RF/control owner is still borrowed.
-                let phase=this.program.phase();
-                if phase!=*this.phase {
-                    if let Some(old)=this.phase.take() {(this.observe)(operation(old),Event::Completed);}
-                    if let Some(new)=phase {(this.observe)(operation(new),Event::Started);}
-                    *this.phase=phase;
-                }
-                match step {
-                    Err(error)=>{if let Some(old)=this.phase.take() {(this.observe)(operation(old),Event::Failed);}break Poll::Ready(Err(error));}
-                    Ok(Atom::Complete)=>break Poll::Ready(Ok(())),
-                    Ok(Atom::Wait)=>{
-                        let Some(at)=clock.now().checked_add(Duration::from_micros(1)) else {break Poll::Ready(Err(RxError::Hardware));};
-                        *this.wait_at=at;
-                        this.wait.as_mut().set(Some((this.make_wait)(*this.timer,at)));
-                        // Register the timer in this owning poll; a ready
-                        // timer resumes only in a later poll.
-                        let Some(wait)=this.wait.as_mut().as_pin_mut() else {break Poll::Ready(Err(RxError::WrongCompletion));};
-                        if wait.poll(cx).is_ready() {*this.wait_ready=true;cx.waker().wake_by_ref();}
-                        break Poll::Pending;
-                    }
-                    Ok(Atom::Runnable)=>{
-                        commands+=1;
-                        if commands<8 && this.program.short_next() && clock.now().saturating_duration_since(started).as_micros()<20 {continue;}
-                    }
-                }
-                cx.waker().wake_by_ref();
-                break Poll::Pending;
-            };
-            if let Some(timing)=this.timing.as_deref_mut() {
-                let before=timing.total_micros;
-                timing.poll_finished(clock,started,result.is_pending(),resumed,ready,None);
-                if let Some(tag)=i2c_tag {
-                    let elapsed=timing.total_micros.checked_sub(before).unwrap_or_else(||{timing.invalid=true;u32::MAX});
-                    let (maximum,count)=if tag&0x80==0 {(&mut this.execution.i2c_poll_micros[1][1],&mut this.execution.i2c_samples[1])}else{(&mut this.execution.i2c_poll_micros[1][0],&mut this.execution.i2c_samples[0])};
-                    *maximum=(*maximum).max(elapsed);
-                    *count+=1;
-                }
-                this.execution.observe_engine(timing,tag);
+                *this.wait_ready = false;
+                resumed = Some((*this.wait_at, clock.now()));
+                this.wait.as_mut().set(None);
             }
-            if let Poll::Ready(Err(error))=&result {this.program.fail_stop(*error);}
-            *this.finished=result.is_ready();
-            result
+            let phase = this.program.phase();
+            if phase != *this.phase {
+                if let Some(old) = this.phase.take() {
+                    (this.observe)(operation(old), Event::Completed);
+                }
+                if let Some(new) = phase {
+                    (this.observe)(operation(new), Event::Started);
+                }
+                *this.phase = phase;
+            }
+            let action = this.program.action_tag();
+            let bit = 1_u64 << action;
+            tag = action | if *this.seen & bit == 0 { 0x80 } else { 0 };
+            *this.seen |= bit;
+            if action == 11 {
+                i2c_tag = Some(tag);
+            }
+            if action == 16 {
+                this.execution.outer_operations += 1;
+            }
+            let at = clock.now();
+            let step = atom::<D, _, _>(
+                this.program,
+                *this.registers,
+                clock,
+                this.execution,
+                this.timing.is_some(),
+                tag,
+            );
+            let finished = clock.now();
+            ready = Some(finished.saturating_duration_since(at));
+            // Phase edges are observed immediately, before any voluntary
+            // yield, while the same RF/control owner is still borrowed.
+            let phase = this.program.phase();
+            if phase != *this.phase {
+                if let Some(old) = this.phase.take() {
+                    (this.observe)(operation(old), Event::Completed);
+                }
+                if let Some(new) = phase {
+                    (this.observe)(operation(new), Event::Started);
+                }
+                *this.phase = phase;
+            }
+            match step {
+                Err(error) => {
+                    if let Some(old) = this.phase.take() {
+                        (this.observe)(operation(old), Event::Failed);
+                    }
+                    break Poll::Ready(Err(error));
+                }
+                Ok(Atom::Complete) => break Poll::Ready(Ok(())),
+                Ok(Atom::Wait) => {
+                    let Some(at) = clock.now().checked_add(Duration::from_micros(1)) else {
+                        break Poll::Ready(Err(RxError::Hardware));
+                    };
+                    *this.wait_at = at;
+                    this.wait
+                        .as_mut()
+                        .set(Some((this.make_wait)(*this.timer, at)));
+                    // Register the timer in this owning poll; a ready
+                    // timer resumes only in a later poll.
+                    let Some(wait) = this.wait.as_mut().as_pin_mut() else {
+                        break Poll::Ready(Err(RxError::WrongCompletion));
+                    };
+                    if wait.poll(cx).is_ready() {
+                        *this.wait_ready = true;
+                        cx.waker().wake_by_ref();
+                    }
+                    break Poll::Pending;
+                }
+                Ok(Atom::Runnable) => {
+                    commands += 1;
+                    if commands < 8
+                        && this.program.short_next()
+                        && clock.now().saturating_duration_since(started).as_micros() < 20
+                    {
+                        continue;
+                    }
+                }
+            }
+            cx.waker().wake_by_ref();
+            break Poll::Pending;
+        };
+        if let Some(timing) = this.timing.as_deref_mut() {
+            let before = timing.total_micros;
+            timing.poll_finished(clock, started, result.is_pending(), resumed, ready, None);
+            if let Some(tag) = i2c_tag {
+                let elapsed = timing.total_micros.checked_sub(before).unwrap_or_else(|| {
+                    timing.invalid = true;
+                    u32::MAX
+                });
+                let (maximum, count) = if tag & 0x80 == 0 {
+                    (
+                        &mut this.execution.i2c_poll_micros[1][1],
+                        &mut this.execution.i2c_samples[1],
+                    )
+                } else {
+                    (
+                        &mut this.execution.i2c_poll_micros[1][0],
+                        &mut this.execution.i2c_samples[0],
+                    )
+                };
+                *maximum = (*maximum).max(elapsed);
+                *count += 1;
+            }
+            this.execution.observe_engine(timing, tag);
         }
+        if let Poll::Ready(Err(error)) = &result {
+            this.program.fail_stop(*error);
+        }
+        *this.finished = result.is_ready();
+        result
     }
 }
 
