@@ -181,3 +181,33 @@ fn a_verified_jump_to_the_declared_entry_ends_the_bootstrap_path_and_any_other_s
     assert_eq!((bound.bytes, bound.unresolved.len()), (Some(0), 0));
     assert!(handoff.render().contains("`entry`"));
 }
+
+#[test]
+fn a_functions_bytes_come_from_its_address_whatever_section_index_it_carries() {
+    // The C5 bootstrap's shape: the section the function's index names starts
+    // above the function. The bytes are still the function's own.
+    let bytes = executable(
+        &[code(
+            "jumper",
+            vec![LUI_T1_0X50014000, ADDI_T1_MINUS_0X300, JR_T1],
+        )],
+        &[("label", 0, 0)],
+    );
+    let elf = oer_analysis_elf::Elf::executable(&bytes).unwrap();
+    let mut function = elf.functions().unwrap().remove(0);
+    let above = elf
+        .sections()
+        .position(|section| section.address > u64::from(function.address))
+        .unwrap();
+    function.section = above;
+    let code = function_code(&elf, &function).unwrap();
+    assert_eq!(code.len(), 12);
+    assert_eq!(code[..4], LUI_T1_0X50014000.to_le_bytes());
+    assert_eq!(
+        constant_jump_target(&elf, &function, TEXT + 8),
+        Some(0x5001_3d00)
+    );
+    // An address no section holds has no bytes, without a panic.
+    function.address = 0x9000_0000;
+    assert_eq!(function_code(&elf, &function), None);
+}

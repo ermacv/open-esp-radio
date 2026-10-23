@@ -106,7 +106,10 @@ impl Image {
 
 /// The file bytes of `function`: found by its address, in the section that
 /// holds all of them.
-fn function_code<'a>(elf: &Elf<'a>, function: &oer_analysis_elf::Function) -> Option<&'a [u8]> {
+pub(super) fn function_code<'a>(
+    elf: &Elf<'a>,
+    function: &oer_analysis_elf::Function,
+) -> Option<&'a [u8]> {
     let address = u64::from(function.address);
     let section = elf.sections().find(|section| section.contains(address))?;
     let start = usize::try_from(address.checked_sub(section.address)?).ok()?;
