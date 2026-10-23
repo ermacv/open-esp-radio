@@ -91,8 +91,6 @@ phy/capture/analog 0ba9dbc8e27179fb topic
 phy/capture/analog/read 5774a605a42871c0 endpoint
 phy/capture/calibration 95d3b73dc049939d topic
 phy/capture/calibration/read d929b1fefdd84698 endpoint
-phy/capture/prepare 3834c8148b114a19 endpoint
-phy/capture/ready dc8f07ec0026a965 topic
 phy/capture/registers f69234aab9349af3 topic
 phy/capture/registers/read 540674e601e83e72 endpoint
 phy/capture/restart dbbf5f4c42b84170 endpoint

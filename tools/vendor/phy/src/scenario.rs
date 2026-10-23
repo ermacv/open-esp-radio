@@ -24,6 +24,9 @@ pub struct Window {
     bound = ""
 )]
 pub enum PhyScenario<C: Comparison> {
+    HostCalibrationCache {
+        boots: u16,
+    },
     TrackingHold {
         ticks: u8,
         #[serde(default)]
@@ -62,6 +65,13 @@ fn one_batch() -> u8 {
 impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
     fn validate(&self) -> Result<()> {
         let (lifecycle, boots, vendor_windows, vendor_transmit) = match self {
+            Self::HostCalibrationCache { boots } => {
+                return if (1..=20).contains(boots) {
+                    Ok(())
+                } else {
+                    Err("cache boots must be in 1..=20".into())
+                };
+            }
             Self::RecordedCalibration { lifecycle, boots } => {
                 return if *lifecycle == Lifecycle::Cold && (1..=255).contains(boots) {
                     Ok(())
@@ -121,6 +131,11 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
         Plan::target_only(ImageClass::DiagnosticPhy)
     }
     fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
+        if matches!(self, Self::HostCalibrationCache { .. }) {
+            return keys.has::<oer_hil_protocol::phy::HostCalibrationCache>()
+                && keys.has::<oer_hil_protocol::phy::StartCalibration>()
+                && keys.has::<oer_hil_protocol::phy::ReadCalibrationSnapshot>();
+        }
         if matches!(
             self,
             Self::TrackingHold { .. } | Self::TrackingHoldWifi { .. }
@@ -129,7 +144,7 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                 && keys.has::<oer_hil_protocol::phy::GetTrackingHold>()
                 && keys.has::<oer_hil_protocol::phy::StopTrackingHold>();
         }
-        keys.has::<oer_hil_protocol::phy::PrepareCapture>()
+        keys.has::<oer_hil_protocol::phy::StartCalibration>()
             && keys.has::<oer_hil_protocol::phy::ReadAnalogImage>()
     }
     fn air_use(&self) -> Vec<AirUse> {
@@ -145,6 +160,9 @@ impl<C: Comparison> Workload for PhyScenario<C> {
     }
     fn run(&self, output: &Path, context: &Context<'_>, _: &Fixtures) -> Result<()> {
         let (lifecycle, boots, vendor_only, vendor_windows, vendor_transmit) = match self {
+            Self::HostCalibrationCache { boots } => {
+                return crate::workload::cache::run(*boots, output, context);
+            }
             Self::RecordedCalibration { lifecycle, boots } => {
                 return crate::workload::calibration::recorded::<C>(
                     *lifecycle, *boots, output, context,
@@ -247,6 +265,21 @@ mod tests {
     fn parse(text: &str) -> Result<PhyScenario<Fake>> {
         Ok(toml::from_str(text)?)
     }
+    #[test]
+    fn cache_exercise_is_bounded_and_uses_the_diagnostic_image() {
+        let scenario = parse("kind='host-calibration-cache'\nboots=3").unwrap();
+        scenario.validate().unwrap();
+        assert_eq!(scenario.plan().image, ImageClass::DiagnosticPhy);
+        for boots in [0, 21, u16::MAX] {
+            assert!(
+                parse(&format!("kind='host-calibration-cache'\nboots={boots}"))
+                    .unwrap()
+                    .validate()
+                    .is_err()
+            );
+        }
+    }
+
     #[test]
     fn hold_counts_and_radio_points_are_explicit_and_bounded() {
         for kind in ["tracking-hold", "tracking-hold-wifi"] {

@@ -33,11 +33,7 @@ pub(crate) fn run(
     let (channel, radio, point) = configuration(lifecycle)?;
     context.with_capture(&output.join("hold"), |capture| {
         capture.discover(Duration::from_secs(15))?;
-        let ready = capture.request(
-            0,
-            PrepareCapture { channel, radio },
-            Duration::from_secs(120),
-        )?;
+        let ready = super::full(context, capture, PrepareCapture { channel, radio })?;
         context.results.observe("capture-ready", &ready);
         let mut id = None;
         let mut initial_policy = None;

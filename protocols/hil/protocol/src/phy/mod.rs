@@ -37,8 +37,6 @@ crate::messages! {
     topic TrackingHold = "phy/hold/samples";
     endpoint StopTrackingHold = "phy/hold/stop" => HoldStopped;
     topic HoldStopped = "phy/hold/stopped";
-    endpoint PrepareCapture = "phy/capture/prepare" => CaptureReady;
-    topic CaptureReady = "phy/capture/ready";
     endpoint RestartCaptureRadio = "phy/capture/restart" => CaptureRestarted;
     topic CaptureRestarted = "phy/capture/restarted";
     endpoint StopCapture = "phy/capture/stop" => CaptureStopped;

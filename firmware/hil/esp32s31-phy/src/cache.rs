@@ -1,4 +1,5 @@
 //! One boot's bounded cache admission and immutable full export, owned by P2.
+#[path = "cache/adapter.rs"]
 mod adapter;
 
 use oer_esp32s31_knowledge::calibration_cache as codec;
@@ -34,23 +35,27 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub const fn new() -> Self {
-        Self {
-            bytes: [0; CALIBRATION_CACHE_CAPACITY],
-            next: 0,
-            phase: Phase::Idle,
-            deadline: Instant::EPOCH,
-            config: PrepareCapture {
-                channel: 1,
-                radio: CaptureRadio::Wifi,
-            },
-            decision: CalibrationCacheDecision::FullRequested,
-            snapshot: None,
-            registration_us: 0,
-            temperature: 0,
-            released: false,
-            ready: None,
-        }
+    #[inline(never)]
+    pub fn place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(
+            storage,
+            Self {
+                bytes: [0; CALIBRATION_CACHE_CAPACITY],
+                next: 0,
+                phase: Phase::Idle,
+                deadline: Instant::EPOCH,
+                config: PrepareCapture {
+                    channel: 1,
+                    radio: CaptureRadio::Wifi,
+                },
+                decision: CalibrationCacheDecision::FullRequested,
+                snapshot: None,
+                registration_us: 0,
+                temperature: 0,
+                released: false,
+                ready: None,
+            }
+        )
     }
 
     pub fn identity(&self, identity: PhyCalibrationIdentity) -> CalibrationCacheIdentity {
@@ -203,6 +208,7 @@ impl Cache {
     }
 
     /// Decode only structurally; native registration owns identity/completion/table validation.
+    #[inline(never)]
     pub fn take_registration(&mut self) -> Result<(PrepareCapture, Option<PhyCalibrationCache>)> {
         if !self.pending() {
             return Err(RejectReason::InvalidState);
@@ -225,6 +231,7 @@ impl Cache {
         Ok((self.config, candidate))
     }
 
+    #[inline(never)]
     pub fn freeze(
         &mut self,
         full: bool,
@@ -348,4 +355,5 @@ pub fn target(identity: PhyCalibrationIdentity) -> CalibrationCacheTarget {
 }
 
 #[cfg(test)]
+#[path = "cache/tests.rs"]
 mod tests;

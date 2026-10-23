@@ -16,12 +16,36 @@ cargo hil run phy-vendor-calibration-restart --chip esp32s31 --board s31-a
 cargo hil run phy-vendor-calibration-ieee802154-restart --chip esp32s31 --board s31-a
 ```
 
-Prepare performs a full registration with no input cache and requires
+`StartCalibration(Full)` requests a full registration with no input cache and requires
 `full_calibration_performed` and `FullForCache`. It freezes the registration
 projection before Wi-Fi startup, matching when the reference prints its
 calibration object. The current Wi-Fi home channel is reported by the reference
 and supplied explicitly. RX is enabled without association or modem sleep;
 no packet traffic is generated.
+
+`HostCalibrationCache` advertises the manual boot-scoped cache service.
+Identity lookup is read-only. `StartCalibration(HostCache)` opens one 500 ms
+window, receives sequential pages of `S31SemanticV1`, and seals a candidate,
+explicit miss, rejection or timeout before native registration. Native identity,
+completion and RX-table checks decide replay; caller admission and actual native
+path are reported separately. A failed hardware registration stays poisoned.
+The snapshot contract and PHY algorithms are unchanged.
+
+The sole P2 radio owner keeps a bounded inbox, reuses it for an immutable export
+after successful full registration, and does not export a new record after
+partial calibration or retained RF wake. P1 reaches it through RequestSlot and
+publishes the initial/sealing answer before releasing registration. A sealed
+operation cannot wait past the original deadline for console publication.
+Calibration temperature is reported in degrees Celsius, as the native snapshot
+defines it. The [host store](../../../tools/hil/lab/CALIBRATION_CACHE.md) owns
+persistence; the firmware has no calibration flash/NVS backend.
+
+`cargo hil run phy-host-calibration-cache --chip esp32s31 --board s31-a` exercises
+three cold full/save/reset/partial pairs, retained RF wake after partial, and
+separate missing-file/no-response full starts. It records native registration
+microseconds, host file-load/transfer/start durations, boot identities and the
+full producing record in run artifacts. Existing vendor comparisons and tracking
+holds request and validate `Full` explicitly.
 
 Indexed MMIO and analog reads run at the selected cold or restarted Wi-Fi/802.15.4 point.
 Restart stops the last client, closes RF, wakes it and rejoins, then advances

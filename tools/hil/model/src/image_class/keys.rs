@@ -157,12 +157,15 @@ mod tests {
     #[test]
     fn calibration_has_its_own_manifest_and_keys_without_a_network() {
         let diagnostic = image_keys_on(ImageClass::DiagnosticPhy, "esp32s31").unwrap();
-        assert!(diagnostic.has::<oer_hil_protocol::phy::PrepareCapture>());
+        assert!(diagnostic.has::<oer_hil_protocol::phy::StartCalibration>());
+        assert!(diagnostic.has::<oer_hil_protocol::phy::HostCalibrationCache>());
+        assert!(diagnostic.has::<oer_hil_protocol::phy::ReadCalibrationSnapshot>());
+        assert!(!diagnostic.has::<oer_hil_protocol::phy::CalibrationCacheRequested>());
         assert!(diagnostic.has::<oer_hil_protocol::phy::ReadRegisterImage>());
         assert!(!diagnostic.has::<network::Udp>());
         assert!(image_keys_on(ImageClass::DiagnosticPhy, "esp32c5").is_none());
         let system = image_keys_on(ImageClass::SystemWatchdog, "esp32s31").unwrap();
-        assert!(!system.has::<oer_hil_protocol::phy::PrepareCapture>());
+        assert!(!system.has::<oer_hil_protocol::phy::StartCalibration>());
         assert_ne!(
             runtime_manifest(ImageClass::DiagnosticPhy, "esp32s31"),
             runtime_manifest(ImageClass::SystemWatchdog, "esp32s31"),

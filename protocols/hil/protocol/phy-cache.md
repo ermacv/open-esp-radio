@@ -5,7 +5,8 @@ of opaque calibration records. The protocol defines no chip identity layout,
 record codec, RF ABI value or calibration algorithm. A format's owner defines
 its numeric identifier, identity bytes and record schema. Algorithm revision
 and PHY profile are separate compatibility fields; an image commit is provenance.
-Current images do not advertise `HostCalibrationCache` or serve these endpoints.
+The S31 `diagnostic-phy` image advertises `HostCalibrationCache` and serves the
+manual Start path. Its caller selects `Full` or `HostCache` explicitly.
 
 `GetCalibrationCacheIdentity` is read-only. It returns the target-derived
 identity and expected format/schema/revision/profile, plus any active ticket.
@@ -47,3 +48,10 @@ or a raw sensor profile; temperature and age are provenance, not invalidation
 rules. Partial registration and retained RF wake do not produce a new full
 snapshot for promotion. Existing image keys advertise only services an image
 actually implements; compiling the `phy` feature alone grants no capability.
+
+The diagnostic image replaces the former preparation RPC with Start/Status;
+`PrepareCapture` is the embedded capture configuration. Its P1 dispatcher
+publishes Started/Completed before an internal request releases the P2 owner.
+An already sealed decision still reaches registration at the original deadline
+if console publication stalls; its caller decision does not change. Automatic
+`CalibrationCacheRequested` is not advertised by this manual image.

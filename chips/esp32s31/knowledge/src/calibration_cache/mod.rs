@@ -29,6 +29,8 @@ pub enum CodecError {
     Boolean,
 }
 
+// Keep cursor operations out of line: one bounded operation is shared across
+// fields and array elements instead of expanding the codec into each caller.
 // Field order here is the format contract. Arrays are row-major; scalar
 // integers have their fixed width, signed values use two's complement.
 macro_rules! record {
@@ -37,10 +39,12 @@ macro_rules! record {
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name { $($(#[$field_doc])* pub $field: $ty),* }
         impl Value for $name {
+            #[inline(never)]
             fn put(&self, output: &mut &mut [u8]) -> Result<(), CodecError> {
                 $(self.$field.put(output)?;)*
                 Ok(())
             }
+            #[inline(never)]
             fn take(input: &mut &[u8]) -> Result<Self, CodecError> {
                 Ok(Self { $($field: <$ty>::take(input)?),* })
             }
@@ -234,13 +238,16 @@ impl CalibrationRecord {
 }
 
 trait Value: Sized {
+    #[inline(never)]
     fn put(&self, output: &mut &mut [u8]) -> Result<(), CodecError>;
+    #[inline(never)]
     fn take(input: &mut &[u8]) -> Result<Self, CodecError>;
 }
 
 macro_rules! integer {
     ($($ty:ty),*) => {$(
         impl Value for $ty {
+            #[inline(never)]
             fn put(&self, output: &mut &mut [u8]) -> Result<(), CodecError> {
                 let width = core::mem::size_of::<Self>();
                 let bytes = core::mem::take(output);
@@ -249,6 +256,7 @@ macro_rules! integer {
                 *output = tail;
                 Ok(())
             }
+            #[inline(never)]
             fn take(input: &mut &[u8]) -> Result<Self, CodecError> {
                 let width = core::mem::size_of::<Self>();
                 let (head, tail) = input.split_at_checked(width).ok_or(CodecError::Length)?;
@@ -261,9 +269,11 @@ macro_rules! integer {
 integer!(u8, i8, u16, i16, u32);
 
 impl Value for bool {
+    #[inline(never)]
     fn put(&self, output: &mut &mut [u8]) -> Result<(), CodecError> {
         u8::from(*self).put(output)
     }
+    #[inline(never)]
     fn take(input: &mut &[u8]) -> Result<Self, CodecError> {
         match u8::take(input)? {
             0 => Ok(false),
@@ -274,12 +284,14 @@ impl Value for bool {
 }
 
 impl<T: Value + Default + Copy, const N: usize> Value for [T; N] {
+    #[inline(never)]
     fn put(&self, output: &mut &mut [u8]) -> Result<(), CodecError> {
         for value in self {
             value.put(output)?;
         }
         Ok(())
     }
+    #[inline(never)]
     fn take(input: &mut &[u8]) -> Result<Self, CodecError> {
         let mut values = [T::default(); N];
         for value in &mut values {

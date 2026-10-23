@@ -48,10 +48,14 @@ const RPC_TIMEOUT: Duration = Duration::from_secs(3);
 const REGISTRATION_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The result retains caller admission and native outcome as separate evidence.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Started {
     pub boot_id: u64,
     pub status: CalibrationStartStatus,
+    pub host_load_us: u64,
+    pub host_transfer_us: u64,
+    /// Host time from identity lookup to terminal status, on one monotonic clock.
+    pub host_start_us: u64,
 }
 
 /// Identity lookup and disk read precede Start, outside the target's 500 ms window.
@@ -78,6 +82,7 @@ pub fn start<T: Transport>(
         capture,
         source,
     } = request;
+    let overall_began = link.now();
     if boot == 0 {
         return Err("cache exchange requires an observed boot".into());
     }
@@ -86,11 +91,13 @@ pub fn start<T: Transport>(
         return Err("calibration already started in this boot".into());
     }
     let key = CacheKey::new(chip, board, identity.target)?;
+    let load_began = link.now();
     let loaded = if source == CalibrationSource::HostCache {
         store.load(&key)
     } else {
         Loaded::Miss(CalibrationCacheMiss::Missing)
     };
+    let host_load_us = elapsed_us(link, load_began);
     let began = link.now();
     let started = link.request(
         boot,
@@ -101,6 +108,7 @@ pub fn start<T: Transport>(
     if started.ticket == 0 {
         return Err("target issued a zero calibration ticket".into());
     }
+    let transfer_began = link.now();
     match (&started.state, source) {
         (CalibrationStartState::AwaitingCache(request), CalibrationSource::HostCache) => {
             if &request.target != key.target() || request.remaining_ms > CALIBRATION_CACHE_WAIT_MS {
@@ -118,6 +126,7 @@ pub fn start<T: Transport>(
         ) => {}
         _ => return Err("unexpected initial calibration state".into()),
     }
+    let host_transfer_us = elapsed_us(link, transfer_began);
     let deadline = link.now() + REGISTRATION_TIMEOUT;
     loop {
         let status = link.request(
@@ -126,7 +135,7 @@ pub fn start<T: Transport>(
             GetCalibrationStartStatus {
                 ticket: started.ticket,
             },
-            remaining(link, deadline)?.min(RPC_TIMEOUT),
+            remaining(link, deadline)?,
         )?;
         if status.ticket != started.ticket {
             return Err("stale calibration status".into());
@@ -138,6 +147,9 @@ pub fn start<T: Transport>(
                     Started {
                         boot_id: boot,
                         status,
+                        host_load_us,
+                        host_transfer_us,
+                        host_start_us: elapsed_us(link, overall_began),
                     },
                 ));
             }
@@ -148,6 +160,10 @@ pub fn start<T: Transport>(
             }
         }
     }
+}
+
+fn elapsed_us(link: &impl Transport, since: Duration) -> u64 {
+    u64::try_from(link.now().saturating_sub(since).as_micros()).unwrap_or(u64::MAX)
 }
 
 fn remaining(link: &impl Transport, deadline: Duration) -> Result<Duration> {

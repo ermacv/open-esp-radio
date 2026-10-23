@@ -36,10 +36,9 @@ fn record() -> codec::CalibrationRecord {
     record.wifi.rx_gain_tables_initialized = true;
     record.bluetooth.tx_dc_calibrated = true;
     record.bluetooth.tx_power_calibrated = true;
-    record.wifi.wifi_rx_table_last_index =
-        oer_esp32s31_phy::calibration::baseband::PHY_WIFI_RX_GAIN_LAST_INDEX;
-    record.wifi.shared_rx_table_last_index =
-        oer_esp32s31_phy::calibration::baseband::PHY_SHARED_RX_GAIN_LAST_INDEX;
+    // A structurally valid record with a deliberately invalid native RX shape.
+    record.wifi.wifi_rx_table_last_index = 255;
+    record.wifi.shared_rx_table_last_index = 255;
     record
 }
 fn offer(bytes: &[u8]) -> CalibrationCacheMetadata {
@@ -117,7 +116,8 @@ fn ready(full: bool) -> CaptureReady {
 #[test]
 fn a_start_never_holds_the_slot_while_waiting_and_registration_waits_for_published_reply() {
     let clock = VirtualClock::<8>::new();
-    let mut cache = Cache::new();
+    let mut storage = core::mem::MaybeUninit::uninit();
+    let mut cache = Cache::place(&mut storage);
     assert_eq!(cache.identity(identity()).active_ticket, None);
     let started = cache
         .begin(
@@ -147,7 +147,8 @@ fn a_start_never_holds_the_slot_while_waiting_and_registration_waits_for_publish
 fn timeout_wins_at_500_ms_and_pages_and_status_do_not_extend_the_window() {
     for elapsed in [499_999, 500_000, 500_001] {
         let clock = VirtualClock::<8>::new();
-        let mut cache = Cache::new();
+        let mut storage = core::mem::MaybeUninit::uninit();
+        let mut cache = Cache::place(&mut storage);
         begin(&mut cache, &clock);
         let deadline = cache.deadline().unwrap();
         clock.advance(Duration::from_micros(elapsed)).unwrap();
@@ -188,7 +189,8 @@ fn timeout_wins_at_500_ms_and_pages_and_status_do_not_extend_the_window() {
 #[test]
 fn duplicate_gap_foreign_ticket_and_overflow_do_not_change_the_inbox() {
     let clock = VirtualClock::<8>::new();
-    let mut cache = Cache::new();
+    let mut storage = core::mem::MaybeUninit::uninit();
+    let mut cache = Cache::place(&mut storage);
     begin(&mut cache, &clock);
     let page = WriteCalibrationCachePage {
         ticket: TICKET,
@@ -246,7 +248,8 @@ fn each_envelope_failure_is_a_caller_rejection_without_a_native_candidate() {
         CalibrationCacheRejection::Checksum,
         CalibrationCacheRejection::Decode,
     ] {
-        let mut cache = Cache::new();
+        let mut storage = core::mem::MaybeUninit::uninit();
+        let mut cache = Cache::place(&mut storage);
         begin(&mut cache, &clock);
         let mut bytes = bytes;
         if reason == CalibrationCacheRejection::Decode {
@@ -274,16 +277,16 @@ fn each_envelope_failure_is_a_caller_rejection_without_a_native_candidate() {
 #[test]
 fn structural_decode_preserves_foreign_identity_and_native_guard_failures() {
     let clock = VirtualClock::<8>::new();
-    for changed in 0..4 {
+    for changed in 0..3 {
         let mut record = record();
         match changed {
-            0 => {}
-            1 => record.identity.mac_extension += 1,
-            2 => record.wifi.tx_iq_calibrated = false,
-            _ => record.wifi.wifi_rx_table_last_index = 255,
+            0 => record.identity.mac_extension += 1,
+            1 => record.wifi.tx_iq_calibrated = false,
+            _ => {}
         }
         let bytes = record.encode().unwrap();
-        let mut cache = Cache::new();
+        let mut storage = core::mem::MaybeUninit::uninit();
+        let mut cache = Cache::place(&mut storage);
         begin(&mut cache, &clock);
         upload(&mut cache, &bytes, clock.now());
         assert_eq!(
@@ -292,10 +295,13 @@ fn structural_decode_preserves_foreign_identity_and_native_guard_failures() {
         );
         cache.release();
         let candidate = cache.take_registration().unwrap().1.unwrap();
-        assert_eq!(
-            candidate.validate_for_replay(identity()).is_ok(),
-            changed == 0
-        );
+        use oer_esp32s31_phy::state::PhyCalibrationCacheError as Error;
+        let expected = match changed {
+            0 => Error::IdentityMismatch,
+            1 => Error::IncompleteCalibration,
+            _ => Error::InvalidRxGainTable,
+        };
+        assert_eq!(candidate.validate_for_replay(identity()), Err(expected));
         assert_eq!(adapter::record(candidate.into_snapshot()), record);
     }
 }
@@ -303,7 +309,8 @@ fn structural_decode_preserves_foreign_identity_and_native_guard_failures() {
 fn full_export_is_immutable_and_partial_or_failed_registration_cannot_export() {
     let clock = VirtualClock::<8>::new();
     for full in [true, false] {
-        let mut cache = Cache::new();
+        let mut storage = core::mem::MaybeUninit::uninit();
+        let mut cache = Cache::place(&mut storage);
         cache
             .begin(
                 StartCalibration {
@@ -360,7 +367,8 @@ fn full_export_is_immutable_and_partial_or_failed_registration_cannot_export() {
 #[test]
 fn new_boot_has_no_ticket_upload_or_export_from_the_previous_owner() {
     let clock = VirtualClock::<8>::new();
-    let mut cache = Cache::new();
+    let mut storage = core::mem::MaybeUninit::uninit();
+    let mut cache = Cache::place(&mut storage);
     assert!(
         cache
             .write(
@@ -401,7 +409,8 @@ fn native_mapping_preserves_every_semantic_golden_field() {
 #[test]
 fn a_sealed_decision_reaches_registration_even_if_reply_publication_stalls() {
     let clock = VirtualClock::<8>::new();
-    let mut cache = Cache::new();
+    let mut storage = core::mem::MaybeUninit::uninit();
+    let mut cache = Cache::place(&mut storage);
     begin(&mut cache, &clock);
     cache
         .complete(

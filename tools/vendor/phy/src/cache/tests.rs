@@ -246,3 +246,36 @@ fn slow_upload_stops_at_the_original_deadline_without_extending_it() {
     assert_eq!(requests[2].3, Duration::from_millis(300));
     assert_eq!(requests[3].3, Duration::from_millis(100));
 }
+
+#[test]
+fn explicit_full_uses_no_cache_upload_and_reports_one_host_clock() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path().into());
+    let mut status = ready();
+    status["state"]["Ready"]["decision"] = serde_json::json!("FullRequested");
+    let fake = Fake::new(vec![
+        identity(),
+        serde_json::json!({"ticket":7,"state":{"Registering":{"decision":"FullRequested"}}}),
+        status,
+    ]);
+    let (_, started) = start(
+        &fake,
+        &store,
+        StartRequest {
+            boot_id: 11,
+            session_id: 0,
+            chip: "esp32s31",
+            board: oer_lab_board::DeviceId::parse("020000002564").unwrap(),
+            capture: PrepareCapture {
+                channel: 1,
+                radio: CaptureRadio::Wifi,
+            },
+            source: CalibrationSource::Full,
+        },
+    )
+    .unwrap();
+    assert_eq!(fake.requests.borrow().len(), 3);
+    assert_eq!(started.host_load_us, 0);
+    assert_eq!(started.host_transfer_us, 0);
+    assert_eq!(started.host_start_us, 3000);
+}

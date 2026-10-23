@@ -236,7 +236,7 @@ fn every_cache_message_fits_existing_framing_with_maximum_pages_and_identifiers(
 }
 
 #[test]
-fn postcard_rejects_oversized_pages_and_no_current_image_advertises_the_service() {
+fn postcard_rejects_oversized_pages_and_only_diagnostic_phy_advertises_manual_cache() {
     // Serialize the Vec length as postcard does, then the oversized payload.
     let mut buffer = [0; 64];
     let encoded = postcard::to_slice(&(7u32, 0u16, &[0u8; 33][..]), &mut buffer).expect("fixture");
@@ -258,7 +258,7 @@ fn postcard_rejects_oversized_pages_and_no_current_image_advertises_the_service(
             GetCalibrationStartStatus::KEY,
             ReadCalibrationSnapshot::KEY,
         ] {
-            assert!(!keys.contains(&key));
+            assert_eq!(keys.contains(&key), features.contains(&"diagnostic-phy"));
         }
     }
 }
