@@ -61,6 +61,21 @@ The command line package is `oer-tool-analysis-cli` and its executable is `blobr
 Linux linker adapters are the separate `oer-analysis-blobray-linker`, so a consumer that
 links, such as the vendor scenarios, does not depend on the command line.
 
+Resource provenance is `oer-analysis-riscv-model::AnalysisResources`, under
+`analysis_resources` in CLI JSON and the first line of image analysis reports.
+The named `blobray-cli` and `image-checks` profiles select existing defaults;
+the report records effective work units (work policy 1), admitted working-memory
+bytes and timeout milliseconds, local function-budget formulas and the value
+alternative capacity. Admission is not process RSS. An event is each production
+of a typed limit outcome, including separate passes of the same function;
+`functions` counts distinct analyzed function identities, with per-reason counts,
+and cached summary lookups add neither events nor functions. `results` counts
+output records carrying a typed limit reason, once per record even when it has
+several reasons. A projection does not infer a limit from an unknown value or
+from prose. `unaccounted` explicitly lists limits without typed local reasons;
+these are not zero-count claims. Operation work, memory and timeout exhaustion
+remain errors and never produce an ordinary resource-marked result.
+
 | Crate | Principal modules | Owns | Allowed local dependencies |
 | --- | --- | --- | --- |
 | `oer-analysis-elf` | classify, dwarf, rv32 | ELF/archive parsing and raw ELF classification | None |
