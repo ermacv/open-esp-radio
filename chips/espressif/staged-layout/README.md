@@ -15,6 +15,12 @@ runtime, the chip layouts and the build scripts of every staged image.
 | `zeroed` | The input sections the runtime linker script places in regions the boot zeroes |
 | `build` (feature `build`) | `configure_runtime` and `configure_bootstrap`, which link a binary with the shared scripts under [`linker`](linker) and the chip's ROM script, define every layout value as a `--defsym` symbol and keep the link's relocations (`--emit-relocs`) for the stack analysis |
 
+Both staged links omit `.debug_aranges`: the pinned LLVM's fat-LTO emitter
+can encode backward spans when CUs share an input section. Address lookup
+uses the CU ranges and line tables retained in the ELF. The shared
+[`dwarf.x`](linker/dwarf.x) precedes scripts that place debug sections;
+allocated sections and their relocations are unaffected.
+
 The linker scripts contain no addresses or header constants of their own;
 they read `SRAM_ORIGIN`, `RUNTIME_PSRAM_ORIGIN`, `HART_COUNT`,
 `STAGE_TWO_MAGIC` and the other symbols emitted by `build`. Stage two has

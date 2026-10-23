@@ -269,7 +269,6 @@ SECTIONS
   .stack_sizes 0 (INFO) : { *(.stack_sizes) }
   .riscv.attributes 0 (INFO) : { *(.riscv.attributes) }
   .debug_abbrev 0 : { *(.debug_abbrev) }
-  .debug_aranges 0 : { *(.debug_aranges) }
   .debug_info 0 : { *(.debug_info) }
   .debug_line 0 : { *(.debug_line) }
   .debug_loc 0 : { *(.debug_loc) }
