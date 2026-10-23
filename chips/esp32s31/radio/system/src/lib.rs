@@ -177,7 +177,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     }
 
     fn tick(&mut self) -> impl core::future::Future<Output = ()> {
-        boundary::Boundary::new(async move {
+        boundary::shared(async move {
             if self.backend.track_tick().await.is_err() {
                 self.core.poison();
             }
@@ -301,7 +301,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     }
 
     fn close_rf(&mut self) -> impl core::future::Future<Output = ()> {
-        boundary::Boundary::new(async move {
+        boundary::shared(async move {
             let result = self.backend.close_rf(LastClientLeft(())).await;
             self.core.closed(result);
         })

@@ -86,12 +86,9 @@ impl ActorCore {
         }
     }
     pub(super) fn prepared(&mut self, phy: &PhyPreparation) -> RfEpoch {
-        let epoch = if *phy == PhyPreparation::AlreadyOpen {
-            self.state
-                .epoch
-                .unwrap_or_else(|| self.mint.next_epoch(None))
-        } else {
-            self.mint.next_epoch(self.state.epoch)
+        let epoch = match (*phy, self.state.epoch) {
+            (PhyPreparation::AlreadyOpen, Some(epoch)) => epoch,
+            (_, previous) => self.mint.next_epoch(previous),
         };
         self.state.epoch = Some(epoch);
         epoch
