@@ -379,13 +379,46 @@ pub fn prints(corpus: &Corpus, start: u32, end: u32) -> Result<String> {
         return Ok(String::new());
     }
     let mut budget = Budget::new()?;
-    let metadata = corpus.metadata(Some(&[]), &mut budget)?;
+    let regions = [ImageRegion {
+        start,
+        length: u64::from(end - start),
+    }];
+    let mut readers = BTreeSet::new();
+    let (_, limited) = app::library::register_accesses(
+        &corpus.inputs,
+        assumptions(&[]),
+        &regions,
+        &RiscvDecoder,
+        &budget.memory,
+        &mut budget.control,
+        &mut |record, _| {
+            if let RegisterAccess::Observation {
+                function,
+                address: Some(address),
+                reads: Some(_),
+                ..
+            } = record
+                && (start..end).contains(address)
+                && let Some(name) = &function.name
+            {
+                readers.insert(String::from_utf8_lossy(name).into_owned());
+            }
+            Ok(())
+        },
+    )?;
+    budget.report("register-accesses", limited)?;
+    if readers.is_empty() {
+        return Ok(String::new());
+    }
+    budget = Budget::new()?;
+    let readers: Vec<_> = readers.into_iter().collect();
+    let metadata = corpus.metadata(Some(&readers), &mut budget)?;
     let mut calls = BTreeMap::new();
     let mut callees = BTreeSet::new();
     let mut dictionaries = BTreeMap::new();
     let limited = app::library::analyze_library(
         &corpus.inputs,
-        assumptions(&[]),
+        assumptions(&readers),
         &RiscvDecoder,
         &budget.memory,
         &mut budget.control,
@@ -477,10 +510,7 @@ pub fn prints(corpus: &Corpus, start: u32, end: u32) -> Result<String> {
     let (_, read_limits) = app::library::register_accesses(
         &corpus.inputs,
         request,
-        &[ImageRegion {
-            start,
-            length: u64::from(end - start),
-        }],
+        &regions,
         &RiscvDecoder,
         &budget.memory,
         &mut budget.control,
