@@ -83,9 +83,9 @@ pub use coexistence::{
 pub use scheduler_item::{SCHEDULER_ITEM_UNEXECUTED, SchedulerItemCompletionStatus};
 
 pub use scheduler_pool::{
-    SchedulerAllocationConfig, SchedulerAllocationNumbers, SchedulerItemId, SchedulerItemSpace,
-    SchedulerPoolError, SchedulerPoolPlaceError, SchedulerRoleInstance, SchedulerRoleKind,
-    SchedulerRolePool, SchedulerRolePoolStorage, SchedulerRoleReleaseFailure,
+    SchedulerAllocationConfig, SchedulerAllocationNumbers, SchedulerItemId, SchedulerItemSources,
+    SchedulerItemSpace, SchedulerPoolError, SchedulerPoolPlaceError, SchedulerRoleInstance,
+    SchedulerRoleKind, SchedulerRolePool, SchedulerRolePoolStorage, SchedulerRoleReleaseFailure,
 };
 
 pub(crate) use ble_phy_engine::{BlePhyEngineCpuOwned, BlePhyEngineStorage};

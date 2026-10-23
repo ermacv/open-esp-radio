@@ -306,3 +306,31 @@ fn only_submitted_items_resolve_from_their_link() {
     let space = SchedulerItemSpace::new().with(&pool);
     assert_eq!(space.listed_item(space.link(listed)), None);
 }
+
+#[test]
+fn the_last_populated_pool_of_a_kind_resolves_without_falling_back() {
+    let mut first = pool();
+    let storage = Box::leak(Box::new(
+        SchedulerRolePoolStorage::<TestStorage, 2>::zeroed(),
+    ));
+    let mut last = Pool::place::<crate::bluetooth::engine::HostDma<0x2f00_3000>>(
+        crate::dma_static::Placed::host(storage),
+        config().connections(),
+    )
+    .expect("second pool fits");
+    let a = first.acquire().expect("first slot");
+    let b = last.acquire().expect("last slot");
+    prepare(&mut first, &a);
+    prepare(&mut last, &b);
+    let a = first.submit(&a, 0).expect("prepared first");
+    let b = last.submit(&b, 0).expect("prepared last");
+    let a_link = SchedulerItemSpace::new().with(&first).link(a);
+    let b_link = SchedulerItemSpace::new().with(&last).link(b);
+    let space = SchedulerItemSpace::new().with(&first).with(&last);
+    assert_eq!(space.listed_item(b_link), Some(b));
+    assert_eq!(space.link(b), b_link);
+    assert_eq!(space.listed_item(a_link), None);
+    let reversed = SchedulerItemSpace::new().with(&last).with(&first);
+    assert_eq!(reversed.listed_item(a_link), Some(a));
+    assert_eq!(reversed.listed_item(b_link), None);
+}
