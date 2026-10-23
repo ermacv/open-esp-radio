@@ -54,7 +54,7 @@ oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.
 static CELLS: ControllerEventCells<X> =
     ControllerEventCells::new(&irq::SCHEDULER_SIGNAL, &irq::TIMER_SIGNAL);
 
-struct Boot {
+pub(super) struct Boot {
     actor: Option<Actor>,
     inbox: Option<ClientInbox<Bluetooth>>,
     cold: Option<ColdOwner>,
@@ -197,7 +197,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         profile,
         address: base,
     });
-    radio.spawn(driver(boot).expect("one P2 driver task"));
+    radio.spawn(super::radio_worker(boot).expect("one P2 driver task"));
     radio.spawn(bridge::supervisor().expect("one P2 port supervisor"));
     let app = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(p.FROM_CPU_INTR0)));
     adopted.enable_interrupts();
@@ -217,13 +217,9 @@ async fn fail<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Respon
     bridge::complete(reply, Err(Fault::Hardware));
     hold(owner).await
 }
-mod task {
-    #[embassy_executor::task]
-    pub(super) async fn driver(boot: &'static mut super::Boot) {
-        super::WORKER.take().future(|| super::worker(boot)).await;
-    }
+pub(super) async fn run_worker(boot: &'static mut Boot) {
+    WORKER.take().future(|| worker(boot)).await;
 }
-use task::driver;
 type Worker = impl core::future::Future<Output = ()>;
 static WORKER: static_cell::ConstStaticCell<oer_memory::StaticPlace<Worker>> =
     static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
