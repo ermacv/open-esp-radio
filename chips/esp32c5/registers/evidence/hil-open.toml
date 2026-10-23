@@ -2,6 +2,11 @@
 schema = 1
 
 [[sources]]
+id = "HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23"
+kind = "unattested-hil-observation"
+description = "ESP32-C5 v1.0, c5-a, stand lease 604 on 2026-10-23: a controlled JTAG width experiment opened the IEEE 802.15.4 MAC clocks, wrote all ones to CHANNEL at 0x600a3048 and read 0x000000ff. Bit 7 is implemented and read-write; its meaning and reset value are unknown. The original words and clocks were restored and verified. The OpenOCD halted-event WDT-disable hook was suppressed; this was a halted write/read experiment, not a concurrent read-only observation. Raw records: ermacv/oer-notes evidence/407/c5-widths.json, c5-widths.log and c5-widths-lease.log. This external JTAG record is not a typed HIL-run attestation."
+
+[[sources]]
 id = "HIL_OPEN_C5_REGISTER_PROBE_2026_09_27"
 kind = "unattested-hil-observation"
 description = "ESP32-C5 v1.0 board, stand run, 2026-09-27 (record outside this repository): an open register probe image, flashed and captured over USB Serial/JTAG. After opening the IEEE 802.15.4 MAC clocks, a read-modify-write of all ones read back CHANNEL 0x000000ff, TX_POWER 0x0000001f, EVENT_ENABLE 0x00001fff and COEX_PTI 0x000001ff. This establishes which bits of those words are implemented and read-write; it assigns no meaning to CHANNEL bit 7, which the public struct declares reserved."
