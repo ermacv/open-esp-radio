@@ -54,6 +54,8 @@ struct Script {
     #[cfg(feature = "bluetooth")]
     ble_installation: u32,
     #[cfg(feature = "bluetooth")]
+    ble_tracking: bool,
+    #[cfg(feature = "bluetooth")]
     ble_stopped: bool,
     #[cfg(feature = "bluetooth")]
     ble_fault: bool,
@@ -737,3 +739,45 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
 
 #[cfg(feature = "bluetooth")]
 mod bluetooth;
+
+#[test]
+fn a_rung_doorbell_wins_over_an_already_due_tracking_deadline() {
+    use core::{
+        pin::pin,
+        task::{Context, Poll, Waker},
+    };
+    let model = model(Script::default());
+    let clock = clock();
+    let (end, cells) = claim_for_host_test();
+    let actor = RadioSystem::new(end, model, clock, LpClock::<RcSlow>::for_host_test());
+    let mut join = pin!(cells.wifi.join(WifiJoin { wifi: cold() }));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert!(join.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(
+        pin!(actor.wait(Some(clock.now()))).as_mut().poll(&mut cx),
+        Poll::Ready(false)
+    );
+}
+
+#[test]
+fn no_tracking_deadline_waits_only_for_a_posted_request() {
+    use core::{
+        pin::pin,
+        task::{Context, Poll, Waker},
+    };
+    let model = model(Script::default());
+    let clock = clock();
+    let (end, cells) = claim_for_host_test();
+    let actor = RadioSystem::new(end, model, clock, LpClock::<RcSlow>::for_host_test());
+    let mut wait = pin!(actor.wait(None));
+    let mut cx = Context::from_waker(Waker::noop());
+    assert!(wait.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(clock.next_deadline(), None);
+    clock
+        .advance(Duration::from_millis(1))
+        .expect("virtual time fits");
+    assert!(wait.as_mut().poll(&mut cx).is_pending());
+    let mut join = pin!(cells.wifi.join(WifiJoin { wifi: cold() }));
+    assert!(join.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(wait.as_mut().poll(&mut cx), Poll::Ready(false));
+}

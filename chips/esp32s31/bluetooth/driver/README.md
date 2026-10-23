@@ -101,7 +101,7 @@ and
 [`Kconfig.mac`](https://github.com/espressif/esp-idf/blob//components/esp_hw_support/port/esp32s31/Kconfig.mac).
 
 The `bluetooth` feature of `oer-esp32s31-radio-system` composes this
-lifecycle into its single P2 actor. `WithBluetooth` holds common power,
+lifecycle into its single P2 actor. `BluetoothAttachment` holds Bluetooth power,
 coexistence and `BluetoothPhyMembership`; `ControllerLifecycle` holds the
 branded Engine and its initialization states. The membership cell carries
 only configuration and installation identities.
@@ -146,8 +146,8 @@ Stop:
 4. the actor leaves BTBB/PHY, resets the Controller, releases Bluetooth clocks,
    coexistence and common power, and closes RF only for the last member.
 
-The reset returns the complete arena. `into_reset` and `WithBluetooth::into_stopped`
-allow a fresh scoped installation while `RadioSystem::map_backend` retains the
-same shared actor state and Wi-Fi membership. A started RF failure poisons the
+The reset returns the complete arena. `into_reset` and `BluetoothAttachment::into_stopped`
+allow a fresh scoped installation after the attachment loan is normally detached;
+the shared actor and Wi-Fi membership remain in their original storage. A started RF failure poisons the
 shared domain; a local Controller reset cannot clear it. A late retirement
 returns its complete old graph and never satisfies a newer installation's leave.
