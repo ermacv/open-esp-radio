@@ -47,6 +47,7 @@ pub mod network;
 pub mod phy;
 pub mod system;
 pub mod telemetry;
+pub mod wifi;
 
 /// Every module's messages, for a host that decodes any frame.
 #[cfg(feature = "registry")]
@@ -60,6 +61,7 @@ pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
         phy::MESSAGES,
         lower_mac::MESSAGES,
         health::MESSAGES,
+        wifi::MESSAGES,
     ]
     .into_iter()
     .flatten()

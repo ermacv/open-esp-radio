@@ -30,6 +30,69 @@ fn event<M: oer_hil_protocol::Message>(
 use crate::{ProtocolHealth, command_response_matches};
 
 #[test]
+fn wifi_credentials_are_redacted_in_host_debug_and_persisted_protocol_records() {
+    use oer_hil_protocol::{Message, wifi::*};
+    let command = StartStation(StationStart {
+        credentials: NetworkCredentials::try_new(b"private-test-network", b"private-test-password")
+            .unwrap(),
+        power_save: StationPowerSave::Off,
+    });
+    // Even an accidental decoded echo must not disclose the command body.
+    let echo = event(7, 11, 13, 17, command);
+    let debug = format!("{echo:?}");
+    assert!(debug.contains("payload_length:"));
+    assert!(!debug.contains("payload: ["));
+    assert_eq!(echo.to_json()["body"]["credentials"], "<redacted>");
+    let state = super::ProtocolState {
+        sent: vec![super::SentCommand {
+            request_id: 17,
+            session_id: 13,
+            path: StartStation::PATH,
+            host_sent_unix_micros: 23,
+        }],
+        messages: vec![
+            echo,
+            event(
+                7,
+                12,
+                13,
+                17,
+                StationLink {
+                    epoch: 3,
+                    state: StationLinkState::Authorized,
+                },
+            ),
+        ],
+        received_unix_micros: vec![29, 31],
+        ..Default::default()
+    };
+    let log = super::capture::protocol_log(&state, None, true, false).unwrap();
+    let text = std::str::from_utf8(&log).unwrap();
+    assert!(!text.contains("private-test"));
+    let records: Vec<serde_json::Value> = text
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        records[0],
+        serde_json::json!({
+            "record": "host-command",
+            "command": {"request_id":17, "session_id":13, "path": StartStation::PATH, "host_sent_unix_micros":23},
+        })
+    );
+    assert_eq!(
+        records[1]["message"]["body"],
+        serde_json::json!({"credentials":"<redacted>", "power_save":"Off"})
+    );
+    assert_eq!(
+        records[2]["message"]["body"],
+        serde_json::json!({"epoch":3, "state":"Authorized"})
+    );
+    assert_eq!(records[4]["finalized"], true);
+    assert_eq!(records[4]["cancelled"], false);
+}
+
+#[test]
 fn attachment_accepts_an_existing_sequence_but_still_detects_a_gap() {
     let mut boot = ProtocolHealth::default();
     boot.observe(&hello(7, 87), DecodeCounters::default());

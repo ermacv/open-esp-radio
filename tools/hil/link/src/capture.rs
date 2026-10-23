@@ -409,34 +409,12 @@ impl SerialCapture {
         // final attempt to preserve every byte accepted by the serial reader.
         oer_os_durable::atomic_write(&self.output.join("uart.bin"), &bytes)?;
         oer_os_durable::atomic_write(&self.output.join("uart.log"), uart.as_bytes())?;
-        let mut log = Vec::new();
-        for sent in &state.sent {
-            serde_json::to_writer(
-                &mut log,
-                &serde_json::json!({"record": "host-command", "command": sent}),
-            )?;
-            log.push(b'\n');
-        }
-        for (index, message) in state.messages.iter().enumerate() {
-            serde_json::to_writer(
-                &mut log,
-                &serde_json::json!({
-                    "record": "target-event",
-                    "message": message.to_json(),
-                    "host_received_unix_micros": state.received_unix_micros.get(index),
-                }),
-            )?;
-            log.push(b'\n');
-        }
-        for record in [
-            serde_json::json!({"record": "link-health", "health": state.health}),
-            serde_json::json!({"record": "capture-end", "finalized": finalized, "cancelled": oer_os_process::cancellation_requested(), "failure": state.failure}),
-            serde_json::json!({"record": "target-link-health", "health": target_health.map(|result|
-                result.as_ref().map_err(|error| error.to_string()))}),
-        ] {
-            serde_json::to_writer(&mut log, &record)?;
-            log.push(b'\n');
-        }
+        let log = protocol_log(
+            &state,
+            target_health,
+            finalized,
+            oer_os_process::cancellation_requested(),
+        )?;
         oer_os_durable::atomic_write(&self.output.join("protocol.jsonl"), &log)?;
         if let Some(observations) = observations {
             oer_os_durable::atomic_json(
@@ -461,6 +439,44 @@ impl SerialCapture {
                 .close(Some(LinkError::transport("serial worker panicked")));
         }
     }
+}
+
+/// The exact records persisted to protocol.jsonl; command bodies are never recorded.
+pub(super) fn protocol_log(
+    state: &ProtocolState,
+    target_health: Option<&Result<LinkHealth>>,
+    finalized: bool,
+    cancelled: bool,
+) -> Result<Vec<u8>> {
+    let mut log = Vec::new();
+    for sent in &state.sent {
+        serde_json::to_writer(
+            &mut log,
+            &serde_json::json!({"record": "host-command", "command": sent}),
+        )?;
+        log.push(b'\n');
+    }
+    for (index, message) in state.messages.iter().enumerate() {
+        serde_json::to_writer(
+            &mut log,
+            &serde_json::json!({
+                "record": "target-event",
+                "message": message.to_json(),
+                "host_received_unix_micros": state.received_unix_micros.get(index),
+            }),
+        )?;
+        log.push(b'\n');
+    }
+    for record in [
+        serde_json::json!({"record": "link-health", "health": state.health}),
+        serde_json::json!({"record": "capture-end", "finalized": finalized, "cancelled": cancelled, "failure": state.failure}),
+        serde_json::json!({"record": "target-link-health", "health": target_health.map(|result|
+            result.as_ref().map_err(|error| error.to_string()))}),
+    ] {
+        serde_json::to_writer(&mut log, &record)?;
+        log.push(b'\n');
+    }
+    Ok(log)
 }
 
 fn nonblocking_serial(serial: Box<dyn SerialLine>) -> std::result::Result<fs::File, LinkError> {
