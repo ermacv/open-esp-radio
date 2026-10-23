@@ -17,6 +17,7 @@ pub(crate) fn configure(
         root: std::fs::canonicalize(&spec.root)?,
         chip: spec.chip.clone(),
         stack_policy: std::fs::canonicalize(spec.root.join(&spec.stack_policy))?,
+        diagnostic: spec.diagnostic,
     };
     let path = std::path::absolute(output.join(SPEC_FILE))?;
     std::fs::write(&path, toml::to_string(&analysis)?)?;
@@ -107,6 +108,7 @@ mod tests {
             root: root.to_owned(),
             chip: "test".into(),
             stack_policy: "stack.toml".into(),
+            diagnostic: false,
         };
         let mut command = Command::new("not-executed");
         configure(&mut command, &spec, root, true).unwrap();
@@ -145,6 +147,7 @@ mod tests {
         }
         let digest = oer_os_durable::sha256_bytes(b"unchanged");
         let placement = Placement {
+            irq_stacks: Vec::new(),
             functions: vec![PlacedFunction {
                 name: "strict".into(),
                 symbol: "strict".into(),

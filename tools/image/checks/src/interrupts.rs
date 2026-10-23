@@ -25,13 +25,17 @@ mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
 mod code;
 pub use code::CodePlacement;
+pub(crate) mod allocation;
 mod guard;
+pub use allocation::LinkedStack;
 
 /// The interrupt stacks' report in an image build's output directory.
 pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
+    /// Each hart's actual linked storage, independently of the contract maximum.
+    pub allocations: BTreeMap<u32, LinkedStack>,
     pub expression_limited_functions: usize,
     pub witness_memory_peak: u64,
     pub traps: oer_analysis_riscv_stack::TrapFact,
@@ -295,8 +299,8 @@ impl InterruptStacks {
                 }
             };
             let percent = self.contract.interrupts.irq_stack_margin_percent;
-            let usable = self.contract.irq_stack_usable_bytes(hart.core);
-            if with_margin(bytes, percent) > u64::from(usable) {
+            let usable = self.usable_bytes(hart.core);
+            if self.contract.interrupts.irq_stack_with_margin(bytes)? > u64::from(usable) {
                 return Err(format!(
                     "hart {}'s interrupt stack needs {bytes} bytes and a {}% margin, more than \
                      its usable {} bytes:\n{}",
@@ -349,6 +353,7 @@ impl InterruptStacks {
                 self.expression_limited_functions
             );
         }
+        out.push_str(&self.render_allocations());
         out.push_str(&self.render_guards());
         if self.level_writers.is_empty() {
             let _ = writeln!(
@@ -423,7 +428,7 @@ impl InterruptStacks {
                 hart.core,
                 hart.bytes
                     .map_or(format!("{} + ?", hart.partial), |bytes| bytes.to_string()),
-                self.contract.irq_stack_usable_bytes(hart.core),
+                self.usable_bytes(hart.core),
                 match hart.bytes {
                     None => "partial",
                     Some(_) if hart.assumptions().is_empty() && hart.level_drops().is_empty() => {
@@ -475,11 +480,6 @@ impl InterruptStacks {
         }
         out
     }
-}
-
-/// `bytes` with the platform's margin.
-fn with_margin(bytes: u64, percent: u32) -> u64 {
-    bytes + bytes * u64::from(percent) / 100
 }
 
 /// The names of the reviewed ROM summaries of `profile`'s chip; none for a
@@ -631,6 +631,11 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         None => Vec::new(),
     };
     Ok(InterruptStacks {
+        allocations: allocation::read(
+            &oer_analysis_elf::Elf::parse(elf)?,
+            interrupts,
+            &contract.memory,
+        )?,
         expression_limited_functions: analysis.expression_limited_functions(),
         witness_memory_peak: memory.peak().max(image.usage.memory_bytes),
         traps: image.traps.clone(),
@@ -859,6 +864,7 @@ mod tests {
 
     pub(super) fn stacks(handlers: Vec<(u32, Vec<u32>)>) -> InterruptStacks {
         InterruptStacks {
+            allocations: BTreeMap::new(),
             expression_limited_functions: 0,
             witness_memory_peak: 0,
             traps: Default::default(),
@@ -896,6 +902,7 @@ mod tests {
             bound,
         };
         InterruptStacks {
+            allocations: BTreeMap::new(),
             expression_limited_functions: 0,
             witness_memory_peak: 0,
             traps: Default::default(),
@@ -917,6 +924,43 @@ mod tests {
             panic_hook_data: Vec::new(),
             contract: contract(),
         }
+    }
+
+    #[test]
+    fn allocation_uses_only_a_proven_product_bound_and_reports_its_source() {
+        let mut stacks = partial(1000);
+        let select = |stacks: &InterruptStacks, diagnostic| {
+            crate::linker::irq_stacks::select(stacks, diagnostic)
+                .unwrap()
+                .remove(0)
+        };
+        let partial = select(&stacks, false);
+        assert!(!partial.from_bound);
+        assert_eq!(partial.bytes, stacks.contract.interrupts.irq_stack_bytes);
+        stacks.harts[0].bytes = Some(1000);
+        let diagnostic = select(&stacks, true);
+        assert!(!diagnostic.from_bound);
+        assert_eq!(diagnostic.bytes, stacks.contract.interrupts.irq_stack_bytes);
+        let product = select(&stacks, false);
+        assert!(product.from_bound);
+        assert_eq!(product.bytes, 5200);
+        stacks.allocations.insert(
+            0,
+            LinkedStack {
+                bottom: u64::from(stacks.contract.memory.sram.origin),
+                bytes: product.bytes,
+                from_bound: true,
+            },
+        );
+        assert_eq!(stacks.usable_bytes(0), 1104);
+        assert!(stacks.check(Required::Product).is_ok());
+        assert!(
+            stacks
+                .render()
+                .contains("0\t1000\t100 (10%)\t4096\t5200\tproven bound")
+        );
+        stacks.harts[0].bytes = Some(1010);
+        assert!(stacks.check(Required::Product).is_err());
     }
 
     #[test]
@@ -1165,7 +1209,7 @@ mod tests {
     #[test]
     fn the_margin_is_a_share_of_the_bound() {
         assert_eq!(
-            with_margin(1000, contract().interrupts.irq_stack_margin_percent),
+            contract().interrupts.irq_stack_with_margin(1000).unwrap(),
             1000 + 1000 * u64::from(contract().interrupts.irq_stack_margin_percent) / 100
         );
     }

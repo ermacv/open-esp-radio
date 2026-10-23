@@ -27,6 +27,9 @@ pub struct Spec {
     pub root: PathBuf,
     pub chip: String,
     pub stack_policy: PathBuf,
+    /// Diagnostic/probe images retain the contract maximum on every hart.
+    #[serde(default)]
+    pub diagnostic: bool,
 }
 
 impl Spec {
@@ -89,6 +92,8 @@ pub struct PlacedFunction {
 pub struct Placement {
     #[serde(default)]
     pub functions: Vec<PlacedFunction>,
+    #[serde(default)]
+    pub irq_stacks: Vec<super::irq_stacks::Allocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<Fingerprint>,
 }
@@ -175,6 +180,7 @@ impl Placement {
         }
         Ok(Self {
             functions,
+            irq_stacks: Vec::new(),
             fingerprint: None,
         })
     }
@@ -297,7 +303,30 @@ pub(super) fn analyze(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    Placement::select(&requested, sections, placement.free_sram())
+    let irq_stacks = super::irq_stacks::select(&stacks, spec.diagnostic)?;
+    let released = irq_stacks.iter().try_fold(0_u64, |sum, stack| -> Result<u64> {
+        let previous = stacks.allocated_bytes(stack.hart);
+        let released = previous.checked_sub(stack.bytes).ok_or_else(|| {
+            format!("hart {}'s first-pass IRQ allocation {previous} is smaller than the selected {} bytes", stack.hart, stack.bytes)
+        })?;
+        Ok(sum + u64::from(released))
+    })?;
+    let mut placement = Placement::select(&requested, sections, placement.free_sram() + released)?;
+    placement.irq_stacks = irq_stacks;
+    Ok(placement)
+}
+
+/// The second link is final: verify its bounds and guards before fingerprinting.
+pub(super) fn verify(
+    spec: &Spec,
+    output: &Path,
+    placement: &Placement,
+    inputs: &mut Inputs,
+) -> Result<()> {
+    let Some((image, _)) = spec.image(output, inputs)? else {
+        return Ok(());
+    };
+    super::irq_stacks::verify(&interrupt_stacks_of(&image)?, &placement.irq_stacks)
 }
 
 /// Finish the selection record after at most one additional link.

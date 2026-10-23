@@ -70,8 +70,14 @@ contract. The image linker runs the same interrupt analysis and `CodePlacement`
 after its first link. It resolves strict cached functions to their defining
 input sections using the objects' symbol tables, selects those whole sections
 in the generated `strict-text.x` inside `.isr.text`, and links once more.
-With no strict cached functions the fragment stays empty and the first ELF is
-final. Strict code has no manual function-section annotations. Assembly entry,
+The same second link sizes the IRQ stacks independently by hart; see the
+[image linker](../linker/README.md). Even with an empty strict fragment, a
+proven product bound selects its bound plus the contract's 10% margin, rounded
+up to 16 bytes, plus its guard; an unproven or diagnostic stack keeps the
+contract maximum. Checks use the actual linked ranges, and placement
+`maximum-bytes` limits their capacity. A second-pass bound change above 64
+bytes or a bound plus margin that no longer fits fails without another link.
+Strict code has no manual function-section annotations. Assembly entry,
 riscv-rt and esp-hal section conventions still place their code in SRAM;
 `.hot.text` selects code for performance. The post-build interrupt check
 verifies the final ELF.
@@ -92,7 +98,9 @@ before its second invocation. An analysis error, an unrepresentable script name
 or insufficient SRAM fails the link. A diagnostic's partial stack still supplies
 its known strict functions. Bootstrap has no analysis specification.
 
-`interrupt-stack.txt` reports each hart's guard, exception entry and path,
+`interrupt-stack.txt` reports each hart's bound, rounded-up percentage margin,
+guard, allocated bytes and size source (proven bound or contract maximum),
+as well as its exception entry and path,
 largest reachable own frame and remaining guard bytes, as well as strict code in cached memory by hart/level,
 P2 task code in PSRAM and its task roots, static cached data references and
 sized objects, and usable/placed/free SRAM. `interrupt-placement.txt`, listed

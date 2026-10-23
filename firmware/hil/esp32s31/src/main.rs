@@ -205,8 +205,8 @@ fn validate_runtime_layout() {
         let [cpu1_bottom, cpu1_top] = bounds(&sections.irq_stacks[1]);
         range_in_internal_sram(cpu0_bottom, cpu0_top)
             && range_in_internal_sram(cpu1_bottom, cpu1_top)
-            && cpu0_top - cpu0_bottom == oer_esp32s31_layout::LAYOUT.irq_stack_bytes
-            && cpu1_top - cpu1_bottom == oer_esp32s31_layout::LAYOUT.irq_stack_bytes
+            && cpu0_top - cpu0_bottom <= oer_esp32s31_layout::LAYOUT.irq_stack_bytes
+            && cpu1_top - cpu1_bottom <= oer_esp32s31_layout::LAYOUT.irq_stack_bytes
     };
     let task_stack_valid = stack_bottom >= PROFILE_DATA_START
         && stack_top <= PROFILE_DATA_END

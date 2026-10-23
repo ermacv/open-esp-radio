@@ -71,7 +71,7 @@ source-table-symbol = "__EXTERNAL_INTERRUPTS"
 harts = [0, 1]
 # esp-hal's IPC line.
 always-levels = [1]
-# Each hart's dedicated SRAM interrupt stack.
+# Maximum allocation of each hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 irq-stack-margin-percent = 10
@@ -127,8 +127,8 @@ range = [
     { range = ["__runtime_critical_data_start", "__runtime_critical_bss_end"], region = "sram" },
     { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
     { range = ["_stack_end", "_stack_start"], region = "psram", bytes = 0x30000 },
-    { range = ["__runtime_cpu0_irq_stack_bottom", "__runtime_cpu0_irq_stack_top"], region = "sram", bytes = 0x8000 },
-    { range = ["__runtime_cpu1_irq_stack_bottom", "__runtime_cpu1_irq_stack_top"], region = "sram", bytes = 0x8000 },
+    { range = ["__runtime_cpu0_irq_stack_bottom", "__runtime_cpu0_irq_stack_top"], region = "sram", maximum-bytes = 0x8000 },
+    { range = ["__runtime_cpu1_irq_stack_bottom", "__runtime_cpu1_irq_stack_top"], region = "sram", maximum-bytes = 0x8000 },
 ]
 symbol = [
     { name = "_start_trap", bytes = 4, region = "sram" },

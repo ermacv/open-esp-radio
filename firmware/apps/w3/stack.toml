@@ -3,7 +3,7 @@ coverage_policy = "../../../chips/espressif/staged-layout/stack-coverage.toml"
 max_move_bytes = 4096
 
 # W3's portable station and IP call chain runs on P1 in PSRAM. This
-# allocation belongs only to this image; interrupt stacks keep the chip size.
+# allocation belongs only to this image; IRQ stacks are sized by the linker.
 [cpu0_task_stack]
 root = "runtime_main"
 bottom_symbol = "__runtime_cpu0_task_stack_bottom"
@@ -13,7 +13,6 @@ minimum_free_bytes = 16384
 allocation_bytes = 57520
 
 [interrupt_stacks]
-minimum_free_bytes = 4096
 
 [bootstrap_stack]
 root = "_start_rust"

@@ -48,7 +48,15 @@ contracts: [Hardware memory](hardware-memory.md).
 - CPU0's task stack is in PSRAM; each hart has an SRAM interrupt stack
   with a guard region, a debug trigger and stack painting:
   [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).
-- Stack roots, storage and free-space reserves are policy inputs:
+- The image linker sizes each hart's IRQ stack to
+  `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
+  is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and
+  for diagnostic images. Hart 0 on S31 is also rounded to hart 1's guard
+  alignment. The second link is final: its bound plus margin must fit the
+  allocation minus guard, and its guard and bottom alignment are checked.
+  A bound change above 64 bytes fails the build. See the
+  [image linker](../tools/image/linker/README.md).
+- Task-stack roots, storage and free-space reserves are policy inputs:
   [S31 policy](../chips/esp32s31/platform/stack.toml) and
   [C5 policy](../chips/esp32c5/platform/stack.toml).
 - Static bounds and their assumptions are described in [Stack bounds in

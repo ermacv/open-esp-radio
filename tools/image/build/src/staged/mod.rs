@@ -66,6 +66,8 @@ pub(crate) fn build(
             root: spec.root.clone(),
             chip: spec.chip.clone(),
             stack_policy: spec.stack_policy.clone(),
+            diagnostic: spec.checks.as_ref().and_then(|checks| checks.interrupts)
+                != Some(oer_image_checks::interrupts::Required::Product),
         };
         let specification = strict::configure(&mut runtime, &analysis, &output, strict)?;
         crate::cargo::ensure_fetched(root)?;

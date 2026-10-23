@@ -71,14 +71,16 @@ SECTIONS
   .irq_stacks ORIGIN(INTERNAL_LOW) (NOLOAD) :
   {
     __runtime_cpu0_irq_stack_bottom = ABSOLUTE(.);
-    . = . + IRQ_STACK_BYTES;
+    . = . + IRQ_STACK_HART0_BYTES;
     __runtime_cpu0_irq_stack_top = ABSOLUTE(.);
     __runtime_cpu1_irq_stack_bottom = ABSOLUTE(.);
-    . = . + (HART_COUNT > 1 ? IRQ_STACK_BYTES : 0);
+    . = . + (HART_COUNT > 1 ? IRQ_STACK_HART1_BYTES : 0);
     __runtime_cpu1_irq_stack_top = ABSOLUTE(.);
   } > INTERNAL_LOW
 
-  .isr.text ALIGN(ADDR(.irq_stacks) + SIZEOF(.irq_stacks), 64) :
+  /* MTVT's first table requires 256-byte alignment; leave at most 255
+     bytes between the stacks and code, outside either allocation. */
+  .isr.text ALIGN(ADDR(.irq_stacks) + SIZEOF(.irq_stacks), 256) :
     AT(ALIGN(LOADADDR(.runtime.header) + SIZEOF(.runtime.header), 64))
   {
     __runtime_isr_start = ABSOLUTE(.);
@@ -362,9 +364,9 @@ ASSERT((__runtime_critical_data_load_start & 3) == 0 &&
 ASSERT((__runtime_dma_data_load_start & 3) == 0 &&
        ((__runtime_dma_data_end - __runtime_dma_data_start) & 3) == 0,
        "runtime initialized DMA state copy must be word aligned");
-ASSERT(__runtime_cpu0_irq_stack_top - __runtime_cpu0_irq_stack_bottom == IRQ_STACK_BYTES &&
+ASSERT(__runtime_cpu0_irq_stack_top - __runtime_cpu0_irq_stack_bottom == IRQ_STACK_HART0_BYTES &&
        __runtime_cpu1_irq_stack_top - __runtime_cpu1_irq_stack_bottom ==
-           (HART_COUNT > 1 ? IRQ_STACK_BYTES : 0),
+           (HART_COUNT > 1 ? IRQ_STACK_HART1_BYTES : 0),
        "runtime requires one exact SRAM IRQ stack per hart");
 ASSERT(__runtime_cpu0_irq_stack_bottom % __runtime_cpu0_irq_stack_guard_bytes == 0,
        "hart 0 IRQ stack bottom must be guard aligned");

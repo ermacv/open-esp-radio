@@ -35,8 +35,6 @@ pub const BEGIN: &str = "OER-W1-BEGIN";
 pub const END: &str = "OER-W1-END";
 /// The marker of the image's verdict line.
 const RESULT_MARKER: &str = "OER-RESULT: ";
-/// The interrupt stack the `irq_stack` gate requires to stay free.
-pub const MIN_IRQ_STACK_FREE: u64 = 4096;
 /// The longest gap list the image prints.
 const MAX_GAPS: usize = 64;
 /// The longest tracking tick list the image prints.
@@ -240,13 +238,12 @@ struct Spec {
     count: Count,
 }
 
-const GATE_NAMES: [&str; 13] = [
+const GATE_NAMES: [&str; 12] = [
     "beacons",
     "channel",
     "exit",
     "walker_restart",
     "ownership",
-    "irq_stack",
     "service_errors",
     "unserviced",
     "timer_wake",
@@ -510,7 +507,7 @@ const SPECS: &[Spec] = &[
     },
     Spec {
         keyword: "w1.stack",
-        keys: numbers!("irq_bytes", "irq_free", "min_free"),
+        keys: numbers!("irq_bytes", "irq_free"),
         open: false,
         count: Count::Once,
     },
@@ -978,7 +975,6 @@ pub enum GateName {
     Exit,
     WalkerRestart,
     Ownership,
-    IrqStack,
     ServiceErrors,
     Unserviced,
     TimerWake,
@@ -989,13 +985,12 @@ pub enum GateName {
 }
 
 impl GateName {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 12] = [
         Self::Beacons,
         Self::Channel,
         Self::Exit,
         Self::WalkerRestart,
         Self::Ownership,
-        Self::IrqStack,
         Self::ServiceErrors,
         Self::Unserviced,
         Self::TimerWake,
@@ -1013,7 +1008,6 @@ impl GateName {
             Self::Exit => "exit",
             Self::WalkerRestart => "walker_restart",
             Self::Ownership => "ownership",
-            Self::IrqStack => "irq_stack",
             Self::ServiceErrors => "service_errors",
             Self::Unserviced => "unserviced",
             Self::TimerWake => "timer_wake",
@@ -1661,12 +1655,6 @@ pub fn recompute(report: &Report, expected: &Config) -> Result<Host, ReportError
         walker_restart_gate(report)?,
         ownership_gate(report)?,
         gate(
-            GateName::IrqStack,
-            report.stack.number("irq_free")? >= MIN_IRQ_STACK_FREE,
-            "irq-stack-low",
-            false,
-        ),
-        gate(
             GateName::ServiceErrors,
             report.rx.number("service_errors")? == 0,
             "service-errors",
@@ -1811,6 +1799,29 @@ impl Outcome {
 pub struct Checked {
     pub outcome: Outcome,
     pub summary: Vec<String>,
+}
+
+/// Hold the observed IRQ depth to the actual image's proven bound, as HIL
+/// does. Capacity comes from that ELF, never from a free-byte constant.
+pub fn check_interrupt_stack(
+    report: &Report,
+    capacity: u32,
+    bound: u64,
+) -> Result<u64, ReportError> {
+    let reported = report.stack.number("irq_bytes")?;
+    let free = report.stack.number("irq_free")?;
+    if reported != u64::from(capacity) || free > reported {
+        return Err(malformed(format!(
+            "IRQ stack capacity {reported}, free {free}; linked capacity {capacity}"
+        )));
+    }
+    let used = reported - free;
+    if used > bound {
+        return Err(malformed(format!(
+            "observed IRQ stack depth {used} exceeds proven bound {bound} (capacity {reported}, free {free})"
+        )));
+    }
+    Ok(used)
 }
 
 fn disagreements(
@@ -2235,7 +2246,7 @@ mod tests {
             "w1.exit cause=StopRequested end=Halted",
             "w1.p2 phase=window swi2_max_us=20 swi2_p99_us=8 actor_max_us=40 actor_p99_us=10 actor_over_bound=0 receive_max_us=30 receive_p99_us=9 mac_to_poll_max_us=50 ring_to_doorbell_max_us=12",
             "w1.clock op=acquire clock=WifiMac phase=window count=1 max_us=3",
-            "w1.stack irq_bytes=32768 irq_free=20000 min_free=4096",
+            "w1.stack irq_bytes=32768 irq_free=20000",
             "w1.timer cmp=0 phase=stress early=0 late_count=1 late_max_us=4 late_total_us=4 missed=0 unmatched=0 coalesced=0 overlapping=0 armed_at_end=0 waits=135000 woke_early=0",
             "w1.wake cmp=1 phase=hold waits=3 woke_early=0",
             "w1.lag i=0 stamp=1000000 lag_us=51700 since_prev_us=- until_next_us=1500",
@@ -2254,7 +2265,6 @@ mod tests {
             "w1.gate name=exit result=pass",
             "w1.gate name=walker_restart result=pass",
             "w1.gate name=ownership result=pass",
-            "w1.gate name=irq_stack result=pass",
             "w1.gate name=service_errors result=pass",
             "w1.gate name=unserviced result=pass",
             "w1.gate name=timer_wake result=pass",
@@ -2749,18 +2759,6 @@ mod tests {
         set(&mut end, "w1.exit", "end", "Abandoned");
         assert_eq!(host_gate(&end, GateName::Exit).result, GateResult::Fail);
 
-        let mut stack = body();
-        set(&mut stack, "w1.stack", "irq_free", "4096");
-        assert_eq!(
-            host_gate(&stack, GateName::IrqStack).result,
-            GateResult::Pass
-        );
-        set(&mut stack, "w1.stack", "irq_free", "4095");
-        assert_eq!(
-            host_gate(&stack, GateName::IrqStack).result,
-            GateResult::Fail
-        );
-
         let mut errors = body();
         set(&mut errors, "w1.rx", "service_errors", "1");
         assert_eq!(
@@ -2786,6 +2784,21 @@ mod tests {
         set(&mut overflow, "w1.rx", "unserviced_pwr", "1");
         let report = Report::parse(&console(&overflow)).unwrap();
         assert!(recompute(&report, &expected()).is_err());
+    }
+
+    #[test]
+    fn irq_observation_uses_the_linked_capacity_and_proven_bound() {
+        let mut body = body();
+        set(&mut body, "w1.stack", "irq_bytes", "5200");
+        set(&mut body, "w1.stack", "irq_free", "4200");
+        let report = Report::parse(&console(&body)).unwrap();
+        assert_eq!(check_interrupt_stack(&report, 5200, 1000).unwrap(), 1000);
+        assert!(check_interrupt_stack(&report, 5200, 999).is_err());
+        assert!(check_interrupt_stack(&report, 32768, 1000).is_err());
+        set(&mut body, "w1.stack", "irq_free", "5201");
+        assert!(
+            check_interrupt_stack(&Report::parse(&console(&body)).unwrap(), 5200, 1000).is_err()
+        );
     }
 
     #[test]
@@ -3719,10 +3732,10 @@ mod tests {
 
         // A gate the image fails and the host passes.
         let mut gate = body();
-        set_gate(&mut gate, "irq_stack", "result=fail reason=low");
+        set_gate(&mut gate, "unserviced", "result=fail reason=low");
         let checked = check(
             &console(&gate),
-            "OER-RESULT: fail w1 irq-stack low",
+            "OER-RESULT: fail w1 unserviced low",
             &expected(),
         );
         assert_eq!(checked.outcome.exit_code(), 3, "{:?}", checked.outcome);
@@ -3779,8 +3792,8 @@ mod tests {
         let mut two = body();
         set(&mut two, "w1.rx", "service_errors", "2");
         set_gate(&mut two, "service_errors", "result=fail reason=errors");
-        set(&mut two, "w1.stack", "irq_free", "100");
-        set_gate(&mut two, "irq_stack", "result=fail reason=low");
+        set(&mut two, "w1.rx", "unserviced_mac", "1");
+        set_gate(&mut two, "unserviced", "result=fail reason=low");
         assert_eq!(
             check(
                 &console(&two),
@@ -3793,14 +3806,14 @@ mod tests {
         );
         let both = check(
             &console(&two),
-            "OER-RESULT: fail w1 irq-stack low; service-errors 2",
+            "OER-RESULT: fail w1 unserviced low; service-errors 2",
             &expected(),
         );
         assert_eq!(both.outcome.exit_code(), 1, "{:?}", both.outcome);
         assert_eq!(
             check(
                 &console(&two),
-                "OER-RESULT: fail w1 irq-stack low; service-errors 2; exit x",
+                "OER-RESULT: fail w1 unserviced low; service-errors 2; exit x",
                 &expected()
             )
             .outcome

@@ -17,8 +17,8 @@
 //! trigger watches the chip contract's guard of each hart's interrupt stack, so an
 //! overflow traps before it reaches the state below the stack.
 //!
-//! The runtime linker script reserves the CPU0 task stack and each hart's
-//! interrupt stack with the chip layout's sizes; this module finds them by
+//! The runtime linker script reserves the CPU0 task stack and sizes each
+//! interrupt stack from its bound or contract maximum; this module finds them by
 //! their bounding symbols.
 
 use core::{
@@ -98,8 +98,8 @@ fn interrupt_stack_guard_bytes(hart: usize) -> usize {
     }
 }
 
-/// Bytes of each hart's interrupt stack, as the runtime linker script reserved
-/// them.
+/// Bytes of hart 0's interrupt stack, as the runtime linker script reserved
+/// it. Other harts may have different allocations.
 pub fn irq_stack_bytes() -> usize {
     interrupt_stack(0).map_or(0, |stack| stack.len())
 }

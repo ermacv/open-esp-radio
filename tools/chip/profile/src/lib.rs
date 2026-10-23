@@ -20,6 +20,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+mod irq_stack;
+
 /// Format of `chip.toml`.
 pub const SCHEMA: u32 = 1;
 /// The root of the chip packages, whose `<id>/platform` directories hold
@@ -233,7 +235,7 @@ pub struct InterruptContract {
     #[serde(default)]
     pub ipc: Option<Ipc>,
     pub level_writers: Vec<LevelWriter>,
-    /// Each hart's dedicated SRAM interrupt stack.
+    /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
     pub irq_stack_bytes: u32,
     /// Guard bytes keyed by hart, with exactly one entry for every `harts` member.
     pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
@@ -241,7 +243,7 @@ pub struct InterruptContract {
 }
 
 impl InterruptContract {
-    /// The bytes an interrupt stack may use: below them lies the guard.
+    /// Maximum usable bytes; final checks read the actual allocation from ELF.
     pub fn irq_stack_usable_bytes(&self, hart: u32) -> u32 {
         self.irq_stack_bytes - self.irq_stack_guard_bytes[&hart]
     }
@@ -378,6 +380,9 @@ pub struct RangeRule {
     /// The range's exact size, where the contract fixes one.
     #[serde(default)]
     pub bytes: Option<u64>,
+    /// Maximum size for a range whose allocation is chosen at link time.
+    #[serde(default)]
+    pub maximum_bytes: Option<u64>,
 }
 
 /// Symbols whose `bytes` from their address lie in `region`.

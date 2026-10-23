@@ -44,10 +44,9 @@ top_symbol = "__runtime_cpu0_task_stack_top"
 minimum_free_bytes = 16384
 
 # The dedicated SRAM interrupt stacks are bounded by the interrupt-stack gate
-# against the platform interrupt contract's margin. This is runtime painting's
-# engineering reserve, not a qualified nesting bound.
+# against the platform interrupt contract's percentage margin; there is no
+# separate fixed free-byte reserve.
 [interrupt_stacks]
-minimum_free_bytes = 4096
 
 # The bootstrap runs on the linker script's `_stack_end`..`_stack_start` from
 # riscv-rt's `_start_rust`, which calls `hal_main` and then the bootstrap's

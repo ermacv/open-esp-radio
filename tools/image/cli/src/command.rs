@@ -341,7 +341,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         .transpose()?;
     Ok(match verdict {
         Some((_, result)) if let Some(config) = &w1 => {
-            ExitCode::from(check_w1(&console, &result, config))
+            ExitCode::from(check_w1(root, &console, &result, config)?)
         }
         Some((_, result)) if let Some(config) = &w2 => {
             let target = oer_lab_router::mac::Mac::parse(&board.mac).ok_or("invalid board MAC")?;
@@ -375,7 +375,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
 
 /// Check image w1's report against its `result` line and print the host's
 /// summary; the exit code.
-fn check_w1(console: &[String], result: &str, config: &w1::Config) -> u8 {
+fn check_w1(root: &Path, console: &[String], result: &str, config: &w1::Config) -> Result<u8> {
     let checked = w1::check(console, result, config);
     for line in &checked.summary {
         eprintln!("fw: w1 {line}");
@@ -392,7 +392,24 @@ fn check_w1(console: &[String], result: &str, config: &w1::Config) -> u8 {
         }
         w1::Outcome::Unreadable(error) => eprintln!("fw: w1 {error}"),
     }
-    checked.outcome.exit_code()
+    if let Ok(report) = w1::Report::parse(console) {
+        let profile = oer_chip_profile::Profile::load(root, "esp32s31")?;
+        let elf = std::fs::read(root.join("target/fw/w1/runtime.elf"))?;
+        let stacks = oer_image_checks::interrupts::interrupt_stacks(root, &profile, elf)?;
+        let bound = stacks
+            .harts
+            .iter()
+            .find(|hart| hart.core == 0)
+            .and_then(|hart| hart.bytes)
+            .ok_or("w1 has no proven hart 0 IRQ stack bound")?;
+        let used = w1::check_interrupt_stack(&report, stacks.allocated_bytes(0), bound)
+            .map_err(|error| error.to_string())?;
+        eprintln!(
+            "fw: w1 IRQ stack observed {used} <= proven bound {bound} bytes; allocated {} bytes",
+            stacks.allocated_bytes(0)
+        );
+    }
+    Ok(checked.outcome.exit_code())
 }
 
 pub fn monitor(root: &Path, selector: &str) -> Result<()> {
