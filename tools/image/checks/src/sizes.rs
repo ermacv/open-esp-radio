@@ -260,11 +260,11 @@ impl Measurements {
         }
         out.types = types::read(&file)?;
         out.resources = Resources {
-            work_units: image.usage.work_units,
-            peak_memory_bytes: image.usage.memory_bytes,
-            work_limit: crate::stack::budget::WORK_UNITS,
-            memory_limit_bytes: crate::stack::budget::MEMORY_LIMIT,
-            timeout_seconds: crate::stack::budget::TIMEOUT.as_secs(),
+            work_units: image.resources.usage.work_units,
+            peak_memory_bytes: image.resources.usage.peak_admitted_bytes,
+            work_limit: crate::stack::budget::LIMITS.work_units,
+            memory_limit_bytes: crate::stack::budget::LIMITS.working_memory_bytes,
+            timeout_seconds: crate::stack::budget::LIMITS.timeout_ms / 1000,
             partial_functions: image
                 .analysis
                 .functions

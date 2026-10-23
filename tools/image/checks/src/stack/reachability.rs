@@ -171,14 +171,14 @@ impl<'a> Report<'a> {
 
     pub fn header(&self, memory_peak: u64) -> String {
         format!(
-            "Reachability over the existing resolved stack bounds (report only)\n\
+            "{}Reachability over the existing resolved stack bounds (report only)\n\
             Witnesses follow first-discovery parents; they are not shortest paths.\n\
             Unmatched selectors have no linked function entry; inlined bodies are not separate entries.\n\
             observed linked implementations: {}; unmatched selectors: {}\n\
-            analysis working-memory peak: {memory_peak} bytes (before witnesses: {} bytes)\n\n",
+            \n",
+            crate::stack::budget::header(&self.image.resources, memory_peak),
             self.targets.len(),
-            self.unmatched.len(),
-            self.image.usage.memory_bytes
+            self.unmatched.len()
         )
     }
 

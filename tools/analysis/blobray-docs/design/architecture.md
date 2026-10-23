@@ -66,12 +66,19 @@ Resource provenance is `oer-analysis-riscv-model::AnalysisResources`, under
 The named `blobray-cli` and `image-checks` profiles select existing defaults;
 the report records effective work units (work policy 1), admitted working-memory
 bytes and timeout milliseconds, local function-budget formulas and the value
-alternative capacity. Admission is not process RSS. An event is each production
-of a typed limit outcome, including separate passes of the same function;
+alternative capacity. Admission is not process RSS. An event is each fresh
+capacity rejection or typed local-budget outcome,
+including separate passes of the same function; propagation of an already
+widened value and repeated partial records do not create new events;
 `functions` counts distinct analyzed function identities, with per-reason counts,
 and cached summary lookups add neither events nor functions. `results` counts
 output records carrying a typed limit reason, once per record even when it has
-several reasons. A projection does not infer a limit from an unknown value or
+several reasons. Canonical selected records, named-function semantic gap
+records and detailed failure rows contribute results; grouped views and
+aggregate counts do not count the same results again. Image work usage covers
+the original image-analysis budget; the reported memory peak can include
+witnesses built under their existing separate guards. A projection does not
+infer a limit from an unknown value or
 from prose. `unaccounted` explicitly lists limits without typed local reasons;
 these are not zero-count claims. Operation work, memory and timeout exhaustion
 remain errors and never produce an ordinary resource-marked result.

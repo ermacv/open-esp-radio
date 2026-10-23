@@ -47,8 +47,8 @@ allocated, read-only, non-executable `PROGBITS` sections, with its section
 offset; text is printable ASCII, tab, newline, carriage return and bytes above
 0x7f, rendered with `\n`, `\t`, `\r`, `\\`, `\"` and `\xNN` escapes so a
 non-UTF-8 string stays exact. A run without its terminator is not reported.
-Both JSON documents are schema 1 (`{"schema":1,"inputs":[...],"symbols":[...]}`,
-`{"schema":1,"inputs":[...],"strings":[...]}`).
+Both JSON documents are schema 2 (`{"schema":2,"analysis_resources":{...},"inputs":[...],"symbols":[...]}`,
+`{"schema":2,"analysis_resources":{...},"inputs":[...],"strings":[...]}`).
 
 ## Synthetic linked images
 

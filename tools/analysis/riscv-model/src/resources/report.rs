@@ -43,6 +43,7 @@ pub struct LocalLimit {
     pub per_instruction: u64,
     pub constant: u64,
     pub multiplier: u64,
+    pub zero_for_empty: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -93,9 +94,31 @@ pub struct FunctionLimits {
     results: u64,
 }
 impl FunctionLimits {
+    pub fn value_events(events: [u64; 2]) -> Self {
+        let mut limits = Self::default();
+        for (reason, events) in [
+            LimitReason::LocalBudget(LocalBudgetScope::FunctionExpressions),
+            LimitReason::ValueAlternatives,
+        ]
+        .into_iter()
+        .zip(events)
+        {
+            if events != 0 {
+                limits.count(reason).events = events;
+            }
+        }
+        limits
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        for count in &other.counts {
+            self.count(count.reason).events += count.events;
+        }
+    }
+
     fn count(&mut self, reason: LimitReason) -> &mut LimitCount {
         if let Some(i) = self.counts.iter().position(|c| c.reason == reason) {
-            return &mut self.counts[i];
+            return self.counts.get_mut(i).expect("existing limit count");
         }
         self.counts.push(LimitCount {
             reason,
@@ -113,11 +136,6 @@ impl FunctionLimits {
             self.event(LimitReason::LocalBudget(budget.scope));
         }
     }
-    pub fn semantic_gap(&mut self, reason: SemanticGapReason) {
-        if let Some(reason) = LimitReason::semantic_gap(reason) {
-            self.event(reason);
-        }
-    }
     /// One output record, possibly carrying more than one reason.
     pub fn result(&mut self, reasons: &[LimitReason]) {
         if reasons.is_empty() {
@@ -125,7 +143,7 @@ impl FunctionLimits {
         }
         self.results += 1;
         for (i, &reason) in reasons.iter().enumerate() {
-            if !reasons[..i].contains(&reason) {
+            if !reasons.iter().take(i).any(|&earlier| earlier == reason) {
                 self.count(reason).results += 1;
             }
         }
@@ -143,6 +161,55 @@ impl LimitReason {
     }
 }
 impl AnalysisLimited {
+    /// Combine independent inputs, whose function identities do not overlap.
+    pub fn merge(&mut self, other: &Self) {
+        self.functions += other.functions;
+        self.results += other.results;
+        for count in &other.events_by_reason {
+            if let Some(total) = self
+                .events_by_reason
+                .iter_mut()
+                .find(|c| c.reason == count.reason)
+            {
+                total.events += count.events;
+                total.functions += count.functions;
+                total.results += count.results;
+            } else {
+                self.events_by_reason.push(count.clone());
+            }
+        }
+    }
+
+    pub fn result(&mut self, reason: LimitReason) {
+        self.results += 1;
+        if let Some(count) = self
+            .events_by_reason
+            .iter_mut()
+            .find(|c| c.reason == reason)
+        {
+            count.results += 1;
+        } else {
+            self.events_by_reason.push(LimitCount {
+                reason,
+                events: 0,
+                functions: 0,
+                results: 1,
+            });
+        }
+    }
+
+    /// Replace output counts after filtering, retaining whole-operation events.
+    pub fn project_results(&mut self, projected: &Self) {
+        self.results = projected.results;
+        for count in &mut self.events_by_reason {
+            count.results = projected
+                .events_by_reason
+                .iter()
+                .find(|c| c.reason == count.reason)
+                .map_or(0, |c| c.results);
+        }
+    }
+
     pub fn function(&mut self, limits: &FunctionLimits) {
         if limits.counts.is_empty() {
             return;
@@ -197,6 +264,7 @@ impl AnalysisResources {
                     per_instruction: 8,
                     constant: 32,
                     multiplier: 1,
+                    zero_for_empty: true,
                 }
             } else {
                 LocalLimit {
@@ -204,6 +272,7 @@ impl AnalysisResources {
                     minimum: 100_000,
                     per_instruction: 512,
                     constant: 0,
+                    zero_for_empty: false,
                     multiplier: if scope == LocalBudgetScope::SignatureAudit {
                         16
                     } else {
@@ -224,10 +293,12 @@ impl AnalysisResources {
             limited: Box::new(limited),
             unaccounted: [
                 "C4: word slots, recursion stack bytes and offset range",
+                "Value-alternative caps returning only Unknown/NoProof, including returned-constant unions",
                 "C5: dispatch slices, jump-table entries and indexed-address depth",
                 "C6: word, field, type, DWARF-origin and recursion depth/steps/paths",
                 "C7: postdominator function-instruction capacity",
                 "C8: address enumeration and declared-word runs (inventory consumer)",
+                "C10: trap-entry steps and paths have no distinct local-limit reason",
                 "C14: function CFG/value work has only the operation guard",
                 "C16: execution event capacity has only an operation error",
             ]
@@ -235,12 +306,6 @@ impl AnalysisResources {
             .map(String::from)
             .collect(),
         }
-    }
-    pub fn header(&self) -> String {
-        format!(
-            "analysis_resources: {}\n",
-            serde_json::to_string(self).expect("resource provenance is JSON")
-        )
     }
 }
 
@@ -251,8 +316,12 @@ mod tests {
     fn events_functions_and_output_records_are_independent() {
         let reason = LimitReason::LocalBudget(LocalBudgetScope::ReadFlow);
         let mut one = FunctionLimits::default();
-        one.event(reason);
-        one.event(reason);
+        let outcome = SummaryOutcome::<()>::LocalBudgetExceeded(LocalBudgetExceeded {
+            scope: LocalBudgetScope::ReadFlow,
+            limit: 100_000,
+        });
+        one.outcome(&outcome);
+        one.outcome(&outcome);
         one.result(&[reason, reason]);
         one.result(&[reason]);
         let mut total = AnalysisLimited::default();
@@ -294,6 +363,55 @@ mod tests {
                 working_memory_bytes: 1024 << 20,
                 timeout_ms: 300_000
             }
+        );
+    }
+
+    #[test]
+    fn resource_document_round_trips_and_rejects_unknown_fields() {
+        let resources = AnalysisResources::new(
+            AnalysisProfile::BlobrayCli,
+            AnalysisProfile::BlobrayCli.limits(),
+            AnalysisUsage::default(),
+            AnalysisLimited::default(),
+        );
+        let value = serde_json::to_value(&resources).expect("resource document");
+        assert_eq!(
+            serde_json::from_value::<AnalysisResources>(value.clone()).expect("round trip"),
+            resources
+        );
+        for path in [vec![], vec!["limits"], vec!["usage"], vec!["limited"]] {
+            let mut invalid = value.clone();
+            let mut object = &mut invalid;
+            for key in path {
+                object = &mut object[key];
+            }
+            object
+                .as_object_mut()
+                .expect("resource object")
+                .insert("unexpected".into(), true.into());
+            assert!(serde_json::from_value::<AnalysisResources>(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn filtering_changes_only_output_counts() {
+        let reason = LimitReason::LocalBudget(LocalBudgetScope::ReadFlow);
+        let mut function = FunctionLimits::default();
+        function.event(reason);
+        function.result(&[reason]);
+        function.result(&[reason]);
+        let mut all = AnalysisLimited::default();
+        all.function(&function);
+        let mut selected = AnalysisLimited::default();
+        selected.result(reason);
+        all.project_results(&selected);
+        assert_eq!((all.functions, all.results), (1, 1));
+        assert_eq!(
+            (
+                all.events_by_reason[0].events,
+                all.events_by_reason[0].results
+            ),
+            (1, 1)
         );
     }
 }

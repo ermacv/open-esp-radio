@@ -55,6 +55,10 @@ pub struct Limits {
     position: RunPosition,
 }
 impl Limits {
+    pub fn used(&self) -> u64 {
+        self.units
+    }
+
     pub fn new(max_work_units: u64, timeout: std::time::Duration) -> Self {
         Self {
             units: 0,

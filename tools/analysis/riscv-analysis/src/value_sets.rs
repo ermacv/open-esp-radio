@@ -34,6 +34,7 @@ impl Set {
     }
 }
 pub(super) struct Sets<'a> {
+    pub limit_events: u64,
     memory: &'a WorkingMemory,
     values: AdmittedVec<'a, Set>,
     slots: AdmittedVec<'a, Option<u32>>,
@@ -41,6 +42,7 @@ pub(super) struct Sets<'a> {
 impl<'a> Sets<'a> {
     pub fn new(memory: &'a WorkingMemory) -> Self {
         Self {
+            limit_events: 0,
             memory,
             values: AdmittedVec::new(memory),
             slots: AdmittedVec::new(memory),
@@ -126,6 +128,7 @@ impl<'a> Sets<'a> {
                     return Ok(Value::Unknown);
                 }
                 if !out.insert(v) {
+                    self.limit_events += 1;
                     return Ok(Value::Widened);
                 }
             }
@@ -150,6 +153,7 @@ impl<'a> Sets<'a> {
                 return Ok(value);
             }
             if !out.insert(value) {
+                self.limit_events += 1;
                 return Ok(Value::Widened);
             }
         }
@@ -179,6 +183,7 @@ impl<'a> Sets<'a> {
                     return Ok(v);
                 }
                 if !out.insert(v) {
+                    self.limit_events += 1;
                     return Ok(Value::Widened);
                 }
             }
@@ -218,6 +223,24 @@ mod tests {
             assert_eq!(
                 sets.join(all, Value::Constant(9), &mut c).unwrap(),
                 Value::Widened
+            );
+            assert_eq!(sets.limit_events, 1);
+            assert_eq!(
+                sets.join(Value::Widened, all, &mut c).unwrap(),
+                Value::Widened
+            );
+            assert_eq!(sets.join(all, all, &mut c).unwrap(), all);
+            assert_eq!(
+                sets.limit_events, 1,
+                "propagation and cached set reuse are not fresh exhaustion"
+            );
+            assert_eq!(
+                sets.join(all, Value::Constant(10), &mut c).unwrap(),
+                Value::Widened
+            );
+            assert_eq!(
+                sets.limit_events, 2,
+                "another rejected alternative is a second event"
             );
             // Cartesian operations retain all outputs and collapse duplicates.
             let sum = sets

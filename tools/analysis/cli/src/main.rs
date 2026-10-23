@@ -5,7 +5,8 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use oer_analysis_blobray_application as app;
 use oer_analysis_riscv_model::{
-    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, ReadOnlyWindow, Result,
+    AnalysisLimited, AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, Error, ErrorCode,
+    LimitReason, OperationLimits, ReadOnlyWindow, Result,
 };
 use std::io::Write;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
@@ -242,15 +243,38 @@ const MIB: u64 = 1024 * 1024;
 /// Cooperative limits of an operation that runs in this process.
 #[derive(clap::Args)]
 struct InProcessOptions {
-    #[arg(long, default_value_t = DEFAULT_WORKING_BYTES / MIB)]
+    #[arg(long, default_value_t = AnalysisProfile::BlobrayCli.limits().working_memory_bytes / MIB)]
     working_memory_mib: u64,
-    #[arg(long, default_value_t = oer_analysis_riscv_model::DEFAULT_TIMEOUT_MS / 1000)]
+    #[arg(long, default_value_t = AnalysisProfile::BlobrayCli.limits().timeout_ms / 1000)]
     timeout_secs: u64,
-    #[arg(long, default_value_t = oer_analysis_riscv_model::DEFAULT_WORK_UNITS)]
+    #[arg(long, default_value_t = AnalysisProfile::BlobrayCli.limits().work_units)]
     max_work_units: u64,
 }
 
 impl InProcessOptions {
+    fn resources(
+        &self,
+        memory: &oer_analysis_riscv_model::WorkingMemory,
+        control: &app::in_process::Limits,
+        limited: AnalysisLimited,
+    ) -> Result<AnalysisResources> {
+        Ok(AnalysisResources::new(
+            AnalysisProfile::BlobrayCli,
+            OperationLimits {
+                work_units: self.max_work_units,
+                working_memory_bytes: memory.observation().limit_bytes,
+                timeout_ms: self
+                    .timeout_secs
+                    .checked_mul(1000)
+                    .ok_or_else(|| invalid("timeout milliseconds overflow"))?,
+            },
+            AnalysisUsage {
+                work_units: control.used(),
+                peak_admitted_bytes: memory.peak(),
+            },
+            limited,
+        ))
+    }
     fn memory(&self) -> Result<oer_analysis_riscv_model::WorkingMemory> {
         oer_analysis_riscv_model::WorkingMemory::new(
             self.working_memory_mib
@@ -437,6 +461,7 @@ fn field_accesses(
             Ok(())
         },
     )?;
+    let limited = summary.analysis.limited.clone();
     let unknown_addresses = summary.unknown_addresses;
     let app::library::QuerySummary {
         partial,
@@ -449,6 +474,7 @@ fn field_accesses(
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::FieldAccessesDocument {
                 schema: oer_tool_analysis_cli::wire::FIELD_ACCESSES_SCHEMA,
+                analysis_resources: limits.resources(&memory, &control, limited)?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
@@ -572,7 +598,7 @@ fn function_records(
             .is_some_and(|name| names.iter().any(|wanted| wanted.as_bytes() == name))
     };
     let mut functions = Vec::new();
-    app::library::analyze_library(
+    let mut limited = app::library::analyze_library(
         &executables,
         assumptions,
         &oer_analysis_riscv_lift::RiscvDecoder,
@@ -614,11 +640,25 @@ fn function_records(
     } else {
         ExitCode::FAILURE
     };
+    let mut projected = AnalysisLimited::default();
+    for function in &functions {
+        if let oer_tool_analysis_cli::wire::NamedFunction::Analyzed { records, .. } = function {
+            for record in records {
+                if let oer_analysis_riscv_model::FunctionRecord::SemanticGap { reason, .. } = record
+                    && let Some(reason) = LimitReason::semantic_gap(*reason)
+                {
+                    projected.result(reason);
+                }
+            }
+        }
+    }
+    limited.project_results(&projected);
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::FunctionRecordsDocument {
                 schema: oer_tool_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA,
+                analysis_resources: limits.resources(&memory, &control, limited)?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
@@ -717,7 +757,7 @@ fn mmio_diff(
     let (new_inputs, new) = read(new)?;
     let memory = limits.memory()?;
     let mut control = limits.control();
-    let diff = app::mmio_diff::mmio_diff(
+    let (diff, limited) = app::mmio_diff::mmio_diff(
         &old,
         &new,
         assumptions,
@@ -731,6 +771,7 @@ fn mmio_diff(
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::MmioDiffDocument {
                 schema: oer_tool_analysis_cli::wire::MMIO_DIFF_SCHEMA,
+                analysis_resources: limits.resources(&memory, &control, limited)?,
                 old: described(&old_inputs, &old),
                 new: described(&new_inputs, &new),
                 abi: assumptions.abi,
@@ -786,6 +827,11 @@ fn symbols(
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::SymbolsDocument {
                 schema: oer_tool_analysis_cli::wire::SYMBOLS_SCHEMA,
+                analysis_resources: limits.resources(
+                    &memory,
+                    &control,
+                    AnalysisLimited::default(),
+                )?,
                 inputs: described(&inputs, &executables),
                 symbols: rows,
             };
@@ -846,6 +892,11 @@ fn strings(
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::StringsDocument {
                 schema: oer_tool_analysis_cli::wire::STRINGS_SCHEMA,
+                analysis_resources: limits.resources(
+                    &memory,
+                    &control,
+                    AnalysisLimited::default(),
+                )?,
                 inputs: described(&inputs, &executables),
                 strings: rows,
             };
@@ -1066,7 +1117,8 @@ fn register_accesses(
         out.write_all(b",\"records\":[").map_err(io_error)?;
     }
     let mut first = true;
-    let summary = app::library::register_accesses(
+    let mut projected = AnalysisLimited::default();
+    let (summary, mut limited) = app::library::register_accesses(
         &executables,
         assumptions,
         &ranges,
@@ -1076,6 +1128,9 @@ fn register_accesses(
         &mut |record, _| {
             if !filter.keeps(record) {
                 return Ok(());
+            }
+            if let Some(reason) = app::library::register_limit_reason(record) {
+                projected.result(reason);
             }
             if let Some(groups) = groups.as_mut() {
                 groups.add(record);
@@ -1114,6 +1169,16 @@ fn register_accesses(
             Ok(())
         },
     )?;
+    for failure in summary
+        .rom_signature_summary_unavailable
+        .iter()
+        .chain(&summary.signature_audit_incomplete)
+    {
+        if let ErrorCode::LocalBudgetExceeded(budget) = failure.reason.code {
+            projected.result(LimitReason::LocalBudget(budget.scope));
+        }
+    }
+    limited.project_results(&projected);
     if json {
         out.write_all(b"]").map_err(io_error)?;
         if let Some(groups) = &groups {
@@ -1126,8 +1191,10 @@ fn register_accesses(
         }
         write!(
             out,
-            ",\"summary\":{}}}",
-            serde_json::to_string(&summary).map_err(json_error)?
+            ",\"summary\":{},\"analysis_resources\":{}}}",
+            serde_json::to_string(&summary).map_err(json_error)?,
+            serde_json::to_string(&limits.resources(&memory, &control, limited)?)
+                .map_err(json_error)?
         )
         .map_err(io_error)?;
         writeln!(out).map_err(io_error)?;
@@ -1218,6 +1285,7 @@ fn call_arguments(
     let mut callers = Vec::new();
     let mut blocked = Vec::new();
     let app::library::QuerySummary {
+        limited,
         partial,
         partial_causes,
         gaps,
@@ -1244,6 +1312,7 @@ fn call_arguments(
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::CallArgumentsDocument {
                 schema: oer_tool_analysis_cli::wire::CALL_ARGUMENTS_SCHEMA,
+                analysis_resources: limits.resources(&memory, &control, limited)?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
@@ -1380,6 +1449,11 @@ fn callers(
         Format::Json => {
             let document = oer_tool_analysis_cli::wire::CallersDocument {
                 schema: oer_tool_analysis_cli::wire::CALLERS_SCHEMA,
+                analysis_resources: limits.resources(
+                    &memory,
+                    &control,
+                    summary.analysis.limited.clone(),
+                )?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
@@ -1525,6 +1599,39 @@ mod cli_tests {
         ])
         .unwrap();
         assert!(matches!(cli.format, Format::Json));
+    }
+
+    #[test]
+    fn cli_flags_are_the_effective_resource_limits() {
+        let cli = Cli::try_parse_from([
+            "blobray",
+            "symbols",
+            "--input",
+            "library=a.elf",
+            "--working-memory-mib",
+            "7",
+            "--timeout-secs",
+            "19",
+            "--max-work-units",
+            "12345",
+        ])
+        .expect("resource flags");
+        let Command::Symbols { limits, .. } = cli.command else {
+            panic!("symbols command")
+        };
+        let memory = limits.memory().expect("memory");
+        let resources = limits
+            .resources(&memory, &limits.control(), AnalysisLimited::default())
+            .expect("resource report");
+        assert_eq!(resources.profile, AnalysisProfile::BlobrayCli);
+        assert_eq!(
+            resources.limits.operation,
+            OperationLimits {
+                work_units: 12345,
+                working_memory_bytes: 7 * MIB,
+                timeout_ms: 19000
+            }
+        );
     }
 
     #[test]

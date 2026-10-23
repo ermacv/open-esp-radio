@@ -9,9 +9,9 @@ use oer_analysis_riscv_model::{
 use serde::{Deserialize, Serialize};
 
 /// Schema of the `register-accesses` document
-/// (`{"schema":12,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+/// (`{"schema":13,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 /// `groups` only with `--group-by`, `call_results` only for selected result sources).
-pub const REGISTER_ACCESSES_SCHEMA: u32 = 12;
+pub const REGISTER_ACCESSES_SCHEMA: u32 = 13;
 
 /// One analyzed input of a `register-accesses` document, by position.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,6 +26,7 @@ pub struct RegisterAccessInput {
 #[serde(deny_unknown_fields)]
 pub struct RegisterAccessDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     /// Selected callee names; absent for the load-only query.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub call_results: Vec<String>,
@@ -47,10 +48,10 @@ pub struct RegisterAccessDocument {
 }
 
 /// Schema of the `function-records` document
-/// (`{"schema":10,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"functions":[...],"missing":[...]}`).
-pub const FUNCTION_RECORDS_SCHEMA: u32 = 10;
-pub const FIELD_ACCESSES_SCHEMA: u32 = 6;
-pub const CALLERS_SCHEMA: u32 = 5;
+/// (`{"schema":11,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"functions":[...],"missing":[...]}`).
+pub const FUNCTION_RECORDS_SCHEMA: u32 = 11;
+pub const FIELD_ACCESSES_SCHEMA: u32 = 7;
+pub const CALLERS_SCHEMA: u32 = 6;
 
 /// Every memory access of the analyzed functions that lands on one field
 /// offset, as a field of its root ([`oer_analysis_blobray_application::field`]), and the functions no
@@ -59,6 +60,7 @@ pub const CALLERS_SCHEMA: u32 = 5;
 #[serde(deny_unknown_fields)]
 pub struct FieldAccessesDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -93,6 +95,7 @@ pub struct FieldAccessesDocument {
 #[serde(deny_unknown_fields)]
 pub struct FunctionRecordsDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -134,6 +137,7 @@ pub enum NamedFunction {
 #[serde(deny_unknown_fields)]
 pub struct CallersDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -158,14 +162,15 @@ pub struct CallersDocument {
 }
 
 /// Schema of the `call-arguments` document
-/// (`{"schema":6,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`).
-pub const CALL_ARGUMENTS_SCHEMA: u32 = 6;
+/// (`{"schema":7,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`).
+pub const CALL_ARGUMENTS_SCHEMA: u32 = 7;
 
 /// The argument registers at every call site of the named functions.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CallArgumentsDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -190,13 +195,14 @@ pub struct CallArgumentsDocument {
 }
 
 /// Schema of the `mmio-diff` document.
-pub const MMIO_DIFF_SCHEMA: u32 = 5;
+pub const MMIO_DIFF_SCHEMA: u32 = 6;
 
 /// The MMIO difference of two builds.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MmioDiffDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub old: Vec<RegisterAccessInput>,
     pub new: Vec<RegisterAccessInput>,
     pub abi: Option<CallAbi>,
@@ -208,26 +214,28 @@ pub struct MmioDiffDocument {
     pub diff: oer_analysis_blobray_domain::MmioDiff,
 }
 
-/// Schema of the `symbols` document (`{"schema":1,"inputs":[...],"symbols":[...]}`).
-pub const SYMBOLS_SCHEMA: u32 = 1;
+/// Schema of the `symbols` document (`{"schema":2,"inputs":[...],"symbols":[...]}`).
+pub const SYMBOLS_SCHEMA: u32 = 2;
 
 /// The defined function and data symbols of the inputs.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SymbolsDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     pub symbols: Vec<oer_analysis_blobray_application::symbols::SymbolRow>,
 }
 
-/// Schema of the `strings` document (`{"schema":1,"inputs":[...],"strings":[...]}`).
-pub const STRINGS_SCHEMA: u32 = 1;
+/// Schema of the `strings` document (`{"schema":2,"inputs":[...],"strings":[...]}`).
+pub const STRINGS_SCHEMA: u32 = 2;
 
 /// The NUL-terminated text of the inputs' read-only data sections.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StringsDocument {
     pub schema: u32,
+    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     pub strings: Vec<oer_analysis_blobray_application::symbols::StringRow>,
 }

@@ -27,6 +27,7 @@ struct OwnedSummary<'m> {
     _results: MemoryReservation<'m>,
 }
 struct Entry<'m> {
+    limits: FunctionLimits,
     function: Option<LibraryFunction>,
     object: Option<usize>,
     key: Option<CallKey>,
@@ -215,6 +216,7 @@ impl<'m> Summaries<'m> {
                     function,
                     object: None,
                     key,
+                    limits: FunctionLimits::default(),
                     summary: SummaryOutcome::NoProof,
                     edges: AdmittedVec::new(memory),
                     discovery: usize::MAX,
@@ -442,6 +444,7 @@ pub(super) fn analyze<'a>(
                     return Err(integrity());
                 };
                 table.entry_mut(id)?.object = Some(object_id);
+                let mut limits = FunctionLimits::default();
                 let records = match research(
                     &mut objects,
                     object_id,
@@ -450,6 +453,7 @@ pub(super) fn analyze<'a>(
                     &NoSummaries,
                     decoder,
                     memory,
+                    &mut limits,
                     c,
                 ) {
                     Ok((records, _, _, _)) => records,
@@ -466,6 +470,7 @@ pub(super) fn analyze<'a>(
                     }
                     Err(e) => return Err(e),
                 };
+                table.entry_mut(id)?.limits = limits;
                 let facts = function_facts(&function, &records, memory, c)?;
                 let links = CallLinks::new(&facts, &function, catalog, memory, c)?;
                 let mut edges = AdmittedVec::new(memory);
@@ -559,6 +564,7 @@ pub(super) fn analyze<'a>(
             }
             let recursive = component.len() > 1 || table.entry(id)?.edges.contains(&id);
             for member in component.iter().copied() {
+                let mut limits = table.entry(member)?.limits.clone();
                 let object = table.entry(member)?.object;
                 let mut contract = SummaryOutcome::NoProof;
                 let mut disable_contract = false;
@@ -584,6 +590,7 @@ pub(super) fn analyze<'a>(
                         &scoped,
                         decoder,
                         memory,
+                        &mut limits,
                         c,
                     ) {
                         Ok((mut records, mut summary, mut found, mut expression_budget)) => {
@@ -616,6 +623,7 @@ pub(super) fn analyze<'a>(
                                         memory,
                                         &mut raw_conflicts,
                                         &mut entry_complete,
+                                        &mut limits,
                                         c,
                                     )?
                                 } else if entry_required || rom_signature.is_some() {
@@ -628,6 +636,7 @@ pub(super) fn analyze<'a>(
                                         memory,
                                         &mut raw_conflicts,
                                         &mut entry_complete,
+                                        &mut limits,
                                         c,
                                     )?;
                                     SummaryOutcome::NoProof
@@ -653,6 +662,7 @@ pub(super) fn analyze<'a>(
                                         decoder,
                                         memory,
                                         &mut raw_conflicts,
+                                        &mut limits,
                                         c,
                                     ) {
                                         Ok(SummaryOutcome::Available(())) => {
@@ -690,6 +700,7 @@ pub(super) fn analyze<'a>(
                                     &scoped,
                                     decoder,
                                     memory,
+                                    &mut limits,
                                     c,
                                 )?;
                                 if publish && expression_budget.is_none() {
@@ -706,6 +717,7 @@ pub(super) fn analyze<'a>(
                                         memory,
                                         &mut raw_conflicts,
                                         &mut None,
+                                        &mut limits,
                                         c,
                                     )?;
                                 }
@@ -852,6 +864,7 @@ pub(super) fn analyze<'a>(
                                 contract = SummaryOutcome::LocalBudgetExceeded(reason);
                             }
                             let analyzed = AnalyzedFunction {
+                                limits,
                                 function,
                                 records: &records,
                                 coverage: summary.coverage,
@@ -902,6 +915,7 @@ fn research<'a>(
     summaries: &dyn CallSummaries,
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
+    limits: &mut FunctionLimits,
     c: &mut dyn RunControl,
 ) -> Result<(
     RecordBuffer<'a>,
@@ -939,6 +953,7 @@ fn research<'a>(
         c,
         &mut sink,
     )?;
+    limits.merge(&FunctionLimits::value_events(summary.limit_events));
     let budget = sink.expression_budget();
     Ok((records, summary, found, budget))
 }
@@ -1011,6 +1026,7 @@ fn produce<'a>(
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
     audit_complete: &mut Option<SummaryOutcome<()>>,
+    limits: &mut FunctionLimits,
     c: &mut dyn RunControl,
 ) -> Result<SummaryOutcome<OwnedSummary<'a>>> {
     let (arguments, argument_memory) = match argument_summary(
@@ -1022,6 +1038,7 @@ fn produce<'a>(
         memory,
         conflicts,
         audit_complete,
+        limits,
         c,
     )? {
         SummaryOutcome::Available(value) => value,
@@ -1067,6 +1084,7 @@ fn argument_summary<'a>(
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
     audit_complete: &mut Option<SummaryOutcome<()>>,
+    limits: &mut FunctionLimits,
     c: &mut dyn RunControl,
 ) -> Result<SummaryOutcome<(ArgumentSummary, MemoryReservation<'a>)>> {
     let audit = rom_signature.is_some()
@@ -1084,7 +1102,9 @@ fn argument_summary<'a>(
         summaries: &unshaped,
     };
     if !audit {
-        return program.summarize(&calls, memory, c);
+        let result = program.summarize(&calls, memory, c)?;
+        limits.outcome(&result);
+        return Ok(result);
     }
     let mut observe = |origin, usage: &ReadUse, c: &mut dyn RunControl| {
         let conflict = match origin {
@@ -1104,6 +1124,7 @@ fn argument_summary<'a>(
         Ok(())
     };
     let result = program.summarize_observed(&calls, memory, c, &mut observe)?;
+    limits.outcome(&result);
     *audit_complete = Some(result.status());
     Ok(result)
 }
@@ -1116,6 +1137,7 @@ fn audit<'a>(
     decoder: &dyn FunctionSemantics,
     memory: &'a WorkingMemory,
     conflicts: &mut AdmittedVec<'a, RawConflict>,
+    limits: &mut FunctionLimits,
     c: &mut dyn RunControl,
 ) -> Result<SummaryOutcome<()>> {
     let program = ArgumentProgram::capture(facts, decoder, memory, c)?;
@@ -1126,9 +1148,9 @@ fn audit<'a>(
         }
         Ok(())
     };
-    Ok(program
-        .audit(&calls, memory, c, &mut observe, entries)?
-        .status())
+    let result = program.audit(&calls, memory, c, &mut observe, entries)?;
+    limits.outcome(&result);
+    Ok(result.status())
 }
 fn record_conflict(
     conflicts: &mut AdmittedVec<'_, RawConflict>,
@@ -1347,6 +1369,7 @@ mod tests {
                 &decoder,
                 memory,
                 &mut conflicts,
+                &mut FunctionLimits::default(),
                 c,
             )
         } else {
@@ -1360,6 +1383,7 @@ mod tests {
                 memory,
                 &mut conflicts,
                 &mut None,
+                &mut FunctionLimits::default(),
                 c,
             )?
             .status())
@@ -1451,6 +1475,7 @@ mod tests {
         let catalog = Callees::capture(&[], &memory, &mut || Ok(())).expect("catalog");
         let mut table = Summaries::new(&catalog, None, &memory, &mut || Ok(())).expect("table");
         let mut counts = SummaryOutcomeCounts::default();
+        let mut resources = AnalysisLimited::default();
         let reason = LocalBudgetExceeded {
             limit: 100_000,
             scope: LocalBudgetScope::ArgumentSummary,
@@ -1468,13 +1493,27 @@ mod tests {
             SummaryOutcome::LocalBudgetExceeded(reason),
         ] {
             let id = table.entries.len();
+            let name = format!("callee-{id}").into_bytes();
+            let key = CallKey::Symbol(name.clone());
+            table.groups.symbols.insert(
+                name.clone(),
+                Group {
+                    members: vec![id],
+                    remaining: 1,
+                    representative: None,
+                    conflict: false,
+                },
+            );
+            let mut produced = FunctionLimits::default();
+            produced.outcome(&outcome);
             table
                 .entries
                 .push(
                     Entry {
                         function: None,
                         object: None,
-                        key: None,
+                        key: Some(key),
+                        limits: produced,
                         summary: SummaryOutcome::NoProof,
                         edges: AdmittedVec::new(&memory),
                         discovery: 0,
@@ -1488,8 +1527,20 @@ mod tests {
             table.finish(id, outcome).expect("finish");
             let actual = table.entry(id).expect("stored entry").summary.status();
             assert_eq!(actual, expected);
+            for _ in 0..5 {
+                assert_eq!(
+                    table.summary(Callee::Symbol(&name)).is_some(),
+                    matches!(actual, SummaryOutcome::Available(()))
+                );
+            }
+            resources.function(&table.entry(id).expect("cached entry").limits);
             counts.record(actual);
         }
+        assert_eq!(resources.functions, 1);
+        assert_eq!(
+            resources.events_by_reason[0].events, 1,
+            "cached lookups never recount production"
+        );
         assert_eq!(
             counts,
             SummaryOutcomeCounts {

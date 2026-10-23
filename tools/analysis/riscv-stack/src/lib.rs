@@ -123,6 +123,8 @@ pub struct FunctionFacts {
     pub complete: bool,
     /// This function reached its local expression capacity.
     pub expression_limited: bool,
+    /// Expression-capacity and value-alternative typed events, in that order.
+    pub limit_events: [u64; 2],
     /// Every direct self-call constructs inputs that execute no further
     /// direct self-call, proved from instructions and stack payload bytes.
     pub terminal_recursive_callees: bool,
@@ -799,6 +801,7 @@ fn function_facts(
         unresolved_registers,
         complete: observation.complete,
         expression_limited: observation.expression_limited,
+        limit_events: observation.limit_events,
         terminal_recursive_callees,
         target_loads,
         open_exit_target_loads,
