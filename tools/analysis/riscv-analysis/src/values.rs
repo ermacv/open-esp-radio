@@ -1305,6 +1305,22 @@ fn analyze_with_symbols<'m, 's>(
             emitted += 1;
         }
         if input.image.is_some() {
+            let followed = if matches!(
+                node.decoded.flow,
+                InstructionFlow::Indirect { link: false, .. }
+            ) {
+                super::known_jump(input.jumps, node.offset, control)?
+            } else {
+                None
+            };
+            let mut followed_local = followed.is_some_and(|jump| !jump.targets.is_empty());
+            if let Some(jump) = followed {
+                for &target in &jump.targets {
+                    control.checkpoint(1)?;
+                    followed_local &= target >= input.extent.start
+                        && target < input.extent.start + input.extent.length;
+                }
+            }
             let transfer = match node.decoded.flow {
                 InstructionFlow::Jump { displacement, link } => {
                     let address = (node.offset as u32).wrapping_add(displacement as u32);
@@ -1328,9 +1344,11 @@ fn analyze_with_symbols<'m, 's>(
                     let is_local = |v: &Value| matches!(v, Value::Image(a) if u64::from(*a) >= input.extent.start && u64::from(*a) < input.extent.start + input.extent.length);
                     let local = targets.values[..targets.len].iter().all(is_local);
                     if !link && targets.values[..targets.len].iter().any(is_local) {
-                        effects
-                            .gap
-                            .get_or_insert(SemanticGapReason::UnexpandedControlFlow);
+                        if !followed_local {
+                            effects
+                                .gap
+                                .get_or_insert(SemanticGapReason::UnexpandedControlFlow);
+                        }
                         // The registers at a jump the graph does not expand
                         // yet, such as one through a jump table whose base a
                         // register holds: a caller that reads the table from
@@ -1371,16 +1389,13 @@ fn analyze_with_symbols<'m, 's>(
                         control,
                     )?;
                 }
-                // A jump the graph follows through a known table, whose
-                // target the values leave unknown, goes where the table's
-                // edges go: no opaque transfer and no gap. Targets the values
-                // resolve stay transfers. Its registers stay for a caller
-                // that proves the table again.
-                let followed = !call
-                    && matches!(target, Value::Unknown | Value::Widened)
-                    && matches!(node.decoded.flow, InstructionFlow::Indirect { .. })
-                    && super::known_jump(input.jumps, node.offset, control)?.is_some();
-                if !followed {
+                // A proven local table's edges own its targets, even when
+                // values retain alternatives excluded by the guarding bound.
+                // Keep the pre-jump registers for proof revalidation. Proven
+                // external tails still emit their resolved Transfer facts.
+                if !(followed_local
+                    || followed.is_some() && matches!(target, Value::Unknown | Value::Widened))
+                {
                     effects.gap.get_or_insert(SemanticGapReason::OpaqueCall);
                     sink.record(
                         &FunctionRecord::Transfer {
@@ -2688,6 +2703,17 @@ mod tests {
                         external: false,
                     })
                     .collect();
+                // Noreturn analysis also follows proven external tails. Their
+                // Transfer facts must survive, including when a link makes
+                // this a call rather than a graph-followed jump.
+                let jumps = if targets.iter().all(|&target| target >= 0x1000) {
+                    vec![KnownJump {
+                        site: last as u64 * 2,
+                        targets: targets.iter().map(|&target| u64::from(target)).collect(),
+                    }]
+                } else {
+                    Vec::new()
+                };
                 let input = FunctionInput {
                     traps: crate::TrapSemantics::Unknown,
                     image: Some(&Image),
@@ -2699,7 +2725,7 @@ mod tests {
                     bytes: &bytes,
                     relocations: &PreparedReferences::empty(),
                     data_ranges: &[],
-                    jumps: &[],
+                    jumps: &jumps,
                     returns: &NoSummaries,
                     call_behavior: &UnknownCallBehavior,
                 };
