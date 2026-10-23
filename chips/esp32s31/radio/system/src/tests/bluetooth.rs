@@ -1,22 +1,28 @@
 use super::*;
-use core::convert::Infallible;
 use oer_esp32s31_radio_client::bluetooth::{
     self, Bluetooth, BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission,
 };
 
-impl ClientBackend<Bluetooth, RcSlow> for Model {
-    fn admits(&self, _: &BluetoothJoin) -> bool {
-        let script = self.0.borrow();
+struct ModelAttachment;
+impl BluetoothBackend<Model, RcSlow> for ModelAttachment {
+    fn attached(&mut self, _: &mut Model) {}
+    fn detached(&mut self, _: &mut Model) {}
+    fn is_stopped(&self, shared: &Model) -> bool {
+        !shared.0.borrow().bluetooth
+    }
+    fn admits(&self, shared: &Model, _: &BluetoothJoin) -> bool {
+        let script = shared.0.borrow();
         script.ble_available && !script.bluetooth
     }
     async fn enter(
         &mut self,
+        shared: &mut Model,
         _: BluetoothJoin,
         phy: PhyPreparation,
         _: &LpClock<RcSlow>,
     ) -> Result<BluetoothJoined, Failed<BluetoothJoin>> {
-        self.push(Event::BleEnter);
-        let mut script = self.0.borrow_mut();
+        shared.push(Event::BleEnter);
+        let mut script = shared.0.borrow_mut();
         assert!(
             !script.bluetooth,
             "a second role must use the existing Bluetooth client"
@@ -31,13 +37,16 @@ impl ClientBackend<Bluetooth, RcSlow> for Model {
     }
     async fn track(
         &mut self,
+        shared: &mut Model,
         installation: Installation,
     ) -> Result<Installation, Failed<Installation>> {
-        self.push(Event::BleTrack);
+        shared.push(Event::BleTrack);
         // Model an asynchronous initial tracking transaction, including a
         // suspension while the other client's request stays in its own cell.
+        shared.0.borrow_mut().ble_tracking = true;
         yield_now().await;
-        if self.0.borrow().ble_fault {
+        shared.0.borrow_mut().ble_tracking = false;
+        if shared.0.borrow().ble_fault {
             Err(Failed {
                 returned: installation,
                 cause: Failure::Poisoned,
@@ -46,12 +55,13 @@ impl ClientBackend<Bluetooth, RcSlow> for Model {
             Ok(installation)
         }
     }
-    async fn retune(&mut self, never: Infallible) -> Result<Infallible, Failed<Infallible>> {
-        match never {}
-    }
-    async fn exit(&mut self, installation: Installation) -> (BluetoothLeft, Exit) {
-        self.push(Event::BleExit);
-        let mut script = self.0.borrow_mut();
+    async fn exit(
+        &mut self,
+        shared: &mut Model,
+        installation: Installation,
+    ) -> (BluetoothLeft, Exit) {
+        shared.push(Event::BleExit);
+        let mut script = shared.0.borrow_mut();
         if installation.0 != script.ble_installation || !script.ble_stopped {
             return (
                 BluetoothLeft { stopped: false },
@@ -101,9 +111,13 @@ fn multi<F: Future<Output = ()>>(
         model.clone(),
         clock(),
         LpClock::<RcSlow>::for_host_test(),
-    )
-    .with_bluetooth(inbox);
-    match block_on(select(actor.run(), client(cells, ble))) {
+    );
+    let mut attachment = ModelAttachment;
+    let mut attached = actor
+        .attach_bluetooth(inbox, &mut attachment)
+        .ok()
+        .expect("one model attachment");
+    match block_on(select(attached.run(), client(cells, ble))) {
         Either::First(never) => match never {},
         Either::Second(()) => {}
     }
@@ -323,4 +337,168 @@ fn a_second_role_cannot_join_another_bluetooth_client() {
             Event::CloseRf
         ]
     );
+}
+
+#[test]
+fn runtime_handover_waits_for_the_entered_tracking_transaction() {
+    use core::pin::pin;
+    let model = model(Script {
+        ble_available: true,
+        ..Script::default()
+    });
+    let (end, _) = claim_for_host_test();
+    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock(),
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    let mut attachment = ModelAttachment;
+    let mut attached = actor
+        .attach_bluetooth(inbox, &mut attachment)
+        .ok()
+        .expect("one model attachment");
+    let mut client = pin!(async {
+        let (ble, joined) = ble.join(join()).await;
+        let joined = joined.expect("accepted BLE join");
+        let (ble, tracked) = ble.track(joined.member, joined.payload.installation).await;
+        (ble, tracked.expect("completed initial tracking"))
+    });
+    let boundary = poll_fn(|cx| {
+        assert!(
+            !model.0.borrow().ble_tracking,
+            "a runtime handover never polls through an entered RF transaction"
+        );
+        client.as_mut().poll(cx)
+    });
+    let (ble, tracked) = block_on(attached.run_until(boundary));
+    assert!(!model.0.borrow().ble_tracking);
+    assert!(matches!(model.log().last(), Some(Event::BleTrack)));
+    // The same actor, RF epoch and member now perform the ordinary leave.
+    model.0.borrow_mut().ble_stopped = true;
+    let left =
+        block_on(attached.run_until(ble.leave(Leaving::Tracked(tracked.member), tracked.payload)));
+    assert!(left.1.payload.stopped);
+    assert_eq!(model.log().last(), Some(&Event::CloseRf));
+    let out = block_on(attached.run_until(core::future::ready(42)));
+    assert_eq!(out, 42);
+}
+
+#[test]
+fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
+    let model = model(Script {
+        ble_available: true,
+        ..Script::default()
+    });
+    let (end, _) = claim_for_host_test();
+    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock(),
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    let backend = core::ptr::from_ref(&actor.backend);
+    let core = core::ptr::from_ref(&actor.core);
+    let mut attachment = ModelAttachment;
+    let mut attached = actor
+        .attach_bluetooth(inbox, &mut attachment)
+        .ok()
+        .expect("one model attachment");
+    let (ble, joined) = block_on(attached.run_until(ble.join(join())));
+    let joined = joined.expect("first installation");
+    let epoch = joined.epoch;
+    let mut attached = attached
+        .detach()
+        .err()
+        .expect("a live installation retains its loan");
+    model.0.borrow_mut().ble_stopped = true;
+    let (ble, left) = block_on(attached.run_until(ble.leave(
+        Leaving::Untracked(joined.member),
+        joined.payload.installation,
+    )));
+    assert!(left.payload.stopped);
+    let inbox = attached.detach().ok().expect("normal stop detaches");
+    assert_eq!(backend, core::ptr::from_ref(&actor.backend));
+    assert_eq!(core, core::ptr::from_ref(&actor.core));
+    let mut attached = actor
+        .attach_bluetooth(inbox, &mut attachment)
+        .ok()
+        .expect("reinstall same actor");
+    let (ble, joined) = block_on(attached.run_until(ble.join(join())));
+    let joined = joined.expect("fresh installation");
+    assert_ne!(epoch, joined.epoch);
+    model.0.borrow_mut().ble_stopped = true;
+    let (_, left) = block_on(attached.run_until(ble.leave(
+        Leaving::Untracked(joined.member),
+        joined.payload.installation,
+    )));
+    assert!(left.payload.stopped);
+    let _ = attached.detach().ok().expect("second normal stop");
+}
+
+#[test]
+fn an_abandoned_attachment_loan_cannot_open_a_second_seat() {
+    let model = model(Script::default());
+    let (end, _) = claim_for_host_test();
+    let (one, _) = bluetooth::claim_for_host_test(end.doorbell);
+    let (two, _) = bluetooth::claim_for_host_test(end.doorbell);
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock(),
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    let mut a = ModelAttachment;
+    let mut b = ModelAttachment;
+    {
+        let _loan = actor
+            .attach_bluetooth(one, &mut a)
+            .ok()
+            .expect("first seat");
+    }
+    let _returned = actor
+        .attach_bluetooth(two, &mut b)
+        .err()
+        .expect("no fresh authority after abandonment");
+    assert!(model.log().is_empty());
+}
+
+#[test]
+fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
+    let model = model(Script {
+        ble_available: true,
+        fail_prepare: true,
+        ..Script::default()
+    });
+    let (end, _) = claim_for_host_test();
+    let (inbox, ble) = bluetooth::claim_for_host_test(end.doorbell);
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock(),
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    let mut a = ModelAttachment;
+    let mut loan = actor
+        .attach_bluetooth(inbox, &mut a)
+        .ok()
+        .expect("first loan");
+    let (ble, failed) = block_on(loan.run_until(ble.join(join())));
+    assert_eq!(
+        failed.err().expect("failed prepare").cause,
+        Failure::Poisoned
+    );
+    let inbox = loan.detach().ok().expect("no Bluetooth hardware entered");
+    let mut loan = actor
+        .attach_bluetooth(inbox, &mut a)
+        .ok()
+        .expect("same common domain");
+    let (_, failed) = block_on(loan.run_until(ble.join(join())));
+    assert_eq!(
+        failed.err().expect("poison persists").cause,
+        Failure::Poisoned
+    );
+    assert_eq!(model.log(), vec![Event::Prepare(Err(Fault))]);
 }

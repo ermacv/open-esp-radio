@@ -108,23 +108,12 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit);
 }
 
-#[derive(Debug, Default)]
-struct State {
-    poisoned: bool,
-    members: u32,
-    tracked: u32,
-    epoch: Option<RfEpoch>,
-}
-
-/// Client-neutral membership and RF epoch custody.
-struct ActorCore {
-    mint: MemberMint,
-    state: State,
-}
+mod actor_core;
+mod boundary;
+use actor_core::{Action, ActorCore};
 
 /// The radio system's actor for the client `K`.
-pub struct RadioSystem<K: Client, S: LpSource, B, T, E = ()> {
-    extra: E,
+pub struct RadioSystem<K: Client, S: LpSource, B, T> {
     backend: B,
     timer: T,
     lp: LpClock<S>,
@@ -147,8 +136,7 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wif
             lp,
             doorbell,
             inbox: wifi,
-            extra: (),
-            core: ActorCore { mint, state: State::default() },
+            core: ActorCore::new(mint),
         }
     }
 }
@@ -161,7 +149,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                 let answer = self.serve(request).await;
                 responder.answer(answer);
             }
-            let deadline = (!self.core.state.poisoned && self.core.state.tracked > 0)
+            let deadline = (self.core.tracking_active())
                 .then(|| self.backend.tracking_deadline())
                 .flatten();
             let doorbell = self.doorbell;
@@ -181,30 +169,28 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
     }
 }
 
-impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K, S, B, T, E> {
+impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S, B, T> {
     /// Access backend-local runtime ownership between separate borrows of run.
     /// The mutable borrow prevents the actor from running concurrently.
     pub fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
     }
 
-    /// Change a composition's backend while preserving the one actor's RF state.
-    pub fn map_backend<N: PhyDomain>(self, map: impl FnOnce(B) -> N) -> RadioSystem<K, S, N, T, E> {
-        RadioSystem {
-            backend: map(self.backend),
-            timer: self.timer,
-            lp: self.lp,
-            doorbell: self.doorbell,
-            inbox: self.inbox,
-            core: self.core,
-            extra: self.extra,
-        }
+    fn tick(&mut self) -> impl core::future::Future<Output = ()> {
+        boundary::Boundary::new(async {
+            if self.backend.track_tick().await.is_err() {
+                self.core.poison();
+            }
+        })
     }
 
-    async fn tick(&mut self) {
-        if self.backend.track_tick().await.is_err() {
-            self.core.state.poisoned = true;
-        }
+    fn prepare(
+        &mut self,
+    ) -> impl core::future::Future<Output = Result<(PhyPreparation, RfEpoch), Failure>> {
+        boundary::Boundary::new(async {
+            let phy = self.backend.prepare().await;
+            self.core.prepared(phy)
+        })
     }
 
     async fn serve<Q: Client>(&mut self, request: Request<Q>) -> Answer<Q>
@@ -214,7 +200,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
         match request {
             Request::Join(join) => Answer::Join(self.join::<Q>(join).await),
             Request::Track(member, track) => {
-                if self.core.state.poisoned {
+                if self.core.is_poisoned() {
                     return Answer::Track(Err(Failed {
                         returned: (member, Q::track_returned(track)),
                         cause: Failure::Poisoned,
@@ -222,16 +208,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 }
                 Answer::Track(match self.backend.track(track).await {
                     Ok(payload) => {
-                        self.core.state.tracked += 1;
+                        self.core.tracked();
                         Ok(TrackedMember {
                             member: self.core.mint.track(member),
                             payload,
                         })
                     }
                     Err(Failed { returned, cause }) => {
-                        if cause == Failure::Poisoned {
-                            self.core.state.poisoned = true;
-                        }
+                        self.core.failed(cause);
                         Err(Failed {
                             returned: (member, returned),
                             cause,
@@ -240,7 +224,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 })
             }
             Request::Retune(member, retune) => {
-                if self.core.state.poisoned {
+                if self.core.is_poisoned() {
                     return Answer::Retune(Err(Failed {
                         returned: (member, Q::retune_returned(retune)),
                         cause: Failure::Poisoned,
@@ -249,9 +233,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 Answer::Retune(match self.backend.retune(retune).await {
                     Ok(payload) => Ok(oer_esp32s31_radio_client::RetunedMember { member, payload }),
                     Err(Failed { returned, cause }) => {
-                        if cause == Failure::Poisoned {
-                            self.core.state.poisoned = true;
-                        }
+                        self.core.failed(cause);
                         Err(Failed {
                             returned: (member, returned),
                             cause,
@@ -267,7 +249,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
     where
         B: ClientBackend<Q, S>,
     {
-        if self.core.state.poisoned {
+        if self.core.is_poisoned() {
             return Err(Failed {
                 returned: Q::join_returned(join),
                 cause: Failure::Poisoned,
@@ -279,27 +261,18 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 cause: Failure::Refused,
             });
         }
-        let phy = match self.backend.prepare().await {
-            Ok(phy) => phy,
-            Err(Fault) => {
-                self.core.state.poisoned = true;
+        let (phy, epoch) = match self.prepare().await {
+            Ok(prepared) => prepared,
+            Err(cause) => {
                 return Err(Failed {
                     returned: Q::join_returned(join),
-                    cause: Failure::Poisoned,
+                    cause,
                 });
             }
         };
-        if phy != PhyPreparation::AlreadyOpen {
-            self.core.state.epoch = Some(self.core.mint.next_epoch(self.core.state.epoch));
-        }
-        let epoch = self.core
-            .state
-            .epoch
-            .unwrap_or_else(|| self.core.mint.next_epoch(None));
-        self.core.state.epoch = Some(epoch);
         match self.backend.enter(join, phy, &self.lp).await {
             Ok(payload) => {
-                self.core.state.members += 1;
+                self.core.joined();
                 Ok(Joined {
                     member: self.core.mint.untracked(),
                     epoch,
@@ -307,18 +280,12 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 })
             }
             Err(Failed { returned, cause }) => {
-                if cause == Failure::Poisoned {
-                    self.core.state.poisoned = true;
-                } else if self.core.state.members == 0 {
+                if matches!(self.core.failed_enter(cause), Action::CloseRf) {
                     self.close_rf().await;
                 }
                 Err(Failed {
                     returned,
-                    cause: if self.core.state.poisoned {
-                        Failure::Poisoned
-                    } else {
-                        cause
-                    },
+                    cause: self.core.failure(cause),
                 })
             }
         }
@@ -328,33 +295,23 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
     where
         B: ClientBackend<Q, S>,
     {
-        if let Leaving::Tracked(_) = member {
-            self.core.state.tracked = self.core.state.tracked.saturating_sub(1);
-        }
+        self.core.leaving(matches!(member, Leaving::Tracked(_)));
         self.core.mint.retire(member);
         let (payload, exit) = self.backend.exit(leave).await;
-        self.core.state.members = self.core.state.members.saturating_sub(1);
-        if exit.health == DomainHealth::Poisoned {
-            self.core.state.poisoned = true;
-        } else if exit.last && !self.core.state.poisoned {
+        if matches!(self.core.exited(exit), Action::CloseRf) {
             self.close_rf().await;
         }
         Left {
             payload,
-            domain: if self.core.state.poisoned {
-                DomainHealth::Poisoned
-            } else {
-                DomainHealth::Healthy
-            },
+            domain: self.core.health(),
         }
     }
 
-    async fn close_rf(&mut self) {
-        match self.backend.close_rf(LastClientLeft(())).await {
-            // RF stays open: the next join finds it open in this epoch.
-            Ok(()) | Err(CloseFault::Recoverable) => {}
-            Err(CloseFault::Poisoned) => self.core.state.poisoned = true,
-        }
+    fn close_rf(&mut self) -> impl core::future::Future<Output = ()> {
+        boundary::Boundary::new(async {
+            let result = self.backend.close_rf(LastClientLeft(())).await;
+            self.core.closed(result);
+        })
     }
 }
 
@@ -376,5 +333,7 @@ mod test_clocks;
 #[cfg(feature = "bluetooth")]
 mod bluetooth;
 
+#[cfg(feature = "bluetooth")]
+pub use bluetooth::{BluetoothActor, BluetoothBackend};
 #[cfg(all(target_arch = "riscv32", feature = "bluetooth"))]
-pub use esp32s31::WithBluetooth;
+pub use esp32s31::BluetoothAttachment;
