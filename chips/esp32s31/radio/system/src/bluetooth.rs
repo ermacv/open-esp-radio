@@ -135,7 +135,7 @@ where
             };
             match select(next.as_mut(), wait).await {
                 Either::First(out) => return out,
-                Either::Second(true) => self.actor.tick().await,
+                Either::Second(true) => boundary::shared(self.actor.tick()).await,
                 Either::Second(false) => {}
             }
         }
@@ -184,7 +184,7 @@ where
                     .exit(&mut self.actor.backend, installation)
                     .await;
                 if matches!(self.actor.core.exited(exit), Action::CloseRf) {
-                    self.actor.close_rf().await;
+                    boundary::shared(self.actor.close_rf()).await;
                 }
                 Answer::Leave(Left {
                     payload,
@@ -209,7 +209,7 @@ where
                 cause: Failure::Refused,
             });
         }
-        let phy = match self.actor.backend.prepare().await {
+        let phy = match boundary::shared(self.actor.backend.prepare()).await {
             Ok(phy) => phy,
             Err(Fault) => {
                 self.actor.core.poison();
@@ -235,7 +235,7 @@ where
             }
             Err(Failed { returned, cause }) => {
                 if matches!(self.actor.core.failed_enter(cause), Action::CloseRf) {
-                    self.actor.close_rf().await;
+                    boundary::shared(self.actor.close_rf()).await;
                 }
                 Err(Failed {
                     returned,
