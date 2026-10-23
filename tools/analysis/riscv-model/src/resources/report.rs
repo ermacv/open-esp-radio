@@ -6,6 +6,10 @@ use crate::*;
 pub enum AnalysisProfile {
     BlobrayCli,
     ImageChecks,
+    RegisterInventory,
+    SignatureCorpus,
+    VendorScenario,
+    VendorCopies,
 }
 
 /// Defaults are policy, independent of clocks and of the reporting adapter.
@@ -28,6 +32,21 @@ impl AnalysisProfile {
                 work_units: DEFAULT_WORK_UNITS,
                 working_memory_bytes: 1024 << 20,
                 timeout_ms: 300_000,
+            },
+            Self::RegisterInventory | Self::SignatureCorpus => OperationLimits {
+                work_units: DEFAULT_WORK_UNITS,
+                working_memory_bytes: DEFAULT_WORKING_BYTES,
+                timeout_ms: 3_600_000,
+            },
+            Self::VendorScenario => OperationLimits {
+                work_units: 2_000_000_000,
+                working_memory_bytes: 256 << 20,
+                timeout_ms: 600_000,
+            },
+            Self::VendorCopies => OperationLimits {
+                work_units: 1_000_000_000_000,
+                working_memory_bytes: 8192 << 20,
+                timeout_ms: 1_200_000,
             },
         }
     }
@@ -491,6 +510,23 @@ mod tests {
     }
     #[test]
     fn profiles_keep_the_existing_operation_limits() {
+        for profile in [AnalysisProfile::RegisterInventory, AnalysisProfile::SignatureCorpus] {
+            assert_eq!(profile.limits(), OperationLimits {
+                work_units: 1_000_000_000,
+                working_memory_bytes: 256 << 20,
+                timeout_ms: 3_600_000,
+            });
+        }
+        assert_eq!(AnalysisProfile::VendorScenario.limits(), OperationLimits {
+            work_units: 2_000_000_000,
+            working_memory_bytes: 256 << 20,
+            timeout_ms: 600_000,
+        });
+        assert_eq!(AnalysisProfile::VendorCopies.limits(), OperationLimits {
+            work_units: 1_000_000_000_000,
+            working_memory_bytes: 8192 << 20,
+            timeout_ms: 1_200_000,
+        });
         assert_eq!(
             AnalysisProfile::BlobrayCli.limits(),
             OperationLimits {
