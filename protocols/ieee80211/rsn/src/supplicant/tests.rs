@@ -135,7 +135,14 @@ fn resign_eapol_key_variant(
 }
 
 fn completed_connected() -> (RsnConnectedSupplicant, crate::OwnedEapolFrame<512>, Ptk) {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
     let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
@@ -178,7 +185,14 @@ fn group_kde(key_id: u8, key: u8) -> [u8; 24] {
 
 #[test]
 fn resolves_m1_through_typed_install_and_authenticated_m4() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
 
@@ -234,7 +248,14 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
 
 #[test]
 fn invalid_message3_mic_is_ignored_and_valid_retry_can_install() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
     let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
@@ -389,7 +410,14 @@ fn connected_duplicate_message3_rejects_bad_mic_and_changed_commitment() {
 
 #[test]
 fn a_newer_completed_group_request_cannot_be_rolled_back_by_an_older_owner() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut connected = connected(pmk.derive_ptk(crate::Akm::Psk, context()));
     let frame = |counter| {
@@ -421,7 +449,14 @@ fn a_newer_completed_group_request_cannot_be_rolled_back_by_an_older_owner() {
 
 #[test]
 fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let frame = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [9; 8], &[0x55; 24])
         .unwrap()
@@ -462,7 +497,14 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
 
 #[test]
 fn connected_group_rekey_authenticates_duplicate_before_cached_response() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let frame = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [9; 8], &[0x55; 24])
         .unwrap()
@@ -495,7 +537,14 @@ fn connected_group_rekey_authenticates_duplicate_before_cached_response() {
 
 #[test]
 fn connected_group_rekey_rejects_authenticated_changed_same_replay() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let frame = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [9; 8], &[0x55; 24])
         .unwrap()
@@ -535,7 +584,14 @@ fn connected_group_rekey_rejects_authenticated_changed_same_replay() {
 
 #[test]
 fn failed_group_rekey_does_not_retain_message1_commitment() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let frame = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [9; 8], &[0x55; 24])
         .unwrap()
@@ -567,7 +623,14 @@ fn failed_group_rekey_does_not_retain_message1_commitment() {
 
 #[test]
 fn connected_group_rekey_rejects_bad_mic_and_stale_replay() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let valid = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [0; 8], &[0x55; 24])
         .unwrap()
@@ -642,7 +705,14 @@ fn a_response_deadline_past_the_time_range_is_refused() {
 
 /// A supplicant past Message 1 and the encrypted Message 3 it now awaits.
 fn awaiting_encrypted_message3() -> (RsnStaSupplicant, crate::OwnedEapolFrame<512>, Pmk, Ptk) {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
     let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
@@ -736,7 +806,14 @@ fn completed_handshake_repeated_m3_only_grants_group_installation() {
 
 #[test]
 fn group_key_data_request_owns_verified_bytes_without_blocking_new_authentication() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let frame = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [9; 8], &[0x55; 24])
         .unwrap()
@@ -775,7 +852,14 @@ fn group_key_data_request_owns_verified_bytes_without_blocking_new_authenticatio
 
 #[test]
 fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() {
-    let pmk = Pmk::derive(b"password", b"ssid").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let frame = RsnTxFrame::<512>::group_message1(crate::Akm::Psk, LOCAL, 3, [9; 8], &[0x55; 24])
         .unwrap()

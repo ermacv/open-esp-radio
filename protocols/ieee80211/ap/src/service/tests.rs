@@ -52,7 +52,16 @@ fn signed_message2(
     authenticator_nonce: [u8; 32],
     supplicant_nonce: [u8; 32],
 ) -> OwnedEapolFrame<512> {
-    let ptk = Pmk::derive(b"password", b"test-ap").unwrap().derive_ptk(
+    let ptk = {
+        let mut derivation =
+            oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    }
+    .derive_ptk(
         oer_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
             authenticator_address: AP,
@@ -107,7 +116,15 @@ fn service(
 ) -> AccessPointService<'_, oer_ieee80211_wire::security::spp::Association> {
     AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new(
         AP,
-        Pmk::derive(b"password", b"test-ap").unwrap(),
+        {
+            let mut derivation =
+                oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            loop {
+                if let Some(pmk) = derivation.step() {
+                    break pmk;
+                }
+            }
+        },
         RsnGtk::new(
             oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             true,
@@ -495,7 +512,15 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new(
         AP,
-        Pmk::derive(b"password", b"test-ap").unwrap(),
+        {
+            let mut derivation =
+                oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            loop {
+                if let Some(pmk) = derivation.step() {
+                    break pmk;
+                }
+            }
+        },
         RsnGtk::new(
             oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             true,
@@ -665,7 +690,16 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     assert!(retried_message1.frame().retransmission());
     assert_eq!(retried_message1.frame().as_bytes(), message1.as_bytes());
 
-    let ptk = Pmk::derive(b"password", b"test-ap").unwrap().derive_ptk(
+    let ptk = {
+        let mut derivation =
+            oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    }
+    .derive_ptk(
         oer_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
             authenticator_address: AP,
@@ -867,7 +901,16 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         ApWpa2Progress::None
     ));
 
-    let ptk = Pmk::derive(b"password", b"test-ap").unwrap().derive_ptk(
+    let ptk = {
+        let mut derivation =
+            oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    }
+    .derive_ptk(
         oer_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
             authenticator_address: AP,
@@ -1038,7 +1081,15 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new(
         AP,
-        Pmk::derive(b"password", b"test-ap").unwrap(),
+        {
+            let mut derivation =
+                oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            loop {
+                if let Some(pmk) = derivation.step() {
+                    break pmk;
+                }
+            }
+        },
         RsnGtk::new(
             oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             true,
@@ -1490,7 +1541,15 @@ fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
     let mut storage = AccessPointPeerStorage::new();
     let service = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new(
         AP,
-        Pmk::derive(b"password", b"test-ap").unwrap(),
+        {
+            let mut derivation =
+                oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            loop {
+                if let Some(pmk) = derivation.step() {
+                    break pmk;
+                }
+            }
+        },
         RsnGtk::new(
             oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             true,
@@ -1995,7 +2054,15 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
         let mut storage = AccessPointPeerStorage::new();
         let mut service = AccessPointService::<spp::Interface>::new(
             AP,
-            Pmk::derive(b"password", b"test-ap").unwrap(),
+            {
+                let mut derivation =
+                    oer_ieee80211_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+                loop {
+                    if let Some(pmk) = derivation.step() {
+                        break pmk;
+                    }
+                }
+            },
             RsnGtk::new(
                 oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
                 true,

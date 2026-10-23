@@ -7,6 +7,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::Akm;
 
+mod pbkdf2;
+pub use pbkdf2::PmkDerivation;
+
 pub const PSK_PASSPHRASE_MIN_LEN: usize = 8;
 pub const PSK_PASSPHRASE_MAX_LEN: usize = 63;
 pub const PSK_SSID_MAX_LEN: usize = 32;
@@ -66,18 +69,6 @@ impl Pmk {
     /// association which derived it.
     pub fn duplicate(&self) -> Self {
         Self(self.0)
-    }
-
-    pub fn derive(passphrase: &[u8], ssid: &[u8]) -> Result<Self, PskDerivationError> {
-        if !(PSK_PASSPHRASE_MIN_LEN..=PSK_PASSPHRASE_MAX_LEN).contains(&passphrase.len()) {
-            return Err(PskDerivationError::InvalidPassphraseLength);
-        }
-        if ssid.is_empty() || ssid.len() > PSK_SSID_MAX_LEN {
-            return Err(PskDerivationError::InvalidSsidLength);
-        }
-        let mut bytes = [0; 32];
-        pbkdf2::pbkdf2_hmac::<Sha1>(passphrase, ssid, PSK_PBKDF2_ITERATIONS, &mut bytes);
-        Ok(Self(bytes))
     }
 
     /// Derive the pairwise transient key with the association's suite.
