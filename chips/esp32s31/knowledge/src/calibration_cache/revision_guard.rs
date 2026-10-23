@@ -85,6 +85,14 @@ const INPUTS: &[(&str, &str)] = &[
         include_str!("../../../phy/src/executor/run.rs"),
     ),
     (
+        "executor/rx/hardware.rs",
+        include_str!("../../../phy/src/executor/rx/hardware.rs"),
+    ),
+    (
+        "executor/rx.rs",
+        include_str!("../../../phy/src/executor/rx.rs"),
+    ),
+    (
         "executor/step/channel_gain.rs",
         include_str!("../../../phy/src/executor/step/channel_gain.rs"),
     ),
@@ -103,10 +111,6 @@ const INPUTS: &[(&str, &str)] = &[
     (
         "executor/step/rfpll.rs",
         include_str!("../../../phy/src/executor/step/rfpll.rs"),
-    ),
-    (
-        "executor/step/rx_gain.rs",
-        include_str!("../../../phy/src/executor/step/rx_gain.rs"),
     ),
     (
         "executor/step/temperature.rs",
@@ -161,6 +165,10 @@ const INPUTS: &[(&str, &str)] = &[
         include_str!("../../../phy/src/rx/gain_calibration.rs"),
     ),
     ("rx/iq.rs", include_str!("../../../phy/src/rx/iq.rs")),
+    (
+        "rx/program.rs",
+        include_str!("../../../phy/src/rx/program.rs"),
+    ),
     (
         "rx/saturation.rs",
         include_str!("../../../phy/src/rx/saturation.rs"),
@@ -318,6 +326,7 @@ fn calibration_or_replay_changes_require_a_reviewed_revision() {
     // takes a new pair and a new digest arm after reviewing all input paths.
     let expected = match revision {
         (1, 1) => "e28a4e4c74b0d8ed26a4a390b634ff46175370d20955c29acb109c347e30b16c",
+        (2, 1) => "4e9a61acd06a95e0a9c13ee09dfcab05cb6d0799f2eac7a5abcf9f0b0ea8ea68",
         _ => panic!(
             "unreviewed calibration revision/profile {revision:?}; digest {actual}; review INPUTS and add a new pair in revision_guard.rs"
         ),
