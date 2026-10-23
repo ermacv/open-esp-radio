@@ -9,6 +9,7 @@ description = "Allocation-free Rust ESP32-S31 PHY state machines"
 
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-time = { path = "../../../portable/time" }
 oer-cooperate = { path = "../../../portable/cooperate" }
 pin-project-lite = "0.2.17"

@@ -363,6 +363,7 @@ fn append(bytes: &Mutex<Vec<u8>>, chunk: &[u8]) {
 }
 
 mod capture;
+mod console_text;
 #[cfg(any(test, feature = "test-support"))]
 pub use capture::test_support;
 pub mod error;

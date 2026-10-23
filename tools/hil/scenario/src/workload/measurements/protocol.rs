@@ -166,8 +166,7 @@ fn link(records: &mut BTreeMap<String, Measurement>, prefix: &str, value: LinkHe
         ("rx.overflows", value.rx_overflows),
         ("tx.frames", value.tx_frames),
         ("tx.dropped", value.tx_dropped),
-        ("text.dropped", value.text_dropped),
-        ("text.truncated", value.text_truncated),
+        ("notes.dropped", value.notes_dropped),
     ] {
         add(
             records,

@@ -1,4 +1,5 @@
 //! Image-only observations while the existing PHY clock reference is held.
+use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
@@ -8,11 +9,20 @@ use oer_esp32s31_hal::{
 use oer_hil_protocol::base::RejectReason;
 use oer_time::{Clock, Duration, Timer};
 
-#[derive(Debug)]
 pub enum Point {
     AfterPhyRegistration,
     BeforeRfClose,
     AfterRfWake,
+}
+
+impl Point {
+    const fn name(&self) -> &'static str {
+        match self {
+            Self::AfterPhyRegistration => "AfterPhyRegistration",
+            Self::BeforeRfClose => "BeforeRfClose",
+            Self::AfterRfWake => "AfterRfWake",
+        }
+    }
 }
 
 /// Sample the named field without changing analog state or clock ownership.
@@ -33,9 +43,10 @@ pub async fn observe<B: PlatformClockBackend, T>(
         }
         if started && let Ok(raw) = i2c::try_finish_read(&registers, address) {
             crate::transport::CONSOLE
-                .line_reliably(format_args!(
-                    "OPEN_RADIO_HIL phy=sar2-checkpoint point={point:?} raw={raw:#04x} init={}",
-                    field.extract(raw)
+                .note_reliably(&Note::sar2_checkpoint(
+                    point.name(),
+                    raw.into(),
+                    field.extract(raw).into(),
                 ))
                 .await;
             return Ok(());

@@ -5,7 +5,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_esp32c5_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
 use oer_hil_agent::base::{Either, Intake, PanicRequest, Platform, WatchdogRequest};
-use oer_hil_agent::console::Console as HilConsole;
+use oer_hil_agent::console::{Console as HilConsole, Immediate};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{
     BootEvidence, ImageKeySet, PostMortemCheckpoints, RejectReason, Rejected,
@@ -15,11 +15,15 @@ use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use static_cell::StaticCell;
 
 /// Writes one line through the ROM, independently of the USB driver.
-fn rom_line(line: &core::ffi::CStr) {
-    oer_esp32c5_board::rom::line(line);
+pub(crate) struct RomLine;
+
+impl Immediate for RomLine {
+    fn print(line: &core::ffi::CStr) {
+        oer_esp32c5_board::rom::line(line);
+    }
 }
 
-pub(crate) static CONSOLE: HilConsole<256, 8, 8> = HilConsole::new(rom_line);
+pub(crate) static CONSOLE: HilConsole<8, 8, RomLine> = HilConsole::new();
 
 /// Watchdog tests the console handed over, one at a time.
 static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMode), 1> =

@@ -17,6 +17,7 @@ diagnostic-phy = []
 
 [dependencies]
 oer-memory = { path = "../../../portable/memory" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = { version = "0.9.3", features = ["serde"] }
 embassy-sync = "0.8.0"
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }

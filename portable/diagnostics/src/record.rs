@@ -1,9 +1,13 @@
 //! The transport-independent diagnostic record codec. Its output starts
 //! with the record tag; callers put these exact bytes in their own frame.
 
+use crate::note::{MAX_NAME, MAX_NAME_BYTES, MAX_NAMES, MAX_WORDS, Note, Topic};
+use crate::path::{MAX_PATH_NAMES, MAX_PATH_WORDS};
 use oer_trace::{Channel, Domain, Event, Kind};
 
-pub const MAX_PAYLOAD: usize = 16 + 48 + 64;
+/// The largest payload after the tag: a previous panic is 16 + 48 + 64, a
+/// note 4 + its words and names with their lengths.
+pub const MAX_PAYLOAD: usize = 4 + 4 * MAX_WORDS + MAX_NAMES + MAX_NAME_BYTES;
 
 /// Closing the diagnostic sequence makes loss of a whole panic record
 /// observable even when the following boot itself succeeded.
@@ -41,6 +45,7 @@ pub struct PreviousPanic<'a> {
 pub enum Record<'a> {
     PreviousPanic(PreviousPanic<'a>),
     Event { kind: Kind, words: [u32; 2] },
+    Note(Note<'a>),
 }
 
 /// Maximum encoded record: its tag and the largest previous-panic payload.
@@ -59,6 +64,7 @@ pub fn encode<E>(record: &Record<'_>, write: impl FnMut(&[u8]) -> Result<(), E>)
     match record {
         Record::PreviousPanic(panic) => encode_previous_panic(panic, write),
         Record::Event { kind, words } => encode_event_words(*kind, || *words, write),
+        Record::Note(note) => encode_note(note, write),
     }
 }
 
@@ -85,6 +91,30 @@ pub(super) fn encode_previous_panic<E>(
     ])?;
     write(panic.file.as_bytes())?;
     write(panic.message.unwrap_or("").as_bytes())
+}
+
+/// Tag 3: topic u16, word count u8, name count u8, the words, then each name
+/// as a length u8 and its bytes.
+#[inline]
+pub(super) fn encode_note<E>(
+    note: &Note<'_>,
+    mut write: impl FnMut(&[u8]) -> Result<(), E>,
+) -> Result<(), E> {
+    write(&[3])?;
+    write(&note.topic.raw().to_le_bytes())?;
+    // The top bit of the name count says the path lost something.
+    write(&[
+        note.words().len() as u8,
+        note.names().len() as u8 | if note.overflowed() { 0x80 } else { 0 },
+    ])?;
+    for word in note.words() {
+        write(&word.to_le_bytes())?;
+    }
+    for name in note.names() {
+        write(&[name.len() as u8])?;
+        write(name.as_bytes())?;
+    }
+    Ok(())
 }
 
 #[inline]
@@ -164,6 +194,49 @@ pub fn decode(bytes: &[u8]) -> Result<Record<'_>, DecodeError> {
                 u32::from_le_bytes(fields.array()?),
             ],
         },
+        3 => {
+            let topic = Topic::from_raw(u16::from_le_bytes(fields.array()?))
+                .ok_or(DecodeError::UnknownRecord)?;
+            let [count, name_count] = fields.array()?;
+            let overflow = name_count & 0x80 != 0;
+            let name_count = name_count & 0x7f;
+            let (words, names) = (usize::from(count), usize::from(name_count));
+            let (extra_words, extra_names) = if topic.has_path() {
+                (MAX_PATH_WORDS, MAX_PATH_NAMES)
+            } else {
+                (0, 0)
+            };
+            // The topics' const checks keep both ranges inside the arrays.
+            if !(topic.word_count()..=topic.word_count() + extra_words).contains(&words)
+                || !(topic.name_count()..=topic.name_count() + extra_names).contains(&names)
+                || words > MAX_WORDS
+                || names > MAX_NAMES
+                || (overflow && !topic.has_path())
+            {
+                return Err(DecodeError::Payload);
+            }
+            let mut words = [0; MAX_WORDS];
+            for word in words.iter_mut().take(usize::from(count)) {
+                *word = u32::from_le_bytes(fields.array()?);
+            }
+            let mut names = [""; MAX_NAMES];
+            let mut name_bytes = 0;
+            for name in names.iter_mut().take(usize::from(name_count)) {
+                let [length] = fields.array()?;
+                name_bytes += usize::from(length);
+                if usize::from(length) > MAX_NAME || name_bytes > MAX_NAME_BYTES {
+                    return Err(DecodeError::Payload);
+                }
+                *name = core::str::from_utf8(fields.bytes(usize::from(length))?)
+                    .map_err(|_| DecodeError::Payload)?;
+            }
+            Record::Note(Note::from_parts(
+                topic,
+                words.get(..usize::from(count)).unwrap_or(&[]),
+                names.get(..usize::from(name_count)).unwrap_or(&[]),
+                overflow,
+            ))
+        }
         _ => return Err(DecodeError::UnknownRecord),
     };
     if !fields.0.is_empty() {

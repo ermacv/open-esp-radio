@@ -1,5 +1,6 @@
 //! Fatal CPU exception reporting independent of the executor and USB logger.
 
+use oer_diagnostics::Note;
 use oer_esp32s31_board::rom;
 use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 
@@ -9,8 +10,10 @@ use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 pub fn report_stack_guard() {
     let (control, address) = trap::stack_watchpoint();
     let hart = esp_hal::system::Cpu::current() as usize;
-    rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL stack_guard hart={hart} control={control:08x} address={address:08x}\r\n"
+    rom::note(&Note::stack_guard(
+        hart as u32,
+        control as u32,
+        address as u32,
     ));
 }
 

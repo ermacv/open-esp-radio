@@ -1,9 +1,12 @@
 //! Forced due tracking in the diagnostic image only, with bounded coarse edges.
 pub mod metrics;
+mod notes;
 mod observer;
 mod recorder;
+pub use notes::Notes;
 pub use observer::Observer;
 mod sar_tails;
+use oer_diagnostics::Note;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_phy::state::client::DEFAULT_PLL_TRACK_PERIOD_MICROS;
 use oer_hil_protocol::{base::RejectReason, phy::*};
@@ -61,92 +64,102 @@ pub fn finish_sample(hold: &mut Hold, recorder: recorder::Recorder, committed: u
 
 /// Report preparation only after maintenance returns, including failures.
 #[inline(never)]
-pub fn report_preparation(
+pub async fn report_preparation(
     trace: &oer_esp32s31_phy::tracking::observation::ReadinessTrace,
     polls: &HoldPolls,
 ) {
-    use oer_esp32s31_board::rom::print_fmt;
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare polls={} max-poll-us={}\n",
-        polls.polls, polls.maximum_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare resume-count={} late-max-us={} late-total-us={}\n",
-        polls.resumes, polls.maximum_lateness_micros, polls.lateness_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare ready-count={} ready-max-us={}\n",
-        polls.ready_edges, polls.maximum_ready_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare commands={} first-check-max-us={}\n",
-        trace.commands, trace.maximum_first_check_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare yield-count={} yield-total-us={} yield-max-us={}\n",
-        trace.yields, trace.yield_total_micros, trace.yield_maximum_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare failure-elapsed-us={} failure-late-us={}\n",
-        trace.failure_elapsed_micros, trace.failure_lateness_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-prepare failure-busy={:?} complete={}\n",
+    note(&Note::t7_prepare_polls(
+        polls.polls.into(),
+        polls.maximum_micros,
+    ))
+    .await;
+    note(&Note::t7_prepare_resumes(
+        polls.resumes.into(),
+        polls.maximum_lateness_micros,
+        polls.lateness_micros,
+    ))
+    .await;
+    note(&Note::t7_prepare_ready(
+        polls.ready_edges.into(),
+        polls.maximum_ready_micros,
+    ))
+    .await;
+    note(&Note::t7_prepare_commands(
+        trace.commands.into(),
+        trace.maximum_first_check_micros,
+    ))
+    .await;
+    note(&Note::t7_prepare_yields(
+        trace.yields.into(),
+        trace.yield_total_micros,
+        trace.yield_maximum_micros.into(),
+    ))
+    .await;
+    note(&Note::t7_prepare_failure_times(
+        trace.failure_elapsed_micros,
+        trace.failure_lateness_micros,
+    ))
+    .await;
+    note(&Note::t7_prepare_failure_busy(
         trace.failure_busy,
-        trace.complete()
-    ));
+        trace.complete(),
+    ))
+    .await;
     for sample in trace.not_ready_samples() {
-        print_fmt(format_args!(
-            "OPEN_RADIO_HIL t7-prepare not-ready command={} elapsed-us={}\n",
-            sample.command, sample.elapsed_micros
-        ));
+        note(&Note::t7_prepare_not_ready(
+            sample.command.into(),
+            sample.elapsed_micros.into(),
+        ))
+        .await;
     }
 }
 
 #[cfg(oer_profile)]
 #[inline(never)]
-pub fn report_timer(window: Option<oer_espressif_executor::timer_observation::Window>) {
+pub async fn report_timer(window: Option<oer_espressif_executor::timer_observation::Window>) {
     let Some(window) = window else {
         return;
     };
     let r = window.finish();
-    use oer_esp32s31_board::rom::print_fmt;
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-timer registrations={} due-at-register={} irqs={}\n",
-        r.registrations, r.due_at_registration, r.interrupts
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-timer program-max-us={} dispatch-max-us={} invalid={}\n",
-        r.programming.maximum_micros, r.dispatch.maximum_micros, r.invalid
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-timer alarm-to-irq-max-us={} irq-late-max-us={} irq-to-dispatch-max-us={}\n",
-        r.alarm_to_irq.maximum_micros,
-        r.deadline_lateness.maximum_micros,
-        r.irq_to_dispatch.maximum_micros
-    ));
-    print_fmt(format_args!(
-        "OPEN_RADIO_HIL t7-timer unmatched-irqs={} unmatched-dispatch={} armed={}\n",
-        r.unmatched_interrupts, r.unmatched_dispatches, r.armed_at_end
-    ));
+    note(&Note::t7_timer_registrations(
+        r.registrations.into(),
+        r.due_at_registration.into(),
+        r.interrupts.into(),
+    ))
+    .await;
+    note(&Note::t7_timer_program(
+        r.programming.maximum_micros.into(),
+        r.dispatch.maximum_micros.into(),
+        r.invalid.into(),
+    ))
+    .await;
+    note(&Note::t7_timer_latency(
+        r.alarm_to_irq.maximum_micros.into(),
+        r.deadline_lateness.maximum_micros.into(),
+        r.irq_to_dispatch.maximum_micros.into(),
+    ))
+    .await;
+    note(&Note::t7_timer_unmatched(
+        r.unmatched_interrupts.into(),
+        r.unmatched_dispatches.into(),
+        r.armed_at_end.into(),
+    ))
+    .await;
 }
 
-/// The diagnostic image's UART sink; observer tests inject their own writer.
+/// The diagnostic image's console: the notes go through its queue.
 pub struct Uart;
-impl core::fmt::Write for Uart {
-    fn write_str(&mut self, value: &str) -> core::fmt::Result {
-        oer_esp32s31_board::rom::print_fmt(format_args!("{}", value));
-        Ok(())
-    }
-    fn write_fmt(&mut self, args: core::fmt::Arguments<'_>) -> core::fmt::Result {
-        oer_esp32s31_board::rom::print_fmt(args);
-        Ok(())
+impl Notes for Uart {
+    async fn note(&mut self, note: &Note<'static>) {
+        crate::transport::CONSOLE.note_reliably(note).await;
     }
 }
 
-impl<C: Clock, W: core::fmt::Write> oer_esp32s31_phy::PhyTargetObserver
-    for &mut Observer<'_, C, W>
-{
+async fn note(note: &Note<'static>) {
+    crate::transport::CONSOLE.note_reliably(note).await;
+}
+
+impl<C: Clock, W: Notes> oer_esp32s31_phy::PhyTargetObserver for &mut Observer<'_, C, W> {
     const OBSERVE_ENGINE_POLLS: bool = true;
     fn channel_action_completed(
         &mut self,

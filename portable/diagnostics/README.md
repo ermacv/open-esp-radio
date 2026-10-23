@@ -14,7 +14,7 @@ sink. It accepts complete slices or propagates the sink's error. There is no
 console marker, hex escaping, sequence, CRC, clock or transport dependency.
 The sink can collect the bytes in an existing bounded payload buffer, or pass
 them straight to a framing layer without allocating a full record buffer.
-`record::MAX_RECORD_BYTES` (129) bounds a complete tagged record.
+`record::MAX_RECORD_BYTES` (139) bounds a complete tagged record.
 
 `record::decode(bytes)` decodes exactly one record, borrowing its text from
 those bytes. It reports `Truncated`, `UnknownRecord` or `Payload` for an
@@ -47,6 +47,38 @@ It does not wrap them in `Console`, `OER-DIAG:01`, hex, or a second sequence/CRC
 The HIL transport supplies its own header, ordering and integrity; its
 integration belongs to the HIL images' migration. The record format has one
 definition shared with the line console below.
+
+## Notes: `oer_diagnostics::note`
+
+A **note** is a typed HIL diagnostic: a `Topic` and its values, record tag 3.
+Each topic has a constructor on `Note` whose arguments the compiler checks
+(`Note::cca_register(point, register, raw)`), so the firmware never builds
+text. The words are 32-bit values in the topic's field order (a 64-bit value
+is two words, low first), and a name is static text of a variant or register
+(at most 8 words, 6 names, 64 bytes a name and 96 bytes of names in a note).
+Payload: topic u16, word count u8, name count u8 (top bit: the path
+overflowed), the words, then each name as a length u8 and its bytes. The
+decoder accepts exactly the counts of the topic's layout and, for a topic that
+ends with a path, up to 4 more words and 6 more names.
+
+`DiagnosticPath` describes a nested error's variants without `core::fmt`: a
+type pushes its variant's name (`&'static str`, from an exhaustive `match`)
+and calls its payload's `push_path`; the numbers a variant carries are
+pushed as words. `DiagPath` keeps 6 names and 4 words (the deepest real chain
+is `Ok(Unavailable(Acquire(TrackingTime(TimeReversed(class)))))` with two
+64-bit numbers); anything beyond is not dropped silently but marked, and the
+host prints `path-truncated`.
+
+With the `render` feature (host only; firmware never enables it)
+`render::note` prints a note as the text the firmware used to format
+(`OPEN_RADIO_HIL cca-register point=… name=… raw=0x…`; a path prints nested,
+`Err(Failed(Run(Port(…))))`, then ` numbers=…`), and `render::Stream` decodes
+and numbers a boot's lines. `emit_note` writes a note as an `OER-DIAG:01`
+line numbered from the boot's one shared sequence, so notes from the ROM and
+from a USB writer in one image do not each count from zero; the S31 board
+prints them through the ROM in 64-byte pieces. The HIL host (`oer-hil-link`)
+renders them in `uart.log` and for its console checks, and shows a lost,
+damaged or unknown line as an `OER-DIAG-ERROR` line with the raw text.
 
 ## Synchronous line frame: `oer_diagnostics::console`
 

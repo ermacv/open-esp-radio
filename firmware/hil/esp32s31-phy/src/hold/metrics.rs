@@ -1,5 +1,6 @@
 //! Diagnostic-only root-future poll and suspension observation.
 //! Suspension is measured directly; it includes timers and scheduling latency.
+use oer_diagnostics::Note;
 #[derive(Clone, Copy, Default)]
 pub struct Row {
     pub polls: u32,
@@ -9,7 +10,7 @@ pub struct Row {
     pub maximum_suspended_us: u64,
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Metrics {
     pub rows: [Row; 5],
     pub invalid: bool,
@@ -97,26 +98,32 @@ pub async fn observe<F: core::future::Future, C: oer_time::Clock>(
 }
 
 /// UART is available only to the caller after the root future returns.
-pub fn report(
-    tick: u8,
-    metrics: &Metrics,
-    output: &mut impl core::fmt::Write,
-) -> core::fmt::Result {
+pub async fn report(tick: u8, metrics: &Metrics, output: &mut impl super::Notes) {
     for (operation, row) in metrics.rows.iter().enumerate() {
-        writeln!(
-            output,
-            "OPEN_RADIO_HIL hold-poll tick={} op={} polls={} pending={} resumes={}",
-            tick, operation, row.polls, row.pending, row.resumes
-        )?;
-        writeln!(
-            output,
-            "OPEN_RADIO_HIL hold-gap tick={} op={} total-us={} max-us={} invalid={}",
-            tick, operation, row.suspended_us, row.maximum_suspended_us, metrics.invalid
-        )?;
+        output
+            .note(&Note::hold_poll(
+                tick.into(),
+                operation as u32,
+                row.polls,
+                row.pending,
+                row.resumes,
+            ))
+            .await;
+        output
+            .note(&Note::hold_gap(
+                tick.into(),
+                operation as u32,
+                row.suspended_us,
+                row.maximum_suspended_us,
+                metrics.invalid,
+            ))
+            .await;
     }
-    writeln!(
-        output,
-        "OPEN_RADIO_HIL hold-root tick={} poll-us={} max-poll-us={}",
-        tick, metrics.poll_us, metrics.maximum_poll_us
-    )
+    output
+        .note(&Note::hold_root(
+            tick.into(),
+            metrics.poll_us,
+            metrics.maximum_poll_us,
+        ))
+        .await;
 }

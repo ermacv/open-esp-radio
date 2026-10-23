@@ -1,10 +1,26 @@
 //! Version-one synchronous line framing over the shared record codec.
 //! This layer alone owns sequence, CRC, the console marker and hex escaping.
 
+use core::sync::atomic::{AtomicU32, Ordering};
+
+use crate::note::Note;
 use crate::record::{self, MAX_PAYLOAD, PreviousPanic, Record};
 use oer_trace::Event;
 
 pub const PREFIX: &[u8] = b"OER-DIAG:01";
+
+/// The longest line one note makes: both line ends, the prefix, the
+/// sequence, the longest record and the checksum, all in hex.
+pub const MAX_NOTE_LINE: usize = 2 + PREFIX.len() + 2 * (4 + record::MAX_RECORD_BYTES) + 4 + 2;
+
+/// Writes `note` as one frame numbered from this boot's shared sequence: for
+/// the images whose notes come from several places (the ROM, a USB writer),
+/// which must not each count from zero. `write` has the contract of
+/// [`Console::new`]'s.
+pub fn emit_note<E>(note: &Note<'_>, write: impl FnMut(&[u8]) -> Result<(), E>) -> Result<(), E> {
+    static SEQUENCE: AtomicU32 = AtomicU32::new(0);
+    Console::starting_at(write, SEQUENCE.fetch_add(1, Ordering::Relaxed)).note(note)
+}
 
 /// One synchronous CPU0 boot console. `write` must write all the supplied
 /// bytes or return an error. A failed record consumes its sequence too, so
@@ -20,6 +36,18 @@ where
 {
     pub const fn new(write: F) -> Self {
         Self { write, sequence: 0 }
+    }
+
+    /// A console whose first frame carries `sequence`: for a producer that
+    /// keeps the sequence of its boot elsewhere.
+    pub const fn starting_at(write: F, sequence: u32) -> Self {
+        Self { write, sequence }
+    }
+
+    pub fn note(&mut self, note: &Note<'_>) -> Result<(), E> {
+        let mut crc = self.begin()?;
+        record::encode_note(note, |bytes| self.hex(bytes, &mut crc))?;
+        self.end(crc)
     }
 
     pub fn previous_panic(&mut self, panic: &PreviousPanic<'_>) -> Result<(), E> {

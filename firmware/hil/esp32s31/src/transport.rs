@@ -2,36 +2,28 @@
 //! its ROM line output and its platform. Every HIL image of this runtime
 //! serves the host through [`serve`].
 
-use core::ffi::CStr;
-
 use esp_hal::usb::usb_serial_jtag::{
     UsbPadControl, UsbSerialJtag, UsbSerialJtagRx, UsbSerialJtagTx,
 };
 use oer_hil_agent::base::{Intake, Platform, Requests};
-use oer_hil_agent::console::{Console, Logger};
+use oer_hil_agent::console::{Console, Immediate};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{BootEvidence, ImageKeySet, PostMortemCheckpoints};
 
-const LINE: usize = 384;
-const LINES: usize = 8;
+const NOTES: usize = 8;
 const MESSAGES: usize = 8;
 
 /// Writes one line through the ROM, independently of the USB driver.
-fn rom_line(line: &CStr) {
-    oer_esp32s31_board::rom::line(line);
+pub(crate) struct RomLine;
+
+impl Immediate for RomLine {
+    fn print(line: &core::ffi::CStr) {
+        oer_esp32s31_board::rom::line(line);
+    }
 }
 
 oer_espressif_staged_runtime::placed_static! {
-    pub(crate) static CONSOLE: Console<LINE, LINES, MESSAGES> = Console::new(rom_line), in critical_data "logging";
-}
-
-/// Installs the `log` facade over [`CONSOLE`]. Calling this more than once
-/// is harmless.
-pub(crate) fn init_logger() {
-    static LOGGER: Logger<LINE, LINES, MESSAGES> = Logger(&CONSOLE);
-    if log::set_logger(&LOGGER).is_ok() {
-        log::set_max_level(log::LevelFilter::Info);
-    }
+    pub(crate) static CONSOLE: Console<NOTES, MESSAGES, RomLine> = Console::new(), in critical_data "logging";
 }
 
 struct Chip;

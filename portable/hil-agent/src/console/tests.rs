@@ -13,15 +13,23 @@ use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use oer_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
+use oer_diagnostics::Note;
 
 const BOOT: u64 = 77;
 
-type TestConsole = Console<64, 4, 8>;
+/// Keeps what is written immediately, per test thread.
+struct Captured;
+
+impl Immediate for Captured {
+    fn print(line: &CStr) {
+        IMMEDIATE.with(|lines| lines.borrow_mut().push(line.to_bytes().to_vec()));
+    }
+}
+
+type TestConsole = Console<4, 8, Captured>;
 
 fn console() -> &'static TestConsole {
-    Box::leak(Box::new(TestConsole::new(|line| {
-        IMMEDIATE.with(|lines| lines.borrow_mut().push(line.to_bytes().to_vec()));
-    })))
+    Box::leak(Box::new(TestConsole::new()))
 }
 
 std::thread_local! {
@@ -239,19 +247,110 @@ fn a_full_queue_drops_and_counts_instead_of_blocking() {
     assert_eq!(console.link_health().tx_dropped, 1);
 }
 
-#[test]
-fn text_before_the_console_runs_is_written_immediately() {
-    let console = console();
-    IMMEDIATE.with(|lines| lines.borrow_mut().clear());
-    console.line(format_args!("early {}", 1));
-    IMMEDIATE.with(|lines| assert_eq!(*lines.borrow(), [b"early 1".to_vec()]));
+fn rearm(step: u32) -> Note<'static> {
+    Note::rearm(step, 20, 20_000)
+}
+
+/// The notes a stream of console lines carries, in order: the sequence each
+/// was numbered with and its words.
+fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
+    bytes
+        .split(|&byte| byte == b'\n')
+        .filter_map(|line| line.strip_suffix(b"\r").or(Some(line)))
+        .filter_map(|line| {
+            let mut scratch = [0; oer_diagnostics::MAX_PAYLOAD + 7];
+            match oer_diagnostics::decode(line, &mut scratch) {
+                Ok(Some((sequence, oer_diagnostics::Record::Note(note)))) => {
+                    Some((sequence, note.words().to_vec()))
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 #[test]
-fn a_cut_line_is_counted() {
+fn a_note_before_the_console_runs_is_written_immediately() {
     let console = console();
-    console.line_immediately(format_args!("{}", "x".repeat(100)));
-    assert_eq!(console.truncated_lines(), 1);
+    IMMEDIATE.with(|lines| lines.borrow_mut().clear());
+    console.note_immediately(&rearm(1));
+    IMMEDIATE.with(|lines| {
+        let lines = lines.borrow();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].starts_with(b"OER-DIAG:01"));
+        assert!(!lines[0].ends_with(b"\r\n"), "the printer ends the line");
+    });
+    assert_eq!(console.dropped_notes(), 0);
+}
+
+#[test]
+fn an_immediate_note_is_dropped_and_counted_while_a_frame_is_written() {
+    let console = console();
+    IMMEDIATE.with(|lines| lines.borrow_mut().clear());
+    let writing = console.writer.try_acquire().expect("the writer is free");
+    console.note_immediately(&rearm(1));
+    drop(writing);
+    IMMEDIATE.with(|lines| assert!(lines.borrow().is_empty()));
+    assert_eq!(console.dropped_notes(), 1);
+    assert_eq!(console.link_health().notes_dropped, 1);
+}
+
+#[test]
+fn queued_notes_are_numbered_when_written_so_an_immediate_one_cannot_reorder_them() {
+    let console = console();
+    console.running.store(true, Ordering::Release);
+    block_on(console.note_reliably(&rearm(1)));
+    block_on(console.note_reliably(&rearm(2)));
+    let first = console.notes.try_receive().expect("queued");
+    let second = console.notes.try_receive().expect("queued");
+    // Written in the order they were queued, each numbered at its write.
+    let mut wire = Vec::new();
+    let mut sink = Sink(&mut wire);
+    block_on(console.write_note(&mut sink, &first));
+    block_on(console.write_note(&mut sink, &second));
+    let notes = decoded(&wire);
+    assert_eq!(notes.len(), 2);
+    // The sequence is shared by the process, so only its order is checked.
+    assert!(notes[1].0 > notes[0].0);
+    assert_eq!(notes[0].1, [1, 20, 0, 20_000, 0]);
+    assert_eq!(notes[1].1, [2, 20, 0, 20_000, 0]);
+}
+
+#[test]
+fn a_reliable_note_waits_for_room_instead_of_being_lost() {
+    use core::{
+        future::Future as _,
+        task::{Context, Poll, Waker},
+    };
+    let console = console();
+    console.running.store(true, Ordering::Release);
+    for step in 0..4 {
+        block_on(console.note_reliably(&rearm(step)));
+    }
+    let late = rearm(9);
+    let mut waiting = core::pin::pin!(console.note_reliably(&late));
+    let mut context = Context::from_waker(Waker::noop());
+    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
+    assert_eq!(console.dropped_notes(), 0);
+    let _ = console.notes.try_receive().expect("queued");
+    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Ready(()));
+}
+
+/// An endpoint that keeps what is written.
+struct Sink<'a>(&'a mut Vec<u8>);
+
+impl embedded_io_async::ErrorType for Sink<'_> {
+    type Error = core::convert::Infallible;
+}
+
+impl Write for Sink<'_> {
+    async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    async fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 #[test]

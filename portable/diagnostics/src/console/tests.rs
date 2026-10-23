@@ -221,6 +221,7 @@ fn line_frames_remain_byte_identical_to_the_saved_stand_records() {
                     assert_eq!(kind, PlatformEvent::KIND);
                     console.event(&PlatformEvent(words)).unwrap();
                 }
+                Record::Note(note) => console.note(&note).unwrap(),
             }
             expected.extend_from_slice(format!("\r\n{line}\r\n").as_bytes());
         }
@@ -259,4 +260,25 @@ fn failed_header_does_not_encode_or_sample_the_event() {
         assert!(console.event(&Counted(&calls)).is_err());
         assert_eq!(calls.get(), u32::from(failed_write == 5));
     }
+}
+
+#[test]
+fn the_longest_note_fits_the_line_bound() {
+    let mut path = crate::DiagPath::new();
+    for name in ["abcdefghijklmnop"; 6] {
+        path.name(name);
+    }
+    for word in 0..4 {
+        path.word(word);
+    }
+    let note = crate::Note::registration(true, &path);
+    let mut line = Vec::new();
+    Console::new(|bytes: &[u8]| {
+        line.extend_from_slice(bytes);
+        Ok::<_, ()>(())
+    })
+    .note(&note)
+    .unwrap();
+    assert!(line.len() <= MAX_NOTE_LINE);
+    assert!(line.starts_with(b"\r\nOER-DIAG:01") && line.ends_with(b"\r\n"));
 }

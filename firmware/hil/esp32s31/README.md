@@ -38,7 +38,8 @@ exception entry format nothing: they record the post-mortem fault and the
 hart's trap registers, the vector it took and the sources pending and routed
 to it (`agent/src/fatal.rs`) in RTC fast memory and reset, and the next boot
 prints `OPEN_RADIO_HIL runtime=PANIC boot=previous` or `runtime=EXCEPTION
-boot=previous` with that state before anything else. A panic message with
+boot=previous` with that state before anything else, as typed notes
+(`OER-DIAG:01` lines through the ROM) that the host renders into those lines. A panic message with
 arguments is not kept, only a static one in task context. An
 interrupt-context panic omits location and message because compiler metadata
 may be in unavailable PSRAM; the hook receives the platform's safe

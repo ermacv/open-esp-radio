@@ -1,5 +1,6 @@
 //! Prepared capture ownership and the later bounded, polled RX experiment.
 use crate::cca_checkpoint::{Point, observe_enables, observe_running};
+use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
@@ -48,9 +49,7 @@ pub struct Prepared {
 }
 
 fn failure(step: &str, error: RxRingError) -> RejectReason {
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=cca-rx FAIL step={step} error={error:?}\n"
-    ));
+    crate::transport::CONSOLE.note_immediately(&Note::cca_rx_fail(step, &DiagPath::of(&error)));
     RejectReason::Internal
 }
 
@@ -108,9 +107,13 @@ pub async fn run<B: PlatformClockBackend, T>(
     prepared: Option<Prepared>,
 ) -> (WifiClocked, Result<()>) {
     let (mut runtime, interrupts, clocks) = wifi.into_running();
-    crate::transport::CONSOLE.line_reliably(format_args!(
-        "OPEN_RADIO_HIL phy=cca-rx begin channel={channel} descriptors={COUNT} capacity={CAPACITY}"
-    )).await;
+    crate::transport::CONSOLE
+        .note_reliably(&Note::cca_rx_begin(
+            channel.into(),
+            COUNT as u32,
+            CAPACITY as u32,
+        ))
+        .await;
     let result = experiment(domain, &mut runtime, channel, prepared).await;
     (
         WifiClocked::from_running(runtime, interrupts, clocks),
@@ -179,11 +182,13 @@ async fn experiment<B: PlatformClockBackend, T>(
     let returned = !runtime.receive_dma_snapshot().walker_enabled
         && storage.detached_buffer_count() == 0
         && stopped.topology_snapshot().valid;
-    oer_esp32s31_board::rom::print_fmt(format_args!(
-        "OPEN_RADIO_HIL phy=cca-rx cleanup mac_idle=true gate_closed={} buffers_returned={returned} buffers={}\n",
-        !runtime.receive_dma_snapshot().walker_enabled,
-        COUNT + 1,
-    ));
+    crate::transport::CONSOLE
+        .note_reliably(&Note::cca_rx_cleanup(
+            !runtime.receive_dma_snapshot().walker_enabled,
+            returned,
+            COUNT as u32 + 1,
+        ))
+        .await;
     if !returned {
         return Err(RejectReason::Internal);
     }
@@ -271,9 +276,14 @@ async fn sample<B: PlatformClockBackend, T>(
         if !runtime.receive_dma_snapshot().walker_enabled {
             return Err(RejectReason::Internal);
         }
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL phy=cca-rx sample={sample} received={received} normalized={normalized} beacons={beacons}\n"
-        ));
+        crate::transport::CONSOLE
+            .note_reliably(&Note::cca_rx_sample(
+                sample.into(),
+                received as u32,
+                normalized as u32,
+                beacons as u32,
+            ))
+            .await;
     }
     if beacons == 0 {
         oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=cca-rx FAIL step=no-beacons");

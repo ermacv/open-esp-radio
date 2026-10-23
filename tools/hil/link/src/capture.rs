@@ -10,8 +10,13 @@ use std::{collections::VecDeque, os::fd::AsRawFd};
 fn boot_smoke_complete(bytes: &[u8]) -> Result<bool> {
     const PASS: &[u8] = b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS";
     const PANIC: &[u8] = b"OPEN_RADIO_HIL runtime=PANIC";
+    const ERROR: &[u8] = b"OER-DIAG-ERROR";
     if bytes.windows(PANIC.len()).any(|part| part == PANIC) {
         return Err("boot-smoke runtime panicked".into());
+    }
+    // A panic record that is garbled or out of order is never shown as one.
+    if bytes.windows(ERROR.len()).any(|part| part == ERROR) {
+        return Err("boot-smoke console has an unreadable diagnostic".into());
     }
     let mut passed = false;
     for line in bytes.split_inclusive(|byte| *byte == b'\n') {
@@ -33,8 +38,33 @@ fn boot_smoke_complete(bytes: &[u8]) -> Result<bool> {
     Ok(passed)
 }
 
+/// The warning for diagnostic notes the target's console lost, if any.
+fn notes_lost(health: LinkHealth) -> Option<String> {
+    (health.notes_dropped != 0)
+        .then(|| format!("diagnostic_notes_dropped={}", health.notes_dropped))
+}
+
 #[cfg(test)]
 mod boot_smoke_tests {
+    #[test]
+    fn lost_notes_are_reported() {
+        let health = |notes_dropped| oer_hil_protocol::base::LinkHealth {
+            rx_frames: 0,
+            rx_cobs_errors: 0,
+            rx_checksum_errors: 0,
+            rx_decode_errors: 0,
+            rx_overflows: 0,
+            tx_frames: 0,
+            tx_dropped: 0,
+            notes_dropped,
+        };
+        assert_eq!(super::notes_lost(health(0)), None);
+        assert_eq!(
+            super::notes_lost(health(3)).as_deref(),
+            Some("diagnostic_notes_dropped=3")
+        );
+    }
+
     use super::boot_smoke_complete;
 
     #[test]
@@ -60,6 +90,48 @@ mod boot_smoke_tests {
             )
             .is_err()
         );
+    }
+
+    fn note_line(sequence: u32, note: &oer_diagnostics::Note<'_>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        oer_diagnostics::Console::starting_at(
+            |chunk: &[u8]| {
+                bytes.extend_from_slice(chunk);
+                Ok::<_, ()>(())
+            },
+            sequence,
+        )
+        .note(note)
+        .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn typed_rearm_notes_decide_boot_smoke_like_the_text_they_replace() {
+        let pass = b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS\r\n";
+        let mut console = note_line(0, &oer_diagnostics::Note::rearm(3, 20, 20_010));
+        console.extend_from_slice(pass);
+        assert!(boot_smoke_complete(&crate::console_text::render(&console, true)).unwrap());
+
+        let mut failed = note_line(0, &oer_diagnostics::Note::rearm_failed(2, 100_000));
+        failed.extend_from_slice(pass);
+        assert!(boot_smoke_complete(&crate::console_text::render(&failed, true)).is_err());
+    }
+
+    #[test]
+    fn an_unreadable_diagnostic_fails_the_gate_even_with_a_pass() {
+        let pass = b"OPEN_RADIO_HIL boot-smoke=PASS timer=PASS rearm=PASS\r\n";
+        // The panic record was lost, so the next one is shown after a gap.
+        let mut lost = note_line(0, &oer_diagnostics::Note::rearm(1, 20, 20_000));
+        lost.extend(note_line(2, &oer_diagnostics::Note::rearm(3, 20, 20_010)));
+        lost.extend_from_slice(pass);
+        assert!(boot_smoke_complete(&crate::console_text::render(&lost, true)).is_err());
+
+        let mut damaged = note_line(0, &oer_diagnostics::Note::fatal_panic(1, 0, 1, 2, 3));
+        let flip = damaged.len() - 5;
+        damaged[flip] = if damaged[flip] == b'0' { b'1' } else { b'0' };
+        damaged.extend_from_slice(pass);
+        assert!(boot_smoke_complete(&crate::console_text::render(&damaged, true)).is_err());
     }
 
     #[test]
@@ -210,7 +282,7 @@ impl SerialCapture {
                 .bytes
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if boot_smoke_complete(&bytes)? {
+            if boot_smoke_complete(&console_text::render(&bytes, true))? {
                 return Ok(());
             }
             drop(bytes);
@@ -305,11 +377,8 @@ impl SerialCapture {
             if qualify_target_health {
                 protocol::validate_target_link_health(health)?;
             }
-            if health.text_dropped != 0 || health.text_truncated != 0 {
-                eprintln!(
-                    "diagnostic_text_loss=dropped:{} truncated:{}",
-                    health.text_dropped, health.text_truncated
-                );
+            if let Some(warning) = notes_lost(health) {
+                eprintln!("{warning}");
             }
         }
         Ok(uart)
@@ -324,7 +393,7 @@ impl SerialCapture {
             .bytes
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let uart = String::from_utf8_lossy(&bytes).into_owned();
+        let uart = String::from_utf8_lossy(&console_text::render(&bytes, true)).into_owned();
         let state = self
             .protocol
             .state

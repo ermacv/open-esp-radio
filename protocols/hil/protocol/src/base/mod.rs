@@ -77,8 +77,8 @@ pub struct LinkHealth {
     pub rx_overflows: u32,
     pub tx_frames: u32,
     pub tx_dropped: u32,
-    pub text_dropped: u32,
-    pub text_truncated: u32,
+    /// Diagnostic notes the console lost.
+    pub notes_dropped: u32,
 }
 
 /// Bind a request to one boot. Only a session-free [`GetHello`] may discover

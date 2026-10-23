@@ -1,6 +1,7 @@
 //! Image-local observer: callbacks only record; UART is flushed after root return.
-use super::{metrics::Metrics, recorder::Recorder, sar_tails::Tails};
+use super::{Notes, metrics::Metrics, recorder::Recorder, sar_tails::Tails};
 use core::cell::RefCell;
+use oer_diagnostics::Note;
 use oer_esp32s31_phy::tracking::observation::{
     EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RfpllEngineTrace, RxGainExecution,
 };
@@ -20,7 +21,7 @@ pub struct Observer<'a, C, W> {
     output: &'a mut W,
     pub metrics: Option<&'a RefCell<Metrics>>,
 }
-impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
+impl<'a, C: Clock, W: Notes> Observer<'a, C, W> {
     pub fn new(
         tick: u8,
         engine: &'a mut HoldPolls,
@@ -44,7 +45,7 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
     }
     /// Called only after the root future returns, including failures.
     #[inline(never)]
-    pub fn report(&mut self, tick: u8) {
+    pub async fn report(&mut self, tick: u8) {
         for operation in [
             Operation::Rfpll,
             Operation::BluetoothIeee802154Power,
@@ -59,35 +60,30 @@ impl<'a, C: Clock, W: core::fmt::Write> Observer<'a, C, W> {
             if timing.polls == 0 {
                 continue;
             }
-            report_engine(operation, timing, self.output);
+            report_engine(operation, timing, self.output).await;
         }
         for (index, timing) in self.gains.iter().enumerate() {
             if let Some(timing) = timing {
-                print(
-                    self.output,
-                    format_args!(
-                        "OPEN_RADIO_HIL gain-parts family={} lower-us={} arithmetic-us={} publication-us={}\n",
+                self.output
+                    .note(&Note::gain_parts(
                         if index == 0 { 2 } else { 4 },
-                        timing.lower_micros,
-                        timing.arithmetic_micros,
-                        timing.publication_micros
-                    ),
-                );
+                        timing.lower_micros.into(),
+                        timing.arithmetic_micros.into(),
+                        timing.publication_micros.into(),
+                    ))
+                    .await;
             }
         }
         for packed in &self.channels {
-            report_channel_action(*packed, self.output);
+            report_channel_action(*packed, self.output).await;
         }
         if let Some(execution) = &self.rx {
-            report_rx_gain(execution, self.output);
+            report_rx_gain(execution, self.output).await;
         }
-        print(
-            self.output,
-            format_args!("OPEN_RADIO_HIL sar_tail tick={} {:?}\n", tick, self.tails),
-        );
+        self.tails.report(tick.into(), self.output).await;
     }
 }
-impl<C: Clock, W: core::fmt::Write> Observer<'_, C, W> {
+impl<C: Clock, W: Notes> Observer<'_, C, W> {
     pub fn channel_action_completed(
         &mut self,
         action: u8,
@@ -169,105 +165,93 @@ impl<C: Clock, W: core::fmt::Write> Observer<'_, C, W> {
     }
 }
 
-fn print(output: &mut impl core::fmt::Write, args: core::fmt::Arguments<'_>) {
-    output.write_fmt(args).expect("diagnostic UART output");
-}
 /// Family formatting stays outside the observer and measured driver frames.
 #[inline(never)]
-fn report_engine(operation: Operation, timing: &HoldPolls, output: &mut impl core::fmt::Write) {
-    let family = operation_family(operation);
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL engine family={} polls={} pending={} ready={}\n",
+async fn report_engine(operation: Operation, timing: &HoldPolls, output: &mut impl Notes) {
+    let family = operation_family(operation) as u32;
+    output
+        .note(&Note::engine_polls(
             family,
-            timing.polls,
-            timing.pending,
-            timing.polls.saturating_sub(timing.pending)
-        ),
-    );
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL engine family={} total-us={} max-us={}\n",
-            family, timing.total_micros, timing.maximum_micros
-        ),
-    );
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL engine family={} resumes={} late-total-us={}\n",
-            family, timing.resumes, timing.lateness_micros
-        ),
-    );
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL engine family={} late-max-us={} invalid={}\n",
-            family, timing.maximum_lateness_micros, timing.invalid
-        ),
-    );
+            timing.polls.into(),
+            timing.pending.into(),
+            timing.polls.saturating_sub(timing.pending).into(),
+        ))
+        .await;
+    output
+        .note(&Note::engine_totals(
+            family,
+            timing.total_micros,
+            timing.maximum_micros,
+        ))
+        .await;
+    output
+        .note(&Note::engine_resumes(
+            family,
+            timing.resumes.into(),
+            timing.lateness_micros,
+        ))
+        .await;
+    output
+        .note(&Note::engine_lateness(
+            family,
+            timing.maximum_lateness_micros,
+            timing.invalid,
+        ))
+        .await;
     if matches!(
         operation,
         Operation::WifiPower | Operation::BluetoothIeee802154Power
     ) {
-        print(
-            output,
-            format_args!(
-                "OPEN_RADIO_HIL power-gain family={} count={} max-us={}\n",
-                family, timing.ready_edges, timing.maximum_ready_micros
-            ),
-        );
+        output
+            .note(&Note::power_gain(
+                family,
+                timing.ready_edges.into(),
+                timing.maximum_ready_micros,
+            ))
+            .await;
     }
     if operation == Operation::Dcode {
-        print(
-            output,
-            format_args!(
-                "OPEN_RADIO_HIL dcode-atom count={} max-us={}\n",
-                timing.ready_edges, timing.maximum_ready_micros
-            ),
-        );
+        output
+            .note(&Note::dcode_atom(
+                timing.ready_edges.into(),
+                timing.maximum_ready_micros,
+            ))
+            .await;
     }
     if matches!(operation, Operation::RxGain | Operation::ChannelRestore) {
-        print(
-            output,
-            format_args!(
-                "OPEN_RADIO_HIL calibration-atom family={} count={} max-us={}\n",
-                family, timing.ready_edges, timing.maximum_ready_micros
-            ),
-        );
+        output
+            .note(&Note::calibration_atom(
+                family,
+                timing.ready_edges.into(),
+                timing.maximum_ready_micros,
+            ))
+            .await;
     }
 }
 
 #[inline(never)]
-fn report_channel_action(packed: u64, output: &mut impl core::fmt::Write) {
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL channel-action name={} packed={}\n",
+async fn report_channel_action(packed: u64, output: &mut impl Notes) {
+    output
+        .note(&Note::channel_action(
             oer_esp32s31_phy::tracking::observation::calibration::name(true, (packed >> 32) as u8),
-            packed
-        ),
-    );
+            packed,
+        ))
+        .await;
 }
 
 #[inline(never)]
-fn report_rx_gain(execution: &RxGainExecution, output: &mut impl core::fmt::Write) {
+async fn report_rx_gain(execution: &RxGainExecution, output: &mut impl Notes) {
     let [lower, hardware, commit] = execution.maximum_parts_micros;
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL rx-gain-parts lower-us={} hardware-us={} commit-us={}\n",
-            lower, hardware, commit
-        ),
-    );
+    output
+        .note(&Note::rx_gain_parts(lower, hardware, commit))
+        .await;
     for (part, (action, micros)) in execution
         .maximum_parts_actions
         .into_iter()
         .zip(execution.maximum_parts_micros)
         .enumerate()
     {
-        report_calibration_action(part as u8, action, micros, output);
+        report_calibration_action(part as u8, action, micros, output).await;
     }
     for (part, (action, micros)) in execution
         .maximum_engine_actions
@@ -275,13 +259,13 @@ fn report_rx_gain(execution: &RxGainExecution, output: &mut impl core::fmt::Writ
         .zip(execution.maximum_engine_micros)
         .enumerate()
     {
-        report_calibration_action(3 + part as u8, action, micros, output);
+        report_calibration_action(3 + part as u8, action, micros, output).await;
     }
-    report_rx_i2c_polls(execution, output);
+    report_rx_i2c_polls(execution, output).await;
 }
 
 #[inline(never)]
-fn report_rx_i2c_polls(execution: &RxGainExecution, output: &mut impl core::fmt::Write) {
+async fn report_rx_i2c_polls(execution: &RxGainExecution, output: &mut impl Notes) {
     for (stage, maxima) in execution.i2c_poll_micros.into_iter().enumerate() {
         for (repeat, micros) in maxima.into_iter().enumerate() {
             report_calibration_action(
@@ -289,33 +273,24 @@ fn report_rx_i2c_polls(execution: &RxGainExecution, output: &mut impl core::fmt:
                 11 | if repeat == 0 { 0x80 } else { 0 },
                 micros,
                 output,
-            );
+            )
+            .await;
         }
     }
     let samples = (u64::from(execution.i2c_samples[0]) << 32) | u64::from(execution.i2c_samples[1]);
-    print(
-        output,
-        format_args!("OPEN_RADIO_HIL rx-i2c-samples-packed={}\n", samples),
-    );
+    output.note(&Note::rx_i2c_samples(samples)).await;
 }
 
 #[inline(never)]
-fn report_calibration_action(
-    part: u8,
-    action: u8,
-    micros: u32,
-    output: &mut impl core::fmt::Write,
-) {
-    print(
-        output,
-        format_args!(
-            "OPEN_RADIO_HIL calibration-name channel=false part={} action={} first={} us={}\n",
-            part,
+async fn report_calibration_action(part: u8, action: u8, micros: u32, output: &mut impl Notes) {
+    output
+        .note(&Note::calibration_name(
+            part.into(),
             oer_esp32s31_phy::tracking::observation::calibration::name(false, action),
             action & 0x80 != 0,
-            micros
-        ),
-    );
+            micros,
+        ))
+        .await;
 }
 
 fn operation_family(operation: Operation) -> usize {

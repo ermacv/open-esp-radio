@@ -4,23 +4,23 @@
 //! transport (the halves of an `embedded-io-async` endpoint) and a way to
 //! write one line immediately; the image supplies its [`crate::base::Platform`] and
 //! serves its own requests. The console owns everything between: the ordered
-//! queue of outgoing messages, the bounded text log, the request intake with
-//! the base module, and the link counters.
+//! queue of outgoing messages, the queue of diagnostic notes, the request
+//! intake with the base module, and the link counters.
 //!
 //! Producers never touch the endpoint. They serialize their message into
 //! the queue ([`Console::publish`] drops it when the queue is full,
 //! [`Console::publish_reliably`] waits), and the one [`Console::run`] task
-//! frames and writes messages and text lines in queue order.
+//! frames and writes messages and notes in queue order. A note is a typed
+//! [`oer_diagnostics::Note`]; the console numbers it when it writes it, so
+//! the host sees a lost one and never a reordered one. The console formats
+//! no text.
 
 pub mod progress;
-mod text;
 pub mod writer;
-
-pub use text::TextBuffer;
 
 use core::cell::RefCell;
 use core::ffi::CStr;
-use core::fmt::Arguments;
+use core::marker::PhantomData;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use embassy_futures::select::{Either3, select3};
@@ -28,24 +28,32 @@ use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex as AsyncMutex;
 use embedded_io_async::{Read, Write};
+use oer_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
 use oer_hil_protocol::base::{ImageKeySet, LinkHealth, Rejected};
 use oer_hil_protocol::{DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity};
 
 use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
 
-/// Text lines written back to back before the task looks at the queue again.
+/// Messages and notes written back to back before the task looks at the
+/// queues again.
 const DRAIN_BATCH: usize = 4;
 /// The boot's first message: the host's handshake expects Hello here.
 const HELLO_SEQUENCE: u32 = 0;
 /// Bytes read from the endpoint at once.
 const RX_CHUNK: usize = 128;
 
-/// One console. `LINE` bounds one text line, `LINES` the queued lines and
-/// `MESSAGES` the queued messages.
-pub struct Console<const LINE: usize, const LINES: usize, const MESSAGES: usize> {
-    /// Writes one line synchronously, for boot, panic and the time before
-    /// [`Console::run`] starts.
-    immediate: fn(&CStr),
+/// How a chip writes one line synchronously, independently of its USB
+/// driver: for the time before [`Console::run`] starts and for notes that
+/// cannot wait. A type, not a pointer, so that the call is a direct one.
+pub trait Immediate {
+    /// Writes `line` and a line end.
+    fn print(line: &CStr);
+}
+
+/// One console. `NOTES` bounds the queued notes and `MESSAGES` the queued
+/// messages; `P` writes its immediate lines.
+pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
+    immediate: PhantomData<P>,
     writer: writer::Writer,
     running: AtomicBool,
     boot_low: AtomicU32,
@@ -59,28 +67,25 @@ pub struct Console<const LINE: usize, const LINES: usize, const MESSAGES: usize>
     // writer's future, which is moved into its task.
     encoder: AsyncMutex<CriticalSectionRawMutex, FrameEncoder>,
     messages: Channel<CriticalSectionRawMutex, Outbound, MESSAGES>,
-    lines: Channel<CriticalSectionRawMutex, TextBuffer<LINE>, LINES>,
+    notes: Channel<CriticalSectionRawMutex, Note<'static>, NOTES>,
     written: progress::SerializedEvents,
     sent_frames: AtomicU32,
     dropped_messages: AtomicU32,
     received: Mutex<CriticalSectionRawMutex, RefCell<DecodeCounters>>,
-    text: TextLoss,
+    lost: NoteLoss,
 }
 
-/// What the text log lost.
-struct TextLoss {
+/// What the note queue lost.
+struct NoteLoss {
     dropped: AtomicU32,
-    queue_full: AtomicU32,
     writer_busy: AtomicU32,
     write_errors: AtomicU32,
-    truncated: AtomicU32,
-    first_queue_loss: Mutex<CriticalSectionRawMutex, RefCell<Option<TextBuffer<160>>>>,
 }
 
-impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE, LINES, MESSAGES> {
-    pub const fn new(immediate: fn(&CStr)) -> Self {
+impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MESSAGES, P> {
+    pub const fn new() -> Self {
         Self {
-            immediate,
+            immediate: PhantomData,
             writer: writer::Writer::new(),
             running: AtomicBool::new(false),
             boot_low: AtomicU32::new(0),
@@ -89,7 +94,7 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
             publishing: AsyncMutex::new(()),
             encoder: AsyncMutex::new(FrameEncoder::new()),
             messages: Channel::new(),
-            lines: Channel::new(),
+            notes: Channel::new(),
             written: progress::SerializedEvents::new(),
             sent_frames: AtomicU32::new(0),
             dropped_messages: AtomicU32::new(0),
@@ -105,13 +110,10 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
                 deserialize_errors: 0,
                 overflows: 0,
             })),
-            text: TextLoss {
+            lost: NoteLoss {
                 dropped: AtomicU32::new(0),
-                queue_full: AtomicU32::new(0),
                 writer_busy: AtomicU32::new(0),
                 write_errors: AtomicU32::new(0),
-                truncated: AtomicU32::new(0),
-                first_queue_loss: Mutex::new(RefCell::new(None)),
             },
         }
     }
@@ -178,38 +180,17 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
         self.written.wait_for(sequence).await;
     }
 
-    /// Queues one text line; before [`Console::run`] starts, writes it
-    /// immediately.
-    pub fn line(&self, args: Arguments<'_>) {
-        if !self.running.load(Ordering::Acquire) {
-            self.line_immediately(args);
-            return;
-        }
-        // Under sustained pressure, skip even the formatting of a line that
-        // cannot enter the queue; `try_send` stays the authoritative check.
-        if self.lines.is_full() {
-            self.lose_queued_line(args);
-            return;
-        }
-        let line = self.format(args);
-        if self.lines.try_send(line).is_err() {
-            self.lose_queued_line(args);
-        }
-    }
-
-    /// Queues one text line, waiting for room instead of losing it; before
+    /// Queues `note`, waiting for room instead of losing it; before
     /// [`Console::run`] starts, writes it immediately. Only for reporting
     /// outside measured hot paths, which must not depend on USB progress.
-    pub async fn line_reliably(&self, args: Arguments<'_>) {
+    pub async fn note_reliably(&self, note: &Note<'static>) {
         if !self.running.load(Ordering::Acquire) {
-            self.line_immediately(args);
+            self.note_immediately(note);
             return;
         }
-        // Wait for room before formatting, so the caller's future never
-        // holds a whole line across the await.
         loop {
-            core::future::poll_fn(|cx| self.lines.poll_ready_to_send(cx)).await;
-            if self.lines.try_send(self.format(args)).is_ok() {
+            core::future::poll_fn(|cx| self.notes.poll_ready_to_send(cx)).await;
+            if self.notes.try_send(*note).is_ok() {
                 return;
             }
         }
@@ -220,35 +201,32 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
         self.dropped_messages.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Writes one line now, for boot, panic and last-resort diagnostics. It
-    /// never interleaves with a frame: while the task writes, the line is
-    /// dropped and counted.
-    pub fn line_immediately(&self, args: Arguments<'_>) {
-        let line = self.format(args);
+    /// Writes `note` now, for the time before [`Console::run`] starts and
+    /// for synchronous callers. It never interleaves with a frame: while the
+    /// task writes, the note is dropped and counted.
+    pub fn note_immediately(&self, note: &Note<'_>) {
         let Some(_writing) = self.writer.try_acquire() else {
-            self.text.writer_busy.fetch_add(1, Ordering::Relaxed);
-            self.text.dropped.fetch_add(1, Ordering::Relaxed);
+            self.lost.writer_busy.fetch_add(1, Ordering::Relaxed);
+            self.lost.dropped.fetch_add(1, Ordering::Relaxed);
             return;
         };
-        (self.immediate)(line.as_c_str());
+        let mut line = NoteLine::new();
+        line.encode(note);
+        if let Some(text) = line.text() {
+            P::print(text);
+        }
     }
 
-    /// Text lines lost to a full queue, a busy writer or a failed write.
-    pub fn dropped_lines(&self) -> u32 {
-        self.text.dropped.load(Ordering::Relaxed)
-    }
-
-    /// Text lines cut to fit `LINE`.
-    pub fn truncated_lines(&self) -> u32 {
-        self.text.truncated.load(Ordering::Relaxed)
+    /// Notes lost to a busy writer or a failed write.
+    pub fn dropped_notes(&self) -> u32 {
+        self.lost.dropped.load(Ordering::Relaxed)
     }
 
     fn sent(&self) -> Sent {
         Sent {
             frames: self.sent_frames.load(Ordering::Acquire),
             dropped: self.dropped_messages.load(Ordering::Acquire),
-            text_dropped: self.dropped_lines(),
-            text_truncated: self.truncated_lines(),
+            notes_dropped: self.dropped_notes(),
         }
     }
 
@@ -256,24 +234,6 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
     pub fn link_health(&self) -> LinkHealth {
         let received = self.received.lock(|received| *received.borrow());
         crate::base::link_health(received, self.sent())
-    }
-
-    fn format(&self, args: Arguments<'_>) -> TextBuffer<LINE> {
-        let line = TextBuffer::format(args);
-        if line.was_truncated() {
-            self.text.truncated.fetch_add(1, Ordering::Relaxed);
-        }
-        line
-    }
-
-    fn lose_queued_line(&self, args: Arguments<'_>) {
-        if self.text.queue_full.fetch_add(1, Ordering::Relaxed) == 0 {
-            let first = TextBuffer::format(args);
-            self.text
-                .first_queue_loss
-                .lock(|slot| *slot.borrow_mut() = Some(first));
-        }
-        self.text.dropped.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Publishes an answer of the base module for an image serving
@@ -299,7 +259,7 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
     }
 
     /// Serves the endpoint until the chip resets: writes queued messages and
-    /// lines, and hands each request of the image to `serve`, which must
+    /// notes, and hands each request of the image to `serve`, which must
     /// not block; the base module's requests are answered here.
     pub async fn run<C: Requests>(
         &self,
@@ -316,12 +276,11 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
             Err(_) => self.lose_message(),
         }
         let mut chunk = [0_u8; RX_CHUNK];
-        let mut reported = (0, 0);
         loop {
             match select3(
                 self.messages.receive(),
                 rx.read(&mut chunk),
-                self.lines.receive(),
+                self.notes.receive(),
             )
             .await
             {
@@ -342,18 +301,17 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
                         .lock(|received| *received.borrow_mut() = counters);
                 }
                 Either3::Second(Err(_)) => {}
-                Either3::Third(line) => self.write_line(&mut tx, &line).await,
+                Either3::Third(note) => self.write_note(&mut tx, &note).await,
             }
             for _ in 1..DRAIN_BATCH {
                 if let Ok(message) = self.messages.try_receive() {
                     self.write_message(&mut tx, &message).await;
-                } else if let Ok(line) = self.lines.try_receive() {
-                    self.write_line(&mut tx, &line).await;
+                } else if let Ok(note) = self.notes.try_receive() {
+                    self.write_note(&mut tx, &note).await;
                 } else {
                     break;
                 }
             }
-            self.report_text_loss(&mut tx, &mut reported).await;
             embassy_futures::yield_now().await;
         }
     }
@@ -374,63 +332,66 @@ impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> Console<LINE,
         }
     }
 
-    async fn write_line(&self, tx: &mut impl Write, line: &TextBuffer<LINE>) {
+    /// Numbers and writes one note as a whole line, under the writer.
+    async fn write_note(&self, tx: &mut impl Write, note: &Note<'_>) {
         let _writing = self.writer.acquire_async().await;
-        if tx.write_all(line.as_bytes()).await.is_err() || tx.write_all(b"\r\n").await.is_err() {
-            self.text.write_errors.fetch_add(1, Ordering::Relaxed);
-            self.text.dropped.fetch_add(1, Ordering::Relaxed);
+        let mut line = NoteLine::new();
+        line.encode(note);
+        if tx.write_all(line.framed()).await.is_err() {
+            self.lost.write_errors.fetch_add(1, Ordering::Relaxed);
+            self.lost.dropped.fetch_add(1, Ordering::Relaxed);
         }
-    }
-
-    /// Writes one line whenever the text log lost or cut lines since the
-    /// last report.
-    async fn report_text_loss(&self, tx: &mut impl Write, reported: &mut (u32, u32)) {
-        let now = (self.dropped_lines(), self.truncated_lines());
-        if now == *reported {
-            return;
-        }
-        let first = self.text.first_queue_loss.lock(|first| *first.borrow());
-        let first = first
-            .as_ref()
-            .and_then(|line| core::str::from_utf8(line.as_bytes()).ok())
-            .unwrap_or("");
-        let line = self.format(format_args!(
-            "[WARN logger] dropped_total={} truncated_total={} queue_full={} writer_busy={} write_errors={} first_queue_drop={first:?}",
-            now.0,
-            now.1,
-            self.text.queue_full.load(Ordering::Relaxed),
-            self.text.writer_busy.load(Ordering::Relaxed),
-            self.text.write_errors.load(Ordering::Relaxed),
-        ));
-        self.write_line(tx, &line).await;
-        *reported = now;
     }
 }
 
-/// The `log` facade over a console: install it with [`log::set_logger`].
-pub struct Logger<const LINE: usize, const LINES: usize, const MESSAGES: usize>(
-    pub &'static Console<LINE, LINES, MESSAGES>,
-);
+/// One note as the `OER-DIAG:01` line the host decodes.
+struct NoteLine {
+    /// The line with its framing: `\r\n` before and after, then a NUL.
+    bytes: [u8; MAX_NOTE_LINE + 1],
+    length: usize,
+}
 
-impl<const LINE: usize, const LINES: usize, const MESSAGES: usize> log::Log
-    for Logger<LINE, LINES, MESSAGES>
-{
-    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
-        metadata.level() <= log::STATIC_MAX_LEVEL
-    }
-
-    fn log(&self, record: &log::Record<'_>) {
-        if self.enabled(record.metadata()) {
-            self.0.line(format_args!(
-                "[{} {}] {}",
-                record.level(),
-                record.target(),
-                record.args()
-            ));
+impl NoteLine {
+    const fn new() -> Self {
+        Self {
+            bytes: [0; MAX_NOTE_LINE + 1],
+            length: 0,
         }
     }
 
-    fn flush(&self) {}
+    /// Numbers `note` from the boot's shared note sequence. A line that
+    /// does not fit is left empty, never half.
+    fn encode(&mut self, note: &Note<'_>) {
+        let written = emit_note(note, |bytes: &[u8]| {
+            let end = self.length + bytes.len();
+            let slot = if end <= MAX_NOTE_LINE {
+                self.bytes.get_mut(self.length..end)
+            } else {
+                None
+            };
+            slot.map(|slot| slot.copy_from_slice(bytes))
+                .map(|()| self.length = end)
+                .ok_or(())
+        });
+        if written.is_err() {
+            self.length = 0;
+        }
+    }
+
+    /// The whole line with its framing.
+    fn framed(&self) -> &[u8] {
+        self.bytes.get(..self.length).unwrap_or(&[])
+    }
+
+    /// The line without its framing, for a printer that ends lines itself.
+    fn text(&mut self) -> Option<&CStr> {
+        let end = self.length.checked_sub(2)?;
+        if !self.framed().starts_with(b"\r\n") || !self.framed().ends_with(b"\r\n") {
+            return None;
+        }
+        *self.bytes.get_mut(end)? = 0;
+        CStr::from_bytes_until_nul(self.bytes.get(2..=end)?).ok()
+    }
 }
 
 #[cfg(test)]

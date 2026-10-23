@@ -3,10 +3,9 @@
 //! first task, then Embassy timer wakes and rearming before the host's pass
 //! line, all on the USB Serial/JTAG console.
 
-use core::fmt::Write;
-
 use embassy_time::{Duration, Timer};
 use esp_hal::{Blocking, peripherals::USB_DEVICE, usb::usb_serial_jtag::UsbSerialJtag};
+use oer_diagnostics::{Note, emit_note};
 
 /// How long the smoke image waits on its timer before it passes.
 const TIMER_WAKE: Duration = Duration::from_millis(100);
@@ -24,18 +23,20 @@ pub(crate) async fn run(mut console: UsbSerialJtag<'static, Blocking>) {
     let _ = console.write(b"OPEN_RADIO_HIL embassy=START\r\n");
     Timer::after(TIMER_WAKE).await;
     if let Err(failure) = crate::boot_smoke_rearm::run(|measurement| {
-        let _ = write!(
-            console,
-            "OPEN_RADIO_HIL rearm step={} delay_ms={} elapsed_us={}\r\n",
-            measurement.step, measurement.delay_ms, measurement.elapsed_us
+        let _ = emit_note(
+            &Note::rearm(
+                u32::from(measurement.step),
+                measurement.delay_ms,
+                measurement.elapsed_us,
+            ),
+            |bytes| console.write(bytes),
         );
     })
     .await
     {
-        let _ = write!(
-            console,
-            "OPEN_RADIO_HIL boot-smoke=FAIL rearm=FAIL step={} elapsed_us={}\r\n",
-            failure.step, failure.elapsed_us
+        let _ = emit_note(
+            &Note::rearm_failed(u32::from(failure.step), failure.elapsed_us),
+            |bytes| console.write(bytes),
         );
         core::future::pending::<()>().await;
     }

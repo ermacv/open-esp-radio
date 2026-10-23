@@ -3,7 +3,7 @@
 //! driver's lock.
 
 use core::ffi::{CStr, c_char};
-use core::fmt;
+use oer_diagnostics::{Note, emit_note};
 
 unsafe extern "C" {
     fn ets_install_usb_printf();
@@ -30,25 +30,41 @@ pub fn line(text: &CStr) {
     unsafe { ets_printf(c"%s\r\n".as_ptr(), text.as_ptr()) };
 }
 
-/// Print formatted text through the ROM, in pieces of a small stack
-/// buffer; a NUL byte in the text is left out.
-pub fn print_fmt(arguments: fmt::Arguments<'_>) {
-    let mut writer = Writer {
-        buffer: [0; WRITER_BYTES],
+/// Print `note` as one `OER-DIAG:01` console line, in pieces of a small stack
+/// buffer; the host decodes and renders it. The boot's shared sequence lets the
+/// host see a lost or reordered one.
+pub fn note(note: &Note<'_>) {
+    let mut sink = Sink {
+        buffer: [0; SINK_BYTES],
         length: 0,
     };
-    let _ = fmt::Write::write_fmt(&mut writer, arguments);
-    writer.flush();
+    let Ok(()) = emit_note(note, |bytes: &[u8]| {
+        sink.push(bytes);
+        Ok::<(), core::convert::Infallible>(())
+    });
+    sink.flush();
 }
 
-const WRITER_BYTES: usize = 64;
+const SINK_BYTES: usize = 64;
 
-struct Writer {
-    buffer: [u8; WRITER_BYTES],
+struct Sink {
+    buffer: [u8; SINK_BYTES],
     length: usize,
 }
 
-impl Writer {
+impl Sink {
+    fn push(&mut self, bytes: &[u8]) {
+        for &byte in bytes.iter().filter(|&&byte| byte != 0) {
+            if self.length == SINK_BYTES - 1 {
+                self.flush();
+            }
+            if let Some(slot) = self.buffer.get_mut(self.length) {
+                *slot = byte;
+                self.length += 1;
+            }
+        }
+    }
+
     fn flush(&mut self) {
         if let Some(end) = self.buffer.get_mut(self.length) {
             *end = 0;
@@ -57,20 +73,5 @@ impl Writer {
             print(text);
         }
         self.length = 0;
-    }
-}
-
-impl fmt::Write for Writer {
-    fn write_str(&mut self, text: &str) -> fmt::Result {
-        for &byte in text.as_bytes().iter().filter(|&&byte| byte != 0) {
-            if self.length == WRITER_BYTES - 1 {
-                self.flush();
-            }
-            if let Some(slot) = self.buffer.get_mut(self.length) {
-                *slot = byte;
-                self.length += 1;
-            }
-        }
-        Ok(())
     }
 }
