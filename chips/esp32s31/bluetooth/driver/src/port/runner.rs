@@ -188,18 +188,18 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
     ) -> Result<(ControllerSchedulerEpoch, ControllerTimeSample, u64), Fault> {
         self.check()?;
         let request = match self.task.controller_time_access() {
-            ControllerTimeAccess::Idle(i) => i.request().map_err(|_| Fault::Hardware)?,
-            _ => return Err(Fault::Hardware),
+            ControllerTimeAccess::Idle(i) => i.request().map_err(|_| Fault::ClockBegin)?,
+            _ => return Err(Fault::ClockBusy),
         };
         loop {
             if self.cancel.load(Ordering::Acquire) || self.timer.now() >= deadline {
                 let _ = self.task.cancel_owned_controller_time(request);
-                return Err(Fault::Hardware);
+                return Err(Fault::ClockTimeout);
             }
             match self
                 .task
                 .recheck_owned_controller_time(request)
-                .map_err(|_| Fault::Hardware)?
+                .map_err(|_| Fault::ClockRead)?
             {
                 ControllerTimeEventStep::Sample { sample, .. } => {
                     let epoch = self.epoch.unwrap_or_else(|| {

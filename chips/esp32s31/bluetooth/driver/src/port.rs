@@ -61,6 +61,10 @@ pub enum Fault {
     Accounting,
     Abandoned,
     RejectedTerminal,
+    ClockBusy,
+    ClockBegin,
+    ClockTimeout,
+    ClockRead,
 }
 /// Notification from P1 to P2. The image uses its priority-safe static signal.
 pub trait Notify {

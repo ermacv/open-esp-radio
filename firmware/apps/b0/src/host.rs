@@ -167,7 +167,8 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                 if random {
                     match owner.now().await {
                         Ok(Ok(_)) => {}
-                        _ => return Err(Fault::Hardware),
+                        Err(poisoned) => return Err(poisoned.cause),
+                        Ok(Err(_)) => return Err(Fault::ClockBusy),
                     }
                     self.io.entropy().await?;
                 }
@@ -190,7 +191,8 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                         // removing this command's mandatory terminal.
                         match owner.now().await {
                             Ok(Ok(_)) => {}
-                            _ => return Err(Fault::Hardware),
+                            Err(poisoned) => return Err(poisoned.cause),
+                            Ok(Err(_)) => return Err(Fault::ClockBusy),
                         }
                         let mut phase = owner.phase();
                         service
@@ -213,11 +215,23 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                     Err(owner) => rp::Ended::fail_stop(owner.fail_stop(), Err(Fault::Hardware)),
                 }
             }
-            Err(fault) => rp::Ended::fail_stop(owner.fail_stop(), Err(fault)),
+            Err(fault) => {
+                let _ = self.io.send(&HardwareError([0x10, 1, fault as u8])).await;
+                rp::Ended::fail_stop(owner.fail_stop(), Err(fault))
+            }
         }
     }
 }
 struct StopComplete;
+struct HardwareError([u8; 3]);
+impl HciControllerResponse for HardwareError {
+    fn kind(&self) -> PacketKind {
+        PacketKind::Event
+    }
+    fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
 impl HciControllerResponse for StopComplete {
     fn kind(&self) -> PacketKind {
         PacketKind::Event
