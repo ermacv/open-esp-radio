@@ -130,7 +130,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
     let p = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(p.PSRAM));
-    let mut console = UsbSerialJtag::new(p.USB_DEVICE);
+    let mut console = UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(p.USB_DEVICE));
     if previous.is_some() {
         let _ = console.write(b"OER-B0-BRINGUP: previous panic\r\n");
     }
