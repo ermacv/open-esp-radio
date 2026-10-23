@@ -290,6 +290,9 @@ impl Signals {
         }
     }
 
+    // Keep the typed Waker scopes outside the backend's generated poll frame
+    // so stack analysis can resolve both quarantine notifications.
+    #[inline(never)]
     pub(crate) fn quarantine(&self) {
         // No transition out of quarantine exists, including after a late
         // hardware stop or a concurrent normal teardown.
