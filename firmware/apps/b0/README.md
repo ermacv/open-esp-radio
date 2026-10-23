@@ -25,3 +25,8 @@ explicit 0 dBm cap, leases both boards and exclusive air, and runs the
 two-boot 1M DTM procedure against the pinned ESP-IDF peer. Its evidence goes
 to the user's XDG data directory. Hardware conformance is separate from
 this RF/count procedure; a successful build alone proves neither.
+
+The current USB transport completes the first Reset but does not complete
+the next command on the stand. The JTAG post-mortem places the last
+interrupted P1 frame in the USB transmit flush retry. RF, the two-boot gate
+and hardware port conformance are unqualified.
