@@ -18789,7 +18789,8 @@ pub mod modem_syscon_radio {
     pub struct RegisterBlock {
         _reserved0: [u8; 0x04],
         clk_conf: ClkConf,
-        _reserved1: [u8; 0x08],
+        _reserved1: [u8; 0x04],
+        clk_conf_power_st: ClkConfPowerSt,
         modem_rst_conf: ModemRstConf,
         clk_conf1: ClkConf1,
     }
@@ -18798,6 +18799,11 @@ pub mod modem_syscon_radio {
         #[inline(always)]
         pub const fn clk_conf(&self) -> &ClkConf {
             &self.clk_conf
+        }
+        #[doc = "0x0c - Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET."]
+        #[inline(always)]
+        pub const fn clk_conf_power_st(&self) -> &ClkConfPowerSt {
+            &self.clk_conf_power_st
         }
         #[doc = "0x10 - Modem protocol reset lines."]
         #[inline(always)]
@@ -18950,6 +18956,117 @@ pub mod modem_syscon_radio {
         impl crate::Resettable for ClkConfSpec {
             const RESET_VALUE: u32 = 0x0020_0002;
         }
+    }
+    #[doc = "CLK_CONF_POWER_ST (rw) register accessor: Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET.\n\nYou can [`read`](crate::Reg::read) this register and get [`clk_conf_power_st::R`]. You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`clk_conf_power_st::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@clk_conf_power_st`] module"]
+    #[doc(alias = "CLK_CONF_POWER_ST")]
+    pub type ClkConfPowerSt = crate::Reg<clk_conf_power_st::ClkConfPowerStSpec>;
+    #[doc = "Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET."]
+    pub mod clk_conf_power_st {
+        #[doc = "Register `CLK_CONF_POWER_ST` reader"]
+        pub type R = crate::R<ClkConfPowerStSpec>;
+        #[doc = "Register `CLK_CONF_POWER_ST` writer"]
+        pub type W = crate::W<ClkConfPowerStSpec>;
+        #[doc = "Field `CLK_ZB_ST_MAP` reader - Power states that enable the IEEE 802.15.4 clock domain."]
+        pub type ClkZbStMapR = crate::FieldReader;
+        #[doc = "Field `CLK_ZB_ST_MAP` writer - Power states that enable the IEEE 802.15.4 clock domain."]
+        pub type ClkZbStMapW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        #[doc = "Field `CLK_FE_ST_MAP` reader - Power states that enable the front-end clock domain."]
+        pub type ClkFeStMapR = crate::FieldReader;
+        #[doc = "Field `CLK_FE_ST_MAP` writer - Power states that enable the front-end clock domain."]
+        pub type ClkFeStMapW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        #[doc = "Field `CLK_BT_ST_MAP` reader - Power states that enable the Bluetooth clock domain."]
+        pub type ClkBtStMapR = crate::FieldReader;
+        #[doc = "Field `CLK_BT_ST_MAP` writer - Power states that enable the Bluetooth clock domain."]
+        pub type ClkBtStMapW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        #[doc = "Field `CLK_WIFI_ST_MAP` reader - Power states that enable the Wi-Fi clock domain."]
+        pub type ClkWifiStMapR = crate::FieldReader;
+        #[doc = "Field `CLK_WIFI_ST_MAP` writer - Power states that enable the Wi-Fi clock domain."]
+        pub type ClkWifiStMapW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        #[doc = "Field `CLK_MODEM_PERI_ST_MAP` reader - Power states that enable the modem peripheral clock domain."]
+        pub type ClkModemPeriStMapR = crate::FieldReader;
+        #[doc = "Field `CLK_MODEM_PERI_ST_MAP` writer - Power states that enable the modem peripheral clock domain."]
+        pub type ClkModemPeriStMapW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        #[doc = "Field `CLK_MODEM_APB_ST_MAP` reader - Power states that enable the modem APB clock domain."]
+        pub type ClkModemApbStMapR = crate::FieldReader;
+        #[doc = "Field `CLK_MODEM_APB_ST_MAP` writer - Power states that enable the modem APB clock domain."]
+        pub type ClkModemApbStMapW<'a, REG> = crate::FieldWriter<'a, REG, 4>;
+        impl R {
+            #[doc = "Bits 8:11 - Power states that enable the IEEE 802.15.4 clock domain."]
+            #[inline(always)]
+            pub fn clk_zb_st_map(&self) -> ClkZbStMapR {
+                ClkZbStMapR::new(((self.bits >> 8) & 0x0f) as u8)
+            }
+            #[doc = "Bits 12:15 - Power states that enable the front-end clock domain."]
+            #[inline(always)]
+            pub fn clk_fe_st_map(&self) -> ClkFeStMapR {
+                ClkFeStMapR::new(((self.bits >> 12) & 0x0f) as u8)
+            }
+            #[doc = "Bits 16:19 - Power states that enable the Bluetooth clock domain."]
+            #[inline(always)]
+            pub fn clk_bt_st_map(&self) -> ClkBtStMapR {
+                ClkBtStMapR::new(((self.bits >> 16) & 0x0f) as u8)
+            }
+            #[doc = "Bits 20:23 - Power states that enable the Wi-Fi clock domain."]
+            #[inline(always)]
+            pub fn clk_wifi_st_map(&self) -> ClkWifiStMapR {
+                ClkWifiStMapR::new(((self.bits >> 20) & 0x0f) as u8)
+            }
+            #[doc = "Bits 24:27 - Power states that enable the modem peripheral clock domain."]
+            #[inline(always)]
+            pub fn clk_modem_peri_st_map(&self) -> ClkModemPeriStMapR {
+                ClkModemPeriStMapR::new(((self.bits >> 24) & 0x0f) as u8)
+            }
+            #[doc = "Bits 28:31 - Power states that enable the modem APB clock domain."]
+            #[inline(always)]
+            pub fn clk_modem_apb_st_map(&self) -> ClkModemApbStMapR {
+                ClkModemApbStMapR::new(((self.bits >> 28) & 0x0f) as u8)
+            }
+        }
+        impl W {
+            #[doc = "Bits 8:11 - Power states that enable the IEEE 802.15.4 clock domain."]
+            #[inline(always)]
+            pub fn clk_zb_st_map(&mut self) -> ClkZbStMapW<'_, ClkConfPowerStSpec> {
+                ClkZbStMapW::new(self, 8)
+            }
+            #[doc = "Bits 12:15 - Power states that enable the front-end clock domain."]
+            #[inline(always)]
+            pub fn clk_fe_st_map(&mut self) -> ClkFeStMapW<'_, ClkConfPowerStSpec> {
+                ClkFeStMapW::new(self, 12)
+            }
+            #[doc = "Bits 16:19 - Power states that enable the Bluetooth clock domain."]
+            #[inline(always)]
+            pub fn clk_bt_st_map(&mut self) -> ClkBtStMapW<'_, ClkConfPowerStSpec> {
+                ClkBtStMapW::new(self, 16)
+            }
+            #[doc = "Bits 20:23 - Power states that enable the Wi-Fi clock domain."]
+            #[inline(always)]
+            pub fn clk_wifi_st_map(&mut self) -> ClkWifiStMapW<'_, ClkConfPowerStSpec> {
+                ClkWifiStMapW::new(self, 20)
+            }
+            #[doc = "Bits 24:27 - Power states that enable the modem peripheral clock domain."]
+            #[inline(always)]
+            pub fn clk_modem_peri_st_map(&mut self) -> ClkModemPeriStMapW<'_, ClkConfPowerStSpec> {
+                ClkModemPeriStMapW::new(self, 24)
+            }
+            #[doc = "Bits 28:31 - Power states that enable the modem APB clock domain."]
+            #[inline(always)]
+            pub fn clk_modem_apb_st_map(&mut self) -> ClkModemApbStMapW<'_, ClkConfPowerStSpec> {
+                ClkModemApbStMapW::new(self, 28)
+            }
+        }
+        #[doc = "Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET.\n\nYou can [`read`](crate::Reg::read) this register and get [`clk_conf_power_st::R`](R). You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`clk_conf_power_st::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct ClkConfPowerStSpec;
+        impl crate::RegisterSpec for ClkConfPowerStSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`clk_conf_power_st::R`](R) reader structure"]
+        impl crate::Readable for ClkConfPowerStSpec {}
+        #[doc = "`write(|w| ..)` method takes [`clk_conf_power_st::W`](W) writer structure"]
+        impl crate::Writable for ClkConfPowerStSpec {
+            type Safety = crate::Unsafe;
+        }
+        #[doc = "`reset()` method sets CLK_CONF_POWER_ST to value 0"]
+        impl crate::Resettable for ClkConfPowerStSpec {}
     }
     #[doc = "MODEM_RST_CONF (rw) register accessor: Modem protocol reset lines.\n\nYou can [`read`](crate::Reg::read) this register and get [`modem_rst_conf::R`]. You can [`reset`](crate::Reg::reset), [`write`](crate::Reg::write), [`write_with_zero`](crate::Reg::write_with_zero) this register using [`modem_rst_conf::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@modem_rst_conf`] module"]
     #[doc(alias = "MODEM_RST_CONF")]

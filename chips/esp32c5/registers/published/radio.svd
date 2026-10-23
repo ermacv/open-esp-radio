@@ -7403,6 +7403,53 @@ and are preserved by every field transaction.</description>
           </fields>
         </register>
         <register>
+          <name>CLK_CONF_POWER_ST</name>
+          <description>Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET.</description>
+          <addressOffset>0xC</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <resetMask>0xFFFFFF00</resetMask>
+          <fields>
+            <field>
+              <name>CLK_ZB_ST_MAP</name>
+              <description>Power states that enable the IEEE 802.15.4 clock domain.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>CLK_FE_ST_MAP</name>
+              <description>Power states that enable the front-end clock domain.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>CLK_BT_ST_MAP</name>
+              <description>Power states that enable the Bluetooth clock domain.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>CLK_WIFI_ST_MAP</name>
+              <description>Power states that enable the Wi-Fi clock domain.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>CLK_MODEM_PERI_ST_MAP</name>
+              <description>Power states that enable the modem peripheral clock domain.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>CLK_MODEM_APB_ST_MAP</name>
+              <description>Power states that enable the modem APB clock domain.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
           <name>MODEM_RST_CONF</name>
           <description>Modem protocol reset lines.</description>
           <addressOffset>0x10</addressOffset>
