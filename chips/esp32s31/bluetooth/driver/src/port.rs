@@ -26,6 +26,8 @@ use oer_time::{Clock, Duration, Instant, Timer};
 
 mod capacity;
 #[cfg(any(target_arch = "riscv32", test))]
+mod event;
+#[cfg(any(target_arch = "riscv32", test))]
 mod guard;
 mod lifecycle;
 /// Durable command and clock endpoints for the separately retained P2 worker.
