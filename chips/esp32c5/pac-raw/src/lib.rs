@@ -14127,14 +14127,14 @@ pub mod modem_wifi_mac_power_observed {
         }
     }
 }
-#[doc = "Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This selective foundation publishes only register geometry exercised by the pinned public common/chip LL accessors. The public struct and register headers still carry TODO ZB-93 pending an authoritative regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep words remain deliberately absent and no reset values are claimed."]
+#[doc = "Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This selective foundation publishes only register geometry exercised by the pinned public common/chip LL accessors and separately cited board observations of implemented opaque bits. The public struct and register headers still carry TODO ZB-93 pending an authoritative regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep words remain deliberately absent and no reset values are claimed."]
 pub type Ieee802154Mac = crate::Periph<ieee802154_mac::RegisterBlock, 0x600a_3000>;
 impl core::fmt::Debug for Ieee802154Mac {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Ieee802154Mac").finish()
     }
 }
-#[doc = "Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This selective foundation publishes only register geometry exercised by the pinned public common/chip LL accessors. The public struct and register headers still carry TODO ZB-93 pending an authoritative regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep words remain deliberately absent and no reset values are claimed."]
+#[doc = "Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This selective foundation publishes only register geometry exercised by the pinned public common/chip LL accessors and separately cited board observations of implemented opaque bits. The public struct and register headers still carry TODO ZB-93 pending an authoritative regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep words remain deliberately absent and no reset values are claimed."]
 pub mod ieee802154_mac {
     #[repr(C)]
     #[doc = "Register block"]
@@ -14402,7 +14402,7 @@ pub mod ieee802154_mac {
         pub const fn multipan3_extended_address_high(&self) -> &MultipanExtendedAddressHigh {
             self.multipan_extended_address_high(3)
         }
-        #[doc = "0x48 - Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent."]
+        #[doc = "0x48 - Selected primary frequency code and an implemented opaque bit 7. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent."]
         #[inline(always)]
         pub const fn channel(&self) -> &Channel {
             &self.channel
@@ -15200,10 +15200,10 @@ pub mod ieee802154_mac {
             type Safety = crate::Safe;
         }
     }
-    #[doc = "CHANNEL (rw) register accessor: Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`channel::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`channel::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@channel`] module"]
+    #[doc = "CHANNEL (rw) register accessor: Selected primary frequency code and an implemented opaque bit 7. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`channel::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`channel::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@channel`] module"]
     #[doc(alias = "CHANNEL")]
     pub type Channel = crate::Reg<channel::ChannelSpec>;
-    #[doc = "Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent."]
+    #[doc = "Selected primary frequency code and an implemented opaque bit 7. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent."]
     pub mod channel {
         #[doc = "Register `CHANNEL` reader"]
         pub type R = crate::R<ChannelSpec>;
@@ -15213,11 +15213,20 @@ pub mod ieee802154_mac {
         pub type FrequencyCodeR = crate::FieldReader;
         #[doc = "Field `FREQUENCY_CODE` writer - Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number."]
         pub type FrequencyCodeW<'a, REG> = crate::FieldWriter<'a, REG, 7, u8, crate::Safe>;
+        #[doc = "Field `BIT_7_OPAQUE` reader - Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23."]
+        pub type Bit7OpaqueR = crate::BitReader;
+        #[doc = "Field `BIT_7_OPAQUE` writer - Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23."]
+        pub type Bit7OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
         impl R {
             #[doc = "Bits 0:6 - Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number."]
             #[inline(always)]
             pub fn frequency_code(&self) -> FrequencyCodeR {
                 FrequencyCodeR::new((self.bits & 0x7f) as u8)
+            }
+            #[doc = "Bit 7 - Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23."]
+            #[inline(always)]
+            pub fn bit_7_opaque(&self) -> Bit7OpaqueR {
+                Bit7OpaqueR::new(((self.bits >> 7) & 1) != 0)
             }
         }
         impl W {
@@ -15226,8 +15235,13 @@ pub mod ieee802154_mac {
             pub fn frequency_code(&mut self) -> FrequencyCodeW<'_, ChannelSpec> {
                 FrequencyCodeW::new(self, 0)
             }
+            #[doc = "Bit 7 - Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23."]
+            #[inline(always)]
+            pub fn bit_7_opaque(&mut self) -> Bit7OpaqueW<'_, ChannelSpec> {
+                Bit7OpaqueW::new(self, 7)
+            }
         }
-        #[doc = "Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`channel::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`channel::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        #[doc = "Selected primary frequency code and an implemented opaque bit 7. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.\n\nYou can [`read`](crate::Reg::read) this register and get [`channel::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`channel::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
         pub struct ChannelSpec;
         impl crate::RegisterSpec for ChannelSpec {
             type Ux = u32;

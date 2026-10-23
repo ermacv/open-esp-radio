@@ -5320,7 +5320,8 @@
       <name>IEEE802154_MAC</name>
       <description>Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This
         selective foundation publishes only register geometry exercised by
-        the pinned public common/chip LL accessors. The public struct and
+        the pinned public common/chip LL accessors and separately cited
+        board observations of implemented opaque bits. The public struct and
         register headers still carry TODO ZB-93 pending an authoritative
         regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep
         words remain deliberately absent and no reset values are claimed.</description>
@@ -5609,7 +5610,7 @@
         </register>
         <register>
           <name>CHANNEL</name>
-          <description>Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.</description>
+          <description>Selected primary frequency code and an implemented opaque bit 7. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.</description>
           <addressOffset>0x48</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
@@ -5625,6 +5626,12 @@
                   <maximum>127</maximum>
                 </range>
               </writeConstraint>
+            </field>
+            <field>
+              <name>BIT_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
             </field>
           </fields>
         </register>

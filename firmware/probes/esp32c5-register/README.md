@@ -24,7 +24,7 @@ and host. A block whose read does not complete is `INCOMPLETE`.
 
 | Register | Expected implemented bits |
 | --- | --- |
-| `CHANNEL` | frequency code 6:0 and the unclassified bit 7 |
+| `CHANNEL` | frequency code 6:0 and the opaque bit 7 |
 | `TX_POWER` | power code 4:0 |
 | `EVENT_ENABLE` | thirteen events 12:0 |
 | `COEX_PTI` | TX/RX PTI 3:0, ACK PTI 7:4, bit 8 |
@@ -44,6 +44,10 @@ cargo stand lease --board esp32c5 --air none --flashed esp32c5-register-probe \
 The image boots through the ESP-IDF second-stage bootloader that `espflash`
 writes and uses esp-hal's standard linker script.
 
-On the stand's ESP32-C5 v1.0 every width matches the model except `CHANNEL`
-bit 7, which is also implemented; the register model records that bit as
-unclassified with this observation as its evidence.
+On the stand's ESP32-C5 v1.0 `CHANNEL` reads back `0xff` after an all-ones
+write. The model records bit 7 as `BIT_7_OPAQUE`, with its meaning and reset
+value unknown, alongside the public seven-bit frequency code. SOURCE:
+`HIL_OPEN_C5_REGISTER_PROBE_2026_09_27` and
+`HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23`. The other measured widths match the
+published fields. Width experiments write registers; the JTAG repeat uses
+a halted target with OpenOCD's WDT-disable hook suppressed.

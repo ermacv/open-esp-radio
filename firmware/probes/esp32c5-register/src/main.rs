@@ -47,7 +47,7 @@ const PROBES: &[Probe] = &[
     Probe {
         // Bit 7 is implemented although the struct declares it reserved;
         // the first board run (2026-09-27) observed it.
-        name: "CHANNEL (freq 6:0, unclassified 7)",
+        name: "CHANNEL (freq 6:0, opaque 7)",
         expected: 0x0000_00ff,
         write_read: |mac| {
             // SAFETY: the idle MAC has no user; the probe restores nothing.
