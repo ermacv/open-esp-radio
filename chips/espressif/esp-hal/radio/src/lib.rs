@@ -5,7 +5,7 @@
 //! and the radio's platform clocks on top of esp-hal's clock control.
 //!
 //! esp-hal owns the SoC and everything before the handoff; the radio HAL owns
-//! the radio blocks after it (docs/decisions.md, "Hardware ownership root").
+//! the radio blocks after it (docs/architecture.md, "Hardware").
 //! [`take_radio`] consumes esp-hal's singletons of the blocks the radio owns
 //! whole ([`RadioSingletons`]) and returns the HAL's [`RadioHardware`] root.
 //! It also requires the adopted [`Psram`]: PSRAM adoption takes esp-hal's

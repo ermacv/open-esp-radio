@@ -1,39 +1,65 @@
 # Architecture
 
-This page describes what exists and the rules new code follows;
-[decisions](decisions.md) lists the choices behind them.
+What the system is, how it is divided and the rules new code follows.
+Details live in the README next to the code they govern; the topic pages at
+the end go deeper.
+
+## Goals and scope
+
+- **Chips.** ESP32-S31 is the product; ESP32-C5 is a research target and a
+  peer on the vendor SDK.
+- **Radios.** Wi-Fi in every mode, Bluetooth LE (every controller capability
+  the hardware offers, multiple connections and the central role first),
+  IEEE 802.15.4, with hardware coexistence between them. Bluetooth Classic
+  later: ACL first, one Bluetooth driver with LE and BR/EDR phases, a generic
+  HCI layer with LE as one sub-dispatcher, one air reservation for all of
+  Bluetooth.
+- **Vendor parity is not a goal.** Clean architecture with hard boundaries,
+  sans-IO protocols tested on the host and hardware offloads come first.
+  Vendor code is evidence of hardware behaviour, not a design to copy; a
+  vendor algorithm may sit behind a seam as one policy but never shapes an
+  interface. What a standard defines follows the standard; a vendor value
+  replaces it only with a stated reason.
+- **Licensing.** MIT OR Apache-2.0. ESP-IDF ports are Apache-2.0 only, with
+  their modification notices. Code written from the vendor libraries and ROMs
+  records facts, not a port. Pinned vendor libraries and ROMs may be analysed,
+  emulated and linked into comparison images locally and in CI; they are
+  never published. Rules for each source: [source policy](source-policy.md).
 
 ## Layers
 
 ```text
 application          credentials, network stack (embassy-net), sockets
-  ieee80211 runtime  one async loop per role set, over the lower-MAC port
+  protocol runtime   one async loop per role set, over the protocol's port
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
-  chip drivers       ESP32-S31 Wi-Fi DMA, MAC and driver core
+  chip drivers       ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 drivers
   radio system       one owner of the shared RF front-end
   PHY                calibration, tracking, channel, TX power (Rust port of libphy)
   HAL                typed register ownership: root, partitions, phased sequences
-  PAC                generated from the register model (raw) plus single transactions
+  PAC                generated from the register model
 platform (firmware/) staged boot, interrupt table, panic record, linker layout
 ```
+
+Wi-Fi is split into `wire` (over-the-air formats), `port` (the backend
+contract), sans-IO cores and a `runtime`; Bluetooth LE and IEEE 802.15.4 have
+their port, model and protocol crates and grow the same split. A backend
+depends on its protocol's port, its wire formats and `cipher` only.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
-time (`oer-time-virtual`). The protocol's runtime adds `async`/`await` over
-the port without binding an executor: time comes from `oer-time`, and the
-firmware composition spawns its futures. Drivers own hardware and wait;
-adapters bind executors and `embassy-time`. The PHY takes cooperative admission
-from `oer-cooperate::CooperativeTimer` alongside its timer. The Espressif
-executor's `Cooperative<T>` binding counts ready run tokens through public
-Embassy trace hooks and also observes pending interrupt/signal facts and the
-current task poll's elapsed time. It adds no retained timer state. Calibration
-checks this port between complete hardware atoms; no private queue layout is
-part of the driver interface.
+time. Only a protocol's runtime awaits, and it binds no executor: time comes
+from `oer-time`, interrupt signals from `portable/`, no `embassy-executor`,
+`embassy-time`, `embassy-net` or HAL dependency (`embassy-sync` and
+`embassy-futures` are allowed). The firmware composition spawns the futures.
+Drivers own hardware and wait; adapters bind executors.
 
-## Execution contexts
+Code whose value is recovered knowledge or a pure algorithm is kept when it
+moves; ownership, orchestration and wiring are rebuilt.
+
+## Execution
 
 | Context | Runs | Rule |
 | --- | --- | --- |
@@ -41,132 +67,174 @@ part of the driver interface.
 | P2 | one radio executor on `FROM_CPU` line 2: Wi-Fi driver, BLE lower link layer, the radio-system actor | every step bounded; long waits are timer waits |
 | P1 / thread | role bodies, network stack, application | — |
 
-An interrupt handler never shares a lock with a task. Drivers never block or
-spin. Lines `FROM_CPU` 0 and 1 are the per-core executors.
-
-### Radio doorbell
-
-While a Wi-Fi interrupt epoch is live, only P3 writes the MAC and WDEVPWR
-interrupt banks. The P3 handlers run one `WifiIrqLine` (Wi-Fi driver
-`irq.rs`) through a `HandlerCell`, an ownership state machine rather than a
-lock: the line holds the active epoch, the fact publishers and a request
-word. P2 asks for a bank change by setting a request bit (`fetch_or`,
-Release) and ringing the doorbell. The doorbell handler resets its software
-interrupt first, then takes every request at once (`swap(0)`, AcqRel), so a
-ring after the reset raises it again and requests before the take coalesce.
-`MASK_ALL` wins over `UNMASK_RX`: the line masks both banks once and posts
-the masked fact; an unmask after it is ignored and counted. P2 requests
-`UNMASK_RX` only after the RX frontier drained with no released buffer left
-to rearm. Installing a line clears a stale request. The doorbell route is
-enabled at boot; the MAC and WDEVPWR routes are enabled after the line is
-installed and silenced right after the mask is confirmed. A lease the upper
-layer returns posts the RX-capacity fact (`RxReturnNotifier`), so the runner
-rearms the returned descriptors even when an exhausted walker raises no RX
-interrupt; the notice touches no ring state.
-
-### W1 receive path
-
-One received frame and the owner of its DMA buffer at each step:
-
-1. **P3.** The MAC line handler masks RX delivery, acknowledges and raises
-   the RX fact in the image's static `IrqSignal` of the P2 executor
-   (`oer_interrupt_table::signal`), which pends P2 and touches no waker;
-   the buffer is the DMA engine's.
-2. **P2.** The executor's handler hands the fact to the receive runner
-   (`rx/receive.rs`) and wakes it in P2's own context; the runner runs
-   the product service (`rx/transaction`), which takes the completed unit
-   and stages it: the original buffer becomes a `NetworkRxFrame` lease of
-   the staging pool, with no copy. Chained, oversized, empty and too-long
-   units are dropped and counted there and never leave P2.
-3. **P2.** `QueueSink` (`rx/upper.rs`), the runner's publisher, marks the
-   lease's first handoff (the monotonic time and the prefix's raw MAC
-   stamp), counts it and sends it into an affine SPSC queue as deep as the
-   pool; a send after a pool credit therefore never refuses. The queue owns
-   the lease. The runner unmasks RX through the doorbell once drained.
-4. **P1.** `FrameReceiver::next` takes the lease and holds it as a
-   `HeldRxFrame`; `normalize` decodes the prefix under `W1_INGRESS` (no
-   strict RXEND or dump-length refusal; what they would refuse is counted)
-   and counts refusals by reason. The application owns the lease.
-5. **P1.** The MPDU and `portable::rx_meta` on the configured channel go to
-   `sta::receive::classify` and `observe_scan`; in W1 the acceptance
-   instrument `runtime::survey::Survey` calls them and tallies each BSS.
-6. **P1.** Dropping the held frame releases the lease and posts the
-   RX-capacity fact; P2 rearms the buffer.
-
-P2 and P1 share only the queue's cursors and an `AtomicWaker`. Teardown waits,
-bounded, until no lease is staged before it stops the walker, and queued
-frames are staged: P1 keeps receiving and dropping frames after it requests
-the stop, until the exit is published; otherwise the epoch ends quarantined
-with `DrainTimeout`.
+- An interrupt handler never shares a lock with a task and reaches tasks
+  through static typed signals, never through an executor's waker.
+- Drivers never block or spin. A named settle of a known length up to 20 µs
+  may busy-wait and counts against its context's step bound; a wait of
+  unknown length is a timer-woken step with a deadline.
+- A lower-priority task wakes a higher-priority one only through
+  `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
+- Interrupt handlers and the executor code they run execute from SRAM or ROM.
+  P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
+  separate controllers). Nothing runs from cached flash. The image check
+  enforces it.
+- Interrupt stacks have a proven bound and are sized from it at link time;
+  task stacks are reported, and an image may declare them proven. No frame
+  exceeds the move limit (4 KiB); larger state lives in placed static
+  storage and futures hold a reference. Code and stacks run from PSRAM after
+  the staged bootstrap. Details: [memory and stacks](memory.md).
 
 ## Ownership
 
 - One owner per resource, neither `Clone` nor `Copy`: `&mut` within a call, a
-  token or lease beyond it, an actor across tasks. A handle shared over a mutex
-  is not ownership. A read-only capability without side effects (a
-  free-running counter nobody writes, such as `MacLocalTime`) may be `Copy`.
-- Who controls a state decides its form: the caller's own state is a typestate
-  or token, the world's (air, hardware, peers, time) a typed refusal or outcome.
-  A `Busy` the caller's own state explains is a design defect.
-- A guarantee is written down only with what enforces it (a type with a
-  compile-fail test, or a stated run-time check).
+  token or lease beyond it, an actor across tasks. A handle shared over a
+  mutex is not ownership. A read-only capability without side effects may be
+  `Copy`.
+- Who controls a state decides its form: the caller's own state is a
+  typestate or token; the world's (air, hardware, peers, time) a typed
+  refusal or outcome. A `Busy` the caller's own state explains is a design
+  defect.
+- A guarantee is written down only with what enforces it: a type with a
+  compile-fail test, or a stated run-time check. A type-level mechanism names
+  the bug it prevents.
 - DMA-reachable storage is permanent and is released only after a proof that
-  DMA stopped; otherwise it is quarantined until reset
-  ([rules](../chips/esp32s31/notes/wifi/dma-execution.md)).
+  DMA stopped; otherwise it is quarantined until reset.
 
-## Hardware ownership
+## Hardware
 
-Two roots, split by phase. esp-hal (the owner's fork) owns the SoC and
-everything before the radio handoff: boot, clocks, interrupts, PSRAM, flash,
-console, time. Our HAL owns the radio blocks after the handoff. Each word both
-sides can write has one runtime writer, listed and reviewed in
-`chips/esp32s31/registers/shared-words.toml` and checked by
-`cargo registers check shared-words`.
-
-Structures the hardware reads and writes in RAM (DMA descriptors, the RX
-control prefix, TX descriptor words, BLE exchange memory) are part of the
-hardware too: [hardware memory](hardware-memory.md) describes them in the
-register model, with the protocol in the HAL.
-
-The S31 Wi-Fi handoff returns one `RadioAccess` by value. The driver owns it
-through the runtime epoch; synchronous HAL capabilities borrow it with
-`&mut`. A retune takes the owner for its entire asynchronous transaction and
-returns it with the result. Register access uses no shared arena or dynamic
-borrow guard.
+- **Two roots, split by phase.** esp-hal (the owner's fork) owns the SoC and
+  everything before the radio handoff: boot, clocks, interrupts, PSRAM,
+  flash, console, time. Our HAL owns the radio blocks after the handoff,
+  taken through a safe constructor that consumes esp-hal's radio singletons.
+  Each word both sides can write has one runtime writer, listed in
+  `chips/esp32s31/registers/shared-words.toml` and checked by `cargo
+  registers check shared-words`.
+- **Register model.** Registers, analog-I2C bytes (a separate space addressed
+  by block and index) and the memory the hardware reads and writes (DMA
+  descriptors, the RX control prefix, TX descriptor words, BLE exchange
+  memory) are described in `chips/<chip>/registers/` and generated into the
+  PAC ([hardware memory](hardware-memory.md)). A bit is described, opaque (a
+  use observed, meaning unknown), reserved or absent; only described and
+  opaque bits are fields. Pointer fields take typed references; placement is
+  proved by the linker; each block's handover protocol is its HAL engine.
+- **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
+  the driver owns it through the runtime epoch and lends it with `&mut`. No
+  shared register arena or dynamic borrow guard.
 
 ## Radio system
 
-One actor on the P2 executor owns the shared RF front-end: PHY
-registration, calibration and tracking, channel retune, modem clocks,
-coexistence timers and sleep. Clients reach it through per-client cells with
-lock-free wakers; PHY membership is a typestate (`Untracked`, `Tracked`,
-`Suspended`). It owns the HAL's `RadioDomain` by value. Coexistence claims
-are not implemented.
+One actor on the P2 executor owns the shared RF front-end: PHY registration,
+calibration and tracking, channel retune, modem clocks, coexistence timers
+and sleep. Clients reach it through per-client cells; PHY membership is a
+typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
+`RadioDomain` by value.
 
-## Regulatory domain
+- **PHY.** Calibration and tracking are cut into bounded P2 steps: a ready P2
+  peer waits for at most one hardware atom, no longer than 50 µs; with no
+  ready peer, polling continues for at most 1 ms. A periodic tracking tick
+  starts only if it overlaps no granted hard window and no announced retune,
+  and is deferred by at most one period. A retune is one transaction; a
+  failure after the first RF write poisons the PHY domain. Calibration
+  matches the vendor when each field stays within the vendor's spread for
+  that field, measured in the same run on the same board; the comparison
+  runs when the calibration sources change.
+- **Power and reset.** Common radio power enables the shared domain without
+  resetting the Wi-Fi MAC. Wi-Fi resets its own baseband and MAC after PHY
+  calibration at its client entry. Brownout policy belongs to the bootstrap.
+- **Regulatory domain.** `oer-radio-regulatory` holds a validated domain (a
+  generated subset of `wireless-regdb`) fixed for an installation; without
+  one no radio installs. Every tune, install, scan and transmission of all
+  three radios takes a `Permitted` channel. A no-initiating-radiation
+  channel is listened on only; 5 GHz DFS channels are refused until radar
+  detection exists. One transmit power ceiling (the domain's EIRP less the
+  antenna gain, the chip's maximum, an owner cap) covers all three radios.
+- **Coexistence.** Hybrid: hardware priority (PTI) and the vendor schedule
+  serve ordinary traffic; typed air claims and grants serve hard deadlines
+  only (the BLE connection event, 802.15.4 timed TX/RX and CSL slot, the
+  beacon window of a dozing Wi-Fi station). Ports name what an operation is;
+  one coexistence owner maps (client, kind) to a priority through the chip
+  family's table (`oer-espressif-coex`). Each MAC's PTI registers belong to
+  its driver. Windows shorter than a grant are enforced by PTI alone and
+  reported as blackouts. The runtime that combines the policy and the
+  schedule does not exist yet.
+- **Low-power clock** is a type (`LpClock<RcSlow | Xtal32k>`).
 
-`oer-radio-regulatory` decides which channels a country permits. A
-`RegulatoryDomain` is a validated list of frequency rules (a generated subset
-of `wireless-regdb`, `cargo regdb`); `permit` turns a protocol's channel
-(`RadioChannel`: Wi-Fi, IEEE 802.15.4, the Bluetooth LE band) into a
-`Permitted` channel, which every tune, install, scan and transmission takes.
-A channel in a no-initiating-radiation rule is listened on only, and a 5 GHz
-DFS channel is refused. One transmit power ceiling, the least of the domain's
-EIRP less the board's antenna gain, the chip's maximum and an owner cap,
-reaches the Wi-Fi PHY, the IEEE 802.15.4 PIB and the Bluetooth LE transmit
-power. The images take the country from the stand (`cargo fw`).
+## Radio ports
 
-## Radio port
+A port is the contract between a protocol's logic and a chip backend
+([radio ports](radio-ports.md), [time](time.md)). `oer-radio-port` and the
+protocol ports are not frozen; they grow with the protocols, each change with
+its model and conformance case.
 
-`oer-radio-port` and the Wi-Fi lower-MAC port (`oer-ieee80211-port`) are
-not frozen. The S31 has no lower-MAC port backend yet: the Wi-Fi images drive
-the chip driver directly.
-[Radio ports](radio-ports.md) states the principles they follow,
-[time](time.md) the clock domains and their relations.
+- Every port has a reference model in its own host crate,
+  `protocols/<protocol>/model`; the hardware backend runs the same
+  conformance cases. Frame protection is the `cipher` layer that backends
+  and models take.
+- One owner holds a lower-MAC core and its phase; every lifecycle transition
+  is a method of a borrowed typestate view.
+- A caller that drops an admitted request detaches only its waker; the port
+  keeps the registration and buffer lease until the terminal event and
+  reclaims exactly once. Event streams end with the uninstall.
+- Abandonment is requested through a static typed signal and executed only
+  in the driver's context, which erases keys and silences routes; a stop the
+  driver does not confirm in its bound leaves the installation quarantined.
+- No radio-system token crosses a port; PHY membership stays inside the
+  backend. The Bluetooth LE port takes the form of the Wi-Fi lower-MAC port.
 
-## Placement
+## Protocols
 
-Code goes where its subject is: `protocols/` for the sans-IO protocols and
-the radio port, `portable/` for generic support, `chips/<chip>/` for one
-chip, `chips/espressif/` for Espressif IP shared by the chips. See the
-[repository layout](repository-layout.md).
+- **Wi-Fi** (`protocols/ieee80211`, driver `chips/esp32s31/ieee80211`). The
+  driver owns the four EDCA queues and executes each attempt's retry plan;
+  EDCA parameters belong to a VIF. Rate selection is its own portable
+  machine: no fixed data or control-frame rate; frames before association and
+  to a group use the lowest rate the BSS basic set allows. MSDU age starts at
+  software admission. Monitor is a tap in the shared lower-MAC loop, not a
+  role; ESP-NOW and FTM are clients of the lower-MAC port. A STA+AP pair keeps
+  the access point running when the upstream cannot rejoin.
+- **Bluetooth LE** (`protocols/bluetooth`, driver `chips/esp32s31/bluetooth`).
+  HCI is the world boundary. Among conflicting connections the one closest to
+  its supervision timeout wins; Host backpressure withholds acknowledgement
+  instead of dropping the link. Controller memory is generated layouts with a
+  HAL handover engine; no controller address reaches the driver. How much of
+  an interval a connection event may take is policy of the portable link
+  layer, from timing allowances the backend reports.
+- **IEEE 802.15.4** (`protocols/ieee802154`). The port boundary follows the
+  OpenThread radio platform: the backend executes acknowledgement, CSMA-CA
+  and the cipher as advertised capabilities; retries, the pending-table
+  policy, keys and counters stay in the core. Configuration is admitted in
+  any radio state.
+
+## Instrumentation and probes
+
+`trace` (what happened), `profile` (what it costs) and `debug-control`
+(knobs that force paths) are separate classes, each under its own cfg
+(`oer_trace`, `oer_profile`, `oer_debug_control`) that only `cargo fw` sets
+for an image declaring it. Probe hooks compile under `cfg(oer_probe)` for
+`cargo fw probe` images only; production has no item only a probe uses.
+
+## Tools
+
+- **Images.** Only `cargo fw` builds images (`tools/image`); it runs the
+  image checks (placement, stacks, frames) and `cargo fw sizes` compares
+  builds.
+- **Stand.** HIL runs (`cargo hil`, `tools/hil`) start by hand when they answer
+  a real question. Stand roles belong to firmware, not boards; the lab router
+  is reprogrammed to each run's profile; the stand file holds no credentials
+  (each run generates and never logs them). A performance A/B is 5 of 5
+  runs: a throughput regression above 5 %, a p95 latency regression above
+  10 % or more CPU load for the same throughput blocks the change. Bisect on
+  the stand is a manual `git bisect run` over one scenario.
+- **Analysis.** Binary analysis is a set of building blocks (ELF view, RV32
+  decoding, lifting, control-flow and value analysis, concrete execution)
+  under `tools/analysis`, with Blobray as the entry point for vendor
+  libraries; ELF is read only through `object`. Vendor register sequences
+  are compared by hand with `tools/vendor`; a scenario prints its verdict and
+  keeps nothing.
+
+## Topic pages
+
+[Repository layout](repository-layout.md) · [unsafe](unsafe.md) ·
+[source policy](source-policy.md) · [hardware memory](hardware-memory.md) ·
+[memory and stacks](memory.md) · [notifications](execution-wakes.md) ·
+[radio ports](radio-ports.md) · [time](time.md) · [network](network.md) ·
+[hardware errata](hardware-errata.md) · [protocol naming](protocol-naming.md)

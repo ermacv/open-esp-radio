@@ -35,7 +35,8 @@ driver.
 
 ## Configuration
 
-Configuration is admitted in any radio state. `pib()` inspects the retained
+Configuration is admitted in any radio state. The frame counter only moves
+forward, except when it is replaced together with the keys. `pib()` inspects the retained
 values; `update_pib(env, |pib| ...)` completes a synchronous engine entry. It
 replaces values without queuing. The caller uses the raw engine's LL and
 environment arguments or the owner's stored MAC.

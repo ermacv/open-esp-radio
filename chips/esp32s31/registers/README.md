@@ -110,8 +110,7 @@ platform-owned `MODEM_LPCON` registers remain in the upstream analysis catalog.
 See the [PAC provenance map](../pac/README.md).
 
 Source provenance catalogs retain their exact source IDs, revisions and hashes.
-Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states)
-and the [Register bits decision](../../../docs/decisions.md#code).
+Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states).
 
 A cited exact whole-register initialization image remains one closed image
 operation when reset is unknown. The image alone gives its lanes no bit

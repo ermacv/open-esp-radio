@@ -17,7 +17,9 @@ contain no Bluetooth state.
   which only `close_rf` consumes. A recoverable close leaves RF open in the
   same epoch.
 - Between requests: the periodic tracking tick, when due, while a member is
-  tracked.
+  tracked. A tick starts only if it overlaps no granted hard window and no
+  announced retune or resume; it is deferred by at most one tracking period,
+  and every shift is counted.
 - A failure that touched shared state poisons the domain; every later answer
   hands back what was lent. The client contract's `Failure` table defines the
   classification.

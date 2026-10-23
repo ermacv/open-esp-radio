@@ -22,7 +22,7 @@ Not affiliated with or endorsed by Espressif Systems.
 | `chips/` | everything Espressif: PACs, HALs, PHY, drivers, staged boot, boards, and each chip's register model, notes and vendor pins |
 | `firmware/` | the images for a chip: apps, bootstraps, HIL agents, probes, ESP-IDF peers |
 | `tools/` | the developer's machine, by domain: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
-| `docs/` | architecture, decisions, source policy, hardware errata |
+| `docs/` | architecture, source policy, hardware errata and topic pages |
 
 ## Build
 

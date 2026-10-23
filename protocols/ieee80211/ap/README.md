@@ -4,6 +4,9 @@
 No other crate uses it yet; its public calls are reached only from its own
 tests.
 
+An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
+a station reports 20/40 OBSS as the standard requires.
+
 ## Known defects
 
 **Security**

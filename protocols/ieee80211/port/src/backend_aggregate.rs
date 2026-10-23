@@ -107,7 +107,7 @@ pub enum AmpduRetryDecision {
     /// send a BlockAckReq at `starting_sequence`, whose BlockAck drives the
     /// resort (a later BlockAck report). Every MPDU
     /// ages from its MSDU's admission, not from the aggregate's commit as in
-    /// `libpp[lmac.o]::lmacMSDUAged` (`docs/decisions.md`, MSDU age).
+    /// `libpp[lmac.o]::lmacMSDUAged` (`protocols/ieee80211/port/README.md`, MSDU age).
     DiscardAged {
         /// Original MPDU positions that remain unacknowledged.
         retry_mask: u32,

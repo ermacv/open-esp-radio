@@ -21,8 +21,8 @@ and sizes.
 ## Code placement
 
 - The image linker selects strict code by analysis and places its input
-  sections in SRAM through `strict-text.x`: [Interrupt code placement in
-  Decisions](decisions.md#execution) and [image checks](../tools/image/checks/README.md).
+  sections in SRAM through `strict-text.x`: [execution in the
+  architecture](architecture.md#execution) and [image checks](../tools/image/checks/README.md).
 - `.hot.text` places code in SRAM for performance:
   [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs).
 - Assembly, riscv-rt and esp-hal use `.trap`, `.rwtext` and
@@ -59,8 +59,8 @@ contracts: [Hardware memory](hardware-memory.md).
 - Task-stack roots, storage and free-space reserves are policy inputs:
   [S31 policy](../chips/esp32s31/platform/stack.toml) and
   [C5 policy](../chips/esp32c5/platform/stack.toml).
-- Static bounds and their assumptions are described in [Stack bounds in
-  Decisions](decisions.md#execution) and the
+- Static bounds and their assumptions are described in [execution in the
+  architecture](architecture.md#execution) and the
   [RV32 stack analyzer](../tools/analysis/riscv-stack/README.md).
 
 ## Panic

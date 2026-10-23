@@ -60,7 +60,8 @@ runtime and the bootstrap with the classes' cfgs (`oer_trace`,
 `oer_profile`, `oer_debug_control`) in a compile cache of their own
 (`target/fw/cargo-<class>-…`); an image that declares none compiles none, in
 `target/fw/cargo`. The probe hooks are no class: `cfg(oer_probe)` belongs to
-`cargo fw probe` alone.
+`cargo fw probe` alone. No crate has a probe feature, and production has no
+item only a probe uses.
 
 An `ImageBundle` is one directory with a `bundle.json`:
 
@@ -409,8 +410,8 @@ not change it. `report` means changes that are only reported. `stop`
 returns exit 1; errors (including incompatible provenance) also return exit 1.
 The command never asks a question itself: the agent takes a `stop` to the owner.
 
-The verdicts follow the "Size budgets" rule in
-[`docs/decisions.md`](../../../docs/decisions.md) and are decided in
+The verdicts follow the "Sizes" rule in
+[`CLAUDE.md`](../../../CLAUDE.md) and are decided in
 [`sizes/compare.rs`](src/sizes/compare.rs). Only growth of an SRAM section or
 of an allocated stack (task or interrupt) is a `stop`. Growth of code,
 read-only data, writable PSRAM, types, frames, computed bounds and root frames, and a new
@@ -461,9 +462,9 @@ Build main and the PR head in two output directories, with the same compiler,
 flags, image configuration and profile. For example, from clean main build
 `cargo fw build w3 --analysis`, then copy `target/fw/w3-analysis` to
 `target/size-base/w3-analysis`. Switch to the PR head, repeat the build and copy
-the output to `target/size-head/w3-analysis`. For a complete chip table include
-every app/analysis bundle and the outputs of `cargo hil images check --all` in
-each directory. Then run:
+the output to `target/size-head/w3-analysis`. Include the bundles of every
+image the change reaches (app/analysis bundles, and `cargo hil images check`
+outputs for HIL classes it touches), not the whole chip. Then run:
 
 ```console
 cargo fw sizes target/size-base target/size-head
