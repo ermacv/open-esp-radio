@@ -1,4 +1,5 @@
 use super::*;
+use crate::executor::test_clock::VirtualClock;
 use crate::{
     calibration::estimator::{
         PhyDcIqAccumulatorSnapshot, PhyDcIqEnablePhase, PhyDcIqMmioBinding,
@@ -6,7 +7,7 @@ use crate::{
     },
     rx::program::tests::{Oracle, at_estimator, at_field, parameters},
 };
-use oer_time_virtual::VirtualClock;
+use oer_time::Timer;
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
 struct Delay;
@@ -230,7 +231,7 @@ fn one_driver_publishes_both_banks_across_bounded_polls_and_counts_each_poll() {
             let started = clock.now();
             polls += 1;
             let result = future.as_mut().poll(&mut cx);
-            assert!(calls.get() - before <= 8);
+            assert!(calls.get() - before <= 1);
             assert!(clock.now().saturating_duration_since(started).as_micros() <= 50);
             if let Poll::Ready(result) = result {
                 result.expect("publisher succeeds");
@@ -239,7 +240,7 @@ fn one_driver_publishes_both_banks_across_bounded_polls_and_counts_each_poll() {
         }
     }
     assert_eq!(io.entries, 148);
-    assert!(polls > 1 && polls < io.calls.get());
+    assert!(polls >= io.calls.get());
     assert_eq!(usize::from(timing.polls), polls);
     assert_eq!(timing.pending + 1, timing.polls);
     assert!(!timing.invalid);
@@ -314,6 +315,11 @@ fn an_immediately_ready_timer_is_consumed_once_and_resumes_in_a_later_poll() {
     impl Clock for Immediate<'_> {
         fn now(&self) -> Instant {
             self.0.now()
+        }
+    }
+    impl oer_cooperate::CooperativeTimer for Immediate<'_> {
+        fn should_yield(&self) -> bool {
+            true
         }
     }
     impl Timer for Immediate<'_> {
@@ -438,4 +444,44 @@ fn abandoning_a_pending_driver_retains_its_cursor_and_prevents_restart() {
     // The outer physical owner must fail-stop: cancellation is not permission
     // to recreate a timer or restart the attempt allowance under a new driver.
     assert!(matches!(program.step(), Err(RxError::Hardware)));
+}
+
+#[test]
+fn no_peer_continues_until_guard_and_new_peer_stops_at_the_next_atom() {
+    for peer_after in [None, Some(23)] {
+        let clock = VirtualClock::<2>::new();
+        clock.set_ready_peers(false);
+        if let Some(delay) = peer_after {
+            clock.ready_peer_at(
+                clock
+                    .now()
+                    .checked_add(Duration::from_micros(delay))
+                    .expect("peer time fits"),
+            );
+        }
+        let mut io = Fake::new(&clock);
+        let mut program = RxProgram::new(parameters());
+        let mut execution = RxGainExecution::default();
+        let mut timing = EngineTiming::default();
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        let started = clock.now();
+        {
+            let mut driver = core::pin::pin!(drive::<Delay, _, _, _>(
+                &mut program,
+                &mut io,
+                &clock,
+                &mut execution,
+                Some(&mut timing),
+                |_, _| {}
+            ));
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+        }
+        let elapsed = clock.now().saturating_duration_since(started).as_micros();
+        if let Some(at) = peer_after {
+            assert!((at..=at + 50).contains(&elapsed));
+        } else {
+            assert!((900..=950).contains(&elapsed));
+        }
+        assert!(timing.maximum_micros <= 1000);
+    }
 }

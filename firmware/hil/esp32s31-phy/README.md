@@ -147,9 +147,12 @@ counters remain bounded independently of the number of batches.
 `phy-tracking-idle-wifi-10m` and `phy-tracking-idle-ieee802154-10m` retain
 one registration for 600 natural ticks, in forty batches of fifteen. They
 record actual branch occurrences, bracket durations and engine maxima.
-Natural-policy investigations retain polls above 50 microseconds; the forced
-hold scenarios enforce that poll limit. Policy checks and RF cleanup apply
-to both modes. Batch handshakes add time to the 600 one-second tick intervals.
+Natural-policy investigations retain long polls for diagnosis. Forced holds
+check the engine's 1 ms continuous-poll guard. The ready-P2 response bound of
+one atom, at most 50 microseconds, is qualified separately with scheduler,
+timer and interrupt proofs; aggregate engine maxima alone do not establish
+that response. Policy checks and RF cleanup apply to both modes. Batch
+handshakes add time to the 600 one-second tick intervals.
 
 Registration and bring-up checkpoints use the console's reliable text queue;
 the console owns USB writes for both frames and checkpoint lines. Reporting

@@ -1,4 +1,5 @@
 use super::*;
+use oer_time::Timer;
 mod channel_gain;
 mod dc_iq;
 mod dcode;
@@ -12,6 +13,7 @@ impl crate::executor::wait::PhyShortDelay for TestDelay {
     }
 }
 
+use crate::executor::test_clock::VirtualClock;
 use crate::{
     analog::{
         i2c::{PhyI2cError, fields},
@@ -23,7 +25,6 @@ use crate::{
     calibration::cold::PhyColdI2cRequest,
 };
 use oer_time::{Clock, Duration};
-use oer_time_virtual::VirtualClock;
 use std::{
     cell::Cell,
     rc::Rc,
@@ -659,6 +660,11 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
             self.0.now()
         }
     }
+    impl oer_cooperate::CooperativeTimer for AsyncTimer {
+        fn should_yield(&self) -> bool {
+            true
+        }
+    }
     impl Timer for AsyncTimer {
         async fn wait_until(&self, at: Instant) {
             self.0.wait_until(at).await;
@@ -765,6 +771,11 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
     impl Clock for Probe<'_> {
         fn now(&self) -> Instant {
             self.clock.now()
+        }
+    }
+    impl oer_cooperate::CooperativeTimer for Probe<'_> {
+        fn should_yield(&self) -> bool {
+            true
         }
     }
     impl Timer for Probe<'_> {
@@ -1371,7 +1382,7 @@ fn rfpll_pending_failure_and_cancellation_keep_the_thermal_envelope_unrestored()
     }
     assert_eq!(
         correction.action(),
-        Action::Search(crate::tracking::rfpll::search::Action::WriteCap(0))
+        Action::Search(crate::tracking::rfpll::search::Action::ReadInitialCap)
     );
     assert!(!io.rfpll_actions.contains(&Action::Search(
         crate::tracking::rfpll::search::Action::ReadStatus
@@ -1387,6 +1398,11 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
     impl Clock for NoWait<'_> {
         fn now(&self) -> Instant {
             self.clock.now()
+        }
+    }
+    impl oer_cooperate::CooperativeTimer for NoWait<'_> {
+        fn should_yield(&self) -> bool {
+            false
         }
     }
     impl Timer for NoWait<'_> {
@@ -1439,15 +1455,8 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
         }
         assert_eq!(timer.constructed.get(), 0);
         // Per-command tracing retains individual checkpoints. The quiet route
-        // batches four commands, including terminal recognition in the last poll.
-        assert_eq!(
-            pending,
-            if observed {
-                247
-            } else {
-                247 / usize::from(BATCH_COMMANDS)
-            }
-        );
+        // continues to completion with no peer and no modeled elapsed time.
+        assert_eq!(pending, if observed { 247 } else { 0 });
         assert_eq!(wakes.0.load(std::sync::atomic::Ordering::Relaxed), pending);
         assert_eq!(
             (stats.pending as usize, stats.polls as usize, stats.resumes),
@@ -1462,7 +1471,7 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
 }
 
 #[test]
-fn rfpll_batch_stops_at_elapsed_budget_before_its_command_count_limit() {
+fn rfpll_ready_peer_stops_after_each_atom() {
     let clock = Rc::new(VirtualClock::<1>::new());
     let mut io = Io {
         rfpll_clock: Some(clock.clone()),
@@ -1490,24 +1499,24 @@ fn rfpll_batch_stops_at_elapsed_budget_before_its_command_count_limit() {
             assert!(driver.as_mut().poll(&mut cx).is_pending());
             assert_eq!(
                 clock.now().saturating_duration_since(before).as_micros(),
-                20
+                10
             );
             clock
                 .advance(Duration::from_micros(500))
                 .expect("clock fits");
         }
     }
-    // The third batch contains the low-byte write and the masked high-byte
-    // read. Dropping it cannot publish the high byte or finish the model.
-    assert_eq!(io.actions.len(), 12);
+    // Three bounded command atoms cannot finish the search; dropping the
+    // driver must retain its partially completed model.
+    assert_eq!(io.actions.len(), 6);
     assert_eq!(io.rfpll_samples, 0);
     assert!(matches!(
         search.action(),
-        crate::tracking::rfpll::search::Action::WriteCap(100)
+        crate::tracking::rfpll::search::Action::EnableSearch
     ));
     assert_eq!(
         (timing.polls, timing.pending, timing.maximum_micros),
-        (3, 3, 20)
+        (3, 3, 10)
     );
 }
 
@@ -1645,4 +1654,51 @@ fn cold_rfpll_waits_between_busy_retries_and_fails_overflow_before_publishing() 
         Job::counted_i2c(&mut transaction, Instant::from_micros(u64::MAX)),
         Err(Failure::DeadlineOverflow)
     ));
+}
+
+#[test]
+fn rfpll_no_peer_guard_and_peer_arriving_during_a_poll_bound_continuation() {
+    for peer_after in [None, Some(25)] {
+        let clock = Rc::new(VirtualClock::<1>::new());
+        clock.set_ready_peers(false);
+        if let Some(delay) = peer_after {
+            clock.ready_peer_at(
+                clock
+                    .now()
+                    .checked_add(Duration::from_micros(delay))
+                    .expect("peer time fits"),
+            );
+        }
+        let mut io = Io {
+            rfpll_clock: Some(clock.clone()),
+            rfpll_command_micros: 10,
+            rfpll_initial: 100,
+            ..Io::default()
+        };
+        let mut correction = crate::tracking::rfpll::Correction::new(13);
+        let mut timing = EngineTiming::default();
+        let (waker, _) = context();
+        let mut cx = Context::from_waker(&waker);
+        let started = clock.now();
+        {
+            let mut job = Job::rfpll(rfpll::Cursor::Correction(&mut correction), clock.now())
+                .expect("clock fits");
+            let mut driver = core::pin::pin!(drive::<TestDelay, _, _>(
+                &mut job,
+                &mut io,
+                clock.as_ref(),
+                Some(&mut timing),
+                None,
+                None
+            ));
+            assert!(driver.as_mut().poll(&mut cx).is_pending());
+        }
+        let elapsed = clock.now().saturating_duration_since(started).as_micros();
+        if let Some(at) = peer_after {
+            assert!((at..=at + 10).contains(&elapsed));
+        } else {
+            assert!((900..=950).contains(&elapsed));
+        }
+        assert!(timing.maximum_micros <= 1000);
+    }
 }

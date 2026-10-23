@@ -19,7 +19,8 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_time::{Clock, Duration, Instant, Timer};
+use oer_cooperate::CooperativeTimer as Timer;
+use oer_time::{Clock, Duration, Instant};
 
 pub(crate) trait Hardware {
     fn control<D: PhyShortDelay>(&mut self, command: ControlCommand) -> Result<(), RxError>;
@@ -241,7 +242,6 @@ impl<
         let mut resumed = None;
         let mut ready = None;
         let mut tag = 0;
-        let mut commands = 0;
         let mut i2c_tag = None;
         let result = loop {
             if let Some(wait) = this.wait.as_mut().as_pin_mut() {
@@ -323,10 +323,9 @@ impl<
                     break Poll::Pending;
                 }
                 Ok(Atom::Runnable) => {
-                    commands += 1;
-                    if commands < 8
-                        && this.program.short_next()
-                        && clock.now().saturating_duration_since(started).as_micros() < 20
+                    if !this.timer.should_yield()
+                        && clock.now().saturating_duration_since(started).as_micros()
+                            < u64::from(oer_cooperate::POLL_ADMISSION_MICROS)
                     {
                         continue;
                     }

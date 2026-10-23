@@ -141,7 +141,7 @@ impl Rx {
         else {
             return Err(RejectReason::Internal);
         };
-        let joined = join_ieee802154(available, &clocked, &EmbassyClock).map_err(|error| {
+        let joined = join_ieee802154(available, &clocked, &crate::PHY_CLOCK).map_err(|error| {
             oer_esp32s31_board::rom::print_fmt(format_args!(
                 "OPEN_RADIO_HIL phy=FAIL step=154-join error={error:?}\n"
             ));
@@ -161,13 +161,13 @@ impl Rx {
                 0,
                 &mut polls,
                 Some(&mut trace),
-                &EmbassyClock,
+                &crate::PHY_CLOCK,
                 &mut uart,
             );
             #[cfg(oer_profile)]
             let timer_window = oer_espressif_executor::timer_observation::Window::begin();
             let result = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-                &EmbassyClock,
+                &crate::PHY_CLOCK,
                 domain,
                 &mut (),
                 &mut observer,
@@ -305,7 +305,7 @@ impl Rx {
         self.absent = Some(absent);
         crate::sar2_checkpoint::observe(domain, crate::sar2_checkpoint::Point::BeforeRfClose)
             .await?;
-        close_concurrent_rf::<_, (), RomShortDelay>(&EmbassyClock, domain, &mut ())
+        close_concurrent_rf::<_, (), RomShortDelay>(&crate::PHY_CLOCK, domain, &mut ())
             .await
             .map_err(|_| RejectReason::Internal)?;
         Ok(())

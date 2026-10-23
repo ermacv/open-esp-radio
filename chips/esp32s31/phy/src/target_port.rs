@@ -8,7 +8,7 @@
 //! contract.
 
 use crate::executor::wait::{Kind, PhyShortDelay, delay, delay_observed};
-use oer_time::Timer;
+use oer_cooperate::CooperativeTimer as Timer;
 
 use core::marker::PhantomData;
 

@@ -14,7 +14,7 @@ use oer_ieee80211_wire::channel::WifiChannel;
 use oer_radio_regulatory::Permitted;
 
 pub(crate) async fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_cooperate::CooperativeTimer,
     domain: &mut RadioDomain<B, ConcurrentPhy>,
     wifi: &mut WifiClocked,
     channel: Permitted<WifiChannel>,

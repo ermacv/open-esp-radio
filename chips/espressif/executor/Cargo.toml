@@ -9,6 +9,8 @@ description = "Scheduler-free Embassy executor and time driver for Espressif sta
 
 [features]
 default = []
+# Raw executor lifecycle proofs; run as an isolated `cargo test --lib`.
+trace-tests = ["embassy-executor/trace"]
 # Nominal static radio-slot declarations. Images without a port slot retain
 # their dependency graph and linked bytes.
 port-slots = ["dep:oer-radio-port"]
@@ -26,6 +28,7 @@ esp32c5 = [
 # The executor and time driver, which a chip feature selects.
 chip = [
     "dep:embassy-executor",
+    "embassy-executor/trace",
     "dep:embassy-time-driver",
     "dep:embassy-time-queue-utils",
     "dep:esp-hal",
@@ -37,6 +40,8 @@ chip = [
 
 [dependencies]
 static_cell = "2.1.1"
+oer-cooperate = { path = "../../../portable/cooperate" }
+oer-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-memory = { path = "../../../portable/memory" }
 oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
@@ -59,7 +64,6 @@ esp32c5-pac = { package = "esp32c5", git = "https://github.com/ermacv/esp-pacs",
 [dev-dependencies]
 embassy-executor = { version = "0.10.0", default-features = false }
 embassy-time-queue-utils = "0.3"
-oer-time = { path = "../../../portable/time" }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 
 [lints]
