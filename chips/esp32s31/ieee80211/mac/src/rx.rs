@@ -1321,3 +1321,13 @@ pub use prefix::{
     decode_normalized_rx_metadata, decode_rx_local_timestamp, decode_rx_phy_info,
     first_segment_layout, view_normalized_rx_frame,
 };
+
+impl NormalizedRxFrame<'_> {
+    /// The PHY fields actually decoded from this frame's hardware prefix.
+    pub fn observed_phy(&self) -> Option<RxPhyInfo> {
+        match self.metadata.rate {
+            oer_ieee80211_port::RxEvidence::HardwareObserved(rate) => Some(rate),
+            _ => None,
+        }
+    }
+}

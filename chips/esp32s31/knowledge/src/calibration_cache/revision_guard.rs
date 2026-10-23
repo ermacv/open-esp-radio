@@ -248,6 +248,10 @@ const INPUTS: &[(&str, &str)] = &[
         include_str!("../../../phy/src/tracking/observation/calibration.rs"),
     ),
     (
+        "tracking/observation/health.rs",
+        include_str!("../../../phy/src/tracking/observation/health.rs"),
+    ),
+    (
         "tracking/observation.rs",
         include_str!("../../../phy/src/tracking/observation.rs"),
     ),
@@ -330,6 +334,7 @@ fn calibration_or_replay_changes_require_a_reviewed_revision() {
         (3, 1) => "da5fb1d69371d0676bfb8cdc55fd0c6df2e2081e9a72fafa17ba3590a0836615",
         (4, 1) => "008f6c5f0a501640c21ce9111f3ac731b3e62a5d8cc9860cffb32513ba127004",
         (5, 1) => "e79bed368e93dd2199efa0d19479c5f67a889a900755dded76a5f429b4bcf630",
+        (6, 1) => "602a4486aaefdbc4f753647ac474b1e95ffc4d56bbd50d6999a8636516249250",
         _ => panic!(
             "unreviewed calibration revision/profile {revision:?}; digest {actual}; review INPUTS and add a new pair in revision_guard.rs"
         ),

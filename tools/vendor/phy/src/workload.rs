@@ -35,3 +35,4 @@ pub(crate) fn full(
         _ => Err("explicit full R1 request changed its native result contract".into()),
     }
 }
+pub(crate) mod health;

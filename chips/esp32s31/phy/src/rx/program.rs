@@ -162,7 +162,6 @@ struct RestoreObligation {
     registers: bool,
     bus: bool,
 }
-
 /// Complete RX calibration and gain publication with one retained program PC.
 /// Only the enclosing physical owner may run it or publish its terminal result.
 ///
@@ -188,6 +187,10 @@ pub struct RxProgram {
     restore: RestoreObligation,
     failure: Option<PhyRxGainInitFailure>,
     fault: Option<RxError>,
+    #[cfg(feature = "radio-health")]
+    health_frequency: Option<u16>,
+    #[cfg(feature = "radio-health")]
+    health_correction: Option<crate::tracking::observation::health::Correction>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -285,6 +288,10 @@ impl RxProgram {
             restore: RestoreObligation::default(),
             failure: None,
             fault: None,
+            #[cfg(feature = "radio-health")]
+            health_frequency: None,
+            #[cfg(feature = "radio-health")]
+            health_correction: None,
         }
     }
 
@@ -578,13 +585,17 @@ impl RxProgram {
         }
         result
     }
-
     fn start_frequency(&mut self) {
-        self.work = Work::Frequency(RfpllFrequencyTransition::channel(RfpllFrequencyRequest {
+        let request = RfpllFrequencyRequest {
             crystal_selector: self.inputs.crystal_selector,
             frequency_code: 0x9b4,
             offset: 0,
-        }));
+        };
+        #[cfg(feature = "radio-health")]
+        {
+            self.health_frequency = Some(request.frequency_code);
+        }
+        self.work = Work::Frequency(RfpllFrequencyTransition::channel(request));
         self.cursor.pc = Pc::Frequency;
     }
     fn frequency_completed(&mut self, completion: RfpllFrequencyCompletion) -> Result<(), RxError> {
@@ -713,6 +724,15 @@ impl RxProgram {
                 return Ok(());
             }
         };
+        #[cfg(feature = "radio-health")]
+        {
+            self.health_correction = Some(crate::tracking::observation::health::Correction {
+                context: self.measurement_context()?,
+                configuration: outcome.configuration,
+                iterations: outcome.iterations,
+                converged: outcome.converged,
+            });
+        }
         if let Some(index) = self.cursor.fine {
             let slot = self
                 .memory
@@ -1171,3 +1191,36 @@ impl I2cStep<'_> {
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+#[cfg(feature = "radio-health")]
+impl RxProgram {
+    fn measurement_context(
+        &self,
+    ) -> Result<crate::tracking::observation::health::Context, RxError> {
+        let Work::Calibration(cal) = &self.work else {
+            return Err(RxError::WrongCompletion);
+        };
+        Ok(crate::tracking::observation::health::Context {
+            gain: cal.request.gain_index,
+            measurement: cal.minimum_request.measurement,
+            shared_radio: cal.request.shared_radio,
+            radio_stage: cal.request.stage == PhyRxDcCalibrationStage::Radio,
+            fine_code: self.cursor.fine,
+            high_level: self.cursor.high,
+            frequency_code: self.health_frequency,
+        })
+    }
+    pub(crate) fn take_health_correction(
+        &mut self,
+    ) -> Option<crate::tracking::observation::health::Correction> {
+        self.health_correction.take()
+    }
+}
+#[cfg(feature = "radio-health")]
+impl EstimatorStep<'_> {
+    pub(crate) fn health_context(
+        &self,
+    ) -> Result<crate::tracking::observation::health::Context, RxError> {
+        self.program.measurement_context()
+    }
+}

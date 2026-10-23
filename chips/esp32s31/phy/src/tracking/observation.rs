@@ -470,6 +470,10 @@ pub enum Event {
     PollStarted,
     PollPending,
     PollReady,
+    #[cfg(feature = "radio-health")]
+    DcIq(health::DcIq),
+    #[cfg(feature = "radio-health")]
+    RxDcCorrection(health::Correction),
 }
 
 /// Wall time inside child future polls, including interrupts and observation
@@ -698,6 +702,10 @@ impl Recorder {
             self.observe_poll(operation, event, now_micros);
             return;
         }
+        #[cfg(feature = "radio-health")]
+        if matches!(event, Event::DcIq(_) | Event::RxDcCorrection(_)) {
+            return;
+        }
         let index = operation as usize;
         let timing = &mut self.timings[index];
         if event == Event::Started {
@@ -921,3 +929,6 @@ impl<F: core::future::Future, O: FnMut(Event)> core::future::Future for Observed
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "radio-health")]
+pub mod health;

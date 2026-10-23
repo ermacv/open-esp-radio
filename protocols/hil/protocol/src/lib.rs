@@ -59,6 +59,7 @@ pub fn registry() -> impl Iterator<Item = &'static MessageInfo> {
         telemetry::MESSAGES,
         phy::MESSAGES,
         lower_mac::MESSAGES,
+        health::MESSAGES,
     ]
     .into_iter()
     .flatten()
@@ -73,3 +74,6 @@ pub use postcard_schema as __postcard_schema;
 pub use postcard_schema::Schema as __Schema;
 #[doc(hidden)]
 pub use postcard_schema::Schema as __SchemaDerive;
+
+#[cfg(feature = "health")]
+pub mod health;

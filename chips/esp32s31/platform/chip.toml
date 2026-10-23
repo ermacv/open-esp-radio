@@ -223,3 +223,8 @@ stack-policy = "firmware/hil/esp32s31-phy/stack.toml"
 package = "oer-firmware-hil-esp32s31-lower-mac"
 manifest = "firmware/hil/esp32s31-lower-mac/Cargo.toml"
 stack-policy = "firmware/hil/esp32s31-lower-mac/stack.toml"
+
+[hil.images.diagnostic-radio-health]
+package = "oer-firmware-hil-esp32s31-phy"
+manifest = "firmware/hil/esp32s31-phy/Cargo.toml"
+stack-policy = "firmware/hil/esp32s31-phy/stack.toml"

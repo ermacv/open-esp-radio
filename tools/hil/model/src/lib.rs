@@ -67,3 +67,5 @@ pub use wait::{
     ConnectionInterval, Factor, InvalidFactor, OutOfRange, ProtocolQuantity, Provisional, Resolved,
     Symbols, TimeUnits, Wait, WaitError,
 };
+
+pub mod health;

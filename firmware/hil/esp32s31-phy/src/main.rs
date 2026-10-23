@@ -88,12 +88,12 @@ enum Answer {
 // Both ends of this queue run on P1. P2 is reached only through RequestSlot.
 static REQUESTS: embassy_sync::channel::Channel<
     embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
-    (RequestIdentity, Request),
+    (RequestIdentity, IntakeRequest),
     1,
 > = embassy_sync::channel::Channel::new();
 
 oer_espressif_staged_runtime::entry!(main);
-
+#[cfg(not(feature = "diagnostic-radio-health"))]
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     oer_esp32s31_board::rom::install_usb_printf();
     oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL runtime=START diagnostic=phy");
@@ -173,7 +173,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             spawner.spawn(dispatch(poster).expect("diagnostic dispatch task"));
         });
 }
-
+#[cfg(not(feature = "diagnostic-radio-health"))]
 #[embassy_executor::task]
 async fn console(usb: transport::Usb, boot: u64) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
@@ -196,7 +196,7 @@ async fn console(usb: transport::Usb, boot: u64) {
         )
         .await;
 }
-
+#[cfg(not(feature = "diagnostic-radio-health"))]
 #[embassy_executor::task]
 async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
@@ -269,7 +269,7 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
         }
     }
 }
-
+#[cfg(not(feature = "diagnostic-radio-health"))]
 #[embassy_executor::task]
 async fn serve_radio(radio: &'static mut radio::Radio) {
     // RX ring authority is core-local and is created only after the P2 spawn.
@@ -317,3 +317,31 @@ async fn serve_radio(radio: &'static mut radio::Radio) {
         }
     }
 }
+
+#[cfg(feature = "diagnostic-radio-health")]
+mod health;
+#[macro_export]
+macro_rules! capture_observer {
+    ($radio:expr) => {{
+        #[cfg(feature = "diagnostic-radio-health")]
+        {
+            crate::health::Observer {
+                store: &mut $radio.health,
+            }
+        }
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        {
+            oer_esp32s31_phy::NoopPhyTargetObserver
+        }
+    }};
+}
+
+#[cfg(not(feature = "diagnostic-radio-health"))]
+type IntakeRequest = Request;
+#[cfg(feature = "diagnostic-radio-health")]
+type IntakeRequest = oer_hil_agent::base::Either<Request, health::Request>;
+#[cfg(feature = "diagnostic-radio-health")]
+static HEALTH_SLOT: RequestSlot<health::Request, health::Answer> = RequestSlot::new(&DOORBELL, 1);
+
+#[cfg(feature = "diagnostic-radio-health")]
+use health::startup::main;

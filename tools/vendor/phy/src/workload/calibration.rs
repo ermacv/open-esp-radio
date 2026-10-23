@@ -674,7 +674,7 @@ fn window_registers(windows: &[crate::scenario::Window]) -> Result<Vec<Register>
     Ok(registers.into_values().collect())
 }
 
-fn vendor_boot(port: &Path) -> Result<(String, oer_lab_board::port::Port)> {
+pub(super) fn vendor_boot(port: &Path) -> Result<(String, oer_lab_board::port::Port)> {
     let mut serial = reset_console(port)?;
     let started = Instant::now();
     let mut console = Vec::new();

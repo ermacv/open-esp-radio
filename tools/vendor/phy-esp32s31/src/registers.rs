@@ -113,3 +113,43 @@ pub(crate) fn repository() -> tempfile::TempDir {
     }
     directory
 }
+
+/// Geometry of the same direct, non-destructive fields the native MAC reads.
+/// Opaque bits, RX-hang banks and the unknown-semantics ten-bit NF bank are excluded.
+pub fn health(root: &Path) -> Result<Vec<oer_vendor_phy::comparison::HealthRegister>> {
+    use oer_vendor_phy::comparison::{HealthField, HealthRegister};
+    let svd = std::fs::read_to_string(root.join(SVD))?;
+    let geometry = oer_registers_model::svd_geometry(&svd)?;
+    let words = partition(root, "WifiMacPeripherals")?;
+    words
+        .into_iter()
+        .filter(|r| {
+            r.name.starts_with("WIFI_MAC_RX_STATISTICS.")
+                || r.name.starts_with("WIFI_MAC_TX_STATISTICS.")
+                || r.name == "WIFI_PHY_RATE_ORACLE.NOISE_FLOOR_MEASUREMENT"
+        })
+        .map(|r| {
+            let geometry = geometry
+                .iter()
+                .find(|g| g.name == r.name)
+                .ok_or("missing health register geometry")?;
+            let fields = geometry
+                .fields
+                .iter()
+                .filter(|f| !f.name.contains("OPAQUE"))
+                .map(|f| {
+                    Ok(HealthField {
+                        name: f.name.clone(),
+                        offset: f.offset.try_into()?,
+                        width: f.width.try_into()?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(HealthRegister {
+                name: r.name,
+                address: r.address,
+                fields,
+            })
+        })
+        .collect()
+}

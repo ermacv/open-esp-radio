@@ -65,6 +65,7 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
     execution: &mut RxGainExecution,
     measured: bool,
     tag: u8,
+    #[cfg(feature = "radio-health")] observe: &mut impl FnMut(Operation, Event),
 ) -> Result<Atom, RxError> {
     let begun = measured.then(|| clock.now());
     let command = program.step()?;
@@ -122,6 +123,8 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
         }
         RxStep::Estimator(step) => {
             let command = step.command();
+            #[cfg(feature = "radio-health")]
+            let health_context = step.health_context()?;
             if let PhyDcIqAction::Configure(request) = command {
                 if execution.minimum_operations
                     > 100_000 - u32::from(crate::HARDWARE_EDGE_LIMIT) - 8
@@ -134,7 +137,18 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
                     execution.minimum_searches += 1;
                 }
             }
+            #[cfg(feature = "radio-health")]
+            let health_started = clock.now();
             let result = registers.estimator::<D>(command);
+            #[cfg(feature = "radio-health")]
+            let observation = result.ok().and_then(|completion| {
+                crate::tracking::observation::health::DcIq::observed(
+                    health_started.as_micros(),
+                    clock.now().as_micros(),
+                    completion,
+                    health_context,
+                )
+            });
             let wait = matches!(
                 result,
                 Ok(PhyDcIqCompletion::CapturePending { .. }
@@ -158,6 +172,10 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
                 _ => {}
             }
             let completed = complete!(step, result);
+            #[cfg(feature = "radio-health")]
+            if let Some(observation) = observation {
+                observe(Operation::RxGainDcPhase, Event::DcIq(observation));
+            }
             if wait {
                 completed?;
                 return Ok(Atom::Wait);
@@ -280,7 +298,13 @@ impl<
                 this.execution,
                 this.timing.is_some(),
                 tag,
+                #[cfg(feature = "radio-health")]
+                &mut this.observe,
             );
+            #[cfg(feature = "radio-health")]
+            if let Some(correction) = this.program.take_health_correction() {
+                (this.observe)(Operation::RxGainDcPhase, Event::RxDcCorrection(correction));
+            }
             let finished = clock.now();
             ready = Some(finished.saturating_duration_since(at));
             // Phase edges are observed immediately, before any voluntary

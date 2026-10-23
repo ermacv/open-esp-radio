@@ -15,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 oer-chip-profile = { path = "../../chip/profile" }
-oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
 toml = "1.1"
 oer-os-durable = { path = "../../os/durable" }
 

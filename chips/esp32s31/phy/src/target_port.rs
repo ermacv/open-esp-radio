@@ -200,6 +200,10 @@ pub enum PhyRfBoundary {
 /// code can implement this trait to compare a completed Rust result with ROM or to
 /// capture diagnostic MMIO without placing either dependency in this crate.
 pub trait PhyTargetObserver {
+    #[cfg(feature = "radio-health")]
+    const OBSERVE_HEALTH: bool = false;
+    #[cfg(feature = "radio-health")]
+    fn pwdet_completed(&mut self, _observation: crate::tracking::observation::health::Pwdet) {}
     fn readiness_trace(&mut self) -> Option<&mut crate::tracking::observation::ReadinessTrace> {
         None
     }
@@ -1371,6 +1375,12 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         registers: &mut impl SharedPhyContext,
         observer: &mut O,
     ) -> Result<PhyPwdetCompletion, PhyTargetPortError> {
+        #[cfg(feature = "radio-health")]
+        let health_start = if O::OBSERVE_HEALTH {
+            self.timer.now().as_micros()
+        } else {
+            0
+        };
         match binding {
             PhyPwdetExternalBinding::Mmio(binding) => {
                 let completion = binding.execute_target(registers);
@@ -1383,10 +1393,15 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 {
                     observer.power_detector_sample(measurement_index, sample_index, value);
                 }
+                #[cfg(feature = "radio-health")]
+                self.observe_pwdet(observer, health_start, completion);
                 Ok(completion)
             }
             PhyPwdetExternalBinding::Ready(binding) => {
-                Ok(binding.execute_target(registers, self.timer))
+                let completion = binding.execute_target(registers, self.timer);
+                #[cfg(feature = "radio-health")]
+                self.observe_pwdet(observer, health_start, completion);
+                Ok(completion)
             }
             PhyPwdetExternalBinding::Timer(binding) => {
                 delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
@@ -2145,7 +2160,10 @@ impl<
             self.timer,
             program,
             self.registers,
+            #[cfg(not(feature = "radio-health"))]
             |_, _| {},
+            #[cfg(feature = "radio-health")]
+            |operation, event| self.observer.tracking_operation(operation, event),
             |_| {},
             None,
         )
@@ -2255,3 +2273,23 @@ pub mod temperature;
 
 #[cfg(oer_probe)]
 pub(crate) use radio_lifecycle::reset_wake_i2c_master;
+
+#[cfg(feature = "radio-health")]
+impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
+    fn observe_pwdet<O: PhyTargetObserver>(
+        &self,
+        observer: &mut O,
+        started_micros: u64,
+        completion: PhyPwdetCompletion,
+    ) {
+        if O::OBSERVE_HEALTH {
+            if let Some(observation) = crate::tracking::observation::health::Pwdet::observed(
+                started_micros,
+                self.timer.now().as_micros(),
+                completion,
+            ) {
+                observer.pwdet_completed(observation);
+            }
+        }
+    }
+}

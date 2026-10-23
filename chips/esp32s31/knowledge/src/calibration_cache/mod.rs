@@ -12,7 +12,7 @@ pub const SNAPSHOT_SCHEMA: u16 = 8;
 /// Exact record length, with no native padding or pointer representation.
 pub const RECORD_BYTES: usize = 261;
 /// Reviewed calibration/replay algorithm revision, independent of the RF ABI.
-pub const CALIBRATION_ALGORITHM_REVISION: u32 = 5;
+pub const CALIBRATION_ALGORITHM_REVISION: u32 = 6;
 /// Reviewed `PhyConfig::production()` profile, independent of the image commit.
 pub const CALIBRATION_PROFILE_ID: u32 = 1;
 

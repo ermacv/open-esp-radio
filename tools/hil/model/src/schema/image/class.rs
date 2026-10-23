@@ -8,6 +8,8 @@ pub enum ImageClass {
     SystemWatchdog,
     /// Public-read calibration diagnostic; no station data service.
     DiagnosticPhy,
+    /// Bounded radio-health collection; separate from all existing images.
+    DiagnosticRadioHealth,
     /// Lower-MAC port contract exercised through real hardware and air.
     DiagnosticLowerMac,
     /// The radio-free image with the product panic entry alone, without the
@@ -31,6 +33,7 @@ impl ImageClass {
                 | Self::SystemPanicReset
                 | Self::DiagnosticUsbJtagOff
                 | Self::DiagnosticPhy
+                | Self::DiagnosticRadioHealth
                 | Self::DiagnosticLowerMac
         ) {
             self.runtime_features().to_owned()
@@ -39,8 +42,9 @@ impl ImageClass {
         }
     }
 
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::DiagnosticPhy,
+        Self::DiagnosticRadioHealth,
         Self::DiagnosticLowerMac,
         Self::SystemWatchdog,
         Self::SystemPanicReset,
@@ -53,13 +57,17 @@ impl ImageClass {
     pub const fn diagnostic(self) -> bool {
         matches!(
             self,
-            Self::DiagnosticUsbJtagOff | Self::DiagnosticPhy | Self::DiagnosticLowerMac
+            Self::DiagnosticUsbJtagOff
+                | Self::DiagnosticPhy
+                | Self::DiagnosticRadioHealth
+                | Self::DiagnosticLowerMac
         )
     }
 
     pub const fn id(self) -> &'static str {
         match self {
             Self::DiagnosticPhy => "diagnostic-phy",
+            Self::DiagnosticRadioHealth => "diagnostic-radio-health",
             Self::DiagnosticLowerMac => "diagnostic-lower-mac",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
@@ -71,6 +79,7 @@ impl ImageClass {
     pub const fn runtime_features(self) -> &'static str {
         match self {
             Self::DiagnosticPhy => "diagnostic-phy",
+            Self::DiagnosticRadioHealth => "diagnostic-radio-health",
             Self::DiagnosticLowerMac => "diagnostic-lower-mac",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",

@@ -764,3 +764,23 @@ pub fn admit_maintenance<B: PlatformClockBackend>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "radio-health")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackingInspectionError {
+    Domain(ConcurrentPhyError),
+    Time(PhyTrackTimeError),
+}
+#[cfg(feature = "radio-health")]
+impl ConcurrentPhy {
+    /// Read retained policy conditions. This neither executes jobs nor advances the scheduler.
+    pub fn inspect_tracking(
+        &self,
+        now_micros: u64,
+    ) -> Result<crate::tracking::inspection::Inspection, TrackingInspectionError> {
+        self.settled()
+            .map_err(TrackingInspectionError::Domain)?
+            .inspect_tracking(now_micros)
+            .map_err(TrackingInspectionError::Time)
+    }
+}

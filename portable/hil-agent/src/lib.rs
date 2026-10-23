@@ -11,3 +11,6 @@ pub mod postmortem;
 
 #[doc(hidden)]
 pub use oer_hil_protocol as __protocol;
+
+#[cfg(feature = "health")]
+pub mod health;

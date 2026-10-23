@@ -691,3 +691,10 @@ pub trait AsyncEvent {
 
     fn wait(&mut self) -> impl Future<Output = Result<Self::Event, Self::Error>> + '_;
 }
+
+impl RadioAccess {
+    /// Native twelve-bit NF code and decoded quarter-dB observation from one read.
+    pub fn noise_floor_snapshot(&self) -> (u16, i32) {
+        self.registers.noise_floor_snapshot()
+    }
+}
