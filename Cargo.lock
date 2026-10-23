@@ -2614,8 +2614,15 @@ dependencies = [
 name = "oer-bluetooth-le-controller"
 version = "0.1.0"
 dependencies = [
+ "oer-bluetooth-hci",
  "oer-bluetooth-le-ll",
+ "oer-bluetooth-le-model",
+ "oer-bluetooth-le-port",
  "oer-bluetooth-le-radio",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
@@ -3108,6 +3115,37 @@ dependencies = [
  "critical-section",
  "esp-hal",
  "oer-diagnostics",
+]
+
+[[package]]
+name = "oer-firmware-apps-b0"
+version = "0.1.0"
+dependencies = [
+ "embassy-executor",
+ "embassy-futures",
+ "esp-hal",
+ "oer-bluetooth-hci",
+ "oer-bluetooth-le-controller",
+ "oer-bluetooth-le-port",
+ "oer-bluetooth-le-radio",
+ "oer-embassy-time",
+ "oer-esp32s31-bluetooth-driver",
+ "oer-esp32s31-board",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-layout",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-radio-client",
+ "oer-esp32s31-radio-system",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-esp-hal-radio",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
+ "oer-interrupt-table",
+ "oer-memory",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-time",
+ "static_cell",
 ]
 
 [[package]]
