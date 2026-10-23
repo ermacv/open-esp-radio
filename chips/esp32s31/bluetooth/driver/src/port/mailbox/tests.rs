@@ -88,6 +88,48 @@ fn rx() -> Start {
 }
 
 #[test]
+fn a_published_clock_failure_survives_the_workers_quarantine_flag() {
+    let (f, mut device) = Fixture::new();
+    let mut clock = device.clock();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut now = pin!(clock.now());
+    assert!(now.as_mut().poll(&mut cx).is_pending());
+    let (request, response) = f.clocks.take_request().expect("physical clock request");
+    response.answer(ClockAnswer {
+        request,
+        result: Err(Fault::ClockTimeout),
+    });
+    f.cancel.store(true, Ordering::Release);
+    assert!(matches!(
+        now.as_mut().poll(&mut cx),
+        Poll::Ready(Err(Poisoned {
+            cause: Fault::ClockTimeout
+        }))
+    ));
+}
+
+#[test]
+fn quarantine_never_turns_a_completed_sample_into_reusable_clock_authority() {
+    let (f, mut device) = Fixture::new();
+    let mut clock = device.clock();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut now = pin!(clock.now());
+    assert!(now.as_mut().poll(&mut cx).is_pending());
+    let (request, response) = f.clocks.take_request().expect("physical clock request");
+    response.answer(ClockAnswer {
+        request,
+        result: Ok(LeInstant::from_micros(77)),
+    });
+    f.cancel.store(true, Ordering::Release);
+    assert!(matches!(
+        now.as_mut().poll(&mut cx),
+        Poll::Ready(Err(Poisoned {
+            cause: Fault::Abandoned
+        }))
+    ));
+}
+
+#[test]
 fn cancelled_start_resumes_the_same_request_and_keeps_the_running_owner() {
     let (f, mut device) = Fixture::new();
     let mut cx = Context::from_waker(Waker::noop());
