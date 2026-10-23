@@ -80,6 +80,53 @@ pub struct BodyViews<'p, Id: SlotIdentity, D: Device<B>, const B: usize> {
     view: Frontend<'p, Id, D, B>,
     resources: Resources<'p, Id, D, B>,
 }
+// Keep queue progress and terminal conversion shared across concrete sinks.
+// A terminal leaves this helper before its sink runs, so the two working
+// frames do not overlap on the call stack.
+impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize> Frontend<'p, Id, D, B> {
+    #[inline(never)]
+    fn poll_disable(&self) -> Poll<Result<Option<Terminal<'p, Id, D, B>>, radio::Poisoned<Fault>>> {
+        let held = &self.held;
+        while let Some(event) = held.events.try_receive().ok() {
+            match event {
+                owned::OwnedEvent::Terminal(terminal) => {
+                    return Poll::Ready(Ok(Some(terminal.lend(&self.loan))));
+                }
+                owned::OwnedEvent::Received { frame, .. } => {
+                    if let Err(frame) = held.recycled.try_send(frame).map_err(|error| error.0) {
+                        core::mem::forget(frame);
+                        held.storage.poison(Fault::Capacity);
+                    }
+                    held.loss.set(true);
+                    held.storage.driver.wake();
+                }
+                owned::OwnedEvent::Tbtt(_) => held.loss.set(true),
+            }
+        }
+        if let Err(error) = held.storage.check() {
+            return Poll::Ready(Err(error));
+        }
+        if !held.enabled.get() && held.commands.is_empty() && held.recycled.is_empty() {
+            Poll::Ready(Ok(None))
+        } else {
+            Poll::Pending
+        }
+    }
+
+    #[inline(never)]
+    fn reject_disable(
+        &self,
+        terminal: Terminal<'p, Id, D, B>,
+    ) -> Result<(), radio::Poisoned<Fault>> {
+        handoff::retain_terminal(
+            self.held.failed_terminal,
+            owned::OwnedTerminal::retain(terminal, &self.loan),
+        );
+        self.held.storage.poison(Fault::Abandoned);
+        self.held.storage.check()
+    }
+}
+
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> SlotOwner<Id> for Esp32s31Backend<Id, D, B> {
     type Vacant = StoppedPort<Id, D, B>;
     type Pools = (
@@ -531,42 +578,21 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> PortBackend<Id> for Esp32s3
         'p: 'a,
         S: FnMut(Terminal<'p, Id, D, B>) -> core::ops::ControlFlow<Terminal<'p, Id, D, B>>,
     {
-        let held = &view.held;
-        let loan = view.loan;
-        held.want_enabled.set(false);
-        held.storage.driver.wake();
+        view.held.want_enabled.set(false);
+        view.held.storage.driver.wake();
         poll_fn(move |cx| {
-            held.storage.body.register(cx.waker());
-            while let Some(event) = held.events.try_receive().ok() {
-                match event {
-                    owned::OwnedEvent::Terminal(t) => {
-                        if let core::ops::ControlFlow::Break(t) = sink(t.lend(&loan)) {
-                            handoff::retain_terminal(
-                                held.failed_terminal,
-                                owned::OwnedTerminal::retain(t, &loan),
-                            );
-                            held.storage.poison(Fault::Abandoned);
-                            return Poll::Ready(held.storage.check());
+            view.held.storage.body.register(cx.waker());
+            loop {
+                match view.poll_disable() {
+                    Poll::Ready(Ok(Some(terminal))) => {
+                        if let core::ops::ControlFlow::Break(terminal) = sink(terminal) {
+                            return Poll::Ready(view.reject_disable(terminal));
                         }
                     }
-                    owned::OwnedEvent::Received { frame, .. } => {
-                        if let Err(frame) = held.recycled.try_send(frame).map_err(|error| error.0) {
-                            core::mem::forget(frame);
-                            held.storage.poison(Fault::Capacity);
-                        }
-                        held.loss.set(true);
-                        held.storage.driver.wake();
-                    }
-                    owned::OwnedEvent::Tbtt(_) => held.loss.set(true),
+                    Poll::Ready(Ok(None)) => return Poll::Ready(Ok(())),
+                    Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                    Poll::Pending => return Poll::Pending,
                 }
-            }
-            if let Err(error) = held.storage.check() {
-                return Poll::Ready(Err(error));
-            }
-            if !held.enabled.get() && held.commands.is_empty() && held.recycled.is_empty() {
-                Poll::Ready(Ok(()))
-            } else {
-                Poll::Pending
             }
         })
     }

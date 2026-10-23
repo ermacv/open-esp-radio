@@ -1660,8 +1660,9 @@ impl<
         }
     }
 
-    // Keep the same routing frame independently of the concrete FnMut sink.
-    #[inline(never)]
+    // Static dispatch can share the terminal/fault temporaries with the
+    // caller instead of retaining a separate routing frame below it.
+    #[inline(always)]
     fn disable_terminal(
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
