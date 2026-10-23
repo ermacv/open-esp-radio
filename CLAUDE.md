@@ -1,139 +1,113 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for Espressif chips (ESP32-S31 and ESP32-C5):
-Wi-Fi, Bluetooth LE and IEEE 802.15.4,
-without vendor radio binaries. Decisions are in
-[docs/decisions.md](docs/decisions.md), the system in
-[docs/architecture.md](docs/architecture.md).
+Rust 2024 `no_std` radio stack for Espressif chips (ESP32-S31, ESP32-C5):
+Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries.
+Read [docs/architecture.md](docs/architecture.md) before any task: it is the
+system these rules serve.
 
-## Rules
+## Code
 
 - **Ask, never fall back.** When a choice changes a shared crate, drops data,
   adds a fallback, leaves work unfinished, changes memory use or on-hardware
   behavior, or departs from a contract shape already accepted, explain it,
-  recommend an option and ask before writing code. Never silently pick a
-  conservative reading, an older behavior or an approximation. Decide small,
-  local, reversible details (a name, a variant, a test shape) yourself and
-  state the choice in one line of the PR; batch the real questions.
-- **Keep your word.** Never drop silently what you said you would keep; a
-  departure from the plan you stated goes into the PR as your own decision.
-  Before calling something unused, grep its field and method accesses, not
-  only its type name.
+  recommend an option and ask before writing code. Decide small, local,
+  reversible details (a name, a variant, a test shape) yourself and state
+  each in one line of the PR; batch the real questions.
+- **Keep your word.** A departure from the plan you stated goes into the PR
+  as your own decision. Before calling something unused, grep its field and
+  method accesses, not only its type name.
 - **No compatibility layers.** Change an interface together with all its
   callers: no deprecated aliases, re-export shims or fallback paths.
+- **Compile time first.** Every check that can run at compile time runs there.
+- **Panics.** Input from outside never panics: frames from the air, any peer
+  value (counters, PNs, sequence numbers, lengths, indices), host and API
+  input return a handled error. Elsewhere `todo!`, `unreachable!`, `panic!`
+  and `expect` (never a bare `unwrap()`) are allowed, each with a static
+  message. Panic lints warn; a crate moves to `deny` when its contract
+  freezes.
+- **Execution.** An interrupt handler never shares a lock with a task. Driver
+  code never blocks or spins; it yields to its executor. The one exception is
+  a named settle of a known length up to 20 µs. Portable protocols take no
+  `critical-section` and no blocking mutex.
+- **Hardware access.** MMIO only through typed PAC accessors. A missing field
+  is added to `chips/<chip>/registers/` and regenerated (`cargo registers
+  generate`), never written as a local mask or shift. Code preserves reserved
+  and unknown bits. `unsafe` stays in the PAC, the placement constructor and
+  the HAL's protocol core, narrow and with `// SAFETY:`
+  ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
+- **Air formats** use the `oer-wire` field macro and its bounded cursor; each
+  field names its clause of the standard. No hand-written masks or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
-  constants; time in tests comes from the virtual clocks of `oer-time-virtual`.
-  A test is hermetic and safe in parallel: it uses only its own memory and
-  files inside its own temporary directory (`tempfile`). No test starts an
-  external program, changes process-wide state (signals, descriptors,
-  environment, working directory, limits), uses a fixed path, opens a
-  network port or waits on real time. The one exception is the pinned Rust
-  toolchain (`cargo`, `rustc`, `lld`), run into the test's own build
-  directory: compile-fail ownership cases and compiler-driven fixtures.
-- **Hardware access.** MMIO only through typed PAC accessors. A missing field
-  is added to `chips/<chip>/registers/` and regenerated (`cargo registers generate`), never
-  written as a local mask or shift. `unsafe` stays narrow and carries
-  `// SAFETY:` ([docs/unsafe.md](docs/unsafe.md)).
-- **Execution.** An interrupt handler never shares a lock with a task. Driver
-  code never blocks or spins; it yields to its executor. The one exception is
-  a named settle of up to 20 µs ([docs/decisions.md](docs/decisions.md)).
-- **Panics.** Input from outside never panics: frames from the air, any peer
-  value (counters, PNs, sequence numbers, lengths, indices), host and API
-  input return a handled error. Elsewhere, during development, `todo!`,
-  `unreachable!`, `panic!` and `expect` (never a bare `unwrap()`) are allowed,
-  each with a static message. Panic lints warn; a crate moves to `deny` when
-  its contract freezes ([docs/decisions.md](docs/decisions.md)).
+  constants; time comes from `oer-time-virtual`. A test is hermetic and safe
+  in parallel: its own memory and its own temporary directory (`tempfile`);
+  no external program, process-wide state, fixed path, network port or real
+  time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
+  run into the test's own build directory for compile-fail and
+  compiler-driven cases.
 - **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
   `registers/**/published/*`, `vendor/facts/**`, `vendor/phy-baselines/*/*.json`,
-  all below `chips/`) are
-  never read whole or edited by hand: grep them by path, regenerate them.
-  `chips/*/layout/linker/dma-window.x` is small and may be read, but it is
-  regenerated, never edited.
+  all below `chips/`) are never read whole or edited by hand: grep them by
+  path, regenerate them. `chips/*/layout/linker/dma-window.x` may be read,
+  never edited.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
   ([docs/source-policy.md](docs/source-policy.md)); the Bluetooth LE hardware
-  engine is the one exception and keeps what it takes from `esp32s31-bt-lib`.
-  To find something in vendor libraries, ROM or a vendor image (register
-  accesses, callers including indirect ones, data), try Blobray
-  (`cargo blobray`, [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md))
-  before symbol and relocation searches; report what it cannot answer.
-- **GitHub.** Act only in the owner's repositories; never write to upstream
-  projects (fixes to esp-hal go to the owner's fork).
-- **Decisions.** Only the owner decides. Add or change a line in
-  `docs/decisions.md` only for an answer the owner stated explicitly, in the
-  same change, without attribution or date.
-- **Documents state the current state.** No plans, work lists, migration
-  maps, history or "the owner decided" in the repository; notes and plans
-  live outside it.
-
-## Where code goes
-
-The layout is [docs/repository-layout.md](docs/repository-layout.md).
-
-- **Roots by what the code is about:** `protocols/` the sans-IO protocols and
-  their vocabularies (radio, Wi-Fi, Bluetooth, 802.15.4, network, HIL);
-  `portable/` generic support no protocol or chip owns (time, memory, trace,
-  Embassy bindings, the HIL agent core); `chips/` everything Espressif:
-  `espressif/` for IP shared by the chips, `<chip>/` for PAC, HAL, PHY,
-  drivers, board, layout, chip knowledge and the chip's `platform/`,
-  `registers/`, `notes/` and `vendor/` data; `firmware/` the chip images;
-  `tools/<domain>/` everything for the developer's machine, a domain's
-  libraries beside its program (`tools/hil/run`, `tools/hil/cli`).
-- **Executables** live only in `firmware/` and `tools/`; a host program is
-  `main.rs` and its own modules.
-- **Direction:** protocols and portable crates know no chip and no tool; a
-  host tool takes a chip fact from a crate that does not touch hardware and
-  never links a HAL. Only names and the unsafe boundary are checked
-  (`cargo test -p oer-test-layers`).
-- **Names:** a library is `oer-` and its path below the root
-  (`protocols/ieee80211/wire` is `oer-ieee80211-wire`); an executable keeps its
-  root (`oer-firmware-apps-w1`, `oer-tool-image-cli`).
-- Only `cargo fw` builds images; other programs take artifacts.
-- A crate never sits inside another crate's directory. A new crate needs a
-  reason: dependency direction, a license boundary, a different target or
-  dependency set, or an independent consumer; otherwise it is a module.
+  engine is the one exception. To find something in vendor libraries, ROM or
+  a vendor image, use Blobray (`cargo blobray`,
+  [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md)) first.
+- **Where code goes** ([docs/repository-layout.md](docs/repository-layout.md)):
+  `protocols/` sans-IO protocols, `portable/` generic support, `chips/`
+  everything Espressif, `firmware/` chip images, `tools/<domain>/` the
+  developer's machine. Executables only in `firmware/` and `tools/`. A library
+  is `oer-` plus its path below the root; an executable keeps its root
+  (`oer-firmware-apps-w1`). A crate never sits inside another; a new crate
+  needs a reason (dependency direction, license, target, independent
+  consumer). Only `cargo fw` builds images. Every package builds.
 
 ## Work
 
-- A branch per task; one worktree per session, reused: switch to the next
-  task's branch inside it (`git switch -c <branch> origin/main`), so its
-  `target/` stays warm. A new worktree starts its `target/` as a copy of a
-  warm one (`cp -a --reflink=auto <warm>/target <new>/`); never share
-  `CARGO_TARGET_DIR` between checkouts. Remove a worktree with `git worktree
-  remove` (never `--force`) once its branch is merged.
-- Scratch checkouts, target directories and builds stay under the clone's
-  `target/`, never in `/tmp`: it is a small tmpfs shared by every session,
-  and a full one fails other sessions' builds.
-- `target/` holds only output that can be rebuilt. A pull request carries
-  its evidence as a few lines: the checks run with their exit codes, run IDs
-  and a short table. Longer text goes to the notes repository outside this
-  one, unhashed (git versions it). A binary kept outside git (a vendor image
-  or capture, a raw dump) goes to `<XDG data>/open-esp-radio/evidence/<task>/`
-  with one SHA-256 line in the notes; nothing else is hashed or inventoried.
-  A failed run stays in the shared run store under its run ID. Vendor
-  binaries and disassembly never enter a git repository.
-- Do what the task asks and check what it names: no stand run, comparison
-  or measurement series the task does not ask for. A question the task
-  does not answer goes to whoever set the task.
-- Preserve unrelated changes in a dirty tree. Conventional Commit subjects
-  (`fix(esp32s31): …`).
-- For what you changed: `cargo test -p <pkg>`, `cargo clippy -p <pkg>
-  --all-targets`, `cargo fmt`. Chip code also builds for
-  `riscv32imafc-unknown-none-elf`.
-- Commands longer than about a minute (builds, CI watches, stand runs) run in
-  the background; wait for their completion, never block the conversation.
-- Judge a check only by its own exit code: never through a pipe such as
-  `| tail` (redirect to a file and print `exit=$?` instead).
-- Pass a list of paths or arguments as an array, not as one string variable.
-- Cite commit hashes as `git` prints them after the commit, never from memory.
-- The stand is shared: hardware runs hold the board's lock; never kill another
-  holder, wait for it. Stand runs need no extra approval; the owner's limits
-  on secrets, eFuse writes, protected boards and hub ports still apply.
-- Open the pull request as a draft at the start (`gh pr create --draft`) and
-  push the work to it; mark it ready for review when the work is done
-  (`gh pr ready`). The owner merges it (squash, the branch is deleted); an
-  agent never merges. Pull requests run no CI. CI runs on main after each
-  merge; a red main is fixed by whoever broke it, in the next pull request.
+- **Do what the task asks and check what it names.** No stand run,
+  comparison or measurement series the task does not ask for. A question the
+  task does not answer goes to whoever set it.
+- **Evidence is short.** A pull request lists the checks it ran with their
+  exit codes, run IDs and a short table. Longer text goes to the notes
+  repository outside this one, unhashed. A binary kept outside git (a vendor
+  image or capture, a raw dump) goes to
+  `<XDG data>/open-esp-radio/evidence/<task>/` with one SHA-256 line in the
+  notes; nothing else is hashed or inventoried. `target/` holds only output
+  that can be rebuilt.
+- **Checks for what you changed:** `cargo test -p <pkg>`, `cargo clippy -p
+  <pkg> --all-targets`, `cargo fmt`; chip code also builds for
+  `riscv32imafc-unknown-none-elf`. Judge a check only by its own exit code,
+  never through a pipe (redirect to a file and print `exit=$?`).
+- **Sizes.** `cargo fw sizes` for the images the change reaches. Growth of
+  code, `.rodata`, writable PSRAM, a type, future or frame is reported. Growth
+  of an SRAM section, an allocated task stack or an interrupt stack stops the
+  pull request until the owner answers.
+- **Stand.** Runs only when they answer a real question. Hardware runs hold
+  the board's lock; never kill another holder, wait. The owner's limits on
+  secrets, eFuse writes, protected boards and hub ports apply. A claim about
+  what the hardware puts on air is used only after a stand run confirms it.
+- **Branches and worktrees.** A branch per task; one worktree per session,
+  reused (`git switch -c <branch> origin/main`). A new worktree copies a warm
+  `target/` (`cp -a --reflink=auto`); never share `CARGO_TARGET_DIR`. Scratch
+  stays under the clone's `target/`, never in `/tmp`. Remove a merged
+  worktree with `git worktree remove` (never `--force`). Preserve unrelated
+  changes in a dirty tree.
+- **Long commands** (builds, CI watches, stand runs) run in the background;
+  never block the conversation.
+- **Pull requests.** Conventional Commit subjects (`fix(esp32s31): …`). Open
+  the PR as a draft at the start, mark it ready when done (`gh pr ready`).
+  The owner merges; an agent never merges. PRs run no CI; CI runs on main
+  after each merge, and a red main is fixed by whoever broke it. Rebase only
+  on a conflict or when main changed the same files. Cite commit hashes as
+  `git` prints them. Pass lists of paths as arrays, not one string.
+- **GitHub.** Act only in the owner's repositories; upstream projects are
+  read-only (fixes to esp-hal go to the owner's fork).
+- **Documents state the current state,** in English. No plans, history or
+  "the owner decided" in the repository. An owner decision changes this file,
+  [docs/architecture.md](docs/architecture.md) or the README of the code it
+  governs, in the same change.

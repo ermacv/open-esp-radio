@@ -76,7 +76,7 @@ fastest candidate no faster than the data rate, or the slowest candidate when
 all are faster, applying the BSS preamble rule afterward.
 
 Every subframe ages from its MSDU's admission into software, on the
-monotonic clock (`oer_time::Instant`, `docs/decisions.md`, MSDU age): the
+monotonic clock (`oer_time::Instant`, `protocols/ieee80211/port/README.md`, MSDU age): the
 caller gives each original subframe's admission instant with every
 completion, and a subframe without one ends the exchange as incomplete
 (`UnknownSubframe`), never a panic. A subframe is aged once less than the

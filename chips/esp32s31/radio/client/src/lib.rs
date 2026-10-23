@@ -49,7 +49,7 @@ pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
 pub use oer_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 
 /// The provisional bound of one poll of the actor future
-/// (docs/decisions.md, "Radio system").
+/// (docs/architecture.md, "Radio system").
 pub const ACTOR_STEP_BOUND: oer_time::Duration = oer_time::Duration::from_micros(50);
 
 mod sealed {

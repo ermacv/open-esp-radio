@@ -33,7 +33,8 @@ For each scenario they give:
 
 - The gates are those of the catalog's scenario files, except these:
   - A/B comparison against a reference build: 5 of 5 runs; a throughput
-    regression above 5 % or a p95 latency regression above 10 % blocks;
+    regression above 5 %, a p95 latency regression above 10 % or more
+    per-core CPU load for the same throughput blocks;
   - secure GATT: connection loss at most 20 % over at least 45 attempts;
   - GATT trace: 10 repetitions;
   - PHY calibration tolerance: a field matches when its difference stays

@@ -5,8 +5,7 @@ and its schema-2 peripheral fragments. It follows the layout of the
 [ESP32-S31 register project](../../esp32s31/registers/README.md); the generator is
 [`tools/registers/model`](../../../tools/registers/model/README.md).
 
-Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states)
-and the [Register bits decision](../../../docs/decisions.md#code).
+Register and layout bits follow the [shared bit-state rule](../../../tools/registers/model/README.md#register-bit-states).
 
 A cited exact whole-register initialization image remains one closed image
 operation when reset is unknown. The image alone gives its lanes no bit

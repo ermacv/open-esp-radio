@@ -9,11 +9,11 @@ disallowed-methods = [
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     # esp-hal's `regs()` reaches a block without its singleton; these blocks
     # pass to the radio HAL at the handoff (oer-espressif-esp-hal-radio).
-    { path = "esp_hal::peripherals::IEEE802154::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
-    { path = "esp_hal::peripherals::MODEM_SYSCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
-    { path = "esp_hal::peripherals::MODEM_LPCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
-    { path = "esp_hal::peripherals::I2C_ANA_MST::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
-    { path = "esp_hal::peripherals::LP_TSENS::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
+    { path = "esp_hal::peripherals::IEEE802154::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, "Hardware")" },
+    { path = "esp_hal::peripherals::MODEM_SYSCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, "Hardware")" },
+    { path = "esp_hal::peripherals::MODEM_LPCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, "Hardware")" },
+    { path = "esp_hal::peripherals::I2C_ANA_MST::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, "Hardware")" },
+    { path = "esp_hal::peripherals::LP_TSENS::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, "Hardware")" },
     # A typed DMA address comes from placed storage or a loan, made only in
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
     { path = "oer_esp32c5_pac::layouts::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from oer_esp32c5_hal::dma_address" },

@@ -1,4 +1,4 @@
-//! The owner's size rule: `docs/decisions.md`, "Size budgets".
+//! The owner's size rule: `CLAUDE.md`, "Sizes".
 use super::{Provenance, Summary};
 use crate::Result;
 use oer_image_checks::sizes::{Measurements, Section};

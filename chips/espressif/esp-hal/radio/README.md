@@ -1,7 +1,7 @@
 # oer-espressif-esp-hal-radio
 
 The handoff of the ESP32-S31 radio blocks from esp-hal to the radio HAL
-(docs/decisions.md, "Hardware ownership root"), and the radio's platform
+(docs/architecture.md, "Hardware"), and the radio's platform
 clocks on esp-hal.
 
 - `take_radio(RadioSingletons, &Psram)` consumes esp-hal's singletons of the

@@ -1,6 +1,6 @@
 # Task and interrupt notifications
 
-The execution levels are in [decisions](decisions.md#execution). Task
+The execution levels are in [architecture](architecture.md#execution). Task
 notifications that travel upwards use `oer_sync::PriorityWaker`. It has one
 serialized consumer on one hart. A higher-priority producer completes before
 interrupted registration resumes; a lower-priority producer may remain suspended. Producers publish input before notifying; the consumer registers
