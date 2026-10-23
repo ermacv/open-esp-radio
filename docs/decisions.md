@@ -426,7 +426,10 @@ bounds) live in the code that applies them.
   latency regression above 10 % or more per-core CPU load for the same
   throughput blocks the change.
 - **PHY calibration** matches the vendor when each field's difference stays
-  within the vendor's own spread for that field.
+  within the vendor's own spread for that field, measured in the same run:
+  vendor boots interleaved with ours on the same board, not a stored
+  reference. The comparison runs when the calibration sources change, not
+  for other changes.
   Hardware measurement results that the vendor leaves unconsumed (the PHY
   CCA counter result words, whose window restarts at each Wi-Fi baseband
   reset release) are checked for readability, not compared by value.

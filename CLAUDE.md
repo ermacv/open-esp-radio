@@ -107,12 +107,17 @@ The layout is [docs/repository-layout.md](docs/repository-layout.md).
 - Scratch checkouts, target directories and builds stay under the clone's
   `target/`, never in `/tmp`: it is a small tmpfs shared by every session,
   and a full one fails other sessions' builds.
-- `target/` holds only output that can be rebuilt. Evidence of a task
-  (reports, run IDs, measurements, tables, hashes, analyzer output) goes to
-  the notes repository outside this one; large or binary artifacts (images,
-  captures, raw dumps) go to `<XDG data>/open-esp-radio/evidence/<task>/`,
-  listed with their SHA-256 in the notes. Vendor binaries and disassembly
-  never enter a git repository. HIL runs already live in the shared run store.
+- `target/` holds only output that can be rebuilt. A pull request carries
+  its evidence as a few lines: the checks run with their exit codes, run IDs
+  and a short table. Longer text goes to the notes repository outside this
+  one, unhashed (git versions it). A binary kept outside git (a vendor image
+  or capture, a raw dump) goes to `<XDG data>/open-esp-radio/evidence/<task>/`
+  with one SHA-256 line in the notes; nothing else is hashed or inventoried.
+  A failed run stays in the shared run store under its run ID. Vendor
+  binaries and disassembly never enter a git repository.
+- Do what the task asks and check what it names: no stand run, comparison
+  or measurement series the task does not ask for. A question the task
+  does not answer goes to whoever set the task.
 - Preserve unrelated changes in a dirty tree. Conventional Commit subjects
   (`fix(esp32s31): …`).
 - For what you changed: `cargo test -p <pkg>`, `cargo clippy -p <pkg>
