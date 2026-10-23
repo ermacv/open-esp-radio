@@ -219,7 +219,9 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                         }));
                     }
                 };
-                let epoch = self.core.prepared(&phy);
+                let epoch = self
+                    .core
+                    .prepared(matches!(phy, PhyPreparation::AlreadyOpen));
                 Answer::Join(match self.backend.enter(join, phy, &self.lp).await {
                     Ok(payload) => {
                         self.core.joined();
