@@ -101,7 +101,7 @@ pub enum Start {
     Transmit(Transmit),
     Receive(Receive),
 }
-/// Definite pre-publication refusal or a completed first physical event.
+/// Definite pre-publication refusal or an admitted physical test session.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Started {
     Executed,

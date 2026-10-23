@@ -26,7 +26,11 @@ two-boot 1M DTM procedure against the pinned ESP-IDF peer. Its evidence goes
 to the user's XDG data directory. Hardware conformance is separate from
 this RF/count procedure; a successful build alone proves neither.
 
-The current USB transport completes the first Reset but does not complete
-the next command on the stand. The JTAG post-mortem places the last
-interrupted P1 frame in the USB transmit flush retry. RF, the two-boot gate
-and hardware port conformance are unqualified.
+USB flush retries retain one published transfer until its fresh completion.
+P2 retains an active receiver between finite 1 ms command turns, so Test End
+can stop a quiet receiver without waiting for a packet. Confirmed stop
+reclaims an interrupted event without counting it; naturally completed
+events count only valid received packets. Every DTM event restores the
+reviewed link-state policy before publication.
+
+Hardware port conformance is unqualified.

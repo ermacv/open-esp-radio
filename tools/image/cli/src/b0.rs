@@ -157,42 +157,29 @@ fn dma_snapshot(
     let section = &sizes["elfs"]["runtime"]["sections"][".dma.bss"];
     let address = section["address"].as_u64().ok_or("DMA section address")?;
     let bytes = section["bytes"].as_u64().ok_or("DMA section size")?;
+    fs::create_dir_all(output.join("post-mortem"))?;
     let path = output.join("post-mortem/dma.bin");
     let path = path.to_str().ok_or("DMA snapshot path encoding")?;
     if path.contains(['{', '}']) {
         return Err("DMA snapshot path contains Tcl braces".into());
     }
     let openocd = oer_lab_board::openocd::Openocd::locate()?;
-    let mut arguments = openocd.word_arguments("esp32s31", access.id(), 0);
-    // Read-only debugger observations of named words from the S31 register
-    // model; production accesses remain in their typed PAC owners.
-    let registers = [
-        ("list_0", 0x2010_b000),
-        ("irq_enable_0", 0x2010_1054),
-        ("irq_status_0", 0x2010_105c),
-        ("irq_enable_1", 0x2010_1060),
-        ("irq_status_1", 0x2010_1068),
-        ("sram_prefix", 0x2010_1074),
-        ("scheduler_reference", 0x2010_1078),
-        ("scheduler_state", 0x2010_107c),
-        ("finished_lists", 0x2010_125c),
-        ("phy_interrupt_enable", 0x2010_14b4),
-    ];
-    let mut script = format!("init; halt; dump_image {{{path}}} {address:#x} {bytes}");
-    for (name, address) in registers {
-        script.push_str(&format!("; echo \"{name} [mdw {address:#x}]\""));
-    }
-    script.push_str("; resume; shutdown");
-    *arguments.last_mut().ok_or("OpenOCD command argument")? = script;
+    let mut arguments = openocd.register_arguments("esp32s31", access.id(), &[]);
+    *arguments.last_mut().ok_or("OpenOCD command argument")? =
+        format!("init; halt; dump_image {{{path}}} {address:#x} {bytes}; resume; shutdown");
     let operation = access.operation()?;
     let mut command = oer_os_process::command(&openocd.program);
     command.args(arguments);
     operation.lifetime().pin(&mut command)?;
     let result = oer_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
+    let status = result.status;
     fs::write(
         output.join("post-mortem/dma-openocd.log"),
         [result.stdout, result.stderr].concat(),
     )?;
+    if !status.success() || fs::metadata(path)?.len() != bytes {
+        return Err("OpenOCD did not capture the complete DMA section".into());
+    }
     Ok(())
 }
 
