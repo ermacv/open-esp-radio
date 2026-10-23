@@ -45,6 +45,7 @@ pub type Memory<'pool, 'epoch> = ArenaMemory<'pool, 'epoch, 0, 0, 0, 0, 0, 0, 1>
 #[derive(Clone, Copy)]
 pub struct Limits {
     recheck: Duration,
+    command_turn: Duration,
     operation: Duration,
 }
 #[derive(Clone, Copy)]
@@ -55,11 +56,22 @@ struct PendingEvent {
 }
 impl Limits {
     /// No zero-delay loops or unbounded waits.
-    pub const fn new(recheck: Duration, operation: Duration) -> Option<Self> {
-        if recheck.as_micros() == 0 || operation.as_micros() <= recheck.as_micros() {
+    pub const fn new(
+        recheck: Duration,
+        command_turn: Duration,
+        operation: Duration,
+    ) -> Option<Self> {
+        if recheck.as_micros() == 0
+            || command_turn.as_micros() < recheck.as_micros()
+            || operation.as_micros() <= command_turn.as_micros()
+        {
             None
         } else {
-            Some(Self { recheck, operation })
+            Some(Self {
+                recheck,
+                command_turn,
+                operation,
+            })
         }
     }
 }
@@ -465,7 +477,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             let recheck = self
                 .timer
                 .now()
-                .checked_add(self.limits.recheck)
+                .checked_add(self.limits.command_turn)
                 .ok_or(Fault::Hardware)?;
             let input = step(
                 self.cancel,

@@ -83,7 +83,7 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
             &irq::WAKE,
             permission,
             bridge::RuntimeClock::new(port_epoch),
-            Limits::new(Duration::from_micros(10), Duration::from_millis(100))
+            Limits::new(Duration::from_micros(10), Duration::from_millis(1), Duration::from_millis(100))
                 .expect("finite bring-up containment"),
             &irq::FAULT,
         );
