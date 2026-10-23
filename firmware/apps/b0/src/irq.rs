@@ -5,6 +5,7 @@ use core::{
     cell::RefCell,
     sync::atomic::{AtomicBool, Ordering},
 };
+use esp_hal::interrupt::software::SoftwareInterruptAcknowledger;
 use oer_esp32s31_bluetooth_driver::port::Fault;
 use oer_esp32s31_bluetooth_driver::{
     interrupt::{ControllerInterruptHalf, SchedulerWakeCell},
@@ -15,7 +16,8 @@ use oer_esp32s31_hal::bluetooth::{
     ModemLpTimerHandlerRegisterStep, ModemLpTimerInterruptReadyOwner, ModemLpTimerInterruptStep,
     ModemLpTimerSoftwarePendingOwner,
 };
-use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, SameLevel};
+use oer_espressif_executor::{Doorbell, SameLevel};
+use oer_firmware_apps_b0::routes::{self, Routes};
 use oer_interrupt_table::signal::IrqSignal;
 use oer_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, HandlerCell,
@@ -54,8 +56,8 @@ oer_espressif_staged_runtime::placed_static! {
     static STATE:HandlerCell<State>=HandlerCell::new(),in critical_data "b0";
     static STORAGE:StaticCell<State>=StaticCell::new(),in critical_data "b0";
     static QUEUES:StaticCell<TimerQueues>=StaticCell::new(),in critical_data "b0";
-    static ACK:HandlerCell<DoorbellAcknowledger<3>>=HandlerCell::new(),in critical_data "b0";
-    static ACK_STORE:StaticCell<DoorbellAcknowledger<3>>=StaticCell::new(),in critical_data "b0";
+    static ACK:HandlerCell<SoftwareInterruptAcknowledger<'static, 3>>=HandlerCell::new(),in critical_data "b0";
+    static ACK_STORE:StaticCell<SoftwareInterruptAcknowledger<'static, 3>>=StaticCell::new(),in critical_data "b0";
     pub static FAULT:AtomicBool=AtomicBool::new(false),in critical_data "b0";
     pub static SCHEDULER_SIGNAL:IrqSignal<X>=IrqSignal::new(),in critical_data "b0";
     pub static REPLY:IrqSignal<X>=IrqSignal::new(),in critical_data "b0";
@@ -91,7 +93,11 @@ static TIMER_PORT: StaticCell<TimerPort> = StaticCell::new();
 pub fn initialize(
     soft: SoftwareInterrupt<'static, 3>,
     token: DoorbellToken,
-) -> (SchedulerBell, &'static mut TimerPort) {
+) -> (
+    SchedulerBell,
+    &'static mut TimerPort,
+    oer_espressif_esp_hal_irq::Route,
+) {
     let queues = QUEUES.init(TimerQueues::new());
     let (pending, receive) = queues.pending.split();
     let (restore, ready) = queues.ready.split();
@@ -107,14 +113,12 @@ pub fn initialize(
         .ok()
         .expect("one B0 handler storage");
     let (bell, ack) = Doorbell::new(soft, token, SameLevel::<PrimaryToken, DoorbellToken>::new());
+    let (ack, route) = ack.into_parts();
     let _ = ACK
         .install(ACK_STORE.init(ack))
         .ok()
         .expect("one radio doorbell acknowledger");
     let bell = BELL.init(bell);
-    ACK.with(|ack| ack.enable())
-        .expect("published doorbell")
-        .expect("correct shared route");
     let port = TIMER_PORT.init(TimerPort {
         pending: RefCell::new(receive),
         ready: RefCell::new(restore),
@@ -125,11 +129,12 @@ pub fn initialize(
     (
         oer_esp32s31_bluetooth_driver::interrupt::SchedulerDoorbell::new(Bell(bell), &REPLY),
         port,
+        route,
     )
 }
 
 pub fn doorbell() {
-    let _ = ACK.with(|ack| ack.acknowledge());
+    let _ = ACK.with(|ack| ack.reset());
     let _ = STATE.with(|s| {
         if let Ok(owner) = s.ready.try_receive() {
             if matches!(s.timer, TimerState::Vacant) {
@@ -188,76 +193,95 @@ pub fn timer() {
     });
 }
 
-/// Retains all three same-core route tokens through a live epoch.
-pub struct Inactive {
+/// The fourth route is the doorbell; it is masked before STATE can move.
+struct Control {
     primary: PrimaryToken,
     nrt: NrtToken,
     timer: TimerToken,
+    doorbell: oer_espressif_esp_hal_irq::Route,
 }
-pub struct Active(Inactive);
+impl routes::Control for Control {
+    fn enable(&mut self) -> bool {
+        oer_espressif_esp_hal_irq::enable(&self.primary).is_ok()
+            && oer_espressif_esp_hal_irq::enable(&self.nrt).is_ok()
+            && oer_espressif_esp_hal_irq::enable(&self.timer).is_ok()
+            && oer_espressif_esp_hal_irq::enable_route(&self.doorbell).is_ok()
+    }
+    fn disable_radio(&mut self) {
+        oer_espressif_esp_hal_irq::disable(&self.primary);
+        oer_espressif_esp_hal_irq::disable(&self.nrt);
+        oer_espressif_esp_hal_irq::disable(&self.timer);
+    }
+    fn disable_doorbell(&mut self) {
+        oer_espressif_esp_hal_irq::disable_route(&self.doorbell);
+    }
+}
+pub struct Inactive(Routes<Control, routes::Off>);
+pub struct Active(Routes<Control, routes::Live>);
+pub struct Draining(Routes<Control, routes::Draining>);
 impl Inactive {
-    pub fn new(primary: PrimaryToken, nrt: NrtToken, timer: TimerToken) -> Self {
-        Self {
+    pub fn new(
+        primary: PrimaryToken,
+        nrt: NrtToken,
+        timer: TimerToken,
+        doorbell: oer_espressif_esp_hal_irq::Route,
+    ) -> Self {
+        Self(Routes::new(Control {
             primary,
             nrt,
             timer,
-        }
+            doorbell,
+        }))
     }
-    /// State transfer only: routes are inactive, the old request channel is
-    /// retired, and no P2 operation may ring it until publication completes.
     pub fn publish(
         &self,
         half: Half,
         timer: ModemLpTimerInterruptReadyOwner,
     ) -> Result<(), (Half, ModemLpTimerInterruptReadyOwner)> {
-        STATE
-            .with(|s| {
-                if s.half.is_some() || !matches!(s.timer, TimerState::Vacant) {
-                    return Err((half, timer));
-                }
-                s.half = Some(half);
-                s.timer = TimerState::Ready(timer);
-                Ok(())
-            })
-            .expect("P2 route-off handover cannot overlap another P2 handover")
+        self.0.handover(|| {
+            STATE
+                .with(|s| {
+                    if s.half.is_some() || !matches!(s.timer, TimerState::Vacant) {
+                        return Err((half, timer));
+                    }
+                    s.half = Some(half);
+                    s.timer = TimerState::Ready(timer);
+                    Ok(())
+                })
+                .expect("all routes are masked during P2 handover")
+        })
     }
     pub fn enable(self) -> Result<Active, Self> {
-        if oer_espressif_esp_hal_irq::enable(&self.primary).is_err()
-            || oer_espressif_esp_hal_irq::enable(&self.nrt).is_err()
-            || oer_espressif_esp_hal_irq::enable(&self.timer).is_err()
-        {
-            self.disable_all();
-            return Err(self);
-        }
-        Ok(Active(self))
+        self.0.enable().map(Active).map_err(Inactive)
     }
-    fn disable_all(&self) {
-        oer_espressif_esp_hal_irq::disable(&self.primary);
-        oer_espressif_esp_hal_irq::disable(&self.nrt);
-        oer_espressif_esp_hal_irq::disable(&self.timer);
-    }
-    /// Same-core P3 cannot remain in flight when P2 resumes after route
-    /// removal. The half is moved by value; P2 borrows no IRQ registers.
+    /// Same-core handlers have returned before P2 resumes with all routes off.
     pub fn take(&self) -> Result<(Half, ModemLpTimerInterruptReadyOwner), Fault> {
-        STATE
-            .with(|s| {
-                if s.half.is_none() || !matches!(s.timer, TimerState::Ready(_)) {
-                    return Err(Fault::Hardware);
-                }
-                let half = s.half.take().expect("checked half");
-                let TimerState::Ready(timer) = core::mem::replace(&mut s.timer, TimerState::Vacant)
-                else {
-                    unreachable!("checked ready timer")
-                };
-                Ok((half, timer))
-            })
-            .ok_or(Fault::Hardware)?
+        self.0.handover(|| {
+            STATE
+                .with(|s| {
+                    if s.half.is_none() || !matches!(s.timer, TimerState::Ready(_)) {
+                        return Err(Fault::Hardware);
+                    }
+                    let half = s.half.take().expect("checked half");
+                    let TimerState::Ready(timer) =
+                        core::mem::replace(&mut s.timer, TimerState::Vacant)
+                    else {
+                        unreachable!("checked ready timer")
+                    };
+                    Ok((half, timer))
+                })
+                .ok_or(Fault::Hardware)?
+        })
     }
 }
 impl Active {
-    pub fn disable(self) -> Inactive {
-        self.0.disable_all();
-        self.0
+    pub fn disable(self) -> Draining {
+        Draining(self.0.drain())
+    }
+}
+impl Draining {
+    pub fn finish(self) -> Inactive {
+        Inactive(self.0.finish())
     }
 }
 impl ModemLpTimerSoftwareOwnerStorage for TimerPort {

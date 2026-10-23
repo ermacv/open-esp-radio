@@ -176,7 +176,8 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::init::<2, _>(p.SYSTIMER, tokens.radio_alarm);
     oer_espressif_executor::bind::<0, _>(tokens.app_alarm);
-    let (bell, timer) = irq::initialize(SoftwareInterrupt::new(p.FROM_CPU_INTR3), tokens.doorbell);
+    let (bell, timer, doorbell) =
+        irq::initialize(SoftwareInterrupt::new(p.FROM_CPU_INTR3), tokens.doorbell);
     let bell = SCHEDULER.init(bell);
     let _ = bridge::clock_state();
     let radio = RADIO_EXECUTOR
@@ -190,7 +191,12 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         cell: Some(cell),
         bell,
         timer: Some(timer),
-        routes: Some(irq::Inactive::new(tokens.primary, tokens.nrt, tokens.timer)),
+        routes: Some(irq::Inactive::new(
+            tokens.primary,
+            tokens.nrt,
+            tokens.timer,
+            doorbell,
+        )),
         arena: Some(ARENA.take().expect("one static arena")),
         port_epoch: 0,
         reply: None,
@@ -217,7 +223,11 @@ async fn fail<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Respon
     bridge::complete(reply, Err(Fault::Hardware));
     hold(owner).await
 }
-async fn fault<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Response)>, cause: Fault) -> ! {
+async fn fault<T>(
+    owner: &mut T,
+    reply: &mut Option<(rpc::Command, bridge::Response)>,
+    cause: Fault,
+) -> ! {
     bridge::complete(reply, Err(cause));
     bridge::fail_clock(cause);
     hold(owner).await

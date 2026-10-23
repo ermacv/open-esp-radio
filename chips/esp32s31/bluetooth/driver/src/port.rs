@@ -93,6 +93,10 @@ pub trait Notify {
 /// Independent, generation-keyed controller-clock request endpoint.
 #[allow(async_fn_in_trait)]
 pub trait ClockClient {
+    /// P1 opens bookkeeping before enabling the physical installation.
+    fn activate(&mut self) -> Result<(), Fault>;
+    /// P1 drains an abandoned clock response before uninstall can join.
+    async fn retire(&mut self) -> Result<(), Fault>;
     async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault>;
 }
 /// A complete start description copied only after the request is retained.

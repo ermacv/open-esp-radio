@@ -83,8 +83,12 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
             &irq::WAKE,
             permission,
             bridge::RuntimeClock::new(port_epoch),
-            Limits::new(Duration::from_micros(10), Duration::from_millis(1), Duration::from_millis(100))
-                .expect("finite bring-up containment"),
+            Limits::new(
+                Duration::from_micros(10),
+                Duration::from_millis(1),
+                Duration::from_millis(100),
+            )
+            .expect("finite bring-up containment"),
             &irq::FAULT,
         );
         bridge::complete(&mut boot.reply, Ok(rpc::Completion::Done));
@@ -101,7 +105,7 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
         if let Err(cause) = result {
             fault(&mut runner, &mut boot.reply, cause).await;
         }
-        let routes = active.disable();
+        let draining = active.disable();
         let deadline = EmbassyClock
             .now()
             .checked_add(Duration::from_millis(100))
@@ -112,6 +116,7 @@ pub(super) fn run<'a, 'p: 'a, 'e: 'a>(
             }
             let _ = EmbassyClock.wait_for(Duration::from_micros(10)).await;
         }
+        let routes = draining.finish();
         let (half, ready) = match routes.take() {
             Ok(x) => x,
             Err(_) => fail(&mut runner, &mut boot.reply).await,

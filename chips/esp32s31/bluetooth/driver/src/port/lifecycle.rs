@@ -313,6 +313,10 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
         if v.shared.draining.load(Ordering::Acquire) {
             return Ok(Err(Refusal::Unavailable));
         }
+        if let Err(cause) = v.clock.get_mut().activate() {
+            v.shared.poison(cause);
+            return Err(Poisoned { cause });
+        }
         v.shared.enabled.store(true, Ordering::Release);
         v.shared.drained.store(false, Ordering::Release);
         v.shared.notify.notify();
@@ -382,7 +386,12 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
                 Poll::Pending
             }
         })
-        .await
+        .await?;
+        if let Err(cause) = v.clock.get_mut().retire().await {
+            v.shared.poison(cause);
+            return Err(Poisoned { cause });
+        }
+        Ok(())
     }
     async fn now<'a, 'p>(
         _: Call,

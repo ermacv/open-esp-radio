@@ -70,7 +70,7 @@ pub struct Busy;
 pub enum Accepted<P: PoolPath> {
     /// An immediate response is retained by the service.
     Response,
-    /// Call `submit`, then `complete` to await this command's port terminal.
+    /// Call `submit`; only `Submitted::AwaitTerminal` needs `complete`.
     Port,
     /// Leave the body through normal disable/uninstall, then reinstall.
     Reset(Reset<P>),
@@ -124,6 +124,14 @@ pub enum Fault {
     Completion,
     /// The port lost events or ended before the mandatory terminal.
     Stream,
+}
+
+/// Whether admission produced a terminal obligation or an immediate HCI status.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
+pub enum Submitted {
+    AwaitTerminal,
+    Response,
 }
 
 /// A submission failure requires the composition to fail-stop the port.
@@ -299,16 +307,14 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
     pub async fn submit<F>(
         &mut self,
         phase: &impl LePhase<'p, P, (), Caps = C, Fault = F>,
-    ) -> Result<(), SubmitError<F>> {
+    ) -> Result<Submitted, SubmitError<F>> {
         if self.faulted {
             return Err(SubmitError::Poisoned);
         }
-        if self
-            .pending
-            .as_ref()
-            .is_none_or(|pending| pending.admitted.is_some())
-        {
-            return Ok(());
+        match self.pending.as_ref() {
+            None => return Ok(Submitted::Response),
+            Some(pending) if pending.admitted.is_some() => return Ok(Submitted::AwaitTerminal),
+            Some(_) => {}
         }
         let capacity = phase.take(&mut self.seat).await;
         let pending = self
@@ -347,7 +353,7 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                     self.faulted = true;
                     return Err(SubmitError::Receipt);
                 }
-                Ok(())
+                Ok(Submitted::AwaitTerminal)
             }
             Ok(Err(refused)) => {
                 phase.release(refused.request.capacity);
@@ -359,7 +365,7 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
                     DtmCommand::End(session) => Lease::Running(session),
                 });
                 self.response = Some(status(opcode, Some(HciError::CMD_DISALLOWED)));
-                Ok(())
+                Ok(Submitted::Response)
             }
             Err(fault) => {
                 self.faulted = true;

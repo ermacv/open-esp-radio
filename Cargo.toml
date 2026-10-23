@@ -325,8 +325,8 @@ publish = false
 
 [workspace.dependencies]
 # The firmware packages' shared dependencies.
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "0f67296516aa33703fcd23e2402acc557705bf6a", default-features = false }
-esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "0f67296516aa33703fcd23e2402acc557705bf6a", default-features = false }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "bdc9b49032d97a5884df4e4f8dfbfe00a31af9ba", default-features = false }
+esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "bdc9b49032d97a5884df4e4f8dfbfe00a31af9ba", default-features = false }
 static_cell = "2.1.1"
 oer-espressif-staged-layout = { path = "chips/espressif/staged-layout" }
 oer-espressif-usb-fifo = { path = "chips/espressif/usb-fifo" }

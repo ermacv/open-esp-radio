@@ -12,9 +12,9 @@ use oer_bluetooth_hci::{
 use oer_bluetooth_le_controller::dtm::{self, Accepted, Entropy};
 use oer_bluetooth_le_port::TxPower;
 use oer_esp32s31_bluetooth_driver::port::{DtmCaps, Fault};
-use oer_firmware_apps_b0::h4::Commands;
+use oer_firmware_apps_b0::{h4::Commands, tx};
 use oer_radio_port as rp;
-use oer_time::{Duration, Timer};
+use oer_time::{Clock, Duration, Timer};
 
 type Id = bridge::slot::Id;
 type Backend = bridge::Backend<Id>;
@@ -28,19 +28,28 @@ impl Entropy for RandomValue {
         self.0.take().ok_or(dtm::EntropyUnavailable)
     }
 }
+enum Received {
+    Command,
+    Framing,
+}
 struct Io {
     console: UsbSerialJtag<'static, esp_hal::Blocking>,
     rng: RNG<'static>,
     commands: Commands,
     entropy: RandomValue,
-    sent: usize,
 }
 impl Io {
-    async fn receive(&mut self) -> Result<(), Fault> {
+    async fn receive(&mut self) -> Result<Received, Fault> {
         while !self.commands.complete() {
+            if self.commands.expire(EmbassyClock.now()) {
+                return Ok(Received::Framing);
+            }
             match self.console.read_byte() {
                 Ok(byte) => {
-                    self.commands.push(byte).map_err(|_| Fault::Hardware)?;
+                    if self.commands.push(byte, EmbassyClock.now()).is_err() {
+                        self.commands.reset();
+                        return Ok(Received::Framing);
+                    }
                 }
                 Err(nb::Error::WouldBlock) => EmbassyClock
                     .wait_for(POLL)
@@ -49,7 +58,7 @@ impl Io {
                 Err(nb::Error::Other(_)) => return Err(Fault::Hardware),
             }
         }
-        Ok(())
+        Ok(Received::Command)
     }
     async fn entropy(&mut self) -> Result<(), Fault> {
         self.entropy.0 = None;
@@ -81,35 +90,22 @@ impl Io {
         Ok(())
     }
     async fn send(&mut self, response: &impl HciControllerResponse) -> Result<(), Fault> {
-        let body = response.as_bytes();
-        while self.sent <= body.len() {
-            let byte = if self.sent == 0 {
-                response.kind() as u8
-            } else {
-                *body.get(self.sent - 1).ok_or(Fault::Accounting)?
-            };
-            match self.console.write_byte_nb(byte) {
-                Ok(()) => self.sent += 1,
-                Err(nb::Error::WouldBlock) => EmbassyClock
-                    .wait_for(POLL)
-                    .await
-                    .map_err(|_| Fault::Hardware)?,
-                Err(nb::Error::Other(_)) => return Err(Fault::Hardware),
-            }
-        }
-        loop {
-            match self.console.flush_tx_nb() {
-                Ok(()) => {
-                    self.sent = 0;
-                    return Ok(());
-                }
-                Err(nb::Error::WouldBlock) => EmbassyClock
-                    .wait_for(POLL)
-                    .await
-                    .map_err(|_| Fault::Hardware)?,
-                Err(nb::Error::Other(_)) => return Err(Fault::Hardware),
-            }
-        }
+        tx::send(self, &EmbassyClock, POLL, response)
+            .await
+            .map_err(|_| Fault::Hardware)
+    }
+}
+impl tx::Sink for Io {
+    type Error = ();
+    fn write(&mut self, byte: u8) -> nb::Result<(), ()> {
+        self.console
+            .write_byte_nb(byte)
+            .map_err(|error| error.map(|_| ()))
+    }
+    fn flush(&mut self) -> nb::Result<(), ()> {
+        self.console
+            .flush_tx_nb()
+            .map_err(|error| error.map(|_| ()))
     }
 }
 enum Disposition {
@@ -152,7 +148,10 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                 self.io.send(&response).await?;
             }
             loop {
-                self.io.receive().await?;
+                if matches!(self.io.receive().await?, Received::Framing) {
+                    self.io.send(&HardwareError([0x10, 1, 0xff])).await?;
+                    continue;
+                }
                 let (stop, random) = {
                     let packet = self.io.commands.packet().map_err(|_| Fault::Hardware)?;
                     (
@@ -183,25 +182,27 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                     Accepted::Reset(reset) => return Ok(Disposition::Reset(reset)),
                     Accepted::Response => {}
                     Accepted::Port => {
-                        {
+                        let submitted = {
                             let phase = owner.phase();
                             service.submit(&*phase).await.map_err(|error| match error {
                                 dtm::SubmitError::Backend(poisoned) => poisoned.cause,
                                 _ => Fault::Accounting,
-                            })?;
+                            })?
+                        };
+                        if submitted == dtm::Submitted::AwaitTerminal {
+                            // Exercise the independent physical latch before
+                            // removing this command's mandatory terminal.
+                            match owner.now().await {
+                                Ok(Ok(_)) => {}
+                                Err(poisoned) => return Err(poisoned.cause),
+                                Ok(Err(_)) => return Err(Fault::ClockBusy),
+                            }
+                            let mut phase = owner.phase();
+                            service
+                                .complete(&mut *phase)
+                                .await
+                                .map_err(|_| Fault::Hardware)?;
                         }
-                        // Exercise the independent physical latch before
-                        // removing this command's mandatory terminal.
-                        match owner.now().await {
-                            Ok(Ok(_)) => {}
-                            Err(poisoned) => return Err(poisoned.cause),
-                            Ok(Err(_)) => return Err(Fault::ClockBusy),
-                        }
-                        let mut phase = owner.phase();
-                        service
-                            .complete(&mut *phase)
-                            .await
-                            .map_err(|_| Fault::Hardware)?;
                     }
                 }
                 let response = service.response().ok_or(Fault::Accounting)?;
@@ -219,8 +220,12 @@ impl rp::PortBody<Id, Backend> for Body<'_> {
                 }
             }
             Err(fault) => {
-                let _ = self.io.send(&HardwareError([0x10, 1, fault as u8])).await;
-                rp::Ended::fail_stop(owner.fail_stop(), Err(fault))
+                let stopped = tx::fail_stop(
+                    || owner.fail_stop(),
+                    self.io,
+                    &HardwareError([0x10, 1, fault as u8]),
+                );
+                rp::Ended::fail_stop(stopped, Err(fault))
             }
         }
     }
@@ -255,7 +260,6 @@ pub async fn serve(
         rng,
         commands: Commands::new(),
         entropy: RandomValue(None),
-        sent: 0,
     };
     let mut poster = channel.0;
     let mut joined = None;
@@ -264,6 +268,14 @@ pub async fn serve(
         let mut request = poster.post(joined.take());
         let (next, frontend) = poll_fn(|cx| request.poll_answer(cx)).await;
         poster = next;
+        let frontend = match frontend {
+            Ok(frontend) => frontend,
+            Err(fault) => {
+                tx::fail_stop(|| (), &mut io, &HardwareError([0x10, 1, fault as u8]));
+                core::future::pending::<()>().await;
+                return;
+            }
+        };
         match rp::run_port(
             frontend,
             Body {

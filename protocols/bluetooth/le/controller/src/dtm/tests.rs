@@ -286,13 +286,16 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                         phase.release(b);
                     }
                     if matches!(scenario, Scenario::Refused) {
-                        service
-                            .submit(&Alter {
-                                inner: &mut *phase,
-                                scenario,
-                            })
-                            .await
-                            .expect("whole request refused");
+                        assert_eq!(
+                            service
+                                .submit(&Alter {
+                                    inner: &mut *phase,
+                                    scenario,
+                                })
+                                .await
+                                .expect("whole request refused"),
+                            Submitted::Response
+                        );
                         take(&mut service, opcode, 0x0c);
                         assert!(matches!(service.lease, Some(Lease::Idle(_))));
                         assert!(matches!(
@@ -319,7 +322,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                         ));
                         break 'operation;
                     }
-                    service.submit(&*phase).await.expect("model admission");
+                    assert_eq!(
+                        service.submit(&*phase).await.expect("model admission"),
+                        Submitted::AwaitTerminal
+                    );
                     assert!(
                         service.response().is_none(),
                         "start completion waits for P2"
@@ -381,7 +387,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                         )
                         .ok()
                         .unwrap();
-                    service.submit(&*phase).await.expect("End admission");
+                    assert_eq!(
+                        service.submit(&*phase).await.expect("End admission"),
+                        Submitted::AwaitTerminal
+                    );
                     service.complete(&mut *phase).await.expect("End terminal");
                     assert_eq!(
                         &take(&mut service, hci::LE_TEST_END_OPCODE, 0)[6..],
@@ -518,7 +527,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for ResetFlow<Id> {
                         ),
                         Ok(Accepted::Port)
                     ));
-                    service.submit(&*phase).await.expect("RX admission");
+                    assert_eq!(
+                        service.submit(&*phase).await.expect("RX admission"),
+                        Submitted::AwaitTerminal
+                    );
                     service.complete(&mut *phase).await.expect("RX terminal");
                     take(&mut service, hci::LE_RECEIVER_TEST_V2_OPCODE, 0);
                     let Ok(Accepted::Reset(reset)) =

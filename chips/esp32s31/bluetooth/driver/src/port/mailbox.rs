@@ -135,16 +135,21 @@ impl ClockState {
         self.retired = false;
         Ok(())
     }
-    fn retire(&mut self, epoch: u64) -> Result<(), Fault> {
-        let mut cx = Context::from_waker(core::task::Waker::noop());
-        if self.epoch != epoch || !self.discard_abandoned(&mut cx) {
-            return Err(self.fail(Fault::Accounting));
+    fn poll_retire(&mut self, epoch: u64, cx: &mut Context<'_>) -> Poll<Result<(), Fault>> {
+        if self.epoch != epoch || self.pending.as_ref().is_some_and(|p| !p.abandoned) {
+            return Poll::Ready(Err(self.fail(Fault::Accounting)));
+        }
+        if !self.discard_abandoned(cx) {
+            return Poll::Pending;
         }
         if let Some(fault) = self.fault {
-            return Err(fault);
+            return Poll::Ready(Err(fault));
+        }
+        if self.cancel.load(Ordering::Acquire) {
+            return Poll::Ready(Err(Fault::Abandoned));
         }
         self.retired = true;
-        Ok(())
+        Poll::Ready(Ok(()))
     }
     fn begin(&mut self, epoch: u64) -> Result<ClockRequest, ClockError> {
         if epoch != self.epoch || self.retired {
@@ -176,7 +181,9 @@ impl ClockState {
     }
 }
 
-/// Same-context clock bookkeeping; no P3 handler reaches this cell.
+/// P1-only bookkeeping: initialization, activate, now, cancellation and retire.
+/// P2 only constructs an epoch-keyed endpoint and answers the request mailbox;
+/// it never enters this cell. No P3 handler reaches it.
 pub type ClockStorage = HandlerCell<ClockState>;
 
 pub struct ClockEndpoint {
@@ -199,6 +206,19 @@ impl Drop for ClockCall {
     }
 }
 impl ClockClient for ClockEndpoint {
+    fn activate(&mut self) -> Result<(), Fault> {
+        self.state
+            .with(|state| state.activate(self.epoch))
+            .ok_or(Fault::Accounting)?
+    }
+    async fn retire(&mut self) -> Result<(), Fault> {
+        poll_fn(|cx| {
+            self.state
+                .with(|state| state.poll_retire(self.epoch, cx))
+                .unwrap_or(Poll::Ready(Err(Fault::Accounting)))
+        })
+        .await
+    }
     async fn now(&mut self) -> PortResult<LeInstant, ClockError, Fault> {
         let Some(begin) = self.state.with(|state| {
             if let Some(cause) = state.fault {
@@ -371,10 +391,6 @@ impl<T: Timer + Clone> Device for MailboxDevice<T> {
         self.timer.clone()
     }
     fn clock(&mut self) -> ClockEndpoint {
-        let active = self.clock.with(|state| state.activate(self.epoch));
-        if active != Some(Ok(())) {
-            self.fail(Fault::Accounting);
-        }
         ClockEndpoint {
             state: self.clock,
             epoch: self.epoch,
@@ -414,10 +430,6 @@ impl<T: Timer + Clone> Device for MailboxDevice<T> {
     }
     async fn shutdown(&mut self) -> Result<(), Fault> {
         self.done(Operation::Shutdown).await?;
-        let retired = self.clock.with(|state| state.retire(self.epoch));
-        if retired != Some(Ok(())) {
-            return Err(self.fail(Fault::Accounting));
-        }
         self.stopped = true;
         self.running = false;
         Ok(())

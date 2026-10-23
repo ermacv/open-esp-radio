@@ -11,11 +11,19 @@ use oer_radio_port as rp;
 pub type Backend<Id> = port::Backend<Id, rpc::MailboxDevice<EmbassyClock>>;
 oer_espressif_executor::declare_port_slot!(pub slot: super::Backend<Id>);
 pub type Front = rp::SlotFrontend<'static, slot::Id, Backend<slot::Id>>;
-type Ready = RequestSlot<Option<rp::Joined<slot::Id>>, Front>;
+type Ready = RequestSlot<Option<rp::Joined<slot::Id>>, Result<Front, Fault>>;
 static READY_BELL: Doorbell = Doorbell::new();
 static READY: Ready = Ready::new(&READY_BELL, 1);
-pub struct FrontendChannel(pub Poster<Option<rp::Joined<slot::Id>>, Front>);
+pub struct FrontendChannel(pub Poster<Option<rp::Joined<slot::Id>>, Result<Front, Fault>>);
 pub fn frontend() -> FrontendChannel {
+    let state = CLOCK_STORE.init(rpc::ClockState::new(
+        CLOCKS.claim().expect("one P1 clock caller"),
+        &irq::FAULT,
+    ));
+    let _installed = CLOCK
+        .install(state)
+        .ok()
+        .expect("one P1 clock bookkeeping owner");
     FrontendChannel(READY.claim().expect("one HCI frontend"))
 }
 
@@ -129,14 +137,6 @@ pub fn fail_clock(cause: Fault) {
 
 #[embassy_executor::task]
 pub async fn supervisor() {
-    let state = CLOCK_STORE.init(rpc::ClockState::new(
-        CLOCKS.claim().expect("one clock caller"),
-        &irq::FAULT,
-    ));
-    let _installed = CLOCK
-        .install(state)
-        .ok()
-        .expect("one clock bookkeeping owner");
     let mut first = Some(rpc::MailboxDevice::new(
         EmbassyClock,
         COMMANDS.claim().expect("one device caller"),
@@ -152,29 +152,44 @@ pub async fn supervisor() {
         let Some((joined, response)) = READY.take_request() else {
             continue;
         };
-        let registered = match joined {
-            None => slot
-                .register(Backend::new(first.take().expect("initial backend")))
-                .ok(),
-            Some(joined) => slot
-                .reinstall(joined, |vacant| {
-                    let device = match vacant.into_device().reinitialize() {
-                        Ok(device) => device,
-                        Err(mut device) => {
-                            device.quarantine();
-                            device
-                        }
-                    };
-                    Backend::new(device)
-                })
-                .ok(),
+        let (frontend, registration) = match joined {
+            None => {
+                let Some(device) = first.take() else {
+                    oer_firmware_apps_b0::handoff::park_failure((), || {
+                        response.answer(Err(Fault::Accounting))
+                    })
+                    .await
+                };
+                match slot.register(Backend::new(device)) {
+                    Ok(registered) => registered,
+                    Err(owner) => {
+                        oer_firmware_apps_b0::handoff::park_failure(owner, || {
+                            response.answer(Err(Fault::Accounting))
+                        })
+                        .await
+                    }
+                }
+            }
+            Some(joined) => match slot.reinstall(joined, |vacant| {
+                let device = match vacant.into_device().reinitialize() {
+                    Ok(device) => device,
+                    Err(mut device) => {
+                        device.quarantine();
+                        device
+                    }
+                };
+                Backend::new(device)
+            }) {
+                Ok(registered) => registered,
+                Err(resume) => {
+                    oer_firmware_apps_b0::handoff::park_failure(resume, || {
+                        response.answer(Err(Fault::Accounting))
+                    })
+                    .await
+                }
+            },
         };
-        let Some((frontend, registration)) = registered else {
-            // No endpoint or new slot can be issued after a failed claim.
-            core::future::pending::<()>().await;
-            continue;
-        };
-        response.answer(frontend);
+        response.answer(Ok(frontend));
         if let Some(completion) = registration.run().await {
             completion.unregistered();
         }

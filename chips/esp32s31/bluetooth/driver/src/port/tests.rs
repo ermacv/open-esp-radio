@@ -28,6 +28,12 @@ impl Notify for Notification {
 }
 struct TestClock(TestTimer);
 impl ClockClient for TestClock {
+    fn activate(&mut self) -> Result<(), Fault> {
+        Ok(())
+    }
+    async fn retire(&mut self) -> Result<(), Fault> {
+        Ok(())
+    }
     async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault> {
         Ok(Ok(oer_time::RadioInstant::from_micros(
             self.0.now().as_micros(),

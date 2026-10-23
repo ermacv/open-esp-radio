@@ -110,12 +110,21 @@ fn sram_accounting(base: &Path, head: &Path) -> Result<serde_json::Value> {
     use serde_json::Value;
     let base: Value = serde_json::from_slice(&fs::read(base)?)?;
     let head: Value = serde_json::from_slice(&fs::read(head)?)?;
+    sram_accounting_values(&base, &head)
+}
+
+fn sram_accounting_values(
+    base: &serde_json::Value,
+    head: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    use serde_json::Value;
     let runtime = |value: &Value| value["elfs"]["runtime"].clone();
     let a = runtime(&base);
     let b = runtime(&head);
     let value = |v: &Value, path: &str| -> Result<i64> {
         v.pointer(path)
             .and_then(Value::as_i64)
+            .filter(|value| *value >= 0)
             .ok_or_else(|| format!("sizes.json has no {path}").into())
     };
     let span = |v: &Value| -> Result<i64> {
@@ -134,16 +143,34 @@ fn sram_accounting(base: &Path, head: &Path) -> Result<serde_json::Value> {
             low = low.min(address);
             high = high.max(address.checked_add(bytes).ok_or("SRAM extent overflow")?);
         }
+        if high <= low {
+            return Err("no nonempty valid SRAM span".into());
+        }
         high.checked_sub(low)
-            .ok_or_else(|| "no valid SRAM span".into())
+            .ok_or_else(|| "SRAM span overflow".into())
     };
-    let text = value(&b, "/totals/sram/code")? - value(&a, "/totals/sram/code")?;
-    let owned = value(&b, "/totals/sram/ram")? - value(&a, "/totals/sram/ram")?;
-    let irq = value(&b, "/sections/.irq_stacks/bytes")? - value(&a, "/sections/.irq_stacks/bytes")?;
-    let full = span(&b)? - span(&a)?;
+    let difference = |head: i64, base: i64| -> Result<i64> {
+        head.checked_sub(base)
+            .ok_or_else(|| "SRAM accounting overflow".into())
+    };
+    let text = difference(
+        value(&b, "/totals/sram/code")?,
+        value(&a, "/totals/sram/code")?,
+    )?;
+    let owned = difference(
+        value(&b, "/totals/sram/ram")?,
+        value(&a, "/totals/sram/ram")?,
+    )?;
+    let irq = difference(
+        value(&b, "/sections/.irq_stacks/bytes")?,
+        value(&a, "/sections/.irq_stacks/bytes")?,
+    )?;
+    let full = difference(span(&b)?, span(&a)?)?;
+    let rw = difference(difference(owned, text)?, irq)?;
+    let alignment = difference(full, owned)?;
     Ok(
         json!({"base_provenance":base["provenance"],"head_provenance":head["provenance"],
-        "sram_text":text,"sram_rw":owned-text-irq,"allocated_irq_stacks":irq,"alignment":full-owned,
+        "sram_text":text,"sram_rw":rw,"allocated_irq_stacks":irq,"alignment":alignment,
         "full_sram":full,"limit":7360,"passed":full<=7360}),
     )
 }
@@ -395,5 +422,41 @@ mod tests {
             assert_eq!(report["alignment"], gap);
             assert_eq!(report["passed"], passed);
         }
+    }
+    #[test]
+    fn malformed_sram_summaries_are_errors_instead_of_passes_or_panics() {
+        let valid = json!({"elfs":{"runtime":{
+            "totals":{"sram":{"code":1,"ram":2}},
+            "sections":{".irq_stacks":{"memory":"sram","address":100,"bytes":1}}
+        }}});
+        let mut cases = Vec::new();
+        for sections in [
+            json!({}),
+            json!({".flash":{"memory":"flash","address":1,"bytes":1}}),
+        ] {
+            let mut bad = valid.clone();
+            bad["elfs"]["runtime"]["sections"] = sections;
+            cases.push(bad);
+        }
+        for (key, value) in [
+            ("bytes", 0),
+            ("bytes", -1),
+            ("address", -1),
+            ("address", i64::MAX),
+        ] {
+            let mut bad = valid.clone();
+            bad["elfs"]["runtime"]["sections"][".irq_stacks"][key] = json!(value);
+            cases.push(bad);
+        }
+        for bad in cases {
+            assert!(sram_accounting_values(&valid, &bad).is_err());
+            assert!(sram_accounting_values(&bad, &valid).is_err());
+        }
+        let mut base = valid.clone();
+        let mut head = valid.clone();
+        base["elfs"]["runtime"]["totals"]["sram"]["code"] = json!(i64::MAX);
+        head["elfs"]["runtime"]["totals"]["sram"]["ram"] = json!(i64::MAX);
+        // Individually representable nonnegative inputs overflow decomposition.
+        assert!(sram_accounting_values(&base, &head).is_err());
     }
 }

@@ -16,7 +16,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive",
 oer-memory = { path = "../../../../portable/memory" }
 critical-section = "1.2.0"
 oer-time = { path = "../../../../portable/time" }
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "0f67296516aa33703fcd23e2402acc557705bf6a", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "bdc9b49032d97a5884df4e4f8dfbfe00a31af9ba", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 oer-espressif-esp-hal-irq = { path = "../../esp-hal-irq", features = ["esp32s31"], optional = true }
 
