@@ -218,7 +218,9 @@ fn w1_stand(
 }
 
 /// The stand router's regulatory country, read only, with the router lock.
-fn w0_country(stand: &stand::Stand) -> Result<(oer_lab_router::lock::RouterLock, [u8; 2])> {
+pub(super) fn w0_country(
+    stand: &stand::Stand,
+) -> Result<(oer_lab_router::lock::RouterLock, [u8; 2])> {
     let router = stand.router()?;
     let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
     let lock = oer_lab_router::lock::router(&router_lock_directory()?, router.ssh_target.expose())?;

@@ -1,43 +1,63 @@
 use super::*;
-pub(super) type Running<'a, 'loan: 'a, 'p: 'loan, 'e: 'loan> =
-    impl core::future::Future<Output = Result<(), Fault>> + 'a;
-static RUNNING: static_cell::ConstStaticCell<
-    oer_memory::StaticPlace<Running<'static, 'static, 'static, 'static>>,
-> = static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
-#[define_opaque(Running)]
-fn running<'a, 'loan: 'a, 'p: 'loan, 'e: 'loan>(
+pub(super) async fn run<'a, 'loan: 'a, 'p: 'loan, 'e: 'loan>(
     actor: &'a mut LiveActor<'loan, 'p, 'e>,
     runner: &'a mut LiveRunner<'p, 'e>,
     timer_task: &'a mut ControllerModemTimerTask<'static, irq::TimerPort, 1, X>,
-) -> Running<'a, 'loan, 'p, 'e> {
-    actor.run_until(async {
+    epoch: u64,
+    reply: &'a mut Option<(rpc::Command, bridge::Response)>,
+) -> Result<(), Fault> {
+    let mut operation = core::pin::pin!(async {
         let operations = async {
-            let started = runner
-                .start(Start::Receive(Receive {
-                    channel: TestChannel::new(19).expect("DTM test channel"),
-                    phy: TestPhy::Le1M,
-                }))
-                .await?;
-            if started != oer_esp32s31_bluetooth_driver::port::Started::Executed {
-                return Err(Fault::Hardware);
+            let clock = bridge::RuntimeClock::new(epoch);
+            loop {
+                match select(bridge::command(), poll_fn(|cx| clock.poll_request(cx))).await {
+                    Either::Second(request) => {
+                        let result = runner.now().await;
+                        bridge::RuntimeClock::answer(request, result);
+                        result?;
+                    }
+                    Either::First((command, response)) => {
+                        *reply = Some((command, response));
+                        if command.epoch != epoch {
+                            return Err(Fault::Accounting);
+                        }
+                        let result = match command.operation {
+                            rpc::Operation::Enable => Err(Fault::Accounting),
+                            rpc::Operation::Start(config) => {
+                                runner.start(config).await.map(rpc::Completion::Started)
+                            }
+                            rpc::Operation::End => runner.end().await.map(rpc::Completion::Ended),
+                            rpc::Operation::Progress => {
+                                runner.progress().await.map(|()| rpc::Completion::Done)
+                            }
+                            rpc::Operation::Shutdown => {
+                                // The frontend loan ended before this request.
+                                // Settle its last cancelled clock call first.
+                                if let Some(request) = clock.try_request() {
+                                    let result = runner.now().await;
+                                    bridge::RuntimeClock::answer(request, result);
+                                    result?;
+                                }
+                                runner.end().await?;
+                                // Shutdown is answered only after the enclosing
+                                // fresh pool/epoch scope returns the actual arena.
+                                return Ok(());
+                            }
+                        };
+                        bridge::complete(reply, result);
+                        result?;
+                    }
+                }
             }
-            runner.end().await?;
-            Ok::<_, Fault>(())
         };
         match select(maintenance(timer_task), operations).await {
             Either::First(result) => result,
             Either::Second(result) => result,
         }
-    })
+    });
+    actor.run_until(operation.as_mut()).await
 }
 
-pub(super) fn run<'a, 'loan: 'a, 'p: 'loan, 'e: 'loan>(
-    actor: &'a mut LiveActor<'loan, 'p, 'e>,
-    runner: &'a mut LiveRunner<'p, 'e>,
-    timer_task: &'a mut ControllerModemTimerTask<'static, irq::TimerPort, 1, X>,
-) -> oer_memory::PlacedFuture<'a, Running<'a, 'loan, 'p, 'e>> {
-    RUNNING.take().future(|| running(actor, runner, timer_task))
-}
 pub(super) fn timer_step(
     task: &mut ControllerModemTimerTask<'_, irq::TimerPort, 1, X>,
 ) -> Result<(), Fault> {

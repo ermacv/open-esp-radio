@@ -1,14 +1,9 @@
-//! The first image composition: real actor join, one quiet RX event and normal
-//! graph return. This stage is measured before HCI/stand integration proceeds.
+//! Permanent physical P2 worker. Only ordinary graph return admits another epoch.
 use super::*;
-use core::{
-    convert::Infallible,
-    future::{pending, poll_fn},
-    task::{Context, Poll},
-};
+use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
 use esp_hal::{efuse, usb::usb_serial_jtag::UsbSerialJtag};
-use oer_bluetooth_le_port::{Receive, TestChannel, TestPhy};
+use oer_bluetooth_le_port::TxPower;
 use oer_bluetooth_le_radio::LeBand;
 use oer_esp32s31_bluetooth_driver::{
     modem_timer::{
@@ -16,7 +11,7 @@ use oer_esp32s31_bluetooth_driver::{
         ControllerModemTimerStep, ControllerModemTimerTask,
     },
     port::{
-        Fault, Start,
+        Fault, mailbox as rpc,
         runner::{ClockRequests, Limits, Memory, Runner},
     },
     radio::ControllerLifecycle,
@@ -42,9 +37,8 @@ use oer_esp32s31_radio_client::{
     bluetooth::{self, Bluetooth, BluetoothJoin, Operation, Permission},
     wifi::Wifi,
 };
-use oer_esp32s31_radio_system::{Esp32s31Radio, BluetoothActor, BluetoothAttachment, RadioSystem};
+use oer_esp32s31_radio_system::{BluetoothActor, BluetoothAttachment, Esp32s31Radio, RadioSystem};
 use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
-use oer_memory::OnceValue;
 use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 
@@ -56,39 +50,76 @@ oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.
 static CELLS: ControllerEventCells<X> =
     ControllerEventCells::new(&irq::SCHEDULER_SIGNAL, &irq::TIMER_SIGNAL);
 
-static RESULT: OnceValue<bool> = OnceValue::new();
 struct Boot {
     actor: Option<Actor>,
     inbox: Option<ClientInbox<Bluetooth>>,
     cold: Option<ColdOwner>,
     coex: Option<CoexAbsent<BluetoothClient>>,
     cell: Option<MembershipCell<Bluetooth>>,
-    bell: Option<irq::SchedulerBell>,
+    bell: &'static irq::SchedulerBell,
     timer: Option<&'static mut irq::TimerPort>,
     routes: Option<irq::Inactive>,
+    arena: Option<Placed<Arena>>,
+    port_epoch: u64,
+    reply: Option<(rpc::Command, bridge::Response)>,
     profile: Profile,
     address: [u8; 6],
 }
 static BOOT: StaticCell<Boot> = StaticCell::new();
 type LiveActor<'loan, 'p, 'e> = BluetoothActor<
-    'loan, RcSlow, Shared, EmbassyClock, BluetoothAttachment<lifecycle::Life<'p, 'e>>,
+    'loan,
+    RcSlow,
+    Shared,
+    EmbassyClock,
+    BluetoothAttachment<lifecycle::Life<'p, 'e>>,
 >;
-type LiveRunner<'p, 'e> = Runner<'p, 'e, X, irq::SchedulerBell, EmbassyClock, NoClockRequests>;
+type LiveRunner<'p, 'e> = Runner<'p, 'e, X, SchedulerAccess, EmbassyClock, bridge::RuntimeClock>;
 mod active;
 mod installed;
 
-struct NoClockRequests;
-impl ClockRequests for NoClockRequests {
-    type Request = Infallible;
-    fn try_request(&self) -> Option<Infallible> {
-        None
+static SCHEDULER: StaticCell<irq::SchedulerBell> = StaticCell::new();
+struct SchedulerAccess(&'static irq::SchedulerBell);
+impl oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell
+    for SchedulerAccess
+{
+    fn ring(&self) {
+        oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell::ring(self.0);
     }
-    fn poll_request(&self, _: &mut Context<'_>) -> Poll<Infallible> {
-        Poll::Pending
+    fn poll_reply(
+        &self,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<
+        Result<
+            (),
+            oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptError,
+        >,
+    > {
+        oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell::poll_reply(
+            self.0, cx,
+        )
     }
-    fn answer(never: Infallible, _: Result<oer_bluetooth_le_radio::LeInstant, Fault>) {
-        match never {}
-    }
+}
+pub fn permission(profile: Profile) -> (Permission, TxPower) {
+    let domain = RegulatoryDomain::of(Country::new(profile.country).expect("build country"))
+        .expect("profile country in database");
+    let band = domain.permit(LeBand).expect("profile permits LE band");
+    let permission = Permission::new(
+        band,
+        PowerLimits {
+            antenna_gain_mbm: 0,
+            chip_maximum_mbm: 2100,
+            owner_cap_mbm: Some(i32::from(profile.cap_dbm) * 100),
+        },
+    );
+    let power = TxPower::within(
+        oer_bluetooth_le_radio::LeTxCeiling::new(band, permission.ceiling()),
+        profile.cap_dbm,
+    )
+    .expect("configured power within its ceiling");
+    permission
+        .tx_power(Operation::DtmTx, power)
+        .expect("profile permits DTM TX");
+    (permission, power)
 }
 
 pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
@@ -142,6 +173,8 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     oer_espressif_executor::init::<2, _>(p.SYSTIMER, tokens.radio_alarm);
     oer_espressif_executor::bind::<0, _>(tokens.app_alarm);
     let (bell, timer) = irq::initialize(SoftwareInterrupt::new(p.FROM_CPU_INTR3), tokens.doorbell);
+    let bell = SCHEDULER.init(bell);
+    let _ = bridge::clock_state();
     let radio = RADIO_EXECUTOR
         .init(X::new(SoftwareInterrupt::new(p.FROM_CPU_INTR2)))
         .start(tokens.radio, LEVELS);
@@ -151,56 +184,73 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         cold: Some(ColdOwner::from_partition(parts.bluetooth)),
         coex: Some(parts.bluetooth_coex),
         cell: Some(cell),
-        bell: Some(bell),
+        bell,
         timer: Some(timer),
         routes: Some(irq::Inactive::new(tokens.primary, tokens.nrt, tokens.timer)),
+        arena: Some(ARENA.take().expect("one static arena")),
+        port_epoch: 0,
+        reply: None,
         profile,
         address: base,
     });
     radio.spawn(driver(boot).expect("one P2 driver task"));
+    radio.spawn(bridge::supervisor().expect("one P2 port supervisor"));
     let app = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(p.FROM_CPU_INTR0)));
     adopted.enable_interrupts();
     app.run(tokens.wake, |spawner| {
-        spawner.spawn(report(console).expect("one report task"));
+        let (_, power) = permission(profile);
+        spawner
+            .spawn(host::serve(console, p.RNG, bridge::frontend(), power).expect("one HCI task"));
     })
-}
-#[embassy_executor::task]
-async fn report(mut console: UsbSerialJtag<'static, esp_hal::Blocking>) {
-    loop {
-        if let Some(success) = RESULT.get() {
-            let bytes: &[u8] = if success {
-                b"OER-B0-BRINGUP: returned graph\r\n"
-            } else {
-                b"OER-B0-BRINGUP: fail\r\n"
-            };
-            let _ = console.write(bytes);
-            return;
-        }
-        let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
-    }
 }
 async fn hold<T>(owner: &mut T) -> ! {
     core::hint::black_box(owner);
-    let _ = RESULT.set(false);
+    irq::FAULT.store(true, core::sync::atomic::Ordering::Release);
+    bridge::fail_clock();
     pending().await
+}
+async fn fail<T>(owner: &mut T, reply: &mut Option<(rpc::Command, bridge::Response)>) -> ! {
+    bridge::complete(reply, Err(Fault::Hardware));
+    hold(owner).await
 }
 mod task {
     #[embassy_executor::task]
     pub(super) async fn driver(boot: &'static mut super::Boot) {
-        super::run_driver(boot).await;
+        super::WORKER.take().future(|| super::worker(boot)).await;
     }
 }
 use task::driver;
-async fn run_driver(boot: &'static mut Boot) {
-    with_pool_async(async |pool| {
-        with_epoch_async(async |epoch| {
-            installed::run(boot, pool, epoch).await;
-        })
-        .await;
-    })
-    .await;
-}
-async fn hold_success<A, B>(a: &mut A, b: &mut B) {
-    core::hint::black_box((a, b));
-    pending::<()>().await
+type Worker = impl core::future::Future<Output = ()>;
+static WORKER: static_cell::ConstStaticCell<oer_memory::StaticPlace<Worker>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
+#[define_opaque(Worker)]
+fn worker(boot: &'static mut Boot) -> Worker {
+    async move {
+        let timer: &'static irq::TimerPort = boot.timer.take().expect("one P2 timer handover");
+        loop {
+            let (command, reply) = bridge::command().await;
+            if command.operation != rpc::Operation::Enable
+                || boot.port_epoch.checked_add(1) != Some(command.epoch)
+            {
+                bridge::answer(command, reply, Err(Fault::Accounting));
+                hold(boot).await;
+            }
+            boot.port_epoch = command.epoch;
+            boot.reply = Some((command, reply));
+            {
+                let mut pool = core::pin::pin!(with_pool_async(async |pool| {
+                    let mut epoch = core::pin::pin!(with_epoch_async(async |epoch| {
+                        let mut installed =
+                            core::pin::pin!(installed::run(boot, pool, epoch, timer));
+                        installed.as_mut().await;
+                    }));
+                    epoch.as_mut().await;
+                }));
+                pool.as_mut().await;
+            }
+            // Every scoped future and its old generative authority ended;
+            // the actual arena and cold owners are back in Boot.
+            bridge::complete(&mut boot.reply, Ok(rpc::Completion::Done));
+        }
+    }
 }

@@ -364,7 +364,7 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
             .ok()
             .expect("fresh capacity fixture");
         let p = front.ports();
-        let pool = p.credits;
+        let pool = &*p.credits;
         let first = pool.take(0).await;
         {
             let mut cancelled = std::boxed::Box::pin(pool.take(1));

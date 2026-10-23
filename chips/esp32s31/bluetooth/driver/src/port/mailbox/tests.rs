@@ -6,6 +6,32 @@ use oer_time::{Clock, Instant};
 use oer_time_virtual::VirtualClock;
 use std::{boxed::Box, rc::Rc};
 
+#[test]
+fn frontend_with_a_send_timer_can_cross_from_supervisor_to_p1() {
+    use std::sync::{Arc, Mutex};
+    #[derive(Clone)]
+    struct SendTimer(Arc<Mutex<VirtualClock>>);
+    impl Clock for SendTimer {
+        fn now(&self) -> Instant {
+            self.0.lock().expect("own virtual clock").now()
+        }
+    }
+    impl Timer for SendTimer {
+        async fn wait_until(&self, deadline: Instant) {
+            core::future::poll_fn(|cx| {
+                let clock = self.0.lock().expect("own virtual clock");
+                let mut wait = pin!(clock.wait_until(deadline));
+                wait.as_mut().poll(cx)
+            })
+            .await;
+        }
+    }
+    fn send<T: Send>() {}
+    type Id = oer_radio_port::StaticId<()>;
+    type Backend = super::super::Backend<Id, MailboxDevice<SendTimer>>;
+    send::<oer_radio_port::SlotFrontend<'static, Id, Backend>>();
+}
+
 #[derive(Clone)]
 struct TestTimer(Rc<VirtualClock>);
 impl Clock for TestTimer {

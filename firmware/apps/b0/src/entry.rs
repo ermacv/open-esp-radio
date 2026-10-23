@@ -10,6 +10,8 @@ pub struct Profile {
     pub cap_dbm: i8,
 }
 include!(concat!(env!("OUT_DIR"), "/profile.rs"));
+mod bridge;
+mod host;
 mod irq;
 mod radio;
 
