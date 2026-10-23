@@ -39,6 +39,26 @@ fn reply_is_durable_and_the_command_runs_once() {
 }
 
 #[test]
+fn each_in_place_reply_is_consumed_once_and_replaces_the_previous_value() {
+    let (mut task, mut irq, bell) = halves();
+    for value in [true, false] {
+        {
+            let mut future = pin!(task.progress(&bell));
+            assert!(poll(future.as_mut()).is_pending());
+            assert!(irq.service_with(|command| {
+                assert!(matches!(command, Command::Progress));
+                Ok(Reply::Flag(value))
+            }));
+            assert_eq!(poll(future.as_mut()), Poll::Ready(Ok(value)));
+        }
+        assert!(task.is_quiet());
+        assert!(task.take_reply().is_none());
+        assert!(!irq.service_with(|_| panic!("consumed request cannot execute again")));
+    }
+    assert_eq!(bell.0.get(), 2);
+}
+
+#[test]
 fn abandoned_request_keeps_its_seat_and_cannot_be_replaced() {
     let (mut task, mut irq, bell) = halves();
     {
@@ -124,11 +144,45 @@ fn stale_reply_cannot_free_the_request_seat() {
         task.take_reply(),
         Some(Err(SchedulerInterruptError::ForeignReply))
     ));
+    assert!(matches!(
+        task.take_reply(),
+        Some(Err(SchedulerInterruptError::ForeignReply))
+    ));
+    assert!(!irq.service_with(|_| panic!("stale response must retain the actual message")));
     assert!(!task.is_quiet());
     assert!(matches!(
         task.retire(irq),
         Err((SchedulerInterruptError::Abandoned, _, _))
     ));
+}
+
+#[test]
+fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
+    use oer_time::{Clock, Duration};
+    use oer_time_virtual::VirtualClock;
+    for ready_on in [None, Some(1), Some(2), Some(3)] {
+        let clock: VirtualClock = VirtualClock::default();
+        let outlined = SchedulerInterruptClock::new(&clock);
+        assert_eq!(outlined.now(), clock.now());
+        let mut attempts = 0;
+        let result = crate::settle::settle(
+            crate::settle::Settle::new(super::super::DIAGNOSTIC_SETTLE, &outlined),
+            || {
+                attempts += 1;
+                clock
+                    .advance(Duration::from_micros(10))
+                    .expect("virtual time advances");
+                (Some(attempts) == ready_on).then_some(attempts)
+            },
+        );
+        let expected = match ready_on {
+            Some(1) => (Ok(1), 1),
+            Some(2) => (Ok(2), 2),
+            _ => (Err(crate::settle::Unsettled), 2),
+        };
+        assert_eq!((result, attempts), expected);
+        assert_eq!(outlined.now(), clock.now());
+    }
 }
 
 #[test]

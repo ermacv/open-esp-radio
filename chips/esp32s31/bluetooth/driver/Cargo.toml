@@ -10,12 +10,20 @@ description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE
 [dependencies]
 oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
 oer-bluetooth-le-radio = { path = "../../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
+oer-bluetooth-le-ll = { path = "../../../../protocols/bluetooth/le/ll" }
+oer-radio-port = { path = "../../../../protocols/radio/port" }
+oer-memory = { path = "../../../../portable/memory" }
+oer-esp32s31-radio-client = { path = "../../radio/client", features = ["bluetooth"] }
+embassy-futures = "0.1.2"
 oer-esp32s31-hal = { path = "../../hal", features = ["bluetooth-engine"] }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-time = { path = "../../../../portable/time" }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 
 [dev-dependencies]
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+atomic-waker = "1.1.2"
 bytemuck = { version = "1.25.2", default-features = false }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }

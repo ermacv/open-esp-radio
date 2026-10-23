@@ -7,6 +7,7 @@ use oer_bluetooth_le_radio::{
 
 use super::{
     DTM_MAX_PAYLOAD, DtmEvent, DtmPayloadPattern, DtmSession, DtmStartError, DtmStop, DtmTest,
+    DtmWindowError, next_window,
 };
 
 /// A power under the open test domain's ceiling.
@@ -379,4 +380,18 @@ fn reports_without_an_event_in_progress_count_nothing() {
             .is_some()
     );
     assert!(session.in_progress());
+}
+
+#[test]
+fn detached_coded_tx_window_is_refused_without_a_session_or_payload() {
+    let test = DtmTest::Transmit {
+        channel: TestChannel::new(19).expect("test channel"),
+        phy: TestPhy::LeCodedS8,
+        pattern: DtmPayloadPattern::Prbs9,
+        length: 37,
+    };
+    assert_eq!(
+        next_window(test, LeInstant::from_micros(0), RadioTiming::MINIMAL, None),
+        Err(DtmWindowError::UnsupportedPhy)
+    );
 }

@@ -655,8 +655,6 @@ pub(crate) struct SchedulerRoleCpu<'pool, S: SchedulerRoleStorage> {
 /// Item memory of one pool, as seen by the executor.
 pub(crate) trait SchedulerItemSource: sealed::Sealed {
     #[doc(hidden)]
-    fn kind(&self) -> SchedulerRoleKind;
-    #[doc(hidden)]
     fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress;
     #[doc(hidden)]
     fn item_layout(&self, id: SchedulerItemId) -> &BleSchedulerItem;
@@ -669,10 +667,6 @@ impl<S: SchedulerRoleStorage, const N: usize> sealed::Sealed for SchedulerRolePo
 impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
     for SchedulerRolePool<'_, '_, S, N>
 {
-    fn kind(&self) -> SchedulerRoleKind {
-        S::KIND
-    }
-
     fn item_link(&self, id: SchedulerItemId) -> ControllerSramLinkAddress {
         S::item_link(&self.bindings[id.instance()], id.item())
     }
@@ -714,9 +708,15 @@ impl<'pools> SchedulerItemSpace<'pools> {
         }
     }
 
-    /// Add the pool of one kind.
-    pub fn with<S: SchedulerItemSource + 'pools>(mut self, pool: &'pools S) -> Self {
-        self.sources[pool.kind().index()] = Some(pool);
+    /// Add the populated pool of one kind. A zero-capacity pool has no item
+    /// that this space can resolve and does not retain a dispatch table.
+    pub fn with<S: SchedulerRoleStorage + 'pools, const N: usize>(
+        mut self,
+        pool: &'pools SchedulerRolePool<'_, '_, S, N>,
+    ) -> Self {
+        if N != 0 {
+            self.sources[S::KIND.index()] = Some(pool);
+        }
         self
     }
 

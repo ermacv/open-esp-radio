@@ -1,4 +1,7 @@
-use crate::interrupt::SchedulerWorkerWakeClass;
+use crate::interrupt::{
+    PrimaryInterruptClassification, PrimaryWakeFault, SchedulerWakeBatch, SchedulerWakeCell,
+    SchedulerWakePublication, SchedulerWorkerWakeClass,
+};
 
 use oer_esp32s31_hal::bluetooth::BluetoothPrimaryInterruptEpoch;
 
@@ -86,19 +89,24 @@ impl PrimaryInterruptBackend for Backend {
     }
 }
 
+fn classify(
+    capture: PrimaryInterruptCapture,
+) -> Option<Result<SchedulerWakeBatch, PrimaryWakeFault>> {
+    let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+    let _ = cell.publish_from_interrupt(capture);
+    cell.take()
+        .expect("host P2 context")
+        .map(|batch| batch.classify())
+}
+
 #[test]
-fn ordinary_dynamic_epoch_produces_one_paired_scheduler_event() {
+fn ordinary_dynamic_epoch_captures_then_p2_classifies_one_event() {
     let mut backend = Backend::dynamic(true, false, false, false, true, true);
-
-    let PrimaryInterruptStep::Scheduler(event) = execute_primary_interrupt_step(&mut backend)
-    else {
-        panic!("dynamic source must produce scheduler work");
-    };
-
-    assert_eq!(event.wake().class(), SchedulerWorkerWakeClass::Ordinary);
-    assert_eq!(event.wake().deferred_work_publication(), Some(true));
-    assert!(event.scheduler_busy());
-    assert_eq!(event.current_hardware_list().get(), 7);
+    let capture = execute_primary_interrupt_capture(&mut backend);
+    let event = classify(capture)
+        .expect("work capture")
+        .expect("fault-free inputs");
+    assert!(!event.is_marked());
     assert_eq!(
         backend.operations,
         [Operation::PrimaryEpoch, Operation::Work]
@@ -108,20 +116,20 @@ fn ordinary_dynamic_epoch_produces_one_paired_scheduler_event() {
 #[test]
 fn idle_reference_gate_clears_before_fresh_work_read() {
     let mut backend = Backend::dynamic(false, true, true, false, true, true);
-
-    let PrimaryInterruptStep::Scheduler(event) = execute_primary_interrupt_step(&mut backend)
-    else {
-        panic!("idle reference gate must continue after the ordered clear");
-    };
-
-    assert!(event.scheduler_busy());
+    let capture = execute_primary_interrupt_capture(&mut backend);
+    assert!(
+        classify(capture)
+            .expect("capture")
+            .expect("no fault")
+            .is_marked()
+    );
     assert_eq!(
         backend.operations,
         [
             Operation::PrimaryEpoch,
             Operation::ReferenceGate,
             Operation::ReferenceClear,
-            Operation::Work,
+            Operation::Work
         ]
     );
 }
@@ -129,20 +137,19 @@ fn idle_reference_gate_clears_before_fresh_work_read() {
 #[test]
 fn busy_reference_gate_preserves_reference_then_uses_a_fresh_work_read() {
     let mut backend = Backend::dynamic(false, true, true, true, false, false);
-
-    let PrimaryInterruptStep::Scheduler(event) = execute_primary_interrupt_step(&mut backend)
-    else {
-        panic!("busy reference gate must continue to deferred work");
-    };
-
-    assert_eq!(event.wake().class(), SchedulerWorkerWakeClass::Ordinary);
-    assert!(!event.scheduler_busy());
+    let capture = execute_primary_interrupt_capture(&mut backend);
+    assert!(
+        !classify(capture)
+            .expect("capture")
+            .expect("no fault")
+            .is_marked()
+    );
     assert_eq!(
         backend.operations,
         [
             Operation::PrimaryEpoch,
             Operation::ReferenceGate,
-            Operation::Work,
+            Operation::Work
         ]
     );
 }
@@ -150,77 +157,135 @@ fn busy_reference_gate_preserves_reference_then_uses_a_fresh_work_read() {
 #[test]
 fn fault_and_empty_epochs_do_not_touch_scheduler_state() {
     let mut fault = Backend::fault();
-    assert!(matches!(
-        execute_primary_interrupt_step(&mut fault),
-        PrimaryInterruptStep::Fault(_)
-    ));
+    let capture = execute_primary_interrupt_capture(&mut fault);
+    assert!(
+        classify(capture)
+            .expect("fault capture")
+            .expect_err("no work authority")
+            .bank_1_source_8_pending()
+    );
     assert_eq!(fault.operations, [Operation::PrimaryEpoch]);
-
     let mut empty = Backend::dynamic(false, false, false, false, false, false);
-    assert!(matches!(
-        execute_primary_interrupt_step(&mut empty),
-        PrimaryInterruptStep::NoSchedulerWork(_)
-    ));
+    assert_eq!(
+        classify(execute_primary_interrupt_capture(&mut empty)),
+        None
+    );
     assert_eq!(empty.operations, [Operation::PrimaryEpoch]);
 }
 
 #[test]
 fn unclassified_status_fails_closed_without_reading_scheduler_state() {
     let mut backend = Backend::unclassified();
-
-    let PrimaryInterruptStep::Fault(fault) = execute_primary_interrupt_step(&mut backend) else {
-        panic!("unclassified status must fail closed");
-    };
-
-    assert!(fault.sources().unclassified_pending());
+    let capture = execute_primary_interrupt_capture(&mut backend);
+    assert!(
+        classify(capture)
+            .expect("capture")
+            .expect_err("unclassified source")
+            .unclassified_pending()
+    );
     assert_eq!(backend.operations, [Operation::PrimaryEpoch]);
 }
 
 #[test]
-fn one_primary_scheduler_event_updates_the_durable_handoff() {
-    let mut backend = Backend::dynamic(false, true, true, true, true, true);
-    let scheduler_wake =
-        SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
-
-    let published = execute_primary_interrupt_step(&mut backend).publish(&scheduler_wake);
-
-    assert!(matches!(
-        published,
-        PrimaryPublishedInterruptStep::Scheduler {
-            scheduler: SchedulerWakePublication::Pended,
-            ..
-        }
-    ));
-    assert!(
-        scheduler_wake
-            .take()
-            .expect("the host executor's context")
-            .expect("scheduler work must be durable")
-            .is_marked()
-    );
-
-    let empty = execute_primary_interrupt_step(&mut Backend::dynamic(
-        false, false, false, false, false, false,
-    ))
-    .publish(&scheduler_wake);
-    assert!(matches!(
-        empty,
-        PrimaryPublishedInterruptStep::NoSchedulerWork(_)
-    ));
-    assert_eq!(scheduler_wake.is_pending(), Ok(false));
-}
-
-#[test]
-fn unsettled_reference_gate_preserves_the_reference_and_publishes_no_work() {
+fn unsettled_reference_gate_preserves_reference_and_reaches_p2_as_fault() {
     let mut backend = Backend::dynamic(false, false, true, false, false, false);
     backend.gate = Err(Unsettled);
-
-    assert!(matches!(
-        execute_primary_interrupt_step(&mut backend),
-        PrimaryInterruptStep::DiagnosticUnsettled(_)
-    ));
+    let capture = execute_primary_interrupt_capture(&mut backend);
+    assert!(
+        classify(capture)
+            .expect("capture")
+            .expect_err("failed settle")
+            .diagnostic_unsettled()
+    );
     assert_eq!(
         backend.operations,
         [Operation::PrimaryEpoch, Operation::ReferenceGate]
     );
+}
+
+fn dynamic_inputs(key: u8) -> (bool, bool, bool, bool) {
+    (key & 1 != 0, key & 2 != 0, key & 4 != 0, key & 8 != 0)
+}
+fn reference_marker(key: u8) -> Option<bool> {
+    let (a, b, c, deferred) = dynamic_inputs(key);
+    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(a, b, c);
+    let classification = PrimaryInterruptClassification::from_epoch(epoch).expect("no fault");
+    classification.work_classifier().map(|classifier| {
+        classifier
+            .classify(
+                &BluetoothSchedulerWorkObservation::from_fields_for_host_test(true, deferred, 7),
+            )
+            .class()
+            == SchedulerWorkerWakeClass::Marked
+    })
+}
+
+#[test]
+fn every_pair_of_coalesced_inputs_preserves_the_reference_marker_without_cross_pairing() {
+    // In particular source-27/sample=false followed by source-21/sample=true
+    // must remain ordinary: independently OR-ing sources and samples is wrong.
+    for first in 0..16 {
+        for second in 0..16 {
+            let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+            let mut pending = false;
+            for key in [first, second] {
+                let (a, b, c, deferred) = dynamic_inputs(key);
+                let mut backend = Backend::dynamic(a, b, c, false, true, deferred);
+                let published =
+                    cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend));
+                if reference_marker(key).is_some() {
+                    assert_eq!(
+                        published,
+                        Some(if pending {
+                            SchedulerWakePublication::Coalesced
+                        } else {
+                            SchedulerWakePublication::Pended
+                        })
+                    );
+                    pending = true;
+                } else {
+                    assert_eq!(published, None);
+                }
+            }
+            let batch = cell.take().expect("host P2 context");
+            assert_eq!(batch.is_some(), pending);
+            if let Some(batch) = batch {
+                let marked = batch.classify().expect("no fault").is_marked();
+                assert_eq!(
+                    marked,
+                    reference_marker(first) == Some(true) || reference_marker(second) == Some(true),
+                    "inputs {first}, {second}"
+                );
+            }
+            assert_eq!(cell.take(), Ok(None));
+        }
+    }
+}
+
+#[test]
+fn coalesced_faults_preempt_work_and_keep_each_source_until_p2_takes_them() {
+    let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
+    let mut unsettled = Backend::dynamic(false, false, true, false, false, false);
+    unsettled.gate = Err(Unsettled);
+    for mut backend in [
+        Backend::dynamic(false, true, false, false, false, true),
+        Backend::fault(),
+        Backend::unclassified(),
+        unsettled,
+    ] {
+        let _ = cell.publish_from_interrupt(execute_primary_interrupt_capture(&mut backend));
+    }
+    let fault = cell
+        .take()
+        .expect("host P2")
+        .expect("captured inputs")
+        .classify()
+        .expect_err("faults must not issue a scheduler-work authority");
+    assert!(fault.bank_1_source_8_pending());
+    assert!(fault.unclassified_pending());
+    assert!(fault.diagnostic_unsettled());
+    assert!(!fault.bank_0_source_15_pending());
+    assert!(!fault.bank_1_source_9_pending());
+    assert!(!fault.bank_1_source_12_pending());
+    assert_eq!(cell.take(), Ok(None));
 }

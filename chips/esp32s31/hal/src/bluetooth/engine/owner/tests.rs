@@ -4,8 +4,8 @@ use crate::dma_static::Placed;
 use bytemuck::Zeroable;
 use std::boxed::Box;
 
-type Backing = BluetoothArena<0, 1, 2, 4, 4>;
-type Memory = ArenaMemory<'static, 'static, 0, 1, 2, 4, 4, 8>;
+type Backing = BluetoothArena<0, 1, 2, 1, 4, 4>;
+type Memory = ArenaMemory<'static, 'static, 0, 1, 2, 1, 4, 4, 8>;
 
 fn clocked() -> bluetooth::ClockedOwner {
     let (_, partitions) = crate::root::RadioHardware::for_host_test()
@@ -34,6 +34,74 @@ fn model() -> (
         registers: interrupts.registers,
     };
     (engine, output, timer)
+}
+
+fn prepared_dtm_item(
+    engine: &mut Engine<Memory>,
+) -> (SchedulerRoleInstance<'static, 'static>, SchedulerItemId) {
+    let instance = engine.memory.dtm.acquire().expect("one DTM instance");
+    engine
+        .memory
+        .dtm
+        .prepare_event(&instance, |seed| {
+            let words = seed.words();
+            Ok::<_, core::convert::Infallible>(DtmPositionalEventWords::new(
+                words.link_state().apply_reset(
+                    Some(seed.tx_header_head_projection()),
+                    Some(seed.rx_header_tail_projection()),
+                    LeTxPower::from_dbm(0).expect("provider level"),
+                    0,
+                    false,
+                ),
+                words.scheduler_item(),
+            ))
+        })
+        .expect("bound DTM image");
+    let id = engine
+        .memory
+        .dtm
+        .submit(&instance, 0)
+        .expect("prepared item");
+    (instance, id)
+}
+
+#[test]
+fn dtm_busy_refusal_returns_the_original_graph_without_a_transaction() {
+    let (mut engine, _, _) = model();
+    let (instance, id) = prepared_dtm_item(&mut engine);
+    assert!(engine.memory.dtm.is_listed(id));
+    assert!(!engine.allow_busy_insertion::<false>(id).expect("same item"));
+    assert!(!engine.memory.dtm.is_listed(id));
+    let mut items = SchedulerItemSpace::new().with(&engine.memory.dtm);
+    assert!(
+        engine
+            .memory
+            .scheduler
+            .take_completed(&mut items)
+            .expect("no transaction was started")
+            .is_empty()
+    );
+    // Nothing was published, so there is no hardware completion to decode.
+    assert!(engine.memory.dtm.cpu(&instance).is_ok());
+    assert!(engine.memory.dtm.release(instance).is_ok());
+}
+
+#[test]
+fn shared_busy_insertion_keeps_the_item_for_the_hardware_transaction() {
+    let (mut engine, _, _) = model();
+    let (instance, id) = prepared_dtm_item(&mut engine);
+    assert!(engine.allow_busy_insertion::<true>(id).expect("same item"));
+    assert!(engine.memory.dtm.is_listed(id));
+    let refused = engine
+        .memory
+        .dtm
+        .release(instance)
+        .expect_err("item stays listed");
+    assert_eq!(refused.error, SchedulerPoolError::InstanceBusy);
+    engine
+        .return_item(id)
+        .expect("no publication in this model");
+    assert!(engine.memory.dtm.release(refused.instance).is_ok());
 }
 
 #[test]
@@ -167,14 +235,50 @@ fn refusal_returns_the_exact_allocation_and_untouched_registers_for_retry() {
     .unwrap();
     assert!(engine.memory.devices.is_empty());
     assert_ne!(
-        engine.memory.scanning_rx.initial_cursor(),
-        engine.memory.other_rx.initial_cursor()
+        engine.memory.scanning_rx[0].initial_cursor(),
+        engine.memory.other_rx[0].initial_cursor()
     );
 }
 
 #[test]
 fn init_run_completion_stop_reset_returns_one_arena_and_rejects_old_items() {
-    let (mut engine, output, timer) = model();
+    let (engine, output, timer) = model();
+    epoch_cycle(engine, output, timer);
+}
+
+#[test]
+fn dtm_only_profile_returns_one_arena_and_rejects_old_items() {
+    type DtmMemory = ArenaMemory<'static, 'static, 0, 0, 0, 0, 0, 0, 1>;
+    let backing = Box::leak(Box::new(BluetoothArena::<0, 0, 0, 0, 0, 0>::zeroed()));
+    let (mut engine, interrupts) = Engine::<DtmMemory>::for_host_test::<HostDma<0x2f00_1000>>(
+        clocked(),
+        Placed::host(backing),
+        config(),
+    )
+    .ok()
+    .expect("DTM needs no global RX chains");
+    let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
+        timer: engine.registers.modem_lp_timer.take().unwrap(),
+    };
+    let output = bluetooth::InterruptOutputReleasedOwner {
+        registers: interrupts.registers,
+    };
+    epoch_cycle(engine, output, timer);
+}
+
+fn epoch_cycle<
+    const A: usize,
+    const C: usize,
+    const N: usize,
+    const S: usize,
+    const R: usize,
+    const O: usize,
+    const Q: usize,
+>(
+    mut engine: Engine<ArenaMemory<'static, 'static, A, C, N, S, R, O, Q>>,
+    output: bluetooth::InterruptOutputReleasedOwner,
+    timer: bluetooth::ModemLpTimerInterruptReadyOwner,
+) {
     let root = engine.memory.root_address_for_test();
     let epoch = engine.epoch;
     let hal_config = bluetooth::BluetoothControllerHalInitConfig::reviewed_standalone();
@@ -254,13 +358,12 @@ fn init_run_completion_stop_reset_returns_one_arena_and_rejects_old_items() {
     let returned = engine.shut_down_with(output, timer, reset).unwrap();
     let backing = returned.arena.into_inner();
     assert_eq!(core::ptr::from_ref(&*backing).addr(), root);
-    let (mut next, _) = Engine::<Memory>::for_host_test::<HostDma<0x2f00_1000>>(
-        returned.clocked,
-        Placed::host(backing),
-        config(),
-    )
-    .ok()
-    .unwrap();
+    let (mut next, _) =
+        Engine::<ArenaMemory<'static, 'static, A, C, N, S, R, O, Q>>::for_host_test::<
+            HostDma<0x2f00_1000>,
+        >(returned.clocked, Placed::host(backing), config())
+        .ok()
+        .unwrap();
     assert_ne!(next.epoch, epoch);
     assert!(matches!(
         next.complete(stale),
@@ -349,11 +452,16 @@ fn detached_completion_epochs_never_wrap_into_an_old_installation() {
 fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
     let (clocked, arena) = with_pool(|pool| {
         with_epoch(|epoch| {
-            let (mut engine, interrupts) = Engine::<ArenaMemory<'_, '_, 0, 1, 2, 4, 4, 8>>::new::<
-                HostDma<0x2f00_1000>,
-            >(clocked(), placed(), pool, epoch, config())
-            .ok()
-            .unwrap();
+            let (mut engine, interrupts) =
+                Engine::<ArenaMemory<'_, '_, 0, 1, 2, 1, 4, 4, 8>>::new::<HostDma<0x2f00_1000>>(
+                    clocked(),
+                    placed(),
+                    pool,
+                    epoch,
+                    config(),
+                )
+                .ok()
+                .unwrap();
             let timer = bluetooth::ModemLpTimerInterruptReadyOwner {
                 timer: engine.registers.modem_lp_timer.take().unwrap(),
             };
@@ -367,7 +475,7 @@ fn reset_returns_storage_outside_its_scoped_pool_and_epoch_brands() {
     });
     with_pool(|pool| {
         with_epoch(|epoch| {
-            let (mut engine, _) = Engine::<ArenaMemory<'_, '_, 0, 1, 2, 4, 4, 8>>::new::<
+            let (mut engine, _) = Engine::<ArenaMemory<'_, '_, 0, 1, 2, 1, 4, 4, 8>>::new::<
                 HostDma<0x2f00_1000>,
             >(clocked, arena, pool, epoch, config())
             .ok()

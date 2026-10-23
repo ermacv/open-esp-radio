@@ -2762,15 +2762,23 @@ dependencies = [
 name = "oer-esp32s31-bluetooth-driver"
 version = "0.1.0"
 dependencies = [
+ "atomic-waker",
  "bytemuck",
  "critical-section",
+ "embassy-futures",
  "oer-bluetooth-hci",
+ "oer-bluetooth-le-ll",
+ "oer-bluetooth-le-port",
  "oer-bluetooth-le-radio",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
+ "oer-esp32s31-radio-client",
  "oer-interrupt-table",
+ "oer-memory",
+ "oer-radio-port",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2802,6 +2810,7 @@ dependencies = [
  "oer-time",
  "oer-time-virtual",
  "pin-project",
+ "tempfile",
  "vcell",
 ]
 

@@ -44,6 +44,14 @@ pub enum DtmEventPhase {
     Recurring,
 }
 
+/// Configuration of the standalone Controller's DTM link-state reset.
+/// SOURCE: pinned `libble_app.a[controller_1.o]` data symbol
+/// `sym_controller_jqcSm1kAtUzAMoyGlaKq`, byte +0x2b = 3, copied as 72 bytes by
+/// `r_sym_controller_2IrfuGZXubzdQy56qp1S`. The DTM reset body reads that byte
+/// and installs its six-bit selection. This is a software profile value;
+/// physical encoding remains in HAL.
+pub const STANDALONE_DTM_CONFIGURATION: u8 = 3;
+
 /// An owned recipe, rather than a CPU view of a controller-owned descriptor.
 #[derive(Clone, Copy, Debug)]
 pub struct DtmImageBuilder {
@@ -195,7 +203,7 @@ impl ScanningImageBuilder {
         const Q: usize,
     >(
         self,
-        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<LegacyScanEvent, EnginePrepareError<LegacyScanError>> {
         engine.reset_scanning(lease, self.reset.image())?;
@@ -234,7 +242,7 @@ impl ConnectableAdvertisingImageBuilder<'_> {
         const Q: usize,
     >(
         self,
-        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<LegacyAdvertisingEvent, EnginePrepareError<LegacyConnectableAdvertisingError>> {
         engine.prepare_connectable_advertising(lease, self.packets, self.power, ROLE_PRIORITY)?;
@@ -269,7 +277,7 @@ impl PeripheralConnectionImageBuilder {
         const Q: usize,
     >(
         self,
-        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>,
         lease: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> Result<PeripheralConnectionEvent, EnginePrepareError<PeripheralConnectionError>> {
         engine

@@ -9,10 +9,18 @@ use super::{le_rx_chain::RxPlan, scheduler_pool::PoolPlan, *};
 use crate::{bluetooth::TaskOwner, dma_static::Placed};
 
 /// Complete controller backing, with capacities chosen by the composition.
+///
+/// `S = 0` selects the DTM-only profile: `A`, `C`, `N`, `R` and `O` must
+/// also be zero. It contains neither scanner nor global RX graphs, including
+/// their packetless cursors. `S = 1` includes those graphs and enables the
+/// other role APIs. Each global RX chain then requires at least two packets.
+/// The generated graph layouts and their placement protocol are identical
+/// in both profiles.
 pub type BluetoothArena<
     const A: usize,
     const C: usize,
     const N: usize,
+    const S: usize,
     const R: usize,
     const O: usize,
 > = (
@@ -28,11 +36,11 @@ pub type BluetoothArena<
         (
             (
                 SchedulerRolePoolStorage<LegacyConnectableAdvertisingStorage, C>,
-                SchedulerRolePoolStorage<LegacyScanStorage, 1>,
+                SchedulerRolePoolStorage<LegacyScanStorage, S>,
             ),
             (
                 SchedulerRolePoolStorage<PeripheralConnectionStorage, N>,
-                (LeRxChainStorage<R>, LeRxChainStorage<O>),
+                ([LeRxChainStorage<R>; S], [LeRxChainStorage<O>; S]),
             ),
         ),
     ),
@@ -94,21 +102,22 @@ pub struct ArenaMemory<
     const A: usize,
     const C: usize,
     const N: usize,
+    const S: usize,
     const R: usize,
     const O: usize,
     const Q: usize,
 > {
-    root: core::ptr::NonNull<BluetoothArena<A, C, N, R, O>>,
+    root: core::ptr::NonNull<BluetoothArena<A, C, N, S, R, O>>,
     pub(super) dtm: DtmPool<'pool, 'epoch, 1>,
     pub(super) advertising: LegacyAdvertisingPool<'pool, 'epoch, A>,
     pub(super) connectable: LegacyConnectableAdvertisingPool<'pool, 'epoch, C>,
-    pub(super) scanning: LegacyScanPool<'pool, 'epoch, 1>,
+    pub(super) scanning: LegacyScanPool<'pool, 'epoch, S>,
     pub(super) connections: PeripheralConnectionPool<'pool, 'epoch, N>,
     phy: BlePhyEngineCpuOwned,
     direction_finding: DirectionFindingWorkspaceCpuOwned,
     pub(super) devices: LeDeviceTable,
-    pub(super) scanning_rx: LeRxChain<R>,
-    pub(super) other_rx: LeRxChain<O>,
+    pub(super) scanning_rx: [LeRxChain<R>; S],
+    pub(super) other_rx: [LeRxChain<O>; S],
     pub(super) scheduler: scheduler::SchedulerExecutor<SchedulerItemId, Q>,
     #[cfg(any(target_arch = "riscv32", test))]
     pub(super) hardware:
@@ -137,10 +146,11 @@ impl<
     const A: usize,
     const C: usize,
     const N: usize,
+    const S: usize,
     const R: usize,
     const O: usize,
     const Q: usize,
-> Engine<ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>>
+> Engine<ArenaMemory<'pool, 'epoch, A, C, N, S, R, O, Q>>
 {
     /// Unscoped brands for explicit register-model fixtures only.
     #[cfg(any(test, feature = "test-support"))]
@@ -148,14 +158,14 @@ impl<
     #[allow(clippy::type_complexity, clippy::result_large_err)]
     pub fn for_host_test<D: ControllerDmaSpace>(
         clocked: crate::bluetooth::ClockedOwner,
-        placed: Placed<BluetoothArena<A, C, N, R, O>>,
+        placed: Placed<BluetoothArena<A, C, N, S, R, O>>,
         config: SchedulerAllocationConfig,
     ) -> Result<
         (Self, crate::bluetooth::InterruptSetupOwner),
         (
             ArenaError,
             crate::bluetooth::ClockedOwner,
-            Placed<BluetoothArena<A, C, N, R, O>>,
+            Placed<BluetoothArena<A, C, N, S, R, O>>,
         ),
     > {
         Self::new::<D>(
@@ -172,7 +182,7 @@ impl<
     #[allow(clippy::type_complexity, clippy::result_large_err)]
     pub fn new<D: ControllerDmaSpace>(
         clocked: crate::bluetooth::ClockedOwner,
-        placed: Placed<BluetoothArena<A, C, N, R, O>>,
+        placed: Placed<BluetoothArena<A, C, N, S, R, O>>,
         _pool: PoolScope<'pool>,
         _epoch: EpochScope<'epoch>,
         config: SchedulerAllocationConfig,
@@ -181,9 +191,19 @@ impl<
         (
             ArenaError,
             crate::bluetooth::ClockedOwner,
-            Placed<BluetoothArena<A, C, N, R, O>>,
+            Placed<BluetoothArena<A, C, N, S, R, O>>,
         ),
     > {
+        const {
+            assert!(
+                S <= 1,
+                "the scanner/global-RX graph capacity is zero or one"
+            );
+            assert!(
+                S == 1 || (A == 0 && C == 0 && N == 0 && R == 0 && O == 0),
+                "the DTM-only profile contains no other role or global RX graphs"
+            );
+        }
         let prepare = || {
             if Q == 0 {
                 return Err(ArenaError::SchedulerCapacity);
@@ -202,15 +222,23 @@ impl<
                 PoolPlan::<LegacyAdvertisingStorage, A>::new(adv).map_err(ArenaError::Pool)?,
                 PoolPlan::<LegacyConnectableAdvertisingStorage, C>::new(conn_adv)
                     .map_err(ArenaError::Pool)?,
-                PoolPlan::<LegacyScanStorage, 1>::new(config.scanning())
+                PoolPlan::<LegacyScanStorage, S>::new(config.scanning())
                     .map_err(ArenaError::Pool)?,
                 PoolPlan::<PeripheralConnectionStorage, N>::new(config.connections())
                     .map_err(ArenaError::Pool)?,
-                RxPlan::<R>::new().map_err(ArenaError::Receive)?,
-                RxPlan::<O>::new().map_err(ArenaError::Receive)?,
+                if S == 0 {
+                    None
+                } else {
+                    Some(RxPlan::<R>::new().map_err(ArenaError::Receive)?)
+                },
+                if S == 0 {
+                    None
+                } else {
+                    Some(RxPlan::<O>::new().map_err(ArenaError::Receive)?)
+                },
             ))
         };
-        let (dtm_plan, adv_plan, conn_adv_plan, scan_plan, conn_plan, rx_plan, other_plan) =
+        let (dtm_plan, adv_plan, conn_adv_plan, scan_plan, conn_plan, mut rx_plan, mut other_plan) =
             match prepare() {
                 Ok(plans) => plans,
                 Err(error) => return Err((error, clocked, placed)),
@@ -268,18 +296,24 @@ impl<
                     phy: BlePhyEngineStorage::from_parts(phy, &placement),
                     direction_finding: DirectionFindingWorkspaceStorage::from_parts(df, &placement),
                     devices: LeDeviceTable::from_parts(devices, &placement),
-                    scanning_rx: LeRxChain::from_parts(
-                        scanning_rx,
-                        &placement,
-                        RxMemoryListClass::Scanning,
-                        rx_plan,
-                    ),
-                    other_rx: LeRxChain::from_parts(
-                        other_rx,
-                        &placement,
-                        RxMemoryListClass::NonScanning,
-                        other_plan,
-                    ),
+                    scanning_rx: scanning_rx.each_mut().map(|storage| {
+                        LeRxChain::from_parts(
+                            storage,
+                            &placement,
+                            RxMemoryListClass::Scanning,
+                            rx_plan.take().expect("one validated scanning RX graph"),
+                        )
+                    }),
+                    other_rx: other_rx.each_mut().map(|storage| {
+                        LeRxChain::from_parts(
+                            storage,
+                            &placement,
+                            RxMemoryListClass::NonScanning,
+                            other_plan
+                                .take()
+                                .expect("one validated non-scanning RX graph"),
+                        )
+                    }),
                     scheduler: scheduler::SchedulerExecutor::new(),
                     #[cfg(any(target_arch = "riscv32", test))]
                     hardware: scheduler::hardware::SchedulerHardware::new(),
@@ -297,12 +331,13 @@ impl<
     const A: usize,
     const C: usize,
     const N: usize,
+    const S: usize,
     const R: usize,
     const O: usize,
     const Q: usize,
-> sealed::Memory for ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>
+> sealed::Memory for ArenaMemory<'pool, 'epoch, A, C, N, S, R, O, Q>
 {
-    type Storage = BluetoothArena<A, C, N, R, O>;
+    type Storage = BluetoothArena<A, C, N, S, R, O>;
     fn phy(&self) -> &BlePhyEngineCpuOwned {
         &self.phy
     }
@@ -347,10 +382,11 @@ impl<
     const A: usize,
     const C: usize,
     const N: usize,
+    const S: usize,
     const R: usize,
     const O: usize,
     const Q: usize,
-> ControllerMemory for ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>
+> ControllerMemory for ArenaMemory<'pool, 'epoch, A, C, N, S, R, O, Q>
 {
 }
 
@@ -361,10 +397,11 @@ impl<
     const A: usize,
     const C: usize,
     const N: usize,
+    const S: usize,
     const R: usize,
     const O: usize,
     const Q: usize,
-> ArenaMemory<'pool, 'epoch, A, C, N, R, O, Q>
+> ArenaMemory<'pool, 'epoch, A, C, N, S, R, O, Q>
 {
     pub(super) fn root_address_for_test(&self) -> usize {
         self.root.as_ptr().addr()

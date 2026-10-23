@@ -72,7 +72,7 @@ fn rejected_scheduler_initialization_retains_owners_and_pending_notifications() 
     let (interrupt, _, _) = ControllerRuntimeResources::<4, _>::new(&cells).split();
     interrupt
         .scheduler_wake()
-        .publish_from_interrupt(crate::interrupt::SchedulerWorkerWakeClass::Ordinary);
+        .publish_class_for_test(crate::interrupt::SchedulerWorkerWakeClass::Ordinary);
     let initialized = initialized_for_rejection_test();
     let scale = initialized.controller_time_scale();
     let mut writes = 0;

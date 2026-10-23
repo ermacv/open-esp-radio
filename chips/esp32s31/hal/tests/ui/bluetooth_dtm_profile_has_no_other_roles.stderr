@@ -1,0 +1,23 @@
+error[E0599]: no method named `scanning` found for mutable reference `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>` in the current scope
+ --> tests/ui/bluetooth_dtm_profile_has_no_other_roles.rs:8:20
+  |
+8 |     let _ = engine.scanning(); // ui-error: E0599
+  |                    ^^^^^^^^ method not found in `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>`
+
+error[E0599]: no method named `advertising` found for mutable reference `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>` in the current scope
+  --> tests/ui/bluetooth_dtm_profile_has_no_other_roles.rs:10:20
+   |
+10 |     let _ = engine.advertising(); // ui-error: E0599
+   |                    ^^^^^^^^^^^ method not found in `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>`
+
+error[E0599]: no method named `connectable_advertising` found for mutable reference `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>` in the current scope
+  --> tests/ui/bluetooth_dtm_profile_has_no_other_roles.rs:12:20
+   |
+12 |     let _ = engine.connectable_advertising(); // ui-error: E0599
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^ method not found in `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>`
+
+error[E0599]: no method named `connections` found for mutable reference `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>` in the current scope
+  --> tests/ui/bluetooth_dtm_profile_has_no_other_roles.rs:14:20
+   |
+14 |     let _ = engine.connections(); // ui-error: E0599
+   |                    ^^^^^^^^^^^ method not found in `&mut oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>`

@@ -62,7 +62,10 @@ impl<X: SignalExecutor> ControllerInterruptHalf<X> {
         }
     }
 
-    pub fn service_primary(&mut self, clock: &dyn oer_time::Clock) -> super::PrimaryInterruptStep {
+    pub fn service_primary(
+        &mut self,
+        clock: &dyn oer_time::Clock,
+    ) -> super::PrimaryInterruptCapture {
         super::primary::step_primary_interrupt(&mut self.registers, clock)
     }
 
