@@ -29,7 +29,6 @@ window, receives sequential pages of `S31SemanticV1`, and seals a candidate,
 explicit miss, rejection or timeout before native registration. Native identity,
 completion and RX-table checks decide replay; caller admission and actual native
 path are reported separately. A failed hardware registration stays poisoned.
-The snapshot contract and PHY algorithms are unchanged.
 
 The sole P2 radio owner keeps a bounded inbox, reuses it for an immutable export
 after successful full registration, and does not export a new record after

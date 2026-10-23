@@ -33,6 +33,7 @@ workspace = true
 
 
 [dev-dependencies]
+oer-hil-runs = { path = "../../hil/runs", features = ["test-support"] }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }

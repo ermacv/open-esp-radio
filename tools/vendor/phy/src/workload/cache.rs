@@ -13,20 +13,8 @@ use std::{
 
 pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()> {
     let image = context.images()?.scenario_image();
-    let summary: oer_image_build::sizes::Summary =
-        serde_json::from_slice(&oer_hil_runs::format::archived::read_archived(
-            &image.directory.join(oer_image_build::sizes::FILE),
-        )?)?;
-    if summary.provenance.dirty {
-        return Err("cache provenance requires a clean producing image".into());
-    }
-    let provenance = Provenance {
-        image_commit: summary.provenance.commit,
-        application_sha256: oer_os_durable::sha256_file(&image.application())?,
-        run_id: oer_hil_runs::store::run_of(output)
-            .ok_or("cache exercise is outside a run bundle")?,
-        captured_unix_seconds: 0,
-    };
+    let provenance =
+        producing_provenance(output, &oer_os_durable::sha256_file(&image.application())?)?;
     let store = Store::host()?;
     let mut previous_boot = None;
     for pair in 1..=boots {
@@ -284,4 +272,75 @@ fn close(
         return Err("cache exercise did not close RF".into());
     }
     Ok(())
+}
+
+fn producing_provenance(output: &Path, application_sha256: &str) -> Result<Provenance> {
+    use oer_hil_model::schema::image::ImageClass;
+    use oer_hil_runs::format::read::{MANIFEST, RunBundle};
+    let directory = output
+        .ancestors()
+        .find(|directory| directory.join(MANIFEST).is_file())
+        .ok_or("cache exercise is outside a run bundle")?;
+    let run = RunBundle::open(directory)?.ok_or("cache run manifest disappeared")?;
+    let firmware = run
+        .manifest()
+        .firmware
+        .iter()
+        .find(|firmware| firmware.image == ImageClass::DiagnosticPhy)
+        .ok_or("run has no producing R1 firmware record")?;
+    if firmware.repository.dirty || firmware.application_sha256 != application_sha256 {
+        return Err(
+            "cache producing firmware is dirty or does not match the flashed application".into(),
+        );
+    }
+    Ok(Provenance {
+        image_commit: firmware.repository.commit.clone(),
+        application_sha256: firmware.application_sha256.clone(),
+        run_id: run.id().into(),
+        captured_unix_seconds: 0,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provenance_comes_from_the_runs_actual_firmware_not_flash_directory_reports_or_observer_head()
+    {
+        let directory = tempfile::tempdir().expect("valid private run fixture");
+        let mut manifest = oer_hil_runs::run::test_support::manifest();
+        manifest.run_id = "cache-run".into();
+        manifest.repository.commit = "3".repeat(40);
+        manifest.firmware = vec![serde_json::from_value(serde_json::json!({
+            "image":"diagnostic-phy", "repository":{"commit":"1".repeat(40),"dirty":false},
+            "application_path":"firmware/diagnostic-phy/application.bin", "application_size_bytes":1,
+            "application_sha256":"2".repeat(64), "runtime_elf_sha256":"5".repeat(64)
+        })).expect("valid private run fixture")];
+        let path = directory.path().join(oer_hil_runs::format::read::MANIFEST);
+        oer_os_durable::atomic_json(&path, &manifest).expect("valid private run fixture");
+        let output = directory.path().join("scenarios/cache/repetition-001");
+        let provenance =
+            producing_provenance(&output, &"2".repeat(64)).expect("valid private run fixture");
+        assert_eq!(provenance.image_commit, "1".repeat(40));
+        assert_eq!(provenance.run_id, "cache-run");
+        assert!(producing_provenance(&output, &"4".repeat(64)).is_err());
+        manifest.firmware[0].repository.dirty = true;
+        oer_os_durable::atomic_json(&path, &manifest).expect("valid private run fixture");
+        assert!(producing_provenance(&output, &"2".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn provenance_requires_a_run_and_its_r1_firmware_record() {
+        let directory = tempfile::tempdir().expect("valid private run fixture");
+        assert!(producing_provenance(directory.path(), &"2".repeat(64)).is_err());
+        let mut manifest = oer_hil_runs::run::test_support::manifest();
+        manifest.firmware.clear();
+        oer_os_durable::atomic_json(
+            &directory.path().join(oer_hil_runs::format::read::MANIFEST),
+            &manifest,
+        )
+        .expect("valid private run fixture");
+        assert!(producing_provenance(directory.path(), &"2".repeat(64)).is_err());
+    }
 }
