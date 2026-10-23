@@ -498,7 +498,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
         "call results carry no dependency on the previous argument"
     );
-    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 10);
+    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 11);
     assert!(
         oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
     );

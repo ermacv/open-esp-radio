@@ -207,7 +207,7 @@ fn selected_read(
 type Observer<'a> = dyn FnMut(Candidate<'_>, &mut dyn RunControl) -> Result<()> + 'a;
 
 /// Every candidate address the analyzed function `records` access: memory
-/// accesses with the bits a read-modify-write replaces, and masked reads.
+/// accesses with load dependencies and stored provenance supplied separately.
 /// A resolved address outside every range of nonempty `ranges` is skipped.
 /// An unresolved address is always kept; it carries its indexed progression
 /// when it has one and, with nonempty `ranges`, the progression may reach a
@@ -259,15 +259,6 @@ pub(crate) fn observe<'a, 'm>(
     facts.accesses(c, &mut |access, c| {
         observe(access.record, access.width, access.address, None, c)
     })?;
-    for (record, fact) in records.iter().enumerate() {
-        c.checkpoint(1)?;
-        if let FunctionRecord::Expression { expression, .. } = fact
-            && let Some((address, width, mask)) =
-                oer_analysis_blobray_analysis::registers::read_mask(facts, expression)
-        {
-            observe(record as u64, width, address, Some(mask), c)?;
-        }
-    }
     Ok(())
 }
 

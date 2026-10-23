@@ -26,8 +26,38 @@ pub enum MmioOperation {
     Atomic,
     FloatLoad,
     FloatStore,
-    /// The bits a loaded register value keeps: its read mask.
-    ReadSelection,
+}
+
+/// Loaded bits by their use, without sink sites or limit reasons that can
+/// change between builds. Used includes both Exact and May dependencies.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MmioReadUses {
+    pub used: u32,
+    pub preserved: u32,
+    pub unknown: u32,
+    /// The remainder of the load width after used, unknown and preserved.
+    pub unused: u32,
+}
+
+impl MmioReadUses {
+    pub fn new(reads: &ReadUses, width: u8) -> Self {
+        let used = reads.uses.iter().fold(0, |bits, usage| bits | usage.bits);
+        let unknown = reads
+            .unknown
+            .iter()
+            .fold(0, |bits, limit| bits | limit.bits);
+        let preserved = reads.preserved;
+        let full = u32::MAX
+            .checked_shr(32u32.saturating_sub(u32::from(width) * 8))
+            .unwrap_or(0);
+        Self {
+            used,
+            preserved,
+            unknown,
+            unused: full & !(used | preserved | unknown),
+        }
+    }
 }
 
 /// Where a run of stored bits comes from, without what differs between
@@ -84,11 +114,14 @@ pub struct MmioStoredBits {
 pub struct MmioAccess {
     pub location: MmioLocation,
     pub operation: MmioOperation,
-    /// Bytes accessed; absent for a read selection.
+    /// Bytes accessed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask: Option<RegisterMask>,
+    /// For a load: its bit-use classes, independent of instruction shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reads: Option<MmioReadUses>,
     /// For a store: where each run of the stored bits comes from.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stored: Vec<MmioStoredBits>,
@@ -170,4 +203,52 @@ pub struct MmioDiff {
     /// Why code of each build was not analyzed, old and new: code no
     /// function is selected or analyzed from, or facts a build lacks.
     pub gaps: [Vec<MmioGap>; 2],
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_comparison_keeps_classes_but_ignores_sink_sites_and_limit_reasons() {
+        let mut reads = ReadUses {
+            uses: vec![
+                ReadUse {
+                    bits: 1,
+                    sink: ReadSink::Return { register: 10 },
+                    precision: ReadPrecision::Exact,
+                },
+                ReadUse {
+                    bits: 3,
+                    sink: ReadSink::Branch { site: 12 },
+                    precision: ReadPrecision::May,
+                },
+            ],
+            unknown: vec![ReadLimit {
+                bits: 4,
+                limit: ReadLimitKind::StackSpill,
+            }],
+            preserved: 8,
+            unused: 0xf0,
+        };
+        let projected = MmioReadUses::new(&reads, 1);
+        assert_eq!(
+            projected,
+            MmioReadUses {
+                used: 3,
+                unknown: 4,
+                preserved: 8,
+                unused: 0xf0
+            }
+        );
+        reads.uses[0].sink = ReadSink::Return { register: 11 };
+        reads.uses[1].sink = ReadSink::Branch { site: 24 };
+        reads.unknown[0].limit = ReadLimitKind::WorkLimit;
+        assert_eq!(MmioReadUses::new(&reads, 1), projected);
+        reads.uses[0].precision = ReadPrecision::May;
+        assert_eq!(MmioReadUses::new(&reads, 1), projected);
+        assert_eq!(MmioReadUses::new(&reads, 2).unused, 0xfff0);
+        reads.uses[1].bits = 0x13;
+        assert_ne!(MmioReadUses::new(&reads, 1), projected);
+    }
 }

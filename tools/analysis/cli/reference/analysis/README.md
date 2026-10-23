@@ -52,7 +52,7 @@ the operation, and a completed analysis is never discarded for them. A
 relocation to a `.L` local label in a read-only string section
 (`SHF_STRINGS`) shows the escaped text there in quotes; labels of other data,
 such as jump tables, get no text. The JSON document is
-`{"schema":9,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"functions":[...],"missing":[...]}`:
+`{"schema":10,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"functions":[...],"missing":[...]}`:
 an `analyzed` function carries its coverage, its value-semantics summary,
 `complete` and every record (instructions, blocks, edges, references,
 expressions, values, memory accesses, conditions and return values); a
@@ -85,7 +85,7 @@ displacements after it: such an access is a candidate to read, not a proof.
 An access whose last displacement is `--offset` (of `--width` bytes, when
 given) is reported with its instruction offset, kind and width; absolute
 addresses are no field. The JSON document is
-`{"schema":5,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"offset":N,"width":W,"functions":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N,"unknown_addresses":N}`:
+`{"schema":6,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"offset":N,"width":W,"functions":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N,"unknown_addresses":N}`:
 `blocked` lists the functions no analysis could read, `partial` counts the
 analyzed functions whose coverage or value semantics is incomplete and
 `partial_causes` breaks them down by cause (see
@@ -123,7 +123,7 @@ the caller's own argument at entry (`arg0`..`arg7`), another entry register,
 or unknown (`?`); a site without retained register state has no arguments.
 These are may-values of one site: there is no interprocedural expansion and
 a value does not prove that its path runs. The JSON document is
-`{"schema":5,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`;
+`{"schema":6,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"symbols":[...],"callers":[...],"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`;
 `partial` counts analyzed functions whose coverage or semantics is
 incomplete, which can hold further sites or less precise values, and
 `partial_causes` breaks them down by cause.
@@ -166,8 +166,7 @@ Without a summary, results are unknown and all argument bits are May uses.
 Argument contracts come from the same bit-flow engine as loaded-bit uses,
 with entry-register sources. Consumed bits retain Exact/May precision;
 returned bits continue in their physical result positions. Without the flag,
-no summaries are supplied. JSON records the option in the existing
-`call_returns` member; document schemas and shapes are unchanged.
+no summaries are supplied. JSON records the option in the `call_summaries` member.
 
 ### Read-only windows
 
@@ -203,7 +202,7 @@ other relocation references retain their relocation classification; they do
 not imply a call. Repeat `--symbol NAME` for several exact target names.
 
 The JSON document is
-`{"schema":4,"inputs":[...],"abi":...,"call_returns":...,"read_only":[...],"symbols":[...],"callers":[...],"stored":[...],"scan":{...},"functions":N,"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`.
+`{"schema":5,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"symbols":[...],"callers":[...],"stored":[...],"scan":{...},"functions":N,"blocked":[...],"partial":N,"partial_causes":{...},"gaps":N}`.
 Each `callers` entry has a `function` and `references`. A reference carries
 `{offset, site, kind, target, destination, relocation_kind, alternatives}`.
 `offset` retains the relocation's original offset or the transfer instruction's

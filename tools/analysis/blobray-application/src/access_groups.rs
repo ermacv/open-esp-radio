@@ -106,8 +106,7 @@ pub struct AccessEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function: Option<GroupFunction>,
     /// `load`, `store`, `load-reserved`, `store-conditional`, `atomic`,
-    /// `float-load`, `float-store`; `expression` for a masked load/store
-    /// expression; `other` for any other fact.
+    /// `float-load`, `float-store`; `other` for any other fact.
     pub access: String,
     pub width: Option<u8>,
     pub mask: Option<RegisterMask>,
@@ -261,7 +260,6 @@ impl AccessGroups {
 
 fn mask_kind(kind: RegisterMaskKind) -> u8 {
     match kind {
-        RegisterMaskKind::ReadSelection => 0,
         RegisterMaskKind::WriteReplacement => 1,
     }
 }
@@ -280,7 +278,6 @@ fn access(fact: &FunctionRecord) -> (String, Option<u8>) {
             };
             (name.into(), Some(*width))
         }
-        FunctionRecord::Expression { .. } => ("expression".into(), None),
         _ => ("other".into(), None),
     }
 }

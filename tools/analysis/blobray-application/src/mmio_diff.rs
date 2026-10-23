@@ -62,7 +62,6 @@ fn operation(fact: &FunctionRecord) -> Option<(MmioOperation, Option<u8>)> {
             },
             Some(*width),
         )),
-        FunctionRecord::Expression { .. } => Some((MmioOperation::ReadSelection, None)),
         _ => None,
     }
 }
@@ -72,6 +71,7 @@ fn operation(fact: &FunctionRecord) -> Option<(MmioOperation, Option<u8>)> {
 fn access(
     observation: crate::registers::Candidate<'_>,
     stored: Option<Vec<StoredBits>>,
+    reads: Option<ReadUses>,
     ranges: &[ImageRegion],
     symbols: &Symbols,
     unresolved: &mut u64,
@@ -90,7 +90,7 @@ fn access(
                     ..
                 }
             );
-            if operation != MmioOperation::ReadSelection && !through_stack {
+            if !through_stack {
                 *unresolved += 1;
             }
             return None;
@@ -136,6 +136,10 @@ fn access(
         operation,
         width,
         mask: observation.mask,
+        reads: reads
+            .as_ref()
+            .zip(width)
+            .map(|(reads, width)| MmioReadUses::new(reads, width)),
         stored,
     })
 }
@@ -275,6 +279,11 @@ fn collect<'m>(
                         } else {
                             None
                         };
+                        let reads = if o.address.is_some() || o.indexed.is_some() {
+                            flow.reads(o.fact, c)?
+                        } else {
+                            None
+                        };
                         if let FunctionRecord::MemoryAccess { width, .. } = o.fact {
                             o.mask = o.mask.or_else(|| {
                                 stored.as_deref().and_then(|stored| {
@@ -286,7 +295,7 @@ fn collect<'m>(
                         }
                         let input = &symbols[analyzed.function.input as usize];
                         if let Some(access) =
-                            access(o, stored, ranges, input, &mut entry.unresolved)
+                            access(o, stored, reads, ranges, input, &mut entry.unresolved)
                         {
                             admit(memory, admitted, access_bytes(&access), c)?;
                             entry.accesses.push(access);
@@ -627,6 +636,7 @@ mod tests {
             operation: MmioOperation::Store,
             width: Some(4),
             mask: None,
+            reads: None,
             stored: vec![MmioStoredBits {
                 low: 0,
                 width: 32,

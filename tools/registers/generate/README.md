@@ -15,7 +15,7 @@ classification for each integer or floating load, using the shared
 checker's [chip-specific cited diagnostic lists](src/checks/inventory/uses/read_policy.rs)
 does not count as use. Other sinks, including unresolved calls and behavior
 parameters such as `ets_delay_us`, count with both `Exact` and `May` precision;
-`read-selection` expressions do not establish use. Diagnostic evidence is
+read use comes only from load dependencies. Diagnostic evidence is
 retained, and never hides another use or an unknown observation of the same bit.
 
 Stores count explicit `write-replacement` bits and constant bits that differ

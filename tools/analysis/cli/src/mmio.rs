@@ -54,12 +54,11 @@ fn operation(operation: MmioOperation) -> &'static str {
         MmioOperation::Atomic => "atomic",
         MmioOperation::FloatLoad => "float-load",
         MmioOperation::FloatStore => "float-store",
-        MmioOperation::ReadSelection => "keeps",
     }
 }
 
 /// One access on one line: `0x20109c18 store w4 [0..2]=0x0 [2..32]=kept`, or
-/// `0x20109c18 keeps 0xfffffffc` for the bits a loaded value keeps.
+/// `0x20109c18 load w4 reads[used=... preserved=... unknown=... unused=...]`.
 pub fn access(access: &MmioAccess) -> String {
     let mut out = format!(
         "{:<18} {}",
@@ -71,11 +70,17 @@ pub fn access(access: &MmioAccess) -> String {
     }
     if let Some(mask) = access.mask {
         let _ = match mask.kind {
-            RegisterMaskKind::ReadSelection => write!(out, " {:#010x}", mask.bits),
             RegisterMaskKind::WriteReplacement => write!(out, " replaces {:#010x}", mask.bits),
         };
     }
-    if access.operation != MmioOperation::ReadSelection && !access.stored.is_empty() {
+    if let Some(reads) = access.reads {
+        let _ = write!(
+            out,
+            " reads[used={:#010x} preserved={:#010x} unknown={:#010x} unused={:#010x}]",
+            reads.used, reads.preserved, reads.unknown, reads.unused
+        );
+    }
+    if !access.stored.is_empty() {
         let runs: Vec<_> = access.stored.iter().map(run).collect();
         let _ = write!(out, " {}", runs.join(" "));
     }

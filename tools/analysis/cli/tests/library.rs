@@ -121,17 +121,18 @@ fn every_library_function_reports_its_masked_and_unresolved_accesses() {
     let members: std::collections::BTreeSet<_> =
         observed.iter().map(|(f, _, _)| &f.symbol.object).collect();
     assert_eq!(members.len(), 2);
-    for kind in [
-        RegisterMaskKind::ReadSelection,
-        RegisterMaskKind::WriteReplacement,
-    ] {
-        assert!(
-            observed
-                .iter()
-                .any(|(_, address, mask)| *address == Some(0x20000)
-                    && *mask == Some(RegisterMask { kind, bits: 15 }))
-        );
-    }
+    assert!(
+        observed
+            .iter()
+            .any(|(_, address, mask)| *address == Some(0x20000)
+                && *mask
+                    == Some(RegisterMask {
+                        kind: RegisterMaskKind::WriteReplacement,
+                        bits: 15,
+                    }))
+    );
+    assert!(records.iter().all(|record| matches!(record,
+        RegisterAccess::Observation { fact, .. } if matches!(fact.as_ref(), FunctionRecord::MemoryAccess { .. }))));
 }
 
 #[test]
@@ -148,7 +149,7 @@ fn a_store_describes_its_stored_bits_and_a_load_never_does() {
         else {
             continue;
         };
-        // A load, or a masked read whose fact is its selecting expression.
+        // Only stores carry stored provenance.
         if !matches!(
             fact.as_ref(),
             FunctionRecord::MemoryAccess {

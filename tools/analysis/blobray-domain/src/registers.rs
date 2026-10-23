@@ -92,8 +92,6 @@ pub enum ReadLimitKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RegisterMaskKind {
-    /// Bits retained by a saved load-and-constant expression.
-    ReadSelection,
     /// Stored bits not copied identically from the same word, in a write
     /// that preserves at least one bit of that word at its original position.
     /// This is an expression observation, not a claim of hardware RMW safety.

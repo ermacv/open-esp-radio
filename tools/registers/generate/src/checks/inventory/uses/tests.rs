@@ -5,8 +5,7 @@ use oer_analysis_blobray_domain::{
     ReadUse,
 };
 use oer_analysis_riscv_model::{
-    AbstractValue, Error, ErrorCode, Expression, ObjectId, ObjectLocation, SymbolId,
-    SymbolTableKind,
+    AbstractValue, Error, ErrorCode, ObjectId, ObjectLocation, SymbolId, SymbolTableKind,
 };
 use serde_json::Value;
 
@@ -270,20 +269,8 @@ fn reset_store_is_inactive_and_nonreset_store_rejects_only_changed_absent_bits()
 }
 
 #[test]
-fn rmw_preserves_bits_without_using_the_read_selection() {
+fn rmw_preserves_bits_without_counting_them_as_used() {
     let loaded = read(vec![], vec![], !1, 1);
-    let mut expression = loaded.clone();
-    if let RegisterAccess::Observation { fact, mask, .. } = &mut expression {
-        **fact = FunctionRecord::Expression {
-            id: 1,
-            offset: 16,
-            expression: Expression::EntryRegister { register: 10 },
-        };
-        *mask = Some(RegisterMask {
-            kind: RegisterMaskKind::ReadSelection,
-            bits: !1,
-        });
-    }
     let mut stored = constant(1);
     if let RegisterAccess::Observation { stored, mask, .. } = &mut stored {
         *stored = Some(vec![
@@ -308,7 +295,7 @@ fn rmw_preserves_bits_without_using_the_read_selection() {
             bits: 1,
         });
     }
-    let report = run(vec![loaded, expression, stored], Some(0), 1);
+    let report = run(vec![loaded, stored], Some(0), 1);
     assert_eq!(report.violations(), 0);
     assert_eq!(report.words[0].used_bits, 1);
     assert_eq!(report.words[0].unknown_bits, 0);

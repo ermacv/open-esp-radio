@@ -17,20 +17,6 @@ fn constant(v: &AbstractValue) -> Option<u32> {
         None
     }
 }
-fn masked(expression: &Expression) -> Option<(&AbstractValue, u32)> {
-    if let Expression::Integer {
-        op: IntegerOp::And,
-        left,
-        right,
-    } = expression
-    {
-        constant(right)
-            .map(|mask| (left, mask))
-            .or_else(|| constant(left).map(|mask| (right, mask)))
-    } else {
-        None
-    }
-}
 fn width_mask(width: u8) -> Option<u32> {
     match width {
         1 => Some(0xff),
@@ -39,38 +25,6 @@ fn width_mask(width: u8) -> Option<u32> {
         _ => None,
     }
 }
-/// Recognize `(load >> shift) & mask` or `load & mask` and retain source bit positions.
-/// Signed extension bits beyond the load width are excluded.
-pub fn read_mask<'a>(
-    facts: &Facts<'a, '_>,
-    expression: &'a Expression,
-) -> Option<(&'a AbstractValue, u8, RegisterMask)> {
-    let (mut value, bits) = masked(expression)?;
-    let mut shift = 0;
-    if let Some(Expression::Integer {
-        op: IntegerOp::Shr | IntegerOp::Sar,
-        left,
-        right,
-    }) = facts.value_expression(value)
-    {
-        shift = constant(right)? & 31;
-        value = left;
-    }
-    if let Some(Expression::Load { address, width, .. }) = facts.value_expression(value) {
-        let bits = bits.wrapping_shl(shift) & width_mask(*width)?;
-        (bits != 0).then_some((
-            address,
-            *width,
-            RegisterMask {
-                kind: RegisterMaskKind::ReadSelection,
-                bits,
-            },
-        ))
-    } else {
-        None
-    }
-}
-
 /// A read-modify-write replaces every stored bit except those copied
 /// identically from the same word. A write without any preserved bit has no
 /// replacement mask; its stored provenance still describes the whole write.
