@@ -507,7 +507,7 @@ impl Gates {
             }
             return Ok(outcome);
         }
-        let mut image = match crate::stack::Image::read(input.root, input.profile, input.elf) {
+        let image = match crate::stack::Image::read(input.root, input.profile, input.elf) {
             Ok(image) => image,
             Err(error) => {
                 for name in self.requested(CheckedElf::Bootstrap) {
@@ -519,7 +519,19 @@ impl Gates {
                 return Ok(outcome);
             }
         };
-        outcome.sizes = Some(sizes::Measurements::of(&image, input.profile)?);
+        self.bootstrap_image(input, image)
+    }
+
+    fn bootstrap_image(
+        &self,
+        input: &CheckInput<'_>,
+        mut image: crate::stack::Image,
+    ) -> Result<CheckOutcome> {
+        let mut outcome = CheckOutcome {
+            sizes: Some(sizes::Measurements::of(&image, input.profile)?),
+            rom_summaries: image.analysis.summaries.iter().cloned().collect(),
+            ..CheckOutcome::default()
+        };
         if self.frames {
             self.frames_of(&image, input, CheckedElf::Bootstrap, &mut outcome);
         }

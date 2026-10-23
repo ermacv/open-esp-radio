@@ -14,6 +14,10 @@ those. `Required::Product` rejects an unexcepted large frame;
 The runtime shares its analysis with the task and interrupt checks; bootstrap
 shares its analysis between the frame and bootstrap-stack checks.
 
+Both runtime and bootstrap outcomes export the ROM summaries their analyses
+applied. The image bundle records their union so the catalog's stale-summary
+audit includes summaries used only during bootstrap.
+
 An image's `stack.toml` (schema 5) may name exact exceptions:
 
 ```toml
