@@ -22,31 +22,3 @@ name = "memset"
 address = 0x40038610
 frame = 0
 calls = []
-
-# SOURCE(esp32c5): Blobray on the pinned rev100 ROM: __riscv_save_3
-# retains 16 bytes, restored by __riscv_restore_3. The indirect call loads
-# rom_spi_usr_cmd_legacy_funcs's reset-rw-mode slot. ROM initialization
-# installs rom_default_spi_usr_cmd_legacy_funcs, in ROM; the slot names
-# esp_rom_spi_reset_rw_mode. The writer review covers the ROM, staged
-# bootstrap/runtime and pinned esp-hal: none replaces the pointer. The
-# computed switch stays inside this function. Save/restore transfers are
-# retained too; their separate frames make the bound conservative.
-[[function]]
-name = "esp_rom_spi_set_op_mode"
-address = 0x4002c168
-frame = 16
-calls = ["__riscv_save_3", "__riscv_restore_3", "esp_rom_spi_reset_rw_mode"]
-
-# SOURCE(esp32c5): Blobray on the same ROM: __riscv_save_7 retains 32
-# bytes (its transient 64-byte depth is bounded by the helper's own frame),
-# then this function reserves another 16 bytes until __riscv_restore_7.
-# ROM initialization sets rom_spiflash_legacy_funcs to
-# rom_default_spiflash_legacy_funcs; its SPI command wait hook is null.
-# No ROM, staged bootstrap/runtime or pinned esp-hal writer replaces the
-# pointer or hook, so the optional indirect call is not taken. The remaining
-# call is memcpy. Save/restore transfers, including their frames, remain.
-[[function]]
-name = "esp_rom_spi_cmd_start"
-address = 0x4002c4a8
-frame = 48
-calls = ["__riscv_save_7", "__riscv_restore_7", "memcpy"]
