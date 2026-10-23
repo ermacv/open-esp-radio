@@ -391,6 +391,7 @@ where
         receive_room: usize,
         cx: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<Self::Receive>, Fault>> {
+        suspend_rx_continuation(receive_room, &mut self.continuation);
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
         let session = self.session.as_mut().map_err(|e| *e)?;
         if receive_room != 0 {

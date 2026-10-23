@@ -57,6 +57,15 @@ pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
 
 /// Shared admission capacity across the four access categories.
 pub const TX_TICKETS: usize = 8;
+
+// A blocked RX handoff needs P1 to return a lease. Its retry timer must not
+// keep P2 polling an already reached deadline while that consumer cannot run.
+pub(super) fn suspend_rx_continuation(receive_room: usize, continuation: &mut Option<Instant>) {
+    if receive_room == 0 {
+        *continuation = None;
+    }
+}
+
 const INTERFACE_COMMANDS: usize = InterfaceCommandPool::<Station>::COMMAND_CAPACITY
     + InterfaceCommandPool::<AccessPoint>::COMMAND_CAPACITY;
 const INTERFACE_TERMINALS: usize = InterfaceCommandPool::<Station>::TERMINAL_CAPACITY

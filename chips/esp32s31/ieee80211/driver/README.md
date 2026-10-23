@@ -55,6 +55,12 @@ interrupt; the notice touches no ring state.
 
 ## Receive path
 
+When the port's RX handoffs are full, P2 disarms only the RX continuation
+timer and keeps the pending RX work and buffer owners. It waits for a
+returned lease's RX-capacity fact, a TX event or another applicable deadline;
+an overdue RX retry must not keep P2 running while P1 needs to return buffers.
+TX deadlines and the port contract are unchanged.
+
 One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The MAC line handler masks RX delivery, acknowledges and raises
