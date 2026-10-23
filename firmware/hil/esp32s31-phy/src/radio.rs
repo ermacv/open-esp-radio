@@ -1055,11 +1055,11 @@ impl Radio {
 
 #[macro_export]
 macro_rules! place_diagnostic_radio {
-    ($storage:expr, Self { $($field:ident : $value:expr),* $(,)? }) => {{
+    ($storage:expr, Self { $($fields:tt)* }) => {{
         #[cfg(not(feature = "diagnostic-radio-health"))]
-        { oer_memory::init_in_place!($storage, Self { $($field: $value),* }) }
+        { oer_memory::init_in_place!($storage, Self { $($fields)* }) }
         #[cfg(feature = "diagnostic-radio-health")]
-        { oer_memory::init_in_place!($storage, Self { $($field: $value,)*
+        { oer_memory::init_in_place!($storage, Self { $($fields)*
             health => crate::health::Store::place, health_boot: 0,
         }) }
     }};
