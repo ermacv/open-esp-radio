@@ -6,7 +6,7 @@ adapter. P2 owns the device and port registration; the station and IP stack run
 on P1 in PSRAM. `stack.toml` allocates this image's P1 stack, with the platform's
 unchanged interrupt-stack allocation. The image stores the large station future
 in static PSRAM using the same pinned compiler support as the HIL images.
-The calculated P1 bound is 41,120 + ? bytes; its allocation is 57,504 bytes,
+The calculated P1 bound is 41,136 + ? bytes; its allocation is 57,520 bytes,
 including the 16,384-byte minimum free reserve.
 
 Outgoing ICMP uses the pinned fork's raw IPv4 socket and checked wire codecs;
