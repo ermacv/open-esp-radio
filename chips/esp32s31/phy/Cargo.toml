@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "Allocation-free Rust ESP32-S31 PHY state machines"
 
+[features]
+radio-health = []
+
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }

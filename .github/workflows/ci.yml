@@ -61,6 +61,8 @@ jobs:
         run: |
           # The workspace run unifies features: sta and the S31 MAC are built
           # with test-support. This list records the other sets.
+          cargo test --locked -p oer-hil-agent -p oer-esp32s31-phy --features oer-hil-agent/health,oer-esp32s31-phy/radio-health
+          cargo clippy --locked -p oer-hil-agent -p oer-esp32s31-phy --features oer-hil-agent/health,oer-esp32s31-phy/radio-health --all-targets
           cargo test --locked -p oer-ieee80211-sta
           cargo test --locked -p oer-esp32s31-ieee80211-mac
           cargo test --locked -p oer-time --features serde

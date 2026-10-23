@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use oer_hil_protocol::{FRAMING_VERSION, Key, Kind, MESSAGES_LOCK, MessageInfo, registry};
 
-const MODULES: [&str; 7] = [
+const MODULES: [&str; 8] = [
     "base",
     "system",
     "network",
@@ -12,6 +12,7 @@ const MODULES: [&str; 7] = [
     "telemetry",
     "phy",
     "lower-mac",
+    "health",
 ];
 
 #[test]
@@ -96,6 +97,11 @@ fn a_property_carries_no_payload() {
 const FRAMEWORK: [&str; 5] = ["lib.rs", "key.rs", "framing.rs", "io.rs", "envelope.rs"];
 
 const SOURCES: &[(&str, &str)] = &[
+    ("health/mod.rs", include_str!("../src/health/mod.rs")),
+    (
+        "health/records.rs",
+        include_str!("../src/health/records.rs"),
+    ),
     ("base/boot.rs", include_str!("../src/base/boot.rs")),
     (
         "base/image_keys.rs",

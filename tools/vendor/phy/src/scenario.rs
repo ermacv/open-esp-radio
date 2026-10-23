@@ -27,6 +27,12 @@ pub enum PhyScenario<C: Comparison> {
     HostCalibrationCache {
         boots: u16,
     },
+    RadioHealth {
+        channel: u8,
+        peer: [u8; 6],
+        peer_rate_kbps: u32,
+        peer_power_dbm: i8,
+    },
     TrackingHold {
         ticks: u8,
         #[serde(default)]
@@ -70,6 +76,13 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
                     Ok(())
                 } else {
                     Err("cache boots must be in 1..=20".into())
+                };
+            }
+            Self::RadioHealth { channel, peer, .. } => {
+                return if (1..=14).contains(channel) && peer[0] & 1 == 0 && *peer != [0; 6] {
+                    Ok(())
+                } else {
+                    Err("health needs a 2.4 GHz channel and one unicast peer".into())
                 };
             }
             Self::RecordedCalibration { lifecycle, boots } => {
@@ -128,6 +141,12 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
         Ok(())
     }
     fn plan(&self) -> Plan {
+        if matches!(self, Self::RadioHealth { .. }) {
+            let mut plan = Plan::target_only(ImageClass::DiagnosticRadioHealth);
+            plan.requirements.station_network = true;
+            plan.checks = vec!["radio-health"];
+            return plan;
+        }
         Plan::target_only(ImageClass::DiagnosticPhy)
     }
     fn served_by(&self, keys: &oer_hil_protocol::DeviceImageKeys) -> bool {
@@ -135,6 +154,10 @@ impl<C: Comparison> ScenarioFamily for PhyScenario<C> {
             return keys.has::<oer_hil_protocol::phy::HostCalibrationCache>()
                 && keys.has::<oer_hil_protocol::phy::StartCalibration>()
                 && keys.has::<oer_hil_protocol::phy::ReadCalibrationSnapshot>();
+        }
+        if matches!(self, Self::RadioHealth { .. }) {
+            return keys.has::<oer_hil_protocol::health::BeginHealth>()
+                && keys.has::<oer_hil_protocol::health::ReadHealthMeasurements>();
         }
         if matches!(
             self,
@@ -162,6 +185,23 @@ impl<C: Comparison> Workload for PhyScenario<C> {
         let (lifecycle, boots, vendor_only, vendor_windows, vendor_transmit) = match self {
             Self::HostCalibrationCache { boots } => {
                 return crate::workload::cache::run(*boots, output, context);
+            }
+            Self::RadioHealth {
+                channel,
+                peer,
+                peer_rate_kbps,
+                peer_power_dbm,
+            } => {
+                return crate::workload::health::run::<C>(
+                    oer_hil_protocol::health::BeginHealth {
+                        channel: *channel,
+                        peer: *peer,
+                        peer_rate_kbps: Some(*peer_rate_kbps),
+                        peer_power_dbm: Some(*peer_power_dbm),
+                    },
+                    output,
+                    context,
+                );
             }
             Self::RecordedCalibration { lifecycle, boots } => {
                 return crate::workload::calibration::recorded::<C>(
@@ -232,6 +272,9 @@ mod tests {
     impl Comparison for Fake {
         const CHIP: &'static str = "chip-x";
         const VENDOR_OBJECT: &'static str = "phy_param";
+        fn health_registers(_: &Path) -> Result<Vec<crate::comparison::HealthRegister>> {
+            Err("fixture has no chip health banks".into())
+        }
         fn images(_: &Path) -> Result<RegisterImages> {
             Err("no device".into())
         }

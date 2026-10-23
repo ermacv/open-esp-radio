@@ -105,6 +105,7 @@ pub async fn run<B: PlatformClockBackend, T>(
     wifi: WifiClocked,
     channel: u8,
     prepared: Option<Prepared>,
+    #[cfg(feature = "diagnostic-radio-health")] health: Option<&mut crate::health::Store>,
 ) -> (WifiClocked, Result<()>) {
     let (mut runtime, interrupts, clocks) = wifi.into_running();
     crate::transport::CONSOLE
@@ -114,7 +115,15 @@ pub async fn run<B: PlatformClockBackend, T>(
             CAPACITY as u32,
         ))
         .await;
-    let result = experiment(domain, &mut runtime, channel, prepared).await;
+    let result = experiment(
+        domain,
+        &mut runtime,
+        channel,
+        prepared,
+        #[cfg(feature = "diagnostic-radio-health")]
+        health,
+    )
+    .await;
     (
         WifiClocked::from_running(runtime, interrupts, clocks),
         result,
@@ -126,6 +135,7 @@ async fn experiment<B: PlatformClockBackend, T>(
     runtime: &mut RadioAccess,
     channel: u8,
     prepared: Option<Prepared>,
+    #[cfg(feature = "diagnostic-radio-health")] mut health: Option<&mut crate::health::Store>,
 ) -> Result<()> {
     observe_running(domain, runtime, Point::BeforeRing).await?;
     observe_enables(domain, runtime, Point::BeforeRing).await?;
@@ -151,7 +161,24 @@ async fn experiment<B: PlatformClockBackend, T>(
 
     // No CPU interrupt route, station role, upper buffer leases or TX. Keep
     // the finite ring supplied while the hardware receives the router's air.
-    let observed = sample(domain, runtime, storage, &mut ring, channel).await;
+    #[cfg(feature = "diagnostic-radio-health")]
+    if let Some(store) = health.as_deref_mut() {
+        crate::health::cut(store, runtime, oer_hil_protocol::health::Cut::Before);
+    }
+    let observed = sample(
+        domain,
+        runtime,
+        storage,
+        &mut ring,
+        channel,
+        #[cfg(feature = "diagnostic-radio-health")]
+        health.as_deref_mut(),
+    )
+    .await;
+    #[cfg(feature = "diagnostic-radio-health")]
+    if let Some(store) = health.as_deref_mut() {
+        crate::health::cut(store, runtime, oer_hil_protocol::health::Cut::After);
+    }
 
     // As in the working receive teardown, close admission and prove the MAC
     // idle while the walker still retains every DMA credit. A timeout keeps
@@ -202,6 +229,7 @@ async fn sample<B: PlatformClockBackend, T>(
     storage: &Storage,
     ring: &mut RxRingLive<'_, COUNT>,
     channel: u8,
+    #[cfg(feature = "diagnostic-radio-health")] mut health: Option<&mut crate::health::Store>,
 ) -> Result<()> {
     observe_running(domain, runtime, Point::RingOpen).await?;
     observe_enables(domain, runtime, Point::RingOpen).await?;
@@ -239,6 +267,10 @@ async fn sample<B: PlatformClockBackend, T>(
                     };
                     if let Ok(frame) = view_normalized_rx_frame(&segment, W1_INGRESS) {
                         normalized = normalized.saturating_add(1);
+                        #[cfg(feature = "diagnostic-radio-health")]
+                        if let Some(store) = health.as_deref_mut() {
+                            crate::health::received(store, &frame, channel);
+                        }
                         if DecodedHeader::decode(frame.mpdu)
                             .is_some_and(|h| !h.control().is_data() && h.control().subtype() == 8)
                             && parse_management(frame.mpdu, channel, frame.rssi_dbm).is_some_and(
@@ -270,6 +302,10 @@ async fn sample<B: PlatformClockBackend, T>(
                         .saturating_add(Duration::from_micros(2_000)),
                 )
                 .await;
+        }
+        #[cfg(feature = "diagnostic-radio-health")]
+        if let Some(store) = health.as_deref_mut() {
+            crate::health::signal(store, runtime);
         }
         observe_running(domain, runtime, Point::RingSample(sample)).await?;
         observe_enables(domain, runtime, Point::RingSample(sample)).await?;

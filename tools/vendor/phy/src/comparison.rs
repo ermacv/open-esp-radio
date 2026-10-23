@@ -46,6 +46,10 @@ pub trait Comparison: Clone + std::fmt::Debug + Default + Eq + Send + Sync + 'st
     /// The register images of the tree at `root`.
     fn images(root: &Path) -> Result<RegisterImages>;
 
+    /// Only the non-destructive Wi-Fi counter and NF words used by the native MAC.
+    /// Geometry is chip-owned; the protocol accepts no addresses from the host.
+    fn health_registers(root: &Path) -> Result<Vec<HealthRegister>>;
+
     fn recorded(root: &Path, board: &str, lifecycle: Lifecycle) -> Result<RecordedReference>;
 
     fn compare_recorded(
@@ -66,4 +70,26 @@ pub trait Comparison: Clone + std::fmt::Debug + Default + Eq + Send + Sync + 'st
         production: &[ProductionBoot],
         images: &RegisterImages,
     ) -> Result<Compared>;
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct HealthRegister {
+    pub name: String,
+    pub address: u32,
+    pub fields: Vec<HealthField>,
+}
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct HealthField {
+    pub name: String,
+    pub offset: u8,
+    pub width: u8,
+}
+impl HealthField {
+    pub fn value(&self, word: u32) -> Option<u32> {
+        if self.width == 0 || self.width > 32 || u16::from(self.offset) + u16::from(self.width) > 32
+        {
+            return None;
+        }
+        Some((word >> self.offset) & (u32::MAX >> (32 - self.width)))
+    }
 }

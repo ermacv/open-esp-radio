@@ -11,13 +11,14 @@ description = "Target-neutral wire protocol for open ESP radio HIL sessions"
 default = ["network", "bluetooth"]
 async-io = ["dep:embedded-io-async"]
 # The host's decoder of every message: paths, keys and readable payloads.
-registry = ["dep:serde_json", "network", "bluetooth", "phy", "lower-mac"]
+registry = ["dep:serde_json", "network", "bluetooth", "phy", "lower-mac", "health"]
 # The radio families. An image enables the families it serves, so it
 # compiles, and its evidence binds, only their protocol modules; the host
 # enables every family.
 network = []
 bluetooth = []
 phy = []
+health = []
 lower-mac = ["dep:oer-ieee80211-port", "dep:oer-ieee80211-wire"]
 
 [dependencies]

@@ -27,6 +27,10 @@ impl Comparison for Esp32s31 {
         })
     }
 
+    fn health_registers(root: &Path) -> Result<Vec<oer_vendor_phy::comparison::HealthRegister>> {
+        registers::health(root)
+    }
+
     fn recorded(
         root: &Path,
         board: &str,

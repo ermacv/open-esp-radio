@@ -45,6 +45,10 @@ pub struct Radio {
     poisoned: bool,
     hold: Option<crate::hold::Hold>,
     hold_id: u32,
+    #[cfg(feature = "diagnostic-radio-health")]
+    health: crate::health::Store,
+    #[cfg(feature = "diagnostic-radio-health")]
+    health_boot: u64,
 }
 
 impl Radio {
@@ -61,7 +65,7 @@ impl Radio {
         access_point: [u8; 6],
         rng: RngOwner<'static>,
     ) -> &'storage mut Self {
-        oer_memory::init_in_place!(
+        crate::place_diagnostic_radio!(
             storage,
             Self {
                 ieee802154: ieee802154,
@@ -125,6 +129,13 @@ impl Radio {
                     | Request::CacheStatus(_)
                     | Request::CacheRead(_)
             )
+        {
+            return Err(RejectReason::InvalidState);
+        }
+        #[cfg(feature = "diagnostic-radio-health")]
+        if self.health.active()
+            && !matches!(request, Request::CacheIdentity(_) | Request::CacheStatus(_) | Request::CacheRead(_))
+            && !(self.health.armed() && matches!(request, Request::Start(_)))
         {
             return Err(RejectReason::InvalidState);
         }
@@ -201,11 +212,17 @@ impl Radio {
             Request::CacheIdentity(_) => {
                 Ok(Answer::CacheIdentity(self.cache.identity(self.identity)))
             }
-            Request::Start(command) => Ok(Answer::Started(self.cache.begin(
-                command,
-                self.identity,
-                EmbassyClock.now(),
-            )?)),
+            Request::Start(command) => {
+                #[cfg(feature = "diagnostic-radio-health")]
+                if self.health.config().is_some_and(|c| {
+                    c.channel != command.capture.channel
+                        || command.capture.radio != CaptureRadio::Wifi
+                        || command.source != CalibrationSource::Full
+                }) {
+                    return Err(RejectReason::InvalidConfiguration);
+                }
+                Ok(Answer::Started(self.cache.begin(command, self.identity, EmbassyClock.now())?))
+            }
             Request::CacheWrite(command) => Ok(Answer::CacheWritten(
                 self.cache.write(command, EmbassyClock.now())?,
             )),
@@ -267,8 +284,15 @@ impl Radio {
                 let observed = if current.radio == CaptureRadio::Wifi {
                     let wifi = self.clocked.take().ok_or(RejectReason::Internal)?;
                     let prepared = capture_rx.take();
-                    let (wifi, result) =
-                        crate::cca_rx::run(&self.domain, wifi, current.channel, prepared).await;
+                    let (wifi, result) = crate::cca_rx::run(
+                        &self.domain,
+                        wifi,
+                        current.channel,
+                        prepared,
+                        #[cfg(feature = "diagnostic-radio-health")]
+                        None,
+                    )
+                    .await;
                     self.clocked = Some(wifi);
                     result
                 } else {
@@ -375,7 +399,7 @@ impl Radio {
             &mut (),
             &self.clocks,
             registration_config,
-            NoopPhyTargetObserver,
+            crate::capture_observer!(self),
         )
         .await
         .map(|registration| registration.outcome())
@@ -450,6 +474,10 @@ impl Radio {
             CaptureRadio::Ieee802154 { .. } => CaptureLifecycle::Ieee802154,
         };
         let ready = self.snapshot(1, lifecycle, config)?;
+        #[cfg(feature = "diagnostic-radio-health")]
+        if self.health.config().is_some() {
+            self.health.bind_epoch(ready.epoch, ready.channel)?;
+        }
         self.cache.ready(ready)
     }
 
@@ -653,7 +681,7 @@ impl Radio {
                 &crate::PHY_CLOCK,
                 &mut self.domain,
                 &mut (),
-                NoopPhyTargetObserver,
+                crate::capture_observer!(self),
             )
             .await
             .map_err(|_| RejectReason::Internal)?;
@@ -676,7 +704,7 @@ impl Radio {
                 u16::from(channel),
                 0,
                 &mut port,
-                &mut NoopPhyTargetObserver,
+                &mut crate::capture_observer!(self),
             )
             .await
             .map_err(|_| RejectReason::Internal)?;
@@ -858,4 +886,174 @@ impl MacSlowClockCalibrationSource for Sources<'_> {
     fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
         MacSlowClockCalibration::Unavailable
     }
+}
+
+#[cfg(feature = "diagnostic-radio-health")]
+impl Radio {
+    pub fn set_health_boot(&mut self, boot: u64) {
+        self.health_boot = boot;
+    }
+    pub async fn health_request(
+        &mut self,
+        request: crate::health::Request,
+        capture_rx: &mut Option<crate::cca_rx::Prepared>,
+    ) -> Result<crate::health::Answer> {
+        use crate::health::{self, Answer as A, Observer, Request};
+        use oer_hil_protocol::health::*;
+        let result = match request {
+            Request::Begin(config) => {
+                if self.cache.identity(self.identity).active_ticket.is_some() || self.poisoned {
+                    return Err(RejectReason::InvalidState);
+                }
+                A::Started(self.health.begin(config, self.health_boot)?)
+            }
+            Request::Window(RunHealthWindow(identity)) => {
+                self.health.validate_window(identity)?;
+                if self.poisoned {
+                    return Err(RejectReason::InvalidState);
+                }
+                let current = self.current(identity.epoch)?;
+                let started_micros = health::now();
+                if let Ok(state) = self.domain.attachment().phy_state() {
+                    health::retained_detector(&mut self.health, state);
+                    health::temperature(&mut self.health, state, current.channel);
+                }
+                let wifi = self.clocked.take().ok_or(RejectReason::InvalidState)?;
+                let (wifi, rx) = crate::cca_rx::run(
+                    &self.domain,
+                    wifi,
+                    current.channel,
+                    capture_rx.take(),
+                    Some(&mut self.health),
+                )
+                .await;
+                self.clocked = Some(wifi);
+                // The finite RX transaction has already stopped/reclaimed its ring.
+                // Natural tracking now uses its ordinary exclusive PHY path.
+                health::inspection(&mut self.health, self.domain.attachment());
+                let tracking = if rx.is_ok() {
+                    track_concurrent_phy::<_, (), RomShortDelay, _>(
+                        &mut self.domain,
+                        &mut (),
+                        &crate::PHY_CLOCK,
+                        Observer {
+                            store: &mut self.health,
+                        },
+                    )
+                    .await
+                } else {
+                    self.health.fail();
+                    return Ok(A::Window(
+                        self.health_failed_window(identity, started_micros)?,
+                    ));
+                };
+                let at = health::now();
+                let (due, disposition, committed, tracking_failed) = match tracking {
+                    Ok(ConcurrentTrackingTick::NotDue) => {
+                        (Due::NotDue, Disposition::Skipped, 0, false)
+                    }
+                    Ok(ConcurrentTrackingTick::Tracked(outcome)) => {
+                        let committed = u8::from(outcome.rfpll_corrected)
+                            | (u8::from(outcome.calibration.common) << 1)
+                            | (u8::from(outcome.calibration.transmit) << 2);
+                        for (operation, bit) in [
+                            (TrackingOperation::Rfpll, 1),
+                            (TrackingOperation::Common, 2),
+                            (TrackingOperation::Transmit, 4),
+                        ] {
+                            self.health.push(Record::Tracking(Tracking {
+                                condition: None,
+                                operation,
+                                due: Due::Unknown,
+                                disposition: if committed & bit != 0 {
+                                    Disposition::Ran
+                                } else {
+                                    Disposition::Skipped
+                                },
+                                at_micros: at,
+                                committed,
+                            }));
+                        }
+                        (Due::Due, Disposition::Ran, committed, false)
+                    }
+                    Ok(ConcurrentTrackingTick::Unavailable(_)) | Err(_) => {
+                        self.poisoned = true;
+                        (Due::Unknown, Disposition::Failed, 0, true)
+                    }
+                };
+                self.health.push(Record::Tracking(Tracking {
+                    condition: None,
+                    operation: TrackingOperation::Tick,
+                    due,
+                    disposition,
+                    at_micros: at,
+                    committed,
+                }));
+                if let Ok(state) = self.domain.attachment().phy_state() {
+                    health::temperature(&mut self.health, state, current.channel);
+                }
+                let window = HealthWindow {
+                    identity,
+                    started_micros,
+                    finished_micros: health::now(),
+                    rx_cleaned_up: true,
+                    tracking_failed,
+                };
+                self.health.window_finished(window)?;
+                A::Window(window)
+            }
+            Request::Finish(FinishHealth(identity)) => {
+                self.health.validate_finish(identity)?;
+                // Do not start the legacy StopCapture RX experiment a second time.
+                if let Some(current) = self.ready.take() {
+                    if self.exit_capture(current.radio).await.is_err() {
+                        self.health.fail();
+                        self.poisoned = true;
+                    }
+                }
+                A::Finished(
+                    self.health
+                        .finish(identity, self.domain.attachment().rf_closed())?,
+                )
+            }
+            Request::Counters(ReadHealthCounters(r)) => A::Counters(self.health.counters(r)?),
+            Request::Signals(ReadHealthSignals(r)) => A::Signals(self.health.signals(r)?),
+            Request::Tracking(ReadHealthTracking(r)) => A::Tracking(self.health.tracking(r)?),
+            Request::Measurements(ReadHealthMeasurements(r)) => {
+                A::Measurements(self.health.measurements(r)?)
+            }
+            Request::Release(ReleaseHealth(identity)) => {
+                A::Released(self.health.release(identity)?)
+            }
+        };
+        Ok(result)
+    }
+    fn health_failed_window(
+        &mut self,
+        identity: oer_hil_protocol::health::HealthIdentity,
+        started_micros: u64,
+    ) -> Result<oer_hil_protocol::health::HealthWindow> {
+        let window = oer_hil_protocol::health::HealthWindow {
+            identity,
+            started_micros,
+            finished_micros: crate::health::now(),
+            rx_cleaned_up: false,
+            tracking_failed: true,
+        };
+        self.health.window_finished(window)?;
+        self.poisoned = true;
+        Ok(window)
+    }
+}
+
+#[macro_export]
+macro_rules! place_diagnostic_radio {
+    ($storage:expr, Self { $($field:ident : $value:expr),* $(,)? }) => {{
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        { oer_memory::init_in_place!($storage, Self { $($field: $value),* }) }
+        #[cfg(feature = "diagnostic-radio-health")]
+        { oer_memory::init_in_place!($storage, Self { $($field: $value,)*
+            health => crate::health::Store::place, health_boot: 0,
+        }) }
+    }};
 }

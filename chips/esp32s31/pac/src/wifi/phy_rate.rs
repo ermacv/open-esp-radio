@@ -59,3 +59,16 @@ impl WifiRadioRegisters {
         crate::phy::baseband::decode_noise_floor_quarter_db(raw)
     }
 }
+
+impl WifiRadioRegisters {
+    /// The same non-destructive field read as rate control, with its native code retained.
+    pub fn noise_floor_snapshot(&self) -> (u16, i32) {
+        let raw = crate::svd::field_read::observe_phy_noise_floor_sixteenth_db_code(
+            &self.peripherals.wifi_mac.wifi_phy_rate_oracle,
+        );
+        (
+            raw,
+            crate::phy::baseband::decode_noise_floor_quarter_db(raw),
+        )
+    }
+}

@@ -108,6 +108,12 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
             add(key, true);
         }
     }
+    #[cfg(feature = "health")]
+    if enabled("diagnostic-radio-health") {
+        for key in crate::health::KEYS {
+            add(*key, true);
+        }
+    }
     sorted(keys)
 }
 
@@ -124,6 +130,7 @@ pub const READ_FEATURES: &[&str] = &[
     "usb-jtag-off",
     "diagnostic-phy",
     "diagnostic-lower-mac",
+    "diagnostic-radio-health",
 ];
 
 #[cfg(test)]
