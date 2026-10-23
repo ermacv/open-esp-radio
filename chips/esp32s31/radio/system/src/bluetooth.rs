@@ -153,31 +153,34 @@ where
                     }
                 };
                 let epoch = self.actor.core.prepared(&phy);
-                Answer::Join(
-                    match self
-                        .attachment
-                        .enter(&mut self.actor.backend, join, phy, &self.actor.lp)
-                        .await
-                    {
-                        Ok(payload) => {
-                            self.actor.core.joined();
-                            Ok(Joined {
-                                member: self.actor.core.mint.untracked(),
-                                epoch,
-                                payload,
-                            })
+                let entered = {
+                    let entering = core::pin::pin!(self.attachment.enter(
+                        &mut self.actor.backend,
+                        join,
+                        phy,
+                        &self.actor.lp,
+                    ));
+                    entering.await
+                };
+                Answer::Join(match entered {
+                    Ok(payload) => {
+                        self.actor.core.joined();
+                        Ok(Joined {
+                            member: self.actor.core.mint.untracked(),
+                            epoch,
+                            payload,
+                        })
+                    }
+                    Err(Failed { returned, cause }) => {
+                        if matches!(self.actor.core.failed_enter(cause), Action::CloseRf) {
+                            boundary::shared(self.actor.close_rf()).await;
                         }
-                        Err(Failed { returned, cause }) => {
-                            if matches!(self.actor.core.failed_enter(cause), Action::CloseRf) {
-                                boundary::shared(self.actor.close_rf()).await;
-                            }
-                            Err(Failed {
-                                returned,
-                                cause: self.actor.core.failure(cause),
-                            })
-                        }
-                    },
-                )
+                        Err(Failed {
+                            returned,
+                            cause: self.actor.core.failure(cause),
+                        })
+                    }
+                })
             }
             Request::Track(member, installation) => {
                 if self.actor.core.is_poisoned() {
@@ -186,28 +189,28 @@ where
                         cause: Failure::Poisoned,
                     }));
                 }
-                Answer::Track(
-                    match self
-                        .attachment
-                        .track(&mut self.actor.backend, installation)
-                        .await
-                    {
-                        Ok(payload) => {
-                            self.actor.core.tracked();
-                            Ok(TrackedMember {
-                                member: self.actor.core.mint.track(member),
-                                payload,
-                            })
-                        }
-                        Err(Failed { returned, cause }) => {
-                            self.actor.core.failed(cause);
-                            Err(Failed {
-                                returned: (member, returned),
-                                cause,
-                            })
-                        }
-                    },
-                )
+                let tracked = {
+                    let tracking = core::pin::pin!(
+                        self.attachment.track(&mut self.actor.backend, installation)
+                    );
+                    tracking.await
+                };
+                Answer::Track(match tracked {
+                    Ok(payload) => {
+                        self.actor.core.tracked();
+                        Ok(TrackedMember {
+                            member: self.actor.core.mint.track(member),
+                            payload,
+                        })
+                    }
+                    Err(Failed { returned, cause }) => {
+                        self.actor.core.failed(cause);
+                        Err(Failed {
+                            returned: (member, returned),
+                            cause,
+                        })
+                    }
+                })
             }
             Request::Retune(_, never) => match never {},
             Request::Leave(member, installation) => {
@@ -215,10 +218,12 @@ where
                     .core
                     .leaving(matches!(member, Leaving::Tracked(_)));
                 self.actor.core.mint.retire(member);
-                let (payload, exit) = self
-                    .attachment
-                    .exit(&mut self.actor.backend, installation)
-                    .await;
+                let (payload, exit) = {
+                    let leaving = core::pin::pin!(
+                        self.attachment.exit(&mut self.actor.backend, installation)
+                    );
+                    leaving.await
+                };
                 if matches!(self.actor.core.exited(exit), Action::CloseRf) {
                     boundary::shared(self.actor.close_rf()).await;
                 }
