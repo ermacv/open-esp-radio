@@ -351,6 +351,7 @@ impl Radio {
     }
 
     /// Once started, the native registration future runs to its terminal result.
+    #[inline(never)]
     pub async fn service_registration(&mut self) {
         if let Err(_reason) = self.register().await {
             self.poisoned = true;

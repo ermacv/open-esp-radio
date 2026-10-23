@@ -81,68 +81,78 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
                 else {
                     return Err("R1 did not become ready".into());
                 };
-                if ready.epoch != 1
-                    || ready.lifecycle != CaptureLifecycle::Cold
-                    || ready.channel != 1
-                    || ready.radio != CaptureRadio::Wifi
-                {
-                    return Err("cache exercise reached the wrong capture point".into());
-                }
-                if source == CalibrationSource::Full {
-                    if decision != CalibrationCacheDecision::FullRequested
-                        || ready.path != CalibrationPath::FullForCache
-                        || !ready.full_calibration_performed
+                let mut epoch = ready.epoch;
+                let measured: Result<()> = (|| {
+                    if ready.epoch != 1
+                        || ready.lifecycle != CaptureLifecycle::Cold
+                        || ready.channel != 1
+                        || ready.radio != CaptureRadio::Wifi
                     {
-                        return Err("explicit full calibration changed its native contract".into());
+                        return Err("cache exercise reached the wrong capture point".into());
                     }
-                    let mut provenance = provenance.clone();
-                    provenance.captured_unix_seconds = oer_os_durable::unix_seconds();
-                    let path = cache::save(
-                        &link,
-                        0,
-                        &store,
-                        &key,
-                        &started,
-                        provenance,
-                        &directory.join("full-snapshot.json"),
-                    )?;
-                    context.results.observe(format!("{name}-saved"), &path);
-                } else {
-                    if decision != CalibrationCacheDecision::CandidateSupplied
-                        || ready.path != CalibrationPath::PartialFromCache
-                        || ready.full_calibration_performed
-                    {
-                        return Err(
-                            "saved full record did not select native cold partial registration"
-                                .into(),
-                        );
+                    if source == CalibrationSource::Full {
+                        if decision != CalibrationCacheDecision::FullRequested
+                            || ready.path != CalibrationPath::FullForCache
+                            || !ready.full_calibration_performed
+                        {
+                            return Err(
+                                "explicit full calibration changed its native contract".into()
+                            );
+                        }
+                        let mut provenance = provenance.clone();
+                        provenance.captured_unix_seconds = oer_os_durable::unix_seconds();
+                        let path = cache::save(
+                            &link,
+                            0,
+                            &store,
+                            &key,
+                            &started,
+                            provenance,
+                            &directory.join("full-snapshot.json"),
+                        )?;
+                        context.results.observe(format!("{name}-saved"), &path);
+                    } else {
+                        if decision != CalibrationCacheDecision::CandidateSupplied
+                            || ready.path != CalibrationPath::PartialFromCache
+                            || ready.full_calibration_performed
+                        {
+                            return Err(
+                                "saved full record did not select native cold partial registration"
+                                    .into(),
+                            );
+                        }
+                        let before = oer_os_durable::sha256_file(&store.path(&key))?;
+                        // Warm RF wake remains retained; it cannot reload or promote a cache.
+                        let restarted = capture.request_boot(
+                            boot,
+                            0,
+                            RestartCaptureRadio { epoch: ready.epoch },
+                            Duration::from_secs(30),
+                        )?;
+                        epoch = restarted.ready.epoch;
+                        if !restarted.rf_closed
+                            || !restarted.rf_woken
+                            || restarted.ready.epoch <= ready.epoch
+                            || restarted.ready.lifecycle != CaptureLifecycle::Restart
+                            || restarted.ready.full_calibration_performed
+                            || restarted.ready.path != CalibrationPath::PartialFromCache
+                        {
+                            return Err(
+                                "partial boot did not retain the existing RF-wake lifecycle".into(),
+                            );
+                        }
+                        if oer_os_durable::sha256_file(&store.path(&key))? != before {
+                            return Err("partial/warm boot replaced last-full".into());
+                        }
+                        context
+                            .results
+                            .observe(format!("{name}-restart"), &restarted);
                     }
-                    let before = oer_os_durable::sha256_file(&store.path(&key))?;
-                    // Warm RF wake remains retained; it cannot reload or promote a cache.
-                    let restarted = capture.request_boot(
-                        boot,
-                        0,
-                        RestartCaptureRadio { epoch: ready.epoch },
-                        Duration::from_secs(30),
-                    )?;
-                    if !restarted.rf_closed
-                        || !restarted.rf_woken
-                        || restarted.ready.epoch <= ready.epoch
-                        || restarted.ready.lifecycle != CaptureLifecycle::Restart
-                        || restarted.ready.full_calibration_performed
-                        || restarted.ready.path != CalibrationPath::PartialFromCache
-                    {
-                        return Err(
-                            "partial boot did not retain the existing RF-wake lifecycle".into()
-                        );
-                    }
-                    if oer_os_durable::sha256_file(&store.path(&key))? != before {
-                        return Err("partial/warm boot replaced last-full".into());
-                    }
-                    context
-                        .results
-                        .observe(format!("{name}-restart"), &restarted);
-                }
+                    Ok(())
+                })();
+                let closed = close(context, capture, boot, epoch, &name);
+                measured?;
+                closed?;
                 Ok(())
             })?;
         }
@@ -237,6 +247,7 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
             } else {
                 CalibrationCacheDecision::NoCache(CalibrationCacheMiss::Missing)
             };
+            let closed = close(context, capture, boot, ready.epoch, name);
             if decision != expected
                 || ready.path != CalibrationPath::FullForCache
                 || !ready.full_calibration_performed
@@ -245,6 +256,7 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
                     "cache miss/timeout did not select explicit native full calibration".into(),
                 );
             }
+            closed?;
             Ok(())
         })?;
     }
@@ -256,5 +268,20 @@ pub(crate) fn run(boots: u16, output: &Path, context: &Context<'_>) -> Result<()
             "w-image cache integration",
         ],
     );
+    Ok(())
+}
+
+fn close(
+    context: &Context<'_>,
+    capture: &oer_hil_link::SerialCapture,
+    boot: u64,
+    epoch: u32,
+    name: &str,
+) -> Result<()> {
+    let stopped = capture.request_boot(boot, 0, StopCapture { epoch }, Duration::from_secs(30))?;
+    context.results.observe(format!("{name}-stopped"), &stopped);
+    if stopped.epoch != epoch || !stopped.rf_closed {
+        return Err("cache exercise did not close RF".into());
+    }
     Ok(())
 }

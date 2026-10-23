@@ -238,9 +238,7 @@ impl CalibrationRecord {
 }
 
 trait Value: Sized {
-    #[inline(never)]
     fn put(&self, output: &mut &mut [u8]) -> Result<(), CodecError>;
-    #[inline(never)]
     fn take(input: &mut &[u8]) -> Result<Self, CodecError>;
 }
 
