@@ -134,7 +134,10 @@ impl Radio {
         }
         #[cfg(feature = "diagnostic-radio-health")]
         if self.health.active()
-            && !matches!(request, Request::CacheIdentity(_) | Request::CacheStatus(_) | Request::CacheRead(_))
+            && !matches!(
+                request,
+                Request::CacheIdentity(_) | Request::CacheStatus(_) | Request::CacheRead(_)
+            )
             && !(self.health.armed() && matches!(request, Request::Start(_)))
         {
             return Err(RejectReason::InvalidState);
@@ -221,7 +224,11 @@ impl Radio {
                 }) {
                     return Err(RejectReason::InvalidConfiguration);
                 }
-                Ok(Answer::Started(self.cache.begin(command, self.identity, EmbassyClock.now())?))
+                Ok(Answer::Started(self.cache.begin(
+                    command,
+                    self.identity,
+                    EmbassyClock.now(),
+                )?))
             }
             Request::CacheWrite(command) => Ok(Answer::CacheWritten(
                 self.cache.write(command, EmbassyClock.now())?,

@@ -248,6 +248,10 @@ const INPUTS: &[(&str, &str)] = &[
         include_str!("../../../phy/src/tracking/observation/calibration.rs"),
     ),
     (
+        "tracking/observation/health.rs",
+        include_str!("../../../phy/src/tracking/observation/health.rs"),
+    ),
+    (
         "tracking/observation.rs",
         include_str!("../../../phy/src/tracking/observation.rs"),
     ),

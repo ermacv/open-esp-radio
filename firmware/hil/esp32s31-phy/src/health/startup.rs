@@ -96,8 +96,12 @@ pub(crate) async fn console(usb: transport::Usb, boot: u64) {
             &transport::Chip,
             |id, request: oer_hil_agent::base::Either<WireRequest, health::Request>| {
                 let request = match request {
-                    oer_hil_agent::base::Either::First(request) => oer_hil_agent::base::Either::First(Request::Wire(request)),
-                    oer_hil_agent::base::Either::Second(request) => oer_hil_agent::base::Either::Second(request),
+                    oer_hil_agent::base::Either::First(request) => {
+                        oer_hil_agent::base::Either::First(Request::Wire(request))
+                    }
+                    oer_hil_agent::base::Either::Second(request) => {
+                        oer_hil_agent::base::Either::Second(request)
+                    }
                 };
                 if REQUESTS.try_send((id, request)).is_err() {
                     transport::CONSOLE.publish(
@@ -241,7 +245,9 @@ pub(crate) async fn serve_radio(radio: &'static mut radio::Radio) {
             }
         }
         if let Some((request, response)) = HEALTH_SLOT.take_request() {
-            let answer = radio.health_request(request, &mut capture_rx).await
+            let answer = radio
+                .health_request(request, &mut capture_rx)
+                .await
                 .unwrap_or_else(health::Answer::Rejected);
             response.answer(answer);
         }
