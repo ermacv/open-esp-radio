@@ -66,6 +66,11 @@ impl Section {
             && (self.memory == "sram" || (self.memory == "psram" && self.writable))
     }
 
+    /// SRAM only: the memory whose growth stops a pull request.
+    pub fn is_sram(&self) -> bool {
+        self.class != SectionClass::Filler && self.memory == "sram"
+    }
+
     pub fn image_content_bytes(&self) -> u64 {
         if self.is_image_content() {
             self.bytes - self.filler.iter().map(|r| r.bytes).sum::<u64>()

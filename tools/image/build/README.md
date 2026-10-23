@@ -408,15 +408,16 @@ The verdicts follow the "Size budgets" rule in
 [`docs/decisions.md`](../../../docs/decisions.md) and are decided in
 [`sizes/compare.rs`](src/sizes/compare.rs). Only growth of an SRAM section or
 of an allocated stack (task or interrupt) is a `stop`. Growth of code,
-read-only data, types, frames, computed bounds and root frames, and a new
+read-only data, writable PSRAM, types, frames, computed bounds and root frames, and a new
 stack-bound hole, are `report`: the numbers stay in the table, nothing stops.
 
 Code growth is the **net** change in executable and read-only image contents
 across the runtime and bootstrap, excluding linker filler and byte-verified
 embedded copies of the runtime; shrinking contents offsets growth elsewhere,
-including a move between sections. Each SRAM section (code, read-only data
-and writable data) and each writable PSRAM section is RAM; growth of an
-individual RAM section stops, and so does a section moving into RAM.
+including a move between sections. Growth of an individual SRAM section
+(code, read-only data or writable data) stops, and so does a section moving
+into SRAM; a writable PSRAM section is RAM in the table but its growth is
+`report`.
 Input-free linker filler carries no owned RAM or image-content budget. An
 allocated stack growing stops; shrinking or removal is `report`. A new hole
 on an interrupt path already fails `cargo fw build`. Executable and read-only

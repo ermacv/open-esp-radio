@@ -260,7 +260,7 @@ impl Diff {
                 name,
                 before.map_or(0, |s| s.bytes),
                 after.map_or(0, |s| s.bytes),
-                after.is_some_and(Section::is_ram),
+                after.is_some_and(Section::is_sram),
             );
             self.change(
                 elf,
@@ -277,10 +277,10 @@ impl Diff {
                 {
                     let _ = writeln!(self.output, "section `{name}`: {:?} → {:?}", before, after);
                     if before.is_some()
-                        && after.is_some_and(Section::is_ram)
-                        && !before.is_some_and(Section::is_ram)
+                        && after.is_some_and(Section::is_sram)
+                        && !before.is_some_and(Section::is_sram)
                     {
-                        self.stop(format!("{elf} `{name}` moved into RAM"));
+                        self.stop(format!("{elf} `{name}` moved into SRAM"));
                     }
                 }
             }

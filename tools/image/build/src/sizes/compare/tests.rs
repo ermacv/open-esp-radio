@@ -580,3 +580,24 @@ fn an_interrupt_stack_grows_only_as_an_allocated_stack() {
         .insert("irq hart 0".into(), 4080);
     assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
 }
+
+#[test]
+fn writable_psram_growth_is_reported_while_sram_growth_stops() {
+    let mut a = summary();
+    let psram = Section {
+        writable: true,
+        class: SectionClass::Writable,
+        ..psram_contents(4096, false)
+    };
+    runtime(&mut a).sections.insert("psram-data".into(), psram);
+    let mut b = a.clone();
+    runtime(&mut b)
+        .sections
+        .get_mut("psram-data")
+        .unwrap()
+        .bytes += 4096;
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
+    let mut c = a.clone();
+    runtime(&mut c).sections.get_mut(".data").unwrap().bytes += 4;
+    assert_eq!(compare(&a, &c).unwrap().0, Verdict::Stop);
+}
