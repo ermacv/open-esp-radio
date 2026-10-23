@@ -26,10 +26,8 @@ are preserved for the native registration boundary to reject before replay.
 `CALIBRATION_ALGORITHM_REVISION` and `CALIBRATION_PROFILE_ID` identify the
 reviewed calibration/replay implementation and `PhyConfig::production()`.
 They are independent of RF ABI 102, snapshot schema and producing commit.
-The host-only `revision_guard` embeds the production PHY sources listed in
-that test, including state/profile, cold registration and replay/publication
-adapters. It hashes sorted relative paths and source bytes, each terminated
-with NUL, using SHA-256. It embeds no digest in the image. A changed input
-fails until a new reviewed revision/profile pair and digest are recorded;
-the failure prints the actual digest and rerun command. Previously reviewed
-pairs stay immutable. New production inputs belong in that explicit list.
+A change to how PHY calibration computes a snapshot field, or to how
+replay applies it, takes a new revision/profile pair; previously used pairs
+are never reused. The device and the host admit only a record of the
+image's own pair and reject any other before replay. A PHY change that
+alters neither keeps the pair.
