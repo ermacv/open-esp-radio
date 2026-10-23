@@ -79,7 +79,9 @@ moves; ownership, orchestration and wiring are rebuilt.
   separate controllers). Nothing runs from cached flash. The image check
   enforces it.
 - Interrupt stacks have a proven bound and are sized from it at link time;
-  task stacks are reported, and an image may declare them proven. No frame
+  task stacks are reported, and an image may declare them proven. There is no
+  baseline of accepted holes, and an observed depth above a bound fails the
+  run. No frame
   exceeds the move limit (4 KiB); larger state lives in placed static
   storage and futures hold a reference. Code and stacks run from PSRAM after
   the staged bootstrap. Details: [memory and stacks](memory.md).
