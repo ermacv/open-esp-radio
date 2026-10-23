@@ -39,6 +39,9 @@ impl AccessFilter {
                     });
                 word && self.names(function.name.as_deref())
             }
+            RegisterAccess::CallResult { function, .. } => {
+                self.words.is_empty() && self.names(function.name.as_deref())
+            }
             RegisterAccess::Blocked { function, .. } => self.names(function.name.as_deref()),
             RegisterAccess::Gap { .. } => true,
         }

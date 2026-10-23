@@ -35,6 +35,8 @@ pub(crate) struct ReadObservations<'f, 'a, 'm> {
     function: &'f LibraryFunction,
     summaries: &'f dyn CallSummaries,
     links: Option<CallLinks<'m>>,
+    result_names: &'f [String],
+    result_sources: AdmittedVec<'m, (u64, u8)>,
 }
 
 impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
@@ -48,6 +50,7 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         callees: &'f Callees<'m>,
         function: &'f LibraryFunction,
         summaries: &'f dyn CallSummaries,
+        result_names: &'f [String],
     ) -> Self {
         Self {
             evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
@@ -66,6 +69,8 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             function,
             summaries,
             links: None,
+            result_names,
+            result_sources: AdmittedVec::new(memory),
         }
     }
 
@@ -116,6 +121,34 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
                 self.memory,
                 c,
             )?);
+            if !self.result_names.is_empty() {
+                for record in self.facts.records() {
+                    c.checkpoint(1 + self.result_names.len() as u64)?;
+                    if let FunctionRecord::CallInputs { offset, .. } = record
+                        && let Some(callee) =
+                            self.calls.at(*offset, self.function, self.callees, c)?
+                        && callee
+                            .name
+                            .as_ref()
+                            .is_some_and(|name| self.result_names.contains(name))
+                    {
+                        let contract = self
+                            .links
+                            .as_ref()
+                            .and_then(|links| links.callee(*offset))
+                            .and_then(|callee| self.summaries.summary(callee))
+                            .and_then(|summary| summary.contract);
+                        let words = contract.map_or(1, |contract| contract.results);
+                        for register in 10..10 + words {
+                            self.result_sources
+                                .push((*offset, register), c.position())?;
+                        }
+                    }
+                }
+                let len = self.result_sources.len();
+                c.checkpoint(len as u64 * u64::from(len.max(1).ilog2() + 1))?;
+                self.result_sources.sort_unstable();
+            }
         }
         Ok(())
     }
@@ -130,9 +163,51 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             self.abi,
             self.decoder,
             &mut |address, width, c| selected_read(address, width, self.ranges, c),
-            &Calls { links, summaries },
+            &SelectedCalls {
+                calls: Calls { links, summaries },
+                sources: &self.result_sources,
+            },
             c,
         )?;
+        Ok(())
+    }
+    pub fn call_results(
+        &mut self,
+        c: &mut dyn RunControl,
+        emit: &mut dyn FnMut(&RegisterAccess, &mut dyn RunControl) -> Result<()>,
+    ) -> Result<()> {
+        if self.result_names.is_empty() {
+            return Ok(());
+        }
+        self.prepare_links(c)?;
+        if self.result_sources.is_empty() {
+            return Ok(());
+        }
+        self.analyze_reads(c)?;
+        for &(site, register) in self.result_sources.iter() {
+            c.checkpoint(1)?;
+            let callee = self
+                .calls
+                .at(site, self.function, self.callees, c)?
+                .ok_or_else(|| Error::new(ErrorCode::Integrity, "missing selected callee"))?;
+            let mut reads = self.evaluator.result_reads(site, register, c)?;
+            for usage in &mut reads.uses {
+                if let ReadSink::CallArgument { site, callee, .. } = &mut usage.sink {
+                    *callee = self.calls.at(*site, self.function, self.callees, c)?;
+                }
+            }
+            emit(
+                &RegisterAccess::CallResult {
+                    function: self.function.clone(),
+                    site,
+                    callee,
+                    register,
+                    arguments: crate::call_arguments::arguments(self.facts, site, c)?,
+                    reads,
+                },
+                c,
+            )?;
+        }
         Ok(())
     }
     pub fn stored(
@@ -326,6 +401,23 @@ fn candidates(
             Ok(())
         }
         _ => emit(None, None, c),
+    }
+}
+
+/// Query source selection wraps the same callee port; summaries remain unchanged.
+struct SelectedCalls<'s, 'm> {
+    calls: Calls<'s, 'm>,
+    sources: &'s [(u64, u8)],
+}
+impl<'s> oer_analysis_blobray_analysis::registers::CallAt<'s> for SelectedCalls<'s, '_> {
+    fn summary(&self, site: u64) -> Option<&'s CallSummary> {
+        oer_analysis_blobray_analysis::registers::CallAt::summary(&self.calls, site)
+    }
+    fn current(&self) -> Option<&'s CallSummary> {
+        oer_analysis_blobray_analysis::registers::CallAt::current(&self.calls)
+    }
+    fn result_sources(&self) -> &[(u64, u8)] {
+        self.sources
     }
 }
 

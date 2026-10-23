@@ -34,7 +34,9 @@ engine with an injected `FunctionSemantics` for each function. Missing extents
 and unsupported functions become blocked outcomes; code no function covers
 becomes a gap; resource and integrity failures fail the call.
 `library::register_accesses` filters the analyzed memory accesses by optional
-ranges and streams `RegisterAccess` records with a summary. Observed access
+ranges and streams `RegisterAccess` records with a summary. `Assumptions.call_results`
+selects named calls whose result words join the same read-use flow; their records
+include the transfer, callee, argument values and per-word `ReadUses`. Observed access
 widths and masks are never promoted to hardware declarations; source
 publication remains with the independent register tool. See
 [function analysis](../cli/reference/analysis/README.md#function-analysis-contract).

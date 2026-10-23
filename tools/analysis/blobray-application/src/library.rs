@@ -331,6 +331,8 @@ pub struct Assumptions<'a> {
     /// Constants propagate through any acyclic call depth in two analyses.
     pub call_summaries: bool,
     pub signatures: Option<&'a crate::signatures::Signatures>,
+    /// Names whose call-result words become read-use sources. Empty keeps load-only output.
+    pub call_results: &'a [String],
     /// Address ranges read-only at run time whatever a linked image's
     /// section flags say, such as flash mapped for reading: constants are
     /// read from the file-backed bytes inside them.
@@ -809,6 +811,7 @@ pub fn register_accesses(
                 &callees,
                 analyzed.function,
                 analyzed.summaries,
+                assumptions.call_results,
             );
             crate::registers::observe(analyzed.records, &facts, memory, ranges, c, &mut |o, c| {
                 let stored = reads.stored(&o, c)?;
@@ -837,6 +840,10 @@ pub fn register_accesses(
                     },
                     c,
                 )
+            })?;
+            reads.call_results(c, &mut |observation, c| {
+                summary.observations += 1;
+                emit(observation, c)
             })?;
             let [read_limit, stored_limit] = reads.local_budget_exhaustion();
             summary.flow_local_budget_functions += u64::from(read_limit || stored_limit);

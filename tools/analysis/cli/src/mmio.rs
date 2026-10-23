@@ -165,6 +165,7 @@ pub fn reads(reads: &oer_analysis_blobray_domain::ReadUses) -> String {
                 site,
                 register,
                 callee,
+                shift,
             } => {
                 let target = callee
                     .as_ref()
@@ -178,7 +179,10 @@ pub fn reads(reads: &oer_analysis_blobray_domain::ReadUses) -> String {
                         }
                     })
                     .unwrap_or_else(|| "?".to_owned());
-                format!("call@+{site:x}-x{register}({target})")
+                let wiring = shift
+                    .map(|shift| format!(",shift={shift}"))
+                    .unwrap_or_default();
+                format!("call@+{site:x}-x{register}({target}{wiring})")
             }
             ReadSink::Store {
                 site,

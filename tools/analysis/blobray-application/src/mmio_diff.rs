@@ -264,6 +264,7 @@ fn collect<'m>(
                     &callees,
                     analyzed.function,
                     analyzed.summaries,
+                    &[],
                 );
                 crate::registers::observe(
                     analyzed.records,

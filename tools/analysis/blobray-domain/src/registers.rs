@@ -1,7 +1,7 @@
 //! Register-access observations are separate from physical hardware declarations.
 use crate::*;
 
-/// For a load: what happens to each bit of the loaded value inside the function.
+/// For a load or selected call-result word: what happens to each bit of the loaded value inside the function.
 /// Every bit of the access width is in exactly one class:
 /// used > unknown > preserved > unused.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -49,6 +49,10 @@ pub enum ReadSink {
         site: u64,
         register: u8,
         callee: Option<CallTarget>,
+        /// Pure, uninverted wiring: source bit i arrives at argument bit i + shift.
+        /// Omitted when unknown or when call-result tracking was not requested.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shift: Option<i8>,
     },
 }
 
@@ -212,11 +216,59 @@ pub struct LibraryFunction {
     pub name: Option<Vec<u8>>,
 }
 
+/// One argument register's value at a call site.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ArgumentValue {
+    Constant {
+        value: u32,
+    },
+    ImageAddress {
+        address: u32,
+    },
+    Symbol {
+        #[serde(with = "oer_analysis_riscv_model::symbol_name")]
+        name: Vec<u8>,
+        addend: i64,
+    },
+    Section {
+        section: u32,
+        offset: i64,
+    },
+    EntryStack {
+        offset: i64,
+    },
+    /// One of a finite set; no element is selected by the analysis.
+    Alternatives {
+        values: Vec<ArgumentValue>,
+    },
+    /// The calling function's own argument `a<index>` at its entry.
+    EntryArgument {
+        index: u8,
+    },
+    /// Another register's value at the calling function's entry.
+    EntryRegister {
+        register: u8,
+    },
+    Unknown,
+}
+
 /// One outcome of analyzing every function of captured libraries for the
 /// memory addresses they access, in input, object and symbol order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RegisterAccess {
+    /// One selected call's result word, tracked by the same flow as loads.
+    CallResult {
+        function: LibraryFunction,
+        site: u64,
+        callee: CallTarget,
+        /// Physical RV32 result register (x10, or x11 for a u64 contract).
+        register: u8,
+        /// a0..a7 before this transfer, in the call-arguments vocabulary.
+        arguments: Vec<ArgumentValue>,
+        reads: ReadUses,
+    },
     /// One candidate address an analyzed function's record accesses.
     Observation {
         function: LibraryFunction,

@@ -136,6 +136,7 @@ fn assumptions() -> Assumptions<'static> {
         call_summaries: true,
         signatures: None,
         read_only: &[],
+        call_results: &[],
     }
 }
 
@@ -183,6 +184,7 @@ fn summary(records: &[RegisterAccess]) -> RegisterAccessSummary {
                 summary.unresolved_addresses += u64::from(address.is_none());
                 summary.indexed_addresses += u64::from(indexed.is_some());
             }
+            RegisterAccess::CallResult { .. } => summary.observations += 1,
             RegisterAccess::Blocked { .. } => summary.blocked_functions += 1,
             RegisterAccess::Gap { .. } => summary.gaps += 1,
         }
@@ -337,6 +339,7 @@ fn every_read_sink_and_both_precisions_are_use() {
             site: 20,
             register: 10,
             callee: None,
+            shift: None,
         },
     ];
     for sink in sinks {
@@ -368,6 +371,7 @@ fn call(bits: u32, name: Option<&str>, precision: ReadPrecision) -> ReadUse {
         sink: ReadSink::CallArgument {
             site: 20,
             register: 10,
+            shift: None,
             callee: name.map(|name| CallTarget {
                 address: None,
                 function: None,

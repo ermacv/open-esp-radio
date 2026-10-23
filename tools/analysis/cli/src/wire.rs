@@ -9,9 +9,9 @@ use oer_analysis_riscv_model::{
 use serde::{Deserialize, Serialize};
 
 /// Schema of the `register-accesses` document
-/// (`{"schema":11,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
+/// (`{"schema":12,"inputs":[...],"abi":...,"call_summaries":...,"read_only":[...],"records":[...],"groups":[...],"summary":{...}}`;
 /// `groups` only with `--group-by`).
-pub const REGISTER_ACCESSES_SCHEMA: u32 = 11;
+pub const REGISTER_ACCESSES_SCHEMA: u32 = 12;
 
 /// One analyzed input of a `register-accesses` document, by position.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,6 +26,8 @@ pub struct RegisterAccessInput {
 #[serde(deny_unknown_fields)]
 pub struct RegisterAccessDocument {
     pub schema: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub call_results: Vec<String>,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,

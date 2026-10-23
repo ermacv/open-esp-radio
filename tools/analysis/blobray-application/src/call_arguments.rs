@@ -8,7 +8,7 @@
 //! The values are may-values of one call site, without interprocedural
 //! expansion: a value does not prove that the path reaching the call runs.
 use crate::references::{self, Kind, Target, Targets};
-use oer_analysis_blobray_domain::LibraryFunction;
+use oer_analysis_blobray_domain::{ArgumentValue, LibraryFunction};
 use oer_analysis_riscv_model::{
     AbstractValue, Expression, FunctionIndex, Result, RunControl, ValueAlternative,
 };
@@ -31,43 +31,6 @@ pub struct CallSite {
     /// `a0`..`a7` before the transfer; empty when the analysis kept no
     /// register state at this site.
     pub arguments: Vec<ArgumentValue>,
-}
-
-/// One argument register's value at a call site.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum ArgumentValue {
-    Constant {
-        value: u32,
-    },
-    ImageAddress {
-        address: u32,
-    },
-    Symbol {
-        #[serde(with = "oer_analysis_riscv_model::symbol_name")]
-        name: Vec<u8>,
-        addend: i64,
-    },
-    Section {
-        section: u32,
-        offset: i64,
-    },
-    EntryStack {
-        offset: i64,
-    },
-    /// One of a finite set; no element is selected by the analysis.
-    Alternatives {
-        values: Vec<ArgumentValue>,
-    },
-    /// The calling function's own argument `a<index>` at its entry.
-    EntryArgument {
-        index: u8,
-    },
-    /// Another register's value at the calling function's entry.
-    EntryRegister {
-        register: u8,
-    },
-    Unknown,
 }
 
 /// Arguments at the same relocation, exact-transfer and may-transfer sites
@@ -103,7 +66,7 @@ pub fn call_sites(
         .collect()
 }
 
-fn arguments(
+pub(crate) fn arguments(
     facts: &FunctionIndex<'_, '_>,
     offset: u64,
     c: &mut dyn RunControl,

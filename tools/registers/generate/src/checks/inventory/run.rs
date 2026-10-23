@@ -74,6 +74,7 @@ fn accesses(
         call_summaries: true,
         signatures: Some(signatures),
         read_only: &[],
+        call_results: &[],
     };
     let ranges: Vec<_> = regions
         .iter()

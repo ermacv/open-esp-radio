@@ -474,7 +474,9 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
                         width: loaded_width,
                         ..
                     } => same_word(loaded, loaded_width, address, width),
-                    ReadOrigin::Entry(_) | ReadOrigin::MissingResult { .. } => false,
+                    ReadOrigin::Entry(_)
+                    | ReadOrigin::MissingResult { .. }
+                    | ReadOrigin::CallResult { .. } => false,
                 });
             let mut preserved = 0;
             if same && kind == MemoryKind::Store {
@@ -578,6 +580,14 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
             if bits == 0 {
                 continue;
             }
+            let mut sink = sink.clone();
+            if !self.result_sources.is_empty()
+                && !self.audit_results
+                && let ReadSink::CallArgument { shift, .. } = &mut sink
+                && precision == ReadPrecision::Exact
+            {
+                *shift = dependency.shift(outputs, bits);
+            }
             let head = self
                 .sources
                 .get(dependency.source)
@@ -628,14 +638,26 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
         _access: MemoryKind,
         c: &mut dyn RunControl,
     ) -> Result<ReadUses> {
-        let mask = width_mask(width).unwrap_or(u32::MAX);
+        self.source_reads(
+            self.source_at(offset),
+            width_mask(width).unwrap_or(u32::MAX),
+            c,
+        )
+    }
+
+    pub(super) fn source_reads(
+        &self,
+        source: Option<usize>,
+        mask: u32,
+        c: &mut dyn RunControl,
+    ) -> Result<ReadUses> {
+        let source = source.and_then(|id| self.sources.get(id));
         let mut result = ReadUses {
             uses: Vec::new(),
             unknown: Vec::new(),
             preserved: 0,
             unused: 0,
         };
-        let source = self.source_at(offset).and_then(|id| self.sources.get(id));
         let mut event = source.map(|source| source.event).unwrap_or(0);
         while event != 0 {
             c.checkpoint(1)?;
@@ -721,6 +743,7 @@ impl<'f, 'a, 'm> FlowEngine<'f, 'a, 'm, Reads<'m>> {
             site,
             register,
             callee: None,
+            shift: None,
         };
         self.read_sink(flow, consumed.exact, sink.clone(), c)?;
         let len = self.domain.flows.values(flow)?.len();

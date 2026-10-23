@@ -1,6 +1,6 @@
 //! Human rendering of call argument values.
 use crate::listing::signed_hex;
-use oer_analysis_blobray_application::call_arguments::ArgumentValue;
+use oer_analysis_blobray_domain::ArgumentValue;
 
 /// `0x6b`, `arg0`, `phy_param+0xef`, `one-of{0x2 | 0x40}`, `?`.
 pub fn human(value: &ArgumentValue) -> String {
