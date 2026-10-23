@@ -159,6 +159,7 @@ members = [
     "chips/esp32s31/board",
     "firmware/bootstrap/esp32s31",
     "chips/esp32s31/layout",
+    "firmware/apps/b0",
     "firmware/apps/boot-smoke",
     "firmware/apps/radio-root",
     "firmware/apps/w0",

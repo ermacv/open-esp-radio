@@ -1,8 +1,8 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-//! Pure pieces of a Bluetooth LE Controller: no transport, executor, clock,
-//! scheduler or hardware.
+//! Portable Bluetooth LE Controller services and pure protocol pieces.
+//! No transport, executor, clock implementation, scheduler or hardware is owned here.
 //!
 //! - [`timing`]: connection-event geometry over the backend's
 //!   [`ConnectionAllowances`](oer_bluetooth_le_radio::ConnectionAllowances)
@@ -11,13 +11,14 @@
 //!   [`EpochExhausted`](timing::EpochExhausted) when a result leaves the radio
 //!   epoch;
 //! - [`receive`]: authentication of received data channel PDUs before Link
-//!   Layer and Host dispatch.
-//!
-//! No Controller core serves HCI commands or runs the Link Layer roles over a
-//! radio request port yet.
+//!   Layer and Host dispatch;
+//! - [`dtm`]: one-credit Reset/Rand/DTM 1M HCI service over the LE port,
+//!   with durable command, session and response ownership.
 
 #[cfg(test)]
 extern crate std;
 
+/// The one-credit HCI DTM service over the portable LE port.
+pub mod dtm;
 pub mod receive;
 pub mod timing;

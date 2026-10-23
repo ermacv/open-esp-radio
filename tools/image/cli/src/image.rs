@@ -48,6 +48,8 @@ pub const ENV_W0_COUNTRY: &str = "OER_W0_COUNTRY";
 /// What an image is built for on the stand.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Stand {
+    /// B0 BLE's explicit laboratory band and conducted-power cap.
+    B0 { country: [u8; 2], cap_dbm: i8 },
     /// Image `w0`: the stand router radio's regulatory country.
     W0 { country: [u8; 2] },
     /// Image `w1`: the stand's identity.
@@ -59,6 +61,10 @@ pub enum Stand {
 }
 
 /// Fixed fictitious stand identities for analysis, independent of the lab.
+const ANALYSIS_B0: Stand = Stand::B0 {
+    country: *b"DE",
+    cap_dbm: 0,
+};
 const ANALYSIS_W0: Stand = Stand::W0 { country: *b"DE" };
 static ANALYSIS_W1: LazyLock<Stand> = LazyLock::new(|| Stand::W1(analysis_config()));
 static ANALYSIS_W3: LazyLock<Stand> = LazyLock::new(|| Stand::W3(analysis_config()));
@@ -75,6 +81,7 @@ fn analysis_config() -> w1::Config {
 
 fn analysis_stand(image: &str) -> Result<&'static Stand> {
     match image {
+        "b0" => Ok(&ANALYSIS_B0),
         "w0" => Ok(&ANALYSIS_W0),
         w1::IMAGE => Ok(&ANALYSIS_W1),
         w2::IMAGE => Ok(&ANALYSIS_W2),
@@ -89,6 +96,14 @@ fn analysis_stand(image: &str) -> Result<&'static Stand> {
 /// the unconfigured one.
 pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<String>)> {
     match (image, stand) {
+        ("b0", Some(Stand::B0 { country, cap_dbm })) => vec![
+            ("OER_B0_COUNTRY".into(), Some(w1::country_text(*country))),
+            ("OER_B0_POWER_CAP_DBM".into(), Some(cap_dbm.to_string())),
+        ],
+        ("b0", _) => vec![
+            ("OER_B0_COUNTRY".into(), None),
+            ("OER_B0_POWER_CAP_DBM".into(), None),
+        ],
         (w2::IMAGE, Some(Stand::W2(config))) => w2::runtime_env(config),
         (w3::IMAGE, Some(Stand::W3(config))) => w3::runtime_env(config),
         (w1::IMAGE, Some(Stand::W1(config))) => config
@@ -214,7 +229,7 @@ mod tests {
             include_str!("../../../../chips/esp32s31/platform/chip.toml"),
         )
         .unwrap();
-        for image in ["w0", "w1", "w2", "w3", "boot-smoke"] {
+        for image in ["b0", "w0", "w1", "w2", "w3", "boot-smoke"] {
             let manifest = directory
                 .path()
                 .join("firmware/apps")
@@ -234,6 +249,7 @@ mod tests {
     fn analysis_uses_the_fixed_stands_through_the_runtime_environment() {
         let directory = repository();
         for (image, stand) in [
+            ("b0", &ANALYSIS_B0),
             ("w0", &ANALYSIS_W0),
             ("w1", &*ANALYSIS_W1),
             ("w2", &*ANALYSIS_W2),
