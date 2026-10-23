@@ -300,7 +300,7 @@ where
         _lp: &LpClock<RcSlow>,
     ) -> Result<WifiJoined, Failed<WifiReturned>> {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && self.track_tick().await.is_err() {
+        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
             return Err(Failed {
                 returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
                 cause: Failure::Poisoned,
@@ -390,7 +390,7 @@ where
 
     async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && self.track_tick().await.is_err() {
+        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
             return Err(Failed {
                 returned: track.wifi,
                 cause: Failure::Poisoned,
@@ -540,7 +540,7 @@ where
 
     async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && self.track_tick().await.is_err() {
+        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
             return Err(Failed {
                 returned: retune.wifi,
                 cause: Failure::Poisoned,
@@ -600,7 +600,7 @@ where
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && self.track_tick().await.is_err() {
+        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
             return (
                 oer_esp32s31_radio_client::wifi::WifiLeft {
                     wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),

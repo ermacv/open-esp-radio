@@ -124,7 +124,9 @@ where
             returned: join,
             cause: Failure::Poisoned,
         };
-        shared.track_tick().await.map_err(|_| failed())?;
+        crate::boundary::shared(shared.track_tick())
+            .await
+            .map_err(|_| failed())?;
         let cold = self.cold.take().ok_or_else(failed)?;
         let (powered, power) = match cold.power_up(&mut shared.radio, &shared.clocks) {
             Ok(owners) => owners,
@@ -181,7 +183,9 @@ where
             return Err(failed());
         }
         // Re-evaluate due tracking, including work already serviced for Wi-Fi.
-        shared.track_tick().await.map_err(|_| failed())?;
+        crate::boundary::shared(shared.track_tick())
+            .await
+            .map_err(|_| failed())?;
         let member = self.membership.as_ref().ok_or_else(failed)?;
         let ready = bluetooth_rf_ready(&mut shared.radio, member).map_err(|_| failed())?;
         self.controller
@@ -207,7 +211,7 @@ where
         if self.installation != Some(installation) || !self.controller.is_retired(installation.0) {
             return poisoned();
         }
-        if shared.track_tick().await.is_err() {
+        if crate::boundary::shared(shared.track_tick()).await.is_err() {
             return poisoned();
         }
         let Some(task) = self.controller.task_owner() else {
