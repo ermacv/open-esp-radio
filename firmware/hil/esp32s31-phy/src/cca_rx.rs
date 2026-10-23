@@ -48,7 +48,7 @@ pub struct Prepared {
     stopped: RxRingStopped<'static, COUNT>,
 }
 
-fn failure(step: &str, error: RxRingError) -> RejectReason {
+fn failure(step: &'static str, error: RxRingError) -> RejectReason {
     crate::transport::CONSOLE.note_immediately(&Note::cca_rx_fail(step, &DiagPath::of(&error)));
     RejectReason::Internal
 }
