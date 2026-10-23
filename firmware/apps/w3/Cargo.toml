@@ -61,3 +61,7 @@ oer-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true
+
+[package.metadata.open-radio]
+# Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
+task-stack = "proven"

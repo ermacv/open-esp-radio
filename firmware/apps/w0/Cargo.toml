@@ -40,3 +40,5 @@ workspace = true
 [package.metadata.open-radio]
 # `cargo fw` builds this image with `cfg(oer_trace)`: the PHY registration's RF calibration results and readiness waits it logs.
 instrumentation = ["trace"]
+# Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
+task-stack = "proven"
