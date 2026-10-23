@@ -108,18 +108,38 @@ pub fn take_lost() -> u32 {
     LOST.take()
 }
 
+/// A FIFO that never has room: a note written to it is only counted.
+struct Closed;
+
+impl Fifo for Closed {
+    fn has_room(&self) -> bool {
+        false
+    }
+
+    fn push(&mut self, _: u8) {}
+
+    fn flush(&mut self) {}
+}
+
 /// Writes `note` on a path that never returns, taking the peripheral from the
 /// driver: the one named capture. The critical section proves that
-/// interrupts are masked on the calling hart, and the driver runs on that
-/// hart alone (the console is served from the boot hart), so it cannot write
-/// at the same time. A byte the driver had half written may be lost; the
-/// previous boot's record is kept elsewhere.
+/// interrupts are masked on the calling hart, and the driver runs on the
+/// boot hart (`ProCpu`) alone, so on that hart it cannot write at the same
+/// time. Called from any other hart the driver may still run, so the note is
+/// not written and its bytes are counted in the loss instead. A byte the
+/// driver had half written may be lost; the previous boot's record is kept
+/// elsewhere.
 #[allow(
     unsafe_code,
     reason = "the named capture of the peripheral for a fatal path"
 )]
 pub fn fatal_note(note: &Note<'_>, _transport_masked: critical_section::CriticalSection<'_>) {
+    if esp_hal::system::Cpu::current() != esp_hal::system::Cpu::ProCpu {
+        FifoWriter::new(Closed, &LOST, Patience::NONE).note(note);
+        return;
+    }
     // SAFETY: the driver cannot execute while the caller's critical section
-    // holds its hart, and the caller does not return to it.
+    // holds its hart, which is the driver's, and the caller does not return
+    // to it.
     unsafe { write_captured(Patience::NONE, |writer| writer.note(note)) };
 }
