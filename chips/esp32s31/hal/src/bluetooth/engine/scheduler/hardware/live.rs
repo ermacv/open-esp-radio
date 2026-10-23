@@ -263,19 +263,6 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
 /// HAL owner and the typed P3 reply channel.
 impl SchedulerHardware<HalPublications> {
     /// Perform one common stop step through typed P3 acknowledgements.
-    pub async fn step_stop_live(
-        &mut self,
-        controller: &mut ControllerHal<'_>,
-        interrupts: &mut SchedulerTaskHalf,
-        storage: &impl SchedulerDoorbell,
-        stop: crate::bluetooth::BluetoothSchedulerStop,
-    ) -> Result<crate::bluetooth::BluetoothSchedulerStopStep, super::SchedulerStopError> {
-        controller
-            .step_scheduler_stop(interrupts, stop, storage)
-            .await
-            .map_err(super::SchedulerStopError::Interrupt)
-    }
-
     /// Resolve a fresh hardware head inside the retained item space.
     pub async fn snapshot_live(
         &mut self,

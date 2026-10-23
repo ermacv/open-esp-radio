@@ -462,46 +462,47 @@ impl<
     }
 
     /// Keep the stop receipt inside the engine that produced it.
-    pub async fn step_stop<D: SchedulerDoorbell>(
+    /// Poll the retained stop transaction; pending P3 commands stay in its
+    /// channel and `stop`, independent of the lifetime of this borrow.
+    #[inline(never)]
+    pub fn poll_stop<D: SchedulerDoorbell>(
         &mut self,
         storage: &D,
-        stop: crate::bluetooth::BluetoothSchedulerStop,
-    ) -> Result<EngineStopStep, EngineStopError> {
+        stop: &mut crate::bluetooth::BluetoothSchedulerStop,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Result<bool, EngineStopError>> {
         if self.is_quarantined() {
-            return Err(EngineStopError::Quarantined);
+            return core::task::Poll::Ready(Err(EngineStopError::Quarantined));
         }
-        let result = self
-            .memory
-            .hardware
-            .step_stop_live(
-                &mut self.registers.borrow_bluetooth_controller(),
-                self.scheduler_interrupts
-                    .as_mut()
-                    .ok_or(EngineStopError::Hardware(
-                        super::scheduler::SchedulerStopError::Interrupt(
-                            SchedulerInterruptError::NotInstalled,
-                        ),
-                    ))?,
-                storage,
-                stop,
-            )
-            .await
-            .map_err(|error| {
+        let interrupts = self
+            .scheduler_interrupts
+            .as_mut()
+            .ok_or(EngineStopError::Hardware(
+                super::scheduler::SchedulerStopError::Interrupt(
+                    SchedulerInterruptError::NotInstalled,
+                ),
+            ))?;
+        let result = core::task::ready!(
+            self.registers
+                .borrow_bluetooth_controller()
+                .poll_scheduler_stop(interrupts, stop, storage, cx)
+        );
+        core::task::Poll::Ready(match result {
+            Err(error) => {
                 self.faulted = true;
-                EngineStopError::Hardware(error)
-            })?;
-        match result {
-            crate::bluetooth::BluetoothSchedulerStopStep::Pending(stop) => {
-                Ok(EngineStopStep::Pending(stop))
+                Err(EngineStopError::Hardware(
+                    super::scheduler::SchedulerStopError::Interrupt(error),
+                ))
             }
-            crate::bluetooth::BluetoothSchedulerStopStep::Stopped(stopped) => {
+            Ok(crate::bluetooth::scheduler_stop::Progress::Pending) => Ok(false),
+            Ok(crate::bluetooth::scheduler_stop::Progress::Stopped(stopped)) => {
                 self.memory
                     .scheduler
                     .enter_stopped(stopped)
                     .map_err(EngineStopError::Rejected)?;
-                Ok(EngineStopStep::Stopped)
+                Ok(true)
             }
-        }
+        })
     }
 
     pub async fn restart_if_idle<D: SchedulerDoorbell>(
@@ -633,11 +634,6 @@ impl<'pool, 'epoch, const Q: usize> Engine<ArenaMemory<'pool, 'epoch, 0, 0, 0, 0
     }
 }
 
-#[derive(Debug)]
-pub enum EngineStopStep {
-    Pending(crate::bluetooth::BluetoothSchedulerStop),
-    Stopped,
-}
 #[derive(Debug)]
 pub enum EngineStopError {
     Quarantined,

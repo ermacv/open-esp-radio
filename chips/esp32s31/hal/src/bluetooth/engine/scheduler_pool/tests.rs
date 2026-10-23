@@ -14,7 +14,7 @@ use crate::bluetooth::engine::{
 /// Two items and a marker word that reinitialization writes.
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
-struct TestStorage {
+struct TestStorage<const DTM: bool = false> {
     items: [BleSchedulerItem; 2],
     marker: u32,
 }
@@ -25,10 +25,14 @@ struct TestBinding {
     number: u16,
 }
 
-impl sealed::Sealed for TestStorage {}
+impl<const DTM: bool> sealed::Sealed for TestStorage<DTM> {}
 
-impl SchedulerRoleStorage for TestStorage {
-    const KIND: SchedulerRoleKind = SchedulerRoleKind::LegacyScanning;
+impl<const DTM: bool> SchedulerRoleStorage for TestStorage<DTM> {
+    const KIND: SchedulerRoleKind = if DTM {
+        SchedulerRoleKind::DirectTestMode
+    } else {
+        SchedulerRoleKind::LegacyScanning
+    };
     const ITEMS: usize = 2;
     const NUMBERS: usize = 1;
     const NEW: Self = Self {
@@ -333,4 +337,33 @@ fn the_last_populated_pool_of_a_kind_resolves_without_falling_back() {
     let reversed = SchedulerItemSpace::new().with(&last).with(&first);
     assert_eq!(reversed.listed_item(a_link), Some(a));
     assert_eq!(reversed.listed_item(b_link), None);
+}
+
+#[test]
+fn lookup_follows_role_order_independent_of_composition_order() {
+    let mut scanner = pool();
+    let instance = scanner.acquire().expect("scanner slot");
+    prepare(&mut scanner, &instance);
+    let scan = scanner.submit(&instance, 0).expect("scanner prepared");
+    // Two independent host models intentionally give their storage the same
+    // controller link, to make the tie-breaking order observable.
+    let mut dtm = SchedulerRolePool::<'static, 'static, TestStorage<true>, 1>::place::<
+        crate::bluetooth::engine::HostDma<0x2f00_1000>,
+    >(
+        crate::dma_static::Placed::host(Box::leak(Box::new(SchedulerRolePoolStorage::<
+            TestStorage<true>,
+            1,
+        >::zeroed()))),
+        config().direct_test_mode(),
+    )
+    .expect("DTM pool fits");
+    let instance = dtm.acquire().expect("DTM slot");
+    *dtm.cpu(&instance).expect("quiescent").state = 1;
+    let test = dtm.submit(&instance, 0).expect("DTM prepared");
+    let forward = SchedulerItemSpace::new().with(&dtm).with(&scanner);
+    let reverse = SchedulerItemSpace::new().with(&scanner).with(&dtm);
+    let link = forward.link(test);
+    assert_eq!(forward.link(scan), link);
+    assert_eq!(forward.listed_item(link), Some(test));
+    assert_eq!(reverse.listed_item(link), Some(test));
 }

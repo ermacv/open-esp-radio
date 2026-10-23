@@ -22,8 +22,8 @@ use oer_bluetooth_le_radio::{LeInstant, LeWindow, RadioDuration, RadioTiming, Te
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerStop,
     engine::{
-        ArenaMemory, DtmSchedulerFrequency, DtmSchedulerItemCompletionStatus, EngineStopStep,
-        LeTxPower, SchedulerRoleInstance,
+        ArenaMemory, DtmSchedulerFrequency, DtmSchedulerItemCompletionStatus, LeTxPower,
+        SchedulerRoleInstance,
         scheduler::{SchedulerNext, SchedulerRawWindow, interrupt::SchedulerDoorbell},
     },
 };
@@ -79,6 +79,7 @@ pub struct Runner<'pool, 'epoch, X: SignalExecutor, D, T, C> {
     epoch: Option<ControllerSchedulerEpoch>,
     last_time: Option<(u32, u64, Instant)>,
     faulted: bool,
+    stop: BluetoothSchedulerStop,
 }
 impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockRequests>
     Runner<'pool, 'epoch, X, D, T, C>
@@ -114,6 +115,7 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
             epoch: None,
             last_time: None,
             faulted: false,
+            stop: BluetoothSchedulerStop::default(),
         }
     }
     pub fn installation(&mut self) -> u32 {
@@ -147,23 +149,24 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
         if self.task.task_owner().engine().scheduler_is_stopped() {
             return Ok(());
         }
-        let mut progress = BluetoothSchedulerStop::default();
         loop {
             self.service_clock().await?;
             let step = guard(
                 self.cancel,
                 &self.timer,
                 deadline,
-                self.task
-                    .task_owner()
-                    .engine()
-                    .step_stop(&self.doorbell, progress),
+                poll_fn(|cx| {
+                    self.task
+                        .task_owner()
+                        .engine()
+                        .poll_stop(&self.doorbell, &mut self.stop, cx)
+                }),
             )
             .await?
             .map_err(|_| Fault::Hardware)?;
-            match step {
-                EngineStopStep::Stopped => return Ok(()),
-                EngineStopStep::Pending(next) => progress = next,
+            if step {
+                self.stop = BluetoothSchedulerStop::default();
+                return Ok(());
             }
             let at = self
                 .timer
@@ -528,7 +531,8 @@ impl<'pool, 'epoch, X: SignalExecutor, D: SchedulerDoorbell, T: Timer, C: ClockR
     pub fn into_stopped(
         self,
     ) -> Result<ControllerPoweredTaskRuntime<'static, X, Memory<'pool, 'epoch>>, Self> {
-        if self.instance.is_some()
+        if self.stop.is_pending()
+            || self.instance.is_some()
             || self.etm.is_some()
             || self.config.is_some()
             || self.faulted
