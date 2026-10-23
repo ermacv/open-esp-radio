@@ -693,7 +693,7 @@ impl<S: SchedulerRoleStorage, const N: usize> SchedulerItemSource
 
 /// Sealed, statically dispatched pool set for one scheduler item space.
 #[doc(hidden)]
-pub trait SchedulerItemSources: sealed::Sealed {
+pub(crate) trait SchedulerItemSources: sealed::Sealed {
     fn item_link(&self, id: SchedulerItemId) -> Option<ControllerSramLinkAddress>;
     fn item_layout(&self, id: SchedulerItemId) -> Option<&BleSchedulerItem>;
     fn listed_item(
