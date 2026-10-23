@@ -601,3 +601,36 @@ fn writable_psram_growth_is_reported_while_sram_growth_stops() {
     runtime(&mut c).sections.get_mut(".data").unwrap().bytes += 4;
     assert_eq!(compare(&a, &c).unwrap().0, Verdict::Stop);
 }
+
+#[test]
+fn a_composition_uses_the_sum_without_weakening_same_image_provenance() {
+    let a = summary();
+    let mut b = a.clone();
+    b.provenance.package = "system".into();
+    b.provenance.features.push("system".into());
+    let mut head = a.clone();
+    head.provenance.package = "station-agent".into();
+    runtime(&mut head).sections.get_mut(".data").unwrap().bytes = 200;
+    runtime(&mut head).sections.get_mut(".bss").unwrap().bytes = 400;
+    runtime(&mut head)
+        .allocated_stacks
+        .insert("cpu0".into(), 16384);
+    assert!(compare(&a, &head).is_err());
+    assert_eq!(
+        composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
+        Verdict::Report
+    );
+    *runtime(&mut head).allocated_stacks.get_mut("cpu0").unwrap() += 1;
+    assert_eq!(
+        composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
+        Verdict::Stop
+    );
+    *runtime(&mut head).allocated_stacks.get_mut("cpu0").unwrap() -= 1;
+    runtime(&mut head).sections.get_mut(".bss").unwrap().bytes += 1;
+    assert_eq!(
+        composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
+        Verdict::Stop
+    );
+    head.provenance.rustc = "different compiler".into();
+    assert!(composition(&[a, b], &head).is_err());
+}
