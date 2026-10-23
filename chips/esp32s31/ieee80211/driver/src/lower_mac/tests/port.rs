@@ -22,7 +22,7 @@ use std::{
 };
 
 #[derive(Clone)]
-struct TestTimer(Rc<oer_time_virtual::VirtualClock>);
+struct TestTimer(Rc<oer_time_virtual::VirtualClock>, Rc<Cell<bool>>);
 impl Clock for TestTimer {
     fn now(&self) -> Instant {
         self.0.now()
@@ -30,7 +30,17 @@ impl Clock for TestTimer {
 }
 impl Timer for TestTimer {
     async fn wait_until(&self, deadline: Instant) {
-        self.0.wait_until(deadline).await
+        let mut wait = pin!(self.0.wait_until(deadline));
+        core::future::poll_fn(|cx| {
+            if self.1.get() {
+                // The strict-priority model dispatches due timers itself:
+                // advancing a device step must not wake every future timer.
+                wait.as_mut().poll(&mut Context::from_waker(Waker::noop()))
+            } else {
+                wait.as_mut().poll(cx)
+            }
+        })
+        .await
     }
 }
 
@@ -57,6 +67,11 @@ struct Observed {
     resumed_cuts: usize,
     backoffs: Vec<u16>,
     received: std::collections::VecDeque<TestReceive>,
+    continuous_rx: bool,
+    rx_continuation: Option<Instant>,
+    rx_poll_steps: usize,
+    rx_saturated_polls: usize,
+    rx_delivered: usize,
 }
 struct Payload(Rc<Cell<usize>>);
 #[derive(Debug)]
@@ -167,7 +182,7 @@ impl Device<512> for TestDevice {
         &self.timer
     }
     fn next_deadline(&self) -> Option<Instant> {
-        None
+        self.observed.borrow().rx_continuation
     }
     fn take_power_profile(&mut self) -> Option<Self::Power> {
         None
@@ -209,12 +224,43 @@ impl Device<512> for TestDevice {
         _: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<TestReceive>, Fault>> {
         self.assert_driver_context();
-        self.observed.borrow_mut().device_polls += 1;
+        let mut observed = self.observed.borrow_mut();
+        observed.device_polls += 1;
+        suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
+        if observed.continuous_rx {
+            observed.rx_poll_steps += 1;
+            assert!(
+                observed.rx_poll_steps <= 32,
+                "P2 must return to its executor"
+            );
+            observed.rx_saturated_polls += usize::from(receive_room == 0);
+            self.timer
+                .0
+                .advance(oer_time::Duration::from_micros(10))
+                .expect("finite model device step");
+        }
         if receive_room != 0 {
-            if let Some(frame) = self.observed.borrow_mut().received.pop_front() {
+            if let Some(frame) = observed.received.pop_front() {
+                if observed.continuous_rx {
+                    observed.rx_delivered += 1;
+                    if observed.rx_delivered.is_multiple_of(4) {
+                        observed.rx_continuation = Some(
+                            self.timer
+                                .now()
+                                .saturating_add(crate::rx::receive::CONTINUATION_WAIT),
+                        );
+                    }
+                }
                 return Poll::Ready(Ok(DeviceEvent::Receive(frame)));
             }
+            if observed
+                .rx_continuation
+                .is_some_and(|at| self.timer.now() >= at)
+            {
+                observed.rx_continuation = None;
+            }
         }
+        drop(observed);
         let publications = self.hardware.publications();
         self.observed.borrow_mut().backoffs = self
             .hardware
@@ -294,6 +340,7 @@ type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
 mod barriers;
+mod rx_capacity;
 
 fn installed(
     statuses: Vec<(u8, u8)>,
@@ -305,7 +352,10 @@ fn installed_with_hardware(
     statuses: Vec<(u8, u8)>,
     hardware: Hardware,
 ) -> (PortParts<TestDevice, 512>, Rc<RefCell<Observed>>, TestTimer) {
-    let timer = TestTimer(Rc::new(oer_time_virtual::VirtualClock::new()));
+    let timer = TestTimer(
+        Rc::new(oer_time_virtual::VirtualClock::new()),
+        Rc::new(Cell::new(false)),
+    );
     let observed = Rc::new(RefCell::new(Observed {
         statuses,
         ..Observed::default()
