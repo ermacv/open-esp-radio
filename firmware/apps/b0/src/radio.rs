@@ -42,7 +42,11 @@ use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 use oer_time::{Clock, Duration, Timer};
 
-type Shared = Esp32s31Radio<EspHalClocks, EmbassyClock, NoopPhyTargetObserver>;
+type Shared = Esp32s31Radio<
+    EspHalClocks,
+    oer_espressif_executor::Cooperative<EmbassyClock>,
+    NoopPhyTargetObserver,
+>;
 type Actor = RadioSystem<Wifi, RcSlow, Shared, EmbassyClock>;
 type Arena = BluetoothArena<0, 0, 0, 0, 0, 0>;
 mod lifecycle;
@@ -160,7 +164,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         domain,
         parts.wifi_coex,
         clocks,
-        EmbassyClock,
+        oer_espressif_executor::Cooperative::new(EmbassyClock),
         NoopPhyTargetObserver,
         PhyRegisterConfig::new(identity),
     );
