@@ -1,13 +1,17 @@
 use esp_hal::usb::usb_serial_jtag::{UsbSerialJtag, UsbSerialJtagRx, UsbSerialJtagTx};
-use oer_hil_agent::console::Console;
+use oer_hil_agent::console::{Console, Immediate};
 use oer_hil_protocol::base::{BootEvidence, PostMortemCheckpoints, ResetReason};
 
-fn rom_line(line: &core::ffi::CStr) {
-    oer_esp32s31_board::rom::line(line);
+pub(crate) struct RomLine;
+
+impl Immediate for RomLine {
+    fn print(line: &core::ffi::CStr) {
+        oer_esp32s31_board::rom::line(line);
+    }
 }
 
 oer_espressif_staged_runtime::placed_static! {
-    pub(crate) static CONSOLE: Console<384, 8, 8> = Console::new(rom_line), in critical_data "logging";
+    pub(crate) static CONSOLE: Console<8, 8, RomLine> = Console::new(), in critical_data "logging";
 }
 
 pub struct Chip;

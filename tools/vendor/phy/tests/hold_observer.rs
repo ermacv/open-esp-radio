@@ -1,6 +1,8 @@
 // Exercise the actual image observer and root wrapper with a virtual clock/UART.
 #[path = "../../../../firmware/hil/esp32s31-phy/src/hold/metrics.rs"]
 mod metrics;
+#[path = "../../../../firmware/hil/esp32s31-phy/src/hold/notes.rs"]
+mod notes;
 #[path = "../../../../firmware/hil/esp32s31-phy/src/hold/observer.rs"]
 mod observer;
 #[path = "../../../../firmware/hil/esp32s31-phy/src/hold/recorder.rs"]
@@ -14,6 +16,8 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
+use notes::Notes;
+use oer_diagnostics::Note;
 use oer_esp32s31_phy::tracking::observation::{
     EngineTiming, Event, GainTiming, Operation, ReadinessTrace, RxGainExecution,
 };
@@ -21,17 +25,38 @@ use oer_hil_protocol::phy::HoldPolls;
 use oer_time::{Clock, Duration};
 use oer_time_virtual::VirtualClock;
 
+/// Runs a future that never waits.
+fn block<F: Future>(future: F) -> F::Output {
+    let mut future = pin!(future);
+    match future
+        .as_mut()
+        .poll(&mut Context::from_waker(Waker::noop()))
+    {
+        Poll::Ready(output) => output,
+        Poll::Pending => panic!("a report waited"),
+    }
+}
+
 struct Uart<'a> {
     active: &'a Cell<bool>,
     returned: &'a Cell<bool>,
     bytes: &'a RefCell<String>,
 }
-impl core::fmt::Write for Uart<'_> {
-    fn write_str(&mut self, value: &str) -> core::fmt::Result {
+impl Notes for Uart<'_> {
+    async fn note(&mut self, note: &Note<'static>) {
         assert!(!self.active.get(), "UART inside a measured interval");
         assert!(self.returned.get(), "UART before root return");
-        self.bytes.borrow_mut().push_str(value);
-        Ok(())
+        let mut text = self.bytes.borrow_mut();
+        oer_diagnostics::render::note(note, &mut *text).expect("renderable note");
+        text.push('\n');
+    }
+}
+
+/// A sink that records how many notes arrived.
+struct Counted(usize);
+impl Notes for Counted {
+    async fn note(&mut self, _: &Note<'static>) {
+        self.0 += 1;
     }
 }
 
@@ -162,9 +187,9 @@ fn check_quiet_root(failed: bool) {
         assert!(bytes.borrow().is_empty());
     }
     returned.set(true);
-    observer.report(1);
+    block(observer.report(1));
     let sample = observer.recorder.finish(7, failed);
-    metrics::report(1, &metrics.borrow(), &mut uart).expect("UART output");
+    block(metrics::report(1, &metrics.borrow(), &mut uart));
     assert_eq!(sample.invalid, failed);
     assert_eq!(sample.intervals.len(), 5);
     assert_eq!(aggregate.polls, 18);
@@ -175,7 +200,19 @@ fn check_quiet_root(failed: bool) {
     assert!(output.contains("gain-parts family=2 lower-us=2 arithmetic-us=3 publication-us=4"));
     assert!(output.contains("gain-parts family=4 lower-us=2 arithmetic-us=3 publication-us=4"));
     assert!(output.contains("hold-poll tick=1 op=0 polls=2 pending=1 resumes=1"));
-    assert!(output.contains("sar_tail"));
+    // The tails are three kinds of note, in this order, and each prints.
+    let tails: Vec<&str> = output
+        .lines()
+        .filter(|line| line.starts_with("OPEN_RADIO_HIL sar_tail"))
+        .collect();
+    assert_eq!(tails.len(), 3 + 4 + 1);
+    assert!(tails[0].starts_with("OPEN_RADIO_HIL sar_tail tick=1 first=0 bins=0,0,1,0,0,0"));
+    assert!(tails[2].starts_with("OPEN_RADIO_HIL sar_tail tick=1 first=12 bins="));
+    assert!(tails[3].starts_with("OPEN_RADIO_HIL sar_tail tick=1 first=0 largest=3,0"));
+    assert_eq!(
+        tails[7],
+        "OPEN_RADIO_HIL sar_tail tick=1 total=1 expired=0 max_observations=2"
+    );
     assert!(output.contains("calibration-atom family=6"));
     assert!(output.contains("calibration-atom family=8"));
     assert!(output.contains("rx-gain-parts lower-us=2 hardware-us=3 commit-us=4"));
@@ -208,14 +245,14 @@ fn observer_defers_all_uart_until_failed_root_return() {
 fn channel_observation_overflow_invalidates_the_hold_without_early_uart() {
     let clock = VirtualClock::<1>::new();
     let mut aggregate = HoldPolls::default();
-    let mut output = String::new();
+    let mut output = Counted(0);
     {
         let mut observer = observer::Observer::new(1, &mut aggregate, None, &clock, &mut output);
         for _ in 0..33 {
             observer.channel_action_completed(14, &EngineTiming::default(), [0, 8]);
         }
     }
-    assert!(output.is_empty());
+    assert_eq!(output.0, 0);
     assert!(aggregate.invalid);
 }
 

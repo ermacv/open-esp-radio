@@ -107,6 +107,17 @@ pub enum BtbbError {
     Stale,
 }
 
+impl oer_diagnostics::DiagnosticPath for BtbbError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        path.name(match self {
+            Self::AlreadyAcquired => "AlreadyAcquired",
+            Self::NotAcquired => "NotAcquired",
+            Self::Unregistered => "Unregistered",
+            Self::Stale => "Stale",
+        });
+    }
+}
+
 /// The BTBB gain byte (`phy_param[0x120]`) one registered PHY state published
 /// to the domain ([`BtbbPublisher::publish`]). Only the latest
 /// publication of the current registration admits [`RadioDomain::btbb_acquire`];
@@ -265,6 +276,17 @@ pub enum ModemClockError {
     /// A platform clock request failed at a physical edge; modem clocks are
     /// poisoned until reset.
     Poisoned,
+}
+
+impl oer_diagnostics::DiagnosticPath for ModemClockError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        path.name(match self {
+            Self::AlreadyEnabled => "AlreadyEnabled",
+            Self::NotEnabled => "NotEnabled",
+            Self::Rejected => "Rejected",
+            Self::Poisoned => "Poisoned",
+        });
+    }
 }
 
 /// Modem clock modules the shared PHY domain requests for itself.

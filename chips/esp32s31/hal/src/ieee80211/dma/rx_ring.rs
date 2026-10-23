@@ -129,6 +129,26 @@ pub enum RxRingError {
     ResetRequired,
 }
 
+impl oer_diagnostics::DiagnosticPath for RxRingError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        path.name(match self {
+            Self::Empty => "Empty",
+            Self::Count => "Count",
+            Self::Address => "Address",
+            Self::DescriptorOwnerAddress => "DescriptorOwnerAddress",
+            Self::Size => "Size",
+            Self::Overflow => "Overflow",
+            Self::OutstandingLeases => "OutstandingLeases",
+            Self::BufferOwnershipConflict => "BufferOwnershipConflict",
+            Self::ReloadPending => "ReloadPending",
+            Self::WalkerStartUnconfirmed => "WalkerStartUnconfirmed",
+            Self::WalkerStopUnconfirmed => "WalkerStopUnconfirmed",
+            Self::Corrupt => "Corrupt",
+            Self::ResetRequired => "ResetRequired",
+        });
+    }
+}
+
 /// One allocation-free observation of an RX descriptor.
 ///
 /// The snapshot copies volatile words once. It is intended for qualification

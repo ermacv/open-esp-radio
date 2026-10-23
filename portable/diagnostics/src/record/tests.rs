@@ -70,7 +70,8 @@ fn raw_panic_round_trip_is_independent_of_any_frame() {
         message: Some(&message),
     });
     let bytes = encoded(&record);
-    assert_eq!(bytes.len(), MAX_RECORD_BYTES);
+    assert_eq!(bytes.len(), 1 + 16 + 48 + 64);
+    assert!(bytes.len() <= MAX_RECORD_BYTES);
     assert_eq!(decode(&bytes), Ok(record));
 }
 

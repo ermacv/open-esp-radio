@@ -380,6 +380,19 @@ pub enum TargetPhyParamTrackingError {
     MissingCompletedOwner,
 }
 
+impl oer_diagnostics::DiagnosticPath for TargetPhyParamTrackingError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        match self {
+            Self::EpochMismatch => path.name("EpochMismatch"),
+            Self::Run(error) => {
+                path.name("Run");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+            Self::MissingCompletedOwner => path.name("MissingCompletedOwner"),
+        }
+    }
+}
+
 /// The leaf completer of the target ports, waiting on their timer.
 struct TargetCompleter<'t, D, T> {
     timer: &'t T,

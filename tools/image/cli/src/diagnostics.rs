@@ -3,30 +3,34 @@
 
 use std::borrow::Cow;
 
+use oer_diagnostics::render::{Gap, Next};
 use oer_diagnostics::{BootSmokePassed, MAX_PAYLOAD, Record};
 use oer_espressif_esp_hal_radio::diagnostics::RadioRoot;
 use oer_trace::Event;
 
 #[derive(Default)]
 pub(crate) struct Decoder {
-    next: u32,
+    stream: oer_diagnostics::render::Stream,
 }
 
 impl Decoder {
     pub(crate) fn line<'a>(&mut self, line: &'a [u8]) -> oer_image_build::Result<Cow<'a, str>> {
         if oer_lab_board::console::is_reset_line(&String::from_utf8_lossy(line)) {
-            self.next = 0;
+            self.stream.restart();
         }
         let mut scratch = [0; MAX_PAYLOAD + 7];
-        let decoded = oer_diagnostics::decode(line, &mut scratch)
+        let decoded = self
+            .stream
+            .line(line, &mut scratch)
             .map_err(|error| format!("boot diagnostic decode error: {error:?}"))?;
-        let Some((sequence, record)) = decoded else {
+        let Some(Next { gap, record }) = decoded else {
             return Ok(String::from_utf8_lossy(line));
         };
-        let expected = self.next;
-        self.next = sequence.wrapping_add(1);
-        if sequence != expected {
-            return Err(format!("boot diagnostic loss/order error: expected sequence {expected}, received {sequence}").into());
+        if let Some(Gap { expected, received }) = gap {
+            return Err(format!(
+                "boot diagnostic loss/order error: expected sequence {expected}, received {received}"
+            )
+            .into());
         }
         Ok(Cow::Owned(match record {
             Record::PreviousPanic(panic) => {
@@ -45,6 +49,12 @@ impl Decoder {
                     Some(message) => text.push_str(&format!(": {message}")),
                     None => text.push_str(" (formatted message not kept)"),
                 }
+                text
+            }
+            Record::Note(note) => {
+                let mut text = String::new();
+                oer_diagnostics::render::note(&note, &mut text)
+                    .map_err(|_| format!("boot diagnostic note does not render: {note:?}"))?;
                 text
             }
             Record::Event { kind, words } => {

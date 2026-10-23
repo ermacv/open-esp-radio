@@ -11,5 +11,9 @@ description = "Typed boot diagnostics over the line console, without target form
 [dependencies]
 oer-trace = { path = "../trace" }
 
+[features]
+# The host's text for notes; firmware never enables it.
+render = []
+
 [lints]
 workspace = true

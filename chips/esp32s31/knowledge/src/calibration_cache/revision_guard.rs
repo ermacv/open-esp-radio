@@ -329,6 +329,7 @@ fn calibration_or_replay_changes_require_a_reviewed_revision() {
         (2, 1) => "4e9a61acd06a95e0a9c13ee09dfcab05cb6d0799f2eac7a5abcf9f0b0ea8ea68",
         (3, 1) => "da5fb1d69371d0676bfb8cdc55fd0c6df2e2081e9a72fafa17ba3590a0836615",
         (4, 1) => "008f6c5f0a501640c21ce9111f3ac731b3e62a5d8cc9860cffb32513ba127004",
+        (5, 1) => "e79bed368e93dd2199efa0d19479c5f67a889a900755dded76a5f429b4bcf630",
         _ => panic!(
             "unreviewed calibration revision/profile {revision:?}; digest {actual}; review INPUTS and add a new pair in revision_guard.rs"
         ),

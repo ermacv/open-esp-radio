@@ -1,5 +1,6 @@
 //! Image-local RX diagnostic assembly; no block runtime API.
 use crate::MacToken;
+use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::{CoexAbsent, Coexisting, CommonPower, Ieee802154Client, RadioDomain},
@@ -142,15 +143,13 @@ impl Rx {
             return Err(RejectReason::Internal);
         };
         let joined = join_ieee802154(available, &clocked, &crate::PHY_CLOCK).map_err(|error| {
-            oer_esp32s31_board::rom::print_fmt(format_args!(
-                "OPEN_RADIO_HIL phy=FAIL step=154-join error={error:?}\n"
-            ));
+            crate::transport::CONSOLE
+                .note_immediately(&Note::ieee802154_join_fail(&DiagPath::of(&error)));
             RejectReason::Internal
         })?;
-        oer_esp32s31_board::rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL phy=joined acquired={:?}\n",
-            joined.acquired
-        ));
+        crate::transport::CONSOLE
+            .note_reliably(&Note::joined(&DiagPath::of(&joined.acquired)))
+            .await;
         let due = joined.acquired == ConcurrentAcquire::TrackingDue;
         let member = joined.membership;
         if due {
@@ -173,14 +172,13 @@ impl Rx {
                 &mut observer,
             )
             .await;
-            observer.report(0);
+            observer.report(0).await;
             #[cfg(oer_profile)]
-            crate::hold::report_timer(timer_window);
-            crate::hold::report_preparation(&trace, &polls);
+            crate::hold::report_timer(timer_window).await;
+            crate::hold::report_preparation(&trace, &polls).await;
             result.map_err(|error| {
-                oer_esp32s31_board::rom::print_fmt(format_args!(
-                    "OPEN_RADIO_HIL phy=FAIL step=154-maintain error={error:?}\n"
-                ));
+                crate::transport::CONSOLE
+                    .note_immediately(&Note::ieee802154_maintain_fail(&DiagPath::of(&error)));
                 RejectReason::Internal
             })?;
         }

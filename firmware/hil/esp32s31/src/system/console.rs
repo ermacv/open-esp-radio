@@ -32,7 +32,6 @@ pub(crate) fn start(
     #[cfg(not(feature = "usb-jtag-off"))]
     let _pads = pads;
     CONSOLE.start(boot);
-    crate::transport::init_logger();
     executor.run(wake, |spawner| {
         spawner.spawn(test_watchdog(service).expect("system watchdog test task"));
         spawner.spawn(super::panic::panic_on_request().expect("panic task"));

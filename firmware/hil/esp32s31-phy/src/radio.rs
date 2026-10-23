@@ -1,5 +1,6 @@
 use crate::{Answer, WireRequest as Request, projection};
 use esp_hal::rng::RngOwner;
+use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     domain::{CoexAbsent, Coexisting, CommonPower, RadioDomain, WifiClient},
@@ -382,9 +383,7 @@ impl Radio {
         let outcome = match outcome {
             Ok(outcome) => outcome,
             Err(_) => {
-                crate::transport::CONSOLE
-                    .line_reliably(format_args!("OPEN_RADIO_HIL phy=FAIL step=registration"))
-                    .await;
+                oer_esp32s31_board::rom::line(c"OPEN_RADIO_HIL phy=FAIL step=registration");
                 return Err(RejectReason::Internal);
             }
         };
@@ -397,9 +396,9 @@ impl Radio {
         )
         .unwrap_or(u32::MAX);
         crate::transport::CONSOLE
-            .line_reliably(format_args!(
-                "OPEN_RADIO_HIL phy=registration full={} path={:?}",
-                outcome.full_calibration_performed, outcome.calibration_path
+            .note_reliably(&Note::registration(
+                outcome.full_calibration_performed,
+                &DiagPath::of(&outcome.calibration_path),
             ))
             .await;
         self.full_calibration_performed = outcome.full_calibration_performed;
@@ -438,7 +437,12 @@ impl Radio {
             registration_us,
         )?;
         crate::transport::CONSOLE
-            .line_reliably(format_args!("OPEN_RADIO_HIL phy=enter config={config:?}"))
+            .note_reliably(&match config.radio {
+                CaptureRadio::Wifi => Note::enter_wifi(config.channel.into()),
+                CaptureRadio::Ieee802154 { power_dbm } => {
+                    Note::enter_ieee802154(config.channel.into(), power_dbm.into())
+                }
+            })
             .await;
         self.enter_capture(config).await?;
         let lifecycle = match config.radio {
@@ -535,19 +539,21 @@ impl Radio {
             }
             failure => {
                 // Terminal diagnostic evidence only, outside every measured interval.
-                oer_esp32s31_board::rom::print_fmt(format_args!(
-                    "OPEN_RADIO_HIL hold=FAIL tick={} result={failure:?}\n",
-                    hold.samples.len() + 1,
-                ));
+                crate::transport::CONSOLE
+                    .note_reliably(&Note::hold_fail(
+                        hold.samples.len() as u32 + 1,
+                        &DiagPath::of(&failure),
+                    ))
+                    .await;
                 self.poisoned = true;
                 (0, true)
             }
         };
-        observer.report(hold.samples.len() as u8 + 1);
+        observer.report(hold.samples.len() as u8 + 1).await;
         let recorder = observer.recorder;
-        crate::hold::metrics::report(hold.samples.len() as u8 + 1, &metrics.borrow(), &mut uart)
-            .expect("diagnostic UART output");
-        crate::hold::report_preparation(&trace, &hold.engine);
+        let measured = *metrics.borrow();
+        crate::hold::metrics::report(hold.samples.len() as u8 + 1, &measured, &mut uart).await;
+        crate::hold::report_preparation(&trace, &hold.engine).await;
         crate::hold::finish_sample(hold, recorder, committed, failed);
     }
 
@@ -796,9 +802,27 @@ pub fn poll_registration<F: core::future::Future>(
 
 #[inline(never)]
 async fn report_capture_stop(observed: &Result<()>, closed: &Result<()>, rf_closed: bool) {
-    crate::transport::CONSOLE.line_reliably(format_args!(
-        "OPEN_RADIO_HIL capture-stop observation={observed:?} close={closed:?} rf-closed={rf_closed}"
-    )).await;
+    crate::transport::CONSOLE
+        .note_reliably(&Note::capture_stop(
+            outcome_name(observed),
+            outcome_name(closed),
+            rf_closed,
+        ))
+        .await;
+}
+
+/// `Ok` or the rejection's name, for the capture-stop note.
+fn outcome_name(result: &Result<()>) -> &'static str {
+    match result {
+        Ok(()) => "Ok",
+        Err(RejectReason::BootId) => "BootId",
+        Err(RejectReason::SessionId) => "SessionId",
+        Err(RejectReason::InvalidState) => "InvalidState",
+        Err(RejectReason::InvalidConfiguration) => "InvalidConfiguration",
+        Err(RejectReason::Unsupported) => "Unsupported",
+        Err(RejectReason::Busy) => "Busy",
+        Err(RejectReason::Internal) => "Internal",
+    }
 }
 
 struct Sources<'a> {

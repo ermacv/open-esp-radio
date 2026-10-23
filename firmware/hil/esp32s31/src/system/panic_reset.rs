@@ -17,7 +17,6 @@ pub(crate) fn start(
     let mut entropy = oer_espressif_esp_hal_soc::entropy::Entropy::new(rng);
     let boot = u64::from_le_bytes(entropy.random_bytes().expect("HIL boot entropy")).max(1);
     CONSOLE.start(boot);
-    crate::transport::init_logger();
     executor.run(wake, |spawner| {
         spawner.spawn(super::panic::panic_on_request().expect("panic-reset task"));
         spawner.spawn(run(usb, boot).expect("system console task"));

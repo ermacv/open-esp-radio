@@ -9,8 +9,10 @@ executor of `oer-espressif-executor` on the image's interrupt table.
 `boot-smoke` reports `OPEN_RADIO_HIL hal=INIT`
 after esp-hal initialization, `OPEN_RADIO_HIL embassy=START` once the
 executor runs, and `OPEN_RADIO_HIL boot-smoke=PASS timer=PASS` after one
-timer wake, on the USB Serial/JTAG console. It does not speak the HIL wire
-protocol. The runner builds it for the `boot-smoke` scenario through the
+timer wake, on the USB Serial/JTAG console. Its `rearm` and failure lines
+are typed `OER-DIAG:01` diagnostic notes that the host renders into these
+lines ([diagnostics](../../../portable/diagnostics/README.md)). It does not
+speak the HIL wire protocol. The runner builds it for the `boot-smoke` scenario through the
 image pipeline and flashes the bundle at the chip profile's `[flash]` offsets.
 The write leaves the ROM in download mode, and an RTS reset out of it starts
 the image with its USB console silent (the host reads EOF); the runner starts

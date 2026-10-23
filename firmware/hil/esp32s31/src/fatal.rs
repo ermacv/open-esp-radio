@@ -8,6 +8,7 @@
 //! resets, and the next boot's [`report_previous`] prints the record once.
 
 use esp_hal::system::Cpu;
+use oer_diagnostics::Note;
 use oer_esp32s31_board::rom;
 use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 
@@ -189,22 +190,19 @@ pub(crate) fn report_previous() {
         ..
     } = *slot;
     if slot.kind == EXCEPTION {
-        rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL runtime=EXCEPTION boot=previous hart={hart} mcause={mcause:08x} mepc={mepc:08x} mtval={mtval:08x} ra={ra:08x} mscratch={mscratch:08x}\r\n"
+        rom::note(&Note::fatal_exception(
+            hart, mcause, mepc, mtval, ra, mscratch,
         ));
     } else {
-        rom::print_fmt(format_args!(
-            "OPEN_RADIO_HIL runtime=PANIC boot=previous hart={hart} stage={stage} mcause={mcause:08x} mepc={mepc:08x} mtval={mtval:08x}\r\n"
-        ));
+        rom::note(&Note::fatal_panic(hart, stage, mcause, mepc, mtval));
     }
-    rom::print_fmt(format_args!(
-        "fatal irq_vector vector={} line={line:08x} mtvec={mtvec:08x} mtvt={mtvt:08x} slot={mtvt_slot:08x}\r\n",
-        mcause & 0x0fff
+    rom::note(&Note::fatal_irq_vector(
+        mcause & 0x0fff,
+        line,
+        mtvec,
+        mtvt,
+        mtvt_slot,
     ));
-    rom::print_fmt(format_args!(
-        "fatal irq_pending words={p0:08x},{p1:08x},{p2:08x},{p3:08x},{p4:08x},{p5:08x}\r\n"
-    ));
-    rom::print_fmt(format_args!(
-        "fatal irq_routed words={r0:08x},{r1:08x},{r2:08x},{r3:08x},{r4:08x},{r5:08x}\r\n"
-    ));
+    rom::note(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5));
+    rom::note(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5));
 }

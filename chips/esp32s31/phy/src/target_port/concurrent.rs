@@ -118,6 +118,21 @@ pub enum ConcurrentPhyTrackingError {
     Failed(TargetPhyParamTrackingError),
 }
 
+impl oer_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        match self {
+            Self::Rejected(error) => {
+                path.name("Rejected");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+            Self::Failed(error) => {
+                path.name("Failed");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+        }
+    }
+}
+
 /// Register the shared PHY domain through the radio domain's shared-PHY borrow.
 ///
 /// This is the calibrating first `esp_phy_enable`: `PHY` and
@@ -433,6 +448,24 @@ pub enum ConcurrentTrackingTick {
     /// The domain cannot track now (not registered, RF closed, or poisoned);
     /// nothing changed.
     Unavailable(ConcurrentPhyError),
+}
+
+impl oer_diagnostics::DiagnosticPath for ConcurrentTrackingTick {
+    /// A completed tick names its variant and marks the path truncated: the
+    /// outcome's fields are not part of a failure path.
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        match self {
+            Self::NotDue => path.name("NotDue"),
+            Self::Tracked(_) => {
+                path.name("Tracked");
+                path.truncated();
+            }
+            Self::Unavailable(error) => {
+                path.name("Unavailable");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+        }
+    }
 }
 
 /// One tick of ESP-IDF's periodic `phy_track_pll`: evaluate the clients'

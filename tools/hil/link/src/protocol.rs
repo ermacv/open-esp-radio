@@ -464,7 +464,10 @@ impl SerialCapture {
             .bytes
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        contains(bytes.get(mark..).unwrap_or_default(), text.as_bytes())
+        contains(
+            &console_text::render(bytes.get(mark..).unwrap_or_default(), mark == 0),
+            text.as_bytes(),
+        )
     }
 
     pub fn latest_boot_id(&self) -> Option<u64> {
@@ -652,7 +655,7 @@ pub(crate) type DrainedProfile = (
 
 /// Whether console bytes show a chip starting: the ROM banner or the ESP-IDF
 /// bootloader's lines.
-fn console_shows_boot(bytes: &[u8]) -> bool {
+pub(crate) fn console_shows_boot(bytes: &[u8]) -> bool {
     [b"ESP-ROM:".as_slice(), b" boot: ".as_slice()]
         .iter()
         .any(|marker| contains(bytes, marker))

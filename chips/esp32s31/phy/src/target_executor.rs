@@ -223,6 +223,20 @@ pub enum PhyTargetPortError {
     DeadlineOverflow,
 }
 
+impl oer_diagnostics::DiagnosticPath for PhyTargetPortError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        path.name(match self {
+            Self::HardwareEdgeTimedOut => "HardwareEdgeTimedOut",
+            Self::HardwareCapabilityUnavailable => "HardwareCapabilityUnavailable",
+            Self::HardwareInvariant => "HardwareInvariant",
+            Self::RfOperationLimit => "RfOperationLimit",
+            Self::UnexpectedBinding => "UnexpectedBinding",
+            Self::RegistrationEpochMismatch => "RegistrationEpochMismatch",
+            Self::DeadlineOverflow => "DeadlineOverflow",
+        });
+    }
+}
+
 /// Complete the registration tail's bounded read-only PHY-I2C transaction.
 ///
 /// This leaf is deliberately distinct from the general I2C executor: the

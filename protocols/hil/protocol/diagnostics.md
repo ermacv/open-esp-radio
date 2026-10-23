@@ -17,8 +17,9 @@ thread context, the entry records the panic and resets the chip through
 reset and the record. The panic-reset image's panic entry has no HIL hook;
 the watchdog image's hook also records the panic as the post-mortem fault
 (`BootEvidence::post_mortem`) and, on the ESP32-S31, the fatal machine
-state, which the next boot prints through the ROM
-(`OPEN_RADIO_HIL runtime=PANIC boot=previous …`).
+state, which the next boot reports through the ROM as typed notes
+(`OER-DIAG:01` lines) that the host renders as
+`OPEN_RADIO_HIL runtime=PANIC boot=previous …`.
 
 `system::DisableUsb` is served only by the `diagnostic-usb-jtag-off` image
 (the system watchdog image with the agent's `usb-jtag-off` feature): it

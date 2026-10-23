@@ -2793,6 +2793,7 @@ name = "oer-esp32s31-board"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
+ "oer-diagnostics",
  "oer-esp32s31-layout",
  "oer-espressif-staged-layout",
  "oer-radio-regulatory",
@@ -2804,6 +2805,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "critical-section",
+ "oer-diagnostics",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-pac",
  "oer-espressif-analog",
@@ -2911,6 +2913,7 @@ name = "oer-esp32s31-phy"
 version = "0.1.0"
 dependencies = [
  "oer-cooperate",
+ "oer-diagnostics",
  "oer-esp32s31-hal",
  "oer-espressif-analog",
  "oer-time",
@@ -3292,6 +3295,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "esp-hal",
+ "oer-diagnostics",
  "oer-esp32c5-board",
  "oer-esp32c5-esp-hal-soc",
  "oer-esp32c5-layout",
@@ -3313,7 +3317,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "esp-hal",
- "log",
+ "oer-diagnostics",
  "oer-esp32s31-board",
  "oer-esp32s31-layout",
  "oer-espressif-esp-hal-irq",
@@ -3376,6 +3380,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "esp-hal",
  "heapless 0.9.3",
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-hal",
@@ -3483,7 +3488,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embedded-io-async 0.7.0",
  "heapless 0.9.3",
- "log",
+ "oer-diagnostics",
  "oer-hil-protocol",
  "oer-memory",
 ]
@@ -3606,6 +3611,7 @@ name = "oer-hil-link"
 version = "0.1.0"
 dependencies = [
  "mio",
+ "oer-diagnostics",
  "oer-hil-model",
  "oer-hil-protocol",
  "oer-lab-board",
@@ -4609,6 +4615,7 @@ dependencies = [
  "hex",
  "oer-analysis-elf",
  "oer-cooperate",
+ "oer-diagnostics",
  "oer-esp32s31-knowledge",
  "oer-esp32s31-phy",
  "oer-hil-lab",
