@@ -116,6 +116,12 @@ struct State {
     epoch: Option<RfEpoch>,
 }
 
+/// Client-neutral membership and RF epoch custody.
+struct ActorCore {
+    mint: MemberMint,
+    state: State,
+}
+
 /// The radio system's actor for the client `K`.
 pub struct RadioSystem<K: Client, S: LpSource, B, T, E = ()> {
     extra: E,
@@ -124,8 +130,7 @@ pub struct RadioSystem<K: Client, S: LpSource, B, T, E = ()> {
     lp: LpClock<S>,
     doorbell: &'static Doorbell,
     inbox: ClientInbox<K>,
-    mint: MemberMint,
-    state: State,
+    core: ActorCore,
 }
 
 impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wifi, S, B, T> {
@@ -143,8 +148,7 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wif
             doorbell,
             inbox: wifi,
             extra: (),
-            mint,
-            state: State::default(),
+            core: ActorCore { mint, state: State::default() },
         }
     }
 }
@@ -157,7 +161,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                 let answer = self.serve(request).await;
                 responder.answer(answer);
             }
-            let deadline = (!self.state.poisoned && self.state.tracked > 0)
+            let deadline = (!self.core.state.poisoned && self.core.state.tracked > 0)
                 .then(|| self.backend.tracking_deadline())
                 .flatten();
             let doorbell = self.doorbell;
@@ -192,15 +196,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
             lp: self.lp,
             doorbell: self.doorbell,
             inbox: self.inbox,
-            mint: self.mint,
-            state: self.state,
+            core: self.core,
             extra: self.extra,
         }
     }
 
     async fn tick(&mut self) {
         if self.backend.track_tick().await.is_err() {
-            self.state.poisoned = true;
+            self.core.state.poisoned = true;
         }
     }
 
@@ -211,7 +214,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
         match request {
             Request::Join(join) => Answer::Join(self.join::<Q>(join).await),
             Request::Track(member, track) => {
-                if self.state.poisoned {
+                if self.core.state.poisoned {
                     return Answer::Track(Err(Failed {
                         returned: (member, Q::track_returned(track)),
                         cause: Failure::Poisoned,
@@ -219,15 +222,15 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 }
                 Answer::Track(match self.backend.track(track).await {
                     Ok(payload) => {
-                        self.state.tracked += 1;
+                        self.core.state.tracked += 1;
                         Ok(TrackedMember {
-                            member: self.mint.track(member),
+                            member: self.core.mint.track(member),
                             payload,
                         })
                     }
                     Err(Failed { returned, cause }) => {
                         if cause == Failure::Poisoned {
-                            self.state.poisoned = true;
+                            self.core.state.poisoned = true;
                         }
                         Err(Failed {
                             returned: (member, returned),
@@ -237,7 +240,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                 })
             }
             Request::Retune(member, retune) => {
-                if self.state.poisoned {
+                if self.core.state.poisoned {
                     return Answer::Retune(Err(Failed {
                         returned: (member, Q::retune_returned(retune)),
                         cause: Failure::Poisoned,
@@ -247,7 +250,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
                     Ok(payload) => Ok(oer_esp32s31_radio_client::RetunedMember { member, payload }),
                     Err(Failed { returned, cause }) => {
                         if cause == Failure::Poisoned {
-                            self.state.poisoned = true;
+                            self.core.state.poisoned = true;
                         }
                         Err(Failed {
                             returned: (member, returned),
@@ -264,7 +267,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
     where
         B: ClientBackend<Q, S>,
     {
-        if self.state.poisoned {
+        if self.core.state.poisoned {
             return Err(Failed {
                 returned: Q::join_returned(join),
                 cause: Failure::Poisoned,
@@ -279,7 +282,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
         let phy = match self.backend.prepare().await {
             Ok(phy) => phy,
             Err(Fault) => {
-                self.state.poisoned = true;
+                self.core.state.poisoned = true;
                 return Err(Failed {
                     returned: Q::join_returned(join),
                     cause: Failure::Poisoned,
@@ -287,31 +290,31 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
             }
         };
         if phy != PhyPreparation::AlreadyOpen {
-            self.state.epoch = Some(self.mint.next_epoch(self.state.epoch));
+            self.core.state.epoch = Some(self.core.mint.next_epoch(self.core.state.epoch));
         }
         let epoch = self
             .state
             .epoch
-            .unwrap_or_else(|| self.mint.next_epoch(None));
-        self.state.epoch = Some(epoch);
+            .unwrap_or_else(|| self.core.mint.next_epoch(None));
+        self.core.state.epoch = Some(epoch);
         match self.backend.enter(join, phy, &self.lp).await {
             Ok(payload) => {
-                self.state.members += 1;
+                self.core.state.members += 1;
                 Ok(Joined {
-                    member: self.mint.untracked(),
+                    member: self.core.mint.untracked(),
                     epoch,
                     payload,
                 })
             }
             Err(Failed { returned, cause }) => {
                 if cause == Failure::Poisoned {
-                    self.state.poisoned = true;
-                } else if self.state.members == 0 {
+                    self.core.state.poisoned = true;
+                } else if self.core.state.members == 0 {
                     self.close_rf().await;
                 }
                 Err(Failed {
                     returned,
-                    cause: if self.state.poisoned {
+                    cause: if self.core.state.poisoned {
                         Failure::Poisoned
                     } else {
                         cause
@@ -326,19 +329,19 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
         B: ClientBackend<Q, S>,
     {
         if let Leaving::Tracked(_) = member {
-            self.state.tracked = self.state.tracked.saturating_sub(1);
+            self.core.state.tracked = self.core.state.tracked.saturating_sub(1);
         }
-        self.mint.retire(member);
+        self.core.mint.retire(member);
         let (payload, exit) = self.backend.exit(leave).await;
-        self.state.members = self.state.members.saturating_sub(1);
+        self.core.state.members = self.core.state.members.saturating_sub(1);
         if exit.health == DomainHealth::Poisoned {
-            self.state.poisoned = true;
-        } else if exit.last && !self.state.poisoned {
+            self.core.state.poisoned = true;
+        } else if exit.last && !self.core.state.poisoned {
             self.close_rf().await;
         }
         Left {
             payload,
-            domain: if self.state.poisoned {
+            domain: if self.core.state.poisoned {
                 DomainHealth::Poisoned
             } else {
                 DomainHealth::Healthy
@@ -350,7 +353,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer, E> RadioSystem<K,
         match self.backend.close_rf(LastClientLeft(())).await {
             // RF stays open: the next join finds it open in this epoch.
             Ok(()) | Err(CloseFault::Recoverable) => {}
-            Err(CloseFault::Poisoned) => self.state.poisoned = true,
+            Err(CloseFault::Poisoned) => self.core.state.poisoned = true,
         }
     }
 }
