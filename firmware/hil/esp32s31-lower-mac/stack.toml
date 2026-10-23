@@ -39,3 +39,6 @@ root = "_start_rust"
 bottom_symbol = "_stack_end"
 top_symbol = "_stack_start"
 minimum_free_bytes = 4096
+# The bootstrap jumps to stage two's entry and never uses its stack again;
+# the checks verify both facts in the ELFs.
+handoff = "_runtime_start"

@@ -104,6 +104,17 @@ impl Image {
     }
 }
 
+/// The file bytes of `function`: found by its address, in the section that
+/// holds all of them.
+fn function_code<'a>(elf: &Elf<'a>, function: &oer_analysis_elf::Function) -> Option<&'a [u8]> {
+    let address = u64::from(function.address);
+    let section = elf.sections().find(|section| section.contains(address))?;
+    let start = usize::try_from(address.checked_sub(section.address)?).ok()?;
+    section
+        .data
+        .get(start..start.checked_add(function.size as usize)?)
+}
+
 /// The address a `jr` at `site` in `function` jumps to, when it is the
 /// `lui`/`addi` constant (`li`) written to its register by the two
 /// instructions right before it, and no branch or jump of the function lands
@@ -113,9 +124,7 @@ pub(super) fn constant_jump_target(
     function: &oer_analysis_elf::Function,
     site: u32,
 ) -> Option<u32> {
-    let section = elf.section(function.section).ok()?;
-    let start = (u64::from(function.address) - section.address) as usize;
-    let code = section.data.get(start..start + function.size as usize)?;
+    let code = function_code(elf, function)?;
     let mut instructions = Vec::new();
     let mut offset = 0;
     while offset < code.len() {
@@ -221,14 +230,7 @@ pub(super) fn installs_stack_pointer(
         .into_iter()
         .find(|function| function.address == entry)
         .ok_or_else(|| format!("{entry:#010x} is not the start of a function"))?;
-    let section = elf
-        .section(function.section)
-        .map_err(|error| error.to_string())?;
-    let start = (u64::from(entry) - section.address) as usize;
-    let code = section
-        .data
-        .get(start..start + function.size as usize)
-        .ok_or("the function exceeds its section")?;
+    let code = function_code(elf, &function).ok_or("the function's bytes are not in the file")?;
     let end = entry + function.size;
     let mut seen = BTreeSet::new();
     let mut pending = vec![(entry, None::<(u8, u32)>)];
