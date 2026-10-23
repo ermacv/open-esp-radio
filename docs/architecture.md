@@ -143,7 +143,9 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
   failure after the first RF write poisons the PHY domain. Calibration
   matches the vendor when each field stays within the vendor's spread for
   that field, measured in the same run on the same board; the comparison
-  runs when the calibration sources change.
+  runs when the calibration sources change. A change to how a calibration
+  field is computed or replayed raises the calibration revision, so a cached
+  record of another revision is never replayed.
 - **Power and reset.** Common radio power enables the shared domain without
   resetting the Wi-Fi MAC. Wi-Fi resets its own baseband and MAC after PHY
   calibration at its client entry. Brownout policy belongs to the bootstrap.

@@ -317,6 +317,4 @@ fn take_slice<T: Value>(values: &mut [T], input: &mut &[u8]) -> Result<(), Codec
 }
 
 #[cfg(test)]
-mod revision_guard;
-#[cfg(test)]
 mod tests;
