@@ -6,7 +6,6 @@ mod irq;
 mod report;
 mod scan;
 
-use core::fmt::Write;
 use esp_hal::{
     efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
     usb::usb_serial_jtag::UsbSerialJtag,
@@ -68,7 +67,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
     let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
     if let Some(record) = previous {
-        let _ = write!(console, "OER-PANIC previous {record}\r\n");
+        let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
+            |bytes| console.write(bytes),
+            &record,
+        );
     }
     let Some(config) = CONFIG else {
         let _ = console.write(b"OER-RESULT: fail w2 unconfigured\r\n");
@@ -187,7 +189,7 @@ async fn reporting(
     if result.irq_free < 4096 {
         result.errors += 1;
     }
-    let _ = result.print(&mut console);
+    let _ = result.notes(|note| oer_diagnostics::emit_note(note, |bytes| console.write(bytes)));
 }
 fn park() -> ! {
     oer_espressif_staged_runtime::idle()

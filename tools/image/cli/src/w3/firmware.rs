@@ -156,15 +156,26 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
         report.phase = "association-dhcp";
         let console = std::thread::scope(|scope| -> Result<String> {
             let log_path = directory.join("console.txt");
+            let raw_path = directory.join("console.raw.txt");
             let console = scope.spawn(move || -> Result<String> {
                 let end = Instant::now() + timeout;
                 let mut text = String::new();
                 let mut log = fs::File::create(log_path)?;
+                let mut raw_log = fs::File::create(raw_path)?;
+                let mut diagnostics = crate::diagnostics::Decoder::default();
                 while Instant::now() < end {
                     process::check_cancelled()?;
                     match lines.recv_timeout(Duration::from_millis(200)) {
                         Ok(line) if !line.is_empty() => {
-                            let line = String::from_utf8_lossy(&line);
+                            writeln!(raw_log, "{}", String::from_utf8_lossy(&line))?;
+                            // The report is typed notes: the parser reads the
+                            // text the host renders from them.
+                            let Some(line) = diagnostics.line(&line)? else {
+                                continue;
+                            };
+                            if line.is_empty() {
+                                continue;
+                            }
                             if text.len() + line.len() > 256 * 1024 {
                                 return Err("W3 console exceeded bound".into());
                             }

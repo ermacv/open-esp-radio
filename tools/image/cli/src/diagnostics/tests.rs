@@ -203,3 +203,73 @@ fn arbitrary_read_boundaries_preserve_the_rendered_records() {
         );
     }
 }
+
+fn visit_notes(bytes: &mut Vec<u8>, console_lines: &[&str]) {
+    let mut console = Console::new(write(bytes));
+    for line in console_lines {
+        match *line {
+            "first" => console
+                .note(&oer_diagnostics::Note::w2_channel_first(
+                    13, 12, true, 1, true, 1,
+                ))
+                .unwrap(),
+            "last" => console
+                .note(&oer_diagnostics::Note::w2_channel_last(
+                    1000,
+                    1100,
+                    [10, 0, 10, 10],
+                    10,
+                ))
+                .unwrap(),
+            "whole" => console.note(&oer_diagnostics::Note::w2_begin()).unwrap(),
+            other => panic!("unknown note {other}"),
+        }
+    }
+}
+
+#[test]
+fn a_line_of_two_notes_is_one_console_line() {
+    let mut bytes = Vec::new();
+    visit_notes(&mut bytes, &["whole", "first", "last", "whole"]);
+    assert_eq!(
+        rendered(&bytes).unwrap(),
+        "\nOER-W2-BEGIN v=1\n\
+         w2.channel channel=13 sequence=12 allowed=1 sent=1 success=1 responses=1 \
+         rate_kbps=1000 retune_us=1100 power=10,0,10,10 ceiling=10\n\
+         OER-W2-BEGIN v=1\n"
+    );
+}
+
+#[test]
+fn a_missing_last_part_is_an_error_naming_the_lines_it_holds() {
+    let mut bytes = Vec::new();
+    visit_notes(&mut bytes, &["first", "whole"]);
+    let error = rendered(&bytes).unwrap_err().to_string();
+    assert!(error.contains("interrupted"), "{error}");
+    assert!(error.contains("OER-DIAG:01"), "{error}");
+}
+
+#[test]
+fn a_last_part_without_its_first_is_an_error() {
+    let mut bytes = Vec::new();
+    visit_notes(&mut bytes, &["last"]);
+    let error = rendered(&bytes).unwrap_err().to_string();
+    assert!(error.contains("without its first part"), "{error}");
+}
+
+#[test]
+fn another_console_line_between_the_parts_is_an_error() {
+    let mut bytes = Vec::new();
+    visit_notes(&mut bytes, &["first"]);
+    bytes.extend_from_slice(b"some other console text\r\n");
+    let error = rendered(&bytes).unwrap_err().to_string();
+    assert!(error.contains("interrupted"), "{error}");
+}
+
+#[test]
+fn a_stream_that_ends_between_the_parts_is_an_error() {
+    let mut bytes = Vec::new();
+    visit_notes(&mut bytes, &["first"]);
+    let error = rendered(&bytes).unwrap_err().to_string();
+    assert!(error.contains("ended inside a continued line"), "{error}");
+}

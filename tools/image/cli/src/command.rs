@@ -320,7 +320,9 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
             Ok(Some(line)) => {
                 raw_log.write_all(&line)?;
                 raw_log.write_all(b"\n")?;
-                let text = diagnostics.line(&line)?;
+                let Some(text) = diagnostics.line(&line)? else {
+                    continue;
+                };
                 println!("{text}");
                 writeln!(log, "{text}")?;
                 if let Some(verdict) = console_verdict(&line, &text) {
@@ -335,6 +337,9 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         }
     };
     drop(lines);
+    if let Err(error) = diagnostics.finish() {
+        eprintln!("fw: {error}");
+    }
     eprintln!("fw: log {}", log_path.display());
     let air = capture
         .map(oer_hil_lab::air::AirCapture::finish)
@@ -421,7 +426,8 @@ pub fn monitor(root: &Path, selector: &str) -> Result<()> {
     loop {
         match next_line(&lines, Duration::from_secs(1)) {
             Ok(Some(line)) => match diagnostics.line(&line) {
-                Ok(text) => println!("{text}"),
+                Ok(Some(text)) => println!("{text}"),
+                Ok(None) => {}
                 Err(error) => eprintln!("fw: {error}"),
             },
             Ok(None) => {}

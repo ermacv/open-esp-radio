@@ -1,4 +1,4 @@
-use core::fmt::{self, Write};
+use oer_diagnostics::Note;
 
 #[derive(Clone, Copy, Default)]
 pub struct Visit {
@@ -113,94 +113,66 @@ impl Report {
                     }),
         ]
     }
-    pub fn print(&self, out: &mut impl Write) -> fmt::Result {
+    /// The report block as typed notes: the host renders the console text
+    /// `cargo fw w2 check` reads. A channel visit is two notes of one line.
+    pub fn notes<E>(&self, mut emit: impl FnMut(&Note<'static>) -> Result<(), E>) -> Result<(), E> {
         let gates = self.gates();
-        writeln!(out, "OER-W2-BEGIN v=1\r")?;
-        writeln!(
-            out,
-            "w2.config channel={} country={}{} cap={} antenna_mbm={} chip_mbm={} target=xx:xx:xx:xx:{:02X}:{:02X} stand=xx:xx:xx:xx:{:02X}:{:02X}\r",
-            self.lab_channel,
-            self.country[0] as char,
-            self.country[1] as char,
-            self.cap_dbm,
+        emit(&Note::w2_begin())?;
+        emit(&Note::w2_config(
+            u32::from(self.lab_channel),
+            self.country,
+            i32::from(self.cap_dbm),
             self.antenna_mbm,
             self.chip_mbm,
-            self.target[0],
-            self.target[1],
-            self.stand[0],
-            self.stand[1]
-        )?;
-        for v in &self.visits[..self.count] {
-            writeln!(
-                out,
-                "w2.channel channel={} sequence={} allowed={} sent={} success={} responses={} rate_kbps={} retune_us={} power={},{},{},{} ceiling={}\r",
-                v.channel,
-                v.sequence,
-                u8::from(v.allowed),
-                v.sent,
-                u8::from(v.success),
+            self.target,
+            self.stand,
+        ))?;
+        for v in self.visits.iter().take(self.count) {
+            emit(&Note::w2_channel_first(
+                u32::from(v.channel),
+                u32::from(v.sequence),
+                v.allowed,
+                u32::from(v.sent),
+                v.success,
                 v.responses,
+            ))?;
+            emit(&Note::w2_channel_last(
                 v.rate_kbps,
                 v.retune_us,
-                v.power[0],
-                v.power[1],
-                v.power[2],
-                v.power[3],
-                v.ceiling
-            )?;
+                v.power,
+                i32::from(v.ceiling),
+            ))?;
         }
-        write!(out, "w2.basic supported=")?;
-        if self.supported_len == 0 {
-            write!(out, "-")?;
-        }
-        for byte in &self.supported[..self.supported_len] {
-            write!(out, "{byte:02x}")?;
-        }
-        write!(out, " extended=")?;
-        if self.extended_len == 0 {
-            write!(out, "-")?;
-        }
-        for byte in &self.extended[..self.extended_len] {
-            write!(out, "{byte:02x}")?;
-        }
-        writeln!(out, "\r")?;
-        writeln!(
-            out,
-            "w2.unicast rate_kbps={} sequence={} success={} responses={} attempts={} raw={} power={},{},{},{} ceiling={}\r",
+        emit(&Note::w2_basic(
+            self.supported.get(..self.supported_len).unwrap_or(&[]),
+            self.extended.get(..self.extended_len).unwrap_or(&[]),
+        ))?;
+        emit(&Note::w2_unicast(
             self.unicast_rate,
-            self.unicast_sequence,
-            u8::from(self.unicast_success),
+            u32::from(self.unicast_sequence),
+            self.unicast_success,
             self.unicast_responses,
-            self.unicast_attempts,
-            self.unicast_raw,
-            self.unicast_power[0],
-            self.unicast_power[1],
-            self.unicast_power[2],
-            self.unicast_power[3],
-            self.unicast_ceiling
-        )?;
-        writeln!(
-            out,
-            "w2.stats timeouts={} collisions={} colors={} errors={} irq_free={} error={}\r",
+            u32::from(self.unicast_attempts),
+            u32::from(self.unicast_raw),
+            self.unicast_power,
+            i32::from(self.unicast_ceiling),
+        ))?;
+        emit(&Note::w2_stats(
             self.timeouts,
             self.collisions,
             self.colors,
             self.errors,
-            self.irq_free,
-            self.error.unwrap_or("-")
-        )?;
-        for (name, pass) in ['a', 'b', 'c', 'd', 'e'].into_iter().zip(gates) {
-            writeln!(out, "w2.gate name={name} pass={}\r", u8::from(pass))?;
+            self.irq_free as u32,
+            self.error.unwrap_or("-"),
+        ))?;
+        for (name, pass) in ["a", "b", "c", "d", "e"].into_iter().zip(gates) {
+            emit(&Note::w2_gate(name, pass))?;
         }
-        writeln!(out, "OER-W2-END lines={}\r", self.count + 9)?;
-        writeln!(
-            out,
-            "OER-RESULT: {} w2\r",
-            if gates.into_iter().all(|g| g) && self.error.is_none() {
-                "pass"
-            } else {
-                "fail"
-            }
-        )
+        emit(&Note::w2_end(self.count as u32 + 9))?;
+        emit(&if gates.into_iter().all(|g| g) && self.error.is_none() {
+            Note::w2_pass()
+        } else {
+            Note::w2_fail()
+        })
     }
 }

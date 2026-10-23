@@ -20,12 +20,11 @@ compile_error!(
     "w0 declares the trace class: build it with `cargo fw build w0`, check it with RUSTFLAGS=\"--cfg oer_trace\""
 );
 
-use core::fmt::Write as _;
-
 use esp_hal::{
     Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
     usb::usb_serial_jtag::UsbSerialJtag,
 };
+use oer_diagnostics::{DiagPath, DiagnosticPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::ieee80211::init::{
@@ -37,12 +36,15 @@ use oer_esp32s31_ieee80211_driver::startup::{
     RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
     start_esp32s31_radio,
 };
+use oer_esp32s31_phy::tracking::TemperatureAcquisition;
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
     PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
+use oer_esp32s31_radio_client::{DomainHealth, Failure};
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
+use oer_espressif_esp_hal_radio::RadioHandoffError;
 use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
@@ -102,10 +104,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
     let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
     if let Some(record) = previous {
-        let _ = write!(console, "OER-PANIC previous {record}\r\n");
+        let _ = oer_espressif_staged_runtime::diagnostics::emit_previous_panic(
+            |bytes| console.write(bytes),
+            &record,
+        );
     }
     let Some(interrupts) = Interrupts::take() else {
-        let _ = console.write(b"OER-RESULT: fail w0 interrupt-table\r\n");
+        note(&mut console, &Note::w0_fail("interrupt-table"));
         park()
     };
 
@@ -138,19 +143,27 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let (hardware, clocks) = match take_radio(singletons, &psram) {
         Ok(radio) => radio,
         Err(error) => {
-            let _ = write!(console, "OER-RESULT: fail w0 take_radio={error:?}\r\n");
+            note(
+                &mut console,
+                &Note::w0_take_radio_fail(match error {
+                    RadioHandoffError::RootTaken => "RootTaken",
+                }),
+            );
             park()
         }
     };
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
-    let _ = write!(
-        console,
-        "OER w0 identity rf_cal_version={} base_mac={:02x?} mac_ext={:#06x}\r\n",
-        identity.rf_cal_version, identity.base_mac_address, identity.mac_extension
+    note(
+        &mut console,
+        &Note::w0_identity(
+            identity.rf_cal_version,
+            &identity.base_mac_address,
+            u32::from(identity.mac_extension),
+        ),
     );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
-        let _ = console.write(b"OER-RESULT: fail w0 claim\r\n");
+        note(&mut console, &Note::w0_fail("claim"));
         park()
     };
     let ProtocolPartitions {
@@ -219,10 +232,10 @@ async fn w0(boot: Boot) {
     } = boot;
     match run(&mut console, cell, wifi, rng, station, access_point).await {
         Ok(()) => {
-            let _ = console.write(b"OER-RESULT: pass w0\r\n");
+            note(&mut console, &Note::w0_pass());
         }
         Err(reason) => {
-            let _ = write!(console, "OER-RESULT: fail w0 {reason}\r\n");
+            note(&mut console, &Note::w0_fail(reason));
         }
     }
 }
@@ -272,11 +285,11 @@ async fn run(
     let mut stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
-            let _ = write!(console, "OER w0 join failed cause={:?}\r\n", failed.cause);
+            note(console, &Note::w0_join_failed(failure_name(failed.cause)));
             return Err("join");
         }
         Err(RadioStartFailure::Track { failed, .. }) => {
-            let _ = write!(console, "OER w0 track failed cause={:?}\r\n", failed.cause);
+            note(console, &Note::w0_track_failed(failure_name(failed.cause)));
             return Err("track");
         }
     };
@@ -290,35 +303,90 @@ async fn run(
             micros,
             outcome,
         } => {
-            let _ = write!(
+            let mut path = DiagPath::new();
+            calibration_path.push_path(&mut path);
+            note(
                 console,
-                "OER w0 join epoch={} registered calibration_path={calibration_path:?} registration_us={micros}\r\n",
-                report.epoch.get()
+                &Note::w0_join(
+                    report.epoch.get(),
+                    path.names().first().copied().unwrap_or(""),
+                    micros,
+                ),
             );
-            let _ = write!(
+            note(
                 console,
-                "OER w0 ready_waits tx_dc_max_not_ready={} pwdet_sar_max_not_ready={}\r\n",
-                outcome.ready_waits.tx_dc_max_not_ready_samples,
-                outcome.ready_waits.pwdet_sar_max_not_ready_samples
+                &Note::w0_ready_waits(
+                    u32::from(outcome.ready_waits.tx_dc_max_not_ready_samples),
+                    u32::from(outcome.ready_waits.pwdet_sar_max_not_ready_samples),
+                ),
             );
-            let _ = write!(
-                console,
-                "OER w0 rf_calibration {:?}\r\n",
-                outcome.rf_calibration
-            );
+            match outcome.rf_calibration {
+                None => note(console, &Note::w0_rf_calibration_none()),
+                Some(rf) => {
+                    let frequency = rf.frequency;
+                    note(
+                        console,
+                        &Note::w0_rf_calibration(
+                            rf.charge_pump_locked,
+                            frequency.is_some(),
+                            frequency.map_or(0, |frequency| u32::from(frequency.table_entries)),
+                        ),
+                    );
+                    if let Some(frequency) = frequency {
+                        for (name, point) in [
+                            ("nominal", frequency.nominal),
+                            ("low", frequency.low),
+                            ("high", frequency.high),
+                        ] {
+                            note(
+                                console,
+                                &Note::w0_rf_point(
+                                    name,
+                                    point.lock_observed,
+                                    u32::from(point.initial_cap),
+                                    u32::from(point.final_cap),
+                                    u32::from(point.accepted_cap_samples),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
         }
         other => {
-            let _ = write!(console, "OER w0 join phy={other:?}\r\n");
+            let (name, micros) = match other {
+                PhyPreparation::AlreadyOpen => ("AlreadyOpen", 0),
+                PhyPreparation::Woke { micros } => ("Woke", micros),
+                PhyPreparation::Registered { .. } => ("Registered", 0),
+            };
+            note(console, &Note::w0_join_phy(name, micros));
             return Err("not-registered");
         }
     }
-    let _ = write!(
+    note(
         console,
-        "OER w0 track mac_prepared=true tracking_us={:?} temperature={:?} mac_handshake_samples={} mac_handshake_observations={}\r\n",
-        report.track.tracking_micros,
-        report.track.temperature,
-        report.track.mac.handshake_samples,
-        report.track.mac.handshake_observations
+        &Note::w0_track(
+            report.track.tracking_micros.is_some(),
+            report.track.tracking_micros.unwrap_or(0),
+            report.track.mac.handshake_samples,
+            report.track.mac.handshake_observations,
+        ),
+    );
+    let (name, started, completed) = match report.track.temperature.acquisition {
+        TemperatureAcquisition::Unobserved => ("Unobserved", 0, 0),
+        TemperatureAcquisition::Undated => ("Undated", 0, 0),
+        TemperatureAcquisition::Overlong => ("Overlong", 0, 0),
+        TemperatureAcquisition::ClockReversed => ("ClockReversed", 0, 0),
+        TemperatureAcquisition::Window { started, completed } => ("Window", started, completed),
+    };
+    note(
+        console,
+        &Note::w0_temperature(
+            i32::from(report.track.temperature.value),
+            name,
+            started,
+            completed,
+        ),
     );
     let (_cell, released) = stopped.release(cell).await;
     match released {
@@ -327,17 +395,30 @@ async fn run(
                 released.wifi,
                 oer_esp32s31_radio_client::wifi::WifiReturned::Cold(_)
             );
-            let _ = write!(
+            note(
                 console,
-                "OER w0 leave domain={:?} cold={cold}\r\n",
-                released.domain
+                &Note::w0_leave(
+                    match released.domain {
+                        DomainHealth::Healthy => "Healthy",
+                        DomainHealth::Poisoned => "Poisoned",
+                    },
+                    cold,
+                ),
             );
             if !cold || released.domain != oer_esp32s31_radio_client::DomainHealth::Healthy {
                 return Err("leave");
             }
         }
         Err(failure) => {
-            let _ = write!(console, "OER w0 release refused {:?}\r\n", failure.error);
+            let (name, state) = match failure.error {
+                oer_esp32s31_hal::owner::maintenance::Error::MacActive { state } => {
+                    ("MacActive", u32::from(state))
+                }
+                oer_esp32s31_hal::owner::maintenance::Error::RxWalkerEnabled => {
+                    ("RxWalkerEnabled", 0)
+                }
+            };
+            note(console, &Note::w0_release_refused(name, state));
             return Err("release");
         }
     }
@@ -367,6 +448,19 @@ impl MacSlowClockCalibrationSource for Platform {
 impl WifiMacPlatform for Platform {
     fn install_phy_tx_power_profile(&mut self, profile: PhyTxTargetPowerProfile) {
         self.tx_power = Some(profile);
+    }
+}
+
+/// Writes `note` to the console as a typed diagnostic line.
+fn note(console: &mut Console, note: &Note<'_>) {
+    let _ = oer_diagnostics::emit_note(note, |bytes| console.write(bytes));
+}
+
+fn failure_name(cause: Failure) -> &'static str {
+    match cause {
+        Failure::Refused => "Refused",
+        Failure::ClientFailed => "ClientFailed",
+        Failure::Poisoned => "Poisoned",
     }
 }
 

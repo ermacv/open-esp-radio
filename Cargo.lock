@@ -3138,6 +3138,7 @@ version = "0.1.0"
 dependencies = [
  "embassy-executor",
  "esp-hal",
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-hal",
@@ -3201,6 +3202,7 @@ dependencies = [
  "embassy-futures",
  "esp-hal",
  "heapless 0.9.3",
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-hal",
@@ -3238,6 +3240,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "esp-hal",
  "heapless 0.9.3",
+ "oer-diagnostics",
  "oer-embassy-net",
  "oer-embassy-time",
  "oer-esp32s31-board",

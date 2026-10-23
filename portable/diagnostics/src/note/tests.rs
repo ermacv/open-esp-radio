@@ -204,6 +204,8 @@ mod render {
                 .iter()
                 .map(|(_, field)| match field {
                     Field::Wide => 2,
+                    Field::Bytes8 => 3,
+                    Field::Bytes16 => 5,
                     Field::Name | Field::Path => 0,
                     _ => 1,
                 })
@@ -320,5 +322,69 @@ mod render {
             path.name("X");
         }
         assert!(text(&Note::joined(&path)).ends_with("path-truncated"));
+    }
+}
+
+#[cfg(feature = "render")]
+mod parts {
+    use super::*;
+    use crate::note::Part;
+
+    #[test]
+    fn a_topic_with_no_text_of_its_own_continues_a_line_and_only_such_a_topic_does() {
+        for &topic in ALL_TOPICS {
+            let (prefix, _) = topic.layout();
+            assert_eq!(
+                prefix.is_empty(),
+                matches!(topic.part(), Part::Middle | Part::Last),
+                "{topic:?}"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "render")]
+mod reports {
+    use super::*;
+
+    fn text(note: &Note<'_>) -> std::string::String {
+        let mut text = std::string::String::new();
+        crate::render::note(note, &mut text).unwrap();
+        text
+    }
+
+    #[test]
+    fn w2_lines_read_as_the_console_text_the_check_parses() {
+        assert_eq!(
+            text(&Note::w2_config(13, *b"DE", 10, 233, 2100, [0, 1], [0, 2])),
+            "w2.config channel=13 country=DE cap=10 antenna_mbm=233 chip_mbm=2100 \
+             target=xx:xx:xx:xx:00:01 stand=xx:xx:xx:xx:00:02"
+        );
+        assert_eq!(
+            text(&Note::w2_channel_first(13, 12, true, 1, true, 1))
+                + &text(&Note::w2_channel_last(1000, 1100, [10, 0, -10, 10], -3)),
+            "w2.channel channel=13 sequence=12 allowed=1 sent=1 success=1 responses=1 \
+             rate_kbps=1000 retune_us=1100 power=10,0,-10,10 ceiling=-3"
+        );
+        assert_eq!(
+            text(&Note::w2_basic(&[0x82, 0x84], &[])),
+            "w2.basic supported=8284 extended=-"
+        );
+        assert_eq!(
+            text(&Note::w2_basic(&[], &[1, 2, 3, 4, 5, 6, 7, 8, 9])),
+            "w2.basic supported=- extended=010203040506070809"
+        );
+        assert_eq!(
+            text(&Note::w2_stats(0, 0, 0, 0, 16000, "-")),
+            "w2.stats timeouts=0 collisions=0 colors=0 errors=0 irq_free=16000 error=-"
+        );
+    }
+
+    #[test]
+    fn w3_lease_reads_as_the_console_text_the_check_parses() {
+        assert_eq!(
+            text(&Note::w3_lease(true, [192, 0, 2, 8], [192, 0, 2, 1], 24)),
+            "w3.lease acquired=1 address=192.0.2.8 router=192.0.2.1 prefix=24"
+        );
     }
 }
