@@ -77,6 +77,10 @@ pub enum Fault {
     TimerBegin,
     TimerStep,
     TimerRearm,
+    StopTimeout,
+    ResumeTimeout,
+    SubmitTimeout,
+    WakeTimeout,
 }
 /// Notification from P1 to P2. The image uses its priority-safe static signal.
 pub trait Notify {
