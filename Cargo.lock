@@ -4587,6 +4587,7 @@ dependencies = [
  "heapless 0.9.3",
  "hex",
  "oer-analysis-elf",
+ "oer-esp32s31-knowledge",
  "oer-esp32s31-phy",
  "oer-hil-lab",
  "oer-hil-link",
