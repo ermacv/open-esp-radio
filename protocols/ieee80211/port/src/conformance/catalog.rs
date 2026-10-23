@@ -41,10 +41,16 @@ impl Case {
             .chain(Scenario::ALL.into_iter().map(Self::Ownership))
             .chain(BarrierCase::ALL.into_iter().map(Self::Barrier))
             .chain(interface_commands::Case::all().map(Self::Configure))
-            .chain(group_keys::ProgressCase::all().map(Self::Group))
+            .chain(
+                group_keys::ProgressCase::all()
+                    .filter(|case| *case != group_keys::ProgressCase::ReplacementRollback)
+                    .map(Self::Group),
+            )
             .chain(edca::Case::ALL.into_iter().map(Self::Edca))
             .chain(group_keys::Case::ALL.into_iter().map(Self::GroupBoundary))
             .chain(msdu_age::Case::ALL.into_iter().map(Self::Age))
+            // Append new hardware cases so deployed request ordinals stay stable.
+            .chain([Self::Group(group_keys::ProgressCase::ReplacementRollback)])
     }
 
     /// Air or fault stimulus required by this case.
@@ -76,6 +82,14 @@ impl Case {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fail_stop_rollback_is_last_so_no_later_case_needs_the_quarantined_radio() {
+        assert_eq!(
+            Case::all().last(),
+            Some(Case::Group(group_keys::ProgressCase::ReplacementRollback))
+        );
+    }
 
     #[test]
     fn unsupported_aggregate_operations_keep_their_air_classification() {

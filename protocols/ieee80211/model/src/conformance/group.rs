@@ -19,7 +19,9 @@ pub async fn group(
 ) -> Result<GroupTrace, &'static str> {
     if !matches!(
         case,
-        ProgressCase::Disable { .. } | ProgressCase::PublishedRemoval
+        ProgressCase::Disable { .. }
+            | ProgressCase::PublishedRemoval
+            | ProgressCase::ReplacementRollback
     ) {
         return Err("group publication fixture required");
     }
@@ -33,7 +35,7 @@ pub async fn group(
         };
     }
     match run_model(backend, Exercise { case, air }).await {
-        Report::Joined(output) => output,
+        Report::Joined(output) | Report::Stopped(output) => output,
         _ => Err("group fixture failed to uninstall"),
     }
 }
@@ -129,7 +131,7 @@ async fn admit<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         Mutation::Replace => phase.station().replace_group_key(
             permission,
             key.ok_or("replace key")?,
-            id,
+            GroupKeyId::new(2).ok_or("replacement KeyID")?,
             Ccmp128Key::new(&[2; 16]),
         ),
         Mutation::Select => phase
@@ -165,6 +167,66 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
                 return Ended::fail_stop(failed.fail_stop(), Err("group enable"));
             }
         };
+        if self.case == ProgressCase::ReplacementRollback {
+            let result = async {
+                let mut phase = owner.phase();
+                let (admitted, mut timing) =
+                    admit(&mut phase, resources, &self.air, Mutation::Replace).await?;
+                self.air
+                    .fail_next_group_change(GroupFaultStage::ReplacementWrite);
+                self.air.hold_group_commands(false);
+                loop {
+                    match phase.next_event().await {
+                        Err(_) => break,
+                        Ok(Ok(LowerMacEvent::Received { frame, .. })) => phase.recycle(frame),
+                        Ok(Ok(LowerMacEvent::Tbtt(_))) => {}
+                        _ => return Err("rollback emitted an ordinary terminal"),
+                    }
+                }
+                timing.completed_at = Instant::from_micros(self.air.monotonic_now().as_micros());
+                let retained = phase
+                    .held
+                    .failed_group
+                    .items
+                    .borrow()
+                    .iter()
+                    .filter_map(|command| {
+                        if let GroupChange::Replace {
+                            installed,
+                            permission,
+                            ..
+                        } = command
+                        {
+                            Some(Owners {
+                                slot: installed.slot.index(),
+                                permission: permission.index(),
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Ok(ProgressTrace {
+                    rollback: self.air.group_rollback(),
+                    admitted,
+                    timing,
+                    retained,
+                    events: Vec::new(),
+                    poisoned: self.air.failed(),
+                    deadline_woke: false,
+                    published: None,
+                    blocked_while_published: false,
+                })
+            }
+            .await;
+            return match owner
+                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .await
+            {
+                Err(failed) => Ended::fail_stop(failed.fail_stop(), result),
+                Ok(owner) => Ended::uninstall(owner, (), Err("rollback did not fail-stop")),
+            };
+        }
         let result = match self.case {
             ProgressCase::Disable { mutation, applied } => {
                 let setup = admit(&mut owner.phase(), resources, &self.air, mutation).await;
@@ -197,6 +259,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
             }
             timing.completed_at = completed_at;
             Ok(ProgressTrace {
+                rollback: None,
                 admitted,
                 timing,
                 events,

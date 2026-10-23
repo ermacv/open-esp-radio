@@ -84,6 +84,8 @@ struct Hardware {
     /// The MAC-wide CCA a timeout abort forces until its detach.
     cca_forced: bool,
     installed_keys: Vec<(u8, MacCcmpKeyIdentity)>,
+    key_material: Vec<(u8, [u8; 16])>,
+    reject_key_writes: usize,
     crypto_order: Vec<CryptoOperation>,
     cleared_keys: Vec<u8>,
     rx_block_acks: Vec<S31RxBlockAckAgreement>,
@@ -236,18 +238,24 @@ impl CcmpKeyHardware for Hardware {
         &mut self,
         index: u8,
         identity: MacCcmpKeyIdentity,
-        _temporal_key: &[u8; 16],
+        temporal_key: &[u8; 16],
     ) -> MacKeyInstallOutcome {
+        if self.reject_key_writes != 0 {
+            self.reject_key_writes -= 1;
+            return MacKeyInstallOutcome::Rejected;
+        }
         if self.installed_keys.iter().any(|(slot, _)| *slot == index) {
             return MacKeyInstallOutcome::Occupied;
         }
         self.crypto_order.push(CryptoOperation::Install(index));
         self.installed_keys.push((index, identity));
+        self.key_material.push((index, *temporal_key));
         MacKeyInstallOutcome::Installed
     }
 
     fn clear_ccmp_entry(&mut self, index: u8) {
         self.installed_keys.retain(|(slot, _)| *slot != index);
+        self.key_material.retain(|(slot, _)| *slot != index);
         self.crypto_order.push(CryptoOperation::Remove(index));
         self.cleared_keys.push(index);
     }
@@ -4364,4 +4372,56 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
             complete(&mut core, &mut hardware, 0);
         }
     });
+}
+
+#[test]
+fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_rollback() {
+    use oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpReplaceError;
+    use oer_ieee80211_wire::ccmp::GroupKeyId;
+    for rejected in 0..=2 {
+        installed(|resources| {
+            let mut core = core(resources);
+            let mut hardware = Hardware::default();
+            let old_id = GroupKeyId::new(1).unwrap();
+            let new_id = GroupKeyId::new(2).unwrap();
+            let mut key = core
+                .install_receive_key(&mut hardware, old_id, &[1; 16])
+                .unwrap();
+            hardware.reject_key_writes = rejected;
+            let result = core.replace_station_group_key(&mut hardware, &mut key, new_id, &[2; 16]);
+            match rejected {
+                0 => {
+                    assert_eq!(result, Ok(()));
+                    assert_eq!(key.key_id, new_id);
+                    assert_eq!(hardware.key_material, [(1, [2; 16])]);
+                    assert!(core.fault.is_none());
+                    // A later rejected update must restore the newly committed key.
+                    hardware.reject_key_writes = 1;
+                    assert!(matches!(
+                        core.replace_station_group_key(&mut hardware, &mut key, old_id, &[3; 16]),
+                        Err(StaGroupCcmpReplaceError::ReplacementRolledBack(_))
+                    ));
+                    assert_eq!(hardware.key_material, [(1, [2; 16])]);
+                    assert!(core.fault.is_some());
+                }
+                1 => {
+                    assert!(matches!(
+                        result,
+                        Err(StaGroupCcmpReplaceError::ReplacementRolledBack(_))
+                    ));
+                    assert_eq!(key.key_id, old_id);
+                    assert_eq!(hardware.key_material, [(1, [1; 16])]);
+                    assert!(core.fault.is_some());
+                }
+                _ => {
+                    assert!(matches!(
+                        result,
+                        Err(StaGroupCcmpReplaceError::RollbackFailed { .. })
+                    ));
+                    assert!(hardware.key_material.is_empty());
+                    assert!(core.fault.is_some());
+                }
+            }
+        });
+    }
 }

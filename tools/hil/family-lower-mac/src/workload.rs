@@ -305,6 +305,38 @@ mod tests {
         assert_eq!(trace.events.iter().flatten().count(), 2);
     }
     #[test]
+    fn rejected_group_replacement_restores_the_old_key_and_fail_stops_without_a_terminal() {
+        let prepared = Prepared {
+            ampdu: false,
+            basic_rates: [0x8c; 16],
+            basic_rates_len: 1,
+        };
+        let Trace::Group(trace) = model(
+            Case::Group(
+                oer_ieee80211_port::conformance::group_keys::ProgressCase::ReplacementRollback,
+            ),
+            &prepared,
+            6,
+        )
+        .expect("rollback trace") else {
+            panic!("group rollback trace")
+        };
+        assert!(trace.poisoned && trace.within_bound);
+        assert!(trace.events.iter().all(Option::is_none));
+        assert_eq!(
+            trace.retained.iter().flatten().copied().collect::<Vec<_>>(),
+            [trace.admitted]
+        );
+        assert_eq!(
+            trace.rollback,
+            Some(GroupRollback {
+                previous_key_id: 1,
+                attempted_key_id: 2,
+                restored: true,
+            })
+        );
+    }
+    #[test]
     fn configuration_contexts_return_in_fifo_order_across_every_disable_point() {
         let prepared = Prepared {
             ampdu: false,

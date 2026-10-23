@@ -315,10 +315,23 @@ impl Server {
             },
         )
         .await;
-        let radio::PortEnd::Uninstalled { output, joined, .. } = result else {
-            return Err(RejectReason::Internal);
+        let output = match result {
+            radio::PortEnd::Uninstalled { output, joined, .. } => {
+                self.joined = Some(joined);
+                output
+            }
+            radio::PortEnd::FailStopped { output, outcome }
+                if case == catalog::Case::Group(
+                    oer_ieee80211_port::conformance::group_keys::ProgressCase::ReplacementRollback,
+                ) && matches!(outcome.outcome(), radio::Abandon::Stopped(_)) =>
+            {
+                // Last case: emit its captured evidence without resurrecting
+                // a reusable radio owner after fail-stop.
+                drop(outcome);
+                output
+            }
+            _ => return Err(RejectReason::Internal),
         };
-        self.joined = Some(joined);
         let trace = output.map_err(|_| RejectReason::Internal)?;
         Ok(Answer::Trace(CaseTrace { case: key, trace }))
     }

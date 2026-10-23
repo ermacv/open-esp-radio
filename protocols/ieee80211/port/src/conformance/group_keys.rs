@@ -118,6 +118,8 @@ pub enum ProgressCase {
     Expire(Mutation),
     /// A published AP group transmission retains a use of the removed key.
     PublishedRemoval,
+    /// Reject the new GTK write, restore the old entry, then fail-stop.
+    ReplacementRollback,
 }
 
 impl ProgressCase {
@@ -138,7 +140,7 @@ impl ProgressCase {
                     Self::Expire(mutation),
                 ]
             })
-            .chain([Self::PublishedRemoval])
+            .chain([Self::PublishedRemoval, Self::ReplacementRollback])
     }
     /// A healthy hardware key command cannot be held past its bound on air.
     pub const fn execution(self) -> Execution {
@@ -198,8 +200,21 @@ pub enum Completion {
     Transmit(TxOwners),
 }
 
+/// Observed hardware/model state before poisoned teardown erases the table.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Rollback {
+    /// KeyID of the installed entry consumed by replacement.
+    pub previous_key_id: u8,
+    /// KeyID of the rejected replacement.
+    pub attempted_key_id: u8,
+    /// The old key publication completed after rejecting the new one.
+    pub restored: bool,
+}
+
 /// Captured command progress, terminal order and quarantine custody.
 pub struct ProgressTrace<E, R> {
+    /// Actual internal rollback, independent of portable success terminals.
+    pub rollback: Option<Rollback>,
     /// Slot and permission identities captured before command submission.
     pub admitted: Owners,
     /// Admission and completion instants captured on the backend clock.
@@ -397,7 +412,28 @@ pub fn verify_progress<E: AsRef<[Completion]>, R: AsRef<[Owners]>>(
     bound: Duration,
 ) -> Result<(), Violation> {
     verify_timing(trace.timing, bound)?;
+    if case != ProgressCase::ReplacementRollback && trace.rollback.is_some() {
+        return Err(Violation::Reinstallation);
+    }
     match case {
+        ProgressCase::ReplacementRollback => {
+            if !trace.poisoned
+                || !trace.events.as_ref().is_empty()
+                || trace.retained.as_ref() != [trace.admitted]
+            {
+                return Err(Violation::Custody);
+            }
+            let Some(rollback) = trace.rollback else {
+                return Err(Violation::Reinstallation);
+            };
+            if !rollback.restored
+                || rollback.previous_key_id > 3
+                || rollback.attempted_key_id > 3
+                || rollback.previous_key_id == rollback.attempted_key_id
+            {
+                return Err(Violation::Reinstallation);
+            }
+        }
         ProgressCase::Expire(_) => {
             if !trace.poisoned
                 || !trace.events.as_ref().is_empty()
@@ -457,6 +493,52 @@ mod tests {
         clock
             .advance(Duration::from_micros(elapsed))
             .expect("fixture elapsed time fits its virtual clock")
+    }
+
+    #[test]
+    fn rollback_requires_restored_material_quarantined_owners_and_no_success_terminal() {
+        for fault in 0..5 {
+            let admitted = Owners {
+                slot: 0,
+                permission: 0,
+            };
+            let mut trace = ProgressTrace {
+                rollback: Some(Rollback {
+                    previous_key_id: 1,
+                    attempted_key_id: 2,
+                    restored: fault != 1,
+                }),
+                admitted,
+                timing: Timing {
+                    admitted_at: at(0),
+                    completed_at: at(1),
+                },
+                events: alloc::vec![],
+                retained: alloc::vec![admitted],
+                poisoned: fault != 2,
+                deadline_woke: false,
+                published: None,
+                blocked_while_published: false,
+            };
+            if fault == 3 {
+                trace.events.push(Completion::Group {
+                    mutation: Mutation::Replace,
+                    owners: admitted,
+                });
+            }
+            if fault == 4 {
+                trace.retained.clear();
+            }
+            assert_eq!(
+                verify_progress(
+                    ProgressCase::ReplacementRollback,
+                    trace,
+                    Duration::from_micros(10)
+                )
+                .is_ok(),
+                fault == 0
+            );
+        }
     }
 
     #[test]
@@ -539,6 +621,7 @@ mod tests {
                 permission: 0,
             };
             let mut trace = ProgressTrace {
+                rollback: None,
                 admitted,
                 timing: Timing {
                     admitted_at: at(0),

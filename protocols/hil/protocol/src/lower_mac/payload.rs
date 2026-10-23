@@ -150,6 +150,7 @@ pub enum GroupCompletion {
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct GroupTrace {
+    pub rollback: Option<GroupRollback>,
     pub admitted: [u8; 2],
     pub within_bound: bool,
     pub events: [Option<GroupCompletion>; 4],
@@ -158,6 +159,12 @@ pub struct GroupTrace {
     pub deadline_woke: bool,
     pub published: Option<[u32; 2]>,
     pub blocked_while_published: bool,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct GroupRollback {
+    pub previous_key_id: u8,
+    pub attempted_key_id: u8,
+    pub restored: bool,
 }
 pub fn group_trace<
     E: AsRef<[conformance::group_keys::Completion]>,
@@ -190,6 +197,11 @@ pub fn group_trace<
         *retained.get_mut(index)? = Some([owners.slot, owners.permission]);
     }
     Some(GroupTrace {
+        rollback: raw.rollback.map(|rollback| GroupRollback {
+            previous_key_id: rollback.previous_key_id,
+            attempted_key_id: rollback.attempted_key_id,
+            restored: rollback.restored,
+        }),
         admitted: [raw.admitted.slot, raw.admitted.permission],
         within_bound: bound_micros != 0
             && raw

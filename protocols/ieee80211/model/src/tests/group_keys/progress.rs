@@ -187,6 +187,7 @@ impl Exercise<'_> {
         publication: Option<(TxOwners, bool)>,
     ) {
         self.trace.replace(Some(ProgressTrace {
+            rollback: None,
             admitted: owners,
             timing: Timing {
                 admitted_at: self.probe.admitted.get().unwrap(),
@@ -443,6 +444,16 @@ pub(super) async fn exercise(
     case: ProgressCase,
     clock: &Rc<VirtualClock>,
 ) -> ProgressTrace<Vec<Completion>, Vec<Owners>> {
+    if case == ProgressCase::ReplacementRollback {
+        return crate::conformance::group(
+            case,
+            Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
+            oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
+            clock.clone(),
+        )
+        .await
+        .unwrap();
+    }
     let (backend, air) = backend_on(clock.clone());
     let trace = RefCell::new(None);
     let probe = Probe::default();

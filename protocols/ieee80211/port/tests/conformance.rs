@@ -302,7 +302,7 @@ fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands()
     impl group_keys::Harness for GroupFixture<'_> {
         type Events = [group_keys::Event; 0];
         type Completions = heapless::Vec<Completion, 2>;
-        type Retained = [Owners; 0];
+        type Retained = heapless::Vec<Owners, 1>;
         const GROUP_COMMAND_BOUND: Duration = Duration::from_millis(1);
         const SCENARIO_BOUND: Duration = Duration::from_millis(10);
 
@@ -319,6 +319,28 @@ fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands()
                 permission: 0,
             };
             let mut events = heapless::Vec::new();
+            if case == ProgressCase::ReplacementRollback {
+                let mut retained = heapless::Vec::new();
+                retained.push(admitted).expect("retained owner fits");
+                return ProgressTrace {
+                    rollback: Some(group_keys::Rollback {
+                        previous_key_id: 1,
+                        attempted_key_id: 2,
+                        restored: true,
+                    }),
+                    admitted,
+                    events,
+                    retained,
+                    poisoned: true,
+                    timing: Timing {
+                        admitted_at: self.clock.now(),
+                        completed_at: self.clock.now(),
+                    },
+                    deadline_woke: false,
+                    published: None,
+                    blocked_while_published: false,
+                };
+            }
             let (mutation, published) = match case {
                 ProgressCase::Disable { mutation, .. } => (mutation, None),
                 ProgressCase::PublishedRemoval => {
@@ -332,6 +354,7 @@ fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands()
                 ProgressCase::Expire(_) => {
                     panic!("hardware execution must exclude stalled commands");
                 }
+                ProgressCase::ReplacementRollback => unreachable!("handled above"),
             };
             events
                 .push(Completion::Group {
@@ -340,13 +363,14 @@ fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands()
                 })
                 .expect("the group terminal fits after its published use");
             ProgressTrace {
+                rollback: None,
                 admitted,
                 timing: Timing {
                     admitted_at: self.clock.now(),
                     completed_at: self.clock.now(),
                 },
                 events,
-                retained: [],
+                retained: heapless::Vec::new(),
                 poisoned: false,
                 deadline_woke: false,
                 published,

@@ -2002,9 +2002,51 @@ where
             slot,
             index,
             token,
+            material: oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpKeyMaterial::new(
+                key_id,
+                *temporal_key,
+            ),
             key_id,
             brand: core::marker::PhantomData,
         })
+    }
+
+    /// Replace one occupied receive slot inside the port's finite RX cut.
+    /// The handle retains zeroizing rollback material until removal/reset.
+    /// Even a successful internal rollback poisons this core: it grants no
+    /// reusable old owner and no successful portable terminal.
+    pub(crate) fn replace_station_group_key<H: CcmpKeyHardware>(
+        &mut self,
+        hardware: &mut H,
+        installed: &mut ReceiveKeyHandle<'core, Path>,
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        temporal_key: &[u8; CCMP_128_KEY_BYTES],
+    ) -> Result<(), oer_esp32s31_ieee80211_mac::crypto::StaGroupCcmpReplaceError> {
+        use oer_esp32s31_ieee80211_mac::crypto::{
+            StaGroupCcmpKeyMaterial, StaGroupCcmpReplaceError, replace_sta_group_ccmp_with_rollback,
+        };
+        if self.fault.is_some() {
+            return Err(StaGroupCcmpReplaceError::CurrentMaterialMismatch);
+        }
+        let Some(scope) = self.keys.installed.get_mut(installed.index) else {
+            self.fault = Some(LowerMacFault::Key(CryptoKeyError::HardwareRejected));
+            return Err(StaGroupCcmpReplaceError::CurrentMaterialMismatch);
+        };
+        let replacement = StaGroupCcmpKeyMaterial::new(key_id, *temporal_key);
+        let result = replace_sta_group_ccmp_with_rollback(
+            hardware,
+            &mut installed.token,
+            &installed.material,
+            &replacement,
+        );
+        if result.is_ok() {
+            installed.material = replacement;
+            installed.key_id = key_id;
+            *scope = Some(CheckedKeyScope::StationGroup { key_id });
+        } else {
+            self.fault = Some(LowerMacFault::Key(CryptoKeyError::HardwareRejected));
+        }
+        result
     }
 
     fn vacant_key(&self, scope: CheckedKeyScope) -> Result<usize, LowerMacFault> {
