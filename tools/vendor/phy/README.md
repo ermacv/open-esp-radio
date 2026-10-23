@@ -50,3 +50,7 @@ or unexpected reference reset/hang leaves the measured capture INCOMPLETE.
 Every compared calibration projection and register/analog value therefore comes
 from the same primary boot at its selected lifecycle point. Comparison math,
 reviews, exclusions and the treatment of unreadable registers are unchanged.
+
+The public `cache` module exchanges boot-scoped opaque calibration records and
+promotes verified successful full snapshots through the
+[host store](../../hil/lab/CALIBRATION_CACHE.md).

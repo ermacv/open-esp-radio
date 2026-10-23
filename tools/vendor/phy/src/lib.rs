@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod archive;
+pub mod cache;
 pub mod calibration_capture;
 
 pub mod comparison;
