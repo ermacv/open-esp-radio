@@ -147,7 +147,8 @@ and the host refuses any line outside the allowlist. In order:
 
 4. The profile: the stand's channel, HT 20 MHz, a 100 TU beacon interval,
    the radio enabled; the stand's SSID on the AP section, enabled, not
-   hidden. Encryption and keys are never set.
+   hidden. W1 leaves encryption unchanged. Keys are write-only: W4 sets its generated
+   passphrase through the script on stdin; no configuration read returns it.
 
    ```sh
    uci set 'wireless.<radio>.channel=<channel>' && uci set 'wireless.<radio>.htmode=HT20' && uci set 'wireless.<radio>.beacon_int=100' && uci set 'wireless.<radio>.disabled=0' && uci set 'wireless.<ap_section>.ssid=<ssid>' && uci set 'wireless.<ap_section>.disabled=0' && uci set 'wireless.<ap_section>.hidden=0' && uci commit wireless && wifi reload
