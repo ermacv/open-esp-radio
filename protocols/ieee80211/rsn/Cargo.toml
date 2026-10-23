@@ -9,12 +9,14 @@ description = "Allocation-free RSN (WPA2/WPA3) protocol types and four-way-hands
 readme = "README.md"
 
 [dependencies]
+# Erase the stream wrapper's buffered keystream as well as the ChaCha core.
+cipher = { version = "0.5", default-features = false, features = ["zeroize"] }
+chacha20 = { version = "0.10.2", default-features = false, features = ["cipher", "zeroize"] }
 oer-ieee80211-cipher = { path = "../cipher" }
 oer-ieee80211-wire = { path = "../wire" }
 oer-time = { path = "../../../portable/time" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 hmac = { version = "0.12.1", default-features = false }
-pbkdf2 = { version = "0.12.2", default-features = false, features = ["hmac"] }
 sha1 = { version = "0.10.7", default-features = false }
 sha2 = { version = "0.10.9", default-features = false }
 cmac = { version = "0.7.2", default-features = false }
@@ -23,6 +25,7 @@ subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
+pbkdf2 = { version = "0.12.2", default-features = false, features = ["hmac"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
 

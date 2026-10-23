@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, path::Path, process::Command};
 
 pub mod compare;
 mod refresh;
-pub use compare::{Comparison, Verdict, compare_directories};
+pub use compare::{Comparison, Verdict, compare_composition, compare_directories};
 pub use refresh::refresh;
 
 pub const FILE: &str = "sizes.json";

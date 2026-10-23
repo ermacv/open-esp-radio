@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "kebab-case")]
 pub enum ImageClass {
     SystemWatchdog,
+    /// Runtime-provisioned personal station with DHCP and ICMP.
+    WifiStation,
     /// Public-read calibration diagnostic; no station data service.
     DiagnosticPhy,
     /// Bounded radio-health collection; separate from all existing images.
@@ -29,7 +31,8 @@ impl ImageClass {
     pub fn build_features(self, network: &str) -> String {
         if matches!(
             self,
-            Self::SystemWatchdog
+            Self::WifiStation
+                | Self::SystemWatchdog
                 | Self::SystemPanicReset
                 | Self::DiagnosticUsbJtagOff
                 | Self::DiagnosticPhy
@@ -42,10 +45,11 @@ impl ImageClass {
         }
     }
 
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::DiagnosticPhy,
         Self::DiagnosticRadioHealth,
         Self::DiagnosticLowerMac,
+        Self::WifiStation,
         Self::SystemWatchdog,
         Self::SystemPanicReset,
         Self::BootSmoke,
@@ -69,6 +73,7 @@ impl ImageClass {
             Self::DiagnosticPhy => "diagnostic-phy",
             Self::DiagnosticRadioHealth => "diagnostic-radio-health",
             Self::DiagnosticLowerMac => "diagnostic-lower-mac",
+            Self::WifiStation => "wifi-station",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::BootSmoke => "boot-smoke",
@@ -81,6 +86,7 @@ impl ImageClass {
             Self::DiagnosticPhy => "diagnostic-phy",
             Self::DiagnosticRadioHealth => "diagnostic-radio-health",
             Self::DiagnosticLowerMac => "diagnostic-lower-mac",
+            Self::WifiStation => "wifi-station",
             Self::SystemWatchdog => "system-watchdog",
             Self::SystemPanicReset => "system-panic-reset",
             Self::DiagnosticUsbJtagOff => "system-watchdog,usb-jtag-off",

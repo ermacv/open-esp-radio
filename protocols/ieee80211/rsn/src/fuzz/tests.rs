@@ -15,7 +15,7 @@ use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
 
 use super::*;
 use crate::{
-    Akm, EapolKeyFrame, OwnedEapolFrame, Pmk, PtkContext, RsnInterface,
+    Akm, EapolKeyFrame, OwnedEapolFrame, PtkContext, RsnInterface,
     bip::{BipReceiver, BipTransmitter},
     element::validate_rsn_element,
     frames::{
@@ -33,7 +33,15 @@ use crate::{
 /// The captured Message 3's PTK and its decrypted key data.
 fn message3() -> (crate::Ptk, Vec<u8>) {
     let frame = EapolKeyFrame::parse(&MESSAGE3).unwrap();
-    let pmk = Pmk::derive(b"open-esp-radio-m3", b"oer-m3-784").unwrap();
+    let pmk = {
+        let mut derivation =
+            crate::PmkDerivation::new(b"open-esp-radio-m3", b"oer-m3-784").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(
         Akm::PskSha256,
         PtkContext {

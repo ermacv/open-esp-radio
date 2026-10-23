@@ -2524,6 +2524,24 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         Self::from_config(config, StaSecurity::Open, resources)
     }
 
+    /// Construct a personal station directly in caller-provided storage.
+    #[cfg(feature = "placement")]
+    pub fn init_personal<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+        storage: &'a mut core::mem::MaybeUninit<Self>,
+        config: StaConfig<K, C>,
+        password: SaePassword,
+        pmk: Pmk,
+        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        _capacity: GroupCapacity<GROUPS>,
+    ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
+        Self::from_config_in_place(
+            storage,
+            config,
+            StaSecurity::Personal { password, pmk },
+            resources,
+        )
+    }
+
     /// Build a personal station. `capacity` proves its group capacity nonzero.
     pub fn new_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         config: StaConfig<K, C>,

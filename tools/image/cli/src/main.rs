@@ -49,6 +49,10 @@ enum Command {
     Sizes {
         base: std::path::PathBuf,
         head: std::path::PathBuf,
+        /// Compare a new composition against the sum of BASE and these images.
+        /// Allows different recipes; compiler, target and profile must agree.
+        #[arg(long = "add-base")]
+        additional: Vec<std::path::PathBuf>,
     },
     /// Reanalyse saved ELF bundles into a separate summary tree; never builds.
     SizesRefresh {
@@ -158,8 +162,16 @@ fn main() -> ExitCode {
                     },
             } => return w3::check_files(&console, &observations),
             Command::Build { image, analysis } => command::build(&root, &image, analysis)?,
-            Command::Sizes { base, head } => {
-                let result = oer_image_build::sizes::compare_directories(&base, &head)?;
+            Command::Sizes {
+                base,
+                head,
+                additional,
+            } => {
+                let result = if additional.is_empty() {
+                    oer_image_build::sizes::compare_directories(&base, &head)?
+                } else {
+                    oer_image_build::sizes::compare_composition(&base, &additional, &head)?
+                };
                 print!("{}", result.output);
                 return Ok(if result.verdict == oer_image_build::sizes::Verdict::Stop {
                     ExitCode::FAILURE

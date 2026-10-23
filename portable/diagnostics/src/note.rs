@@ -502,6 +502,9 @@ topics! {
         "OPEN_RADIO_HIL placement=PASS isr=SRAM dma_probes=SRAM task_stack=PSRAM irq_stack=SRAM" ();
     /// The entropy source passed its health test.
     EntropyPass = 14, entropy_pass, "OPEN_RADIO_HIL entropy=PASS" ();
+    /// Device wall time for one cooperative WPA2 PMK derivation.
+    StationPmk = 16, station_pmk, "OPEN_RADIO_HIL station-pmk"
+        ("elapsed_us" elapsed_us: wide);
     /// A physical-layer step failed without an error to report.
     PhyFail = 15, phy_fail, "OPEN_RADIO_HIL phy=FAIL"
         ("step" step: name);

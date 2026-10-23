@@ -3,7 +3,14 @@ use crate::{EAPOL_KEY_PACKET_LEN, EapolKeyFrame, EapolKeyMessage, frames};
 
 #[test]
 fn derives_known_ieee_pmk() {
-    let pmk = Pmk::derive(b"password", b"IEEE").unwrap();
+    let pmk = {
+        let mut derivation = crate::PmkDerivation::new(b"password", b"IEEE").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     assert_eq!(
         pmk.0,
         [

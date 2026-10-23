@@ -35,7 +35,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
- "cipher",
+ "cipher 0.4.4",
  "cpufeatures 0.2.17",
  "zeroize",
 ]
@@ -350,6 +350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -487,7 +488,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ae3c82e4355234767756212c570e29833699ab63e6ffd161887314cc5b43847"
 dependencies = [
  "aead",
- "cipher",
+ "cipher 0.4.4",
  "ctr",
  "subtle",
 ]
@@ -505,6 +506,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "chacha20"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
+dependencies = [
+ "cfg-if",
+ "cipher 0.5.2",
+ "cpufeatures 0.3.1",
+ "zeroize",
+]
+
+[[package]]
 name = "chunked_transfer"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,7 +530,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common 0.1.7",
- "inout",
+ "inout 0.1.4",
+]
+
+[[package]]
+name = "cipher"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8cf2a2c93cd704877c0858356ed03480ff301ee950b43f1cbe4573b088bfa6c"
+dependencies = [
+ "block-buffer 0.12.1",
+ "crypto-common 0.2.2",
+ "inout 0.2.5",
+ "zeroize",
 ]
 
 [[package]]
@@ -566,7 +591,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8543454e3c3f5126effff9cd44d562af4e31fb8ce1cc0d3dcd8f084515dbc1aa"
 dependencies = [
- "cipher",
+ "cipher 0.4.4",
  "dbl",
  "digest 0.10.7",
 ]
@@ -754,7 +779,7 @@ version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
 dependencies = [
- "cipher",
+ "cipher 0.4.4",
 ]
 
 [[package]]
@@ -1976,6 +2001,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "707114b52a152fa7bdb290cd7cd5912d9467273b6d74e21b8d81aca1f8533f6b"
 dependencies = [
  "typenum",
+ "zeroize",
 ]
 
 [[package]]
@@ -2120,6 +2146,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "inout"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b5cf4372d022092674a83b8febf5865f7a573cc0c5baec5e49c879b6a20978f"
+dependencies = [
+ "hybrid-array",
 ]
 
 [[package]]
@@ -3327,21 +3362,47 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "embassy-executor",
+ "embassy-futures",
+ "embassy-net",
  "embassy-sync 0.8.0",
  "embassy-time",
  "esp-hal",
+ "heapless 0.9.3",
  "oer-diagnostics",
+ "oer-embassy-net",
+ "oer-embassy-time",
  "oer-esp32s31-board",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211-driver",
+ "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-layout",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-radio-client",
+ "oer-esp32s31-radio-coex",
+ "oer-esp32s31-radio-system",
  "oer-espressif-esp-hal-irq",
+ "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
+ "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-fifo",
  "oer-hil-agent",
  "oer-hil-protocol",
+ "oer-ieee80211-arbiter",
+ "oer-ieee80211-port",
+ "oer-ieee80211-rsn",
+ "oer-ieee80211-runtime",
+ "oer-ieee80211-sta",
+ "oer-ieee80211-upper-mac",
+ "oer-ieee80211-wire",
+ "oer-interrupt-table",
  "oer-memory",
+ "oer-radio-port",
+ "oer-radio-regulatory",
+ "oer-time",
  "static_cell",
+ "xarxa-driver",
 ]
 
 [[package]]
@@ -3859,6 +3920,8 @@ name = "oer-ieee80211-rsn"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "chacha20",
+ "cipher 0.5.2",
  "cmac",
  "hmac",
  "oer-ieee80211-cipher",

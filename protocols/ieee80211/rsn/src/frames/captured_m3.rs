@@ -11,7 +11,7 @@
 //! bytes are retained unchanged; SNonce is from Message 2.
 
 use super::*;
-use crate::{Akm, EapolKeyFrame, EapolKeyMessage, Pmk, PtkContext};
+use crate::{Akm, EapolKeyFrame, EapolKeyMessage, PtkContext};
 
 pub(crate) const MESSAGE3: [u8; 187] = [
     0x02, 0x03, 0x00, 0xb7, 0x02, 0x13, 0xcb, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -46,7 +46,15 @@ const GTK: [u8; 16] = [
 fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     let frame = EapolKeyFrame::parse(&MESSAGE3).unwrap();
     assert_eq!(frame.message(), EapolKeyMessage::PairwiseMessage3);
-    let pmk = Pmk::derive(b"open-esp-radio-m3", b"oer-m3-784").unwrap();
+    let pmk = {
+        let mut derivation =
+            crate::PmkDerivation::new(b"open-esp-radio-m3", b"oer-m3-784").unwrap();
+        loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        }
+    };
     let ptk = pmk.derive_ptk(
         Akm::PskSha256,
         PtkContext {

@@ -1,6 +1,7 @@
 //! Platform observations and diagnostics, independent of radio protocols.
 #[cfg(feature = "system-watchdog")]
 pub(super) mod console;
+#[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
 pub(crate) mod panic;
 #[cfg(feature = "system-panic-reset")]
 pub(super) mod panic_reset;

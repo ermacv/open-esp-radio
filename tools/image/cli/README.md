@@ -5,6 +5,7 @@ flash and runs them to a verdict.
 
 ```console
 cargo fw sizes <base-output-directory> <head-output-directory>
+cargo fw sizes <base-image> <new-composition> --add-base <second-base-image>
 cargo fw decode-console <console.raw.txt>
 cargo fw build <image>
 cargo fw build <w0|w1|w2> --analysis
@@ -214,6 +215,13 @@ interface never are, in no message, lock file or `log.txt`.
 `cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
 exit 0, `stop` or incompatible provenance exit 1. See the [summary format and
 owner thresholds](../build/README.md#size-summaries-and-owner-thresholds).
+
+With `--add-base`, each directory names one `sizes.json` bundle. This explicit
+composition mode permits different image recipes and compares each SRAM section
+and allocated stack against the sum of the baselines. Compiler, chip, target,
+profile and compiler flags must still agree. The table lists each original
+image, the allocation budget and the new composition; type/frame inventories
+remain reports. No input summary or provenance is rewritten.
 
 `cargo fw sizes-refresh INPUT OUTPUT --source-root CONFIGURATION` reanalyses
 saved ELF bundles into a separate schema-2 summary tree without compiling or
