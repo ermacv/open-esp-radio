@@ -63,18 +63,6 @@ pub fn configure_table_memory_base_index(registers: &mut impl SharedPhyAccess, i
     registers.configure_table_memory_base_index(index);
 }
 
-/// Apply complete rev0 ROM `phy_force_pwr_index`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_forced_power_index(
-    registers: &mut impl SharedPhyAccess,
-    enabled: bool,
-    index: PhyForcedPowerIndex,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_forced_power_index(enabled, index);
-}
-
 /// Publish one TX-CFR memory entry and its complete commit pulse.
 ///
 /// Basis: complete S31 `libphy.a[phy_tx_gain.o]::phy_set_tx_cfr_mem`, size

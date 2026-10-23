@@ -32,7 +32,7 @@ pub struct RxDmaBinding<'storage> {
     reserved_address: u32,
     reserved_head: DmaRef<WifiRxDmaDescriptor>,
     /// The table, for a model walker that follows its links.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     table: RxWalkerTable<'storage>,
     arena: &'storage RxArenaWords,
 }
@@ -69,7 +69,7 @@ impl RxDmaWalkerEnabled<'_> {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn for_host_test() -> Self {
         Self::confirmed()
     }
@@ -87,7 +87,7 @@ impl RxDmaReloadSettled<'_> {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn for_host_test() -> Self {
         Self::confirmed()
     }
@@ -102,7 +102,7 @@ impl<'confirmation> RxDmaWalkerStopped<'confirmation> {
     }
 
     /// A model walker's stop proof for the binding it was handed.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn for_host_test(binding: &'confirmation RxDmaBinding<'_>) -> Self {
         Self::confirmed(binding)
     }
@@ -140,7 +140,7 @@ impl RxDmaNextDescriptor {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn for_host_test(address_low: u32, unknown_upper_nonzero: bool) -> Self {
         Self::from_fields(address_low, unknown_upper_nonzero)
     }
@@ -208,7 +208,7 @@ impl RxDmaCursorObservation<'_> {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn for_host_test(last_descriptor_low: u32, next_descriptor_low: u32) -> Self {
         Self::confirmed(last_descriptor_low, next_descriptor_low)
     }
@@ -225,7 +225,7 @@ impl RxDmaCursorObservation<'_> {
 /// The descriptors a model walker resolves its cursors against: the ring
 /// at `descriptor_base` and the reserved descriptor right after it (test
 /// support only).
-#[cfg(any(test, feature = "test-support", oer_probe))]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy)]
 pub struct RxWalkerTable<'storage> {
     descriptor_base: u32,
@@ -233,7 +233,7 @@ pub struct RxWalkerTable<'storage> {
     reserved: &'storage crate::ieee80211::dma::descriptor::RxDescriptor,
 }
 
-#[cfg(any(test, feature = "test-support", oer_probe))]
+#[cfg(any(test, feature = "test-support"))]
 impl<'storage> RxWalkerTable<'storage> {
     pub(crate) const fn new(
         descriptor_base: u32,
@@ -301,7 +301,7 @@ impl<'storage> RxDmaBinding<'storage> {
         Some(Self {
             reserved_address,
             reserved_head,
-            #[cfg(any(test, feature = "test-support", oer_probe))]
+            #[cfg(any(test, feature = "test-support"))]
             table: RxWalkerTable::new(descriptor_base, table.ring(), table.reserved()),
             arena,
         })
@@ -320,7 +320,7 @@ impl<'storage> RxDmaBinding<'storage> {
 
     /// The descriptor at the low address bits `low`, which the walker's
     /// LAST/NEXT registers report, when it belongs to this table.
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn descriptor_at_low(
         &self,
         low: u32,
@@ -536,5 +536,5 @@ impl RxDma for WifiRxDmaEngine {
     }
 }
 
-#[cfg(any(test, feature = "test-support", oer_probe))]
+#[cfg(any(test, feature = "test-support"))]
 pub mod model;

@@ -8,8 +8,6 @@
 
 use crate::WifiRadioRegisters;
 use crate::generated::PhyLowRateState;
-#[cfg(oer_probe)]
-use crate::generated::PhyRx11bLowRateArgument;
 
 const fn phy_low_rate_state(enabled: bool) -> PhyLowRateState {
     if enabled {
@@ -38,18 +36,6 @@ impl WifiRadioRegisters {
         crate::svd::field_read::observe_phy_low_rate_enabled(
             &self.peripherals.wifi_mac.wifi_phy_rate_oracle,
         )
-    }
-
-    /// Apply complete rev0 ROM `phy_rx11blr_cfg` without widening the caller
-    /// low-bit contract into a boolean ABI.
-    #[cfg(oer_probe)]
-    pub fn configure_rx_11b_low_rate(&mut self, input: u32) {
-        let input = PhyRx11bLowRateArgument::new(input)
-            .expect("every u32 is a complete phy_rx11blr_cfg argument");
-        let rate = &self.peripherals.wifi_mac.wifi_phy_rate_oracle;
-        crate::generated::configure_phy_rx11b_first_low_rate_state(rate, input);
-        crate::generated::configure_phy_rx11b_second_low_rate_state(rate, input);
-        crate::generated::configure_phy_rx11b_secondary_low_rate_state(rate, input);
     }
 
     /// Read the current hardware noise floor as the signed byte used by MAC

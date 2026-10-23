@@ -327,6 +327,7 @@ fn calibration_or_replay_changes_require_a_reviewed_revision() {
     let expected = match revision {
         (1, 1) => "e28a4e4c74b0d8ed26a4a390b634ff46175370d20955c29acb109c347e30b16c",
         (2, 1) => "4e9a61acd06a95e0a9c13ee09dfcab05cb6d0799f2eac7a5abcf9f0b0ea8ea68",
+        (3, 1) => "da5fb1d69371d0676bfb8cdc55fd0c6df2e2081e9a72fafa17ba3590a0836615",
         _ => panic!(
             "unreviewed calibration revision/profile {revision:?}; digest {actual}; review INPUTS and add a new pair in revision_guard.rs"
         ),

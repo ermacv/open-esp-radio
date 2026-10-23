@@ -386,7 +386,7 @@ impl PhyTxCfrMmioBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyTxCfrAction {
         self.action
     }
@@ -497,7 +497,7 @@ impl PhyBbMmioBinding {
         Self { action }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyBbMmioAction {
         self.action
     }
@@ -813,7 +813,7 @@ impl PhyBbInitTransition {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn new(state: crate::state::PhyState) -> Self {
         Self::new_on_channel(state, 11)
     }

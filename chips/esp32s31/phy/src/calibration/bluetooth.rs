@@ -23,7 +23,7 @@ pub const fn bluetooth_gain_index_to_baseband(index: u32) -> u32 {
 /// Basis: complete rev0 ROM `phy_bt_bb_to_index` at `0x2f82_6b36`, size
 /// `0x1c`. Noncanonical encodings map to index zero exactly as in ROM.
 #[inline]
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub const fn bluetooth_baseband_to_gain_index(baseband: u32) -> u32 {
     match baseband {
         0x80 => 1,

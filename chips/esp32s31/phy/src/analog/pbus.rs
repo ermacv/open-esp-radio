@@ -540,7 +540,7 @@ impl PhyForceTxRxMmioBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyForceTxRxAction {
         PhyForceTxRxAction::Configure {
             enabled: self.enabled,
@@ -585,7 +585,7 @@ impl PhyForceTxRxTimerBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyForceTxRxAction {
         PhyForceTxRxAction::DelayMicros {
             enabled: self.enabled,

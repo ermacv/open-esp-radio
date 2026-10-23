@@ -316,7 +316,7 @@ impl PhyTemperatureI2cBinding {
         })
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn outer_action(&self) -> PhyTemperatureAction {
         self.outer_action
     }
@@ -325,17 +325,17 @@ impl PhyTemperatureI2cBinding {
         self.transaction.action()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, crate::analog::i2c::PhyI2cError>,
@@ -346,7 +346,7 @@ impl PhyTemperatureI2cBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), crate::analog::i2c::PhyI2cError>,

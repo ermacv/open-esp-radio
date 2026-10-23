@@ -560,20 +560,23 @@ impl PacApiPack {
                      unsafe {{\n\
                          registers.{clear}().write_with_zero(|writer| writer.bits(snapshot.0));\n\
                      }}\n\
-                 }}\n\
-                 /// An event image of the vendor comparison's choosing, for a probe\n\
+                 }}\n",
+                binding.peripheral, binding.status_register, binding.name, binding.name,
+            ));
+            // Bluetooth snapshots are sampled by their owners; only the
+            // IEEE 802.15.4 comparison replays arbitrary event images.
+            if !binding.name.starts_with("bluetooth_") {
+                output.push_str(&format!(
+                    "/// An event image of the vendor comparison's choosing, for a probe\n\
                  /// image that replays a vendor acknowledgement.\n\
                  #[cfg(oer_probe)]\n\
                  #[doc(hidden)]\n\
                  pub const fn {}_for_probe(bits: u32) -> {snapshot_type} {{\n\
                      {snapshot_type}(bits)\n\
                  }}\n",
-                binding.peripheral,
-                binding.status_register,
-                binding.name,
-                binding.name,
-                binding.name,
-            ));
+                    binding.name,
+                ));
+            }
         }
         output.push_str("}\n");
         Ok(output)

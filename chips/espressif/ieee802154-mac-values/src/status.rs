@@ -45,7 +45,7 @@ impl Ieee802154RxStateCode {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_host_test(value: u8) -> Option<Self> {
         if value <= Self::MAX {
@@ -79,7 +79,7 @@ impl Ieee802154TxStateCode {
         Self(value)
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_host_test(value: u8) -> Option<Self> {
         if value <= Self::MAX {

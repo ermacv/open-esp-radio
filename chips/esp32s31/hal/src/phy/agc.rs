@@ -10,8 +10,6 @@ use crate::{owner::SharedPhyAccess, phy_pac, phy_pac_mut};
 
 #[cfg(target_arch = "riscv32")]
 use crate::types::ForcedRxGain;
-#[cfg(oer_probe)]
-use crate::types::PhyFtmEnableVendorArgument;
 
 /// Affine obligation to restore the FTM enable field to its exact prior bit.
 #[must_use = "the exact prior FTM enable bit must be restored"]
@@ -94,14 +92,6 @@ pub fn configure_antenna(registers: &mut impl SharedPhyAccess) {
     registers.configure_agc_antenna();
 }
 
-/// Apply complete rev0 ROM `phy_ant_dft_cfg`.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_antenna_diversity(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_antenna_diversity(enabled);
-}
-
 /// Apply complete rev0 ROM `phy_force_rx_gain`.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_forced_rx_gain(
@@ -111,18 +101,6 @@ pub fn configure_forced_rx_gain(
 ) {
     let registers = phy_pac_mut(registers);
     registers.configure_forced_rx_gain(enabled, gain);
-}
-
-/// Apply complete rev0 ROM `phy_force_rx_gain` from its unmodified vendor ABI.
-#[cfg(target_arch = "riscv32")]
-#[cfg(oer_probe)]
-pub fn configure_forced_rx_gain_from_vendor_arguments(
-    registers: &mut impl SharedPhyAccess,
-    enabled: u32,
-    gain: u32,
-) {
-    let registers = phy_pac_mut(registers);
-    registers.configure_forced_rx_gain_from_vendor_arguments(enabled, gain);
 }
 
 /// Apply either complete branch of rev0 ROM `phy_rfrx_sat_rst`.
@@ -150,13 +128,6 @@ pub fn set_saturation_gain(registers: &mut impl SharedPhyAccess, value: u32) {
 pub fn set_ftm_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
     let registers = phy_pac_mut(registers);
     registers.set_ftm_enabled(enabled);
-}
-
-/// Apply complete `phy_set_ftm_en` semantics to one raw vendor ABI argument.
-#[cfg(oer_probe)]
-pub fn set_ftm_enabled_from_vendor_argument(registers: &mut impl SharedPhyAccess, input: u32) {
-    let registers = phy_pac_mut(registers);
-    registers.set_ftm_enabled_from_vendor_argument(PhyFtmEnableVendorArgument::new(input));
 }
 
 /// Read the exact bit written by [`set_ftm_enabled`].

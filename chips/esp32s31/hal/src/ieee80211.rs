@@ -12,11 +12,6 @@ pub mod dma;
 
 pub mod mac;
 
-#[cfg(oer_probe)]
-#[doc(hidden)]
-#[cfg(oer_probe)]
-pub mod phy_rate;
-
 pub mod station_wake;
 
 /// Role-neutral hardware cold-start before DMA and interrupt publication.

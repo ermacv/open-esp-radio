@@ -818,17 +818,17 @@ impl RfpllFrequencyI2cBinding {
         &mut self.transaction
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, crate::analog::i2c::PhyI2cError>,
@@ -839,7 +839,7 @@ impl RfpllFrequencyI2cBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), crate::analog::i2c::PhyI2cError>,
@@ -1000,10 +1000,3 @@ impl RfpllFrequencyExternalBinding {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(oer_probe)]
-impl RfpllFrequencyTransition {
-    pub const fn request(self) -> RfpllFrequencyRequest {
-        self.request
-    }
-}

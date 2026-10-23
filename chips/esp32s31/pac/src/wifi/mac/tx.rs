@@ -668,13 +668,13 @@ impl MacTxCompletionObservation {
         }
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn with_trigger_flow_model(mut self, trigger_flow: bool) -> Self {
         self.trigger_flow = trigger_flow;
         self
     }
 
-    #[cfg(any(test, feature = "test-support", oer_probe))]
+    #[cfg(any(test, feature = "test-support"))]
     pub const fn with_trigger_packet_counts_model(
         mut self,
         primary: u8,
@@ -1002,16 +1002,6 @@ impl WifiRadioRegisters {
             control.descriptor_address_low().bits(),
         );
         self.start_prepared_mac_tx(queue);
-    }
-
-    /// Apply complete rev0 ROM `phy_enable_cca` or `phy_disable_cca` to the
-    /// two Wi-Fi MAC CCA fields through separate fresh-read updates.
-    #[cfg(oer_probe)]
-    pub fn set_phy_wifi_cca_enabled(&mut self, enabled: bool) {
-        let image = if enabled { 0 } else { 2 };
-        let control = self.peripherals.wifi_mac.wifi_mac_tx_common.cca_control();
-        control.modify(|_, w| w.force().set(image));
-        control.modify(|_, w| w.phy_aux_force().set(image));
     }
 
     /// Program one ordinary queue up to, but excluding, its ENABLE|VALID edge.

@@ -15,7 +15,7 @@
 //! copied.
 
 use crate::analog::pbus::PhyPbusForceTest;
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 use crate::calibration::estimator::phy_linear_to_db;
 
 // Complete rev0 ROM `phy_pwdet_ref_code+0x24` and `+0x50` load `a0 = 4`
@@ -920,7 +920,7 @@ impl PhyPwdetMmioBinding {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(any(test, oer_probe))]
+#[cfg(test)]
 pub enum PhyPwdetPbusBindingAction {
     Start(PhyPbusForceTest),
     SampleCompletion(PhyPbusForceTest),
@@ -964,7 +964,7 @@ impl PhyPwdetPbusBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyPwdetPbusBindingAction {
         match self.hardware.action() {
             crate::analog::pbus::PhyPbusHardwareAction::Start(_) => {
@@ -979,12 +979,12 @@ impl PhyPwdetPbusBinding {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn started(&mut self) -> Result<(), PhyPwdetPbusBindingError> {
         self.hardware.started().map_err(map_pbus_hardware_error)
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -1121,16 +1121,3 @@ impl PhyPwdetExternalBinding {
 
 #[cfg(test)]
 mod tests;
-
-/// Reproduce the separate ROM `phy_get_power_db` transform.
-///
-/// This transform is consumed by later TX calibration code. Complete rev0
-/// ROM `phy_pwdet_ref_code` does not call it: that root stores the raw
-/// four-sample averages returned by `phy_get_tone_sar_dout_`.
-#[cfg(oer_probe)]
-pub fn calculate_pwdet_reference(sample_average: u16, reference_codes: [i16; 2]) -> i16 {
-    let signal = sar_signal_reference(sample_average, reference_codes);
-    phy_linear_to_db(i32::from(signal[0]), 3)
-        .wrapping_add(4)
-        .wrapping_sub(phy_linear_to_db(i32::from(signal[1]), 3)) as i16
-}

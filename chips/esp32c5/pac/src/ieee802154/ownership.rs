@@ -526,17 +526,6 @@ pub enum OperationRxAbortEnableReadback {
     Unexpected,
 }
 
-/// Closed validation-only classification of `EVENT_ENABLE`.
-#[cfg(oer_probe)]
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ValidationEventEnableReadback {
-    AllMasked,
-    TimerPair,
-    EdTimerAbort,
-    Unexpected,
-}
-
 /// Semantic observation shared by `EVENT_ENABLE`, `EVENT_STATUS`, and the
 /// generated affine W1C snapshot.
 ///
@@ -700,40 +689,6 @@ impl Ieee802154EventReadback {
             && !self.tx_sfd_done
             && !self.rx_sfd_done
     }
-
-    #[cfg(oer_probe)]
-    const fn is_timer_pair(self) -> bool {
-        self.timer0_overflow
-            && self.timer1_overflow
-            && !self.tx_done
-            && !self.rx_done
-            && !self.ack_tx_done
-            && !self.ack_rx_done
-            && !self.rx_abort
-            && !self.tx_abort
-            && !self.ed_done
-            && !self.unclassified_7
-            && !self.clock_count_match
-            && !self.tx_sfd_done
-            && !self.rx_sfd_done
-    }
-
-    #[cfg(oer_probe)]
-    const fn is_ed_timer_abort(self) -> bool {
-        self.rx_abort
-            && self.ed_done
-            && self.timer0_overflow
-            && !self.tx_done
-            && !self.rx_done
-            && !self.ack_tx_done
-            && !self.ack_rx_done
-            && !self.tx_abort
-            && !self.unclassified_7
-            && !self.timer1_overflow
-            && !self.clock_count_match
-            && !self.tx_sfd_done
-            && !self.rx_sfd_done
-    }
 }
 
 /// Non-secret readable transmit-security control fields.
@@ -882,22 +837,6 @@ impl TaskRegisters {
             OperationRxAbortEnableReadback::EdOperationReasons
         } else {
             OperationRxAbortEnableReadback::Unexpected
-        }
-    }
-
-    /// Classify the two reset-isolated validation event selections.
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_event_enable_readback(&self) -> ValidationEventEnableReadback {
-        let events = self.event_enable_readback();
-        if events.is_clear() {
-            ValidationEventEnableReadback::AllMasked
-        } else if events.is_timer_pair() {
-            ValidationEventEnableReadback::TimerPair
-        } else if events.is_ed_timer_abort() {
-            ValidationEventEnableReadback::EdTimerAbort
-        } else {
-            ValidationEventEnableReadback::Unexpected
         }
     }
 
@@ -1368,138 +1307,6 @@ impl TaskRegisters {
             crate::generated::Ieee802154TxOffDelay::Delay0,
         );
     }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_enable_timer_events(&mut self) {
-        crate::ieee802154::validation::event_status::enable_timer_events(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_disable_all_events(&mut self) {
-        crate::ieee802154::validation::event_status::disable_all_events(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_timer0_value(&self) -> u32 {
-        crate::ieee802154::validation::event_status::timer0_value(&self.registers)
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_timer1_value(&self) -> u32 {
-        crate::ieee802154::validation::event_status::timer1_value(&self.registers)
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_set_timer_thresholds(&mut self, threshold: u32) {
-        crate::ieee802154::validation::event_status::set_timer_thresholds(
-            &self.registers,
-            threshold,
-        );
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_start_timer0(&mut self) {
-        crate::ieee802154::validation::event_status::start_timer0(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_stop_timer0(&mut self) {
-        crate::ieee802154::validation::event_status::stop_timer0(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_start_timer1(&mut self) {
-        crate::ieee802154::validation::event_status::start_timer1(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_stop_timer1(&mut self) {
-        crate::ieee802154::validation::event_status::stop_timer1(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_enable_ed_timer_abort_events(&mut self) {
-        crate::ieee802154::validation::ed_event::enable_ed_timer_abort_events(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_disable_ed_events(&mut self) {
-        crate::ieee802154::validation::ed_event::disable_all_events(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_enable_ed_abort_reasons(&mut self) {
-        crate::ieee802154::validation::ed_event::enable_ed_abort_reasons(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_disable_ed_abort_reasons(&mut self) {
-        crate::ieee802154::validation::ed_event::disable_all_rx_abort_reasons(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_ed_duration(&self) -> u32 {
-        crate::ieee802154::validation::ed_event::ed_duration(&self.registers)
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_set_ed_duration_eight(&mut self) {
-        crate::ieee802154::validation::ed_event::set_ed_duration_eight(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_ed_timer0_value(&self) -> u32 {
-        crate::ieee802154::validation::ed_event::timer0_value(&self.registers)
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_set_ed_timer0_threshold(&mut self, threshold: u32) {
-        crate::ieee802154::validation::ed_event::set_timer0_threshold(
-            &mut self.registers,
-            threshold,
-        );
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_start_ed_timer0(&mut self) {
-        crate::ieee802154::validation::ed_event::start_timer0(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_stop_ed_timer0(&mut self) {
-        crate::ieee802154::validation::ed_event::stop_timer0(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_start_ed(&mut self) {
-        crate::ieee802154::validation::ed_event::start_ed(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_stop_ed_operation(&mut self) {
-        crate::ieee802154::validation::ed_event::stop_operation(&mut self.registers);
-    }
 }
 
 /// Inactive or ISR-owned IEEE 802.15.4 event/status capability.
@@ -1644,42 +1451,6 @@ impl InterruptRegisters {
             self.registers.rx_status().read().state().bits(),
             self.registers.tx_status().read().state().bits(),
         )
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_event_status_events(&self) -> Ieee802154EventReadback {
-        crate::ieee802154::validation::event_status::event_status_events(&self.registers)
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_write_timer0_event(&mut self) {
-        crate::ieee802154::validation::event_status::write_timer0_event(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_write_timer1_event(&mut self) {
-        crate::ieee802154::validation::event_status::write_timer1_event(&self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_ed_event_status_events(&self) -> Ieee802154EventReadback {
-        crate::ieee802154::validation::ed_event::event_status_events(&self.registers)
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_write_ed_done_event(&mut self) {
-        crate::ieee802154::validation::ed_event::write_ed_done_event(&mut self.registers);
-    }
-
-    #[cfg(oer_probe)]
-    #[doc(hidden)]
-    pub fn validation_write_ed_timer0_event(&mut self) {
-        crate::ieee802154::validation::ed_event::write_timer0_event(&mut self.registers);
     }
 }
 

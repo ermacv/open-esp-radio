@@ -166,7 +166,7 @@ impl BluetoothClockBaseline {
     }
 
     /// A baseline with every physical gate enabled, for host tests.
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn all_enabled_for_host_test() -> Self {
         Self([true; BLUETOOTH_PHYSICAL_CLOCK_COUNT])

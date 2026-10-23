@@ -9,8 +9,6 @@ use crate::generated::{
     PhyPbusMemoryCommand, PhyReceiveTableGainData1, PhyReceiveTableGainData2, PhyTransmitGainData0,
     PhyTransmitGainData1, PhyTransmitGainData2,
 };
-#[cfg(oer_probe)]
-use crate::{PhyForcedPowerIndex, generated::PhyForcedPowerState};
 
 /// Parameter-dependent first PBUS table word (`phy_set_pbus_mem`).
 pub const fn pbus_memory_parameter_002_data(parameter: u8) -> u32 {
@@ -139,15 +137,6 @@ pub enum PhyMemoryError {
     PbusCommandOutOfRange,
 }
 
-#[cfg(oer_probe)]
-const fn forced_power_state(enabled: bool) -> PhyForcedPowerState {
-    if enabled {
-        PhyForcedPowerState::Enabled
-    } else {
-        PhyForcedPowerState::Disabled
-    }
-}
-
 impl RadioPhyRegisters {
     /// Restore one packed PBUS-memory group boundary without rewriting table
     /// memory.
@@ -257,15 +246,6 @@ impl RadioPhyRegisters {
             PhyMemoryIndex::new(u32::from(index))
                 .expect("u8 always fits the reviewed PHY memory-index domain"),
         );
-    }
-
-    /// Apply complete rev0 ROM `phy_force_pwr_index` through its two ordered
-    /// fresh-read field replacements.
-    #[cfg(oer_probe)]
-    pub fn configure_forced_power_index(&mut self, enabled: bool, index: PhyForcedPowerIndex) {
-        let control = &self.peripherals.phy_clock_oracle;
-        crate::generated::configure_forced_power_state(control, forced_power_state(enabled));
-        crate::generated::configure_forced_power_index(control, index);
     }
 
     /// Publish one TX-CFR entry and its complete set/clear commit pulse.

@@ -701,7 +701,7 @@ impl PhyState {
         &self.config
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn set_tx_power_tracking_slow(&mut self, value: u8) {
         self.wifi.tx_power_tracking_slow = value;
     }
@@ -737,7 +737,7 @@ impl PhyState {
         }
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn set_current_level(&mut self, value: u8) {
         self.wifi.current_level = value;
     }
@@ -979,17 +979,17 @@ impl PhyState {
         self.apply_bluetooth_tx_power_outcome(outcome.tx_power);
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn set_ble_channel_base(&mut self, value: u8) {
         self.bluetooth.channel_base = value;
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub const fn ble_channel_base(&self) -> u8 {
         self.bluetooth.channel_base
     }
 
-    #[cfg(any(test, oer_probe))]
+    #[cfg(test)]
     pub fn set_initialization_parameter(&mut self, value: u32) {
         self.common.initialization_parameter = value & 1 != 0;
     }
