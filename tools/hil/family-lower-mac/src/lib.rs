@@ -12,6 +12,7 @@ use oer_hil_scenario::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+pub use workload::model as model_trace;
 
 pub const FAMILY: Kind = Kind::of::<LowerMacScenario>("lower-mac");
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
