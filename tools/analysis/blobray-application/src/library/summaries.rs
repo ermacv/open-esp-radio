@@ -36,6 +36,7 @@ struct Entry<'m> {
     discovery: usize,
     low: usize,
     active: bool,
+    required: bool,
 }
 struct Group {
     members: Vec<usize>,
@@ -148,7 +149,7 @@ fn integrity() -> Error {
 impl<'m> Summaries<'m> {
     fn new(
         catalog: &Callees<'m>,
-        signatures: Option<&crate::signatures::Signatures>,
+        assumptions: Assumptions<'_>,
         memory: &'m WorkingMemory,
         c: &mut dyn RunControl,
     ) -> Result<Self> {
@@ -159,7 +160,7 @@ impl<'m> Summaries<'m> {
             groups: Groups::default(),
             ledger: Ledger::new(memory, c)?,
         };
-        if let Some(signatures) = signatures {
+        if let Some(signatures) = assumptions.signatures {
             for signature in signatures.functions() {
                 c.checkpoint(1)?;
                 let name = signature.name.as_bytes().to_vec();
@@ -213,6 +214,8 @@ impl<'m> Summaries<'m> {
             }
             out.entries.push(
                 Entry {
+                    required: assumptions
+                        .selects(function.as_ref().and_then(|f| f.name.as_deref())),
                     function,
                     object: None,
                     key,
@@ -295,7 +298,7 @@ pub(super) fn analyze<'a>(
     c: &mut dyn RunControl,
     visit: &mut Visit<'_>,
 ) -> Result<()> {
-    let mut table = Summaries::new(catalog, assumptions.signatures, memory, c)?;
+    let mut table = Summaries::new(catalog, assumptions, memory, c)?;
     let mut objects = AdmittedVec::new(memory);
     // Preparation is structural; each function is analyzed exactly once here
     // without summaries, and once below with its completed callee contracts.
@@ -444,47 +447,19 @@ pub(super) fn analyze<'a>(
                     return Err(integrity());
                 };
                 table.entry_mut(id)?.object = Some(object_id);
-                let mut limits = FunctionLimits::default();
-                let records = match research(
-                    &mut objects,
-                    object_id,
-                    &function,
-                    assumptions,
-                    &NoSummaries,
-                    decoder,
-                    memory,
-                    &mut limits,
-                    c,
-                ) {
-                    Ok((records, _, _, _)) => records,
-                    Err(e) if blocks_function(&e) => {
-                        table.entry_mut(id)?.object = None;
-                        visit(
-                            LibraryOutcome::Blocked {
-                                function: &function,
-                                error: &e,
-                            },
-                            c,
-                        )?;
-                        continue;
-                    }
-                    Err(e) => return Err(e),
-                };
-                table.entry_mut(id)?.limits = limits;
-                let facts = function_facts(&function, &records, memory, c)?;
-                let links = CallLinks::new(&facts, &function, catalog, memory, c)?;
-                let mut edges = AdmittedVec::new(memory);
-                for key in links.keys() {
-                    c.checkpoint(1)?;
-                    if let Some(group) = table.groups.get(key) {
-                        for target in group.members.iter().copied() {
-                            edges.push(target, c.position())?;
-                        }
-                    }
+                if assumptions.functions.is_empty() {
+                    discover(
+                        &mut table,
+                        &mut objects,
+                        id,
+                        assumptions,
+                        catalog,
+                        decoder,
+                        memory,
+                        c,
+                        visit,
+                    )?;
                 }
-                c.checkpoint(edges.len() as u64 * u64::from(edges.len().max(1).ilog2() + 1))?;
-                edges.sort_unstable(); // repeated edges are harmless and admitted
-                table.entry_mut(id)?.edges = edges;
             }
             Ok(())
         })?;
@@ -515,6 +490,36 @@ pub(super) fn analyze<'a>(
             }
         }
     }
+    if !assumptions.functions.is_empty() {
+        let mut pending = AdmittedVec::new(memory);
+        for id in 0..table.entries.len() {
+            if table.entry(id)?.required {
+                pending.push(id, c.position())?;
+            }
+        }
+        let mut cursor = 0;
+        while let Some(id) = pending.get(cursor).copied() {
+            cursor += 1;
+            discover(
+                &mut table,
+                &mut objects,
+                id,
+                assumptions,
+                catalog,
+                decoder,
+                memory,
+                c,
+                visit,
+            )?;
+            for edge in 0..table.entry(id)?.edges.len() {
+                let target = table.entry(id)?.edges[edge];
+                if !table.entry(target)?.required {
+                    table.entry_mut(target)?.required = true;
+                    pending.push(target, c.position())?;
+                }
+            }
+        }
+    }
     // Tarjan emits components in callee-first order. Recursive components are
     // analyzed for final records, but no member publishes a narrowing summary.
     let mut stack = AdmittedVec::new(memory);
@@ -522,7 +527,7 @@ pub(super) fn analyze<'a>(
     let mut component = AdmittedVec::new(memory);
     let mut sequence = 0;
     for root in 0..table.entries.len() {
-        if table.entry(root)?.discovery != usize::MAX {
+        if !table.entry(root)?.required || table.entry(root)?.discovery != usize::MAX {
             continue;
         }
         frames.push((root, 0usize), c.position())?;
@@ -903,6 +908,66 @@ pub(super) fn analyze<'a>(
             }
         }
     }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn discover<'a>(
+    table: &mut Summaries<'a>,
+    objects: &mut AdmittedVec<'a, Object<'a>>,
+    id: usize,
+    assumptions: Assumptions<'_>,
+    catalog: &Callees<'a>,
+    decoder: &dyn FunctionSemantics,
+    memory: &'a WorkingMemory,
+    c: &mut dyn RunControl,
+    visit: &mut Visit<'_>,
+) -> Result<()> {
+    let entry = table.entry(id)?;
+    let (Some(object), Some(function)) = (entry.object, entry.function.clone()) else {
+        return Ok(());
+    };
+    let mut limits = FunctionLimits::default();
+    let records = match research(
+        objects,
+        object,
+        &function,
+        assumptions,
+        &NoSummaries,
+        decoder,
+        memory,
+        &mut limits,
+        c,
+    ) {
+        Ok((records, _, _, _)) => records,
+        Err(error) if blocks_function(&error) => {
+            table.entry_mut(id)?.object = None;
+            visit(
+                LibraryOutcome::Blocked {
+                    function: &function,
+                    error: &error,
+                },
+                c,
+            )?;
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    table.entry_mut(id)?.limits = limits;
+    let facts = function_facts(&function, &records, memory, c)?;
+    let links = CallLinks::new(&facts, &function, catalog, memory, c)?;
+    let mut edges = AdmittedVec::new(memory);
+    for key in links.keys() {
+        c.checkpoint(1)?;
+        if let Some(group) = table.groups.get(key) {
+            for target in group.members.iter().copied() {
+                edges.push(target, c.position())?;
+            }
+        }
+    }
+    c.checkpoint(edges.len() as u64 * u64::from(edges.len().max(1).ilog2() + 1))?;
+    edges.sort_unstable();
+    table.entry_mut(id)?.edges = edges;
     Ok(())
 }
 
@@ -1473,7 +1538,8 @@ mod tests {
     fn catalog_and_counters_keep_all_three_summary_outcomes() {
         let memory = WorkingMemory::new(1 << 20).expect("memory");
         let catalog = Callees::capture(&[], &memory, &mut || Ok(())).expect("catalog");
-        let mut table = Summaries::new(&catalog, None, &memory, &mut || Ok(())).expect("table");
+        let mut table = Summaries::new(&catalog, Assumptions::default(), &memory, &mut || Ok(()))
+            .expect("table");
         let mut counts = SummaryOutcomeCounts::default();
         let mut resources = AnalysisLimited::default();
         let reason = LocalBudgetExceeded {
@@ -1519,6 +1585,7 @@ mod tests {
                         discovery: 0,
                         low: 0,
                         active: false,
+                        required: true,
                     },
                     RunPosition::default(),
                 )

@@ -52,6 +52,7 @@ struct Assumptions {
 impl Assumptions {
     fn analysis(&self) -> app::library::Assumptions<'_> {
         app::library::Assumptions {
+            functions: &[],
             abi: self.abi.map(|AbiArg::RiscvInteger| CallAbi::RiscvInteger),
             call_summaries: self.call_summaries,
             signatures: self.signatures.as_ref(),
@@ -620,7 +621,10 @@ fn function_records(
     let mut functions = Vec::new();
     let mut limited = app::library::analyze_library(
         &executables,
-        assumptions,
+        app::library::Assumptions {
+            functions: &names,
+            ..assumptions
+        },
         &oer_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,

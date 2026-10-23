@@ -573,6 +573,7 @@ fn a_call_takes_the_constants_its_callee_returns() {
                 length: 0x2000,
             }],
             Assumptions {
+                functions: &[],
                 abi: None,
                 call_summaries,
                 signatures: None,
@@ -665,6 +666,7 @@ fn returned_addresses(inputs: &[Executable], name: &str) -> Vec<u32> {
             length: 0x3000,
         }],
         Assumptions {
+            functions: &[],
             abi: None,
             call_summaries: true,
             signatures: None,
