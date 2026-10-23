@@ -33,6 +33,34 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
                 let [high, low] = (next()? as u16).to_be_bytes();
                 write!(out, "xx:xx:xx:xx:{high:02X}:{low:02X}")?
             }
+            Field::Ascii2 => {
+                let [high, low] = (next()? as u16).to_be_bytes();
+                write!(out, "{}{}", char::from(high), char::from(low))?
+            }
+            Field::I8x4 => {
+                let [a, b, c, d] = next()?.to_be_bytes().map(|byte| byte as i8);
+                write!(out, "{a},{b},{c},{d}")?
+            }
+            Field::Bytes8 | Field::Bytes16 => {
+                let words = if matches!(*field, Field::Bytes8) {
+                    2
+                } else {
+                    4
+                };
+                let length = next()? as usize;
+                if length == 0 {
+                    out.write_str("-")?;
+                }
+                let mut left = length;
+                for _ in 0..words {
+                    for byte in next()?.to_be_bytes() {
+                        if left > 0 {
+                            write!(out, "{byte:02x}")?;
+                            left -= 1;
+                        }
+                    }
+                }
+            }
             Field::Ipv4 => {
                 let [a, b, c, d] = next()?.to_be_bytes();
                 write!(out, "{a}.{b}.{c}.{d}")?

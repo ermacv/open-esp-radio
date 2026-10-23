@@ -10,6 +10,7 @@ description = "W2: regulatory active scan and acknowledged unicast Probe Request
 build = "build.rs"
 
 [dependencies]
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
 oer-ieee80211-upper-mac = { path = "../../../protocols/ieee80211/upper-mac" }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }

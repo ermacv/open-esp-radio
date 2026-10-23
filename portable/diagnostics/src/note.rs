@@ -3,6 +3,20 @@
 //! (argument count and kinds are checked by the compiler); the host looks the
 //! topic up in the `render` feature's layout and prints the text.
 
+/// How a topic's text joins the console line it belongs to: a long line is
+/// several notes, and the host prints their texts as one line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Part {
+    /// The note is a whole line.
+    Whole,
+    /// The note starts a line that the next note continues.
+    First,
+    /// The note continues the line and the next note continues it further.
+    Middle,
+    /// The note ends the line it continues.
+    Last,
+}
+
 /// Most 32-bit words one note carries.
 pub const MAX_WORDS: usize = 8;
 /// Most names (static text such as a register or a variant) in one note.
@@ -30,6 +44,15 @@ pub enum Field {
     MacTail,
     /// An IPv4 address in the word, most significant byte first.
     Ipv4,
+    /// Two ASCII characters in the word, the first in the high byte.
+    Ascii2,
+    /// Four signed bytes in the word, the first in the high byte, as `a,b,c,d`.
+    I8x4,
+    /// A byte list of at most 8 in a length word and two words, as lower-case
+    /// hexadecimal pairs, or `-` when empty.
+    Bytes8,
+    /// As [`Field::Bytes8`], for at most 16 bytes in a length word and four.
+    Bytes16,
     /// A 64-bit decimal in two words, low word first.
     Wide,
     /// A signed decimal.
@@ -108,6 +131,21 @@ impl<'a> Note<'a> {
         self
     }
 
+    /// A length word and `words` words of the bytes, first byte in the high
+    /// byte of the first word; at most `4 * words` bytes are kept.
+    fn byte_words(self, bytes: &[u8], words: usize) -> Self {
+        let kept = bytes.get(..bytes.len().min(4 * words)).unwrap_or(&[]);
+        let mut note = self.word(kept.len() as u32);
+        for index in 0..words {
+            let mut word = [0; 4];
+            for (slot, byte) in word.iter_mut().zip(kept.iter().skip(4 * index)) {
+                *slot = *byte;
+            }
+            note = note.word(u32::from_be_bytes(word));
+        }
+        note
+    }
+
     fn wide(self, value: u64) -> Self {
         self.word(value as u32).word((value >> 32) as u32)
     }
@@ -172,6 +210,10 @@ macro_rules! argument {
     (bit) => { bool };
     (mactail) => { [u8; 2] };
     (ipv4) => { [u8; 4] };
+    (ascii2) => { [u8; 2] };
+    (i8x4) => { [i8; 4] };
+    (bytes8) => { &[u8] };
+    (bytes16) => { &[u8] };
     (wide) => { u64 };
     (name) => { &'a str };
 }
@@ -219,6 +261,18 @@ macro_rules! push {
     ($note:ident, $value:ident, ipv4) => {
         $note.word(u32::from_be_bytes($value))
     };
+    ($note:ident, $value:ident, ascii2) => {
+        $note.word(u32::from(u16::from_be_bytes($value)))
+    };
+    ($note:ident, $value:ident, i8x4) => {
+        $note.word(u32::from_be_bytes($value.map(|byte| byte as u8)))
+    };
+    ($note:ident, $value:ident, bytes8) => {
+        $note.byte_words($value, 2)
+    };
+    ($note:ident, $value:ident, bytes16) => {
+        $note.byte_words($value, 4)
+    };
     ($note:ident, $value:ident, wide) => {
         $note.wide($value)
     };
@@ -230,6 +284,12 @@ macro_rules! push {
 macro_rules! words_of {
     (wide) => {
         2
+    };
+    (bytes8) => {
+        3
+    };
+    (bytes16) => {
+        5
     };
     (name) => {
         0
@@ -303,6 +363,18 @@ macro_rules! field_of {
     };
     (ipv4) => {
         Field::Ipv4
+    };
+    (ascii2) => {
+        Field::Ascii2
+    };
+    (i8x4) => {
+        Field::I8x4
+    };
+    (bytes8) => {
+        Field::Bytes8
+    };
+    (bytes16) => {
+        Field::Bytes16
     };
     (wide) => {
         Field::Wide
@@ -461,6 +533,33 @@ topics! {
     W3End = 111, w3_end, "OER-W3-END lines=12" ();
     W3Pass = 112, w3_pass, "OER-RESULT: pass w3" ();
     W3Fail = 113, w3_fail, "OER-RESULT: fail w3" ();
+    /// W2 console block.
+    W2Begin = 120, w2_begin, "OER-W2-BEGIN v=1" ();
+    W2Config = 121, w2_config, "w2.config"
+        ("channel" channel: dec, "country" country: ascii2, "cap" cap: signed,
+         "antenna_mbm" antenna_mbm: signed, "chip_mbm" chip_mbm: signed,
+         "target" target: mactail, "stand" stand: mactail);
+    W2ChannelFirst = 122, w2_channel_first, "w2.channel"
+        ("channel" channel: dec, "sequence" sequence: dec, "allowed" allowed: bit,
+         "sent" sent: dec, "success" success: bit, "responses" responses: dec);
+    W2ChannelLast = 123, w2_channel_last, ""
+        ("rate_kbps" rate_kbps: dec, "retune_us" retune_us: wide, "power" power: i8x4,
+         "ceiling" ceiling: signed);
+    W2Basic = 124, w2_basic, "w2.basic"
+        ("supported" supported: bytes8, "extended" extended: bytes16);
+    W2Unicast = 125, w2_unicast, "w2.unicast"
+        ("rate_kbps" rate_kbps: dec, "sequence" sequence: dec, "success" success: bit,
+         "responses" responses: dec, "attempts" attempts: dec, "raw" raw: dec,
+         "power" power: i8x4, "ceiling" ceiling: signed);
+    W2Stats = 126, w2_stats, "w2.stats"
+        ("timeouts" timeouts: dec, "collisions" collisions: dec, "colors" colors: dec,
+         "errors" errors: dec, "irq_free" irq_free: dec, "error" error: name);
+    W2Gate = 127, w2_gate, "w2.gate"
+        ("name" name: name, "pass" pass: bit);
+    W2End = 128, w2_end, "OER-W2-END"
+        ("lines" lines: dec);
+    W2Pass = 129, w2_pass, "OER-RESULT: pass w2" ();
+    W2Fail = 130, w2_fail, "OER-RESULT: fail w2" ();
     /// The smoke image's Embassy timer rearming.
     Rearm = 7, rearm, "OPEN_RADIO_HIL rearm"
         ("step" step: dec, "delay_ms" delay_ms: wide, "elapsed_us" elapsed_us: wide);
@@ -576,6 +675,17 @@ topics! {
          "invalid" invalid: flag);
     HoldRoot = 77, hold_root, "OPEN_RADIO_HIL hold-root"
         ("tick" tick: dec, "poll-us" poll_us: wide, "max-poll-us" max_poll_us: wide);
+}
+
+impl Topic {
+    /// How the topic's text joins its console line.
+    pub const fn part(self) -> Part {
+        match self {
+            Self::W2ChannelFirst => Part::First,
+            Self::W2ChannelLast => Part::Last,
+            _ => Part::Whole,
+        }
+    }
 }
 
 #[cfg(test)]

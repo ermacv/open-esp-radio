@@ -14,8 +14,10 @@ fn console_of(image: &oer_firmware_apps_w3::report::Report) -> String {
     for line in wire.split(|&byte| byte == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         if !line.is_empty() {
-            text.push_str(&decoder.line(line).unwrap());
-            text.push_str("\r\n");
+            if let Some(rendered) = decoder.line(line).unwrap() {
+                text.push_str(&rendered);
+                text.push_str("\r\n");
+            }
         }
     }
     text

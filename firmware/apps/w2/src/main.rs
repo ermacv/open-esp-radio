@@ -6,7 +6,6 @@ mod irq;
 mod report;
 mod scan;
 
-use core::fmt::Write;
 use esp_hal::{
     efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
     usb::usb_serial_jtag::UsbSerialJtag,
@@ -190,7 +189,7 @@ async fn reporting(
     if result.irq_free < 4096 {
         result.errors += 1;
     }
-    let _ = result.print(&mut console);
+    let _ = result.notes(|note| oer_diagnostics::emit_note(note, |bytes| console.write(bytes)));
 }
 fn park() -> ! {
     oer_espressif_staged_runtime::idle()

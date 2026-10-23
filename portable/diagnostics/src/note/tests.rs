@@ -204,6 +204,8 @@ mod render {
                 .iter()
                 .map(|(_, field)| match field {
                     Field::Wide => 2,
+                    Field::Bytes8 => 3,
+                    Field::Bytes16 => 5,
                     Field::Name | Field::Path => 0,
                     _ => 1,
                 })
@@ -320,5 +322,23 @@ mod render {
             path.name("X");
         }
         assert!(text(&Note::joined(&path)).ends_with("path-truncated"));
+    }
+}
+
+#[cfg(feature = "render")]
+mod parts {
+    use super::*;
+    use crate::note::Part;
+
+    #[test]
+    fn a_topic_with_no_text_of_its_own_continues_a_line_and_only_such_a_topic_does() {
+        for &topic in ALL_TOPICS {
+            let (prefix, _) = topic.layout();
+            assert_eq!(
+                prefix.is_empty(),
+                matches!(topic.part(), Part::Middle | Part::Last),
+                "{topic:?}"
+            );
+        }
     }
 }
