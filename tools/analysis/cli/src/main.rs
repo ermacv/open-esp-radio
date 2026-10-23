@@ -52,6 +52,9 @@ struct Assumptions {
 impl Assumptions {
     fn analysis(&self) -> app::library::Assumptions<'_> {
         app::library::Assumptions {
+            functions: &[],
+            symbolic_stores: false,
+            pointer_chains: false,
             abi: self.abi.map(|AbiArg::RiscvInteger| CallAbi::RiscvInteger),
             call_summaries: self.call_summaries,
             signatures: self.signatures.as_ref(),
@@ -93,6 +96,9 @@ enum Command {
         /// Track result bits of calls to these names (repeat, or give several names).
         #[arg(long, num_args = 1.., value_name = "NAME")]
         call_results: Vec<String>,
+        /// Include stored-bit provenance through symbolic pointers.
+        #[arg(long)]
+        symbolic_stores: bool,
         /// Keep only observations in this 32-bit word; repeat for several.
         /// Blocked functions, gaps and the summary are never filtered.
         #[arg(long = "address", value_parser = parse_number, value_name = "ADDRESS")]
@@ -359,6 +365,7 @@ fn run(command: Command, format: Format) -> Result<ExitCode> {
             inputs,
             ranges,
             call_results,
+            symbolic_stores,
             addresses,
             functions,
             group_by,
@@ -381,6 +388,7 @@ fn run(command: Command, format: Format) -> Result<ExitCode> {
                 group_by.map(GroupKey::by),
                 app::library::Assumptions {
                     call_results: &call_results,
+                    symbolic_stores,
                     ..assumptions.analysis()
                 },
                 limits,
@@ -623,7 +631,10 @@ fn function_records(
     let mut functions = Vec::new();
     let mut limited = app::library::analyze_library(
         &executables,
-        assumptions,
+        app::library::Assumptions {
+            functions: &names,
+            ..assumptions
+        },
         &oer_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
@@ -1129,6 +1140,10 @@ fn register_accesses(
         .map_err(io_error)?;
     }
     if json {
+        if assumptions.symbolic_stores {
+            out.write_all(b",\"symbolic_stores\":true")
+                .map_err(io_error)?;
+        }
         if !assumptions.call_results.is_empty() {
             write!(
                 out,

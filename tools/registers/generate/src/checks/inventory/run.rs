@@ -67,6 +67,9 @@ fn accesses(
     // report prints: the register-inventory profile, the chip's signatures,
     // --abi riscv-integer --call-summaries.
     let assumptions = Assumptions {
+        functions: &[],
+        symbolic_stores: false,
+        pointer_chains: false,
         abi: Some(CallAbi::RiscvInteger),
         call_summaries: true,
         signatures: Some(signatures),

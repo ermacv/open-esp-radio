@@ -361,6 +361,7 @@ fn alignment_analysis_and_expansion_release_memory_at_every_cancelled_step() {
             ResearchOptions {
                 abi: ABI,
                 symbolic_spills: true,
+                relocated_loads: false,
                 stack_calls: None,
                 stack_context: None,
             },

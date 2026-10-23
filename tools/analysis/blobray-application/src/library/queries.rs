@@ -102,7 +102,13 @@ pub fn field_accesses(
                     unknown_addresses += field::unknown_addresses(analyzed.records);
                     let facts =
                         FunctionIndex::new(analyzed.records, RecordPolicy::Dictionary, memory, c)?;
-                    let accesses = field::field_accesses(&facts, offset, width, c)?;
+                    let accesses = field::field_accesses(
+                        &facts,
+                        offset,
+                        width,
+                        assumptions.pointer_chains,
+                        c,
+                    )?;
                     if !accesses.is_empty() {
                         emit(
                             &FunctionResult::Matched(field::FieldAccessFunction {

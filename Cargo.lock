@@ -4698,13 +4698,15 @@ name = "oer-vendor-scenario-report"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "object 0.39.1",
+ "oer-analysis-blobray-application",
+ "oer-analysis-blobray-domain",
  "oer-analysis-elf",
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-os-process",
  "oer-vendor-scenario",
  "serde_json",
- "sha2 0.10.9",
 ]
 
 [[package]]

@@ -6,6 +6,8 @@ use oer_analysis_blobray_analysis::navigation::Facts;
 use oer_analysis_elf::{SymbolKind, classify as elf};
 use std::collections::BTreeSet;
 mod queries;
+#[cfg(test)]
+mod selection_tests;
 mod summaries;
 pub use queries::{
     CallerResult, CallersSummary, FieldSummary, FunctionResult, QuerySummary, call_arguments,
@@ -119,7 +121,14 @@ pub fn analyze_library(
         if let LibraryOutcome::Analyzed(a) = &outcome {
             limited.function(&a.limits);
         }
-        visit(outcome, c)
+        let selected = match &outcome {
+            LibraryOutcome::Analyzed(a) => assumptions.selects(a.function.name.as_deref()),
+            LibraryOutcome::Blocked { function, .. } => {
+                assumptions.selects(function.name.as_deref())
+            }
+            LibraryOutcome::Gap { .. } => true,
+        };
+        if selected { visit(outcome, c) } else { Ok(()) }
     };
     assumptions.validate()?;
     if assumptions.call_summaries {
@@ -188,6 +197,8 @@ fn analyze_without_summaries(
                 member,
                 assumptions.abi,
                 assumptions.read_only,
+                assumptions.functions,
+                assumptions.pointer_chains,
                 &NoSummaries,
                 decoder,
                 memory,
@@ -338,6 +349,16 @@ fn constants(value: &AbstractValue, set: &mut BTreeSet<u32>) -> bool {
 /// The explicit assumptions of a library analysis; none by default.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Assumptions<'a> {
+    /// Exact function names to analyze; empty selects every definition.
+    /// With call summaries, the selected functions also need their transitive
+    /// callees' summaries, but only selected outcomes are presented to the caller.
+    pub functions: &'a [String],
+    /// Also expose stored-bit provenance for symbolic addresses. Numeric
+    /// ranges and indexed candidates keep their usual behavior without it.
+    pub symbolic_stores: bool,
+    /// Retain symbolic relocated loads and fields reached through pointers
+    /// loaded from absolute addresses. Disabled by default.
+    pub pointer_chains: bool,
     /// With it, a call the analysis cannot follow keeps the registers this
     /// calling convention preserves; without it, every register is unknown
     /// after such a call.
@@ -356,6 +377,15 @@ pub struct Assumptions<'a> {
 }
 
 impl Assumptions<'_> {
+    fn selects(self, name: Option<&[u8]>) -> bool {
+        self.functions.is_empty()
+            || name.is_some_and(|name| {
+                self.functions
+                    .iter()
+                    .any(|wanted| wanted.as_bytes() == name)
+            })
+    }
+
     fn validate(self) -> Result<()> {
         if self.signatures.is_some() && !self.call_summaries {
             return Err(Error::new(
@@ -414,6 +444,7 @@ fn research_function<'m>(
     input: u64,
     payload: &ArtifactId,
     abi: Option<oer_analysis_riscv_model::CallAbi>,
+    pointer_chains: bool,
     returns: &dyn CallSummaries,
     tables: &dyn TableEntries,
     decoder: &dyn FunctionSemantics,
@@ -453,7 +484,7 @@ fn research_function<'m>(
             references.push((view.section, prepared), control.position())?;
             references.len() - 1
         };
-        oer_analysis_riscv_analysis::research_following_tables(
+        oer_analysis_riscv_analysis::research_following_tables_with_options(
             oer_analysis_riscv_analysis::FunctionInput {
                 traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: view.image,
@@ -474,7 +505,11 @@ fn research_function<'m>(
             memory,
             control,
             sink,
-            abi,
+            oer_analysis_riscv_analysis::ResearchOptions {
+                abi,
+                relocated_loads: pointer_chains,
+                ..Default::default()
+            },
         )
     })
 }
@@ -494,6 +529,8 @@ fn analyze_object(
     member: Member<'_>,
     abi: Option<oer_analysis_riscv_model::CallAbi>,
     read_only: &[ReadOnlyWindow],
+    names: &[String],
+    pointer_chains: bool,
     returns: &dyn CallSummaries,
     decoder: &dyn FunctionSemantics,
     memory: &WorkingMemory,
@@ -564,6 +601,12 @@ fn analyze_object(
     let functions: Vec<LibraryFunction> = selection
         .functions
         .into_iter()
+        .filter(|r| {
+            names.is_empty()
+                || r.name
+                    .as_deref()
+                    .is_some_and(|name| names.iter().any(|wanted| wanted.as_bytes() == name))
+        })
         .map(|r| LibraryFunction {
             input,
             symbol: r.id,
@@ -634,6 +677,7 @@ fn analyze_object(
                     input,
                     &payload,
                     abi,
+                    pointer_chains,
                     returns,
                     tables,
                     decoder,
@@ -767,6 +811,15 @@ pub fn register_accesses(
     let mut conflict_memory = Ledger::new(memory, control)?;
     let mut visit = |outcome: LibraryOutcome<'_>, c: &mut dyn RunControl| match outcome {
         LibraryOutcome::Analyzed(analyzed) => {
+            if !assumptions.selects(analyzed.function.name.as_deref()) {
+                input_limits
+                    .get_mut(analyzed.function.input as usize)
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::Integrity, "analyzed function has no input")
+                    })?
+                    .function(&analyzed.limits);
+                return Ok(());
+            }
             let mut function_limits = analyzed.limits.clone();
             if let Some(outcome) = analyzed.summary_outcome {
                 summary.summary_outcomes.record(outcome);
@@ -856,6 +909,7 @@ pub fn register_accesses(
                 analyzed.function,
                 analyzed.summaries,
                 assumptions.call_results,
+                assumptions.symbolic_stores,
             );
             crate::registers::observe(analyzed.records, &facts, memory, ranges, c, &mut |o, c| {
                 let stored = reads.stored(&o, c)?;
@@ -910,6 +964,9 @@ pub fn register_accesses(
             Ok(())
         }
         LibraryOutcome::Blocked { function, error } => {
+            if !assumptions.selects(function.name.as_deref()) {
+                return Ok(());
+            }
             summary.blocked_functions += 1;
             emit(
                 &RegisterAccess::Blocked {

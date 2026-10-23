@@ -123,7 +123,7 @@ pub fn analyze(
     sink: &mut dyn FunctionSink,
 ) -> Result<AnalysisSummary> {
     analyze_with(
-        input, decoder, memory, control, sink, false, None, false, None, None, None,
+        input, decoder, memory, control, sink, false, None, false, false, None, None, None,
     )
 }
 /// The same CFG/value engine with a bounded expression DAG and explicit ABI assumption.
@@ -144,6 +144,7 @@ pub fn research(
         ResearchOptions {
             abi,
             symbolic_spills: false,
+            relocated_loads: false,
             stack_calls: None,
             stack_context: None,
         },
@@ -157,6 +158,9 @@ pub fn research(
 pub struct ResearchOptions<'a> {
     pub abi: Option<CallAbi>,
     pub symbolic_spills: bool,
+    /// Retain symbolic values loaded through resolved relocations, using the
+    /// same bounded expression DAG as ordinary loads. Disabled by default.
+    pub relocated_loads: bool,
     /// Checked call writes and optional word postconditions from canonical facts;
     /// never a ROM default. Every cached use revalidates target and live inputs.
     pub stack_calls: Option<&'a writes::StackCalls<'a>>,
@@ -181,6 +185,7 @@ pub fn research_with_options(
         true,
         options.abi,
         options.symbolic_spills,
+        options.relocated_loads,
         options.stack_calls,
         options.stack_context,
         None,
@@ -196,6 +201,7 @@ fn analyze_with<'m>(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    relocated_loads: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
     stack_context: Option<&stack_context::StackContext<'_>>,
     mut context: Option<&mut writes::context::ContextRun<'_, 'm>>,
@@ -213,6 +219,7 @@ fn analyze_with<'m>(
         symbolic,
         abi,
         symbolic_spills,
+        relocated_loads,
         stack_calls,
         stack_context,
         &[],
@@ -237,6 +244,7 @@ fn analyze_with<'m>(
         symbolic,
         abi,
         symbolic_spills,
+        relocated_loads,
         stack_calls,
         stack_context,
         &noreturn,
@@ -264,6 +272,7 @@ fn analyze_pass<'m>(
     symbolic: bool,
     abi: Option<CallAbi>,
     symbolic_spills: bool,
+    relocated_loads: bool,
     stack_calls: Option<&writes::StackCalls<'_>>,
     stack_context: Option<&stack_context::StackContext<'_>>,
     noreturn: &[u64],
@@ -664,6 +673,7 @@ fn analyze_pass<'m>(
         symbolic,
         abi,
         symbolic_spills,
+        relocated_loads,
         stack_calls,
         stack_context,
         &mut found_noreturn,

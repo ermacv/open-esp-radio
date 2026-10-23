@@ -296,6 +296,9 @@ pub fn compare(
                     .map(|i| Executable::new(i.bytes.clone()))
                     .collect::<Vec<_>>(),
                 Assumptions {
+                    functions: &[],
+                    symbolic_stores: false,
+                    pointer_chains: false,
                     abi: Some(CallAbi::RiscvInteger),
                     call_summaries: false,
                     signatures: None,

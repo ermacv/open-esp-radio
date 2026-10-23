@@ -104,7 +104,11 @@ before the summary line and groups by address when a filter is given without
 `--group-by`.
 
 `stored` is present for stores in the selected ranges, including selected indexed
-addresses; plain unresolved stores carry none. It lists runs of the stored value,
+addresses; plain unresolved stores carry none by default. `--symbolic-stores`
+also supplies provenance for symbolic pointers through the same CFG evaluator;
+it does not resolve their addresses. The JSON request metadata then contains
+`symbolic_stores: true`; it is absent without the option. The scenario inspector's
+`fields` and `show` enable this option. `stored` lists runs of the stored value,
 low bits first, each from a fixed value, bits of a register at the function's
 entry (an argument for `a0`..`a7`), bits of a loaded value (with `same_word`
 for the stored word itself, the bits a read-modify-write keeps) or unknown.
