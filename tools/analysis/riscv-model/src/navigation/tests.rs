@@ -94,6 +94,43 @@ fn access(offset: u64) -> FunctionRecord {
 }
 
 #[test]
+fn canonical_conflicts_identify_class_site_and_both_original_records() {
+    let memory = WorkingMemory::new(8192).expect("navigation fixture should succeed");
+    for (class, records) in [
+        ("instruction", vec![instruction(4), instruction(4)]),
+        ("call-inputs", vec![inputs(4, 1), inputs(4, 2)]),
+        ("transfer", vec![jump(4, 1), jump(4, 2)]),
+        ("reference", vec![named(b"first"), named(b"second")]),
+    ] {
+        let error =
+            match FunctionIndex::new(&records, RecordPolicy::Canonical, &memory, &mut || Ok(())) {
+                Err(error) => error,
+                Ok(_) => panic!("conflicting records must fail"),
+            };
+        assert_eq!(error.code, ErrorCode::Integrity);
+        assert!(error.message.contains(&format!("class={class}")), "{error}");
+        let offset = if class == "reference" { "0x0" } else { "0x4" };
+        assert!(
+            error.message.contains(&format!("offset={offset}")),
+            "{error}"
+        );
+        assert!(
+            error
+                .message
+                .contains(&format!("first record[0]={:?}", records[0])),
+            "{error}"
+        );
+        assert!(
+            error
+                .message
+                .contains(&format!("second record[1]={:?}", records[1])),
+            "{error}"
+        );
+        assert_eq!(memory.used(), 0);
+    }
+}
+
+#[test]
 fn canonical_graph_and_duplicate_contracts_are_preserved() {
     let memory = WorkingMemory::new(8192).expect("navigation fixture should succeed");
     for records in [
