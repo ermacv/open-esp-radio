@@ -82,7 +82,9 @@ moves; ownership, orchestration and wiring are rebuilt.
   task stacks are reported, and an image may declare them proven: a task
   stack whose image declares it proven fails the build on any unresolved path
   and is sized at link time to its proven bound plus its policy's minimum free
-  bytes. There is no baseline of accepted holes, and an observed depth above a
+  bytes. The bootstrap jumps to a stage-two entry known at build time and
+  the bootstrap stack's path ends there, once the checks verify the jump and
+  that the entry installs its own stack pointer first. There is no baseline of accepted holes, and an observed depth above a
   bound fails the run. No frame
   exceeds the move limit (4 KiB); larger state lives in placed static
   storage and futures hold a reference. Code and stacks run from PSRAM after

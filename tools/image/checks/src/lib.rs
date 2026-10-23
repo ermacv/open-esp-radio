@@ -98,6 +98,8 @@ pub struct CheckInput<'a> {
     /// The image declares its task stacks proven: an unresolved path in one
     /// fails the stack check.
     pub task_stack_proven: bool,
+    /// The stage-two ELF the bootstrap enters, for the bootstrap's `handoff`.
+    pub stage_two_elf: Option<&'a Path>,
 }
 
 /// What the checks passed with.
@@ -505,7 +507,7 @@ impl Gates {
             }
             return Ok(outcome);
         }
-        let image = match crate::stack::Image::read(input.root, input.profile, input.elf) {
+        let mut image = match crate::stack::Image::read(input.root, input.profile, input.elf) {
             Ok(image) => image,
             Err(error) => {
                 for name in self.requested(CheckedElf::Bootstrap) {
@@ -531,11 +533,28 @@ impl Gates {
                 let Some(stack) = input.policy.stacks()?.bootstrap_stack else {
                     return Ok(None);
                 };
-                let audit = crate::stack::StackAudit::of(
+                let handoff = match &stack.handoff {
+                    Some(symbol) => {
+                        let stage_two = input.stage_two_elf.ok_or(
+                            "the bootstrap policy names a handoff, but no stage-two ELF is given",
+                        )?;
+                        let top = input
+                            .policy
+                            .stacks()?
+                            .cpu0_task_stack
+                            .top_symbol
+                            .as_deref()
+                            .ok_or("the CPU0 task stack names no top symbol for the handoff")?;
+                        Some(image.end_path_at_stage_two(symbol, stage_two, top)?)
+                    }
+                    None => None,
+                };
+                let mut audit = crate::stack::StackAudit::of(
                     &image,
                     input.policy,
                     &[("bootstrap stack", stack)],
                 )?;
+                audit.handoff = handoff;
                 if let Some(sizes) = &mut outcome.sizes {
                     for stack in &audit.stacks {
                         sizes.task(&image, stack)?;

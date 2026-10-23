@@ -3988,6 +3988,7 @@ dependencies = [
  "object 0.39.1",
  "oer-analysis-elf",
  "oer-analysis-riscv-decode",
+ "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
  "oer-analysis-riscv-stack",

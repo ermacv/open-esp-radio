@@ -98,6 +98,12 @@ pub struct TaskStack {
     /// This image's CPU0 PSRAM stack allocation. Absent uses the chip layout.
     #[serde(default)]
     pub allocation_bytes: Option<u32>,
+    /// The bootstrap stack only: the symbol, in the stage-two ELF, of the
+    /// entry the bootstrap jumps to. A transfer to it ends the stack's path,
+    /// once the checks verify in the ELFs that the jump goes there and that
+    /// the entry installs its own stack pointer before any stack access.
+    #[serde(default)]
+    pub handoff: Option<String>,
 }
 
 /// Where a stack's capacity comes from.
@@ -311,8 +317,14 @@ impl StackPolicy {
             return Err("interrupt stack maximum must be positive and aligned to 16 bytes".into());
         }
         stacks.cpu0_task_stack.validate("cpu0_task_stack")?;
+        if stacks.cpu0_task_stack.handoff.is_some() {
+            return Err("`handoff` belongs to the bootstrap stack, not `cpu0_task_stack`".into());
+        }
         if let Some(bootstrap) = stacks.bootstrap_stack {
             bootstrap.validate("bootstrap_stack")?;
+            if bootstrap.handoff.as_deref() == Some("") {
+                return Err("`bootstrap_stack` names an empty `handoff` symbol".into());
+            }
             if bootstrap.allocation_bytes.is_some() {
                 return Err(
                     "bootstrap stack allocation cannot be overridden by a runtime policy".into(),
@@ -628,6 +640,27 @@ mod tests {
         assert!(stack.proven_allocation_bytes(u64::from(u32::MAX)).is_err());
     }
     #[test]
+    fn a_handoff_belongs_to_the_bootstrap_stack_alone() {
+        let bootstrap = |handoff: Option<&str>| TaskStack {
+            root: "_start_rust".into(),
+            storage_symbol: None,
+            bottom_symbol: Some("_stack_end".into()),
+            top_symbol: Some("_stack_start".into()),
+            minimum_free_bytes: 4096,
+            allocation_bytes: None,
+            handoff: handoff.map(str::to_owned),
+        };
+        let mut policy = policy(None);
+        policy.bootstrap_stack = Some(bootstrap(Some("_runtime_start")));
+        policy.validate().unwrap();
+        policy.bootstrap_stack = Some(bootstrap(Some("")));
+        assert!(policy.validate().is_err());
+        policy.bootstrap_stack = Some(bootstrap(None));
+        policy.cpu0_task_stack.as_mut().unwrap().handoff = Some("_runtime_start".into());
+        let error = policy.validate().unwrap_err().to_string();
+        assert!(error.contains("belongs to the bootstrap stack"), "{error}");
+    }
+    #[test]
     fn a_proven_task_stack_and_an_explicit_allocation_are_two_sources() {
         let mut policy = policy(None);
         policy.proven_task_stack().unwrap();
@@ -666,6 +699,7 @@ mod tests {
                 top_symbol: None,
                 minimum_free_bytes: 4096,
                 allocation_bytes: None,
+                handoff: None,
             }),
             interrupt_stacks: Some(InterruptStacks {
                 allocation_bytes: bytes,

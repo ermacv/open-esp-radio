@@ -20,6 +20,7 @@ pub mod budget;
 pub mod contract;
 mod coverage;
 pub mod frames;
+pub mod handoff;
 pub mod reachability;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -453,6 +454,8 @@ pub struct StackAudit {
     pub declared_proven: bool,
     /// Where the task stack's size came from, when the image's link says.
     pub size_source: Option<crate::linker::task_stack::SizeSource>,
+    /// The verified jump into stage two that ends the bootstrap stack's path.
+    pub handoff: Option<handoff::Handoff>,
 }
 
 /// One stack's budget and its root's bound.
@@ -563,6 +566,7 @@ impl StackAudit {
             task_bounds,
             declared_proven: false,
             size_source: None,
+            handoff: None,
         })
     }
 
@@ -686,6 +690,9 @@ impl StackAudit {
         }
         for stack in &self.stacks {
             out.push_str(&stack.render());
+        }
+        if let Some(handoff) = &self.handoff {
+            out.push_str(&handoff.render());
         }
         if let Some(source) = self.size_source {
             for stack in &self.stacks {

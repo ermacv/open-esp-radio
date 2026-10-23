@@ -26,6 +26,11 @@ pub enum Fact {
     /// Neither the image's functions nor its concrete DWARF instances
     /// contain a task poll: no task can reach the executor's dequeue call.
     NoTasks,
+    /// The jump out of the bootstrap into the stage-two entry the stack
+    /// policy names. The checks verify, in both ELFs, that the site jumps
+    /// to the entry and that the entry installs its stack pointer before any
+    /// stack access; the bootstrap's stack path ends there.
+    StageTwoEntry,
 }
 
 /// What a resolution takes for granted that the analysis does not prove: a
@@ -58,7 +63,7 @@ impl Fact {
     /// executor invariant.
     pub fn assumption(self) -> Option<Assumption> {
         match self {
-            Self::InterruptTable => None,
+            Self::InterruptTable | Self::StageTwoEntry => None,
             Self::IpcPosts
             | Self::WakerVtables
             | Self::FieldType
@@ -96,6 +101,9 @@ impl Resolution {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Resolutions {
     sites: BTreeMap<u32, Resolution>,
+    /// Addresses a transfer leaves the analysed stack for good: the stack
+    /// below the transfer belongs to the code it enters, not to this root.
+    exits: BTreeSet<u32>,
 }
 
 impl Resolutions {
@@ -116,8 +124,18 @@ impl Resolutions {
         resolution.targets.extend(targets);
     }
 
-    /// Add every resolution of `other`.
+    /// Declare `address` an exit: a transfer that reaches it ends its path.
+    pub fn add_exit(&mut self, address: u32) {
+        self.exits.insert(address);
+    }
+
+    pub fn is_exit(&self, address: u32) -> bool {
+        self.exits.contains(&address)
+    }
+
+    /// Add every resolution and exit of `other`.
     pub fn extend(&mut self, other: Resolutions) {
+        self.exits.extend(other.exits);
         for (site, resolution) in other.sites {
             let into = self.sites.entry(site).or_default();
             into.facts.extend(resolution.facts);

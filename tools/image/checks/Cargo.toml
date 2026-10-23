@@ -12,6 +12,7 @@ description = "The checks of an image: the stack, interrupt-stack and placement 
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-analysis-riscv-decode = { path = "../../analysis/riscv-decode" }
+oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-program = { path = "../../analysis/riscv-program" }
 oer-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }

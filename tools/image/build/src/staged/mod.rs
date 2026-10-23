@@ -164,6 +164,7 @@ pub(crate) fn build(
                 flat: Some(&runtime_bin),
                 output: &output,
                 task_stack_proven,
+                stage_two_elf: None,
             })
             .map_err(|error| log.failed("runtime checks", error))?;
         if let Some(measured) = &outcome.sizes {
@@ -241,6 +242,7 @@ pub(crate) fn build(
                 flat: None,
                 output: &output,
                 task_stack_proven: false,
+                stage_two_elf: Some(&runtime_elf),
             })
             .map_err(|error| log.failed("bootstrap checks", error))?;
         if let Some(measured) = &outcome.sizes {

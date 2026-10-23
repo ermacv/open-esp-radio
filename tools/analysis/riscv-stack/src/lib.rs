@@ -1067,6 +1067,13 @@ impl Walk<'_, '_, '_> {
                 .copied()
                 .unwrap_or(frame);
             for target in targets {
+                if self.resolutions.is_exit(target) {
+                    // The path ends here; the site's own depth counts.
+                    if at > deepest.0 {
+                        deepest = (at, Vec::new());
+                    }
+                    continue;
+                }
                 if !self.analysis.functions.contains_key(&target) {
                     let reason = if self.analysis.in_code(target) {
                         Reason::IntoFunction

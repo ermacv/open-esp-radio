@@ -456,6 +456,42 @@ fn an_unresolved_call_leaves_the_bound_unknown_with_its_reason() {
 }
 
 #[test]
+fn a_declared_exit_ends_the_path_of_a_resolved_transfer_and_any_other_target_stays_a_hole() {
+    let root = Symbol {
+        name: "root",
+        words: vec![
+            SP_DOWN_16, SAVE_RA, LOAD_SLOT, CALL_A5, LOAD_RA, SP_UP_16, RET,
+        ],
+        frame: Some(16),
+    };
+    let analysis = analyze(&executable(&[root]), &[], &[]).unwrap();
+    let site = TEXT + 12;
+    let exit = 0x5000_0000;
+    let bound = |resolutions: &Resolutions| {
+        analysis
+            .bound_with(TEXT, resolutions, &mut crate::tests::ledger(), &mut || {
+                Ok(())
+            })
+            .unwrap()
+    };
+    let mut resolutions = Resolutions::new();
+    resolutions.add(site, Fact::StageTwoEntry, [exit]);
+    // The resolved target lies outside the image: a hole, until declared.
+    assert_eq!(
+        bound(&resolutions).unresolved,
+        [(site, Reason::OutsideImage)]
+    );
+    resolutions.add_exit(exit);
+    let ended = bound(&resolutions);
+    assert_eq!((ended.bytes, ended.unresolved.len()), (Some(16), 0));
+    // Only the declared address ends a path.
+    let mut other = Resolutions::new();
+    other.add(site, Fact::StageTwoEntry, [exit + 4]);
+    other.add_exit(exit);
+    assert_eq!(bound(&other).unresolved, [(site, Reason::OutsideImage)]);
+}
+
+#[test]
 fn a_resolution_gives_an_unresolved_site_each_of_its_targets() {
     // root: frame 16, an indirect call through a5 at offset 8.
     let root = Symbol {

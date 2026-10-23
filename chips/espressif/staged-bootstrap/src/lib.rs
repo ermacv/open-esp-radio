@@ -38,6 +38,16 @@ pub fn start() {
     print("OER_BOOT bootstrap=START\r\n");
 }
 
+/// The entry word of the packed runtime `payload`, for [`hand_off`]'s
+/// constant. A payload too short to hold a header only type-checks (an empty
+/// stand-in): its entry is 0, which no header names, and [`stage`] rejects it.
+pub const fn runtime_entry(payload: &[u8]) -> usize {
+    match oer_espressif_staged_layout::stage_two::entry_of(payload) {
+        Some(entry) => entry as usize,
+        None => 0,
+    }
+}
+
 /// A stage-two payload that [`stage`] copied and checked in PSRAM.
 #[derive(Clone, Copy, Debug)]
 pub struct Staged {
@@ -149,8 +159,17 @@ pub unsafe fn stage(
 /// Publish the staged code to instruction fetch, report
 /// `PASS handoff=stage2`, release the bootstrap's stack watchpoint and enter
 /// stage two with interrupts disabled. Never returns.
+///
+/// `ENTRY` is the stage-two entry the bootstrap's build knows (the entry word
+/// of the payload it carries, see [`runtime_entry`]). The jump goes to
+/// that constant, so the stack analysis sees where the bootstrap's stack
+/// ends; the header's own entry must equal it or the bootstrap halts with an
+/// error instead of jumping.
 #[allow(unsafe_code, reason = "publishes and enters the stage-two image")]
-pub fn hand_off(staged: Staged) -> ! {
+pub fn hand_off<const ENTRY: usize>(staged: Staged) -> ! {
+    if staged.entry != ENTRY {
+        fail(c"OER_BOOT bootstrap=FAIL reason=entry-mismatch\r\n");
+    }
     // SAFETY: the bytes are the checked stage-two image, which nothing
     // modifies or executes until the jump below; the other hart, if any,
     // has not been started.
@@ -162,8 +181,9 @@ pub fn hand_off(staged: Staged) -> ! {
     print("OER_BOOT bootstrap=PASS handoff=stage2\r\n");
     // SAFETY: the bootstrap is about to leave its stack for good.
     unsafe { release_bootstrap_stack_watchpoint() };
-    // SAFETY: the entry lies in the checked executable range of the image.
-    unsafe { jump_to_runtime(staged.entry) }
+    // SAFETY: the entry equals the build's constant and lies in the checked
+    // executable range of the image.
+    unsafe { jump_to_runtime::<ENTRY>() }
 }
 
 #[derive(Clone, Copy)]
@@ -292,17 +312,19 @@ unsafe fn release_bootstrap_stack_watchpoint() {
 }
 
 /// # Safety
-/// `entry` must be the checked entry of a published stage-two image.
+/// `ENTRY` must be the checked entry of a published stage-two image.
 #[allow(unsafe_code, reason = "the jump into stage two")]
-unsafe fn jump_to_runtime(entry: usize) -> ! {
+unsafe fn jump_to_runtime<const ENTRY: usize>() -> ! {
     // SAFETY: the caller's contract; interrupts stay disabled across the jump.
     unsafe {
         asm!(
             "csrci mstatus, 8",
             "fence rw, rw",
             "fence.i",
-            "jalr zero, 0({entry})",
-            entry = in(reg) entry,
+            // t1, not t0: `jr t0` is a return to the analysis (the alternate link register).
+            "li t1, {entry}",
+            "jr t1",
+            entry = const ENTRY,
             options(noreturn),
         )
     }
