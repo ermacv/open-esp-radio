@@ -215,6 +215,44 @@ impl<'de> Deserialize<'de> for Passphrase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wifi::{StartStation, StationPowerSave, StationStart};
+    use crate::{EncodeError, Envelope, FrameEncoder};
+
+    #[test]
+    fn clear_passphrase_erases_storage_and_prevents_serializing_a_station_command() {
+        for length in [MIN_PASSPHRASE_BYTES, MAX_PASSPHRASE_BYTES] {
+            let mut command = Envelope::new(
+                7,
+                11,
+                13,
+                17,
+                StartStation(StationStart {
+                    credentials: NetworkCredentials::try_new(
+                        b"test-network",
+                        &[0xa5; 63][..length],
+                    )
+                    .unwrap(),
+                    power_save: StationPowerSave::Off,
+                }),
+            );
+            assert!(FrameEncoder::new().encode(&command).is_ok());
+
+            command.body.0.credentials.clear_passphrase();
+
+            let credentials = &command.body.0.credentials;
+            assert_eq!(credentials.passphrase.bytes, [0; MAX_PASSPHRASE_BYTES]);
+            assert_eq!(credentials.passphrase.length, 0);
+            assert!(credentials.passphrase().is_empty());
+            assert_eq!(
+                credentials.validate(),
+                Err(NetworkCredentialsError::PassphraseLength)
+            );
+            assert_eq!(
+                FrameEncoder::new().encode(&command),
+                Err(EncodeError::Serialize)
+            );
+        }
+    }
 
     #[test]
     fn clear_erases_the_entire_passphrase_storage_and_preserves_ssid() {
