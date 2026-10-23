@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `reset`
+ --> tests/ui/repeat_reset.rs:8:13
+  |
+5 | pub fn complete<P: PoolPath>(reset: Reset<P>, fresh: &Session<'_, P, Idle>) {
+  |                              ----- move occurs because `reset` has type `oer_bluetooth_le_controller::dtm::Reset<P>`, which does not implement the `Copy` trait
+6 |     let _ = reset.after_install(fresh);
+  |                   -------------------- `reset` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _ = reset.after_install(fresh); // ui-error: E0382
+  |             ^^^^^ value used here after move
+  |
+note: `oer_bluetooth_le_controller::dtm::Reset::<P>::after_install` takes ownership of the receiver `self`, which moves `reset`
+ --> src/dtm.rs
+  |
+  |     pub fn after_install(self, session: &Session<'_, P, Idle>) -> Result<Response, Self> {
+  |                          ^^^^

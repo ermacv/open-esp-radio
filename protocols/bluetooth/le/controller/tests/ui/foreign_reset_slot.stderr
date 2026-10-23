@@ -1,0 +1,22 @@
+error[E0308]: mismatched types
+ --> tests/ui/foreign_reset_slot.rs:8:33
+  |
+6 | pub fn complete<A: SlotIdentity, B: SlotIdentity>(reset: Reset<Root<A>>, own: &Session<'_, Root<A>, Idle>, foreign: &Session<'_, Roo...
+  |                 -                - found type parameter
+  |                 |
+  |                 expected type parameter
+7 |     #[cfg(all())]
+8 |     let _ = reset.after_install(foreign); // ui-error: E0308
+  |                   ------------- ^^^^^^^ expected `&Session<'_, Root<A>, Idle>`, found `&Session<'_, Root<B>, Idle>`
+  |                   |
+  |                   arguments to this method are incorrect
+  |
+  = note: expected reference `&Session<'_, Root<A>, oer_bluetooth_le_port::Idle>`
+             found reference `&Session<'_, Root<B>, oer_bluetooth_le_port::Idle>`
+  = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+  = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+note: method defined here
+ --> src/dtm.rs
+  |
+  |     pub fn after_install(self, session: &Session<'_, P, Idle>) -> Result<Response, Self> {
+  |            ^^^^^^^^^^^^^
