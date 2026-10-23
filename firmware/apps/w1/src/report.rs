@@ -7,8 +7,7 @@
 //! printed only as their length and, per BSS, whether the stored SSID is the
 //! stand's (`ssid_ok=`).
 
-use core::{fmt, fmt::Write};
-
+use oer_diagnostics::Note;
 use oer_esp32s31_hal::ieee80211::init::MAC_STATION_INTERRUPT_MASK;
 use oer_esp32s31_ieee80211_driver::rx::{
     control::{WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
@@ -23,7 +22,7 @@ use crate::{
     irq::{BUFFER, COUNT, SLOTS},
     measure,
     measure::{CLOCKS, ClockOp, Phase, TIMED_PHASES, Tick, TimerLine},
-    own::{CYCLES, Cycle, DISCARDS},
+    own::{CYCLES, Cycle},
 };
 
 /// The survey's table size.
@@ -536,57 +535,49 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
     (verdict, gates)
 }
 
-/// A writer that counts the lines it was given.
-struct Block<'w, W: Write> {
-    out: &'w mut W,
+/// Emits the notes of the block and counts its lines: a line is one note or
+/// several that the host joins.
+struct Block<'e, E, F: FnMut(&Note<'_>) -> Result<(), E>> {
+    emit: &'e mut F,
     lines: u32,
 }
 
-impl<W: Write> Block<'_, W> {
-    fn line(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
-        self.out.write_fmt(args)?;
-        self.out.write_str("\r\n")?;
+impl<E, F: FnMut(&Note<'_>) -> Result<(), E>> Block<'_, E, F> {
+    /// One note of the line that is being written.
+    fn part(&mut self, note: &Note<'_>) -> Result<(), E> {
+        (self.emit)(note)
+    }
+
+    /// The line that its parts made is complete.
+    fn end_line(&mut self) {
         self.lines += 1;
-        Ok(())
     }
 }
 
-/// `xx:xx:xx:xx:HH:HH`.
-struct Masked(Bssid);
-
-impl fmt::Display for Masked {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let [.., fifth, sixth] = self.0.get();
-        write!(f, "xx:xx:xx:xx:{fifth:02X}:{sixth:02X}")
-    }
+/// Emits the notes one after the other: each is built, written and dropped
+/// before the next, so that a long line costs the frame one note.
+macro_rules! parts {
+    ($block:expr, $($note:expr),+ $(,)?) => {{
+        $($block.part(&$note)?;)+
+    }};
 }
 
-/// `<min>..<max>`, or `-` without a sample.
-struct Range<T>(Option<(T, T)>);
-
-impl<T: fmt::Display> fmt::Display for Range<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
-            Some((min, max)) => write!(f, "{min}..{max}"),
-            None => f.write_str("-"),
-        }
-    }
+/// [`parts!`] and the end of the line.
+macro_rules! line {
+    ($block:expr, $($note:expr),+ $(,)?) => {{
+        parts!($block, $($note),+);
+        $block.end_line();
+    }};
 }
 
-/// A number, or `-`.
-struct OrDash(Option<u32>);
-
-impl fmt::Display for OrDash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(value) => write!(f, "{value}"),
-            None => f.write_str("-"),
-        }
-    }
+/// The last two octets of `bssid`: the masked identity a note carries.
+fn mac_tail(bssid: Bssid) -> [u8; 2] {
+    let [.., fifth, sixth] = bssid.get();
+    [fifth, sixth]
 }
 
 /// The exit cause as one token.
-const fn cause(cause: WifiRxCause) -> &'static str {
+pub const fn cause(cause: WifiRxCause) -> &'static str {
     match cause {
         WifiRxCause::StopRequested => "StopRequested",
         WifiRxCause::Prepare(_) => "Prepare",
@@ -598,30 +589,42 @@ const fn cause(cause: WifiRxCause) -> &'static str {
 }
 
 /// The exit end as one token.
-struct End(WifiRxEnd);
-
-impl fmt::Display for End {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (reason, walker_stopped) = match self.0 {
-            WifiRxEnd::Halted => return f.write_str("Halted"),
-            WifiRxEnd::NotStarted => return f.write_str("NotStarted"),
-            WifiRxEnd::Quarantined {
-                reason,
-                walker_stopped,
-            } => (reason, walker_stopped),
-        };
-        let reason = match reason {
-            WifiRxQuarantine::Fault => "Fault",
-            WifiRxQuarantine::MaskTimeout => "MaskTimeout",
-            WifiRxQuarantine::DrainTimeout => "DrainTimeout",
-            WifiRxQuarantine::StopRefused(_) => "StopRefused",
-        };
-        let walker = if walker_stopped {
-            "walker-stopped"
-        } else {
-            "walker-live"
-        };
-        write!(f, "Quarantined:{reason}:{walker}")
+pub const fn end_name(end: WifiRxEnd) -> &'static str {
+    match end {
+        WifiRxEnd::Halted => "Halted",
+        WifiRxEnd::NotStarted => "NotStarted",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::Fault,
+            walker_stopped: true,
+        } => "Quarantined:Fault:walker-stopped",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::Fault,
+            walker_stopped: false,
+        } => "Quarantined:Fault:walker-live",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::MaskTimeout,
+            walker_stopped: true,
+        } => "Quarantined:MaskTimeout:walker-stopped",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::MaskTimeout,
+            walker_stopped: false,
+        } => "Quarantined:MaskTimeout:walker-live",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::DrainTimeout,
+            walker_stopped: true,
+        } => "Quarantined:DrainTimeout:walker-stopped",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::DrainTimeout,
+            walker_stopped: false,
+        } => "Quarantined:DrainTimeout:walker-live",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::StopRefused(_),
+            walker_stopped: true,
+        } => "Quarantined:StopRefused:walker-stopped",
+        WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::StopRefused(_),
+            walker_stopped: false,
+        } => "Quarantined:StopRefused:walker-live",
     }
 }
 
@@ -642,200 +645,223 @@ fn max_p99(histogram: &CycleHistogram, cpu_hz: u32) -> (u64, u64) {
     )
 }
 
-/// A count over a threshold: exact, or `<at_least>..<at_most>`.
-struct Over(u64, u64);
-
-impl fmt::Display for Over {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0 == self.1 {
-            write!(f, "{}", self.0)
-        } else {
-            write!(f, "{}..{}", self.0, self.1)
-        }
-    }
-}
-
-fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result {
+fn block_lines<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
+    block: &mut Block<'_, E, F>,
+    run: &Run<'_>,
+) -> Result<(), E> {
     let (verdict, gates) = gates(run);
     let hz = run.cpu_hz;
-    block.line(format_args!(
-        "w1.config channel={} applied_channel={} stand={} ssid_matches={} window_ms={} cpu_hz={hz} arena={COUNT}x{BUFFER} slots={SLOTS} mask={:#010x}",
-        run.channel,
-        run.applied_channel,
-        Masked(run.stand),
-        ssid_matches(run),
-        run.window_ms,
-        MAC_STATION_INTERRUPT_MASK.bits(),
-    ))?;
+    line!(
+        block,
+        Note::w1_config_a(
+            u32::from(run.channel),
+            u32::from(run.applied_channel),
+            mac_tail(run.stand),
+            ssid_matches(run) as u32,
+            run.window_ms,
+            hz,
+            (COUNT as u32, BUFFER as u32),
+        ),
+        Note::w1_config_b(SLOTS as u32, MAC_STATION_INTERRUPT_MASK.bits()),
+    );
     for (index, (record, tally)) in run.survey.entries().enumerate() {
         let who = if record.bssid == run.stand {
             "stand"
         } else {
             "other"
         };
-        block.line(format_args!(
-            "w1.bss idx={index} who={who} bssid={} bi_tu={} ch={} beacons={} dup={} probe_rsp={} rssi={} no_rssi={} gaps_late={} max_gap_us={} missed={} lag_us={} ssid_len={} ssid_ok={} stamp_span_us={} handoff_span_us={}",
-            Masked(record.bssid),
-            record.beacon_interval_tu,
-            record.channel,
-            tally.beacons,
-            tally.duplicates,
-            tally.probe_responses,
-            Range(tally.rssi_dbm.map(|range| (range.min, range.max))),
-            tally.without_rssi,
-            tally.late_gaps,
-            tally.max_beacon_gap_us,
-            tally.missed_beacons,
-            Range(tally.handoff_lag_us.map(|range| (range.min, range.max))),
-            record.ssid_bytes().len(),
-            u8::from(record.ssid_bytes() == run.ssid),
-            OrDash(tally.stamp_span_us()),
-            OrDash(tally.handoff_span_us()),
-        ))?;
+        line!(
+            block,
+            Note::w1_bss_a(
+                index as u32,
+                who,
+                mac_tail(record.bssid),
+                u32::from(record.beacon_interval_tu),
+                u32::from(record.channel),
+                tally.beacons,
+                tally.duplicates,
+                tally.probe_responses,
+            ),
+            Note::w1_bss_b(
+                tally
+                    .rssi_dbm
+                    .map(|range| (i32::from(range.min), i32::from(range.max))),
+                tally.without_rssi,
+                tally.late_gaps,
+                tally.max_beacon_gap_us,
+                tally.missed_beacons,
+            ),
+            Note::w1_bss_c(
+                tally.handoff_lag_us.map(|range| (range.min, range.max)),
+                record.ssid_bytes().len() as u32,
+                record.ssid_bytes() == run.ssid,
+                tally.stamp_span_us(),
+            ),
+            Note::w1_bss_d(tally.handoff_span_us()),
+        );
     }
     for gap in run.survey.gap_log() {
-        block.line(format_args!(
-            "w1.gap stamp={} gap_us={} missed={}",
-            gap.stamp,
-            gap.gap_us,
-            OrDash(gap.missed_by_tsf)
-        ))?;
+        line!(
+            block,
+            Note::w1_gap(gap.stamp, gap.gap_us, gap.missed_by_tsf)
+        );
     }
-    block.line(format_args!(
-        "w1.gaps dropped={}",
-        run.survey.gap_log_dropped()
-    ))?;
+    line!(block, Note::w1_gaps(run.survey.gap_log_dropped()));
     for tick in run.ticks {
-        block.line(format_args!(
-            "w1.tick start={} end={} ok={}",
-            tick.start,
-            tick.end,
-            u8::from(tick.ok)
-        ))?;
+        line!(block, Note::w1_tick(tick.start, tick.end, tick.ok));
     }
     let rx = &run.rx;
-    block.line(format_args!(
-        "w1.rx units={} bytes={} mac_irqs={} power_irqs={} unserviced_mac={} unserviced_pwr={} doorbell_unmasks={} ignored_unmasks={} chained={} oversized={} empty={} too_long={} overload={} admission_blocks={} stage_capacity_blocks={} service_passes={} service_errors={} capacity_drains={} frames_after_release={}",
-        rx.units,
-        rx.bytes,
-        rx.mac_irqs,
-        rx.power_irqs,
-        run.unserviced_mac,
-        run.unserviced_pwr,
-        rx.doorbell_unmasks,
-        rx.ignored_unmasks,
-        rx.chained_drops,
-        rx.oversized_drops,
-        rx.empty_drops,
-        rx.too_long_drops,
-        rx.overload_drops,
-        rx.admission_blocks,
-        rx.stage_capacity_blocks,
-        rx.service_passes,
-        rx.service_errors,
-        rx.capacity_drains,
-        run.cycles[0].frames_after_release,
-    ))?;
+    line!(
+        block,
+        Note::w1_rx_a(
+            rx.units,
+            rx.bytes,
+            rx.mac_irqs,
+            rx.power_irqs,
+            run.unserviced_mac,
+            run.unserviced_pwr,
+            rx.doorbell_unmasks,
+            rx.ignored_unmasks,
+        ),
+        Note::w1_rx_b(
+            rx.chained_drops,
+            rx.oversized_drops,
+            rx.empty_drops,
+            rx.too_long_drops,
+            rx.overload_drops,
+            rx.admission_blocks,
+            rx.stage_capacity_blocks,
+            rx.service_passes,
+        ),
+        Note::w1_rx_c(
+            rx.service_errors,
+            rx.capacity_drains,
+            run.cycles[0].frames_after_release,
+        ),
+    );
     for (index, cycle) in run.cycles.iter().enumerate() {
         let hold = &cycle.hold;
         let end = cycle.end.as_ref();
-        block.line(format_args!(
-            "w1.hold cycle={index} fill_ms={} reached={} slots={SLOTS} full={} reason={} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={} end_released={} end_detached={} end_staged={} end_observed={} end_recycle_start={} end_accepted_tail={} end_next={} end_last={}",
-            cycle.fill_ms,
-            hold.reached,
-            u8::from(cycle.full.held()),
-            cycle.full.reason(),
-            hold.units,
-            hold.mac_irqs,
-            hold.stage_capacity_blocks,
-            hold.admission_blocks,
-            OrDash(end.map(|end| end.released)),
-            OrDash(end.map(|end| end.detached)),
-            OrDash(end.map(|end| end.staged)),
-            OrDash(end.map(|end| end.observed)),
-            OrDash(end.map(|end| end.recycle_start)),
-            OrDash(end.map(|end| end.accepted_tail)),
-            HexOrDash(end.map(|end| end.next_low)),
-            HexOrDash(end.map(|end| end.last_low)),
-        ))?;
+        line!(
+            block,
+            Note::w1_hold_a(
+                index as u32,
+                cycle.fill_ms,
+                hold.reached as u32,
+                SLOTS as u32,
+                cycle.full.held(),
+                cycle.full.reason(),
+                hold.units,
+                hold.mac_irqs,
+                hold.stage_capacity_blocks,
+            ),
+            Note::w1_hold_b(
+                hold.admission_blocks,
+                end.map(|end| end.released),
+                end.map(|end| end.detached),
+                end.map(|end| end.staged),
+            ),
+            Note::w1_hold_c(
+                end.map(|end| end.observed),
+                end.map(|end| end.recycle_start),
+                end.map(|end| end.accepted_tail),
+                end.map(|end| end.next_low),
+            ),
+            Note::w1_hold_d(end.map(|end| end.last_low)),
+        );
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
         exhaust(block, index, cycle)?;
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
-        block.line(format_args!(
-            "w1.own cycle={index} order={} held={} owner_clear={} first_drop={} hold_mismatch={} dwell_mismatch={} release_mismatch={} first_mismatch={} first_after_release={} order_breaks={} chained={} oversized={} discards={}",
-            cycle.order.name(),
-            cycle.held,
-            cycle.owner_clear,
-            OrDash(cycle.first_drop.and_then(|index| u32::try_from(index).ok())),
-            cycle.hold_mismatch,
-            cycle.dwell_mismatch,
-            cycle.release_mismatch,
-            match cycle.first_mismatch {
-                None => IndexOrDash::Dash,
-                Some(index) => IndexOrDash::Index(index),
-            },
-            Indices(&cycle.first_after_release),
-            cycle.order_breaks,
-            cycle.chained,
-            cycle.oversized,
-            Discards(&cycle.discards),
-        ))?;
+        parts!(
+            block,
+            Note::w1_own_a(
+                index as u32,
+                cycle.order.name(),
+                cycle.held as u32,
+                cycle.owner_clear,
+                cycle.first_drop.and_then(|index| u32::try_from(index).ok()),
+                cycle.hold_mismatch,
+                cycle.dwell_mismatch,
+                cycle.release_mismatch,
+            ),
+            Note::w1_own_b(
+                cycle.first_mismatch,
+                &cycle.first_after_release,
+                cycle.order_breaks,
+                cycle.chained,
+            ),
+            Note::w1_own_c(cycle.oversized),
+        );
+        own_discards(block, &cycle.discards)?;
+        block.end_line();
     }
     let prefix = &rx.prefix;
-    block.line(format_args!(
-        "w1.prefix invalid={} chain={} bounds={} rx_failure={} mic_failure={} quarantined={} output_small={} metadata={} ignored={} unsupported={} strict_rxend_refusable={} strict_dump_refusable={} admitted={}",
-        prefix.invalid,
-        prefix.chain,
-        prefix.bounds,
-        prefix.rx_failure,
-        prefix.mic_failure,
-        prefix.quarantined,
-        prefix.output_small,
-        prefix.metadata,
-        prefix.ignored,
-        prefix.unsupported,
-        prefix.strict_rxend_refusable,
-        prefix.strict_dump_refusable,
-        run.admitted,
-    ))?;
+    line!(
+        block,
+        Note::w1_prefix_a(
+            prefix.invalid,
+            prefix.chain,
+            prefix.bounds,
+            prefix.rx_failure,
+            prefix.mic_failure,
+            prefix.quarantined,
+            prefix.output_small,
+            prefix.metadata,
+        ),
+        Note::w1_prefix_b(
+            prefix.ignored,
+            prefix.unsupported,
+            prefix.strict_rxend_refusable,
+            prefix.strict_dump_refusable,
+            run.admitted,
+        ),
+    );
     let reload = &rx.reload;
-    block.line(format_args!(
-        "w1.reload max_attempts={} limit_us={} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={} walker_on_detached={}",
-        reload.max_reload_attempts,
-        RELOAD_SETTLE_LIMIT.limit().as_micros(),
-        reload.observations,
-        reload.reload_rerings,
-        reload.rering_failures,
-        reload.base_writes,
-        reload.reserved_landings,
-        reload.reserved_late_landings,
-        reload.walker_on_detached,
-    ))?;
+    line!(
+        block,
+        Note::w1_reload_a(
+            reload.max_reload_attempts,
+            RELOAD_SETTLE_LIMIT.limit().as_micros() as u64,
+            reload.observations,
+            reload.reload_rerings,
+            reload.rering_failures,
+            reload.base_writes,
+            reload.reserved_landings,
+        ),
+        Note::w1_reload_b(reload.reserved_late_landings, reload.walker_on_detached),
+    );
     let continuations = &rx.continuations;
-    block.line(format_args!(
-        "w1.continuation immediate={} timed={} drained={} upper_layer_blocked_but_droppable={} probe_pending={} recycled_append_pending={} budget_exhausted={} network_backpressured={} protocol_blocked_by_tx={} longest_streak={}",
-        continuations.immediate,
-        continuations.timed,
-        continuations.drained,
-        continuations.upper_layer_blocked_but_droppable,
-        continuations.probe_pending,
-        continuations.recycled_append_pending,
-        continuations.budget_exhausted,
-        continuations.network_backpressured,
-        continuations.protocol_blocked_by_tx,
-        continuations.longest_streak,
-    ))?;
-    block.line(format_args!(
-        "w1.teardown mask_confirm_us={} drain_us={} drain_polls={}",
-        rx.teardown.mask_confirm_us, rx.teardown.drain_us, rx.teardown.drain_polls
-    ))?;
-    block.line(format_args!(
-        "w1.exit cause={} end={}",
-        cause(run.exit.cause),
-        End(run.exit.end)
-    ))?;
+    line!(
+        block,
+        Note::w1_continuation_a(
+            continuations.immediate,
+            continuations.timed,
+            continuations.drained,
+            continuations.upper_layer_blocked_but_droppable,
+            continuations.probe_pending,
+            continuations.recycled_append_pending,
+            continuations.budget_exhausted,
+            continuations.network_backpressured,
+        ),
+        Note::w1_continuation_b(
+            continuations.protocol_blocked_by_tx,
+            continuations.longest_streak,
+        ),
+    );
+    line!(
+        block,
+        Note::w1_teardown(
+            rx.teardown.mask_confirm_us,
+            rx.teardown.drain_us,
+            rx.teardown.drain_polls,
+        )
+    );
+    line!(
+        block,
+        Note::w1_exit(cause(run.exit.cause), end_name(run.exit.end))
+    );
     let bound_cycles = u32::try_from(
         oer_esp32s31_radio_client::ACTOR_STEP_BOUND.as_micros() * u64::from(hz) / 1_000_000,
     )
@@ -854,13 +880,15 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         let (actor_max, actor_p99) = max_p99(actor, hz);
         let (receive_max, receive_p99) = max_p99(receive, hz);
         let over = actor.snapshot().count_over(bound_cycles);
-        block.line(format_args!(
-            "w1.p2 phase={} swi2_max_us={swi2_max} swi2_p99_us={swi2_p99} actor_max_us={actor_max} actor_p99_us={actor_p99} actor_over_bound={} receive_max_us={receive_max} receive_p99_us={receive_p99} mac_to_poll_max_us={} ring_to_doorbell_max_us={}",
-            phase.name(),
-            Over(over.at_least, over.at_most),
-            micros(mac.load(core::sync::atomic::Ordering::Relaxed), hz),
-            micros(ring.load(core::sync::atomic::Ordering::Relaxed), hz),
-        ))?;
+        line!(
+            block,
+            Note::w1_p2_a(phase.name(), swi2_max, swi2_p99, actor_max, actor_p99),
+            Note::w1_p2_b((over.at_least, over.at_most), receive_max, receive_p99),
+            Note::w1_p2_c(
+                micros(mac.load(core::sync::atomic::Ordering::Relaxed), hz),
+                micros(ring.load(core::sync::atomic::Ordering::Relaxed), hz),
+            ),
+        );
     }
     for clock in CLOCKS {
         for op in ClockOp::ALL {
@@ -869,38 +897,45 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
                 if count == 0 {
                     continue;
                 }
-                block.line(format_args!(
-                    "w1.clock op={} clock={} phase={} count={count} max_us={}",
-                    op.name(),
-                    measure::clock_name(clock),
-                    phase.name(),
-                    micros(max, hz),
-                ))?;
+                line!(
+                    block,
+                    Note::w1_clock(
+                        op.name(),
+                        measure::clock_name(clock),
+                        phase.name(),
+                        count,
+                        micros(max, hz),
+                    )
+                );
             }
         }
     }
-    block.line(format_args!(
-        "w1.stack irq_bytes={} irq_free={}",
-        run.irq_bytes, run.irq_free
-    ))?;
+    line!(
+        block,
+        Note::w1_stack(run.irq_bytes as u32, run.irq_free as u32)
+    );
     for timer in run.timers {
         let report = &timer.report;
-        block.line(format_args!(
-            "w1.timer cmp={} phase={} early={} late_count={} late_max_us={} late_total_us={} missed={} unmatched={} coalesced={} overlapping={} armed_at_end={} waits={} woke_early={}",
-            timer.comparator,
-            timer.phase.name(),
-            report.early_interrupts,
-            report.deadline_lateness.count,
-            report.deadline_lateness.maximum_micros,
-            report.deadline_lateness.total_micros,
-            report.due_at_program_return,
-            report.unmatched_interrupts,
-            report.coalesced_interrupts,
-            report.overlapping_interrupts,
-            u8::from(report.armed_at_end),
-            measure::waits(timer.comparator, timer.phase).0,
-            measure::waits(timer.comparator, timer.phase).1,
-        ))?;
+        line!(
+            block,
+            Note::w1_timer_a(
+                u32::from(timer.comparator),
+                timer.phase.name(),
+                report.early_interrupts,
+                report.deadline_lateness.count,
+                u64::from(report.deadline_lateness.maximum_micros),
+                u64::from(report.deadline_lateness.total_micros),
+            ),
+            Note::w1_timer_b(
+                report.due_at_program_return,
+                report.unmatched_interrupts,
+                report.coalesced_interrupts,
+                report.overlapping_interrupts,
+                report.armed_at_end,
+                measure::waits(timer.comparator, timer.phase).0,
+                measure::waits(timer.comparator, timer.phase).1,
+            ),
+        );
     }
     for comparator in COMPARATORS {
         for phase in WAIT_PHASES {
@@ -908,10 +943,10 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             if waits == 0 {
                 continue;
             }
-            block.line(format_args!(
-                "w1.wake cmp={comparator} phase={} waits={waits} woke_early={early}",
-                phase.name()
-            ))?;
+            line!(
+                block,
+                Note::w1_wake(u32::from(comparator), phase.name(), waits, early,)
+            );
         }
     }
     let units = run.lags.units();
@@ -923,244 +958,172 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         let until_next = units
             .get(index + 1)
             .map(|next| next.stamp.wrapping_sub(unit.stamp));
-        block.line(format_args!(
-            "w1.lag i={index} stamp={} lag_us={} since_prev_us={} until_next_us={}",
-            unit.stamp,
-            unit.lag_us,
-            OrDash(since_prev),
-            OrDash(until_next),
-        ))?;
+        line!(
+            block,
+            Note::w1_lag(
+                index as u32,
+                unit.stamp,
+                unit.lag_us,
+                since_prev,
+                until_next,
+            )
+        );
     }
     let fit = lag_fit(units);
-    block.line(format_args!(
-        "w1.lagfit n={} median_us={} max_us={} next_arrival_matches={} tolerance_us={NEXT_ARRIVAL_TOLERANCE_US}",
-        units.len(),
-        OrDash(fit.map(|fit| fit.median_us)),
-        OrDash(fit.map(|fit| fit.max_us)),
-        fit.map_or(0, |fit| fit.next_arrival_matches),
-    ))?;
+    line!(
+        block,
+        Note::w1_lagfit(
+            units.len() as u32,
+            fit.map(|fit| fit.median_us),
+            fit.map(|fit| fit.max_us),
+            fit.map_or(0, |fit| fit.next_arrival_matches),
+            NEXT_ARRIVAL_TOLERANCE_US,
+        )
+    );
     for (index, pair) in run.tsf.pairs().iter().enumerate() {
-        block.line(format_args!(
-            "w1.tsf i={index} tsf={} handoff={}",
-            pair.tsf, pair.handoff
-        ))?;
+        line!(block, Note::w1_tsf(index as u32, pair.tsf, pair.handoff));
     }
     let fit = tsf_fit(run.tsf.pairs());
-    block.line(format_args!(
-        "w1.tsffit n={} bss={} median_us={} p90_us={} max_us={} slope_ppm={}",
-        run.tsf.pairs().len(),
-        OrDash(
+    line!(
+        block,
+        Note::w1_tsffit_a(
+            run.tsf.pairs().len() as u32,
             run.tsf
                 .stand()
-                .map(|index| u32::try_from(index).unwrap_or(u32::MAX))
+                .map(|index| u32::try_from(index).unwrap_or(u32::MAX)),
+            fit.map(|fit| fit.median_us),
+            fit.map(|fit| fit.p90_us),
         ),
-        OrDash(fit.map(|fit| fit.median_us)),
-        OrDash(fit.map(|fit| fit.p90_us)),
-        OrDash(fit.map(|fit| fit.max_us)),
-        Signed(fit.map(|fit| fit.slope_ppm)),
-    ))?;
+        Note::w1_tsffit_b(fit.map(|fit| fit.max_us), fit.map(|fit| fit.slope_ppm)),
+    );
     let survey = run.survey.counters();
-    block.line(format_args!(
-        "w1.survey frames={} header_refusals={} data={} ignored_management={} table_full={} off_channel={}",
-        survey.frames,
-        survey.header_refusals,
-        survey.data,
-        survey.ignored_management,
-        survey.table_full,
-        survey.off_channel,
-    ))?;
-    block.line(format_args!(
-        "w1.verdict beacons={} bi_us={} window_us={} required={}",
-        verdict.beacons,
-        verdict.bi_us,
-        verdict.window_us,
-        verdict.required.unwrap_or(0),
-    ))?;
+    line!(
+        block,
+        Note::w1_survey(
+            survey.frames,
+            survey.header_refusals,
+            survey.data,
+            survey.ignored_management,
+            survey.table_full,
+            survey.off_channel,
+        )
+    );
+    line!(
+        block,
+        Note::w1_verdict(
+            verdict.beacons,
+            verdict.bi_us,
+            verdict.window_us,
+            verdict.required.unwrap_or(0),
+        )
+    );
     for gate in gates {
-        match gate.outcome {
-            Outcome::Pass => block.line(format_args!("w1.gate name={} result=pass", gate.name))?,
-            Outcome::Fail(reason) => block.line(format_args!(
-                "w1.gate name={} result=fail reason={reason}",
-                gate.name
-            ))?,
-            Outcome::Unexercised(reason) => block.line(format_args!(
-                "w1.gate name={} result=unexercised reason={reason}",
-                gate.name
-            ))?,
-        }
+        block.part(&Note::w1_gate_name(gate.name))?;
+        block.part(&match gate.outcome {
+            Outcome::Pass => Note::w1_gate_pass(),
+            Outcome::Fail(reason) => Note::w1_gate_fail(reason),
+            Outcome::Unexercised(reason) => Note::w1_gate_unexercised(reason),
+        })?;
+        block.end_line();
     }
     Ok(())
 }
 
-/// A signed number, or `-`.
-struct Signed(Option<i32>);
-
-impl fmt::Display for Signed {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(value) => write!(f, "{value}"),
-            None => f.write_str("-"),
-        }
+/// The discard counts of an own line: the nonzero ones, or a dash.
+fn own_discards<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
+    block: &mut Block<'_, E, F>,
+    counts: &[u32; 15],
+) -> Result<(), E> {
+    if counts.iter().all(|&count| count == 0) {
+        return block.part(&Note::w1_discards_none());
     }
-}
-
-/// `0x<hex>`, or `-`.
-struct HexOrDash(Option<u32>);
-
-impl fmt::Display for HexOrDash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(value) => write!(f, "{value:#x}"),
-            None => f.write_str("-"),
-        }
-    }
-}
-
-/// `0`, `1`, or `-`.
-struct Flag(Option<bool>);
-
-impl fmt::Display for Flag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(set) => write!(f, "{}", u8::from(set)),
-            None => f.write_str("-"),
-        }
-    }
-}
-
-/// The nonzero discard counts as `<reason>:<n>` joined by `,`, or `-`.
-struct Discards<'a>(&'a [u32; 15]);
-
-impl fmt::Display for Discards<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut first = true;
-        for (reason, &count) in DISCARDS.iter().zip(self.0) {
-            if count == 0 {
-                continue;
-            }
-            if !first {
-                f.write_char(',')?;
-            }
-            write!(f, "{reason}:{count}")?;
-            first = false;
-        }
-        if first {
-            f.write_str("-")?;
-        }
-        Ok(())
-    }
-}
-
-/// A descriptor index, `x` when unknown, or `-`.
-enum IndexOrDash {
-    Dash,
-    Index(Option<usize>),
-}
-
-impl fmt::Display for IndexOrDash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Dash => f.write_str("-"),
-            Self::Index(Some(index)) => write!(f, "{index}"),
-            Self::Index(None) => f.write_str("x"),
-        }
-    }
-}
-
-/// Descriptor indices joined by `,` (`x` when unknown), or `-` without one.
-struct Indices<'a>(&'a [Option<usize>]);
-
-impl fmt::Display for Indices<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.is_empty() {
-            return f.write_str("-");
-        }
-        for (position, index) in self.0.iter().enumerate() {
-            if position > 0 {
-                f.write_char(',')?;
-            }
-            IndexOrDash::Index(*index).fmt(f)?;
-        }
-        Ok(())
-    }
+    let low_any = counts.iter().take(8).any(|&count| count != 0);
+    block.part(&Note::w1_discards_a(counts))?;
+    block.part(&Note::w1_discards_b((counts, low_any)))
 }
 
 /// The walker and ring snapshot that the first drop of hold cycle `index`
 /// took; every value `-` without one.
-fn exhaust<W: Write>(block: &mut Block<'_, W>, index: usize, cycle: &Cycle) -> fmt::Result {
+fn exhaust<E, F: FnMut(&Note<'_>) -> Result<(), E>>(
+    block: &mut Block<'_, E, F>,
+    index: usize,
+    cycle: &Cycle,
+) -> Result<(), E> {
     let snapshot = cycle.exhaust;
     let take = |field: fn(&WifiRxExhaustion) -> Option<u32>| snapshot.as_ref().and_then(field);
-    let flag = |field: fn(&WifiRxExhaustion) -> bool| Flag(snapshot.as_ref().map(field));
-    block.line(format_args!(
-        "w1.exhaust cycle={index} snapshots={} blocked_us={} next_low={} next_upper={} last_low={} base={} walker={} doorbell={} buffer_full={} ring_base={} recycle_start={} accepted_tail={} observed={} completed={} remaining={} reload_pending={} released={} detached={} staged={} next_after_doorbell={} last_after_doorbell={} desc_hash_changed={}",
-        cycle.snapshots,
-        OrDash(take(|s| Some(s.blocked_us))),
-        HexOrDash(take(|s| Some(s.next_low))),
-        flag(|s| s.next_upper),
-        HexOrDash(take(|s| Some(s.last_low))),
-        HexOrDash(take(|s| s.base)),
-        flag(|s| s.walker_enabled),
-        flag(|s| s.reload_doorbell),
-        OrDash(take(|s| s.buffer_full.map(u32::from))),
-        HexOrDash(take(|s| Some(s.ring_base))),
-        OrDash(take(|s| Some(s.recycle_start))),
-        OrDash(take(|s| Some(s.accepted_tail))),
-        OrDash(take(|s| Some(s.observed))),
-        OrDash(take(|s| Some(s.completed))),
-        OrDash(take(|s| s.remaining)),
-        flag(|s| s.reload_pending),
-        OrDash(take(|s| Some(s.released))),
-        OrDash(take(|s| Some(s.detached))),
-        OrDash(take(|s| Some(s.staged))),
-        HexOrDash(take(|s| s.next_after_doorbell)),
-        HexOrDash(take(|s| s.last_after_doorbell)),
-        flag(|s| s.descriptors_changed),
-    ))
+    let flag = |field: fn(&WifiRxExhaustion) -> bool| snapshot.as_ref().map(field);
+    line!(
+        block,
+        Note::w1_exhaust_a(
+            index as u32,
+            cycle.snapshots,
+            take(|s| Some(s.blocked_us)),
+            take(|s| Some(s.next_low)),
+            flag(|s| s.next_upper),
+        ),
+        Note::w1_exhaust_b(
+            take(|s| Some(s.last_low)),
+            take(|s| s.base),
+            flag(|s| s.walker_enabled),
+            flag(|s| s.reload_doorbell),
+            take(|s| s.buffer_full.map(u32::from)),
+        ),
+        Note::w1_exhaust_c(
+            take(|s| Some(s.ring_base)),
+            take(|s| Some(s.recycle_start)),
+            take(|s| Some(s.accepted_tail)),
+            take(|s| Some(s.observed)),
+        ),
+        Note::w1_exhaust_d(
+            take(|s| Some(s.completed)),
+            take(|s| s.remaining),
+            flag(|s| s.reload_pending),
+            take(|s| Some(s.released)),
+        ),
+        Note::w1_exhaust_e(
+            take(|s| Some(s.detached)),
+            take(|s| Some(s.staged)),
+            take(|s| s.next_after_doorbell),
+            take(|s| s.last_after_doorbell),
+        ),
+        Note::w1_exhaust_f(flag(|s| s.descriptors_changed)),
+    );
+    Ok(())
 }
 
-/// A gate's name in a verdict reason: `walker-restart`.
-struct Phrase(&'static str);
-
-impl fmt::Display for Phrase {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for part in self.0.split('_').enumerate() {
-            if part.0 > 0 {
-                f.write_char('-')?;
-            }
-            f.write_str(part.1)?;
-        }
-        Ok(())
-    }
-}
-
-/// Print the block and the verdict line.
-pub fn print<W: Write>(out: &mut W, run: &Run<'_>) -> fmt::Result {
-    out.write_str("OER-W1-BEGIN v=1\r\n")?;
-    let mut block = Block { out, lines: 0 };
+/// Print the block and the verdict line as notes.
+pub fn print<E>(mut emit: impl FnMut(&Note<'_>) -> Result<(), E>, run: &Run<'_>) -> Result<(), E> {
+    emit(&Note::w1_begin())?;
+    let mut block = Block {
+        emit: &mut emit,
+        lines: 0,
+    };
     block_lines(&mut block, run)?;
     let lines = block.lines;
-    write!(out, "OER-W1-END lines={lines}\r\n")?;
+    emit(&Note::w1_end(lines))?;
     let (verdict, gates) = gates(run);
     if gates.iter().all(|gate| gate.outcome == Outcome::Pass) {
-        return write!(
-            out,
-            "OER-RESULT: pass w1 beacons={} required={}\r\n",
+        return emit(&Note::w1_pass(
             verdict.beacons,
-            verdict.required.unwrap_or(0)
-        );
+            verdict.required.unwrap_or(0),
+        ));
     }
-    out.write_str("OER-RESULT: fail w1")?;
+    emit(&Note::w1_fail_begin())?;
     let mut first = true;
     for gate in gates {
-        let separator = if first { " " } else { "; " };
+        if gate.outcome == Outcome::Pass {
+            continue;
+        }
+        if !first {
+            emit(&Note::w1_fail_separator())?;
+        }
+        emit(&Note::w1_fail_gate(gate.name))?;
         match gate.outcome {
-            Outcome::Pass => continue,
-            Outcome::Fail(reason) => write!(out, "{separator}{} {reason}", Phrase(gate.name))?,
-            Outcome::Unexercised(_) => {
-                write!(out, "{separator}{} not exercised", Phrase(gate.name))?;
-            }
+            Outcome::Pass => {}
+            Outcome::Fail(reason) => emit(&Note::w1_fail_reason(reason))?,
+            Outcome::Unexercised(_) => emit(&Note::w1_fail_not_exercised())?,
         }
         first = false;
     }
-    out.write_str("\r\n")
+    emit(&Note::w1_fail_end())
 }
