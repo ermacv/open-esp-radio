@@ -152,7 +152,10 @@ where
                         }));
                     }
                 };
-                let epoch = self.actor.core.prepared(&phy);
+                let epoch = self
+                    .actor
+                    .core
+                    .prepared(matches!(phy, PhyPreparation::AlreadyOpen));
                 let entered = {
                     let entering = core::pin::pin!(self.attachment.enter(
                         &mut self.actor.backend,

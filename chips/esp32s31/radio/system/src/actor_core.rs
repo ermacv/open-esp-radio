@@ -102,8 +102,8 @@ impl ActorCore {
         }
     }
     #[inline(always)]
-    pub(super) fn prepared(&mut self, phy: &PhyPreparation) -> RfEpoch {
-        if *phy != PhyPreparation::AlreadyOpen {
+    pub(super) fn prepared(&mut self, already_open: bool) -> RfEpoch {
+        if !already_open {
             self.state.epoch = Some(self.mint.next_epoch(self.state.epoch));
         }
         let epoch = self
@@ -128,13 +128,13 @@ mod tests {
     fn first_open_epoch_is_zero_and_only_a_later_reopen_advances_it() {
         let (end, _) = oer_esp32s31_radio_client::claim_for_host_test();
         let mut core = ActorCore::new(end.mint);
-        let zero = core.prepared(&PhyPreparation::AlreadyOpen);
-        assert_eq!(core.prepared(&PhyPreparation::AlreadyOpen), zero);
-        let next = core.prepared(&PhyPreparation::Woke { micros: 0 });
+        let zero = core.prepared(true);
+        assert_eq!(core.prepared(true), zero);
+        let next = core.prepared(false);
         assert_ne!(next, zero);
-        assert_eq!(core.prepared(&PhyPreparation::AlreadyOpen), next);
+        assert_eq!(core.prepared(true), next);
         let (end, _) = oer_esp32s31_radio_client::claim_for_host_test();
         let mut fresh = ActorCore::new(end.mint);
-        assert_eq!(fresh.prepared(&PhyPreparation::Woke { micros: 0 }), zero);
+        assert_eq!(fresh.prepared(false), zero);
     }
 }
