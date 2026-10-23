@@ -520,10 +520,8 @@ enum ReadFlowOp {
 
 /// Bound pathological CFGs without spending the whole operation's budget on
 /// one function. Each domain chooses its work units; all check caller control.
-const READ_MIN_FUNCTION_WORK: u64 = 100_000;
-const READ_INSTRUCTION_WORK: u64 = 512;
 fn read_work_limit(instructions: usize) -> u64 {
-    READ_MIN_FUNCTION_WORK.max((instructions as u64).saturating_mul(READ_INSTRUCTION_WORK))
+    LocalLimit::of(LocalBudgetScope::ReadFlow).limit(instructions as u64)
 }
 struct ReadWork<'c> {
     caller: &'c mut dyn RunControl,

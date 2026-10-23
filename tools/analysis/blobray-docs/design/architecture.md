@@ -83,6 +83,51 @@ from prose. `unaccounted` explicitly lists limits without typed local reasons;
 these are not zero-count claims. Operation work, memory and timeout exhaustion
 remain errors and never produce an ordinary resource-marked result.
 
+Local formulas are data from `LocalLimit::of(scope)`; report construction and
+budget admission use those same values. `limit(N)` preserves saturating work
+allowances; expression capacity uses `checked_limit(N)` and fails the operation
+on arithmetic or host-size overflow. An empty expression analysis has capacity
+zero. Neither formula copies nor independent audit multipliers live in consumers.
+
+`unaccounted` is a typed list of `UnaccountedLimit` kebab-case identifiers.
+Each identifier names one limit without a distinct local reason or count;
+listing it does not claim that the operation exercised or exhausted it.
+
+| Identifier | Limit without typed local provenance |
+| --- | --- |
+| `word-slots` | Exact word slots retained by the value lattice. |
+| `recursion-stack-bytes` | Bytes retained for recursive-call stack payloads. |
+| `recursion-stack-offsets` | Entry-relative stack offset range retained by recursive-call proofs. |
+| `value-alternative-construction` | Alternative capacity in public value construction that returns only unknown. |
+| `returned-constant-alternatives` | Union of constants across returns, whose overflow loses a callee result proof. |
+| `dispatch-slices` | Instruction slice followed while recognizing an indirect dispatch. |
+| `dispatch-table-entries` | Entries admitted by dispatch recognition. |
+| `sweep-table-entries` | Entries followed by the stack analyzer's transfer sweep. |
+| `indexed-address-depth` | Expression depth used to decompose an indexed register address. |
+| `word-steps` | Instruction steps followed by one word-postcondition path. |
+| `word-paths` | Explored and pending word-postcondition paths. |
+| `word-copy-extent` | Copy extent admitted by word-postcondition analysis. |
+| `word-read-chain` | Word-read links followed to recover a word value. |
+| `word-address-depth` | Expression depth used to recover a word address. |
+| `word-expression-allowance` | Additional expression allowance for a word query, without a separate local reason. |
+| `field-depth` | Pointer/root path depth used by a field-access query. |
+| `named-field-depth` | Nested type depth searched for a named field. |
+| `function-pointer-field-depth` | Nested type depth searched for function-pointer fields. |
+| `typedef-chain` | Typedef and qualifier links followed to find a concrete type. |
+| `dwarf-origin-chain` | Captured origin links followed while resolving a DWARF source identity. |
+| `recursion-instructions` | Function instructions admitted by recursive-call proof preparation. |
+| `recursion-pending` | Pending states retained by a recursive-call proof. |
+| `recursion-seeds` | Entry seeds admitted by a recursive-call proof. |
+| `recursion-steps` | Instruction steps followed by a recursive-call proof. |
+| `postdominator-instructions` | Function instructions admitted for postdominator computation. |
+| `checked-address-indices` | Address indices enumerated before the register-access intersection approximation. |
+| `inventory-enumerated-indices` | Indices enumerated by the register inventory consumer. |
+| `declared-word-runs` | Consecutive declared indices followed by the register inventory consumer. |
+| `trap-entry-steps` | Instruction steps followed before a trap entry reaches its handler. |
+| `trap-entry-paths` | Paths followed before a trap entry reaches its handler. |
+| `function-work` | Function CFG/value work, currently guarded only by the operation budget. |
+| `execution-events` | Events of an execution phase, currently rejected as an operation error. |
+
 | Crate | Principal modules | Owns | Allowed local dependencies |
 | --- | --- | --- | --- |
 | `oer-analysis-elf` | classify, dwarf, rv32 | ELF/archive parsing and raw ELF classification | None |

@@ -1506,16 +1506,12 @@ struct Symbols<'a> {
 }
 impl<'a> Symbols<'a> {
     fn new(nodes: usize, memory: &'a WorkingMemory, _c: &mut dyn RunControl) -> Result<Self> {
-        let limit = if nodes == 0 {
-            0
-        } else {
-            nodes
-                .checked_mul(8)
-                .and_then(|n| n.checked_add(32))
-                .ok_or_else(|| {
-                    Error::new(ErrorCode::ResourceLimited, "expression capacity overflow")
-                })?
-        };
+        let limit = LocalLimit::of(LocalBudgetScope::FunctionExpressions)
+            .checked_limit(nodes as u64)
+            .and_then(|limit| usize::try_from(limit).ok())
+            .ok_or_else(|| {
+                Error::new(ErrorCode::ResourceLimited, "expression capacity overflow")
+            })?;
         Ok(Self {
             symbolic_spills: false,
             memory_words: false,
@@ -2177,6 +2173,36 @@ fn returned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expression_capacity_applies_the_reported_formula_and_rejects_overflow() {
+        let report = AnalysisResources::new(
+            AnalysisProfile::BlobrayCli,
+            AnalysisProfile::BlobrayCli.limits(),
+            AnalysisUsage::default(),
+            AnalysisLimited::default(),
+        );
+        let formula = report
+            .limits
+            .local
+            .iter()
+            .find(|limit| limit.scope == LocalBudgetScope::FunctionExpressions)
+            .expect("expression formula");
+        let memory = WorkingMemory::new(1 << 20).expect("working memory");
+        for instructions in [0, 1, 195, 196, 8192] {
+            let symbols =
+                Symbols::new(instructions, &memory, &mut || Ok(())).expect("expression pool");
+            assert_eq!(
+                symbols.limit as u64,
+                formula
+                    .checked_limit(instructions as u64)
+                    .expect("capacity")
+            );
+        }
+        assert!(
+            matches!(Symbols::new(usize::MAX, &memory, &mut || Ok(())), Err(error) if error.code == ErrorCode::ResourceLimited)
+        );
+    }
     #[test]
     fn jalr_wraps_each_alternative_then_clears_its_low_bit() {
         let memory = WorkingMemory::new(1 << 20).unwrap();

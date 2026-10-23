@@ -46,6 +46,47 @@ pub struct LocalLimit {
     pub zero_for_empty: bool,
 }
 
+impl LocalLimit {
+    pub const fn of(scope: LocalBudgetScope) -> Self {
+        let mut limit = Self {
+            scope,
+            minimum: 100_000,
+            per_instruction: 512,
+            constant: 0,
+            multiplier: 1,
+            zero_for_empty: false,
+        };
+        match scope {
+            LocalBudgetScope::SignatureAudit => limit.multiplier = 16,
+            LocalBudgetScope::FunctionExpressions => {
+                limit.minimum = 0;
+                limit.per_instruction = 8;
+                limit.constant = 32;
+                limit.zero_for_empty = true;
+            }
+            LocalBudgetScope::ReadFlow | LocalBudgetScope::ArgumentSummary => {}
+        }
+        limit
+    }
+
+    /// Work allowances saturate on overflow; expression admission uses
+    /// `checked_limit` to preserve its operation error on capacity overflow.
+    pub fn limit(self, instructions: u64) -> u64 {
+        self.checked_limit(instructions).unwrap_or(u64::MAX)
+    }
+
+    pub fn checked_limit(self, instructions: u64) -> Option<u64> {
+        if self.zero_for_empty && instructions == 0 {
+            return Some(0);
+        }
+        self.per_instruction
+            .checked_mul(instructions)?
+            .checked_add(self.constant)?
+            .max(self.minimum)
+            .checked_mul(self.multiplier)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnalysisLimits {
@@ -232,6 +273,80 @@ impl AnalysisLimited {
     }
 }
 
+/// Limits without typed local provenance, documented in the analysis architecture.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnaccountedLimit {
+    WordSlots,
+    RecursionStackBytes,
+    RecursionStackOffsets,
+    ValueAlternativeConstruction,
+    ReturnedConstantAlternatives,
+    DispatchSlices,
+    DispatchTableEntries,
+    SweepTableEntries,
+    IndexedAddressDepth,
+    WordSteps,
+    WordPaths,
+    WordCopyExtent,
+    WordReadChain,
+    WordAddressDepth,
+    WordExpressionAllowance,
+    FieldDepth,
+    NamedFieldDepth,
+    FunctionPointerFieldDepth,
+    TypedefChain,
+    DwarfOriginChain,
+    RecursionInstructions,
+    RecursionPending,
+    RecursionSeeds,
+    RecursionSteps,
+    PostdominatorInstructions,
+    CheckedAddressIndices,
+    InventoryEnumeratedIndices,
+    DeclaredWordRuns,
+    TrapEntrySteps,
+    TrapEntryPaths,
+    FunctionWork,
+    ExecutionEvents,
+}
+impl UnaccountedLimit {
+    pub const ALL: &[Self] = &[
+        Self::WordSlots,
+        Self::RecursionStackBytes,
+        Self::RecursionStackOffsets,
+        Self::ValueAlternativeConstruction,
+        Self::ReturnedConstantAlternatives,
+        Self::DispatchSlices,
+        Self::DispatchTableEntries,
+        Self::SweepTableEntries,
+        Self::IndexedAddressDepth,
+        Self::WordSteps,
+        Self::WordPaths,
+        Self::WordCopyExtent,
+        Self::WordReadChain,
+        Self::WordAddressDepth,
+        Self::WordExpressionAllowance,
+        Self::FieldDepth,
+        Self::NamedFieldDepth,
+        Self::FunctionPointerFieldDepth,
+        Self::TypedefChain,
+        Self::DwarfOriginChain,
+        Self::RecursionInstructions,
+        Self::RecursionPending,
+        Self::RecursionSeeds,
+        Self::RecursionSteps,
+        Self::PostdominatorInstructions,
+        Self::CheckedAddressIndices,
+        Self::InventoryEnumeratedIndices,
+        Self::DeclaredWordRuns,
+        Self::TrapEntrySteps,
+        Self::TrapEntryPaths,
+        Self::FunctionWork,
+        Self::ExecutionEvents,
+    ];
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnalysisResources {
@@ -240,7 +355,7 @@ pub struct AnalysisResources {
     pub usage: AnalysisUsage,
     pub limited: Box<AnalysisLimited>,
     /// Limits without a typed local outcome; absence of counts is not zero events.
-    pub unaccounted: Vec<String>,
+    pub unaccounted: Vec<UnaccountedLimit>,
 }
 impl AnalysisResources {
     pub fn new(
@@ -256,31 +371,7 @@ impl AnalysisResources {
             LocalBudgetScope::FunctionExpressions,
         ]
         .into_iter()
-        .map(|scope| {
-            if scope == LocalBudgetScope::FunctionExpressions {
-                LocalLimit {
-                    scope,
-                    minimum: 0,
-                    per_instruction: 8,
-                    constant: 32,
-                    multiplier: 1,
-                    zero_for_empty: true,
-                }
-            } else {
-                LocalLimit {
-                    scope,
-                    minimum: 100_000,
-                    per_instruction: 512,
-                    constant: 0,
-                    zero_for_empty: false,
-                    multiplier: if scope == LocalBudgetScope::SignatureAudit {
-                        16
-                    } else {
-                        1
-                    },
-                }
-            }
-        })
+        .map(LocalLimit::of)
         .collect();
         Self {
             profile,
@@ -291,20 +382,7 @@ impl AnalysisResources {
             }),
             usage,
             limited: Box::new(limited),
-            unaccounted: [
-                "C4: word slots, recursion stack bytes and offset range",
-                "Value-alternative caps returning only Unknown/NoProof, including returned-constant unions",
-                "C5: dispatch slices, jump-table entries and indexed-address depth",
-                "C6: word, field, type, DWARF-origin and recursion depth/steps/paths",
-                "C7: postdominator function-instruction capacity",
-                "C8: address enumeration and declared-word runs (inventory consumer)",
-                "C10: trap-entry steps and paths have no distinct local-limit reason",
-                "C14: function CFG/value work has only the operation guard",
-                "C16: execution event capacity has only an operation error",
-            ]
-            .into_iter()
-            .map(String::from)
-            .collect(),
+            unaccounted: UnaccountedLimit::ALL.to_vec(),
         }
     }
 }
@@ -312,6 +390,71 @@ impl AnalysisResources {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reported_local_formulas_preserve_the_existing_budgets() {
+        let report = AnalysisResources::new(
+            AnalysisProfile::BlobrayCli,
+            AnalysisProfile::BlobrayCli.limits(),
+            AnalysisUsage::default(),
+            AnalysisLimited::default(),
+        );
+        for instructions in [0, 1, 195, 196, 8192] {
+            for &reported in &report.limits.local {
+                let work = 100_000.max(instructions * 512);
+                let expected = match reported.scope {
+                    LocalBudgetScope::ReadFlow | LocalBudgetScope::ArgumentSummary => work,
+                    LocalBudgetScope::SignatureAudit => work * 16,
+                    LocalBudgetScope::FunctionExpressions if instructions == 0 => 0,
+                    LocalBudgetScope::FunctionExpressions => instructions * 8 + 32,
+                };
+                assert_eq!(reported.limit(instructions), expected);
+                assert_eq!(reported, LocalLimit::of(reported.scope));
+            }
+        }
+    }
+
+    #[test]
+    fn formula_data_controls_evaluation_and_overflow_stays_explicit() {
+        let formula = LocalLimit {
+            scope: LocalBudgetScope::ReadFlow,
+            minimum: 3,
+            per_instruction: 5,
+            constant: 7,
+            multiplier: 2,
+            zero_for_empty: false,
+        };
+        assert_eq!(formula.checked_limit(2), Some(34));
+        for scope in [
+            LocalBudgetScope::ReadFlow,
+            LocalBudgetScope::ArgumentSummary,
+            LocalBudgetScope::SignatureAudit,
+            LocalBudgetScope::FunctionExpressions,
+        ] {
+            let formula = LocalLimit::of(scope);
+            assert_eq!(formula.checked_limit(u64::MAX), None);
+            assert_eq!(formula.limit(u64::MAX), u64::MAX);
+        }
+    }
+
+    #[test]
+    fn unaccounted_limits_are_typed_stable_identifiers() {
+        let encoded = serde_json::to_value(UnaccountedLimit::ALL).expect("unaccounted JSON");
+        let decoded: Vec<UnaccountedLimit> =
+            serde_json::from_value(encoded.clone()).expect("typed limits");
+        assert_eq!(decoded, UnaccountedLimit::ALL);
+        assert!(encoded.as_array().expect("limit list").iter().all(|name| {
+            name.as_str().is_some_and(|name| {
+                name.bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
+            })
+        }));
+        assert_eq!(
+            serde_json::to_string(&UnaccountedLimit::WordSlots).expect("word slots"),
+            "\"word-slots\""
+        );
+        assert!(serde_json::from_str::<UnaccountedLimit>("\"unknown-limit\"").is_err());
+    }
+
     #[test]
     fn events_functions_and_output_records_are_independent() {
         let reason = LimitReason::LocalBudget(LocalBudgetScope::ReadFlow);
