@@ -6,9 +6,10 @@
 //! an ordinary schema-2 fragment without `baseAddress` and without reviews: a
 //! chip's device manifest places every peripheral of the fragment at its own
 //! base address and supplies its own review annotations, which cite that
-//! chip's evidence. Both chips therefore publish one layout, and the chip's
-//! generated PAC re-exports the library's register blocks instead of
-//! generating its own copy.
+//! chip's evidence. Both chips therefore publish one layout: the library's
+//! crate holds its typed register blocks without an address, and each chip's
+//! generated PAC places them at the chip's own address instead of rendering
+//! its own copy.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -27,7 +28,8 @@ pub struct RegisterLibraryManifest {
     pub schema: u32,
     /// Stable library identifier.
     pub name: String,
-    /// Rust path of the raw crate generated from the library.
+    /// Rust path of the crate whose generated module holds the library's
+    /// typed register blocks, at its root.
     pub crate_name: String,
     /// Metadata of the placeholder device used to render the library blocks.
     pub device: ModelDevice,

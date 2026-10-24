@@ -29,7 +29,7 @@ use svd_rs::{
 };
 
 use crate::{
-    Error, FieldOrModify, FullRegisterValue, PacApiPack, RegisterSides, Result,
+    Error, FieldOrModify, FullRegisterValue, PacApiPack, RegisterSides, Result, SharedPeripheral,
     pac_api_render::{domain_value_expression, push_doc, type_binding_name},
 };
 
@@ -109,15 +109,46 @@ impl PacApiPack {
         pack
     }
 
-    /// Render every typed peripheral of `svd` with its transactions, for
-    /// the PAC API module (`generated.rs`), whose root holds the value
-    /// domains and the `layouts` module the transactions name.
-    pub fn render_typed_rust(&self, svd: &str) -> Result<String> {
+    /// Render every typed peripheral of a chip's `svd` with its
+    /// transactions, for the PAC API module (`generated.rs`), whose root
+    /// holds the value domains and the `layouts` module the transactions
+    /// name. A peripheral whose layout a register library owns (`libraries`,
+    /// by peripheral) is that library's block placed at the chip's address:
+    /// the library renders its accessors and transactions once.
+    pub fn render_typed_rust(
+        &self,
+        svd: &str,
+        libraries: &BTreeMap<String, SharedPeripheral>,
+    ) -> Result<String> {
         let typed = self.typed_peripherals();
+        if let Some(peripheral) = libraries
+            .keys()
+            .find(|peripheral| !typed.contains(peripheral.as_str()))
+        {
+            return Err(Error::message(format!(
+                "{peripheral}'s layout comes from a register library, whose blocks are typed: list it in typed-peripherals"
+            )));
+        }
         if typed.is_empty() {
             return Ok(String::new());
         }
         self.validate_typed_operations(&typed)?;
+        if let Some(peripheral) = self
+            .register_sides
+            .iter()
+            .map(|sides| sides.peripheral.as_str())
+            .chain(
+                self.write_trigger_fields
+                    .iter()
+                    .map(|trigger| trigger.peripheral.as_str()),
+            )
+            .chain(self.fifo_ports.iter().map(|port| port.peripheral.as_str()))
+            .find(|peripheral| libraries.contains_key(*peripheral))
+        {
+            return Err(Error::message(format!(
+                "PAC API register sides, write-trigger field or FIFO port of {peripheral} change a block whose layout a register library renders; declare it in the library's API"
+            )));
+        }
         let device = svd_parser::parse(svd).map_err(|error| Error::message(error.to_string()))?;
         let mut output = String::from(
             "// Typed register blocks over `oer-mmio`, rendered by `cargo registers`\n\
@@ -142,11 +173,56 @@ impl PacApiPack {
                 .ok_or_else(|| {
                     Error::message(format!("typed peripheral {name:?} is not in the SVD"))
                 })?;
-            let block = TypedBlock::new(&device, peripheral, self)?;
+            if let Some(library) = libraries.get(name) {
+                let (module, owner) = render_placed(&mut output, peripheral, library)?;
+                blocks.insert(name, (module, owner));
+                continue;
+            }
+            let block = TypedBlock::new(&device, peripheral, self, Some(peripheral.base_address))?;
             block.render(&mut output, self)?;
             blocks.insert(name, (block.module.clone(), block.owner.clone()));
         }
         output.push_str(&self.render_typed_partitions(&blocks)?);
+        Ok(output)
+    }
+
+    /// Render every peripheral of a register library's layout `svd` as a
+    /// typed block without an address, with its transactions: each chip
+    /// that places the layout claims the block at its own address. The
+    /// library has no partitions, no claim and no interrupt source; it
+    /// splits no block.
+    pub fn render_library_typed_rust(&self, svd: &str) -> Result<String> {
+        if !self.options.typed_peripherals.is_empty()
+            || !self.options.unexposed_peripherals.is_empty()
+        {
+            return Err(Error::message(
+                "a register library types every layout it owns: its API lists neither typed nor unexposed peripherals",
+            ));
+        }
+        if !self.ownership_partitions.is_empty()
+            || !self.register_sides.is_empty()
+            || !self.interrupt_sources.is_empty()
+        {
+            return Err(Error::message(
+                "a register library's API declares no ownership partition, register sides or interrupt source: they belong to a chip",
+            ));
+        }
+        let device = svd_parser::parse(svd).map_err(|error| Error::message(error.to_string()))?;
+        let mut pack = self.clone();
+        pack.options.typed_peripherals = device
+            .peripherals
+            .iter()
+            .map(|peripheral| peripheral.name.clone())
+            .collect();
+        pack.validate_typed_operations(&pack.typed_peripherals())?;
+        let mut output = String::from(
+            "// Typed register blocks over `oer-mmio` without an address, rendered by\n\
+             // `cargo registers` from the library's layouts and API policy; no\n\
+             // `unsafe`, no raw write. Each chip places them at its own address.\n\n",
+        );
+        for peripheral in &device.peripherals {
+            TypedBlock::new(&device, peripheral, &pack, None)?.render(&mut output, &pack)?;
+        }
         Ok(output)
     }
 
@@ -550,13 +626,19 @@ struct TypedBlock<'a> {
     peripheral: &'a Peripheral,
     module: String,
     owner: String,
-    base: u64,
+    /// The chip's base address; a register library's block has none.
+    base: Option<u64>,
     registers: Vec<TypedRegister<'a>>,
     split: Option<&'a RegisterSides>,
 }
 
 impl<'a> TypedBlock<'a> {
-    fn new(device: &Device, peripheral: &'a Peripheral, policy: &'a PacApiPack) -> Result<Self> {
+    fn new(
+        device: &Device,
+        peripheral: &'a Peripheral,
+        policy: &'a PacApiPack,
+        base: Option<u64>,
+    ) -> Result<Self> {
         let name = peripheral.name.as_str();
         if matches!(peripheral, MaybeArray::Array(..)) || peripheral.derived_from.is_some() {
             return Err(Error::message(format!(
@@ -662,7 +744,7 @@ impl<'a> TypedBlock<'a> {
             peripheral,
             module: crate::pac_api_render::member_binding_name(name),
             owner: type_binding_name(name),
-            base: peripheral.base_address,
+            base,
             registers,
             split,
         };
@@ -764,7 +846,16 @@ impl<'a> TypedBlock<'a> {
 
     fn render(&self, output: &mut String, policy: &PacApiPack) -> Result<()> {
         let owner = &self.owner;
-        let base = self.base;
+        // A chip's owner defaults to its device registers; a library's
+        // owner names its placement, which each chip supplies.
+        let default = self.base.map_or_else(String::new, |base| {
+            format!(" = oer_mmio::Fixed<0x{base:x}>")
+        });
+        let fixed = if self.base.is_some() {
+            ""
+        } else {
+            "<oer_mmio::Fixed<BASE>>"
+        };
         let size = self.words().last().map_or(0, |last| last + 4);
         let words = self
             .words()
@@ -784,7 +875,7 @@ impl<'a> TypedBlock<'a> {
                 (
                     format!(
                         "\n/// The block again, from the two owners of its one split.\n\
-                         pub fn join(rest: {rest}, part: {part}) -> Self {{\n\
+                         pub fn join(rest: {rest}{fixed}, part: {part}{fixed}) -> Self {{\n\
                          Self(oer_mmio::Block::join(rest.0, part.0))\n\
                          }}\n"
                     ),
@@ -821,33 +912,60 @@ impl<'a> TypedBlock<'a> {
                     source.source
                 )
             });
+        let (placement, origin, fixed_impl) = match self.base {
+            Some(base) => (
+                format!(
+                    "/// The block's base address.\n\
+                     pub const BASE: usize = 0x{base:x};\n"
+                ),
+                "[`BASE`]",
+                format!(
+                    "/// The block's device registers, as the PAC root claims them.\n\
+                     pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, BlockWords>;\n\n"
+                ),
+            ),
+            None => (String::new(), "the block's base", String::new()),
+        };
+        let constructor = match self.base {
+            Some(_) => format!(
+                "impl {owner} {{\n\
+                 /// The owner of the block's device registers.\n\
+                 pub const fn new(block: Claim) -> Self {{\n\
+                 Self(block)\n\
+                 }}\n\
+                 {fixed_join}\
+                 }}\n\n"
+            ),
+            None => format!(
+                "impl<const BASE: usize> {owner}<oer_mmio::Fixed<BASE>> {{\n\
+                 /// The owner of the block's device registers at `BASE`, as a chip's\n\
+                 /// PAC root claims them.\n\
+                 pub const fn new(block: oer_mmio::Block<oer_mmio::Fixed<BASE>, BlockWords>) -> Self {{\n\
+                 Self(block)\n\
+                 }}\n\
+                 {fixed_join}\
+                 }}\n\n"
+            ),
+        };
         let _ = writeln!(
             output,
             "pub mod {module} {{\n\
              {source}\
-             /// The block's base address.\n\
-             pub const BASE: usize = 0x{base:x};\n\
-             /// The bytes from [`BASE`] to the end of the block's last word: the\n\
+             {placement}\
+             /// The bytes from {origin} to the end of the block's last word: the\n\
              /// host memory a test block needs.\n\
              pub const SIZE: usize = 0x{size:x};\n\n\
-             /// The block's declared words, as byte offsets from [`BASE`]: its\n\
+             /// The block's declared words, as byte offsets from {origin}: its\n\
              /// whole register authority.\n\
              pub struct BlockWords;\n\n\
              impl oer_mmio::Registers for BlockWords {{\n\
              const WORDS: &'static [usize] = &[{words}];\n\
              }}\n\n\
-             /// The block's device registers, as the PAC root claims them.\n\
-             pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, BlockWords>;\n\n\
+             {fixed_impl}\
              /// The exclusive owner of the `{name}` registers.\n\
              #[must_use = \"dropping a register owner permanently loses its register authority\"]\n\
-             pub struct {owner}<P: oer_mmio::Placement = oer_mmio::Fixed<0x{base:x}>>(oer_mmio::Block<P, BlockWords>);\n\n\
-             impl {owner} {{\n\
-             /// The owner of the block's device registers.\n\
-             pub const fn new(block: Claim) -> Self {{\n\
-             Self(block)\n\
-             }}\n\
-             {fixed_join}\
-             }}\n\n\
+             pub struct {owner}<P: oer_mmio::Placement{default}>(oer_mmio::Block<P, BlockWords>);\n\n\
+             {constructor}\
              impl<'a> {owner}<oer_mmio::Host<'a>> {{\n\
              /// The block over host memory, for tests of its accessors.\n\
              pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {{\n\
@@ -886,7 +1004,7 @@ impl<'a> TypedBlock<'a> {
                     output,
                     "/// One owner of a split `{}` block.\n\
                      #[must_use = \"a split owner must be joined to recover the block\"]\n\
-                     pub struct {}<P: oer_mmio::Placement = oer_mmio::Fixed<0x{base:x}>>({});\n",
+                     pub struct {}<P: oer_mmio::Placement{default}>({});\n",
                     self.peripheral.name, view.name, view.inner
                 );
             }
@@ -1400,6 +1518,44 @@ fn projected_image(
             operation.name
         ))),
     }
+}
+
+/// A register library's block placed at a chip's address: the library's
+/// module with the chip's base, claim and owner at that base. Returns the
+/// module and owner names, as a chip block's.
+fn render_placed(
+    output: &mut String,
+    peripheral: &Peripheral,
+    library: &SharedPeripheral,
+) -> Result<(String, String)> {
+    let name = peripheral.name.as_str();
+    if matches!(peripheral, MaybeArray::Array(..)) || peripheral.derived_from.is_some() {
+        return Err(Error::message(format!(
+            "typed peripheral {name} must be one plain SVD peripheral"
+        )));
+    }
+    let module = crate::pac_api_render::member_binding_name(name);
+    let owner = type_binding_name(name);
+    let base = peripheral.base_address;
+    let path = format!("{}::{module}", library.crate_name);
+    let _ = writeln!(
+        output,
+        "/// The `{name}` register block at this chip's address: its layout,\n\
+         /// accessors and transactions are the `{}` register library's\n\
+         /// [`{path}`].\n\
+         pub mod {module} {{\n\
+         pub use {path}::*;\n\n\
+         /// The block's base address.\n\
+         pub const BASE: usize = 0x{base:x};\n\n\
+         /// The block's device registers, as the PAC root claims them.\n\
+         pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, BlockWords>;\n\n\
+         /// The exclusive owner of the `{name}` registers, at this chip's address\n\
+         /// unless placed in host memory.\n\
+         pub type {owner}<P = oer_mmio::Fixed<0x{base:x}>> = {path}::{owner}<P>;\n\
+         }}\n",
+        library.library
+    );
+    Ok((module, owner))
 }
 
 /// The claim type of `modules`' blocks as nested tuples of at most eight

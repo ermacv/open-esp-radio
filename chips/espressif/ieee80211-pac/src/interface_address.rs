@@ -1,34 +1,41 @@
 //! MAC receive-interface addresses.
 
-use crate::{MacInterface, svd};
+use oer_mmio::{Index, Placement};
 
-/// The register block of the four interface-address pairs.
-pub type InterfaceAddressRegisters = svd::WifiMacInterfaceAddress;
+use crate::{MacInterface, wifi_mac_interface_address::WifiMacInterfaceAddress};
 
-/// Publish one MAC address and enable it for receive-policy matching.
-///
-/// SOURCE(esp32s31,esp32c5): complete pinned
-/// `libpp.a[hal_mac.o]::hal_mac_set_addr`.
-///
-/// The complete leaf performs three ordered hardware operations. In
-/// particular, the enable edge is a fresh-read RMW and must not be folded
-/// into the preceding full-word high-address store.
-#[inline]
-pub fn program_receive_interface_address(
-    addresses: &InterfaceAddressRegisters,
-    interface: MacInterface,
-    address: [u8; 6],
-) {
-    let interface = interface.bits() as usize;
-    svd::zero_based_field_write::mac_interface_address_low(
-        addresses,
-        interface,
-        u32::from_le_bytes([address[0], address[1], address[2], address[3]]),
-    );
-    svd::zero_based_field_write::mac_interface_address_high(
-        addresses,
-        interface,
-        u16::from_le_bytes([address[4], address[5]]),
-    );
-    crate::generated::enable_mac_interface_receive_policy(addresses, interface);
+impl MacInterface {
+    /// The interface's element of the four-entry interface register arrays.
+    pub const fn index(self) -> Index<4> {
+        match self {
+            Self::Station => Index::constant::<0>(),
+            Self::AccessPoint => Index::constant::<1>(),
+            Self::Context2 => Index::constant::<2>(),
+            Self::Context3 => Index::constant::<3>(),
+        }
+    }
 }
+
+impl<P: Placement> WifiMacInterfaceAddress<P> {
+    /// Publish one MAC address and enable it for receive-policy matching.
+    ///
+    /// SOURCE(esp32s31,esp32c5): complete pinned
+    /// `libpp.a[hal_mac.o]::hal_mac_set_addr`.
+    ///
+    /// The complete leaf performs three ordered hardware operations. In
+    /// particular, the enable edge is a fresh-read RMW and must not be folded
+    /// into the preceding full-word high-address store.
+    #[inline]
+    pub fn program_receive_interface_address(&mut self, interface: MacInterface, address: [u8; 6]) {
+        let index = interface.index();
+        self.mac_interface_address_low(
+            index,
+            u32::from_le_bytes([address[0], address[1], address[2], address[3]]),
+        );
+        self.mac_interface_address_high(index, u16::from_le_bytes([address[4], address[5]]));
+        self.enable_mac_interface_receive_policy(index);
+    }
+}
+
+#[cfg(test)]
+mod tests;

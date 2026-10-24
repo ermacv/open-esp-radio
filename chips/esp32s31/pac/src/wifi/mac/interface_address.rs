@@ -7,14 +7,13 @@ use crate::{MacInterface, WifiRadioRegisters};
 impl WifiRadioRegisters {
     /// Publish one MAC address and enable it for receive-policy matching.
     ///
-    /// The shared transaction of
-    /// [`oer_espressif_ieee80211_pac::interface_address::program_receive_interface_address`].
+    /// The shared library's transaction
+    /// `WifiMacInterfaceAddress::program_receive_interface_address`.
     pub fn program_receive_interface_address(&mut self, interface: MacInterface, address: [u8; 6]) {
-        oer_espressif_ieee80211_pac::interface_address::program_receive_interface_address(
-            &self.peripherals.wifi_mac.wifi_mac_interface_address,
-            interface,
-            address,
-        );
+        self.peripherals
+            .wifi_mac_interface
+            .wifi_mac_interface_address
+            .program_receive_interface_address(interface, address);
     }
 
     /// Publish the STA and AP interface addresses used by the open cold path.

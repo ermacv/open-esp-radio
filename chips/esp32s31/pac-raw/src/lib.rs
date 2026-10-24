@@ -75046,16 +75046,6 @@ pub mod modem_etm {
         }
     }
 }
-#[doc = "Four interface-address pairs consumed by MAC receive filtering."]
-pub type WifiMacInterfaceAddress =
-    crate::Periph<wifi_mac_interface_address::RegisterBlock, 0x2010_405c>;
-impl core::fmt::Debug for WifiMacInterfaceAddress {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_struct("WifiMacInterfaceAddress").finish()
-    }
-}
-#[doc = "Register block shared with other chips; its layout comes from a register library."]
-pub use oer_espressif_ieee80211_pac_raw::wifi_mac_interface_address;
 #[unsafe(no_mangle)]
 static mut DEVICE_PERIPHERALS: bool = false;
 #[doc = r" All the peripherals."]
@@ -75293,8 +75283,6 @@ pub struct Peripherals {
     pub ieee802154_interrupt_route: Ieee802154InterruptRoute,
     #[doc = "MODEM_ETM"]
     pub modem_etm: ModemEtm,
-    #[doc = "WIFI_MAC_INTERFACE_ADDRESS"]
-    pub wifi_mac_interface_address: WifiMacInterfaceAddress,
 }
 impl Peripherals {
     #[doc = r" Returns all the peripherals *once*."]
@@ -75435,10 +75423,10 @@ impl Peripherals {
             ieee802154_mac: unsafe { Ieee802154Mac::steal() },
             ieee802154_interrupt_route: unsafe { Ieee802154InterruptRoute::steal() },
             modem_etm: unsafe { ModemEtm::steal() },
-            wifi_mac_interface_address: unsafe { WifiMacInterfaceAddress::steal() },
         }
     }
 }
+
 /// Safe, SVD-declared read-and-acknowledge interrupt transactions.
 pub mod interrupt_snapshot {
 
@@ -75966,7 +75954,6 @@ pub mod peripheral_ownership {
         pub wifi_mac_he_tb_diagnostics: crate::WifiMacHeTbDiagnostics,
         pub wifi_mac_he_tb_statistics: crate::WifiMacHeTbStatistics,
         pub wifi_mac_he_trigger_rx_diagnostics: crate::WifiMacHeTriggerRxDiagnostics,
-        pub wifi_mac_interface_address: crate::WifiMacInterfaceAddress,
         pub wifi_mac_internal_tx_block_ack: crate::WifiMacInternalTxBlockAck,
         pub wifi_mac_key_table: crate::WifiMacKeyTable,
         pub wifi_mac_last_rx_buffer: crate::WifiMacLastRxBuffer,
@@ -76251,7 +76238,6 @@ pub mod peripheral_ownership {
             ieee802154_mac,
             ieee802154_interrupt_route,
             modem_etm,
-            wifi_mac_interface_address,
         } = peripherals;
         PeripheralPartitions {
             unexposed: UnexposedPeripherals {
@@ -76285,7 +76271,6 @@ pub mod peripheral_ownership {
                 wifi_mac_he_tb_diagnostics,
                 wifi_mac_he_tb_statistics,
                 wifi_mac_he_trigger_rx_diagnostics,
-                wifi_mac_interface_address,
                 wifi_mac_internal_tx_block_ack,
                 wifi_mac_key_table,
                 wifi_mac_last_rx_buffer,

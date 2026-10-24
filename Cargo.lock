@@ -2713,6 +2713,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-espressif-analog",
+ "oer-espressif-ieee80211-pac",
  "oer-espressif-ieee802154-mac-values",
  "oer-mmio",
 ]
@@ -2855,7 +2856,6 @@ name = "oer-esp32s31-pac-raw"
 version = "0.1.0"
 dependencies = [
  "critical-section",
- "oer-espressif-ieee80211-pac-raw",
  "vcell",
 ]
 
@@ -2990,14 +2990,7 @@ dependencies = [
 name = "oer-espressif-ieee80211-pac"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-ieee80211-pac-raw",
-]
-
-[[package]]
-name = "oer-espressif-ieee80211-pac-raw"
-version = "0.1.0"
-dependencies = [
- "vcell",
+ "oer-mmio",
 ]
 
 [[package]]

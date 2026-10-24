@@ -59,7 +59,7 @@ fn block() -> String {
 #[test]
 fn a_typed_block_renders_without_unsafe_or_raw_writes() {
     let rust = typed_pack()
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     for unsafe_item in [
         "unsafe {",
@@ -99,7 +99,7 @@ fn a_register_mixing_write_one_to_clear_and_ordinary_fields_is_refused() {
         ) + &field("ENABLE", 1, 1, "")),
     );
     let error = typed_pack()
-        .render_typed_rust(&svd(&mixed))
+        .render_typed_rust(&svd(&mixed), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error.to_string().contains("mixes write-one-to-clear"),
@@ -118,7 +118,7 @@ fn a_transaction_the_typed_backend_does_not_render_is_refused() {
             sources: vec!["SOURCE".to_owned()],
         });
     let error = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error
@@ -140,7 +140,7 @@ fn a_fixed_image_becomes_a_method_with_its_mask_asserted() {
         sources: vec!["SOURCE".to_owned()],
     });
     let rust = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     assert!(rust.contains("pub fn issue_start(&mut self"), "{rust}");
     assert!(
@@ -167,7 +167,7 @@ fn a_split_observing_a_register_its_read_changes_is_refused() {
         sources: vec!["SOURCE".to_owned()],
     });
     let error = pack
-        .render_typed_rust(&svd(&clearing))
+        .render_typed_rust(&svd(&clearing), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error.to_string().contains("no side-effect-free read"),
@@ -210,7 +210,7 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
 #[test]
 fn a_field_reads_back_as_the_type_its_writer_takes() {
     let rust = typed_pack()
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     assert!(
         rust.contains("pub const fn level(&self) -> oer_mmio::Bits<3>"),
@@ -233,7 +233,7 @@ fn a_write_only_clear_register_is_written_from_zero() {
         &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
     );
     let rust = typed_pack()
-        .render_typed_rust(&svd(&clear))
+        .render_typed_rust(&svd(&clear), &Default::default())
         .expect("the typed block renders");
     assert!(rust.contains("pub fn write_clear("), "{rust}");
     assert!(!rust.contains("pub fn sample_clear("), "{rust}");
@@ -253,7 +253,7 @@ fn only_a_whole_word_vendor_image_skips_the_declared_field_assertion() {
         });
     }
     let rust = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     assert!(
         rust.contains("\"set_declared writes declared fields only\""),
@@ -319,7 +319,7 @@ fn a_fixed_sequence_writes_its_images_in_order() {
             sources: vec!["SOURCE".to_owned()],
         });
     let rendered = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the sequence renders");
     let directory = tempfile::tempdir().expect("a temporary directory");
     let output = run_rendered(
@@ -371,7 +371,7 @@ fn partitioned_pack() -> PacApiPack {
 #[test]
 fn the_root_claims_every_typed_block_at_once_and_checks_their_words() {
     let rust = partitioned_pack()
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     for item in [
         "pub type Claims = (super::radio::Claim, super::other::Claim,);",
@@ -394,7 +394,7 @@ fn a_partition_mixing_typed_and_untyped_peripherals_is_refused() {
         .push("OTHER".to_owned());
     pack.ownership_partitions.truncate(1);
     let error = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error.to_string().contains("mixes typed peripherals"),
@@ -407,7 +407,7 @@ fn an_unexposed_peripheral_must_exist() {
     let mut pack = typed_pack();
     pack.options.unexposed_peripherals = vec!["MISSING".to_owned()];
     let error = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect_err("the typed block is refused");
     assert!(error.to_string().contains("is not in the SVD"), "{error}");
 }
@@ -428,7 +428,7 @@ fn the_two_sides_are_owners_whose_words_cover_the_block() {
         sources: vec!["SOURCE".to_owned()],
     });
     let rust = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     for item in [
         "pub struct RadioIrq<",
@@ -472,7 +472,7 @@ fn triggered() -> String {
 #[test]
 fn an_undeclared_write_only_field_in_a_readable_register_is_still_refused() {
     let error = typed_pack()
-        .render_typed_rust(&svd(&triggered()))
+        .render_typed_rust(&svd(&triggered()), &Default::default())
         .unwrap_err();
     assert!(
         error
@@ -486,7 +486,9 @@ fn an_undeclared_write_only_field_in_a_readable_register_is_still_refused() {
 fn a_write_trigger_field_has_only_its_explicit_trigger() {
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
-    let rust = pack.render_typed_rust(&svd(&triggered())).unwrap();
+    let rust = pack
+        .render_typed_rust(&svd(&triggered()), &Default::default())
+        .unwrap();
     for item in [
         "pub fn trigger_config_update(",
         "pub const TRIGGERS: u32",
@@ -511,7 +513,9 @@ fn a_write_trigger_field_wider_than_one_bit_is_refused() {
     );
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
-    let error = pack.render_typed_rust(&svd(&wide)).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&wide), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("one writable bit"), "{error}");
 }
 
@@ -520,7 +524,9 @@ fn a_write_trigger_field_the_block_lacks_is_refused() {
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
     pack.write_trigger_fields.push(trigger("CONFIG", "MISSING"));
-    let error = pack.render_typed_rust(&svd(&triggered())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&triggered()), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("is not a field"), "{error}");
 }
 
@@ -534,7 +540,9 @@ fn port() -> String {
 fn a_fifo_port_is_only_popped_and_pushed() {
     let mut pack = typed_pack();
     pack.fifo_ports.push(fifo("DATA"));
-    let rust = pack.render_typed_rust(&svd(&port())).unwrap();
+    let rust = pack
+        .render_typed_rust(&svd(&port()), &Default::default())
+        .unwrap();
     assert!(rust.contains("pub fn pop_data(&mut self) -> u8"), "{rust}");
     assert!(
         rust.contains("pub fn push_data(&mut self, value: u8)"),
@@ -558,11 +566,15 @@ fn a_fifo_port_its_read_declares_changing_is_still_pushed() {
         "<readAction>clear</readAction>",
         &field("BYTE", 0, 8, ""),
     );
-    let error = typed_pack().render_typed_rust(&svd(&clearing)).unwrap_err();
+    let error = typed_pack()
+        .render_typed_rust(&svd(&clearing), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("changes when read"), "{error}");
     let mut pack = typed_pack();
     pack.fifo_ports.push(fifo("DATA"));
-    let rust = pack.render_typed_rust(&svd(&clearing)).unwrap();
+    let rust = pack
+        .render_typed_rust(&svd(&clearing), &Default::default())
+        .unwrap();
     assert!(rust.contains("pub fn push_data("), "{rust}");
 }
 
@@ -577,7 +589,9 @@ fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
         description: "test".to_owned(),
         sources: vec!["SOURCE".to_owned()],
     });
-    let error = pack.render_typed_rust(&svd(&port())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&port()), &Default::default())
+        .unwrap_err();
     assert!(
         error.to_string().contains("no side-effect-free read"),
         "{error}"
@@ -592,7 +606,9 @@ fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
         value: 0x41,
         sources: vec!["SOURCE".to_owned()],
     });
-    let error = pack.render_typed_rust(&svd(&port())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&port()), &Default::default())
+        .unwrap_err();
     assert!(
         error.to_string().contains("only popped and pushed"),
         "{error}"
@@ -606,7 +622,9 @@ fn a_register_narrower_than_a_word_is_refused() {
         .to_owned()
         + &field("LEVEL", 0, 8, "")
         + "</fields></register>";
-    let error = typed_pack().render_typed_rust(&svd(&byte)).unwrap_err();
+    let error = typed_pack()
+        .render_typed_rust(&svd(&byte), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("not 32 bits wide"), "{error}");
 }
 
@@ -617,7 +635,9 @@ fn trigger_and_fifo_declarations_need_a_typed_peripheral() {
         peripheral: "OTHER".to_owned(),
         ..fifo("WORD")
     });
-    let error = pack.render_typed_rust(&svd(&block())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&block()), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("is not typed"), "{error}");
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));

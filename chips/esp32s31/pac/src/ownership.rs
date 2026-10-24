@@ -1,6 +1,7 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
 use super::*;
+use crate::generated::{self, peripheral_ownership::Claims};
 
 /// Reviewed Bluetooth low-power timer divider for the main crystal source.
 pub const BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER: ModemLowPowerClockDivider =
@@ -12,6 +13,8 @@ pub const BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER: ModemLowPowerClockDivider =
 /// Private Wi-Fi MAC owners used by one Wi-Fi register set.
 pub(crate) struct WifiRadioPeripheralOwners {
     pub(crate) wifi_mac: svd::peripheral_ownership::WifiMacPeripherals,
+    /// The receive-interface address pairs, the shared library's typed block.
+    pub(crate) wifi_mac_interface: generated::peripheral_ownership::WifiMacInterfacePeripherals,
 }
 
 /// Physical owners used by one IEEE 802.15.4 task register set.
@@ -158,6 +161,7 @@ impl SharedRadioRegisters {
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct WifiMacPartition {
     peripherals: svd::peripheral_ownership::WifiMacPeripherals,
+    interface: generated::peripheral_ownership::WifiMacInterfacePeripherals,
     mac_local_time: MacLocalTime,
 }
 
@@ -229,13 +233,34 @@ pub struct RadioPartitions {
 }
 
 impl RadioPartitions {
-    /// Acquire the generated radio singleton once.
+    /// Acquire the generated radio singleton and claim the typed blocks
+    /// once.
+    #[allow(
+        unsafe_code,
+        reason = "the radio root claims the typed blocks once, with the generated singleton"
+    )]
     pub fn take() -> Option<Self> {
-        svd::Peripherals::take().map(Self::from_peripherals)
+        let peripherals = svd::Peripherals::take()?;
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the radio root claims the typed blocks once, with the generated singleton"
+        )]
+        // SAFETY: `svd::Peripherals::take` returns the radio singleton at
+        // most once, so this claim is made once. The typed blocks' words lie
+        // in no svd2rust partition (the generator renders a typed peripheral
+        // only as its typed block), so no other owner reaches them. The
+        // generated `const` assertion beside `Claims` checks that no two
+        // typed blocks list the same word; words esp-hal also writes are
+        // reviewed with their coordination in `registers/shared-words.toml`.
+        let claims = unsafe { oer_mmio::assume_owned::<Claims>() };
+        Some(Self::from_peripherals(peripherals, claims))
     }
 
-    /// Bind the generated singleton to the opaque partition owners.
-    pub(crate) fn from_peripherals(peripherals: svd::Peripherals) -> Self {
+    /// Bind the generated singleton and the claimed typed blocks to the
+    /// opaque partition owners.
+    pub(crate) fn from_peripherals(peripherals: svd::Peripherals, claims: Claims) -> Self {
+        let generated::peripheral_ownership::PeripheralPartitions { wifi_mac_interface } =
+            generated::peripheral_ownership::partition(claims);
         let svd::peripheral_ownership::PeripheralPartitions {
             wifi_mac,
             wifi_rx_dma,
@@ -259,6 +284,7 @@ impl RadioPartitions {
         Self {
             wifi_mac: WifiMacPartition {
                 peripherals: wifi_mac,
+                interface: wifi_mac_interface,
                 mac_local_time,
             },
             wifi_rx_dma: WifiRxDmaRegisters {
@@ -298,9 +324,20 @@ impl RadioPartitions {
         reason = "a host-test root is fictitious; each test needs its own fresh singleton"
     )]
     pub fn for_host_test() -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "a host-test root claims the typed blocks with its fictitious singleton"
+        )]
         // SAFETY: only host tests build this root. It is fictitious: no real
-        // MMIO exists behind it, so the singleton need not be unique.
-        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
+        // MMIO exists behind it and no test accesses one, so neither the
+        // singleton nor the claim of the typed blocks need be unique.
+        let (peripherals, claims) = unsafe {
+            (
+                svd::Peripherals::steal(),
+                oer_mmio::assume_owned::<Claims>(),
+            )
+        };
+        Self::from_peripherals(peripherals, claims)
     }
 
     /// Construct every partition in an isolated probe image.
@@ -311,10 +348,21 @@ impl RadioPartitions {
         reason = "a probe image runs one closed comparison and no runtime driver"
     )]
     pub fn for_probe() -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "a probe root claims the typed blocks once, with its singleton"
+        )]
         // SAFETY: a probe image (`cfg(oer_probe)`, built by `cargo fw` from
         // `firmware/probes/` alone) contains one closed comparison and
-        // no runtime driver, so no other owner of these registers runs.
-        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
+        // no runtime driver, so no other owner of these registers runs; it
+        // claims the typed blocks once, beside the singleton.
+        let (peripherals, claims) = unsafe {
+            (
+                svd::Peripherals::steal(),
+                oer_mmio::assume_owned::<Claims>(),
+            )
+        };
+        Self::from_peripherals(peripherals, claims)
     }
 }
 
@@ -641,10 +689,14 @@ impl WifiRadioRegisters {
     pub fn new(wifi_mac: WifiMacPartition) -> Self {
         let WifiMacPartition {
             peripherals: wifi_mac,
+            interface: wifi_mac_interface,
             mac_local_time,
         } = wifi_mac;
         Self {
-            peripherals: WifiRadioPeripheralOwners { wifi_mac },
+            peripherals: WifiRadioPeripheralOwners {
+                wifi_mac,
+                wifi_mac_interface,
+            },
             mac_local_time,
         }
     }
@@ -653,6 +705,7 @@ impl WifiRadioRegisters {
     pub fn into_partition(self) -> WifiMacPartition {
         WifiMacPartition {
             peripherals: self.peripherals.wifi_mac,
+            interface: self.peripherals.wifi_mac_interface,
             mac_local_time: self.mac_local_time,
         }
     }
