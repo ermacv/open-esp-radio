@@ -68,6 +68,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             entry: irq.table_entry_bytes,
             source: field(irq.table_source),
             level: field(irq.table_level),
+            class: field(irq.table_class),
             core: field(irq.table_core),
             handler: irq.table_handler,
         };
@@ -372,6 +373,7 @@ struct InterruptContract {
     table_entry_bytes: u32,
     table_source: [u32; 2],
     table_level: [u32; 2],
+    table_class: [u32; 2],
     table_core: [u32; 2],
     table_handler: u32,
 }

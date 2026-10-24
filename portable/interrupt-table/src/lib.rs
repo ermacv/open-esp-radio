@@ -81,6 +81,26 @@ pub trait Matrix {
     fn slot(&self, source: Self::Source) -> usize;
 }
 
+/// What an entry's handler may do. The image gate checks each interrupt
+/// context's code by the classes of its entries; [`interrupt_table!`] checks
+/// at compile time where each class may sit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Class {
+    /// Captures, acknowledges, latches and raises signals: strict code from
+    /// SRAM or ROM with its data in SRAM, no task poll and no waker call.
+    /// Never on the level of its core's [`Class::Executor`].
+    Hardware = 0,
+    /// An executor's interrupt: serves its signals and timers, then polls its
+    /// tasks. Strict up to the poll, its tasks by the task rules; one per
+    /// level and core.
+    Executor = 1,
+    /// A [`Class::Hardware`] handler on the level of its core's
+    /// [`Class::Executor`], the one rule it breaks. The entry names its
+    /// reason, which the image gate's report prints.
+    Exempt = 2,
+}
+
 /// One entry of an image's interrupt table, laid out for the tools that read
 /// it from the image.
 #[derive(Debug)]
@@ -88,6 +108,7 @@ pub trait Matrix {
 pub struct Binding<S, L, C> {
     pub source: S,
     pub level: L,
+    pub class: Class,
     pub core: C,
     /// The handler the vector slot of `source` holds from the link on;
     /// `None` (a zero word) for an entry a `cfg` leaves out of the image.
@@ -330,10 +351,78 @@ pub fn verify_required<M: Matrix>(
 /// `INTERRUPT_TABLE` to its platform's runtime.
 ///
 /// A chip's platform wraps it with its types; each entry reads
-/// `field: Token = SOURCE => handler, LEVEL, CORE;` and defines the token
-/// type `Token`, while `Interrupts::take` hands out every token once. An
-/// entry's `#[cfg(...)]` attributes, before its doc comment, leave all of it
-/// out: token, handler symbol and table entry.
+/// `field: Token = SOURCE => handler, LEVEL, CORE, CLASS;` and defines the
+/// token type `Token`, while `Interrupts::take` hands out every token once.
+/// `CLASS` is a [`Class`]: `Hardware`, `Executor` or `Exempt("reason")`;
+/// an exempt entry's reason is exported as
+/// `__OER_INTERRUPT_EXEMPT_<SOURCE>` for the image gate's report. The table
+/// fails to compile when two `Executor` entries share a level and core, when
+/// a `Hardware` entry sits on the level of its core's `Executor`, or when an
+/// `Exempt` entry does not. An entry's `#[cfg(...)]` attributes, before its
+/// doc comment, leave all of it out: token, handler symbol, reason and table
+/// entry.
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_types!();
+/// # pub fn on_timer() {}
+/// # pub fn on_radio() {}
+/// oer_interrupt_table::interrupt_table! {
+///     source: Source = Source,
+///     level: Level = Level,
+///     core: Core = Core,
+///     handler_attributes: [];
+///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
+///     // A hardware handler would wait for the executor's whole poll.
+///     timer: TimerToken = Timer => on_timer, Two, Zero, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_types!();
+/// # pub fn on_timer() {}
+/// # pub fn on_radio() {}
+/// oer_interrupt_table::interrupt_table! {
+///     source: Source = Source,
+///     level: Level = Level,
+///     core: Core = Core,
+///     handler_attributes: [];
+///     // One executor per level and core.
+///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
+///     timer: TimerToken = Timer => on_timer, Two, Zero, Executor;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_types!();
+/// # pub fn on_timer() {}
+/// oer_interrupt_table::interrupt_table! {
+///     source: Source = Source,
+///     level: Level = Level,
+///     core: Core = Core,
+///     handler_attributes: [];
+///     // Nothing to exempt: no executor shares the level.
+///     timer: TimerToken = Timer => on_timer, Two, Zero, Exempt("no executor here");
+/// }
+/// ```
+///
+/// The same entries on another core, or an exemption beside the executor,
+/// compile:
+///
+/// ```
+/// # oer_interrupt_table::__fake_types!();
+/// # pub fn on_timer() {}
+/// # pub fn on_radio() {}
+/// # pub fn on_absent() {}
+/// oer_interrupt_table::interrupt_table! {
+///     source: Source = Source,
+///     level: Level = Level,
+///     core: Core = Core,
+///     handler_attributes: [];
+///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
+///     timer: TimerToken = Timer => on_timer, Two, One, Hardware;
+///     absent: AbsentToken = Absent => on_absent, Two, Zero, Exempt("until its port");
+/// }
+/// ```
 #[macro_export]
 macro_rules! interrupt_table {
     (
@@ -344,7 +433,8 @@ macro_rules! interrupt_table {
         $(
             $(#[cfg($cfg:meta)])*
             $(#[doc = $doc:literal])*
-            $field:ident: $token:ident = $source:ident => $handler:path, $level:ident, $core:ident;
+            $field:ident: $token:ident = $source:ident => $handler:path, $level:ident, $core:ident,
+                $class:ident $(($reason:literal))?;
         )*
     ) => {
         #[allow(unused_imports)]
@@ -374,7 +464,19 @@ macro_rules! interrupt_table {
 
             $(#[cfg($cfg)])*
             $crate::__interrupt_handler!($handler_attributes, $source, $handler);
+
+            $crate::__exemption!([$($cfg),*] $source $(, $reason)?);
         )*
+
+        const _: () = $crate::__private::check_classes(&[
+            $($crate::__private::Declared {
+                level: __OerInterruptLevels::$level as u32,
+                core: __OerInterruptCores::$core as u32,
+                class: $crate::Class::$class,
+                reason: $crate::__named!($($reason)?),
+                present: cfg!(all($($cfg),*)),
+            },)*
+        ]);
 
         /// Every source token of the image's interrupt table.
         #[allow(dead_code, reason = "an image without sources takes no token")]
@@ -407,6 +509,7 @@ macro_rules! interrupt_table {
             $($crate::Binding {
                 source: __OerInterruptSources::$source,
                 level: __OerInterruptLevels::$level,
+                class: $crate::Class::$class,
                 core: __OerInterruptCores::$core,
                 handler: {
                     #[cfg(all($($cfg),*))]
@@ -436,8 +539,107 @@ macro_rules! __interrupt_handler {
     };
 }
 
+/// The exempt entry's reason, exported for the image gate's report: the
+/// bytes of `reason` named after the entry's source.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __exemption {
+    ([$($cfg:meta),*] $source:ident) => {};
+    ([$($cfg:meta),*] $source:ident, $reason:literal) => {
+        #[cfg(all($($cfg),*))]
+        const _: () = {
+            const REASON: &str = $reason;
+            #[used]
+            #[unsafe(export_name = concat!("__OER_INTERRUPT_EXEMPT_", stringify!($source)))]
+            static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
+        };
+    };
+}
+
+/// Whether an entry names a reason.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __named {
+    () => {
+        false
+    };
+    ($reason:literal) => {
+        true
+    };
+}
+
 #[doc(hidden)]
 pub mod __private {
+    use crate::Class;
+
+    /// One entry as the class rules see it.
+    pub struct Declared {
+        pub level: u32,
+        pub core: u32,
+        pub class: Class,
+        /// The entry names a reason.
+        pub reason: bool,
+        /// A `cfg` keeps the entry in this build.
+        pub present: bool,
+    }
+
+    /// The class rules of a table, at compile time: one `Executor` per
+    /// level and core, no `Hardware` on its level, every `Exempt` on it and
+    /// with a reason.
+    pub const fn check_classes(entries: &[Declared]) {
+        let mut index = 0;
+        while index < entries.len() {
+            let entry = &entries[index];
+            index += 1;
+            if !entry.present {
+                continue;
+            }
+            let mut executors = 0;
+            let mut other = 0;
+            while other < entries.len() {
+                let candidate = &entries[other];
+                other += 1;
+                if candidate.present
+                    && candidate.level == entry.level
+                    && candidate.core == entry.core
+                    && matches!(candidate.class, Class::Executor)
+                {
+                    executors += 1;
+                }
+            }
+            match entry.class {
+                Class::Executor => assert!(
+                    executors == 1,
+                    "two Executor entries share a level and core"
+                ),
+                Class::Hardware => assert!(
+                    executors == 0,
+                    "a Hardware entry shares the level of its core's Executor"
+                ),
+                Class::Exempt => assert!(
+                    executors == 1,
+                    "an Exempt entry is not on the level of its core's Executor"
+                ),
+            }
+            assert!(
+                entry.reason == matches!(entry.class, Class::Exempt),
+                "an Exempt entry, and only it, names its reason"
+            );
+        }
+    }
+
+    /// The bytes of `text`, which holds `N`.
+    pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
+        let text = text.as_bytes();
+        let mut out = [0; N];
+        let mut index = 0;
+        while index < N {
+            out[index] = text[index];
+            index += 1;
+        }
+        out
+    }
+
     /// The private part of a token.
     #[derive(Debug)]
     pub struct Unique(());
@@ -462,22 +664,7 @@ pub mod __private {
 #[macro_export]
 macro_rules! __fake_matrix {
     () => {
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Source {
-            Timer,
-            Radio,
-            Absent,
-        }
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Level {
-            One,
-            Two,
-        }
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Core {
-            Zero,
-            One,
-        }
+        $crate::__fake_types!();
 
         /// Routes by core and source, and the vector slots by source.
         pub struct FakeMatrix {
@@ -533,11 +720,36 @@ macro_rules! __fake_matrix {
             level: Level = Level,
             core: Core = Core,
             handler_attributes: [];
-            timer: TimerToken = Timer => on_timer, One, Zero;
-            radio: RadioToken = Radio => on_radio, Two, One;
+            timer: TimerToken = Timer => on_timer, One, Zero, Hardware;
+            radio: RadioToken = Radio => on_radio, Two, One, Executor;
             #[cfg(any())]
-            /// Left out of every build.
-            absent: AbsentToken = Absent => on_absent, One, Zero;
+            /// Left out of every build; on its own it would break the class
+            /// rules, which only the build's entries obey.
+            absent: AbsentToken = Absent => on_absent, Two, One, Hardware;
+        }
+    };
+}
+
+/// The fake matrix's source, level and core types.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __fake_types {
+    () => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Source {
+            Timer,
+            Radio,
+            Absent,
+        }
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Level {
+            One,
+            Two,
+        }
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Core {
+            Zero,
+            One,
         }
     };
 }

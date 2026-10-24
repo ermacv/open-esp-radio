@@ -10,8 +10,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use oer_analysis_riscv_stack::{
-    Analysis, Dwarf, Field, HartStack, Stacks, TableLayout, interrupt_table, parse_summaries,
-    trap_entry, vector_table,
+    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, interrupt_table,
+    parse_summaries, trap_entry, vector_table,
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -23,6 +23,8 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 
 mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
+mod classes;
+pub use classes::{Breach, Finding};
 mod code;
 pub use code::CodePlacement;
 pub(crate) mod allocation;
@@ -72,6 +74,15 @@ pub struct InterruptStacks {
     pub panic_hook_data: Vec<(u32, u32, u64)>,
     /// The chip's address map and interrupt contract the bounds are held to.
     pub contract: Contract,
+    /// The image's interrupt table, with each entry's class.
+    pub table: Vec<TableEntry>,
+    /// Entries whose class may not sit where they do: fail every policy.
+    pub misplaced: Vec<String>,
+    /// Each exempt entry's handler slot and the reason the image names.
+    pub exemptions: Vec<(u32, String)>,
+    /// What the code of hardware levels and exempt entries does that the
+    /// hardware class forbids.
+    pub hardware: Vec<Finding>,
 }
 
 /// What the code every interrupt level reaches (its handlers and what they
@@ -153,6 +164,13 @@ impl InterruptStacks {
             )
             .into());
         }
+        if !self.misplaced.is_empty() {
+            return Err(format!(
+                "the interrupt table places a class where it may not sit: {}",
+                self.misplaced.join("; ")
+            )
+            .into());
+        }
         for (slot, calls) in &self.handlers {
             if let Some(outside) = std::iter::once(slot)
                 .chain(calls)
@@ -167,6 +185,39 @@ impl InterruptStacks {
             }
         }
         let mut warnings = Vec::new();
+        if let Some(first) = self.hardware.first() {
+            match required {
+                Required::Product => {
+                    return Err(format!(
+                        "hardware code of {} {} in {} at {:#010x}:\n{}",
+                        first.subject,
+                        first.breach,
+                        self.name(first.function),
+                        first.site,
+                        self.render()
+                    )
+                    .into());
+                }
+                Required::Diagnostic => {
+                    let subjects: BTreeSet<&str> = self
+                        .hardware
+                        .iter()
+                        .map(|finding| finding.subject.as_str())
+                        .collect();
+                    for subject in subjects {
+                        let count = self
+                            .hardware
+                            .iter()
+                            .filter(|finding| finding.subject == subject)
+                            .count();
+                        warnings.push(format!(
+                            "{subject}: {count} breaches of the hardware class (diagnostic \
+                             image, reported only); see {INTERRUPT_REPORT}"
+                        ));
+                    }
+                }
+            }
+        }
         for context in &self.code_placement.contexts {
             use code::Location::{Flash, Other, Psram};
             for (addresses, role, subject, region, locations) in [
@@ -186,15 +237,15 @@ impl InterruptStacks {
                 ),
                 (
                     &context.tasks,
-                    "P2 task",
-                    "P2 task",
+                    "executor task",
+                    "executor task",
                     "cached flash",
                     &[Flash][..],
                 ),
                 (
                     &context.tasks,
-                    "P2 task",
-                    "P2 task",
+                    "executor task",
+                    "executor task",
                     "outside SRAM/ROM/PSRAM",
                     &[Other][..],
                 ),
@@ -327,6 +378,80 @@ impl InterruptStacks {
         Ok(warnings)
     }
 
+    /// Each table entry's class, the exemptions with their reasons, the
+    /// breaches of the hardware class and the panic sites of strict code.
+    fn render_classes(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(
+            out,
+            "classes: {} entries, {} misplaced, {} hardware-class breaches",
+            self.table
+                .iter()
+                .filter(|entry| entry.handler.is_some())
+                .count(),
+            self.misplaced.len(),
+            self.hardware.len()
+        );
+        for entry in self.table.iter() {
+            let Some(handler) = entry.handler else {
+                continue;
+            };
+            let _ = write!(
+                out,
+                "  {} (source {}): core {} level {}, {}",
+                self.name(handler),
+                entry.source,
+                entry.core,
+                entry.level,
+                entry.class
+            );
+            match self.exemptions.iter().find(|(slot, _)| *slot == handler) {
+                Some((_, reason)) => {
+                    let _ = writeln!(out, " (shares its core's executor level): {reason}");
+                }
+                None => out.push('\n'),
+            }
+        }
+        for problem in &self.misplaced {
+            let _ = writeln!(out, "  misplaced: {problem}");
+        }
+        for finding in &self.hardware {
+            let _ = writeln!(
+                out,
+                "  {}: {} at {:#010x} {}",
+                finding.subject,
+                self.name(finding.function),
+                finding.site,
+                finding.breach
+            );
+        }
+        let panics: usize = self
+            .code_placement
+            .contexts
+            .iter()
+            .map(|context| context.panics.len())
+            .sum();
+        let _ = writeln!(
+            out,
+            "strict code panics (reported only): {panics} calls into the panic machinery"
+        );
+        for context in &self.code_placement.contexts {
+            if context.panics.is_empty() {
+                continue;
+            }
+            let _ = writeln!(out, "  {context}: {}", context.panics.len());
+            for (caller, callee) in &context.panics {
+                let _ = writeln!(
+                    out,
+                    "    {} calls {}",
+                    self.name(*caller),
+                    self.name(*callee)
+                );
+            }
+        }
+        out
+    }
+
     fn name(&self, address: u32) -> String {
         self.names
             .get(&address)
@@ -376,6 +501,7 @@ impl InterruptStacks {
                 let _ = writeln!(out, "  {problem}");
             }
         }
+        out.push_str(&self.render_classes());
         let code = &self.handler_code;
         let _ = writeln!(
             out,
@@ -468,7 +594,11 @@ impl InterruptStacks {
                 let label = if level.level == 0 {
                     "exception".to_owned()
                 } else {
-                    format!("level {}", level.level)
+                    format!(
+                        "level {} ({})",
+                        level.level,
+                        classes::context_class(&self.table, hart.core, level.level)
+                    )
                 };
                 let _ = writeln!(
                     out,
@@ -582,6 +712,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
             entry: interrupts.table_entry_bytes,
             source: field(interrupts.table_source.into()),
             level: field(interrupts.table_level.into()),
+            class: field(interrupts.table_class.into()),
             core: field(interrupts.table_core.into()),
             handler: interrupts.table_handler,
         },
@@ -652,7 +783,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &mut keep,
         &mut control,
     )?;
-    let code_placement = CodePlacement::of(
+    let mut code_placement = CodePlacement::of(
         analysis,
         functions,
         &harts,
@@ -662,6 +793,66 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &mut keep,
         &mut control,
     )?;
+    let parsed = oer_analysis_elf::Elf::parse(elf)?;
+    let cached_data = |reached: &BTreeSet<u32>| -> Result<Vec<(u32, u32, u64)>> {
+        let code: Vec<_> = parsed
+            .sections()
+            .filter(|section| section.executable)
+            .collect();
+        Ok(
+            cached_hook_references(&parsed, functions, reached, &contract.memory)?
+                .into_iter()
+                .filter(|(_, _, target)| !code.iter().any(|section| section.contains(*target)))
+                .collect(),
+        )
+    };
+    let mut hardware = Vec::new();
+    for context in &mut code_placement.contexts {
+        context.panics = handler_code(analysis, &context.strict, names, &contract.memory).panics;
+        if context.class == Some(Class::Hardware) {
+            let resolutions = inputs.resolutions_for(analysis, context.hart, context.level);
+            hardware.extend(classes::hardware_code(
+                &context.to_string(),
+                analysis,
+                &context.strict,
+                &resolutions,
+                &cached_data(&context.strict)?,
+            ));
+        }
+    }
+    let exemptions = exemption_reasons(&parsed, &table, &interrupts.table_exemption_prefix)?;
+    for entry in table
+        .iter()
+        .filter(|entry| entry.class == Class::Exempt && entry.handler.is_some())
+    {
+        let Some(handler) = entry.handler else {
+            continue;
+        };
+        let resolutions = inputs.resolutions_for(analysis, entry.core, entry.level);
+        let reached = analysis.reached_cut(
+            handler,
+            &resolutions,
+            &BTreeSet::new(),
+            &mut keep,
+            &mut control,
+        )?;
+        hardware.extend(classes::hardware_code(
+            &format!(
+                "exempt {} on hart {} P{}",
+                names
+                    .get(&handler)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{handler:#010x}")),
+                entry.core,
+                entry.level
+            ),
+            analysis,
+            &reached,
+            &resolutions,
+            &cached_data(&reached)?,
+        ));
+    }
+    let misplaced = classes::misplaced(&table);
     let hook = names
         .iter()
         .find(|(_, name)| *name == "oer_platform_panic_hook");
@@ -701,7 +892,45 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         panic_code,
         panic_hook_data,
         contract: contract.clone(),
+        table,
+        misplaced,
+        exemptions,
+        hardware,
     })
+}
+
+/// Each exempt entry's handler slot and its reason: the bytes of the symbol
+/// named by `prefix` and a name of the slot's symbol.
+fn exemption_reasons(
+    elf: &oer_analysis_elf::Elf<'_>,
+    table: &[TableEntry],
+    prefix: &str,
+) -> Result<Vec<(u32, String)>> {
+    let mut reasons = Vec::new();
+    for entry in table.iter().filter(|entry| entry.class == Class::Exempt) {
+        let Some(handler) = entry.handler else {
+            continue;
+        };
+        let reason = elf
+            .symbols()
+            .filter(|symbol| symbol.defined && symbol.address == u64::from(handler))
+            .find_map(|slot| elf.symbol(&format!("{prefix}{}", slot.name)))
+            .ok_or_else(|| {
+                format!(
+                    "the exempt entry of source {} names no reason (`{prefix}<handler>`)",
+                    entry.source
+                )
+            })?;
+        let bytes = usize::try_from(reason.size)
+            .ok()
+            .and_then(|size| {
+                elf.segments()
+                    .find_map(|segment| segment.bytes(reason.address, size))
+            })
+            .ok_or_else(|| format!("`{}` has no bytes in the image", reason.name))?;
+        reasons.push((handler, String::from_utf8_lossy(bytes).into_owned()));
+    }
+    Ok(reasons)
 }
 
 /// The retained relocations reveal compiler-created constants as well as
@@ -887,10 +1116,10 @@ fn source_table(elf: &[u8], symbol: &str) -> Result<u32> {
 mod tests {
     #[test]
     fn a_table_entry_for_a_core_without_an_interrupt_stack_is_refused() {
-        use oer_analysis_riscv_stack::TableEntry;
         let entry = |core| TableEntry {
             source: 7,
             level: 2,
+            class: Class::Executor,
             core,
             handler: Some(0x4000_0000),
         };
@@ -949,6 +1178,10 @@ mod tests {
             panic_code: HandlerCode::default(),
             panic_hook_data: Vec::new(),
             contract: contract(),
+            table: Vec::new(),
+            misplaced: Vec::new(),
+            exemptions: Vec::new(),
+            hardware: Vec::new(),
         }
     }
 
@@ -995,6 +1228,10 @@ mod tests {
             panic_code: HandlerCode::default(),
             panic_hook_data: Vec::new(),
             contract: contract(),
+            table: Vec::new(),
+            misplaced: Vec::new(),
+            exemptions: Vec::new(),
+            hardware: Vec::new(),
         }
     }
 

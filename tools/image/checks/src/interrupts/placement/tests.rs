@@ -383,7 +383,7 @@ fn summaries_and_full_report_headings_are_stable() {
             .code_placement
             .render_paths(|address| stacks.name(address)),
     };
-    let expected = "strict handler code in cached memory: 0 functions, 0 bytes; by level: none\nP2 task code in PSRAM: 0 functions, 0 bytes; tasks: none\ncached handler data: 0 references to 0 objects, 0 bytes\nSRAM: usable 2048, placed 1024, free 1024 bytes\n";
+    let expected = "strict handler code in cached memory: 0 functions, 0 bytes; by level: none\nexecutor task code in PSRAM: 0 functions, 0 bytes; tasks: none\ncached handler data: 0 references to 0 objects, 0 bytes\nSRAM: usable 2048, placed 1024, free 1024 bytes\n";
     assert_eq!(placement.summary(), expected);
     let full = stacks.render_with_placement(&placement);
     let original = stacks.render();

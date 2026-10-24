@@ -164,6 +164,7 @@ pub fn derive<'m>(
             entry: irq.table_entry_bytes,
             source: field(irq.table_source.into()),
             level: field(irq.table_level.into()),
+            class: field(irq.table_class.into()),
             core: field(irq.table_core.into()),
             handler: irq.table_handler,
         },

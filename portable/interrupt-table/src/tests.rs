@@ -122,12 +122,14 @@ fn a_table_lists_each_source_once() {
         crate::Binding {
             source: Source::Timer,
             level: Level::One,
+            class: crate::Class::Hardware,
             core: Core::Zero,
             handler: Some(Timer as unsafe extern "C" fn()),
         },
         crate::Binding {
             source: Source::Timer,
             level: Level::One,
+            class: crate::Class::Hardware,
             core: Core::Zero,
             handler: Some(Timer as unsafe extern "C" fn()),
         },

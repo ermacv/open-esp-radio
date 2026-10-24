@@ -1308,13 +1308,17 @@ fn a_vector_table_names_its_entries_by_relocations() {
     assert!(vector_table(&elf, "missing").is_err());
 }
 
-fn binding(source: u16, level: u8, core: u32) -> [u32; 2] {
-    [u32::from(source) | u32::from(level) << 16, core]
+fn binding(source: u16, level: u8, class: u8, core: u32) -> [u32; 2] {
+    [
+        u32::from(source) | u32::from(level) << 16 | u32::from(class) << 24,
+        core,
+    ]
 }
 
 /// An image whose `__OER_INTERRUPT_TABLE` lists `entries` (source, level,
-/// core, handler symbol index or none) in the staged runtime's binding layout.
-fn table_image(entries: &[(u16, u8, u32, Option<u32>)], relocate_handlers: bool) -> Vec<u8> {
+/// class, core, handler symbol index or none) in the staged runtime's binding
+/// layout.
+fn table_image(entries: &[(u16, u8, u8, u32, Option<u32>)], relocate_handlers: bool) -> Vec<u8> {
     let handler = Symbol {
         name: "handler",
         words: vec![SP_DOWN_16, SP_UP_16, RET],
@@ -1322,8 +1326,8 @@ fn table_image(entries: &[(u16, u8, u32, Option<u32>)], relocate_handlers: bool)
     };
     let mut words = vec![RODATA + 8, entries.len() as u32];
     let mut relocated = vec![0];
-    for &(source, level, core, target) in entries {
-        words.extend(binding(source, level, core));
+    for &(source, level, class, core, target) in entries {
+        words.extend(binding(source, level, class, core));
         if target.is_some() && relocate_handlers {
             relocated.push(words.len());
         }
@@ -1347,13 +1351,21 @@ const S31_TABLE: TableLayout = TableLayout {
     entry: 12,
     source: Field { offset: 0, size: 2 },
     level: Field { offset: 2, size: 1 },
+    class: Field { offset: 3, size: 1 },
     core: Field { offset: 4, size: 4 },
     handler: 8,
 };
 
 #[test]
 fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
-    let elf = table_image(&[(25, 1, 0, Some(TEXT)), (67, 8, 1, None)], true);
+    let elf = table_image(
+        &[
+            (25, 1, 0, 0, Some(TEXT)),
+            (67, 8, 1, 1, None),
+            (68, 8, 2, 1, None),
+        ],
+        true,
+    );
     let entries = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap();
     assert_eq!(
         entries,
@@ -1361,17 +1373,34 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
             TableEntry {
                 source: 25,
                 level: 1,
+                class: Class::Hardware,
                 core: 0,
                 handler: Some(TEXT)
             },
             TableEntry {
                 source: 67,
                 level: 8,
+                class: Class::Executor,
+                core: 1,
+                handler: None
+            },
+            TableEntry {
+                source: 68,
+                level: 8,
+                class: Class::Exempt,
                 core: 1,
                 handler: None
             },
         ]
     );
+}
+
+#[test]
+fn an_unknown_handler_class_fails_the_table() {
+    let elf = table_image(&[(25, 1, 3, 0, Some(TEXT))], true);
+    let error = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(error.to_string().contains("no handler class 3"), "{error}");
 }
 
 #[test]
@@ -1395,7 +1424,7 @@ fn an_empty_table_needs_no_pointer_relocation() {
     );
     // A table with entries still needs its pointer relocated.
     let mut words = vec![RODATA + 8, 1];
-    words.extend(binding(25, 1, 0));
+    words.extend(binding(25, 1, 0, 0));
     words.push(0);
     let elf = built(
         TEXT,
@@ -1411,7 +1440,7 @@ fn an_empty_table_needs_no_pointer_relocation() {
 
 #[test]
 fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
-    let mut elf = table_image(&[(25, 1, 0, Some(TEXT))], true);
+    let mut elf = table_image(&[(25, 1, 0, 0, Some(TEXT))], true);
     let at = {
         let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
         let table = file.symbol("__OER_INTERRUPT_TABLE").unwrap();
@@ -1428,7 +1457,7 @@ fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
 
 #[test]
 fn a_handler_word_without_its_relocation_fails() {
-    let elf = table_image(&[(25, 1, 0, Some(TEXT))], false);
+    let elf = table_image(&[(25, 1, 0, 0, Some(TEXT))], false);
     assert!(interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).is_err());
     assert!(interrupt_table(&elf, "__MISSING", &S31_TABLE).is_err());
 }
@@ -2026,6 +2055,7 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
     let entry = |level, core, handler| TableEntry {
         source: 0,
         level,
+        class: Class::Hardware,
         core,
         handler: Some(handler),
     };
@@ -2477,7 +2507,7 @@ fn the_working_memory_and_the_work_budget_bound_the_analysis() {
 #[test]
 fn every_image_query_charges_its_reads_to_the_work_budget() {
     let limited = |error: Error| assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
-    let table = table_image(&[(25, 1, 0, Some(TEXT))], true);
+    let table = table_image(&[(25, 1, 0, 0, Some(TEXT))], true);
     with_facts(&table, |facts| {
         limited(
             crate::interrupt_table(facts, "__OER_INTERRUPT_TABLE", &S31_TABLE, &mut Units(0))

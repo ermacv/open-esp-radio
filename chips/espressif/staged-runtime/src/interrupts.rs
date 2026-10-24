@@ -8,12 +8,14 @@
 /// ```ignore
 /// oer_espressif_staged_runtime::interrupt_table! {
 ///     /// The Embassy time driver's alarm.
-///     timer: TimerToken = TG0_T0_LEVEL => crate::time::on_alarm, Priority1, ProCpu;
+///     timer: TimerToken = TG0_T0_LEVEL => crate::time::on_alarm, Priority1, ProCpu, Hardware;
 /// }
 /// ```
 ///
 /// Each entry names the token field, the token type, the `Interrupt` source,
-/// the handler (`fn()`), the `Priority` and the `Cpu`. The macro defines the
+/// the handler (`fn()`), the `Priority`, the `Cpu` and the handler's class
+/// (`oer_interrupt_table::Class`: `Hardware`, `Executor` or
+/// `Exempt("reason")`), which the image gate checks. The macro defines the
 /// source's handler symbol in SRAM, which the source's vector slot holds from
 /// the link on, the token type, and `Interrupts::take` that hands out each
 /// token once. The image needs `esp-hal` as a dependency.

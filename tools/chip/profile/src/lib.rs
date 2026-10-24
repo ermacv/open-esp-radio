@@ -230,8 +230,13 @@ pub struct InterruptContract {
     /// Fields of a table entry as `[offset, bytes]`.
     pub table_source: [u32; 2],
     pub table_level: [u32; 2],
+    /// The entry's handler class (`oer_interrupt_table::Class`).
+    pub table_class: [u32; 2],
     pub table_core: [u32; 2],
     pub table_handler: u32,
+    /// An exempt entry's reason is the bytes of the symbol named by this
+    /// prefix and the entry's handler symbol.
+    pub table_exemption_prefix: String,
     pub vector_table_symbol: String,
     pub exception_entry_symbol: String,
     pub source_table_symbol: String,
