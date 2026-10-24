@@ -1,0 +1,15 @@
+[package]
+name = "oer-sort"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "In-place sorting without recursion or allocation, for code whose stack bound is proven"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "contract"
+platform = "portable"
