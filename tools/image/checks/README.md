@@ -110,7 +110,9 @@ or insufficient SRAM fails the link. A diagnostic's partial stack still supplies
 its known strict functions. Bootstrap has no analysis specification.
 
 `interrupt-stack.txt` reports each hart's bound, rounded-up percentage margin,
-guard, allocated bytes and size source (proven bound or contract maximum),
+guard, allocated bytes and size source (`proven bound`, `conditional bound
+(<assumptions>)` for a bound on admitted assumptions or the nesting rule, or
+`contract maximum`),
 as well as its exception entry and path,
 largest reachable own frame and remaining guard bytes, as well as strict code in cached memory by hart/level,
 P2 task code in PSRAM and its task roots, static cached data references and
@@ -167,9 +169,25 @@ Each ELF contains:
   jump in the bootstrap ELF, and a scan of the stage-two ELF shows every path
   from the entry installing the CPU0 task stack's top as `sp` before anything
   reads it. Otherwise the jump stays a hole.
-- `runtime-stack.txt` ends with each task stack's allocation and where it came
-  from: the proven bound plus the policy's reserve, the policy's
-  `allocation_bytes`, or the chip layout's default.
+- `runtime-stack.txt` and `bootstrap-stack.txt` label each bound `proven`
+  only when it rests on no assumption, `conditional (<assumptions>)`, such as
+  `conditional (ExecutorInvariant)`, when it does, and `partial` without a
+  number; `interrupt-stack.txt` labels each hart the same way, with `nesting`
+  where a handler may lower the interrupt level. `runtime-stack.txt` ends with
+  each task stack's allocation and where it came from: the bound (labelled
+  likewise) plus the policy's reserve, the policy's `allocation_bytes`, or
+  the chip layout's default.
+- `runtime-indirect-sites.txt`/`.json` and `bootstrap-indirect-sites.txt`/`.json`
+  list, for each root of the reachability reports (each hart/priority and its
+  exception, CPU0 and the task roots; the bootstrap root), every indirect site
+  its bound took (`Bound::sites`): the site, its function and offset, the
+  number of targets, the facts that give them (`JumpTable` and
+  `ValueAnalysis` from the machine code; `InterruptTable`, `StageTwoEntry`,
+  `IpcPosts`, `WakerVtables`, `FieldType`, `TaskPolls`, `NoTasks` from outside
+  it) and what they assume. Each root counts its sites by fact; the totals
+  count the distinct sites by fact and by assumption, `none` for proven
+  sites. The reports read the bounds the gates computed and change no
+  verdict.
 - `allocated_stacks`: linked CPU0 task stack, each hart's linked IRQ range and
   the bootstrap stack, in bytes.
 - `bounds`: each task root, IRQ hart/level/exception and nested IRQ total, with

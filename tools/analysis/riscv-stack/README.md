@@ -308,6 +308,16 @@ table assumes nothing. `HartStack::assumptions` gathers a hart's. A hart with
 a bound and no assumption is proven; with some, conditional on them. The
 firmware gate admits exactly the named ones, each until a change proves it.
 
+A bound also records every indirect site its walk took (`Bound::sites`, a
+`TakenSite` by site): how many targets the site reaches and where they come
+from (`SiteSource`). The machine code's own resolutions are a `CodeFact`
+(`JumpTable`, a table of exactly known entries; `ValueAnalysis`, a target
+register the value analysis knows), which the analysis keeps per function
+(`FunctionFacts::code_facts`) and which assume nothing; the others are the
+site's `Fact`s, each with its `Fact::assumption`
+(`SiteSource::assumptions`). `Bound::assumptions` is the union of the
+assumptions of these sites.
+
 A bound also lists every function its root reaches over what is resolved
 (`Bound::reached`), and each function its floating-point instructions and
 floating-point CSR accesses (`FunctionFacts::float_sites`): what checks of a

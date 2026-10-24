@@ -78,10 +78,11 @@ moves; ownership, orchestration and wiring are rebuilt.
   P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
   separate controllers). Nothing runs from cached flash. The image check
   enforces it.
-- Interrupt stacks have a proven bound and are sized from it at link time;
+- Interrupt stacks have a bound, proven or conditional on an admitted
+  assumption (the reports name it), and are sized from it at link time;
   task stacks are reported, and an image may declare them proven: a task
   stack whose image declares it proven fails the build on any unresolved path
-  and is sized at link time to its proven bound plus its policy's minimum free
+  and is sized at link time to its bound plus its policy's minimum free
   bytes. The bootstrap jumps to a stage-two entry known at build time and
   the bootstrap stack's path ends there, once the checks verify the jump and
   that the entry installs its own stack pointer first. There is no baseline of accepted holes, and an observed depth above a
