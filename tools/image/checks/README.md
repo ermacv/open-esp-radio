@@ -73,14 +73,42 @@ SRAM or the analysed mask ROM. The panic path, compiler panic entries and the
 image panic hook retain their independent checks; static references from the
 hook and its resolved callees must also avoid cached memory.
 
-The gate separates P2 task polls using resolution facts. For each hart and
-priority it follows the bound's root with exactly that context's resolutions.
-`Analysis::reached_cut` stops at the dequeue calls identified by `TaskPolls` or
-`NoTasks`, retaining their owning functions. Functions beyond the cut are
-tasks; any function also reached on a strict path remains strict. Only P2
-grants this task-side permission: its tasks and callees may execute from
-PSRAM as well as SRAM/ROM. Cached flash XIP is forbidden on both sides.
-Other priorities and exceptions retain strict placement throughout.
+Each interrupt table entry declares its class (`oer_interrupt_table::Class`,
+the byte at `table-class`); the level of a hart's `Executor` entry is the
+executor's level, every other level is a hardware level. The class, never a
+level number or a handler's name, decides the rules:
+
+- **Placement.** Two executors on one level and core, a `Hardware` or
+  `Exempt(WakerCall)` entry on its core's executor level, or an
+  `Exempt(ExecutorLevel)` entry with no executor beside it fail every policy
+  (`interrupt_table!` refuses them at compile time).
+- **Hardware** levels, and the handler of each `Exempt` entry, run strict
+  code throughout: from SRAM/ROM, with no task poll (`TaskPolls`/`NoTasks`
+  sites) and no call through a waker's vtable (`WakerVtables` sites).
+  `Required::Product` fails a breach, `Required::Diagnostic` warns per
+  context. The cached data their strict code references is reported per
+  context, writable (`.data`/`.bss`) and read-only objects by name, and not
+  gated yet.
+- **Executor** levels separate their task polls using resolution facts. For
+  each hart and priority the gate follows the bound's root with exactly that
+  context's resolutions. `Analysis::reached_cut` stops at the dequeue calls
+  identified by `TaskPolls` or `NoTasks`, retaining their owning functions.
+  Functions beyond the cut are tasks; any function also reached on a strict
+  path remains strict. Only an executor's level grants this task-side
+  permission: its tasks and callees may execute from PSRAM as well as
+  SRAM/ROM. Cached flash XIP is forbidden on both sides. The strict part's
+  cached data is reported as for hardware levels; its waker calls are not
+  checked (an executor wakes its own tasks).
+- **Exempt** entries are hardware handlers that break one named rule:
+  `ExecutorLevel` (on their core's executor level) or `WakerCall` (a waker
+  call that only their own handler reaches is waived; the same site reached
+  from the dispatcher or another entry still fails). `interrupt-stack.txt`
+  prints each one's violation and reason, the bytes of the symbol
+  `table-exemption-prefix` plus its handler symbol, and lists the waived
+  sites.
+
+Exceptions retain strict placement throughout. Calls into the panic machinery
+from each context's strict code are reported with their sites, not gated.
 
 The S31 accesses flash and PSRAM through separate MSPI controllers: a flash
 operation does not disable the PSRAM cache. Placement follows this hardware
@@ -122,7 +150,9 @@ guard, allocated bytes and size source (`proven bound`, `conditional bound
 `contract maximum`),
 as well as its exception entry and path,
 largest reachable own frame and remaining guard bytes, as well as strict code in cached memory by hart/level,
-P2 task code in PSRAM and its task roots, static cached data references and
+each table entry's class, exemption reasons, hardware-class breaches,
+panic sites of strict code by context, executor task code in PSRAM and its
+task roots, static cached data references and
 sized objects, and usable/placed/free SRAM. `interrupt-placement.txt`, listed
 in the bundle manifest, gives the full cached function inventory with
 `strict`/`task` classification, crate totals, strict SRAM/ROM/cache totals,

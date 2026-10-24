@@ -190,12 +190,14 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
         TableEntry {
             core: 0,
             level: 2,
+            class: oer_analysis_riscv_stack::Class::Executor,
             source: 7,
             handler: Some(FORMATTER),
         },
         TableEntry {
             core: 1,
             level: 2,
+            class: oer_analysis_riscv_stack::Class::Executor,
             source: 8,
             handler: Some(TEXT + 28),
         },

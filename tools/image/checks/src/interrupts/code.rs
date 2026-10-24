@@ -2,7 +2,7 @@
 
 use super::Result;
 use oer_analysis_riscv_stack::{
-    Analysis, Function, HartStack, Resolutions, Stacks, task_poll_sites,
+    Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites,
 };
 use oer_chip_profile::Memory;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -61,24 +61,32 @@ pub(super) struct PlacedFunction {
 pub(super) struct ContextCode {
     pub hart: u32,
     pub level: u32,
+    /// The level's bound root: its worst trap entry's handler.
+    pub root: u32,
+    /// The level's class ([`super::classes::context_class`]); `None` for the
+    /// exception.
+    pub class: Option<Class>,
     pub strict: BTreeSet<u32>,
     pub tasks: BTreeSet<u32>,
     pub task_roots: BTreeSet<u32>,
     pub cached_paths: BTreeMap<u32, Vec<u32>>,
+    /// Calls into the panic machinery from the strict code, by caller and
+    /// callee: reported, not gated.
+    pub panics: Vec<(u32, u32)>,
 }
 
 impl fmt::Display for ContextCode {
     fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(out, "hart {} ", self.hart)?;
-        if self.level == 0 {
-            out.write_str("exception")
-        } else {
-            write!(out, "P{}", self.level)
+        match self.class {
+            None => out.write_str("exception"),
+            Some(class) => write!(out, "P{} ({class})", self.level),
         }
     }
 }
 
-/// Resolved interrupt code partitioned at the executor's task-poll sites.
+/// Resolved interrupt code partitioned at the task-poll sites of each
+/// executor's level.
 /// A function with any strict path keeps the strict classification.
 #[derive(Debug, Default)]
 pub struct CodePlacement {
@@ -113,16 +121,20 @@ impl CodePlacement {
         let mut tasks = BTreeSet::new();
         for hart in harts {
             for level in hart.levels.iter().chain([&hart.exception]) {
+                let class = (level.level != 0)
+                    .then(|| super::classes::context_class(inputs.table, hart.core, level.level));
+                // Only an executor's level grants the task-side PSRAM
+                // permission. A poll on any other level cannot relax its
+                // interrupt placement.
+                let executor = class == Some(Class::Executor);
                 let resolutions = inputs.resolutions_for(analysis, hart.core, level.level);
                 let cut = task_poll_sites(&resolutions);
                 let mut reached =
                     analysis.reached_cut(level.bound.root, &resolutions, &cut, keep, control)?;
-                // Only P2 grants the task-side PSRAM permission. A poll on
-                // any other level cannot relax its interrupt placement.
-                if level.level != 2 {
+                if !executor {
                     reached.extend(&level.bound.reached);
                 }
-                let task_roots = if level.level == 2 {
+                let task_roots = if executor {
                     reached
                         .iter()
                         .filter_map(|address| analysis.functions.get(address))
@@ -152,11 +164,7 @@ impl CodePlacement {
                     analysis,
                     level.bound.root,
                     &resolutions,
-                    &if level.level == 2 {
-                        cut
-                    } else {
-                        BTreeSet::new()
-                    },
+                    &if executor { cut } else { BTreeSet::new() },
                     &reached,
                     &cached,
                 );
@@ -165,10 +173,13 @@ impl CodePlacement {
                 contexts.push(ContextCode {
                     hart: hart.core,
                     level: level.level,
+                    root: level.bound.root,
+                    class,
                     strict: reached,
                     tasks: task_code,
                     task_roots,
                     cached_paths,
+                    panics: Vec::new(),
                 });
             }
         }
@@ -257,7 +268,7 @@ impl CodePlacement {
             .flat_map(|context| context.task_roots.iter().copied())
             .collect();
         format!(
-            "strict handler code in cached memory: {} functions, {} bytes; by level: {}\nP2 task code in PSRAM: {} functions, {} bytes; tasks: {}\n",
+            "strict handler code in cached memory: {} functions, {} bytes; by level: {}\nexecutor task code in PSRAM: {} functions, {} bytes; tasks: {}\n",
             strict.len(),
             strict
                 .iter()
@@ -340,7 +351,7 @@ impl CodePlacement {
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 /// Shortest resolved paths for diagnostics, restricted to the cut inventory.
 /// Direct targets take precedence over supplemental resolutions, as in Walk.

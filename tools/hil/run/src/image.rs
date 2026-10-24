@@ -212,7 +212,7 @@ pub(crate) fn spec(
         output,
         // HIL images always request every check; each applies where the
         // chip's data names what it checks.
-        // Diagnostic images report strict/P2 code placement violations
+        // Diagnostic images report strict/executor-task code placement violations
         // and may have `partial + ?` interrupt stacks, with their holes named.
         checks: Some(Gates::all(if class.diagnostic() {
             Required::Diagnostic

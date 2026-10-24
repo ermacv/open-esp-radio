@@ -30,12 +30,13 @@ mod system;
 
 oer_espressif_staged_runtime::interrupt_table! {
     /// Wakes the Embassy executor.
-    wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu;
+    wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
     /// The Embassy time driver's alarm (system timer comparator 0).
-    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu;
+    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu, Hardware;
     #[cfg(feature = "system-watchdog")]
     /// The USB Serial/JTAG console, to esp-hal's async driver.
-    console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu;
+    console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu,
+        Exempt(WakerCall, "esp-hal async USB console wakes its AtomicWaker; removed by #441");
 }
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();

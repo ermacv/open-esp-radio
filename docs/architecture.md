@@ -74,6 +74,13 @@ moves; ownership, orchestration and wiring are rebuilt.
   unknown length is a timer-woken step with a deadline.
 - A lower-priority task wakes a higher-priority one only through
   `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
+- Each interrupt table entry declares its class: `Hardware` (capture,
+  acknowledge, latch, raise a signal; never on its core's executor level),
+  `Executor` (one per level and core; strict up to its task polls) or
+  `Exempt` (a hardware handler that breaks one named rule, sitting on the
+  executor's level or calling a waker, with its reason in the image report).
+  The image check applies each class's rules; the level number grants
+  nothing.
 - Interrupt handlers and the executor code they run execute from SRAM or ROM.
   P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
   separate controllers). Nothing runs from cached flash. The image check

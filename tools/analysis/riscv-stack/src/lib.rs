@@ -59,7 +59,7 @@ pub use cha::{
 pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, read as read_debug};
 pub use image::{Function, stack_sizes};
-pub use interrupts::{Field, TableEntry, TableLayout, interrupt_table};
+pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
 pub use oer_analysis_riscv_analysis::TrapSemantics;
 use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
 use oer_analysis_riscv_program::tables::ImageTables;

@@ -69,8 +69,9 @@ ready for a scenario.
 `cargo hil images check --all` builds every image class on both chips and
 checks the linked images. Diagnostic classes use `Required::Diagnostic`:
 interrupt stacks may be `partial + ?` with their unresolved sites named, and
-strict handler/executor code or P2 task code outside its permitted memory is
-reported as a warning with function and byte counts. The paths are in the
+strict handler/executor code or executor task code outside its permitted
+memory, and breaches of the hardware class, are reported as warnings with
+their counts. The paths are in the
 bundle's `interrupt-placement.txt`. Other classes use `Required::Product`
 and fail these placement violations or an unproven interrupt bound. Both
 policies enforce the stack budget, handler entries in SRAM, panic code and

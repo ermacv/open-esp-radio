@@ -80,6 +80,7 @@ const _: () = {
     assert!(size_of::<Cpu>() == 4);
     assert!(offset_of!(Entry, source) == 0);
     assert!(offset_of!(Entry, level) == 2);
+    assert!(offset_of!(Entry, class) == 3 && size_of::<oer_interrupt_table::Class>() == 1);
     assert!(offset_of!(Entry, core) == 4);
     assert!(offset_of!(Entry, handler) == 8);
     assert!(size_of::<Entry>() == 12 && align_of::<Entry>() == 4);
