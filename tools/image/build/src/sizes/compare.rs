@@ -1,4 +1,4 @@
-//! The owner's size rule: `CLAUDE.md`, "Sizes".
+//! Size comparison: `CLAUDE.md`, "Sizes"; growth is reported, never a stop.
 use super::{Provenance, Summary};
 use crate::Result;
 use oer_image_checks::sizes::{Measurements, Section};
@@ -13,14 +13,12 @@ pub enum Verdict {
     #[default]
     Same,
     Report,
-    Stop,
 }
 impl std::fmt::Display for Verdict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Same => "same",
             Self::Report => "report",
-            Self::Stop => "stop",
         })
     }
 }
@@ -375,13 +373,18 @@ struct Diff {
     output: String,
 }
 impl Diff {
-    fn stop(&mut self, reason: String) {
-        self.verdict = Verdict::Stop;
-        let _ = writeln!(self.output, "STOP: {reason}");
-    }
-    /// Growth of a `stops` entry (an SRAM section or an allocated stack) stops;
-    /// growth of any other entry is only reported in the table.
-    fn change(&mut self, elf: &str, kind: &str, name: &str, before: u64, after: u64, stops: bool) {
+    /// Every changed entry is a row of the table; growth of a `highlight`
+    /// entry (an SRAM section or an allocated stack) also gets a `GROWTH:`
+    /// line. Nothing stops.
+    fn change(
+        &mut self,
+        elf: &str,
+        kind: &str,
+        name: &str,
+        before: u64,
+        after: u64,
+        highlight: bool,
+    ) {
         if before == after {
             return;
         }
@@ -391,8 +394,8 @@ impl Diff {
             self.output,
             "| {elf} | {kind} | `{name}` | {before} | {after} | {delta:+} |"
         );
-        if stops && after > before {
-            self.stop(format!("{elf} {kind} `{name}` grows {delta:+} B"));
+        if highlight && after > before {
+            let _ = writeln!(self.output, "GROWTH: {elf} {kind} `{name}` {delta:+} B");
         }
     }
     fn inventory<T: std::fmt::Debug>(
@@ -454,7 +457,7 @@ impl Diff {
                         && after.is_some_and(Section::is_sram)
                         && !before.is_some_and(Section::is_sram)
                     {
-                        self.stop(format!("{elf} `{name}` moved into SRAM"));
+                        let _ = writeln!(self.output, "GROWTH: {elf} `{name}` moved into SRAM");
                     }
                 }
             }

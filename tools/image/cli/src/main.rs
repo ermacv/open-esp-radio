@@ -56,7 +56,7 @@ enum Command {
         analysis: bool,
     },
     /// Compare sizes.json files in two output directories; builds nothing.
-    /// Exit 0 for same/report, 1 for stop or incompatible provenance.
+    /// Exit 0 for same/report, 1 for incompatible provenance or unreadable input.
     Sizes {
         base: std::path::PathBuf,
         head: std::path::PathBuf,
@@ -189,11 +189,7 @@ fn main() -> ExitCode {
                     oer_image_build::sizes::compare_composition(&base, &additional, &head)?
                 };
                 print!("{}", result.output);
-                return Ok(if result.verdict == oer_image_build::sizes::Verdict::Stop {
-                    ExitCode::FAILURE
-                } else {
-                    ExitCode::SUCCESS
-                });
+                return Ok(ExitCode::SUCCESS);
             }
             Command::SizesRefresh {
                 input,

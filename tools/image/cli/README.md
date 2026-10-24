@@ -213,7 +213,7 @@ and UCI section names are printed; the SSID, the SSH target and the
 interface never are, in no message, lock file or `log.txt`.
 
 `cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
-exit 0, `stop` or incompatible provenance exit 1. See the [summary format and
+exit 0, unreadable input or incompatible provenance exit 1. See the [summary format and
 owner thresholds](../build/README.md#size-summaries-and-owner-thresholds).
 
 With `--add-base`, each directory names one `sizes.json` bundle. This explicit
