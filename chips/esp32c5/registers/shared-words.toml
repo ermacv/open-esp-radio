@@ -2,7 +2,9 @@
 # and pinned esp-hal both store to, with how the two writers are kept from
 # racing. `cargo registers check shared-words` finds the shared words from
 # policy/api.toml (every declared word of a typed block counts),
-# published/radio.svd and the pinned esp-hal and platform PAC sources, and
+# published/radio.svd, the pinned esp-hal sources with the clock and reset
+# writers of its esp-metadata-generated file (peripheral aliases such as
+# SYSTEM = PCR resolved) and the platform PAC sources, and
 # fails on a shared word without an entry or an entry for a word no longer
 # shared. Reviewed against esp-hal 1f646c5.
 #
@@ -45,6 +47,13 @@ radio = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map[12] in map_raw (interrupt/mod.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal maps every source, ZB_MAC included, to disabled in setup_interrupts, called before main and by reinitialize_vectoring_after_handoff from the staged runtime's Handoff::adopt (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs), both before any radio owner exists. esp-hal binds ZB_MAC only on an explicit interrupt::enable/bind_handler or IEEE802154::bind_mac_interrupt call, which no C5 image makes (esp-radio is not a dependency); the radio PAC only reads the word."
+
+[[word]]
+address = 0x60096088
+radio = "PCR_RADIO.SARADC_CONF"
+esp_hal = "SYSTEM (PCR).saradc_conf in enable_internal_racey and assert_peri_reset_racey for Peripheral::ApbSarAdc (esp-metadata-generated _generated_esp32c5.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "esp-hal stores it only through PeripheralClockControl when the ApbSarAdc reference count moves between 0 and 1 (esp-hal 1f646c5 system.rs). ApbSarAdc is in KEEP_ENABLED, so esp_hal::init's disable_peripherals leaves it enabled and holds one count that nothing releases; the only guards, from Adc::<ADC1>::new (analog/adc/dig_ctrl.rs) and TemperatureSensor::new (tsens.rs), then neither enable, reset nor disable it. No C5 image constructs an Adc or a TemperatureSensor, so only the missing caller keeps even an uncounted path away."
 
 [[word]]
 address = 0x600a9c0c

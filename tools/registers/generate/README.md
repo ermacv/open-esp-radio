@@ -439,9 +439,12 @@ own copy:
   PAC (`policy/api.toml`, through the published SVD) or a typed block's
   claim reaches (every declared word of a typed peripheral) and pinned
   esp-hal both store to has a reviewed entry in `chips/<chip>/registers/shared-words.toml`, and
-  no reviewed word is no longer shared. `cargo registers check shared-words
-  --chip <chip> --esp-hal-src <dir> --pac-src <dir>` runs it on the given
-  esp-hal and PAC sources.
+  no reviewed word is no longer shared. esp-hal's stores include the clock
+  and reset writers of the chip's `esp-metadata-generated` file, and its
+  peripheral names resolve through that file's singleton aliases
+  (`SYSTEM <= PCR`). `cargo registers check shared-words --chip <chip>
+  --esp-hal-src <dir> --esp-metadata-generated-src <dir> --pac-src <dir>`
+  runs it on the given esp-hal, esp-metadata-generated and PAC sources.
 
 `ChipSources` resolves the files a chip's publication manifest names
 without validating them. The binding index format is

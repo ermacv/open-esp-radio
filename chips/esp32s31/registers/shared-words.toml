@@ -1,7 +1,9 @@
 # Words that a write transaction of the ESP32-S31 radio PAC and pinned esp-hal
 # both store to, with how the two writers are kept from racing. `cargo registers
 # check shared-words` finds the shared words from policy/api.toml,
-# published/radio.svd and the pinned esp-hal and platform PAC sources, and
+# published/radio.svd, the pinned esp-hal sources with the clock and reset
+# writers of its esp-metadata-generated file (peripheral aliases resolved)
+# and the platform PAC sources, and
 # fails on a shared word without an entry or an entry for a word no longer
 # shared. Reviewed against esp-hal 4fd4ba9b (first review: 9fe1c752, by the
 # PHY owner).
