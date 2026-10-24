@@ -18,6 +18,7 @@
 
 pub mod interrupts;
 pub mod linker;
+pub mod panics;
 pub mod placement;
 pub mod sizes;
 pub mod stack;
@@ -100,6 +101,8 @@ pub struct CheckInput<'a> {
     pub task_stack_proven: bool,
     /// The stage-two ELF the bootstrap enters, for the bootstrap's `handoff`.
     pub stage_two_elf: Option<&'a Path>,
+    /// The crate layers and the image's panic budget, for the panic check.
+    pub panics: Option<&'a panics::Contract>,
 }
 
 /// What the checks passed with.
@@ -142,6 +145,8 @@ pub enum Check {
     Placement,
     /// Each hart's interrupt stack, proven.
     Interrupts,
+    /// The panic sites each root reaches, by layer, within the image's budget.
+    Panics,
 }
 
 /// Which requested checks must pass for the build to succeed.
@@ -168,6 +173,7 @@ impl Enforced {
                     STACK => Check::Stack,
                     INTERRUPTS => Check::Interrupts,
                     PLACEMENT => Check::Placement,
+                    PANICS => Check::Panics,
                     _ => return false,
                 };
                 checks.contains(&check)
@@ -192,6 +198,9 @@ pub struct Gates {
     pub placement: bool,
     /// The interrupt code placement and stack policy, when checked.
     pub interrupts: Option<Required>,
+    /// The panic sites of the stack and interrupt roots, by layer, within
+    /// the image's budget ([`panics`]).
+    pub panics: bool,
     /// The caller's own audit of the runtime ELF.
     pub audit: Option<Audit>,
 }
@@ -205,6 +214,7 @@ impl Gates {
             stack: true,
             placement: true,
             interrupts: Some(interrupts),
+            panics: true,
             audit: None,
         }
     }
@@ -219,6 +229,7 @@ impl Gates {
             interrupts: checks
                 .contains(&Check::Interrupts)
                 .then_some(Required::Product),
+            panics: checks.contains(&Check::Panics),
             audit: None,
         }
     }
@@ -229,6 +240,7 @@ pub const STACK: &str = "stack";
 const FRAMES: &str = "frames";
 const INTERRUPTS: &str = "interrupts";
 const PLACEMENT: &str = "placement";
+const PANICS: &str = "panics";
 const AUDIT: &str = "audit";
 
 /// The code sections of the mask ROM, from `profile`'s pinned `[rom]` ELF at
@@ -272,6 +284,7 @@ impl Gates {
                 (self.stack, STACK),
                 (self.interrupts.is_some(), INTERRUPTS),
                 (self.placement, PLACEMENT),
+                (self.panics, PANICS),
                 (self.audit.is_some(), AUDIT),
             ]
             .into_iter()
@@ -279,11 +292,15 @@ impl Gates {
             .map(|(_, name)| name.to_owned())
             .collect(),
             // A staged boot's bootstrap has its own stack.
-            CheckedElf::Bootstrap => [(self.frames, FRAMES), (self.stack, STACK)]
-                .into_iter()
-                .filter(|(requested, _)| *requested)
-                .map(|(_, name)| name.to_owned())
-                .collect(),
+            CheckedElf::Bootstrap => [
+                (self.frames, FRAMES),
+                (self.stack, STACK),
+                (self.panics, PANICS),
+            ]
+            .into_iter()
+            .filter(|(requested, _)| *requested)
+            .map(|(_, name)| name.to_owned())
+            .collect(),
         }
     }
 
@@ -347,9 +364,12 @@ impl Gates {
                         self.frames_of(&image, input, CheckedElf::Runtime, &mut outcome);
                     }
                     let mut sites = crate::stack::sites::Report::default();
+                    let mut interrupt_roots = None;
+                    let mut stack_roots = None;
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
                             let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
+                            interrupt_roots = Some(panics::interrupt_roots(&image, &stacks));
                             if let Some(sizes) = &mut outcome.sizes {
                                 sizes.interrupts(&image, &stacks)?;
                             }
@@ -459,6 +479,8 @@ impl Gates {
                                 outcome
                                     .coverage_reviews
                                     .extend(audit.coverage.applied.iter().cloned());
+                                stack_roots =
+                                    Some(panics::stack_roots(&image, &audit, input.policy));
                                 crate::stack::rom::audit_forbidden(
                                     &image,
                                     forbidden_rom(input.profile),
@@ -514,6 +536,25 @@ impl Gates {
                             .map(str::to_owned),
                         );
                     }
+                    if self.panics {
+                        let roots =
+                            match (stack_runs && interrupts_run, stack_roots, interrupt_roots) {
+                                (false, _, _) => Err(missing(
+                                    "the panic check counts the roots of the stack and interrupts \
+                                 checks, which do not both run"
+                                        .to_owned(),
+                                )),
+                                (true, Some(mut stack), Some(interrupts)) => {
+                                    stack.extend(interrupts);
+                                    Ok(stack)
+                                }
+                                (true, _, _) => Err(CheckResult::Failed(
+                                    "the stack or interrupts analysis did not reach its roots"
+                                        .to_owned(),
+                                )),
+                            };
+                        self.panics_of(&image, input, CheckedElf::Runtime, roots, &mut outcome);
+                    }
                 }
                 Err(error) => {
                     // The analysis both checks share did not run.
@@ -525,10 +566,25 @@ impl Gates {
                         outcome.results.push((STACK.to_owned(), failed.clone()));
                     }
                     if interrupts_run {
-                        outcome.results.push((INTERRUPTS.to_owned(), failed));
+                        outcome
+                            .results
+                            .push((INTERRUPTS.to_owned(), failed.clone()));
+                    }
+                    if self.panics {
+                        outcome.results.push((PANICS.to_owned(), failed));
                     }
                 }
             }
+        }
+        if self.panics && !outcome.results.iter().any(|(name, _)| name == PANICS) {
+            outcome.results.push((
+                PANICS.to_owned(),
+                missing(
+                    "the panic check counts the roots of the stack and interrupts checks, \
+                     which do not run"
+                        .to_owned(),
+                ),
+            ));
         }
         if self.placement {
             let result = match (&profile.memory, &profile.placement) {
@@ -569,7 +625,7 @@ impl Gates {
     /// Check a staged boot's bootstrap ELF.
     pub fn bootstrap(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
-        if !self.stack && !self.frames {
+        if !self.stack && !self.frames && !self.panics {
             return Ok(outcome);
         }
         if input.profile.rom.is_none() {
@@ -611,8 +667,18 @@ impl Gates {
             self.frames_of(&image, input, CheckedElf::Bootstrap, &mut outcome);
         }
         if !self.stack {
+            if self.panics {
+                outcome.results.push((
+                    PANICS.to_owned(),
+                    CheckResult::MissingContract(
+                        "the panic check counts the roots of the stack check, which does not run"
+                            .to_owned(),
+                    ),
+                ));
+            }
             return Ok(outcome);
         }
+        let mut stack_roots = None;
         let result = if input.policy.stacks().is_err() {
             CheckResult::MissingContract("the image's stack policy names no stacks".to_owned())
         } else {
@@ -651,6 +717,7 @@ impl Gates {
                     audit.roots(input.policy),
                 )?;
                 audit.handoff = handoff;
+                stack_roots = Some(crate::panics::stack_roots(&image, &audit, input.policy));
                 if let Some(sizes) = &mut outcome.sizes {
                     for stack in &audit.stacks {
                         sizes.task(&image, stack)?;
@@ -701,7 +768,49 @@ impl Gates {
             }
         };
         outcome.results.push((STACK.to_owned(), result));
+        if self.panics {
+            let roots = stack_roots.ok_or_else(|| {
+                CheckResult::Failed(
+                    "the bootstrap stack analysis did not reach its root".to_owned(),
+                )
+            });
+            self.panics_of(&image, input, CheckedElf::Bootstrap, roots, &mut outcome);
+        }
         Ok(outcome)
+    }
+
+    /// The panic check of `elf` over `roots`, or the result that stands in
+    /// for it when the roots are missing.
+    fn panics_of(
+        &self,
+        image: &crate::stack::Image,
+        input: &CheckInput<'_>,
+        elf: CheckedElf,
+        roots: std::result::Result<Vec<panics::Root>, CheckResult>,
+        outcome: &mut CheckOutcome,
+    ) {
+        let result = match (roots, input.panics) {
+            (Err(result), _) => result,
+            (Ok(_), None) => CheckResult::MissingContract(
+                "the image build supplies no panic contract (crate layers and budget)".to_owned(),
+            ),
+            (Ok(roots), Some(contract)) => ran((|| -> Result<()> {
+                let report = panics::Report {
+                    elf,
+                    roots,
+                    names: &image.names,
+                };
+                let name = match elf {
+                    CheckedElf::Runtime => panics::RUNTIME_REPORT,
+                    CheckedElf::Bootstrap => panics::BOOTSTRAP_REPORT,
+                };
+                std::fs::write(input.output.join(name), report.render(contract))?;
+                outcome.reports.push(name.to_owned());
+                outcome.warnings.extend(report.check(contract)?);
+                Ok(())
+            })()),
+        };
+        outcome.results.push((PANICS.to_owned(), result));
     }
 
     fn frames_of(
@@ -763,9 +872,10 @@ mod enforcement_tests {
             (Check::Stack, STACK),
             (Check::Interrupts, INTERRUPTS),
             (Check::Placement, PLACEMENT),
+            (Check::Panics, PANICS),
         ] {
             let enforced = Enforced::Only([check].into());
-            for requested in [FRAMES, STACK, INTERRUPTS, PLACEMENT, AUDIT] {
+            for requested in [FRAMES, STACK, INTERRUPTS, PLACEMENT, PANICS, AUDIT] {
                 assert_eq!(enforced.requires(requested), requested == name);
                 assert!(Enforced::All.requires(requested));
                 assert!(!Enforced::Reported.requires(requested));

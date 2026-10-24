@@ -234,7 +234,7 @@ pub fn run(
             cap_dbm: 0,
         }),
         false,
-        Enforced::Only([Check::Frames, Check::Interrupts].into()),
+        Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
     )?;
     let budget = sram_accounting(base_sizes, &bundle.directory.join("sizes.json"))?;
     eprintln!("fw: B0 full SRAM {}", serde_json::to_string(&budget)?);

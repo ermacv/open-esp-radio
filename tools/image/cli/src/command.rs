@@ -498,7 +498,7 @@ pub fn build(root: &Path, image_name: &str, analysis: bool) -> Result<()> {
         image_name,
         None,
         analysis,
-        Enforced::Only([Check::Frames, Check::Interrupts].into()),
+        Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
     )?;
     for segment in bundle.segments() {
         eprintln!(

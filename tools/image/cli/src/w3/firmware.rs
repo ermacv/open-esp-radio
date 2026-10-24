@@ -136,6 +136,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
                 [
                     oer_image_checks::Check::Frames,
                     oer_image_checks::Check::Interrupts,
+                    oer_image_checks::Check::Panics,
                 ]
                 .into(),
             ),

@@ -32,6 +32,7 @@ pub(crate) fn build(
     profile: &oer_chip_profile::Profile,
     instrumentation: &Instrumentation,
     task_stack_proven: bool,
+    panics: &oer_image_checks::panics::Contract,
 ) -> Result<ImageBundle> {
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
@@ -165,6 +166,7 @@ pub(crate) fn build(
                 output: &output,
                 task_stack_proven,
                 stage_two_elf: None,
+                panics: Some(panics),
             })
             .map_err(|error| log.failed("runtime checks", error))?;
         if let Some(measured) = &outcome.sizes {
@@ -243,6 +245,7 @@ pub(crate) fn build(
                 output: &output,
                 task_stack_proven: false,
                 stage_two_elf: Some(&runtime_elf),
+                panics: Some(panics),
             })
             .map_err(|error| log.failed("bootstrap checks", error))?;
         if let Some(measured) = &outcome.sizes {

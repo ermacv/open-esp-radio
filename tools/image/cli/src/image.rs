@@ -260,7 +260,7 @@ mod tests {
                 image,
                 None,
                 true,
-                Enforced::Only([Check::Frames, Check::Interrupts].into()),
+                Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
             )
             .unwrap();
             assert_eq!(spec.runtime_environment, runtime_env(image, Some(stand)));
@@ -291,7 +291,8 @@ mod tests {
         let directory = repository();
         for image in ["w0", "w1", "w2", "w3"] {
             for analysis in [false, true] {
-                let enforced = Enforced::Only([Check::Frames, Check::Interrupts].into());
+                let enforced =
+                    Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into());
                 let spec = spec(directory.path(), image, None, analysis, enforced.clone()).unwrap();
                 assert_eq!(
                     spec.output,
@@ -355,7 +356,7 @@ mod tests {
                 "boot-smoke",
                 None,
                 false,
-                Enforced::Only([Check::Frames, Check::Interrupts].into())
+                Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into())
             )
             .is_ok()
         );
@@ -364,7 +365,7 @@ mod tests {
             "boot-smoke",
             None,
             true,
-            Enforced::Only([Check::Frames, Check::Interrupts].into()),
+            Enforced::Only([Check::Frames, Check::Interrupts, Check::Panics].into()),
         )
         .err()
         .unwrap()

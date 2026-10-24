@@ -484,6 +484,11 @@ impl InterruptStacks {
         out
     }
 
+    /// Whether the level `level` of hart `core` is a `Hardware` context.
+    pub(crate) fn hardware_level(&self, core: u32, level: u32) -> bool {
+        classes::context_class(&self.table, core, level) == Class::Hardware
+    }
+
     fn name(&self, address: u32) -> String {
         self.names
             .get(&address)
@@ -1084,7 +1089,10 @@ fn panic_reached(
     control: &mut dyn RunControl,
 ) -> Result<BTreeSet<u32>> {
     let mut reached = BTreeSet::new();
-    for (&address, _) in names.iter().filter(|(_, name)| panic_entry(name)) {
+    for (&address, _) in names
+        .iter()
+        .filter(|(_, name)| crate::panics::panic_entry(name))
+    {
         reached.extend(
             analysis
                 .bound_with(address, resolutions, keep, control)?
@@ -1092,20 +1100,6 @@ fn panic_reached(
         );
     }
     Ok(reached)
-}
-
-/// Demangled compiler entry points in the pinned toolchain, plus the image
-/// hook. Check their final machine-code call graph, rather than source names
-/// or linker-script text: helpers can be outlined or removed by optimization.
-fn panic_entry(name: &str) -> bool {
-    name.starts_with("core::panicking::")
-        || name.starts_with("core::option::unwrap_failed")
-        || name.starts_with("core::option::expect_failed")
-        || name.starts_with("core::result::unwrap_failed")
-        || (name.starts_with("core::slice::index::slice_index") && name.contains("fail"))
-        || name.starts_with("core::cell::panic_already")
-        || name.ends_with("::rust_begin_unwind")
-        || name == "oer_platform_panic_hook"
 }
 
 /// What the functions in `reached` do that interrupt context should not.
