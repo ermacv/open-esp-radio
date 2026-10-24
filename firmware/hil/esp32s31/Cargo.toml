@@ -18,6 +18,8 @@ system-watchdog = [
     "dep:embassy-sync",
     "dep:oer-hil-agent",
     "dep:oer-hil-protocol",
+    "dep:oer-esp32s31-hal",
+    "dep:oer-embassy-time",
 ]
 # The system image that, on request, switches its USB Serial/JTAG off its
 # pads: the board leaves USB, as a stand recovery must handle.
@@ -29,6 +31,8 @@ system-panic-reset = [
     "dep:embassy-sync",
     "dep:oer-hil-agent",
     "dep:oer-hil-protocol",
+    "dep:oer-esp32s31-hal",
+    "dep:oer-embassy-time",
 ]
 wifi-station = [
     "dep:oer-firmware-apps-w3",

@@ -23821,15 +23821,68 @@ pub mod peripheral_ownership {
         pub efuse: super::efuse::Efuse,
     }
 
+    /// The device registers of [`EfusePeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type EfusePeripheralsClaims = super::efuse::Claim;
+
+    impl EfusePeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: EfusePeripheralsClaims) -> Self {
+            let efuse = claims;
+            Self {
+                efuse: super::efuse::Efuse::new(efuse),
+            }
+        }
+    }
+
     /// The true random number generator and its clock and reset word, read by the entropy owner.
     pub struct EntropyPeripherals {
         pub trng: super::trng::Trng,
         pub lp_periclkrst_rng: super::lp_periclkrst_rng::LpPericlkrstRng,
     }
 
+    /// The device registers of [`EntropyPeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type EntropyPeripheralsClaims = (super::trng::Claim, super::lp_periclkrst_rng::Claim);
+
+    impl EntropyPeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: EntropyPeripheralsClaims) -> Self {
+            let (trng, lp_periclkrst_rng) = claims;
+            Self {
+                trng: super::trng::Trng::new(trng),
+                lp_periclkrst_rng: super::lp_periclkrst_rng::LpPericlkrstRng::new(
+                    lp_periclkrst_rng,
+                ),
+            }
+        }
+    }
+
     /// The reset-cause words of both HP cores, read by the reset-cause owner.
     pub struct ResetCausePeripherals {
         pub lp_aon_reset_cause: super::lp_aon_reset_cause::LpAonResetCause,
+    }
+
+    /// The device registers of [`ResetCausePeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type ResetCausePeripheralsClaims = super::lp_aon_reset_cause::Claim;
+
+    impl ResetCausePeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: ResetCausePeripheralsClaims) -> Self {
+            let lp_aon_reset_cause = claims;
+            Self {
+                lp_aon_reset_cause: super::lp_aon_reset_cause::LpAonResetCause::new(
+                    lp_aon_reset_cause,
+                ),
+            }
+        }
     }
 
     /// The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views.
@@ -23839,46 +23892,19 @@ pub mod peripheral_ownership {
 
     /// Every typed partition.
     pub struct PeripheralPartitions {
-        /// The eFuse controller's read words of the factory MAC and the chip revision, read once by the factory identity.
-        pub efuse: EfusePeripherals,
-        /// The true random number generator and its clock and reset word, read by the entropy owner.
-        pub entropy: EntropyPeripherals,
-        /// The reset-cause words of both HP cores, read by the reset-cause owner.
-        pub reset_cause: ResetCausePeripherals,
         /// The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views.
         pub wifi_mac_interface: WifiMacInterfacePeripherals,
     }
 
     /// The device registers of every typed block, which the PAC root
     /// takes with one `oer_mmio::assume_owned`.
-    pub type Claims = (
-        super::efuse::Claim,
-        super::trng::Claim,
-        super::lp_periclkrst_rng::Claim,
-        super::lp_aon_reset_cause::Claim,
-        super::wifi_mac_interface_address::Claim,
-    );
+    pub type Claims = super::wifi_mac_interface_address::Claim;
 
     /// Give each claimed block to its owner in its partition.
     #[inline]
     pub fn partition(claims: Claims) -> PeripheralPartitions {
-        let (efuse, trng, lp_periclkrst_rng, lp_aon_reset_cause, wifi_mac_interface_address) =
-            claims;
+        let wifi_mac_interface_address = claims;
         PeripheralPartitions {
-            efuse: EfusePeripherals {
-                efuse: super::efuse::Efuse::new(efuse),
-            },
-            entropy: EntropyPeripherals {
-                trng: super::trng::Trng::new(trng),
-                lp_periclkrst_rng: super::lp_periclkrst_rng::LpPericlkrstRng::new(
-                    lp_periclkrst_rng,
-                ),
-            },
-            reset_cause: ResetCausePeripherals {
-                lp_aon_reset_cause: super::lp_aon_reset_cause::LpAonResetCause::new(
-                    lp_aon_reset_cause,
-                ),
-            },
             wifi_mac_interface: WifiMacInterfacePeripherals {
                 wifi_mac_interface_address:
                     super::wifi_mac_interface_address::WifiMacInterfaceAddress::new(

@@ -149,6 +149,14 @@ fn panic_hook(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
     fatal::record_panic(stage);
 }
 
+/// The image's entropy owner.
+#[cfg(any(
+    feature = "system-watchdog",
+    feature = "system-panic-reset",
+    feature = "wifi-station"
+))]
+pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
+
 oer_espressif_staged_runtime::entry!(main);
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
@@ -178,6 +186,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         feature = "wifi-station"
     ))]
     system::take_platform_panic();
+    #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
+    system::read_reset_causes(oer_espressif_esp_hal_soc::handoff::take_reset_causes(
+        peripherals.LP_AON_CLK_RST,
+    ));
     // The bootstrap configured PSRAM before entering this separately linked
     // runtime. `esp_hal::init()` cannot carry process-local mapping metadata
     // across that ELF boundary, so stage two explicitly adopts the live
@@ -200,7 +212,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         executor,
         interrupts.wake,
         transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb),
-        peripherals.RNG,
+        crate::Rng::new(
+            oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+            oer_embassy_time::EmbassyClock,
+        ),
     );
 
     #[cfg(feature = "system-watchdog")]
@@ -208,7 +223,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         executor,
         interrupts.wake,
         transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb),
-        peripherals.RNG,
+        crate::Rng::new(
+            oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+            oer_embassy_time::EmbassyClock,
+        ),
         peripherals.TIMG1,
     );
 
@@ -312,8 +330,8 @@ fn bounds(range: &Range<usize>) -> [u32; 2] {
 
 /// Halt the image unless the TRNG produces health-tested entropy.
 #[cfg(feature = "system-watchdog")]
-pub(crate) fn check_entropy_source(entropy: &oer_espressif_esp_hal_soc::entropy::Entropy<'_>) {
-    if entropy.source_status().is_healthy() {
+pub(crate) fn check_entropy_source(entropy: &Rng) {
+    if entropy.status().is_healthy() {
         transport::CONSOLE.note_immediately(&Note::entropy_pass());
     } else {
         fail("entropy-source");

@@ -10,24 +10,30 @@ pub(crate) mod postmortem;
 mod watchdog;
 
 pub(super) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
-    use esp_hal::rtc_cntl::SocResetReason as Soc;
+    use oer_esp32s31_hal::platform::{HpCore, ResetCause as Cause};
     use oer_hil_protocol::base::{BootEvidence, ResetReason};
-    let raw = esp_hal::system::reset_reason();
+    // The console serves boot evidence from core 0.
+    let cause = RESET_CAUSES
+        .try_get()
+        .expect("the boot reads the reset causes before serving evidence")
+        .of(HpCore::Core0);
     BootEvidence {
-        reset_reason: match raw {
-            Some(Soc::CoreSw) => ResetReason::Software,
-            Some(Soc::CoreMwdt1) => ResetReason::MainWatchdog1,
-            Some(Soc::ChipPowerOn) => ResetReason::PowerOn,
-            Some(Soc::SysBrownOut) => ResetReason::Brownout,
-            Some(Soc::CoreMwdt0) => ResetReason::MainWatchdog0,
-            Some(Soc::CoreRwdt | Soc::CpuRwdt | Soc::SysRwdt) => ResetReason::RtcWatchdog,
-            Some(Soc::SysSuperWdt) => ResetReason::SuperWatchdog,
-            Some(Soc::CoreUsbJtag | Soc::CoreUsbUart) => ResetReason::UsbSerialJtag,
-            Some(Soc::CpuJtag) => ResetReason::Jtag,
-            Some(Soc::CpuLockup) => ResetReason::CpuLockup,
+        reset_reason: match cause {
+            Cause::CoreSoftware => ResetReason::Software,
+            Cause::CoreMainWatchdog1 => ResetReason::MainWatchdog1,
+            Cause::ChipPowerOn => ResetReason::PowerOn,
+            Cause::SystemBrownOut => ResetReason::Brownout,
+            Cause::CoreMainWatchdog0 => ResetReason::MainWatchdog0,
+            Cause::CoreRtcWatchdog | Cause::CpuRtcWatchdog | Cause::SystemRtcWatchdog => {
+                ResetReason::RtcWatchdog
+            }
+            Cause::SystemSuperWatchdog => ResetReason::SuperWatchdog,
+            Cause::CoreUsbJtag | Cause::CoreUsbUart => ResetReason::UsbSerialJtag,
+            Cause::CpuJtag => ResetReason::Jtag,
+            Cause::CpuLockup => ResetReason::CpuLockup,
             _ => ResetReason::Other,
         },
-        raw_reset_reason: raw.map_or(0, |reason| reason as u8),
+        raw_reset_reason: cause.code(),
         post_mortem: postmortem::previous(|previous| previous.map(|previous| previous.summary())),
         platform_panic: PLATFORM_PANIC.try_get().copied().flatten().map(|record| {
             oer_hil_protocol::base::PlatformPanic {
@@ -48,6 +54,16 @@ pub(super) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
 static PLATFORM_PANIC: embassy_sync::once_lock::OnceLock<
     Option<oer_espressif_staged_runtime::panic::PanicRecord>,
 > = embassy_sync::once_lock::OnceLock::new();
+
+/// Why each HP core last left reset, read once at boot.
+static RESET_CAUSES: embassy_sync::once_lock::OnceLock<oer_esp32s31_hal::platform::ResetCauses> =
+    embassy_sync::once_lock::OnceLock::new();
+
+/// Read the reset causes from their transferred owner; before the first boot
+/// evidence is served.
+pub(crate) fn read_reset_causes(registers: oer_esp32s31_hal::platform::ResetCauseRegisters) {
+    let _ = RESET_CAUSES.init(oer_esp32s31_hal::platform::ResetCauses::read(registers));
+}
 
 /// Take the previous boot's platform panic record; before the first boot
 /// evidence is served.

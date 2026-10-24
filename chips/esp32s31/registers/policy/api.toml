@@ -15,18 +15,21 @@ name = "EfusePeripherals"
 member = "efuse"
 description = "The eFuse controller's read words of the factory MAC and the chip revision, read once by the factory identity."
 peripherals = ["EFUSE"]
+handoff = true
 
 [[ownership-partitions]]
 name = "EntropyPeripherals"
 member = "entropy"
 description = "The true random number generator and its clock and reset word, read by the entropy owner."
 peripherals = ["TRNG", "LP_PERICLKRST_RNG"]
+handoff = true
 
 [[ownership-partitions]]
 name = "ResetCausePeripherals"
 member = "reset_cause"
 description = "The reset-cause words of both HP cores, read by the reset-cause owner."
 peripherals = ["LP_AON_RESET_CAUSE"]
+handoff = true
 
 [[ownership-partitions]]
 name = "UnexposedPeripherals"

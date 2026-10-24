@@ -35,12 +35,12 @@ use core::convert::Infallible;
 
 use embassy_futures::select::{Either, select};
 use esp_hal::{
-    Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
-    usb::usb_serial_jtag::UsbSerialJtag,
+    Blocking, interrupt::software::SoftwareInterrupt, usb::usb_serial_jtag::UsbSerialJtag,
 };
 use oer_diagnostics::{DiagPath, DiagnosticPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
+use oer_esp32s31_hal::platform::{FactoryIdentity, Interface};
 use oer_esp32s31_hal::root::ProtocolPartitions;
 use oer_esp32s31_hal::types::MacInterruptEnableState;
 use oer_esp32s31_ieee80211_driver::{
@@ -206,7 +206,7 @@ struct Boot {
     console: Console,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
-    rng: RngOwner<'static>,
+    rng: Rng,
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
@@ -218,6 +218,9 @@ struct Boot {
     ),
     timer_lines: AffineSpscReceiver<'static, TimerLine, 2>,
 }
+
+/// The image's entropy owner.
+pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
 oer_espressif_staged_runtime::entry!(main);
 
@@ -238,22 +241,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         park()
     };
 
-    let base_mac = efuse::base_mac_address();
-    let mut base_mac_address = [0; 6];
-    base_mac_address.copy_from_slice(base_mac.as_bytes());
+    let factory = FactoryIdentity::read(
+        oer_espressif_esp_hal_soc::handoff::take_efuse()
+            .expect("the image takes the eFuse words once"),
+    );
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address,
-        mac_extension: efuse::read_field_le::<u16>(efuse::MAC_EXT),
+        base_mac_address: factory.base_mac(),
+        mac_extension: factory.mac_extension(),
     };
-    let mut station = [0; 6];
-    station.copy_from_slice(
-        efuse::interface_mac_address(efuse::InterfaceMacAddress::Station).as_bytes(),
-    );
-    let mut access_point = [0; 6];
-    access_point.copy_from_slice(
-        efuse::interface_mac_address(efuse::InterfaceMacAddress::AccessPoint).as_bytes(),
-    );
+    let station = factory.address(Interface::Station);
+    let access_point = factory.address(Interface::AccessPoint);
 
     let singletons = RadioSingletons {
         i2c_ana_mst: peripherals.I2C_ANA_MST,
@@ -348,7 +346,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         console,
         cell: cells.wifi,
         wifi,
-        rng: RngOwner::new(peripherals.RNG),
+        rng: Rng::new(
+            oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+            EmbassyClock,
+        ),
         station,
         access_point,
         radio,
@@ -403,7 +404,7 @@ async fn w1(boot: Boot) {
 struct Parts {
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
-    rng: RngOwner<'static>,
+    rng: Rng,
     station: [u8; 6],
     access_point: [u8; 6],
     radio: Spawner<RadioTasks>,
@@ -974,7 +975,7 @@ async fn run(
 
 /// Wi-Fi's own platform values for the MAC bring-up.
 struct Platform {
-    rng: RngOwner<'static>,
+    rng: Rng,
     tx_power: Option<PhyTxTargetPowerProfile>,
 }
 

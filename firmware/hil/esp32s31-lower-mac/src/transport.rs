@@ -18,17 +18,20 @@ oer_espressif_staged_runtime::placed_static! {
     pub(crate) static CONSOLE: Console<8, 8, EarlyUsb> = Console::new(), in critical_data "logging";
 }
 
-pub struct Chip;
+/// The image's platform: why the chip last reset, read once at boot.
+pub struct Chip(pub oer_esp32s31_hal::platform::ResetCauses);
 impl oer_hil_agent::base::Platform for Chip {
     fn boot_evidence(&self) -> BootEvidence {
-        let raw = esp_hal::system::reset_reason();
+        use oer_esp32s31_hal::platform::{HpCore, ResetCause};
+        // The console serves boot evidence from core 0.
+        let cause = self.0.of(HpCore::Core0);
         BootEvidence {
-            reset_reason: match raw {
-                Some(esp_hal::rtc_cntl::SocResetReason::CoreSw) => ResetReason::Software,
-                Some(esp_hal::rtc_cntl::SocResetReason::ChipPowerOn) => ResetReason::PowerOn,
+            reset_reason: match cause {
+                ResetCause::CoreSoftware => ResetReason::Software,
+                ResetCause::ChipPowerOn => ResetReason::PowerOn,
                 _ => ResetReason::Other,
             },
-            raw_reset_reason: raw.map_or(0, |reason| reason as u8),
+            raw_reset_reason: cause.code(),
             post_mortem: None,
             platform_panic: None,
         }

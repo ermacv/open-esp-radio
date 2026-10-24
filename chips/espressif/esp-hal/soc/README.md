@@ -2,7 +2,8 @@
 
 This adapter retains the `oer-espressif-esp-hal-soc` package name
 and its public root imports. It uses the pinned esp-hal peripheral witnesses
-and upstream register accessors for non-radio SoC services. Radio register
+and upstream register accessors for non-radio SoC services, and transfers
+platform domains to the chip PAC. Radio register
 ownership remains in `chips/esp32s31/pac`.
 
 The private source modules follow the resources and operations they own:
@@ -20,27 +21,19 @@ These are engineering limits, not measured worst-case reset/RF-off bounds.
 
 - `cache/performance.rs`: cache counter snapshots and the retained CACHE witness.
 - `flash/mmu.rs`: flash MMU operations with the retained SPI0 witness.
-- `reset.rs`: a diverging system-reset request through HAL. The caller
-  owns the failure policy and retains any live resources; this
-  mechanism has no radio dependency and does not arm a watchdog or establish
-  a reset-latency bound.
+- `handoff.rs`: the per-domain transfers of platform blocks to the chip PAC.
+  `take_efuse`, `take_entropy` and `take_reset_causes` consume the domain's
+  esp-hal singletons (`RNG` and `LP_PERI`; `LP_AON_CLK_RST`; esp-hal hands
+  out no `EFUSE`, so the eFuse transfer succeeds once by a flag) and
+  return the PAC owner of its typed blocks, which the HAL's `platform`
+  module reads (`FactoryIdentity`, `Entropy`, `ResetCauses`). esp-hal still
+  enables the TRNG inside `esp_hal::init`; the entropy owner only reads it.
 - `oer-espressif-esp-hal-irq`: the ESP32-S31 interrupt matrix the image's interrupt
   table (`oer-interrupt-table`) drives. The platform runtime's handoff adopts the
   image's table, silences each hart's sources when it installs the hart's
   interrupt stack and verifies them before it enables interrupts; an owner
   routes its source with `enable` and its token and silences it with
   `disable`. Compile-time assertions keep the table's 12-byte entry layout.
-- `entropy.rs`: owns RNG and the independent LP TRNG source. Fixed-size reads
-  borrow that owner and release their temporary HAL reader before returning.
-  No radio role or PHY epoch supplies its lifetime. Read pacing assumes a
-  running CPU cycle counter; this is not a fault-time bound or an entropy
-  quality assessment.
-  `Entropy::source_status` borrows that owner to read whether the TRNG's LP
-  clock runs out of reset, sampling in the standard
-  output mode and health-tested without a recorded failure. esp-hal enables
-  it at startup with ESP-IDF's `rng_ll_enable` and keeps it running after a
-  `TrngSource` drops, because `Rng` (MAC sequence numbers, backoff) reads the
-  same generator.
 
 Performance counters retain the CACHE witness. Cache sync and writeback stay
 with HAL, which serializes them with its DMA and executable-PSRAM cache

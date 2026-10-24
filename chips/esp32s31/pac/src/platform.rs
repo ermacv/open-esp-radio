@@ -1,0 +1,273 @@
+//! Platform blocks the image takes from esp-hal one domain at a time: the
+//! eFuse MAC words, the true random number generator and the reset causes.
+//!
+//! Each domain has a handoff proof, made once by the esp-hal adapter that
+//! consumed the domain's esp-hal singletons, and an owner built from it that
+//! claims only that domain's typed blocks. The owners only read.
+
+use oer_mmio::{Fixed, Placement};
+
+use crate::generated::{
+    efuse::{self, Efuse},
+    lp_aon_reset_cause::{self, LpAonResetCause},
+    lp_periclkrst_rng::{self, LpPericlkrstRng},
+    peripheral_ownership::{
+        EfusePeripherals, EfusePeripheralsClaims, EntropyPeripherals, EntropyPeripheralsClaims,
+        ResetCausePeripherals, ResetCausePeripheralsClaims,
+    },
+    trng::{self, Trng},
+};
+
+#[cfg(test)]
+mod tests;
+
+/// Proof that the platform transferred the eFuse read words.
+#[must_use = "the eFuse owner needs the platform's transfer"]
+pub struct EfuseHandoff(());
+
+impl EfuseHandoff {
+    /// Assert the platform's unique, permanent eFuse handoff.
+    ///
+    /// # Safety
+    /// Call at most once. No other code writes the eFuse read words
+    /// thereafter, and only code that cannot disturb a read (esp-hal's
+    /// eFuse readers) reads them.
+    #[allow(unsafe_code, reason = "the platform proves exclusive eFuse ownership")]
+    pub const unsafe fn assume_exclusive() -> Self {
+        Self(())
+    }
+}
+
+/// The eFuse controller's read words of the factory MAC.
+#[must_use = "dropping a register owner permanently loses its register authority"]
+pub struct EfuseRegisters<P: Placement = Fixed<{ efuse::BASE }>>(Efuse<P>);
+
+impl EfuseRegisters {
+    /// Claim the eFuse block from the platform handoff.
+    #[allow(
+        unsafe_code,
+        reason = "the consumed handoff proves unique register ownership"
+    )]
+    pub fn from_handoff(_handoff: EfuseHandoff) -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the chip PAC's root claims a domain's typed blocks once, from its handoff"
+        )]
+        // SAFETY: `EfuseHandoff`'s constructor guarantees exclusive, permanent
+        // ownership of the eFuse read words. The generated `const` assertion
+        // beside the typed blocks checks that no other typed block lists them.
+        let claims = unsafe { oer_mmio::assume_owned::<EfusePeripheralsClaims>() };
+        Self(EfusePeripherals::from_claims(claims).efuse)
+    }
+}
+
+impl<P: Placement> EfuseRegisters<P> {
+    /// The factory MAC fields of block 1. The controller mirrors them after
+    /// reset; reading needs no command.
+    pub fn factory_mac(&self) -> oer_espressif_efuse::FactoryMac {
+        let low = self.0.read_rd_mac_sys0();
+        let high = self.0.read_rd_mac_sys1();
+        oer_espressif_efuse::FactoryMac {
+            mac_0: low.mac_0(),
+            mac_1: high.mac_1(),
+            mac_ext: high.mac_ext(),
+        }
+    }
+}
+
+/// Proof that the platform transferred esp-hal's `RNG` and `LP_PERI`
+/// singletons.
+#[must_use = "the entropy owner needs the consumed platform ownership"]
+pub struct EntropyHandoff(());
+
+impl EntropyHandoff {
+    /// Assert the platform's unique, permanent entropy handoff.
+    ///
+    /// # Safety
+    /// Call at most once. The caller consumed esp-hal's `RNG` and `LP_PERI`
+    /// singletons, and no other code accesses the TRNG words or
+    /// `LP_PERICLKRST.RNG_CTRL` thereafter.
+    #[allow(unsafe_code, reason = "the platform proves exclusive TRNG ownership")]
+    pub const unsafe fn assume_exclusive() -> Self {
+        Self(())
+    }
+}
+
+/// Where the device's TRNG block lies.
+pub type TrngPlacement = Fixed<{ trng::BASE }>;
+
+/// Where the device's `RNG_CTRL` word lies.
+pub type RngClockPlacement = Fixed<{ lp_periclkrst_rng::BASE }>;
+
+/// The true random number generator, its clock and reset word.
+#[must_use = "dropping a register owner permanently loses its register authority"]
+pub struct EntropyRegisters<P: Placement = TrngPlacement, Q: Placement = RngClockPlacement> {
+    trng: Trng<P>,
+    clock: LpPericlkrstRng<Q>,
+}
+
+impl EntropyRegisters {
+    /// Claim the TRNG blocks from the platform handoff.
+    #[allow(
+        unsafe_code,
+        reason = "the consumed handoff proves unique register ownership"
+    )]
+    pub fn from_handoff(_handoff: EntropyHandoff) -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the chip PAC's root claims a domain's typed blocks once, from its handoff"
+        )]
+        // SAFETY: `EntropyHandoff`'s constructor guarantees exclusive,
+        // permanent ownership of the TRNG words and of `RNG_CTRL`. The
+        // generated `const` assertion beside the typed blocks checks that no
+        // other typed block lists them. esp-hal writes them only inside
+        // `esp_hal::init` and `TrngSource::new`, reviewed in
+        // `registers/shared-words.toml`.
+        let claims = unsafe { oer_mmio::assume_owned::<EntropyPeripheralsClaims>() };
+        let EntropyPeripherals {
+            trng,
+            lp_periclkrst_rng,
+        } = EntropyPeripherals::from_claims(claims);
+        Self {
+            trng,
+            clock: lp_periclkrst_rng,
+        }
+    }
+}
+
+impl<P: Placement, Q: Placement> EntropyRegisters<P, Q> {
+    /// One conditioned 32-bit word of the generator's output.
+    pub fn random_word(&self) -> u32 {
+        self.trng.read_crc_sync_data().sw_crc_random_data_sync()
+    }
+
+    /// The generator's clock, sampling and health-test state.
+    ///
+    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/rng/trng.rs:50-66`
+    /// (`TrngSource::status`), from ESP-IDF's `rng_ll_enable` configuration
+    /// (`components/hal/esp32s31/include/hal/rng_ll.h:163-178`).
+    pub fn status(&self) -> EntropyStatus {
+        let clock = self.clock.read_rng_ctrl();
+        let conf = self.trng.read_conf();
+        let debug = self.trng.read_debug_conf();
+        EntropyStatus {
+            clocked: clock.lp_rng_clk_en() && !clock.lp_rng_rst_en(),
+            sampling: conf.sample_enable() && conf.noise_crc_en() && conf.random_output_mode(),
+            health_tested: !debug.health_test_bypass() && conf.noise_source_sel().get() != 0,
+            health_error: self.trng.read_int_raw().error_int_raw(),
+        }
+    }
+}
+
+/// The generator's state as its owner reads it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EntropyStatus {
+    /// The generator's clock runs and its reset is released.
+    pub clocked: bool,
+    /// Sampling and the output conditioner are on.
+    pub sampling: bool,
+    /// Health tests run on a selected noise source.
+    pub health_tested: bool,
+    /// A startup or continuous health test failed.
+    pub health_error: bool,
+}
+
+impl EntropyStatus {
+    /// Every condition of a working source holds.
+    pub const fn is_healthy(self) -> bool {
+        self.clocked && self.sampling && self.health_tested && !self.health_error
+    }
+}
+
+/// Proof that the platform transferred esp-hal's `LP_AON_CLK_RST` singleton.
+#[must_use = "the reset-cause owner needs the consumed platform ownership"]
+pub struct ResetCauseHandoff(());
+
+impl ResetCauseHandoff {
+    /// Assert the platform's unique, permanent reset-cause handoff.
+    ///
+    /// # Safety
+    /// Call at most once. The caller consumed esp-hal's `LP_AON_CLK_RST`
+    /// singleton, and no other code accesses the reset-cause words
+    /// thereafter.
+    #[allow(
+        unsafe_code,
+        reason = "the platform proves exclusive reset-cause ownership"
+    )]
+    pub const unsafe fn assume_exclusive() -> Self {
+        Self(())
+    }
+}
+
+/// An HP core of the chip.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HpCore {
+    Core0,
+    Core1,
+}
+
+/// The reset-cause words of both HP cores.
+#[must_use = "dropping a register owner permanently loses its register authority"]
+pub struct ResetCauseRegisters<P: Placement = Fixed<{ lp_aon_reset_cause::BASE }>>(
+    LpAonResetCause<P>,
+);
+
+impl ResetCauseRegisters {
+    /// Claim the reset-cause block from the platform handoff.
+    #[allow(
+        unsafe_code,
+        reason = "the consumed handoff proves unique register ownership"
+    )]
+    pub fn from_handoff(_handoff: ResetCauseHandoff) -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the chip PAC's root claims a domain's typed blocks once, from its handoff"
+        )]
+        // SAFETY: `ResetCauseHandoff`'s constructor guarantees exclusive,
+        // permanent ownership of the reset-cause words. The generated `const`
+        // assertion beside the typed blocks checks that no other typed block
+        // lists them.
+        let claims = unsafe { oer_mmio::assume_owned::<ResetCausePeripheralsClaims>() };
+        Self(ResetCausePeripherals::from_claims(claims).lp_aon_reset_cause)
+    }
+}
+
+impl<P: Placement> ResetCauseRegisters<P> {
+    /// The cause code `core` last left reset with, as its field holds it.
+    pub fn cause_code(&self, core: HpCore) -> u8 {
+        let code = match core {
+            HpCore::Core0 => self.0.read_hpcore0_reset_cause().hpcore0_reset_cause(),
+            HpCore::Core1 => self.0.read_hpcore1_reset_cause().hpcore1_reset_cause(),
+        };
+        code.get().to_le_bytes()[0]
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl<'a> EfuseRegisters<oer_mmio::Host<'a>> {
+    /// The eFuse words over host memory of at least [`efuse::SIZE`] bytes.
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        Efuse::host(words).map(Self)
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl<'a, 'b> EntropyRegisters<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
+    /// The generator over host memory of at least [`trng::SIZE`] and
+    /// [`lp_periclkrst_rng::SIZE`] bytes.
+    pub fn host(trng: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        Ok(Self {
+            trng: Trng::host(trng)?,
+            clock: LpPericlkrstRng::host(clock)?,
+        })
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl<'a> ResetCauseRegisters<oer_mmio::Host<'a>> {
+    /// The reset-cause words over host memory of at least
+    /// [`lp_aon_reset_cause::SIZE`] bytes.
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+        LpAonResetCause::host(words).map(Self)
+    }
+}

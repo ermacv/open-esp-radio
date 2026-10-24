@@ -23,9 +23,9 @@ disallowed-methods = [
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
     { path = "oer_mmio::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     { path = "oer_mmio::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
-    # Typed register blocks are claimed once, by the chip PAC's
-    # radio root (docs/unsafe.md, Generated access).
-    { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's radio root" },
+    # Typed register blocks are claimed once, by the chip PAC's root from
+    # each domain's handoff (docs/unsafe.md, Generated access).
+    { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from a domain handoff" },
 ]
 
 # The workspace panic lints (`unwrap_used`, `expect_used`, `panic`,

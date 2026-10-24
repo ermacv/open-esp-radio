@@ -1,5 +1,6 @@
 //! One radio-executor task consumes every RX/TX interrupt batch and keeps
 //! both DMA owners until their stopped boundaries, before posting a retune.
+use crate::Rng;
 use crate::{
     W2Config, irq,
     irq::{B, N, Q, S, TX},
@@ -7,7 +8,6 @@ use crate::{
 };
 use core::{future::poll_fn, pin::Pin, sync::atomic::Ordering};
 use embassy_futures::select::{Either3, select3};
-use esp_hal::rng::RngOwner;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
@@ -81,7 +81,7 @@ const RATES: [u8; 12] = [2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108];
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
-    pub rng: RngOwner<'static>,
+    pub rng: Rng,
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub config: W2Config,
@@ -90,7 +90,7 @@ pub struct Boot {
     pub sender: AffineSpscSender<'static, Report, 1>,
 }
 struct Platform {
-    rng: Option<RngOwner<'static>>,
+    rng: Option<Rng>,
     tx_power: Option<PhyTxTargetPowerProfile>,
 }
 impl MacDelayEntropy for Platform {
@@ -111,7 +111,7 @@ impl WifiMacPlatform for Platform {
         self.tx_power = Some(profile);
     }
 }
-struct Entropy(RngOwner<'static>);
+struct Entropy(Rng);
 impl WifiTxEntropy for Entropy {
     fn next_u32(&mut self) -> u32 {
         self.0.random()
@@ -170,7 +170,7 @@ fn ceiling(channel: oer_radio_regulatory::Permitted<WifiChannel>, config: W2Conf
 async fn run(
     mut cell: MembershipCell<Wifi>,
     wifi: WifiPartition,
-    rng: RngOwner<'static>,
+    rng: Rng,
     station: [u8; 6],
     ap: [u8; 6],
     config: W2Config,
