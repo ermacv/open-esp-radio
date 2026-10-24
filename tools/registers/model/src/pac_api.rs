@@ -75,6 +75,13 @@ pub struct PacApiPack {
     pub register_sides: Vec<RegisterSides>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub interrupt_sources: Vec<InterruptSource>,
+    /// One-bit fields of typed registers that start a hardware action when
+    /// written with one: only their explicit trigger sets them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub write_trigger_fields: Vec<WriteTriggerField>,
+    /// Typed registers that are FIFO ports: a read takes an element out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fifo_ports: Vec<FifoPort>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -116,6 +123,30 @@ pub struct RegisterSides {
 pub struct InterruptSource {
     pub peripheral: String,
     pub source: u16,
+    pub sources: Vec<String>,
+}
+
+/// A write-trigger field of a typed register: writing one starts a
+/// hardware action, and the field reads back nothing the register keeps.
+/// Every read-modify-write of the register writes zero there; only the
+/// field's `trigger_<register>_<field>` writes one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct WriteTriggerField {
+    pub peripheral: String,
+    pub register: String,
+    pub field: String,
+    pub sources: Vec<String>,
+}
+
+/// A FIFO port of a typed block: one register whose read takes an element
+/// out and whose write puts one in. It has `pop_<register>` and
+/// `push_<register>` only: no read without `&mut`, no read-modify-write.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct FifoPort {
+    pub peripheral: String,
+    pub register: String,
     pub sources: Vec<String>,
 }
 
@@ -658,6 +689,26 @@ impl PacApiPack {
         validate_operations("field-replace-modify", &self.field_replace_modifies)?;
         validate_operations("field-argument-modify", &self.field_argument_modifies)?;
         validate_operations("indexed-bit-set-modify", &self.indexed_bit_set_modifies)?;
+        let mut triggers = BTreeSet::new();
+        for trigger in &self.write_trigger_fields {
+            if trigger.sources.is_empty()
+                || !triggers.insert((&trigger.peripheral, &trigger.register, &trigger.field))
+            {
+                return Err(Error::message(format!(
+                    "PAC API write-trigger field {}.{}.{} has no sources or is repeated",
+                    trigger.peripheral, trigger.register, trigger.field
+                )));
+            }
+        }
+        let mut ports = BTreeSet::new();
+        for port in &self.fifo_ports {
+            if port.sources.is_empty() || !ports.insert((&port.peripheral, &port.register)) {
+                return Err(Error::message(format!(
+                    "PAC API FIFO port {}.{} has no sources or is repeated",
+                    port.peripheral, port.register
+                )));
+            }
+        }
 
         for operation in &self.fixed_register_sequences {
             if operation.steps.is_empty() {
@@ -1344,6 +1395,12 @@ impl PacApiPack {
                             .iter()
                             .map(|source| source.sources.as_slice()),
                     )
+                    .chain(
+                        self.write_trigger_fields
+                            .iter()
+                            .map(|trigger| trigger.sources.as_slice()),
+                    )
+                    .chain(self.fifo_ports.iter().map(|port| port.sources.as_slice()))
                     .flatten()
                     .map(String::as_str),
             )
@@ -1879,6 +1936,8 @@ pub(crate) mod tests {
             indexed_bit_set_modifies: Vec::new(),
             register_sides: Vec::new(),
             interrupt_sources: Vec::new(),
+            write_trigger_fields: Vec::new(),
+            fifo_ports: Vec::new(),
         }
     }
 

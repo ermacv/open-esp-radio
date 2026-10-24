@@ -14,6 +14,9 @@
 //! policy transaction, which takes a typed DMA reference, writes it. The
 //! policy's transactions on the block become methods of the owners that
 //! own their register, with their masks checked by `const` assertions.
+//! A policy-declared write-trigger field is zero in every read-modify-write
+//! of its register and one only in its explicit trigger; a policy-declared
+//! FIFO port is only popped and pushed.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -54,6 +57,8 @@ impl PacApiPack {
         pack.options.typed_peripherals.clear();
         pack.register_sides.clear();
         pack.interrupt_sources.clear();
+        pack.write_trigger_fields.clear();
+        pack.fifo_ports.clear();
         macro_rules! retain {
             ($($operations:ident),* $(,)?) => {
                 $(pack.$operations.retain(|operation| !typed.contains(&operation.peripheral));)*
@@ -230,6 +235,48 @@ impl PacApiPack {
         Ok(output)
     }
 
+    /// The name and register of every transaction the typed backend renders
+    /// on `peripheral`.
+    fn typed_register_operations<'s>(
+        &'s self,
+        peripheral: &'s str,
+    ) -> impl Iterator<Item = (&'s str, &'s str)> + 's {
+        let mut operations = Vec::new();
+        macro_rules! collect {
+            ($($operations:ident),* $(,)?) => {
+                $(operations.extend(
+                    self.$operations
+                        .iter()
+                        .filter(|operation| operation.peripheral == peripheral)
+                        .map(|operation| (operation.name.as_str(), operation.register.as_str())),
+                );)*
+            };
+        }
+        collect!(
+            full_register_writes,
+            full_register_reads,
+            fixed_register_images,
+            masked_register_modifies,
+            field_or_modifies,
+            field_clear_modifies,
+            field_replace_modifies,
+            zero_based_field_writes,
+        );
+        for operation in self
+            .fixed_register_sequences
+            .iter()
+            .filter(|operation| operation.peripheral == peripheral)
+        {
+            operations.extend(
+                operation
+                    .steps
+                    .iter()
+                    .map(|step| (operation.name.as_str(), step.register.as_str())),
+            );
+        }
+        operations.into_iter()
+    }
+
     /// Typed peripherals take only the transactions the typed backend
     /// renders; the affine W1C snapshot is every W1C register's own API.
     fn validate_typed_operations(&self, typed: &BTreeSet<&str>) -> Result<()> {
@@ -266,10 +313,16 @@ impl PacApiPack {
                     .iter()
                     .map(|source| source.peripheral.as_str()),
             )
+            .chain(
+                self.write_trigger_fields
+                    .iter()
+                    .map(|trigger| trigger.peripheral.as_str()),
+            )
+            .chain(self.fifo_ports.iter().map(|port| port.peripheral.as_str()))
             .find(|peripheral| !typed.contains(peripheral))
         {
             return Err(Error::message(format!(
-                "PAC API register sides or interrupt source of {peripheral} name a peripheral that is not typed"
+                "PAC API register sides, interrupt source, write-trigger field or FIFO port of {peripheral} name a peripheral that is not typed"
             )));
         }
         Ok(())
@@ -320,6 +373,8 @@ struct TypedField<'a> {
     readable: bool,
     writable: bool,
     pointer: bool,
+    /// A write-trigger field: only its explicit trigger writes one to it.
+    trigger: bool,
     enumeration: Option<Enumeration>,
 }
 
@@ -354,7 +409,13 @@ impl TypedField<'_> {
     }
 
     fn has_setter(&self) -> bool {
-        self.writable && !self.pointer
+        self.writable && !self.pointer && !self.trigger
+    }
+
+    /// Whether a reader returns the field: a trigger reads back nothing the
+    /// register keeps.
+    fn has_getter(&self) -> bool {
+        self.readable && !self.trigger
     }
 
     /// The field's value in `bits`, the register image.
@@ -387,6 +448,8 @@ struct TypedRegister<'a> {
     writable: bool,
     clears_on_read: bool,
     w1c: bool,
+    /// A FIFO port: popped and pushed only.
+    fifo: bool,
     fields: Vec<TypedField<'a>>,
 }
 
@@ -407,7 +470,25 @@ impl TypedRegister<'_> {
     }
 
     fn has_setters(&self) -> bool {
-        !self.w1c && self.fields.iter().any(TypedField::has_setter)
+        !self.w1c && !self.fifo && self.fields.iter().any(TypedField::has_setter)
+    }
+
+    /// The bits of the register's write-trigger fields.
+    fn triggers(&self) -> u32 {
+        self.fields
+            .iter()
+            .filter(|field| field.trigger)
+            .fold(0, |mask, field| mask | field.mask())
+    }
+
+    /// The read a read-modify-write starts from: every write-trigger field
+    /// zero, so writing the image back starts no hardware action.
+    fn modify_read_call(&self) -> String {
+        if self.triggers() == 0 {
+            self.read_call()
+        } else {
+            format!("{} & !{}::TRIGGERS", self.read_call(), self.method)
+        }
     }
 
     fn index_parameter(&self) -> String {
@@ -435,6 +516,16 @@ impl TypedRegister<'_> {
             ),
         }
     }
+}
+
+/// What the policy declares about one register beyond the SVD.
+struct DeclaredKinds<'p> {
+    /// The `(register, field)` DMA address fields.
+    pointers: &'p BTreeSet<(&'p str, &'p str)>,
+    /// The `(register, field)` write-trigger fields.
+    triggers: &'p BTreeSet<(&'p str, &'p str)>,
+    /// Whether the register is a FIFO port.
+    fifo: bool,
 }
 
 /// The owner type suffix of a block's interrupt-handler side.
@@ -479,6 +570,18 @@ impl<'a> TypedBlock<'a> {
             .filter(|operation| !matches!(operation.value(), Ok(FullRegisterValue::Domain(_))))
             .map(|operation| (operation.register.as_str(), operation.field.as_str()))
             .collect::<BTreeSet<_>>();
+        let triggers = policy
+            .write_trigger_fields
+            .iter()
+            .filter(|trigger| trigger.peripheral == name)
+            .map(|trigger| (trigger.register.as_str(), trigger.field.as_str()))
+            .collect::<BTreeSet<_>>();
+        let fifos = policy
+            .fifo_ports
+            .iter()
+            .filter(|port| port.peripheral == name)
+            .map(|port| port.register.as_str())
+            .collect::<BTreeSet<_>>();
         let mut registers = Vec::new();
         for child in peripheral.registers.as_deref().unwrap_or_default() {
             let RegisterCluster::Register(register) = child else {
@@ -501,7 +604,38 @@ impl<'a> TypedBlock<'a> {
                     Some((u64::from(dimension.dim_increment), u64::from(dimension.dim))),
                 ),
             };
-            registers.push(TypedRegister::new(name, info, access, array, &pointers)?);
+            let kinds = DeclaredKinds {
+                pointers: &pointers,
+                triggers: &triggers,
+                fifo: fifos.contains(info.name.as_str()),
+            };
+            registers.push(TypedRegister::new(name, info, access, array, &kinds)?);
+        }
+        if let Some((register, field)) = triggers.iter().find(|(register, field)| {
+            !registers.iter().any(|typed| {
+                typed.info.name == *register
+                    && typed.fields.iter().any(|known| known.info.name == *field)
+            })
+        }) {
+            return Err(Error::message(format!(
+                "write-trigger field {name}.{register}.{field} is not a field of the block"
+            )));
+        }
+        if let Some(register) = fifos
+            .iter()
+            .find(|register| !registers.iter().any(|typed| typed.info.name == **register))
+        {
+            return Err(Error::message(format!(
+                "FIFO port {name}.{register} is not a register of the block"
+            )));
+        }
+        if let Some((operation, register)) = policy
+            .typed_register_operations(name)
+            .find(|(_, register)| fifos.contains(register))
+        {
+            return Err(Error::message(format!(
+                "PAC API {operation:?} names FIFO port {name}.{register}, which is only popped and pushed"
+            )));
         }
         registers.sort_by_key(|register| register.offset);
         let mut words = BTreeSet::new();
@@ -572,7 +706,7 @@ impl<'a> TypedBlock<'a> {
         }
         for name in &split.irq_observes {
             let register = self.register(name)?;
-            if !register.readable || register.clears_on_read {
+            if !register.readable || register.clears_on_read || register.fifo {
                 return Err(Error::message(format!(
                     "register split of {} observes {name}, which has no side-effect-free read",
                     self.peripheral.name
@@ -1033,7 +1167,7 @@ impl<'a> TypedBlock<'a> {
                 operation.name,
                 register.index_parameter(),
                 operation.domain,
-                register.read_call(),
+                register.modify_read_call(),
                 register.write_call(&image)
             );
             if first_view {
@@ -1082,7 +1216,7 @@ impl<'a> TypedBlock<'a> {
                 "#[inline]\npub fn {}(&mut self, {}{parameter}) {{\n{input}let bits = self.0.{};\nself.0.{};\n}}\n",
                 operation.name,
                 register.index_parameter(),
-                register.read_call(),
+                register.modify_read_call(),
                 register.write_call(&update)
             );
             if first_view && operation.value.is_some() {
@@ -1141,7 +1275,7 @@ impl<'a> TypedBlock<'a> {
                 "#[inline]\npub fn {}(&mut self, {}{parameter}) {{\n{input}{transform}let bits = self.0.{};\nself.0.{};\n}}\n",
                 operation.name,
                 register.index_parameter(),
-                register.read_call(),
+                register.modify_read_call(),
                 register.write_call(&if image == "0x00000000" {
                     format!("bits & !0x{mask:08x}")
                 } else {
@@ -1322,11 +1456,12 @@ impl<'a> TypedRegister<'a> {
         info: &'a RegisterInfo,
         access: Access,
         array: Option<(u64, u64)>,
-        pointers: &BTreeSet<(&str, &str)>,
+        kinds: &DeclaredKinds<'_>,
     ) -> Result<Self> {
         let readable = access.can_read();
         let writable = access.can_write();
         let clears_on_read = info.read_action.is_some();
+        let fifo = kinds.fifo;
         let mut fields = Vec::new();
         for field in info.fields.as_deref().unwrap_or_default() {
             let MaybeArray::Single(field) = field else {
@@ -1335,7 +1470,7 @@ impl<'a> TypedRegister<'a> {
                     info.name
                 )));
             };
-            fields.push(TypedField::new(peripheral, info, field, access, pointers)?);
+            fields.push(TypedField::new(peripheral, info, field, access, kinds)?);
         }
         let w1c_fields = fields
             .iter()
@@ -1366,15 +1501,40 @@ impl<'a> TypedRegister<'a> {
                 info.name
             )));
         }
-        if clears_on_read && writable {
+        if clears_on_read && writable && !fifo {
             return Err(Error::message(format!(
                 "typed register {peripheral}.{} is written and changes when read",
                 info.name
             )));
         }
-        if readable && writable && fields.iter().any(|field| field.writable && !field.readable) {
+        if readable
+            && writable
+            && !fifo
+            && fields
+                .iter()
+                .any(|field| field.writable && !field.readable && !field.trigger)
+        {
             return Err(Error::message(format!(
                 "typed register {peripheral}.{} has a write-only field a read-modify-write would replay",
+                info.name
+            )));
+        }
+        if let Some(trigger) = fields.iter().find(|field| field.trigger)
+            && (trigger.width != 1 || !trigger.writable || w1c || fifo)
+        {
+            return Err(Error::message(format!(
+                "typed write-trigger field {peripheral}.{}.{} must be one writable bit of an ordinary register",
+                info.name, trigger.info.name
+            )));
+        }
+        if fifo
+            && (array.is_some()
+                || w1c
+                || fields.len() != 1
+                || fields.iter().any(|field| field.pointer))
+        {
+            return Err(Error::message(format!(
+                "typed FIFO port {peripheral}.{} must be one register with one field",
                 info.name
             )));
         }
@@ -1397,6 +1557,7 @@ impl<'a> TypedRegister<'a> {
             writable,
             clears_on_read,
             w1c,
+            fifo,
             fields,
         })
     }
@@ -1406,6 +1567,10 @@ impl<'a> TypedRegister<'a> {
         let index = self.index_parameter();
         let read = self.read_call();
         let name = &self.info.name;
+        if self.fifo {
+            self.render_fifo_methods(body, reach);
+            return;
+        }
         if self.readable {
             let receiver = if self.clears_on_read {
                 "&mut self"
@@ -1434,6 +1599,7 @@ impl<'a> TypedRegister<'a> {
             );
             return;
         }
+        self.render_triggers(body);
         if !self.has_setters() {
             return;
         }
@@ -1441,11 +1607,17 @@ impl<'a> TypedRegister<'a> {
             let _ = writeln!(
                 body,
                 "/// Read `{name}`, change fields and write it back; every other bit keeps\n\
-                 /// the value read.\n\
+                 /// the value read{}.\n\
                  #[inline]\npub fn modify_{module}(&mut self, {index}change: impl FnOnce(&mut {module}::W)) {{\n\
-                 let mut value = {module}::W(self.0.{read});\n\
+                 let mut value = {module}::W(self.0.{});\n\
                  change(&mut value);\n\
                  self.0.{};\n}}\n",
+                if self.triggers() == 0 {
+                    ""
+                } else {
+                    " and every write-trigger field is zero"
+                },
+                self.modify_read_call(),
                 self.write_call("value.0")
             );
         } else {
@@ -1457,6 +1629,82 @@ impl<'a> TypedRegister<'a> {
                  change(&mut value);\n\
                  self.0.{};\n}}\n",
                 self.write_call("value.0")
+            );
+        }
+    }
+
+    /// The explicit trigger of each write-trigger field: the one write that
+    /// sets it, keeping every other field read and zero in every other
+    /// trigger field.
+    fn render_triggers(&self, body: &mut String) {
+        let module = &self.method;
+        let index = self.index_parameter();
+        let name = &self.info.name;
+        for field in self.fields.iter().filter(|field| field.trigger) {
+            let image = if self.readable {
+                format!(
+                    "(self.0.{}) | 0x{:08x}",
+                    self.modify_read_call(),
+                    field.mask()
+                )
+            } else {
+                format!("0x{:08x}", field.mask())
+            };
+            let _ = writeln!(
+                body,
+                "/// Write one to the write-trigger field `{}` of `{name}`, starting its\n\
+                 /// hardware action once; {}.\n\
+                 #[inline]\npub fn trigger_{module}_{}(&mut self, {index}) {{\n\
+                 self.0.{};\n}}\n",
+                field.info.name,
+                if self.readable {
+                    "every other field keeps the value read, every other trigger is zero"
+                } else {
+                    "every other bit is zero"
+                },
+                field.method.trim_start_matches("r#"),
+                self.write_call(&image)
+            );
+        }
+    }
+
+    /// A FIFO port's `pop` (a read through `&mut`, which takes an element
+    /// out) and `push` (a write from zero, which puts one in).
+    fn render_fifo_methods(&self, body: &mut String, reach: Reach) {
+        let module = &self.method;
+        let name = &self.info.name;
+        let Some(field) = self.fields.first() else {
+            return;
+        };
+        if reach != Reach::Owned {
+            return;
+        }
+        if field.readable {
+            let _ = writeln!(
+                body,
+                "/// Take the next element out of the FIFO port `{name}`.\n\
+                 #[inline]\npub fn pop_{module}(&mut self) -> {} {{\n\
+                 let value = self.0.{};\n{}\n}}\n",
+                field.read_type().rust(),
+                self.read_call(),
+                field.read_expression("value")
+            );
+        }
+        if field.writable {
+            let write_type = field.write_type();
+            let bits = write_type.bits();
+            let image = if field.offset == 0 {
+                bits.to_owned()
+            } else {
+                format!("({bits} << {})", field.offset)
+            };
+            let _ = writeln!(
+                body,
+                "/// Put one element into the FIFO port `{name}`; every other bit is zero.\n\
+                 #[inline]\npub fn push_{module}(&mut self, value: {}) {{\n\
+                 self.0.{};\n}}\n",
+                qualified(&write_type, self),
+                self.write_call(&image)
             );
         }
     }
@@ -1478,6 +1726,15 @@ impl<'a> TypedRegister<'a> {
             self.declared(),
             self.offset
         );
+        if self.triggers() != 0 {
+            let _ = writeln!(
+                output,
+                "/// The bits of the write-trigger fields: zero in every\n\
+                 /// read-modify-write, one only in a field's explicit trigger.\n\
+                 pub const TRIGGERS: u32 = 0x{:08x};\n",
+                self.triggers()
+            );
+        }
         if let Some((stride, count)) = self.array {
             let _ = writeln!(
                 output,
@@ -1492,13 +1749,13 @@ impl<'a> TypedRegister<'a> {
                 render_enumeration(output, field, enumeration);
             }
         }
-        if self.readable {
+        if self.readable && !self.fifo {
             output.push_str(
                 "/// One observation of the register.\n\
                  #[derive(Clone, Copy, Debug, Eq, PartialEq)]\n\
                  pub struct R(pub(super) u32);\n\nimpl R {\n",
             );
-            for field in self.fields.iter().filter(|field| field.readable) {
+            for field in self.fields.iter().filter(|field| field.has_getter()) {
                 render_getter(output, field, "self");
             }
             output.push_str("}\n\n");
@@ -1535,7 +1792,7 @@ impl<'a> TypedRegister<'a> {
                  pub struct W(pub(super) u32);\n\nimpl W {\n"
             });
             if self.readable {
-                for field in self.fields.iter().filter(|field| field.readable) {
+                for field in self.fields.iter().filter(|field| field.has_getter()) {
                     render_getter(output, field, "&self");
                 }
             }
@@ -1681,7 +1938,7 @@ impl<'a> TypedField<'a> {
         register: &RegisterInfo,
         info: &'a FieldInfo,
         register_access: Access,
-        pointers: &BTreeSet<(&str, &str)>,
+        kinds: &DeclaredKinds<'_>,
     ) -> Result<Self> {
         let access = info.access.unwrap_or(register_access);
         let width = info.bit_width();
@@ -1714,7 +1971,12 @@ impl<'a> TypedField<'a> {
             width,
             readable: access.can_read(),
             writable: access.can_write(),
-            pointer: pointers.contains(&(register.name.as_str(), info.name.as_str())),
+            pointer: kinds
+                .pointers
+                .contains(&(register.name.as_str(), info.name.as_str())),
+            trigger: kinds
+                .triggers
+                .contains(&(register.name.as_str(), info.name.as_str())),
             enumeration,
         })
     }
