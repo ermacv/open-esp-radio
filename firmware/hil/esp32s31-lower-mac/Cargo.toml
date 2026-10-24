@@ -59,3 +59,8 @@ workspace = true
 
 [package.metadata.open-radio]
 instrumentation = ["trace", "debug-control"]
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { pac = 11, hal = 40, chips = 492, portable = 29, protocols = 44, firmware = 170, core = 28, embassy = 2, esp-hal = 13, third-party = 1, unnamed = 13, hardware = 11 }
+bootstrap = { esp-hal = 8, unnamed = 2 }

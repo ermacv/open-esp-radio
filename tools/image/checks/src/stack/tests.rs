@@ -6,20 +6,20 @@ mod handoff;
 #[path = "reachability_tests.rs"]
 mod reachability;
 
-const SP_DOWN_16: u32 = 0xff01_0113; // addi sp, sp, -16
-const SAVE_RA: u32 = 0x0011_2623; // sw ra, 12(sp)
-const LOAD_RA: u32 = 0x00c1_2083; // lw ra, 12(sp)
-const SP_UP_16: u32 = 0x0101_0113; // addi sp, sp, 16
+pub(crate) const SP_DOWN_16: u32 = 0xff01_0113; // addi sp, sp, -16
+pub(crate) const SAVE_RA: u32 = 0x0011_2623; // sw ra, 12(sp)
+pub(crate) const LOAD_RA: u32 = 0x00c1_2083; // lw ra, 12(sp)
+pub(crate) const SP_UP_16: u32 = 0x0101_0113; // addi sp, sp, 16
 const SP_DOWN_32: u32 = 0xfe01_0113; // addi sp, sp, -32
 const SP_UP_32: u32 = 0x0201_0113; // addi sp, sp, 32
-const RET: u32 = 0x0000_8067; // jalr zero, 0(ra)
+pub(crate) const RET: u32 = 0x0000_8067; // jalr zero, 0(ra)
 const LOAD_SLOT: u32 = 0x0001_2783; // lw a5, 0(sp)
 const CALL_A5: u32 = 0x0007_80e7; // jalr ra, 0(a5)
-const TEXT: u32 = 0x1000;
+pub(crate) const TEXT: u32 = 0x1000;
 const RODATA: u32 = 0x2000;
 
 /// `jal ra, target` at `site`.
-fn call(site: u32, target: u32) -> u32 {
+pub(crate) fn call(site: u32, target: u32) -> u32 {
     let offset = target.wrapping_sub(site);
     ((offset >> 20 & 1) << 31)
         | ((offset >> 1 & 0x3ff) << 21)
@@ -30,10 +30,10 @@ fn call(site: u32, target: u32) -> u32 {
 }
 
 /// A code symbol: its words and its `.stack_sizes` record, if any.
-struct Code {
-    name: &'static str,
-    words: Vec<u32>,
-    frame: Option<u8>,
+pub(crate) struct Code {
+    pub(crate) name: &'static str,
+    pub(crate) words: Vec<u32>,
+    pub(crate) frame: Option<u8>,
 }
 
 /// The test program, from `TEXT`: `runtime_main` (16 bytes) calls `leaf`
@@ -208,7 +208,7 @@ fn executable_at(text_address: u32, code: &[Code], data: &[(&str, u32, u32)]) ->
     out
 }
 
-fn image(code: &[Code], data: &[(&str, u32, u32)]) -> Image {
+pub(crate) fn image(code: &[Code], data: &[(&str, u32, u32)]) -> Image {
     Image::new(executable(code, data), &[], &[], None).unwrap()
 }
 
@@ -544,6 +544,7 @@ task-stacks = "sram"
         output: directory.path(),
         task_stack_proven: false,
         stage_two_elf: None,
+        panics: None,
     };
     for checks in [&[Check::Stack][..], &[Check::Frames][..]] {
         let image = Image::new(bootstrap.clone(), &[&rom], &summaries, None)

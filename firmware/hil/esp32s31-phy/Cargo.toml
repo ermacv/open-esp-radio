@@ -49,3 +49,8 @@ oer-registers-model = { path = "../../../tools/registers/model" }
 
 [lints]
 workspace = true
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { pac = 11, hal = 21, chips = 347, portable = 34, firmware = 143, core = 2, embassy = 2, esp-hal = 13, unnamed = 40, hardware = 9 }
+bootstrap = { esp-hal = 8, unnamed = 2 }

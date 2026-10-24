@@ -28,6 +28,7 @@ pub mod exclusion;
 pub mod instrumentation;
 mod large_values;
 mod manifest;
+pub mod panic_budget;
 pub mod probe;
 pub mod sizes;
 pub mod staged;
@@ -111,7 +112,8 @@ pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
     let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
-    staged::build(spec, &profile, &instrumentation, task_stack_proven)
+    let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
+    staged::build(spec, &profile, &instrumentation, task_stack_proven, &panics)
 }
 
 /// A runtime check that produces no image for the link-time gates.

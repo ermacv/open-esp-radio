@@ -48,3 +48,8 @@ workspace = true
 [package.metadata.open-radio]
 # `cargo fw` builds this image with `cfg(oer_profile)`: the executor's poll cycles and timer windows it measures.
 instrumentation = ["profile"]
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { pac = 11, hal = 24, chips = 356, portable = 17, firmware = 65, core = 3, embassy = 2, esp-hal = 7, third-party = 2, unnamed = 13, hardware = 12 }
+bootstrap = { esp-hal = 8, unnamed = 2 }

@@ -790,4 +790,4 @@ impl StackBound {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
