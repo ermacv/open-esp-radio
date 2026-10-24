@@ -362,6 +362,9 @@ impl<M: RawMutex, const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, M, RX_QUEUE_
     }
 
     /// Poll until one bounded RX queue entry can be published.
+    // Keep the pool waiter's Waker registration in the typed publisher scope.
+    // Inlining it into a generated poll frame loses that scope in stack analysis.
+    #[inline(never)]
     pub fn poll_ready(&self, context: &mut Context<'_>) -> Poll<()> {
         self.link.register_radio_waker(context.waker());
         if !self.link.snapshot().up {

@@ -2,10 +2,9 @@
 use crate::observation::Observations;
 use core::{
     cell::{Cell, RefCell},
-    future::poll_fn,
+    future::{Future, poll_fn},
     task::Poll,
 };
-use embassy_futures::{select::select, yield_now};
 use oer_embassy_net::{NoopRawMutex, OwnedNetworkRunner};
 use oer_ieee80211_runtime::station_service::{EthernetFrame, MsduReceiver, MsduSender, TxMsdu};
 use oer_ieee80211_wire::{data::EthernetFrameParts, qos::WmmUserPriority};
@@ -34,9 +33,8 @@ impl Counters {
     }
 }
 
-/// Drain at most each input queue's capacity before yielding.
-/// RX capacity is checked before removing an input; a blocked RX publisher
-/// never prevents TX from returning the owners that restore that capacity.
+/// Drain each input queue by at most its capacity per poll, then yield.
+/// A full downstream queue keeps its source owner queued and arms its wake.
 pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
     radio: OwnedNetworkRunner<'_, NoopRawMutex, RX, TX>,
     mut tx: MsduSender<'_, TxMsdu, 2>,
@@ -47,95 +45,127 @@ pub async fn run<const RX: usize, const TX: usize, T: Clock + Timer>(
 ) -> ! {
     let mut state = false;
     loop {
-        if state != link.get() {
-            state = link.get();
-            radio.link_controller().set_link_up(state);
+        let mut timer = core::pin::pin!(clock.wait_for(Duration::from_millis(1)));
+        poll_fn(|cx| {
+            if drain_step(
+                &radio,
+                &mut tx,
+                &mut rx,
+                observations,
+                link,
+                &mut state,
+                clock,
+                cx,
+            ) {
+                // Exactly one bounded step per poll; give the other P1 futures
+                // their turn before retrying work that remains immediately ready.
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            } else {
+                timer.as_mut().poll(cx).map(|_| ())
+            }
+        })
+        .await;
+    }
+}
+
+// Keep Ethernet owner/copy temporaries outside the generated parent poll frame;
+// otherwise that frame also remains live while the station service is polled.
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn drain_step<const RX: usize, const TX: usize, T: Clock>(
+    radio: &OwnedNetworkRunner<'_, NoopRawMutex, RX, TX>,
+    tx: &mut MsduSender<'_, TxMsdu, 2>,
+    rx: &mut MsduReceiver<'_, EthernetFrame, RX>,
+    observations: &RefCell<Observations>,
+    link: &Cell<bool>,
+    state: &mut bool,
+    clock: &T,
+    cx: &mut core::task::Context<'_>,
+) -> bool {
+    if *state != link.get() {
+        *state = link.get();
+        radio.link_controller().set_link_up(*state);
+    }
+    let publisher = radio.rx_publisher();
+    let mut received = 0u32;
+    for _ in 0..RX {
+        let input_ready = {
+            let mut ready = core::pin::pin!(rx.ready());
+            ready.as_mut().poll(cx).is_ready()
+        };
+        if !input_ready || publisher.poll_ready(cx).is_pending() {
+            break;
         }
-        let publisher = radio.rx_publisher();
-        let received = poll_fn(|cx| {
-            let mut received = 0u32;
-            for _ in 0..RX {
-                if publisher.poll_ready(cx).is_pending() {
-                    break;
+        let Some(frame) = rx.try_receive() else {
+            break;
+        };
+        received += 1;
+        let p = frame.parts();
+        observations
+            .borrow_mut()
+            .observe(p.ether_type, p.payload, false, clock.now().as_micros());
+        if radio
+            .rx_publisher()
+            .try_send_parts(p.destination, p.source, p.ether_type, p.payload)
+            .is_err()
+        {
+            let mut o = observations.borrow_mut();
+            o.queue_drops = o.queue_drops.saturating_add(1);
+        }
+    }
+    observations.borrow_mut().bridge.record(received);
+    let mut tx_progress = false;
+    for _ in 0..TX {
+        let input_ready = {
+            let mut ready = core::pin::pin!(radio.wait_tx_publication());
+            ready.as_mut().poll(cx).is_ready()
+        };
+        if !input_ready {
+            break;
+        }
+        let mut ready = core::pin::pin!(tx.ready());
+        let Poll::Ready(permit) = ready.as_mut().poll(cx) else {
+            break;
+        };
+        // A coalesced publication may outlive its last queued owner. Consume
+        // that hint as work too, so the next poll arms a fresh wait before
+        // parking; otherwise a later publication would wait for the timer.
+        tx_progress = true;
+        let Some(packet) = radio.try_receive_tx() else {
+            break;
+        };
+        let bytes = packet.ethernet();
+        if let Some((header, payload)) = bytes.split_first_chunk::<14>() {
+            let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
+            let ether_type = u16::from_be_bytes([e0, e1]);
+            match EthernetFrame::from_parts(EthernetFrameParts {
+                destination: [d0, d1, d2, d3, d4, d5],
+                source: [s0, s1, s2, s3, s4, s5],
+                ether_type,
+                payload,
+            }) {
+                Ok(frame) => {
+                    observations.borrow_mut().observe(
+                        ether_type,
+                        payload,
+                        true,
+                        clock.now().as_micros(),
+                    );
+                    permit.send(TxMsdu {
+                        priority: WmmUserPriority::new(0).expect("best effort priority"),
+                        frame,
+                    });
                 }
-                let Some(frame) = rx.try_receive() else {
-                    break;
-                };
-                received += 1;
-                let p = frame.parts();
-                observations.borrow_mut().observe(
-                    p.ether_type,
-                    p.payload,
-                    false,
-                    clock.now().as_micros(),
-                );
-                if radio
-                    .rx_publisher()
-                    .try_send_parts(p.destination, p.source, p.ether_type, p.payload)
-                    .is_err()
-                {
+                Err(_) => {
                     let mut o = observations.borrow_mut();
                     o.queue_drops = o.queue_drops.saturating_add(1);
                 }
             }
-            Poll::Ready(received)
-        })
-        .await;
-        observations.borrow_mut().bridge.record(received);
-        let mut transmitted = false;
-        for _ in 0..TX {
-            let Some(packet) = radio.try_receive_tx() else {
-                break;
-            };
-            transmitted = true;
-            let bytes = packet.ethernet();
-            if let Some((header, payload)) = bytes.split_first_chunk::<14>() {
-                let [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1] = *header;
-                let ether_type = u16::from_be_bytes([e0, e1]);
-                match EthernetFrame::from_parts(EthernetFrameParts {
-                    destination: [d0, d1, d2, d3, d4, d5],
-                    source: [s0, s1, s2, s3, s4, s5],
-                    ether_type,
-                    payload,
-                }) {
-                    Ok(frame) => {
-                        let permit = tx.ready().await;
-                        observations.borrow_mut().observe(
-                            ether_type,
-                            payload,
-                            true,
-                            clock.now().as_micros(),
-                        );
-                        permit.send(TxMsdu {
-                            priority: WmmUserPriority::new(0).expect("best effort priority"),
-                            frame,
-                        });
-                    }
-                    Err(_) => {
-                        let mut o = observations.borrow_mut();
-                        o.queue_drops = o.queue_drops.saturating_add(1);
-                    }
-                }
-            }
-            drop(packet);
         }
-        if received != 0 || transmitted {
-            yield_now().await;
-        } else {
-            // The timer also propagates a link notice when no frame is queued.
-            let _ = select(
-                async {
-                    poll_fn(|cx| publisher.poll_ready(cx)).await;
-                    rx.ready().await;
-                },
-                select(
-                    radio.wait_tx_publication(),
-                    clock.wait_for(Duration::from_millis(1)),
-                ),
-            )
-            .await;
-        }
+        drop(packet);
     }
+    received != 0 || tx_progress
 }
 
 #[cfg(test)]
@@ -386,5 +416,100 @@ mod tests {
         assert!(o.bridge.rx_frames >= 128);
         assert_eq!(o.bridge.rx_max, RX as u32);
         assert_eq!(o.queue_drops, 0);
+    }
+
+    #[test]
+    fn blocked_step_keeps_owners_and_wakes_on_queue_and_pool_capacity_without_a_timer() {
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        use std::{
+            sync::Arc,
+            task::{Wake, Waker},
+        };
+        struct Wakes(AtomicUsize);
+        impl Wake for Wakes {
+            fn wake(self: Arc<Self>) {
+                self.wake_by_ref();
+            }
+            fn wake_by_ref(self: &Arc<Self>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        let clock = VirtualClock::<8>::new();
+        let pool = allocator::<1>();
+        let general = allocator::<1>();
+        let mut endpoint = OwnedEndpointResources::<NoopRawMutex, 1, 1>::new();
+        let (mut device, radio) = endpoint.split(NetworkInterfaceId::new(0), [2; 6], pool);
+        radio.link_controller().set_link_up(true);
+        let packet = |marker| {
+            let mut p = general.try_alloc().unwrap();
+            p.set_len(15);
+            p.fill(marker);
+            p
+        };
+        device.transmit(packet(2)).unwrap();
+        let mut input = MsduQueue::<EthernetFrame, 1>::new();
+        let (source, receiver) = input.split();
+        let mut output = MsduQueue::<TxMsdu, 2>::new();
+        let (sender, sink) = output.split();
+        for marker in [100, 101] {
+            sender
+                .try_send(TxMsdu {
+                    priority: WmmUserPriority::new(0).unwrap(),
+                    frame: frame(marker),
+                })
+                .unwrap();
+        }
+        let observations = RefCell::new(Observations::new(7));
+        let link = Cell::new(true);
+        let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+        let waker = Waker::from(Arc::clone(&wakes));
+        let mut cx = Context::from_waker(&waker);
+        let mut bridge =
+            core::pin::pin!(run(radio, sender, receiver, &observations, &link, &clock));
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        assert!(!device.can_transmit());
+        assert!(
+            !general.has_available(),
+            "the blocked TX owner stays in its input queue"
+        );
+        let before = wakes.0.load(Ordering::Relaxed);
+        assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[100]);
+        assert!(wakes.0.load(Ordering::Relaxed) > before);
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[101]);
+        assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[2]);
+        assert!(general.has_available());
+
+        // Retire the old publication hint, then arm both source waits. The
+        // second poll is quiescent; subsequent progress requires a real wake.
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        let before = wakes.0.load(Ordering::Relaxed);
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(wakes.0.load(Ordering::Relaxed), before);
+        let before = wakes.0.load(Ordering::Relaxed);
+        device.transmit(packet(5)).unwrap();
+        assert!(wakes.0.load(Ordering::Relaxed) > before);
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(sink.try_receive().unwrap().frame.parts().payload, &[5]);
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        let before = wakes.0.load(Ordering::Relaxed);
+        source.try_send(frame(3)).unwrap();
+        assert!(wakes.0.load(Ordering::Relaxed) > before);
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        let held = device.receive().unwrap();
+        assert_eq!(held[14], 3);
+        source.try_send(frame(4)).unwrap();
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        let before = wakes.0.load(Ordering::Relaxed);
+        drop(held);
+        assert!(wakes.0.load(Ordering::Relaxed) > before);
+        assert!(bridge.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(device.receive().unwrap()[14], 4);
+        assert_eq!(observations.borrow().queue_drops, 0);
+        assert_eq!(
+            clock.now(),
+            oer_time_virtual::START,
+            "no fallback timer fired"
+        );
     }
 }

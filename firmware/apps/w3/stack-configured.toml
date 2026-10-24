@@ -8,7 +8,7 @@ extends = "stack.toml"
 [[frame_exceptions.runtime]]
 function = "oer_radio_port::slot::poll_body::<<oer_radio_port::lifecycle::run_port::BodyAdapter<oer_firmware_apps_w3::station::Body> as oer_radio_port::slot::SlotBody<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_esp32s31_ieee80211_driver::port::Esp32s31Backend<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>, oer_firmware_apps_w3::radio::Device, 1664>>>::run::{closure#0}>"
 reason = "Polling BodyAdapter::run inlines the station Body future and its placed service startup/completion values into this P1 poll boundary."
-ceiling_bytes = 6912
+ceiling_bytes = 6784
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::ConnectedRsn>::advance_deferred"
