@@ -35,6 +35,14 @@ system these rules serve.
   all under one boot deadline below the armed RTC watchdog; a timeout is a
   typed boot failure, never a fallback value. Portable protocols take no
   `critical-section` and no blocking mutex.
+- **Hardware facts.** A fact about the hardware (an address, a memory
+  region, a peripheral, an interrupt source, a CPU line count, the number of
+  cores, an ISA extension, a ROM function) has one source of truth in the
+  chip facts and the register model, each value with its `SOURCE:`. Code,
+  linker scripts and tables where a person could err (vector tables, the
+  binding of a line to its source and handler, memory layout, `--defsym`,
+  stack placement) are generated from that source; only what the facts
+  cannot express is written by hand.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers
   generate`), never written as a local mask or shift. Code preserves reserved
