@@ -128,6 +128,13 @@ Cargo workspace. They share its `Cargo.lock` and `target` directory. From the
 repository root, `cargo blobray` runs `oer-tool-analysis-cli` with the `tools`
 profile.
 
+Use `cargo blobray` in the checkout: Cargo rebuilds the CLI when its Rust
+inputs or tracked `chips/*/platform/chip.toml` facts change. A directly invoked
+binary checks a pinned input's chip facts against those present at build time
+and refuses changed or newly added profiles with a `cargo blobray` rebuild
+message before resolving the artifact. Both the tools and debug profiles use
+this check; even a comment change in a chip profile requires a rebuild.
+
 The Linux linker adapter uses the shared process foundation's `command`
 factory to clear unrelated operation context. Linker ownership and resource
 limits remain the adapter's policy; the analysis core does not depend on
