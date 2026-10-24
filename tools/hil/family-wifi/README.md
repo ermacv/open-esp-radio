@@ -27,7 +27,9 @@ confirms absence. An already absent entry is recorded as the required state;
 a failed flush passes only if the confirming read observes absence. The
 next measured router ping triggers a kernel broadcast ARP. Gate c requires the decoded request
 on the new GTK and the station's ARP reply, each matched to its protected air
-frame by public Sequence Number, PN and KeyID. Missing either frame fails.
+frame by public Sequence Number, PN and KeyID. Missing either frame fails, as does a
+reply captured before its request or any timestamp outside the 5 s window after the trigger;
+capture and host clocks are not compared with each other.
 After router deauthentication,
 a fresh association/handshake and a ten-echo window precede final departure.
 After an accepted StartStation, workload errors also request StopStation;
