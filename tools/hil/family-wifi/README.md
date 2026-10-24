@@ -28,5 +28,7 @@ on the new GTK and the station's ARP reply, each matched to its protected air
 frame by public Sequence Number, PN and KeyID. Missing either frame fails.
 After router deauthentication,
 a fresh association/handshake and a ten-echo window precede final departure.
+After an accepted StartStation, workload errors also request StopStation;
+a cleanup failure is explicit and never replaces a gate with PASS.
 Credentials and key material enter no scenario, environment, log or result.
 PTK rekey and SAE are outside this workload.

@@ -96,8 +96,12 @@ pub(super) fn parse(text: &str, target: [u8; 6], ap: [u8; 6]) -> Result<Vec<Stat
         };
         // A packet with known bad FCS establishes neither a handshake nor a
         // protected data frame. Required missing observations still fail.
-        if fcs == "2" {
-            continue;
+        // SOURCE: tshark -G values, wlan.fcs.status (proto_checksum_vals):
+        // 0 Bad, 1 Good, 2 Unverified, 3 Not present, 4 Illegal.
+        match fcs {
+            "0" | "4" => continue,
+            "" | "1" | "2" | "3" => {}
+            _ => return Err("invalid air FCS status".into()),
         }
         let (seconds, fraction) = time.split_once('.').ok_or("invalid air timestamp")?;
         if fraction.len() < 6 || !fraction.bytes().all(|b| b.is_ascii_digit()) {
@@ -186,6 +190,20 @@ mod tests {
                 .expect_err("invalid capture")
                 .to_string();
             assert!(!error.contains("secret-passphrase"));
+        }
+    }
+
+    #[test]
+    fn unchecked_fcs_is_preserved_and_bad_or_illegal_fcs_proves_nothing() {
+        for (status, count) in [("", 1), ("0", 0), ("1", 1), ("2", 1), ("3", 1), ("4", 0)] {
+            let row = format!(
+                "1.000000000\t2437\t0x0028\t02:00:00:00:00:01\t02:00:00:00:00:02\t02:00:00:00:00:02\t0\t3\t4\t8\t\t\t{status}\t123\t"
+            );
+            let frames = parse(&row, STA, AP).expect("FCS status");
+            assert_eq!(frames.len(), count, "FCS {status}");
+            if let Some(frame) = frames.first() {
+                assert_eq!(frame.handshake_message, Some(4));
+            }
         }
     }
 }
