@@ -2083,7 +2083,11 @@ fn a_second_waker_vtable_fails_the_image() {
     );
     // The link discards the second one with `keep_other`: its DWARF location
     // is a tombstone outside every section, and the census counts one.
-    assert!(census_of(&second_vtable_program(), "keep").unwrap().is_some());
+    assert!(
+        census_of(&second_vtable_program(), "keep")
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[test]
