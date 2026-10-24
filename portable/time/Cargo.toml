@@ -28,6 +28,4 @@ toml = "1.1"
 workspace = true
 
 [package.metadata.open-radio]
-layer = "contract"
-platform = "portable"
 test-feature-sets = ["serde", "schema"]

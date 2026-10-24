@@ -12,7 +12,3 @@ oer-espressif-ieee80211-pac-raw = { path = "../ieee80211-pac-raw" }
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "hardware"
-platform = "portable"

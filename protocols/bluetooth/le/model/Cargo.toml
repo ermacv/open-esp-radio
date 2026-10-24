@@ -27,6 +27,4 @@ oer-bluetooth-le-port = { path = "../port", features = ["test-support"] }
 workspace = true
 
 [package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"
 test-feature-sets = ["test-support"]

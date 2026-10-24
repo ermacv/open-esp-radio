@@ -107,8 +107,8 @@ starters = [
 
 # The mask ROM the stack analyses read: the pinned ROM ELF
 # (chips/esp32s31/vendor/artifacts.toml), the reviewed function summaries
-# and the vendor radio ROM no product image may call into (no check reads
-# these ranges yet).
+# and the vendor radio ROM no image may call into: the stack and interrupt
+# checks fail when a root's walk reaches it.
 [rom]
 elf = "rom"
 summaries = "chips/esp32s31/platform/rom-functions.toml"

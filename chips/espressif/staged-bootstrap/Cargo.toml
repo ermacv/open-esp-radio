@@ -17,10 +17,5 @@ oer-espressif-staged-layout.workspace = true
 oer-espressif-usb-fifo.workspace = true
 esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"] }
 
-[package.metadata.open-radio]
-layer = "platform"
-platform = "family"
-family = "espressif"
-
 [lints]
 workspace = true

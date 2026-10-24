@@ -88,6 +88,8 @@ pub struct ImageBundle {
     pub layout_seed: Option<NonZeroU32>,
     /// The reviewed ROM summaries the stack analysis applied.
     pub rom_summaries: BTreeSet<String>,
+    /// The frame coverage reviews the stack checks applied.
+    pub coverage_reviews: BTreeSet<String>,
     /// Every requested check of every ELF with its result; empty when the
     /// build requested none.
     pub checks: Vec<CheckRecord>,
@@ -201,6 +203,7 @@ impl ImageBundle {
             reports: Vec::new(),
             layout_seed: None,
             rom_summaries: BTreeSet::new(),
+            coverage_reviews: BTreeSet::new(),
             checks: Vec::new(),
             warnings: Vec::new(),
             flash_files: Vec::new(),
@@ -441,6 +444,7 @@ impl ImageBundle {
             reports: Vec::new(),
             layout_seed: other.layout_seed,
             rom_summaries: BTreeSet::new(),
+            coverage_reviews: BTreeSet::new(),
             checks: Vec::new(),
             warnings: Vec::new(),
             flash_files: Vec::new(),

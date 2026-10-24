@@ -344,6 +344,7 @@ pub(crate) fn apply_outcome(
     }
     bundle.reports.extend(outcome.reports);
     bundle.rom_summaries.extend(outcome.rom_summaries);
+    bundle.coverage_reviews.extend(outcome.coverage_reviews);
     bundle.warnings.extend(outcome.warnings);
     if failed.is_empty() {
         return Ok(());

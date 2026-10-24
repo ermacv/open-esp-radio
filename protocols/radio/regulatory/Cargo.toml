@@ -14,7 +14,3 @@ test-support = []
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "contract"
-platform = "portable"

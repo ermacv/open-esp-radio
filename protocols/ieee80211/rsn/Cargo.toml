@@ -31,7 +31,3 @@ oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"

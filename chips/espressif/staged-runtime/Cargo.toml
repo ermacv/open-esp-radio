@@ -25,10 +25,5 @@ esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"]
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-espressif-esp-hal-irq.workspace = true
 
-[package.metadata.open-radio]
-layer = "platform"
-platform = "family"
-family = "espressif"
-
 [lints]
 workspace = true

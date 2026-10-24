@@ -18,10 +18,5 @@ oer-diagnostics = { path = "../../../portable/diagnostics" }
 critical-section = "1.2.0"
 esp-hal = { workspace = true, features = ["static-interrupts", "unstable"] }
 
-[package.metadata.open-radio]
-layer = "platform"
-platform = "family"
-family = "espressif"
-
 [lints]
 workspace = true

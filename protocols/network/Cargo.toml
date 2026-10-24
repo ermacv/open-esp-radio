@@ -9,7 +9,3 @@ description = "Network integration value types shared by open ESP radio adapters
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "contract"
-platform = "portable"

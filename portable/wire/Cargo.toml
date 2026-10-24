@@ -9,7 +9,3 @@ description = "Checked fixed-width wire fields and bounded byte cursors"
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "contract"
-platform = "portable"

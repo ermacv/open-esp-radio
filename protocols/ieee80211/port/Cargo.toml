@@ -31,6 +31,4 @@ oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 workspace = true
 
 [package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"
 test-feature-sets = ["test-support"]

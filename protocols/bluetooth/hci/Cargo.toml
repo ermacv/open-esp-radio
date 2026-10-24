@@ -12,7 +12,3 @@ bt-hci = "=0.10.1"
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"

@@ -23,6 +23,7 @@ mod coverage;
 pub mod frames;
 pub mod handoff;
 pub mod reachability;
+pub mod rom;
 pub mod sites;
 
 use std::collections::{BTreeMap, BTreeSet};

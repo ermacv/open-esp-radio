@@ -24,8 +24,3 @@ workspace = true
 default-target = "riscv32imafc-unknown-none-elf"
 targets = []
 features = ["esp32s31"]
-
-[package.metadata.open-radio]
-layer = "adapter"
-platform = "chip"
-chip = "esp32s31"

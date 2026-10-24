@@ -22,7 +22,3 @@ workspace = true
 
 [dev-dependencies]
 oer-ieee80211-softmac = { path = "../softmac" }
-
-[package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"
