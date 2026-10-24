@@ -476,3 +476,11 @@ kind = "mmio"
 start = 0x600C5090
 end-exclusive = 0x600C50A0
 permissions = "rw"
+
+[[regions]]
+name = "usb-serial-jtag"
+address-space = "cpu"
+kind = "mmio"
+start = 0x6000F000
+end-exclusive = 0x6000F01C
+permissions = "rw"

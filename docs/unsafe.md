@@ -75,7 +75,17 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   owner makes after
   consuming the domain's esp-hal singletons (clippy `disallowed-methods` refuses it
   elsewhere); a probe image may claim a block again after dropping the
-  block's owner.
+  block's owner. The USB Serial/JTAG console's block has an owner before
+  esp-hal exists: each chip HAL's `usb_serial_jtag` keeps the block's
+  holder (`oer-espressif-usb-serial-jtag`'s `Ownership`), which one
+  compare-and-swap changes and nothing waits for. The early writer makes
+  the handoff for each record it holds the block for, and a record that
+  finds the block held is dropped and counted; the esp-hal adapter's
+  `take_usb_serial_jtag` takes only a free block and consumes `USB_DEVICE`
+  to make the driver's owner. The ESP32-S31's `fatal_note` makes the
+  handoff once more, only from a free block, which it keeps for good; it
+  never takes the block from the driver or an early record, so every owner
+  of the block lives alone. Its driver's endpoint and pads are not `Send`.
   The generated `const` assertion beside the claim checks that no two
   blocks list the same word. A word esp-hal also writes is claimed only
   with its reviewed coordination in the chip's
@@ -397,11 +407,6 @@ needs:
   reach these through safe APIs and forbid unsafe code. The image linker
   places strict code in SRAM from interrupt, exception and panic analysis.
 - Each board implements `AdoptsBootstrapMapping` for its PSRAM.
-- `oer-espressif-usb-fifo` captures `USB_DEVICE` with `steal` for the early
-  USB Serial/JTAG writer, which owns the peripheral until `hand_over` gives
-  the token to the driver, and once more in `fatal_note`, the single named
-  capture of a path that never returns, under a critical section; it writes
-  the data register through the PAC's raw 8-bit field.
 - The bootstrap places the packed stage two and the flash tuning reference in
   its own read-only flash sections.
 - A probe image is entered by the Blobray verifier through the exported

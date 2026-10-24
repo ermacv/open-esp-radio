@@ -2,7 +2,7 @@
 use crate::*;
 
 pub(crate) fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_espressif_usb_fifo::note(&oer_diagnostics::Note::diagnostic_start("phy"));
+    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(
         INTERRUPT_TABLE,
@@ -66,7 +66,11 @@ pub(crate) fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
         oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
     ));
-    let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
+    let usb = transport::open_usb(
+        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
+        interrupts.console_usb,
+    );
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
     Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
@@ -85,8 +89,7 @@ pub(crate) async fn console(usb: transport::Usb, boot: u64, chip: transport::Chi
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
     transport::CONSOLE
         .run(
-            usb.rx,
-            usb.tx,
+            usb,
             intake,
             &chip,
             |id, request: oer_hil_agent::base::Either<WireRequest, health::Request>| {

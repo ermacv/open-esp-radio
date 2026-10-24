@@ -18,7 +18,7 @@ pub(crate) fn start(
     wake: crate::ExecutorWake,
     (usb, _pads): (
         crate::transport::Usb,
-        esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
+        oer_esp32s31_hal::usb_serial_jtag::UsbPads,
     ),
     mut entropy: crate::Rng,
 ) -> ! {

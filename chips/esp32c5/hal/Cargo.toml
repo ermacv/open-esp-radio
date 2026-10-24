@@ -21,6 +21,8 @@ oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-espressif-watchdog = { path = "../../espressif/watchdog" }
+oer-espressif-usb-serial-jtag = { path = "../../espressif/usb-serial-jtag" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }

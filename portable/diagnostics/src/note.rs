@@ -704,6 +704,10 @@ topics! {
     FatalPanic = 3, fatal_panic, "OPEN_RADIO_HIL runtime=PANIC boot=previous"
         ("hart" hart: dec, "stage" stage: dec, "mcause" mcause: hex8, "mepc" mepc: hex8,
          "mtval" mtval: hex8);
+    /// The previous boot's failed boot check, kept while the console's
+    /// driver held the USB block.
+    FatalFail = 17, fatal_fail, "OPEN_RADIO_HIL runtime=FAIL boot=previous"
+        ("hart" hart: dec, "reason" reason: name);
     FatalIrqVector = 4, fatal_irq_vector, "fatal irq_vector"
         ("vector" vector: dec, "line" line: hex8, "mtvec" mtvec: hex8, "mtvt" mtvt: hex8,
          "slot" slot: hex8);

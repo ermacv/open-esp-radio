@@ -18,7 +18,6 @@ system-watchdog = [
     "dep:embassy-sync",
     "dep:oer-hil-agent",
     "dep:oer-hil-protocol",
-    "dep:oer-esp32s31-hal",
     "dep:oer-embassy-time",
 ]
 # The system image that, on request, switches its USB Serial/JTAG off its
@@ -31,7 +30,6 @@ system-panic-reset = [
     "dep:embassy-sync",
     "dep:oer-hil-agent",
     "dep:oer-hil-protocol",
-    "dep:oer-esp32s31-hal",
     "dep:oer-embassy-time",
 ]
 wifi-station = [
@@ -53,8 +51,6 @@ wifi-station = [
     "dep:oer-espressif-esp-hal-radio",
     "dep:oer-embassy-net",
     "dep:oer-embassy-time",
-    "dep:oer-interrupt-table",
-    "dep:oer-esp32s31-hal",
     "dep:oer-esp32s31-phy",
     "dep:oer-esp32s31-radio-client",
     "dep:oer-esp32s31-radio-system",
@@ -86,8 +82,8 @@ oer-ieee80211-port = { path = "../../../protocols/ieee80211/port", optional = tr
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"], optional = true }
 oer-embassy-net = { path = "../../../portable/embassy/net", optional = true }
 oer-embassy-time = { path = "../../../portable/embassy/time", optional = true }
-oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", optional = true }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy", optional = true }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", optional = true }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", optional = true }
@@ -113,7 +109,8 @@ oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] 
 oer-hil-agent = { path = "../../../portable/hil-agent", optional = true, default-features = false }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-espressif-usb-fifo = { workspace = true, features = ["esp32s31"] }
+oer-espressif-usb-serial-jtag.workspace = true
+embedded-io-async = "0.7.0"
 oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true
 

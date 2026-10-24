@@ -2689,11 +2689,13 @@ dependencies = [
 name = "oer-esp32c5-hal"
 version = "0.1.0"
 dependencies = [
+ "oer-diagnostics",
  "oer-esp32c5-pac",
  "oer-espressif-analog",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-modem-clock",
+ "oer-espressif-usb-serial-jtag",
  "oer-espressif-watchdog",
  "oer-memory",
  "oer-mmio",
@@ -2769,6 +2771,7 @@ dependencies = [
  "oer-espressif-efuse",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-modem-clock",
+ "oer-espressif-usb-serial-jtag",
  "oer-espressif-watchdog",
  "oer-memory",
  "oer-mmio",
@@ -2968,6 +2971,7 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "esp-hal",
+ "oer-esp32s31-hal",
  "oer-esp32s31-pac",
  "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
@@ -3041,8 +3045,9 @@ name = "oer-espressif-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
+ "oer-esp32c5-hal",
+ "oer-esp32s31-hal",
  "oer-espressif-staged-layout",
- "oer-espressif-usb-fifo",
  "oer-riscv",
 ]
 
@@ -3064,12 +3069,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-espressif-usb-fifo"
+name = "oer-espressif-usb-serial-jtag"
 version = "0.1.0"
 dependencies = [
- "critical-section",
- "esp-hal",
+ "embedded-io-async 0.7.0",
  "oer-diagnostics",
+ "oer-interrupt-table",
+ "oer-memory",
+ "static_cell",
 ]
 
 [[package]]
@@ -3104,7 +3111,6 @@ dependencies = [
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
- "oer-espressif-usb-fifo",
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
@@ -3312,6 +3318,7 @@ dependencies = [
  "embassy-futures",
  "embassy-sync 0.8.0",
  "embassy-time",
+ "embedded-io-async 0.7.0",
  "esp-hal",
  "oer-diagnostics",
  "oer-embassy-time",
@@ -3322,9 +3329,10 @@ dependencies = [
  "oer-espressif-esp-hal-irq",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
- "oer-espressif-usb-fifo",
+ "oer-espressif-usb-serial-jtag",
  "oer-hil-agent",
  "oer-hil-protocol",
+ "oer-interrupt-table",
  "static_cell",
 ]
 
@@ -3338,6 +3346,7 @@ dependencies = [
  "embassy-net",
  "embassy-sync 0.8.0",
  "embassy-time",
+ "embedded-io-async 0.7.0",
  "esp-hal",
  "heapless 0.9.3",
  "oer-diagnostics",
@@ -3358,7 +3367,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
- "oer-espressif-usb-fifo",
+ "oer-espressif-usb-serial-jtag",
  "oer-firmware-apps-w3",
  "oer-hil-agent",
  "oer-hil-protocol",
@@ -3404,7 +3413,7 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
- "oer-espressif-usb-fifo",
+ "oer-espressif-usb-serial-jtag",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-port",
@@ -3444,10 +3453,11 @@ dependencies = [
  "oer-espressif-executor",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-staged-runtime",
- "oer-espressif-usb-fifo",
+ "oer-espressif-usb-serial-jtag",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-wire",
+ "oer-interrupt-table",
  "oer-memory",
  "oer-radio-regulatory",
  "oer-registers-model",

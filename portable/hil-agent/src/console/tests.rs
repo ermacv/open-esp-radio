@@ -106,17 +106,14 @@ impl Host {
     }
 }
 
-struct Rx(Host);
-struct Tx(Host);
+/// The device's one duplex endpoint over the host's queues.
+struct Endpoint(Host);
 
-impl embedded_io_async::ErrorType for Rx {
-    type Error = core::convert::Infallible;
-}
-impl embedded_io_async::ErrorType for Tx {
+impl embedded_io_async::ErrorType for Endpoint {
     type Error = core::convert::Infallible;
 }
 
-impl Read for Rx {
+impl Read for Endpoint {
     async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
         loop {
             if let Some(bytes) = self.0.to_device.borrow_mut().pop_front() {
@@ -128,7 +125,7 @@ impl Read for Rx {
     }
 }
 
-impl Write for Tx {
+impl Write for Endpoint {
     async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
         self.0.from_device.borrow_mut().extend_from_slice(bytes);
         Ok(bytes.len())
@@ -148,8 +145,7 @@ fn run_until(
 ) {
     let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED), 0);
     let run = console.run(
-        Rx(host.clone()),
-        Tx(host.clone()),
+        Endpoint(host.clone()),
         intake,
         &Chip,
         |request, crate::base::WatchdogRequest::Test(own)| served(request, own),

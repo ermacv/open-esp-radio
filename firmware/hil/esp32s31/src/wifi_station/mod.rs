@@ -142,7 +142,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         EmbassyClock,
     );
     if !rng.status().is_healthy() {
-        crate::fail("entropy-source");
+        crate::fail(crate::fatal::Failure::EntropySource);
     }
     let nonces = Placed::init(NONCES.take().uninit(), |place| {
         place.write(SNonceSource::from_entropy(|seed| rng.fill(seed)))
@@ -177,7 +177,11 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     )
     .expect("the driver's first start");
     let executor = crate::Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
-    let (usb, _pads) = crate::transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
+    let (usb, _pads) = crate::usb::open(
+        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
+        interrupts.console_usb,
+    );
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
         let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));

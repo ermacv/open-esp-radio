@@ -1,10 +1,10 @@
 #![no_std]
 use esp_hal::{
     interrupt::software::SoftwareInterrupt,
-    peripherals::{LP_CLKRST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1},
+    peripherals::{LP_CLKRST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1, USB_DEVICE},
 };
 use oer_esp32c5_esp_hal_soc::{
-    handoff::{take_entropy, take_reset_cause, take_watchdogs},
+    handoff::{take_entropy, take_reset_cause, take_usb_serial_jtag, take_watchdogs},
     radio::{RadioSingletons, take_radio},
 };
 use oer_esp32c5_hal::watchdog::{DeadlineBudget, DeadlineWatchdog};
@@ -49,4 +49,14 @@ pub fn handoff(singletons: RadioSingletons) {
     let _root = take_radio(singletons).into_partitions();
     #[cfg(ui_reject)]
     let _second = take_radio(singletons); // ui-error: E0382
+}
+pub fn usb(usb: USB_DEVICE<'static>) {
+    let (_endpoint, _interrupt, pads) = take_usb_serial_jtag(usb)
+        .expect("no early record holds the block")
+        .into_parts();
+    pads.disconnect();
+    #[cfg(ui_reject)]
+    pads.disconnect(); // ui-error: E0382
+    #[cfg(ui_reject)]
+    let _second = take_usb_serial_jtag(usb); // ui-error: E0382
 }

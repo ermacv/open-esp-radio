@@ -40,6 +40,7 @@ fragments = [
     "peripherals/timg-wdt.toml",
     "peripherals/lp-wdt.toml",
     "peripherals/hp-sys-clkrst-timg1.toml",
+    "peripherals/usb-serial-jtag.toml",
     "peripherals/wifi-mac-sta-beacon-filter.toml",
     "peripherals/wifi-mac-beacon-ie-crc.toml",
     "peripherals/wifi-mac-rx-end-state.toml",

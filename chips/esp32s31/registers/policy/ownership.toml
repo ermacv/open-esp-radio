@@ -20,6 +20,7 @@ owned-ranges = [
     "lp-periclkrst-rng",
     "efuse-mac",
     "trng",
+    "usb-serial-jtag",
     "lp-periclkrst-tsens-phy-aux",
     "lp-tsens-phy-aux",
     "ieee802154-core0-route",

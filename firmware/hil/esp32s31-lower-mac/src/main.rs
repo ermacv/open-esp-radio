@@ -34,8 +34,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::irq::wifi_mac, Priority3, ProCpu, Hardware;
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu, Hardware;
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
-    console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu,
-        Exempt(WakerCall, "esp-hal async USB console wakes its task waker; removed by #441");
+    console_usb: ConsoleUsb = USB_DEVICE => crate::transport::usb_interrupt, Priority1, ProCpu, Hardware;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
 }
 
@@ -87,7 +86,9 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_espressif_usb_fifo::note(&oer_diagnostics::Note::diagnostic_start("lower-mac"));
+    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start(
+        "lower-mac",
+    ));
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
     let interrupts = Interrupts::take().expect("conformance interrupt table claimed once");
@@ -162,7 +163,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
         oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
     ));
-    let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
+    let usb = transport::open_usb(
+        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
+        interrupts.console_usb,
+    );
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
     Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
@@ -182,7 +187,7 @@ async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
         oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-lower-mac");
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
     transport::CONSOLE
-        .run(usb.rx, usb.tx, intake, &chip, |id, request: Request| {
+        .run(usb, intake, &chip, |id, request: Request| {
             if REQUESTS.try_send((id, request)).is_err() {
                 transport::CONSOLE.publish(
                     id.session_id,

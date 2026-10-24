@@ -1,6 +1,6 @@
 //! The per-domain transfers of platform blocks from esp-hal's singletons to
-//! the chip PAC: the random number generator, the reset cause and the
-//! watchdogs.
+//! the chip PAC: the random number generator, the reset cause, the
+//! watchdogs and the USB Serial/JTAG console.
 //!
 //! Each function consumes the domain's esp-hal singletons, which esp-hal
 //! hands out once, and never returns them, so it runs at most once per
@@ -9,10 +9,13 @@
 
 use esp_hal::{
     clock::xtal_clock,
-    peripherals::{LP_CLKRST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1},
+    peripherals::{LP_CLKRST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1, USB_DEVICE},
 };
 use oer_esp32c5_hal::platform::{
     EntropyHandoff, EntropyRegisters, ResetCauseHandoff, ResetCauseRegisters,
+};
+use oer_esp32c5_hal::usb_serial_jtag::{
+    RetireError, UsbSerialJtagHandoff, UsbSerialJtagRegisters, retire_early_writer,
 };
 use oer_esp32c5_hal::watchdog::{MicrosecondTick, WatchdogBlocks, WatchdogHandoff, Watchdogs};
 
@@ -84,4 +87,51 @@ pub fn take_watchdogs(
     let tick =
         MicrosecondTick::from_source_hz(xtal_clock().as_hz()).expect("the C5 XTAL is 40 or 48 MHz");
     Watchdogs::new(WatchdogBlocks::from_handoff(handoff), tick)
+}
+
+/// The console's driver could not take the USB Serial/JTAG block: the
+/// singleton comes back, for another try once an early record ended.
+pub struct UsbSerialJtagHeld {
+    pub usb_device: USB_DEVICE<'static>,
+    pub reason: RetireError,
+}
+
+impl core::fmt::Debug for UsbSerialJtagHeld {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("UsbSerialJtagHeld")
+            .field("reason", &self.reason)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Transfer the USB Serial/JTAG console's blocks from the early writer and
+/// esp-hal to the console's driver, if no early record holds them. Never
+/// waits.
+///
+/// The early writer is retired first: no early record takes the block
+/// afterwards, and the driver's owner reports what the early writer dropped
+/// (`take_early_lost`).
+///
+/// # Errors
+/// An early record holds the block now, or the driver took it before.
+pub fn take_usb_serial_jtag(
+    usb_device: USB_DEVICE<'static>,
+) -> Result<UsbSerialJtagRegisters, UsbSerialJtagHeld> {
+    let _retired = match retire_early_writer() {
+        Ok(retired) => retired,
+        Err(reason) => return Err(UsbSerialJtagHeld { usb_device, reason }),
+    };
+    let _consumed = usb_device;
+    #[allow(
+        unsafe_code,
+        reason = "the consumed esp-hal owner and the retired early writer prove the console handoff"
+    )]
+    // SAFETY: esp-hal issues `USB_DEVICE` once; it is consumed above and
+    // never returned, so this runs at most once and no esp-hal driver of the
+    // block exists. esp-hal's console and its `esp_hal::init` never write
+    // the block without that singleton. The early writer, the block's only
+    // other owner, gave it up above: the retirement succeeds only while no
+    // early record holds the block, and no record takes it afterwards.
+    let handoff = unsafe { UsbSerialJtagHandoff::assume_exclusive() };
+    Ok(UsbSerialJtagRegisters::from_handoff(handoff))
 }

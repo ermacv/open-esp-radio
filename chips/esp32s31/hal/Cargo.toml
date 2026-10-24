@@ -31,6 +31,7 @@ oer-espressif-coex = { path = "../../espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
+oer-espressif-usb-serial-jtag = { path = "../../espressif/usb-serial-jtag" }
 
 [dev-dependencies]
 oer-time-virtual = { path = "../../../portable/time-virtual" }
@@ -39,6 +40,7 @@ oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine", 
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-esp32s31-pac = { path = "../pac", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+oer-mmio = { path = "../../../portable/mmio" }
 tempfile = "=3.27.0"
 
 [lints]

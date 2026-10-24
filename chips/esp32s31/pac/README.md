@@ -44,7 +44,7 @@ and invariants in `tools/registers/model`. Reviewed model, ownership policy and 
 | [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../registers/policy/api.toml), the `layouts` module of the model's memory layouts (`chips/esp32s31/registers/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts`, and the policy's typed register blocks over `oer-mmio` with their partitions and `Claims`, which `RadioPartitions::from_handoff` claims once; `IEEE802154_MAC` (split into its generated interrupt and task sides) and `IEEE802154_INTERRUPT_ROUTE` are typed blocks; `WIFI_MAC_INTERFACE_ADDRESS` is the [shared library's block](../../espressif/ieee80211-pac/README.md) at this chip's address |
 | [Radio bindings](../registers/published/radio.bindings.toml) | Published register-to-raw-PAC binding metadata |
 | [src/ownership.rs](src/ownership.rs) and domain modules | Handwritten authority, register-local operations and restricted access |
-| [src/platform.rs](src/platform.rs) | The per-domain handoffs and read-only owners of the typed platform blocks (eFuse MAC words, TRNG, reset causes) |
+| [src/platform.rs](src/platform.rs) | The per-domain handoffs and read-only owners of the typed platform blocks (eFuse MAC words, TRNG, reset causes), and in `platform/usb_serial_jtag.rs` the USB Serial/JTAG console's handoff and its endpoint, interrupt and pad owners |
 
 Both Rust generated outputs are regenerated through the publisher. Do not
 edit them by hand or extend their lint exceptions to handwritten files. The

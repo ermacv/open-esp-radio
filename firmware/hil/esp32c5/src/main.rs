@@ -27,16 +27,15 @@ mod boot_smoke;
 mod boot_smoke_rearm;
 #[cfg(feature = "system-watchdog")]
 mod system;
+mod usb;
 
 oer_espressif_staged_runtime::interrupt_table! {
     /// Wakes the executor.
     wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
     /// The Embassy time driver's alarm (system timer comparator 0).
     alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu, Hardware;
-    #[cfg(feature = "system-watchdog")]
-    /// The USB Serial/JTAG console, to esp-hal's async driver.
-    console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu,
-        Exempt(WakerCall, "esp-hal async USB console wakes its task waker; removed by #441");
+    /// The USB Serial/JTAG console: it raises the console endpoint's signal.
+    console_usb: ConsoleUsb = USB_DEVICE => crate::usb::interrupt, Priority1, ProCpu, Hardware;
 }
 
 oer_espressif_executor::tasks! {
@@ -76,10 +75,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     oer_espressif_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
     let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     #[cfg(feature = "boot-smoke")]
-    let console = boot_smoke::start(peripherals.USB_DEVICE);
+    let console = boot_smoke::start(peripherals.USB_DEVICE, interrupts.console_usb);
     #[cfg(feature = "system-watchdog")]
     let console = system::console::Console::new(
-        peripherals.USB_DEVICE,
+        oer_esp32c5_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
         interrupts.console_usb,
         oer_esp32c5_esp_hal_soc::handoff::take_watchdogs(
             peripherals.TIMG0,
