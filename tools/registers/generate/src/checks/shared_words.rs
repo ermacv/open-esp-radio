@@ -42,6 +42,10 @@ pub enum Coordination {
     /// Both sides store whole words (trigger strobes); neither reads,
     /// modifies and writes back, so neither undoes the other.
     WholeWordStores,
+    /// The radio only reads the word: its typed view is read-only in the
+    /// publication, so no generated writer exists, and no API transaction
+    /// stores to it; esp-hal is the only writer. Checked.
+    RadioReadsOnly,
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,6 +220,47 @@ pub fn radio_written(svd: &str, api: &str) -> Result<BTreeMap<u32, BTreeSet<Stri
         }
     }
     Ok(words)
+}
+
+/// Words the radio PAC can only read: every radio register at the word is
+/// `read-only` in the radio SVD (register, peripheral or device default) and
+/// only a typed block's claim, no API write transaction, reaches it.
+pub fn radio_read_only(svd: &str, api: &str) -> Result<BTreeSet<u32>> {
+    let document = roxmltree::Document::parse(svd)?;
+    let device_access = text(document.root_element(), "access");
+    let registers = radio_registers(svd)?;
+    let mut read_only = BTreeMap::<u32, bool>::new();
+    for peripheral in document
+        .descendants()
+        .filter(|node| node.has_tag_name("peripheral"))
+    {
+        let peripheral_name = text(peripheral, "name").unwrap_or_default();
+        let peripheral_access = text(peripheral, "access").or(device_access);
+        for register in peripheral
+            .descendants()
+            .filter(|node| node.has_tag_name("register"))
+        {
+            let name = text(register, "name").unwrap_or_default();
+            let access = text(register, "access").or(peripheral_access);
+            let key = (peripheral_name.to_owned(), name.to_owned());
+            for address in registers.get(&key).into_iter().flatten() {
+                *read_only.entry(*address).or_insert(true) &= access == Some("read-only");
+            }
+        }
+    }
+    let written = radio_written(svd, api)?;
+    Ok(read_only
+        .into_iter()
+        .filter(|(address, read_only)| {
+            *read_only
+                && written.get(address).is_none_or(|writers| {
+                    writers
+                        .iter()
+                        .all(|writer| writer.ends_with(" (typed block)"))
+                })
+        })
+        .map(|(address, _)| address)
+        .collect())
 }
 
 /// Peripheral base addresses and modules of the platform PAC's `lib.rs`
@@ -487,6 +532,22 @@ fn esp_hal_words(
     Ok(words)
 }
 
+/// What is wrong with the reviewed entry of a shared word, if anything.
+fn entry_problem(address: u32, word: &ReviewedWord, read_only: &BTreeSet<u32>) -> Option<String> {
+    if word.reason.trim().is_empty() || word.radio.is_empty() || word.esp_hal.is_empty() {
+        return Some(format!(
+            "{address:#010x}: reviewed entry needs radio, esp_hal and a reason"
+        ));
+    }
+    (word.coordination == Coordination::RadioReadsOnly && !read_only.contains(&address)).then(
+        || {
+            format!(
+                "{address:#010x}: reviewed radio-reads-only, but the radio publication can write it"
+            )
+        },
+    )
+}
+
 /// Checks `chip`'s shared words against its review file.
 pub fn check(
     root: &Path,
@@ -497,10 +558,10 @@ pub fn check(
     let publication = crate::ChipSources::load(
         &root.join(format!("chips/{chip}/registers/publication/registers.toml")),
     )?;
-    let radio = radio_written(
-        &fs::read_to_string(&publication.svd)?,
-        &fs::read_to_string(&publication.api)?,
-    )?;
+    let svd = fs::read_to_string(&publication.svd)?;
+    let api = fs::read_to_string(&publication.api)?;
+    let radio = radio_written(&svd, &api)?;
+    let read_only = radio_read_only(&svd, &api)?;
     let esp_hal = esp_hal_words(esp_hal, pac_src, chip)?;
     let shared: BTreeSet<u32> = radio
         .keys()
@@ -533,10 +594,7 @@ pub fn check(
                 esp_hal[address].iter().cloned().collect::<Vec<_>>().join(", "),
                 review_path.display()
             )),
-            Some(word) if word.reason.trim().is_empty() || word.radio.is_empty() || word.esp_hal.is_empty() => {
-                problems.push(format!("{address:#010x}: reviewed entry needs radio, esp_hal and a reason"))
-            }
-            Some(_) => {}
+            Some(word) => problems.extend(entry_problem(*address, word, &read_only)),
         }
     }
     for address in reviewed.keys().filter(|address| !shared.contains(address)) {
@@ -601,6 +659,74 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
         assert_eq!(
             typed.keys().copied().collect::<Vec<_>>(),
             [0x1000, 0x1004, 0x1010, 0x1018]
+        );
+    }
+
+    #[test]
+    fn only_a_read_only_view_without_write_transactions_is_radio_read_only() {
+        let svd = r#"<device><peripherals>
+<peripheral><name>ROUTE</name><baseAddress>0x1000</baseAddress><registers>
+<register><name>CORE0</name><addressOffset>0x0</addressOffset><access>read-only</access></register>
+<register><name>CORE1</name><addressOffset>0x4</addressOffset><access>read-write</access></register>
+</registers></peripheral>
+<peripheral><name>VIEW</name><baseAddress>0x2000</baseAddress><access>read-only</access><registers>
+<register><name>STATUS</name><addressOffset>0x0</addressOffset></register>
+<register><name>CLEAR</name><addressOffset>0x4</addressOffset></register>
+</registers></peripheral>
+</peripherals></device>"#;
+        let typed = "[options]\ntyped-peripherals = [\"ROUTE\", \"VIEW\"]\n";
+        // A read-only register, declared or inherited from its peripheral;
+        // the read-write route word is writable through its typed block.
+        assert_eq!(
+            radio_read_only(svd, typed)
+                .expect("the policy resolves")
+                .into_iter()
+                .collect::<Vec<_>>(),
+            [0x1000, 0x2000, 0x2004]
+        );
+        // A write transaction makes the word writable whatever its access.
+        let written = format!(
+            "{typed}[[fixed-register-images]]\nperipheral = \"VIEW\"\nregister = \"CLEAR\"\n"
+        );
+        assert_eq!(
+            radio_read_only(svd, &written)
+                .expect("the policy resolves")
+                .into_iter()
+                .collect::<Vec<_>>(),
+            [0x1000, 0x2000]
+        );
+    }
+
+    #[test]
+    fn a_radio_reads_only_review_of_a_writable_word_fails() {
+        let word = |coordination| ReviewedWord {
+            address: 0x1000,
+            radio: "ROUTE.CORE0".into(),
+            esp_hal: "INTERRUPT_CORE0.core_0_intr_map".into(),
+            coordination,
+            reason: "esp-hal's interrupt table is the only writer".into(),
+        };
+        let read_only = BTreeSet::from([0x1000]);
+        assert_eq!(
+            entry_problem(0x1000, &word(Coordination::RadioReadsOnly), &read_only),
+            None
+        );
+        assert!(
+            entry_problem(
+                0x1000,
+                &word(Coordination::RadioReadsOnly),
+                &BTreeSet::new()
+            )
+            .is_some_and(|problem| problem.contains("radio publication can write it"))
+        );
+        // Other coordinations are reviewed statements, not checked access.
+        assert_eq!(
+            entry_problem(
+                0x1000,
+                &word(Coordination::DisjointLifecycle),
+                &BTreeSet::new()
+            ),
+            None
         );
     }
 
