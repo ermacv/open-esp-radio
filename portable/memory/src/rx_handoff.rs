@@ -104,11 +104,18 @@ impl<const FRAME_CAPACITY: usize, const QUEUE_DEPTH: usize>
         }
     }
 
-    pub fn claim_radio(&self, index: u8) -> RxRadioLease<'_, FRAME_CAPACITY> {
-        let slot = self
-            .slots
+    #[expect(
+        clippy::expect_used,
+        reason = "documented panic of the claims: the index comes from this pool's own channels, so a foreign one is a driver defect"
+    )]
+    fn slot_of(&self, index: u8) -> &RxHandoffSlot<FRAME_CAPACITY> {
+        self.slots
             .get(usize::from(index))
-            .expect("RX handoff index belongs to this pool");
+            .expect("RX handoff index belongs to this pool")
+    }
+
+    pub fn claim_radio(&self, index: u8) -> RxRadioLease<'_, FRAME_CAPACITY> {
+        let slot = self.slot_of(index);
         slot.claim(
             SLOT_FREE,
             SLOT_RADIO,
@@ -140,7 +147,7 @@ impl<const FRAME_CAPACITY: usize, const QUEUE_DEPTH: usize>
         }
         (0..QUEUE_DEPTH).find_map(|distance| {
             let index = (start + distance) % QUEUE_DEPTH;
-            let slot = &self.slots[index];
+            let slot = self.slots.get(index)?;
             slot.try_claim(SLOT_FREE, SLOT_RADIO).then(|| RxRadioLease {
                 slot,
                 index: index as u8,
@@ -150,10 +157,7 @@ impl<const FRAME_CAPACITY: usize, const QUEUE_DEPTH: usize>
     }
 
     pub fn claim_network(&self, index: u8) -> RxNetworkLease<'_, FRAME_CAPACITY> {
-        let slot = self
-            .slots
-            .get(usize::from(index))
-            .expect("RX handoff index belongs to this pool");
+        let slot = self.slot_of(index);
         slot.claim(
             SLOT_READY,
             SLOT_NETWORK,
@@ -311,12 +315,9 @@ impl<const FRAME_CAPACITY: usize> RxNetworkLease<'_, FRAME_CAPACITY> {
     #[inline(always)]
     pub fn republish(mut self, offset: usize, length: usize) -> u8 {
         let current_offset = self.slot.offset();
-        let current_end = current_offset
-            .checked_add(self.slot.length())
-            .expect("live RX range fits its slot");
-        let end = offset
-            .checked_add(length)
-            .expect("republished RX range length cannot overflow");
+        // A saturated sum fails the range assertion below.
+        let current_end = current_offset.saturating_add(self.slot.length());
+        let end = offset.saturating_add(length);
         assert!(
             offset >= current_offset && end <= current_end && end <= FRAME_CAPACITY,
             "republished RX range must stay inside initialized storage"

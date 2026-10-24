@@ -1,6 +1,10 @@
 //! Runtime-owned fallbacks for the trap entry and interrupt vector table.
 
 #[unsafe(no_mangle)]
+#[expect(
+    clippy::panic,
+    reason = "fail-stop: an interrupt without a handler is an image defect; the panic handler records it"
+)]
 pub extern "C" fn oer_unhandled_interrupt() -> ! {
     panic!("unhandled interrupt");
 }

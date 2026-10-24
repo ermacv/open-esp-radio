@@ -18,7 +18,7 @@ disallowed-methods = [
     { path = "esp_hal::peripherals::MODEM_SYSCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
     { path = "esp_hal::peripherals::MODEM_LPCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
     { path = "esp_hal::peripherals::I2C_ANA_MST::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
-    { path = "esp_hal::peripherals::LP_TSENS::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
+    { path = "esp_hal::peripherals::LP_TSENS::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)", allow-invalid = true },
     # A typed DMA address comes from placed storage or a loan, made only in
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
     { path = "oer_esp32c5_pac::layouts::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from oer_esp32c5_hal::dma_address" },

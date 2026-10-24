@@ -62,13 +62,23 @@ enum Message {
 impl PanicRecord {
     /// The end of the location's file path, as recorded.
     pub fn file(&self) -> &str {
-        let bytes = &self.file[..usize::from(self.file_length)];
+        let bytes = self
+            .file
+            .get(..usize::from(self.file_length))
+            .unwrap_or_default();
         // The kept suffix may start inside a UTF-8 sequence; skip to the
         // first boundary.
         let start = (0..bytes.len())
-            .find(|&i| core::str::from_utf8(&bytes[i..]).is_ok())
+            .find(|&i| {
+                bytes
+                    .get(i..)
+                    .is_some_and(|tail| core::str::from_utf8(tail).is_ok())
+            })
             .unwrap_or(bytes.len());
-        core::str::from_utf8(&bytes[start..]).unwrap_or("")
+        bytes
+            .get(start..)
+            .and_then(|tail| core::str::from_utf8(tail).ok())
+            .unwrap_or("")
     }
 
     /// The start of the panic's message when it was a static string; `None`
@@ -77,13 +87,17 @@ impl PanicRecord {
         let Message::Static(bytes, length) = &self.message else {
             return None;
         };
-        let bytes = &bytes[..usize::from(*length)];
+        let bytes = bytes.get(..usize::from(*length)).unwrap_or_default();
         // The kept prefix may end inside a UTF-8 sequence; drop that part.
-        let end = (0..=bytes.len())
+        let kept = (0..=bytes.len())
             .rev()
-            .find(|&i| core::str::from_utf8(&bytes[..i]).is_ok())
-            .unwrap_or(0);
-        Some(core::str::from_utf8(&bytes[..end]).unwrap_or(""))
+            .find_map(|i| {
+                bytes
+                    .get(..i)
+                    .and_then(|head| core::str::from_utf8(head).ok())
+            })
+            .unwrap_or("");
+        Some(kept)
     }
 }
 
@@ -199,7 +213,6 @@ pub fn take_previous() -> Option<PanicRecord> {
 }
 
 /// Record `info` in the retained slot without formatting.
-
 fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
     let hart: usize;
     let sp: usize;
@@ -265,7 +278,6 @@ unsafe extern "Rust" {
 }
 
 #[panic_handler]
-
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     let details = record(info);
     #[cfg(feature = "panic-hook")]
@@ -283,7 +295,6 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 /// It copies through iterators, without an index whose bounds check could
 /// fail: a panic while recording re-enters the handler, a call-graph cycle
 /// that leaves every interrupt's stack bound unknown.
-
 fn file_tail(file: &str) -> ([u8; FILE_BYTES], u32) {
     let bytes = file.as_bytes();
     let mut kept = [0; FILE_BYTES];
@@ -300,7 +311,6 @@ fn file_tail(file: &str) -> ([u8; FILE_BYTES], u32) {
 
 /// The first [`MESSAGE_BYTES`] of `message`, zero-padded, and how many there
 /// are; like [`file_tail`], without an index.
-
 fn message_head(message: &str) -> ([u8; MESSAGE_BYTES], u32) {
     let mut kept = [0; MESSAGE_BYTES];
     let mut length = 0;
