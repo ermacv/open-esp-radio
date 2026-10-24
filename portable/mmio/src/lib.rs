@@ -225,14 +225,17 @@ pub struct HostTooSmall {
 
 impl<'a, R: Registers> Block<Host<'a>, R> {
     /// A block over `words`, which holds every word `R` lists.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, HostTooSmall> {
-        const {
+    ///
+    /// It is a `const fn` so that a block whose words end past the address
+    /// space fails where it is placed, even in a constant.
+    pub const fn host(words: &'a mut [u32]) -> Result<Self, HostTooSmall> {
+        let required = const {
             assert!(
                 ascending(R::WORDS),
                 "a block lists word-aligned words, strictly ascending"
             );
+            end(R::WORDS)
         };
-        let required = end(R::WORDS);
         let available = words.len().saturating_mul(4);
         if available < required {
             return Err(HostTooSmall {
@@ -242,7 +245,7 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
         }
         Ok(Self {
             place: Host {
-                base: NonNull::from(words).cast(),
+                base: NonNull::from_mut(words).cast(),
                 _memory: PhantomData,
             },
             registers: PhantomData,
@@ -269,9 +272,18 @@ const fn ascending(mut list: &[usize]) -> bool {
 }
 
 /// The byte just past the last word of an ascending `list`.
+///
+/// It is evaluated only at compile time: a list whose last word ends past
+/// the address space fails the evaluation instead of wrapping.
 const fn end(list: &[usize]) -> usize {
     match list.last() {
-        Some(last) => *last + 4,
+        Some(last) => {
+            assert!(
+                *last <= usize::MAX - 4,
+                "a block's words lie inside the address space"
+            );
+            *last + 4
+        }
         None => 0,
     }
 }
@@ -325,8 +337,9 @@ impl<P: Placement, R: Registers> Block<P, R> {
         const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
         // SAFETY: the block is the exclusive authority over the words it
         // lists (`assume_owned`'s promise, or host memory it borrows mutably
-        // and checked to hold them) and lists this one, checked at compile
-        // time above.
+        // and checked to reach the end of its last word, an end computed
+        // without overflow at compile time) and lists this one, checked at
+        // compile time above.
         unsafe { self.place.word(OFFSET).read_volatile() }
     }
 
