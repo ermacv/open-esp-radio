@@ -103,7 +103,12 @@ pub(super) fn full() -> Evidence {
             completed_us: 40_000_000,
             old_key_id: 1,
             new_key_id: 2,
-            arp_received_us: 41_000_000,
+            epoch: 1,
+            previous_generation: 1,
+            generation: 2,
+            triggered_us: 40_500_000,
+            request: Some(arp(false, 41_000_000)),
+            reply: Some(arp(true, 41_002_000)),
             arp_frames: 1,
         }),
         air: Some(Air {
@@ -201,7 +206,7 @@ fn rekey_timer_or_duplicate_echoes_are_not_successful_traffic_or_rekey() {
             0 => e.rekey = None,
             1 => e.rekey.as_mut().expect("GTK").new_key_id = 1,
             2 => e.rekey.as_mut().expect("GTK").arp_frames = 0,
-            3 => e.rekey.as_mut().expect("GTK").arp_received_us = 39_000_000,
+            3 => e.rekey.as_mut().expect("GTK").triggered_us = 39_000_000,
             4 => e.traffic.as_mut().expect("traffic").echoes.clear(),
             _ => {
                 let t = e.traffic.as_mut().expect("traffic");
@@ -251,5 +256,54 @@ fn conformance_is_regenerated_from_the_model_and_cannot_pass_empty_or_duplicate_
             _ => keys.prepared.basic_rates_len = 0,
         }
         fails(&e, 5);
+    }
+}
+
+fn arp(transmitted: bool, at: u64) -> ArpObservation {
+    ArpObservation {
+        received_us: at + 1000,
+        air_us: Some(at),
+        frame: oer_hil_protocol::wifi::StationArpFrame {
+            epoch: 1,
+            generation: 2,
+            transmitted,
+            group_addressed: !transmitted,
+            operation: if transmitted { 2 } else { 1 },
+            sender: if transmitted {
+                [10, 231, 0, 100]
+            } else {
+                [10, 231, 0, 1]
+            },
+            target: if transmitted {
+                [10, 231, 0, 1]
+            } else {
+                [10, 231, 0, 100]
+            },
+            sequence: if transmitted { 124 } else { 123 },
+            packet_number: if transmitted { 200 } else { 1 },
+            key_id: if transmitted { 0 } else { 2 },
+        },
+    }
+}
+#[test]
+fn rekey_requires_both_exact_arp_frames_in_the_same_epoch_and_generation() {
+    for mutation in 0..12 {
+        let mut e = full();
+        let r = e.rekey.as_mut().expect("GTK");
+        match mutation {
+            0 => r.request = None,
+            1 => r.reply = None,
+            2 => r.request.as_mut().expect("request").air_us = None,
+            3 => r.reply.as_mut().expect("reply").air_us = None,
+            4 => r.request.as_mut().expect("request").frame.operation = 2,
+            5 => r.request.as_mut().expect("request").frame.key_id = 1,
+            6 => r.request.as_mut().expect("request").frame.group_addressed = false,
+            7 => r.reply.as_mut().expect("reply").frame.sender = [127, 0, 0, 1],
+            8 => r.reply.as_mut().expect("reply").frame.generation = 1,
+            9 => r.reply.as_mut().expect("reply").frame.epoch = 2,
+            10 => r.reply.as_mut().expect("reply").air_us = Some(40_999_999),
+            _ => r.reply.as_mut().expect("reply").air_us = Some(46_000_001),
+        }
+        fails(&e, 2);
     }
 }

@@ -158,9 +158,65 @@ pub struct Rekey {
     pub completed_us: u64,
     pub old_key_id: u8,
     pub new_key_id: u8,
-    /// Broadcast ARP received and decoded by the station after that handshake.
-    pub arp_received_us: u64,
+    pub epoch: u32,
+    pub previous_generation: u32,
+    pub generation: u32,
+    pub triggered_us: u64,
     pub arp_frames: u32,
+    pub request: Option<ArpObservation>,
+    pub reply: Option<ArpObservation>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArpObservation {
+    pub received_us: u64,
+    pub frame: oer_hil_protocol::wifi::StationArpFrame,
+    /// Independently captured protected MPDU with this exact SN, PN and KeyID.
+    pub air_us: Option<u64>,
+}
+impl Rekey {
+    fn exchange(&self, t: &Traffic, end: u64) -> bool {
+        let Some((request, reply)) = self.request.as_ref().zip(self.reply.as_ref()) else {
+            return false;
+        };
+        let (q, a) = (&request.frame, &reply.frame);
+        let Some((q_air, a_air)) = request.air_us.zip(reply.air_us) else {
+            return false;
+        };
+        let within = |at: u64| {
+            at >= self.triggered_us
+                && at <= end
+                && at.saturating_sub(self.triggered_us) <= 5_000_000
+        };
+        self.epoch > 0
+            && self.generation > self.previous_generation
+            && self.completed_us <= self.triggered_us
+            && self.arp_frames > 0
+            && [q, a].into_iter().all(|f| {
+                f.epoch == self.epoch
+                    && f.generation == self.generation
+                    && f.sequence < 4096
+                    && (1..(1 << 48)).contains(&f.packet_number)
+            })
+            && !q.transmitted
+            && q.group_addressed
+            && q.operation == 1
+            && q.key_id == self.new_key_id
+            && q.sender == t.router.octets()
+            && q.target == t.address.octets()
+            && a.transmitted
+            && !a.group_addressed
+            && a.operation == 2
+            && a.key_id == 0
+            && a.sender == t.address.octets()
+            && a.target == t.router.octets()
+            && [request.received_us, reply.received_us, q_air, a_air]
+                .into_iter()
+                .all(within)
+            && q_air <= request.received_us
+            && q_air < a_air
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -256,9 +312,8 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
             t.complete(100)
                 && t.window().is_some_and(|(start, end)| {
                     start < r.completed_us
-                        && r.completed_us < r.arp_received_us
-                        && r.arp_received_us <= end
-                        && r.arp_frames > 0
+                        && r.exchange(t, end)
+                        && e.handshake.as_ref().is_some_and(|h| h.epoch == r.epoch)
                         && (1..=3).contains(&r.old_key_id)
                         && (1..=3).contains(&r.new_key_id)
                         && r.old_key_id != r.new_key_id
@@ -301,7 +356,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
     [
         ('a', a, "missing or contradictory W3 association/DHCP/ICMP/departure/statistics evidence"),
         ('b', b, "missing/contradictory four-way handshake, Connected or router authorization; association to M4 exceeds 1 s"),
-        ('c', c, "missing bidirectional 100/100, observed GTK change or decoded ARP on the new key"),
+        ('c', c, "missing bidirectional 100/100, GTK change or protected broadcast ARP request/station reply on the new key"),
         ('d', d, "missing/truncated air window, zero protected station frames, capture loss or plaintext data"),
         ('e', x, "missing forced departure, fresh authorized handshake or bidirectional 10/10 after reconnect"),
         ('f', f, "missing or mismatching required hardware/model key traces"),

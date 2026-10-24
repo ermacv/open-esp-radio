@@ -33,6 +33,8 @@ crate::messages! {
     #[cfg(feature = "wifi")]
     topic StationGroupKey = "wifi/station/group-key";
     #[cfg(feature = "wifi")]
+    topic StationArpFrame = "wifi/station/arp-frame";
+    #[cfg(feature = "wifi")]
     endpoint StopStation = "wifi/station/stop" => crate::base::Accepted;
     #[cfg(feature = "wifi")]
     topic StationStopped = "wifi/station/stopped";

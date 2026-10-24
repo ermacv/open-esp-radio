@@ -23,9 +23,11 @@ pub struct StationFrame {
     pub replay_counter: Option<u64>,
     pub status: Option<u16>,
     pub key_id: Option<u8>,
+    pub sequence: Option<u16>,
+    pub packet_number: Option<u64>,
 }
 
-pub(super) const FIELDS: [&str; 13] = [
+pub(super) const FIELDS: [&str; 15] = [
     "frame.time_epoch",
     "radiotap.channel.freq",
     "wlan.fc.type_subtype",
@@ -39,6 +41,8 @@ pub(super) const FIELDS: [&str; 13] = [
     "wlan.fixed.status_code",
     "wlan.wep.key",
     "wlan.fcs.status",
+    "wlan.seq",
+    "wlan.ccmp.extiv",
 ];
 
 fn decimal<T: core::str::FromStr>(s: &str) -> Result<T> {
@@ -56,7 +60,7 @@ pub(super) fn parse(text: &str, target: [u8; 6], ap: [u8; 6]) -> Result<Vec<Stat
     let mut frames = Vec::new();
     let mut previous = 0;
     for line in text.lines() {
-        let fields: [&str; 13] = line
+        let fields: [&str; 15] = line
             .split('\t')
             .collect::<Vec<_>>()
             .try_into()
@@ -75,6 +79,8 @@ pub(super) fn parse(text: &str, target: [u8; 6], ap: [u8; 6]) -> Result<Vec<Stat
             status,
             key,
             fcs,
+            sequence,
+            packet_number,
         ] = fields;
         // Exclude foreign BSS frames before interpreting their optional fields.
         let transmitter = optional(transmitter, mac)?;
@@ -121,6 +127,21 @@ pub(super) fn parse(text: &str, target: [u8; 6], ap: [u8; 6]) -> Result<Vec<Stat
             replay_counter: optional(replay, decimal)?,
             status: optional(status, hexadecimal)?,
             key_id: optional(key, decimal)?,
+            sequence: optional(sequence, |s| {
+                decimal::<u16>(s).and_then(|n| {
+                    if n < 4096 {
+                        Ok(n)
+                    } else {
+                        Err("invalid air sequence".into())
+                    }
+                })
+            })?,
+            packet_number: optional(packet_number, |s| {
+                s.strip_prefix("0x")
+                    .and_then(|s| u64::from_str_radix(s, 16).ok())
+                    .filter(|n| *n < 1 << 48)
+                    .ok_or_else(|| "invalid air packet number".into())
+            })?,
         });
     }
     Ok(frames)
@@ -134,8 +155,8 @@ mod tests {
     #[test]
     fn projection_preserves_m4_and_protection_without_identity_or_key_data() {
         let input = concat!(
-            "1.000000000\t2437\t0x0028\t02:00:00:00:00:01\t02:00:00:00:00:02\t02:00:00:00:00:02\t0\t3\t4\t8\t\t\t1\n",
-            "1.100000000\t2437\t0x0028\t02:00:00:00:00:02\t02:00:00:00:00:01\t02:00:00:00:00:02\t1\t\t\t\t\t0\t1\n"
+            "1.000000000\t2437\t0x0028\t02:00:00:00:00:01\t02:00:00:00:00:02\t02:00:00:00:00:02\t0\t3\t4\t8\t\t\t1\t\t\n",
+            "1.100000000\t2437\t0x0028\t02:00:00:00:00:02\t02:00:00:00:00:01\t02:00:00:00:00:02\t1\t\t\t\t\t0\t1\t123\t0x000000000001\n"
         );
         let frames = parse(input, STA, AP).expect("decoded station");
         assert_eq!(frames.len(), 2);
@@ -144,6 +165,13 @@ mod tests {
         assert!(!frames[0].protected);
         assert!(frames[1].protected);
         assert!(!frames[1].eapol);
+        assert_eq!(frames[1].sequence, Some(123));
+        assert_eq!(frames[1].packet_number, Some(1));
+        for invalid in ["0x1000000000000", "private-key", "0xGG"] {
+            let bad = input.replace("0x000000000001", invalid);
+            let error = parse(&bad, STA, AP).expect_err("invalid PN").to_string();
+            assert!(!error.contains(invalid));
+        }
         let saved = serde_json::to_string(&frames).expect("secret-free evidence");
         assert!(!saved.contains("02:00"));
         assert!(!format!("{frames:?}").contains("02:00"));
@@ -152,7 +180,7 @@ mod tests {
     fn malformed_or_missing_protection_cannot_become_a_protected_frame() {
         for row in [
             "secret-passphrase",
-            "1.000000\t2437\t0x28\t02:00:00:00:00:01\t02:00:00:00:00:02\t02:00:00:00:00:02\t\t\t\t\t\t\t1",
+            "1.000000\t2437\t0x28\t02:00:00:00:00:01\t02:00:00:00:00:02\t02:00:00:00:00:02\t\t\t\t\t\t\t1\t\t",
         ] {
             let error = parse(row, STA, AP)
                 .expect_err("invalid capture")
