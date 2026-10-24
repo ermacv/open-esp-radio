@@ -104,7 +104,9 @@ fn an_interrupt_after_a_failed_attempt_still_gets_a_final_attempt() {
     let result = settle(Settle::new(limit(20), &clock), || {
         attempts += 1;
         if attempts == 1 {
-            clock.advance(Duration::from_micros(30)).unwrap();
+            clock
+                .advance(Duration::from_micros(30))
+                .expect("the virtual clock advances past the limit");
             None
         } else {
             Some(attempts)
@@ -117,7 +119,9 @@ fn an_interrupt_after_a_failed_attempt_still_gets_a_final_attempt() {
     let mut attempts = 0;
     let result: Result<(), _> = settle(Settle::new(limit(20), &clock), || {
         attempts += 1;
-        clock.advance(Duration::from_micros(30)).unwrap();
+        clock
+            .advance(Duration::from_micros(30))
+            .expect("the virtual clock advances past the limit");
         None
     });
     assert_eq!((result, attempts), (Err(Unsettled), 2));
