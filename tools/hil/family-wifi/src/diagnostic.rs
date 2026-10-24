@@ -5,7 +5,10 @@ use oer_hil_lab::{
     config::StationFixtureConfig,
 };
 use oer_hil_protocol::{network::Ready, wifi::*};
-use oer_hil_scenario::{Result, workload::context::Context};
+use oer_hil_scenario::{
+    Result,
+    workload::{context::Context, require_keys},
+};
 use oer_lab_router::{credentials, mac::Mac, router, ssh::Ssh, w4};
 use std::{path::Path, time::Duration};
 
@@ -117,6 +120,9 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     let (check, drops, stats) = check.finish_station(target.octets(), applied.bssid.octets())?;
     context
         .results
+        .observe("initial-gtk-observer-health", &stats);
+    context
+        .results
         .observe("initial-gtk-observer-check", &check);
     if drops > 0
         || !check.iter().any(|f| {
@@ -137,6 +143,8 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     )?;
     let air = AirCapture::start_in_run(applied.channel)?;
     let result = context.with_capture(output, |capture| {
+        require_keys::<StartStation>(capture)?;
+        require_keys::<StopStation>(capture)?;
         let start = capture.command(
             StartStation(StationStart {
                 credentials: NetworkCredentials::try_new(
