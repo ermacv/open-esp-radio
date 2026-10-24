@@ -216,15 +216,18 @@ pub fn verify_open_ht20(remote: &mut dyn Remote, radio: &str, interface: &str) -
     Ok(())
 }
 
-pub fn ping(ssh: &Ssh, address: Ipv4Addr) -> Result<Ping> {
+pub fn ping(ssh: &Ssh, address: Ipv4Addr, count: u16) -> Result<Ping> {
+    if !matches!(count, 10 | 100) {
+        return Err("invalid station echo count".to_owned());
+    }
     if !usable_address(address) {
         return Err("unusable ping address".to_owned());
     }
     let script = format!(
-        "LC_ALL=C ping -n -c {ECHO_COUNT} -i 1 -W 1 {address} | \
+        "LC_ALL=C ping -n -c {count} -i 1 -W 1 {address} | \
          awk '/packets transmitted/ {{ print $1, $4 }}'"
     );
-    let output = ssh.output(&script, Duration::from_secs(115))?;
+    let output = ssh.output(&script, Duration::from_secs(u64::from(count) + 15))?;
     if !output.status.success() {
         return Err("router ping command failed".to_owned());
     }

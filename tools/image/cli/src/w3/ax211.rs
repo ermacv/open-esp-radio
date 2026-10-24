@@ -460,12 +460,12 @@ fn workload(
         disconnect_event: false,
         after: joined,
     });
-    let capture = Capture::start(ssh, interface, lease.address)?;
+    let capture = Capture::start(ssh, interface, lease.address, 100)?;
     report.phase = "ping";
     eprintln!("fw: AX211 lease observed; exchanging 100 echoes each way at 1 s");
     session.send("ping")?;
     let (station_ping, router_ping) = std::thread::scope(|scope| -> Result<_> {
-        let reverse = scope.spawn(|| w3::ping(ssh, lease.address));
+        let reverse = scope.spawn(|| w3::ping(ssh, lease.address, 100));
         let station = session.event(Duration::from_secs(120));
         let router = reverse
             .join()

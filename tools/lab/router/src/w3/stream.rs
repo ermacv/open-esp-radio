@@ -20,6 +20,7 @@ pub struct Capture {
     child: Child,
     output: Option<JoinHandle<Result<String>>>,
     diagnostics: Option<JoinHandle<Result<bool>>>,
+    count: u16,
 }
 
 fn bounded(reader: impl Read) -> Result<String> {
@@ -35,12 +36,22 @@ fn bounded(reader: impl Read) -> Result<String> {
 }
 
 impl Capture {
-    pub fn start(ssh: &Ssh, interface: &str, address: std::net::Ipv4Addr) -> Result<Self> {
+    pub fn start(
+        ssh: &Ssh,
+        interface: &str,
+        address: std::net::Ipv4Addr,
+        count: u16,
+    ) -> Result<Self> {
+        if !matches!(count, 10 | 100) {
+            return Err("invalid station echo count".to_owned());
+        }
         if !super::usable_address(address) {
             return Err("unusable capture address".to_owned());
         }
         let script = format!(
-            "exec timeout 240 tcpdump -n -tt -l -c 400 -i {} {}",
+            "exec timeout {} tcpdump -n -tt -l -c {} -i {} {}",
+            u32::from(count) + 25,
+            u32::from(count) * 4,
             quote(interface)?,
             quote(&format!("icmp and host {address}"))?
         );
@@ -73,6 +84,7 @@ impl Capture {
             child,
             output: Some(output),
             diagnostics: Some(diagnostics),
+            count,
         };
         readiness
             .recv_timeout(Duration::from_secs(10))
@@ -100,7 +112,7 @@ impl Capture {
             .ok_or("missing capture status reader")?
             .join()
             .map_err(|_| "capture status reader panicked")??;
-        completed_observation(&text, exited, complete)
+        completed_observation(&text, exited, complete, self.count)
     }
 }
 
@@ -108,9 +120,10 @@ fn completed_observation(
     text: &str,
     exited: bool,
     healthy: bool,
+    count: u16,
 ) -> Result<(Vec<super::Echo>, bool)> {
     let echoes = super::parse_echoes(text)?;
-    let complete = exited && healthy && echoes.len() == 400;
+    let complete = exited && healthy && echoes.len() == usize::from(count) * 4;
     Ok((echoes, complete))
 }
 
@@ -189,7 +202,7 @@ mod tests {
                 })
             })
         }).collect::<String>();
-        let (rows, complete) = completed_observation(&text, true, true).unwrap();
+        let (rows, complete) = completed_observation(&text, true, true, 100).unwrap();
         assert!(complete);
         assert_eq!(rows.len(), 400);
         let station = "192.0.2.8".parse().unwrap();
@@ -197,9 +210,13 @@ mod tests {
         assert!(crate::w3::echo_gate(&rows, station, router));
         assert!(crate::w3::echo_gate(&rows, router, station));
         let truncated = text.lines().take(398).collect::<Vec<_>>().join("\n");
-        assert!(!completed_observation(&truncated, true, true).unwrap().1);
-        assert!(!completed_observation(&text, false, true).unwrap().1);
-        assert!(!completed_observation(&text, true, false).unwrap().1);
-        assert!(completed_observation(&format!("{text}truncated"), true, true).is_err());
+        assert!(
+            !completed_observation(&truncated, true, true, 100)
+                .unwrap()
+                .1
+        );
+        assert!(!completed_observation(&text, false, true, 100).unwrap().1);
+        assert!(!completed_observation(&text, true, false, 100).unwrap().1);
+        assert!(completed_observation(&format!("{text}truncated"), true, true, 100).is_err());
     }
 }

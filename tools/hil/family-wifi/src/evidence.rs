@@ -12,7 +12,7 @@ pub struct KeyEvidence {
     pub hardware: Vec<oer_hil_protocol::lower_mac::CaseTrace>,
 }
 impl KeyEvidence {
-    fn complete(&self) -> bool {
+    pub(crate) fn complete(&self) -> bool {
         use oer_ieee80211_port::conformance::{BarrierCase, Execution, catalog::Case};
         let required: Vec<_> = Case::all()
             .enumerate()
@@ -86,6 +86,9 @@ impl Traffic {
     fn pairs(&self, source: Ipv4Addr, destination: Ipv4Addr) -> bool {
         use std::collections::BTreeMap;
         if self.count == 0 || self.address == self.router {
+            return false;
+        }
+        if self.echoes.len() != usize::from(self.count) * 4 {
             return false;
         }
         let mut requests = BTreeMap::new();
@@ -270,9 +273,13 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
             h.complete()
                 && air.captured_frames > 0
                 && air.protected_station_frames > 0
+                && air.protected_station_frames <= air.captured_frames
                 && air.plaintext_station_frames == 0
                 && air.dropped_frames == 0
                 && air.first_us <= h.association_us
+                && air.first_us > 0
+                && air.last_us >= air.first_us
+                && base.final_departure_us > h.m4_us
                 && air.last_us >= base.final_departure_us
         });
     let x = e
@@ -303,3 +310,7 @@ pub fn evaluate(e: &Evidence) -> [Gate; 6] {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) fn test_evidence() -> Evidence {
+    tests::full()
+}

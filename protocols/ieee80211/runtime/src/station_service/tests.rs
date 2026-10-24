@@ -525,6 +525,10 @@ enum ObservedOutput {
         reason: TxRefusal,
     },
     Notice(StaNotice),
+    GroupKeyChanged {
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        replaced: bool,
+    },
     CommandRefused(ObservedCommandRefused),
     CommandCompleted(ObservedCommandTerminal),
     AccessPoint(AccessPointCommand<ModelCaps24>),
@@ -611,6 +615,9 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
                 ObservedOutput::TxRefused { operation, reason }
             }
             ServiceOutput::Notice(notice) => ObservedOutput::Notice(notice),
+            ServiceOutput::GroupKeyChanged { key_id, replaced } => {
+                ObservedOutput::GroupKeyChanged { key_id, replaced }
+            }
             ServiceOutput::AccessPoint(command) => ObservedOutput::AccessPoint(command),
             ServiceOutput::CommandRefused(refused) => {
                 let request = ObservedRequest::of(&refused.request);
@@ -1603,6 +1610,8 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
                     .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
                 let response = world.sent(&mut seen, DATA).await;
                 assert!(matches!(response.key, Some((_, true))));
+                assert!(world.outputs.borrow().iter().any(|output| matches!(output,
+                    ObservedOutput::GroupKeyChanged {key_id,replaced:true} if key_id.get() == 2)));
                 world.station_command(2, StaCommand::Disconnect).await;
                 world.sent(&mut seen, DEAUTHENTICATION).await;
                 world

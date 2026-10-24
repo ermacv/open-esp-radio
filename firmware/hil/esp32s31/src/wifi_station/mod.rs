@@ -1,6 +1,7 @@
 mod future;
 pub(crate) mod irq;
 mod network;
+mod observation;
 mod radio;
 mod station;
 use crate::transport::CONSOLE;
@@ -221,8 +222,20 @@ type Starts = embassy_sync::channel::Channel<
     1,
 >;
 static STARTS: Starts = Starts::new();
+type Controls<T> = embassy_sync::channel::Channel<
+    embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+    T,
+    1,
+>;
+static PROBES: Controls<(RequestIdentity, oer_hil_protocol::wifi::ProbeStation)> = Controls::new();
+static STOPS: Controls<RequestIdentity> = Controls::new();
 oer_hil_agent::requests! {
-    pub enum Requests (sessions = false) { Start(oer_hil_protocol::wifi::StartStation) }
+    pub enum Requests (sessions = false) {
+        Start(oer_hil_protocol::wifi::StartStation),
+        Probe(oer_hil_protocol::wifi::ProbeStation),
+        Counters(oer_hil_protocol::wifi::GetStationCounters),
+        Stop(oer_hil_protocol::wifi::StopStation)
+    }
 }
 type ConsoleWork = impl core::future::Future<Output = ()>;
 static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =
@@ -248,28 +261,53 @@ fn console_task_future(work: oer_memory::PlacedFuture<'static, ConsoleWork>) -> 
 async fn console_work(usb: crate::transport::Usb, boot: u64) {
     use oer_hil_protocol::base::{Accepted, RejectReason, Rejected};
     let mut configured = false;
-    crate::transport::serve(
-        usb,
-        boot,
-        0,
-        move |request, Requests::Start(start): Requests| {
-            let reason = if configured {
-                Some(RejectReason::InvalidState)
-            } else if start.0.credentials.validate().is_err() {
-                Some(RejectReason::InvalidConfiguration)
-            } else if STARTS.try_send((request, start.0)).is_err() {
-                Some(RejectReason::Busy)
-            } else {
-                configured = true;
-                None
-            };
-            if let Some(reason) = reason {
-                CONSOLE.publish(request.session_id, request.request_id, &Rejected(reason));
-            } else {
-                CONSOLE.publish(request.session_id, request.request_id, &Accepted);
+    let mut stopping = false;
+    crate::transport::serve(usb, boot, 0, move |request, command: Requests| {
+        let reason = match command {
+            Requests::Counters(_) => {
+                emit(request, &observation::counters());
+                return;
             }
-        },
-    )
+            Requests::Start(start) => {
+                if configured {
+                    Some(RejectReason::InvalidState)
+                } else if start.0.credentials.validate().is_err() {
+                    Some(RejectReason::InvalidConfiguration)
+                } else if STARTS.try_send((request, start.0)).is_err() {
+                    Some(RejectReason::Busy)
+                } else {
+                    configured = true;
+                    None
+                }
+            }
+            Requests::Probe(probe) => {
+                if !configured || stopping {
+                    Some(RejectReason::InvalidState)
+                } else if !probe.valid() {
+                    Some(RejectReason::InvalidConfiguration)
+                } else if PROBES.try_send((request, probe)).is_err() {
+                    Some(RejectReason::Busy)
+                } else {
+                    None
+                }
+            }
+            Requests::Stop(_) => {
+                if !configured || stopping {
+                    Some(RejectReason::InvalidState)
+                } else if STOPS.try_send(request).is_err() {
+                    Some(RejectReason::Busy)
+                } else {
+                    stopping = true;
+                    None
+                }
+            }
+        };
+        if let Some(reason) = reason {
+            emit(request, &Rejected(reason));
+        } else {
+            emit(request, &Accepted);
+        }
+    })
     .await
 }
 
@@ -372,4 +410,10 @@ pub fn arbiter(
         .ok_or(ArbiterPolicyError::AbsenceBudgetOverflow)?;
     policy.absence = Duration::from_micros(absence);
     policy.checked(publication_bound)
+}
+
+// Keep the bounded wire-record constructor out of control/worker poll frames.
+#[inline(never)]
+fn emit<M: oer_hil_protocol::Message>(request: RequestIdentity, body: &M) {
+    CONSOLE.publish(request.session_id, request.request_id, body);
 }

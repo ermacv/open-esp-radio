@@ -14,6 +14,7 @@ impl Registry for Families {
     const FAMILIES: &'static [Kind] = &[
         oer_hil_family_system::FAMILY,
         oer_hil_family_lower_mac::FAMILY,
+        oer_hil_family_wifi::FAMILY,
         oer_vendor_phy_esp32s31::family::FAMILY,
     ];
     const FIXTURES: &'static [&'static dyn FixtureProvider] = &[];
