@@ -24,7 +24,7 @@ pub mod frames;
 pub mod handoff;
 pub mod reachability;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::rc::Rc;
@@ -33,7 +33,7 @@ use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{
     Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
-    image_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
+    image_resolutions, parse_summaries, read_debug, stack_sizes,
 };
 
 use crate::stack::budget::{Budget, LIMITS};
@@ -289,8 +289,7 @@ impl Image {
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
         }
-        let taken = taken_addresses(&facts, &mut keep, &mut control)?;
-        let mut resolutions = image_resolutions(
+        let resolutions = image_resolutions(
             &facts,
             &analysis,
             &dwarf,
@@ -319,7 +318,6 @@ impl Image {
             retained_bytes: 0,
             observed_functions: Vec::new(),
         };
-        resolutions.extend(image.ipc_resolutions(&taken, &mut keep, &mut control)?);
         let mut limited = oer_analysis_riscv_model::AnalysisLimited::default();
         for (&address, function) in &image.analysis.functions {
             let first = preliminary.remove(&address).unwrap_or_default();
@@ -406,35 +404,6 @@ impl Image {
         Ok(bounds
             .map(oer_analysis_elf::StorageBounds::nonempty)
             .transpose()?)
-    }
-
-    /// The targets of the IPC dispatch's call of the posted callback: the
-    /// `handler` argument of every direct call of the only function that
-    /// posts one; none when the image posts none.
-    fn ipc_resolutions(
-        &self,
-        taken: &BTreeSet<u32>,
-        keep: &mut Ledger<'_>,
-        control: &mut dyn RunControl,
-    ) -> Result<Resolutions> {
-        let resolutions = Resolutions::new();
-        let Some(contract) = &self.contract else {
-            return Ok(resolutions);
-        };
-        let Some(ipc) = &contract.interrupts.ipc else {
-            return Ok(resolutions);
-        };
-        Ok(oer_analysis_riscv_stack::ipc_resolutions(
-            &self.analysis,
-            taken,
-            self.address_of(&ipc.post),
-            ipc.post_handler_argument,
-            ipc.dispatch
-                .iter()
-                .flat_map(|dispatch| self.address_of(dispatch)),
-            keep,
-            control,
-        )?)
     }
 }
 

@@ -145,24 +145,6 @@ pub fn derive<'m>(
         keep,
         c,
     )?;
-    if let Some(ipc) = &irq.ipc {
-        let taken = taken_addresses(image, keep, c)?;
-        resolutions.extend(ipc_resolutions(
-            analysis,
-            &taken,
-            names
-                .iter()
-                .filter(|(_, name)| name == &ipc.post)
-                .map(|(address, _)| *address),
-            ipc.post_handler_argument,
-            names
-                .iter()
-                .filter(|(_, name)| ipc.dispatch.contains(name))
-                .map(|(address, _)| *address),
-            keep,
-            c,
-        )?);
-    }
     let vectors = vector_table(image, &irq.vector_table_symbol, c)?
         .into_iter()
         .flatten()
@@ -198,7 +180,6 @@ pub fn derive<'m>(
         &Stacks {
             table: &table,
             cores: &irq.harts,
-            always: &irq.always_levels,
             vectors: &vectors,
             exception,
             sources,

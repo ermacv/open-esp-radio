@@ -1097,6 +1097,26 @@ minimum_free_bytes = 16
     }
 
     #[test]
+    fn a_linked_cross_core_call_fails_in_every_image() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        for name in [
+            "<esp_hal::interrupt::ipc::Ipc>::call_function",
+            "esp_hal::interrupt::ipc::implem::dispatch",
+            "esp_hal::interrupt::ipc::implem::ipc_handler::<0usize>",
+        ] {
+            let image = image(&with(Some(starter(name))), &[("cpu0_stack", 0, 1024)]);
+            let error = cores::audit_runtime(&image, &policy, &chip())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("cross-core call") && error.contains(name),
+                "{error}"
+            );
+            assert!(cores::audit_bootstrap(&image, &chip()).is_err());
+        }
+    }
+
+    #[test]
     fn storage_linked_for_an_unused_stack_fails() {
         let (_directory, policy) = policy_with(POLICY, "");
         for (bottom, top) in [

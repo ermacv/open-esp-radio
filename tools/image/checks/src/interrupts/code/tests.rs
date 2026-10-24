@@ -80,7 +80,6 @@ fn fixture(
     let inputs = Stacks {
         table: &[],
         cores: &[0],
-        always: &[priority],
         vectors: &[],
         exception: TrapEntry {
             entry: exception,

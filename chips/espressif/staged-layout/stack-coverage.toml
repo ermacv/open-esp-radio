@@ -43,12 +43,6 @@ source = "rustc 1.97.1 library/compiler-builtins/compiler-builtins/src/mem/mod.r
 reason = "Pinned compiler memory builtin wrapper lacks emitted frame metadata in the final image. Review does not assign zero usage; runtime stack headroom remains independent."
 
 [[reviewed]]
-symbols = ["esp_hal::interrupt::ipc::implem::ipc_handler::<0usize>", "esp_hal::interrupt::ipc::implem::ipc_handler::<1usize>", "esp_hal::interrupt::ipc::implem::callback_handler"]
-category = "assembly"
-source = "esp-hal@21e2e93 esp-hal/src/interrupt/ipc/riscv.rs #[naked] handlers bound by esp_hal::init"
-reason = "Naked CLINT software-interrupt entries that esp_hal::init binds to CPU interrupt 3. The runtime's stack-switched vector entries replace that slot and no image uses esp_hal::interrupt::ipc, so they never run here; no frame size is claimed."
-
-[[reviewed]]
 symbols = ["_start_Trap1_trap", "_start_Trap2_trap", "_start_Trap3_trap", "_start_Trap4_trap", "_start_Trap5_trap", "_start_Trap6_trap", "_start_Trap7_trap", "_start_Trap8_trap", "_start_Trap9_trap", "_start_Trap10_trap", "_start_Trap11_trap", "_start_Trap12_trap", "_start_Trap13_trap", "_start_Trap14_trap", "_start_Trap15_trap", "_start_Trap16_trap", "_start_Trap17_trap", "_start_Trap18_trap", "_start_Trap19_trap", "_start_Trap20_trap", "_start_Trap21_trap", "_start_Trap22_trap", "_start_Trap23_trap", "_start_Trap24_trap", "_start_Trap25_trap", "_start_Trap26_trap", "_start_Trap27_trap", "_start_Trap28_trap", "_start_Trap29_trap", "_start_Trap30_trap", "_start_Trap31_trap", "_start_Trap32_trap", "_start_Trap33_trap", "_start_Trap34_trap", "_start_Trap35_trap", "_start_Trap36_trap", "_start_Trap37_trap", "_start_Trap38_trap", "_start_Trap39_trap", "_start_Trap40_trap", "_start_Trap41_trap", "_start_Trap42_trap", "_start_Trap43_trap", "_start_Trap44_trap", "_start_Trap45_trap", "_start_Trap46_trap", "_start_Trap47_trap", "_start_DefaultHandler_trap", "_continue_interrupt_trap", "_pre_default_start_trap", "_pre_default_start_trap_ret", "_default_start_trap"]
 category = "assembly"
 source = "esp-hal@9b59fce esp-riscv-rt/src/lib.rs define_interrupt! and trap entry global_asm; esp-hal/ld/riscv/hal-defaults.x PROVIDE(_start_DefaultHandler_trap = _start_trap)"

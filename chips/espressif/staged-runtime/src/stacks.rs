@@ -179,8 +179,8 @@ pub unsafe fn install_current_hart_interrupt_stack() {
 /// The static stack analysis checks the entries of `_runtime_psram_mtvt_source`
 /// (each swaps `sp` to the interrupt stack before its first memory access);
 /// this keeps that check true of the table the hart dispatches through: a slot
-/// another owner rewrote after [`install_current_hart_interrupt_stack`], such
-/// as ESP-HAL's direct IPC binding, would run on the interrupted stack.
+/// another owner rewrote after [`install_current_hart_interrupt_stack`] would
+/// run on the interrupted stack.
 pub(crate) fn verify_current_hart_vectors() {
     let table: *const u32;
     // SAFETY: reading `mtvt` touches no memory.

@@ -65,9 +65,7 @@ use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, Reco
 use oer_analysis_riscv_program::tables::ImageTables;
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
-pub use resolutions::{
-    Assumption, Fact, Resolution, Resolutions, ipc_resolutions, task_poll_sites,
-};
+pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
 pub use tasks::task_poll_resolutions;
@@ -76,7 +74,7 @@ pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
 pub use wakers::{waker_resolutions, waker_vtables};
 
 /// The common image-derived resolutions. Reuses the already captured ELF,
-/// analysis and typed DWARF; callers add platform IPC/interrupt routing facts.
+/// analysis and typed DWARF; callers add platform interrupt routing facts.
 #[allow(clippy::too_many_arguments)]
 pub fn image_resolutions<'a>(
     image: &ImageFacts<'_>,

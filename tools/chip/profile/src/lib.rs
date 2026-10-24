@@ -132,6 +132,10 @@ pub struct CoreStart {
     /// Demangled function-name patterns, as the policy's `observed_functions`:
     /// `*` matches any substring, all other characters are literal.
     pub starters: Vec<String>,
+    /// The functions of the cross-core call, same patterns. An image that
+    /// links one runs code posted to another core, which no image does until
+    /// the call is typed.
+    pub ipc: Vec<String>,
 }
 
 /// The `[reset-cause]` table: the field of the chip's platform publication
@@ -216,19 +220,6 @@ pub struct LevelWriter {
     pub contexts: Vec<String>,
 }
 
-/// The `[interrupts.ipc]` table: the inter-processor call whose dispatch
-/// calls a posted function.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Ipc {
-    /// The only writer of the posted callback.
-    pub post: String,
-    /// Its argument that is every function the dispatch runs.
-    pub post_handler_argument: usize,
-    /// The functions that call the posted callback.
-    pub dispatch: Vec<String>,
-}
-
 /// The `[interrupts]` table: where an image's interrupt table, vectors and
 /// dispatcher are, the levels every hart takes and the stack they run on.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -245,11 +236,6 @@ pub struct InterruptContract {
     pub exception_entry_symbol: String,
     pub source_table_symbol: String,
     pub harts: Vec<u32>,
-    pub always_levels: Vec<u32>,
-    /// The inter-processor call of a chip with more than one hart; `None`
-    /// on a single hart.
-    #[serde(default)]
-    pub ipc: Option<Ipc>,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
     pub irq_stack_bytes: u32,

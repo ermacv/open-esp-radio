@@ -1,9 +1,8 @@
 //! The worst-case interrupt stack of each hart, from the image's interrupt
 //! table.
 //!
-//! A hart takes interrupts at the levels of its table entries, and at the
-//! levels the platform always uses (the IPC line's); a level preempts only a
-//! lower one, so the stack holds at most one interrupt per level at a time,
+//! A hart takes interrupts at the levels of its table entries; a level
+//! preempts only a lower one, so the stack holds at most one interrupt per level at a time,
 //! with an exception on top. Each level costs its worst hardware-vector entry:
 //! the entry's frame below the interrupt stack's position plus the bound of
 //! the handler it calls, where the dispatcher's calls through the source
@@ -30,8 +29,6 @@ pub struct Stacks<'a> {
     pub table: &'a [TableEntry],
     /// The harts, by the table's core numbers.
     pub cores: &'a [u32],
-    /// Levels every hart takes whatever the table holds.
-    pub always: &'a [u32],
     /// The checked entries of the hardware vectors.
     pub vectors: &'a [TrapEntry],
     /// The checked entry of exceptions.
@@ -134,13 +131,12 @@ pub fn interrupt_stacks(
 ) -> Result<Vec<HartStack>> {
     let mut harts = Vec::new();
     for &core in stacks.cores {
-        let mut levels: BTreeSet<u32> = stacks
+        let levels: BTreeSet<u32> = stacks
             .table
             .iter()
             .filter(|entry| entry.core == core && entry.handler.is_some())
             .map(|entry| entry.level)
             .collect();
-        levels.extend(stacks.always);
         let mut level_stacks = Vec::new();
         for level in levels {
             let resolutions = stacks.resolutions_for(analysis, core, level);
