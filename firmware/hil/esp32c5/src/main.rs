@@ -78,7 +78,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let console = boot_smoke::start(peripherals.USB_DEVICE, interrupts.console_usb);
     #[cfg(feature = "system-watchdog")]
     let console = system::console::Console::new(
-        oer_esp32c5_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+        oer_esp32c5_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
         interrupts.console_usb,
         oer_esp32c5_esp_hal_soc::handoff::take_watchdogs(
             peripherals.TIMG0,

@@ -164,7 +164,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
     ));
     let usb = transport::open_usb(
-        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
         interrupts.console_usb,
     );
     transport::CONSOLE.start(boot);

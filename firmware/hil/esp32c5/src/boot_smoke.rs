@@ -22,7 +22,8 @@ pub(crate) fn start(
 ) -> Console {
     oer_esp32c5_hal::usb_serial_jtag::early_text(b"OPEN_RADIO_HIL hal=INIT\r\n");
     crate::usb::open(
-        oer_esp32c5_esp_hal_soc::handoff::take_usb_serial_jtag(device),
+        oer_esp32c5_esp_hal_soc::handoff::take_usb_serial_jtag(device)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
         route,
     )
 }

@@ -1,5 +1,5 @@
 use oer_esp32s31_hal::usb_serial_jtag::{
-    UsbEndpoint, UsbInterrupt, UsbSerialJtagRegisters, console_parts,
+    ConsoleEndpoint, ConsoleInterrupt, UsbSerialJtagRegisters, console_parts,
 };
 use oer_espressif_executor::Executor;
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
@@ -22,7 +22,7 @@ oer_espressif_staged_runtime::placed_static! {
     pub(crate) static CONSOLE: Console<8, 8, EarlyUsb> = Console::new(), in critical_data "logging";
     /// The console's interrupt: its handler's registers and the endpoint's
     /// signal.
-    static USB_INTERRUPT: Interrupt<Executor<0>, UsbInterrupt> = Interrupt::new(), in critical_data "console_usb";
+    static USB_INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new(), in critical_data "console_usb";
 }
 
 /// The console's `Hardware` interrupt handler: it acknowledges the events
@@ -58,7 +58,7 @@ impl oer_hil_agent::base::Platform for Chip {
 }
 
 /// The console's endpoint, polled by the core-0 executor's console task.
-pub type Usb = Endpoint<Executor<0>, UsbEndpoint>;
+pub type Usb = Endpoint<Executor<0>, ConsoleEndpoint>;
 
 /// Opens the console over the block the esp-hal adapter took from the
 /// early writer and esp-hal (`take_usb_serial_jtag`): it gives the handler

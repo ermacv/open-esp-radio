@@ -178,7 +178,8 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     .expect("the driver's first start");
     let executor = crate::Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     let (usb, _pads) = crate::usb::open(
-        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+            .expect("no early record holds the USB Serial/JTAG at the console handoff"),
         interrupts.console_usb,
     );
     adopted.enable_interrupts();

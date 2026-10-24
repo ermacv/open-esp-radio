@@ -76,12 +76,16 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   consuming the domain's esp-hal singletons (clippy `disallowed-methods` refuses it
   elsewhere); a probe image may claim a block again after dropping the
   block's owner. The USB Serial/JTAG console's block has an owner before
-  esp-hal exists: each chip HAL's `usb_serial_jtag` early writer makes its
-  handoff for each record it writes, until the esp-hal adapter's
-  `take_usb_serial_jtag` retires it and consumes `USB_DEVICE` to make the
-  driver's owner; the ESP32-S31's `fatal_note` makes it once more, the
-  single named capture of a path that never returns, under a critical
-  section on the driver's hart.
+  esp-hal exists: each chip HAL's `usb_serial_jtag` keeps the block's
+  holder (`oer-espressif-usb-serial-jtag`'s `Ownership`), which one
+  compare-and-swap changes and nothing waits for. The early writer makes
+  the handoff for each record it holds the block for, and a record that
+  finds the block held is dropped and counted; the esp-hal adapter's
+  `take_usb_serial_jtag` takes only a free block and consumes `USB_DEVICE`
+  to make the driver's owner. The ESP32-S31's `fatal_note` makes the
+  handoff once more, from a free block or from the driver on the driver's
+  hart under a critical section on a path that never returns; the driver's
+  parts are guarded and make no access once the fatal path holds the block.
   The generated `const` assertion beside the claim checks that no two
   blocks list the same word. A word esp-hal also writes is claimed only
   with its reviewed coordination in the chip's

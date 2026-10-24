@@ -5,7 +5,8 @@
 //! task's endpoint, the interrupt handler's acknowledgement and the pads.
 //! Unlike the other platform domains the block has an owner before esp-hal
 //! exists: the early writer, which builds one for each record it writes,
-//! until the console's driver takes the block from the esp-hal adapter.
+//! until the console's driver takes the block from the esp-hal adapter; and
+//! the fatal path, which takes it from a driver that never runs again.
 
 use oer_mmio::{Fixed, Placement};
 
@@ -27,9 +28,11 @@ impl UsbSerialJtagHandoff {
     ///
     /// # Safety
     /// While the owner built from this proof, or any part of it, lives, no
-    /// other code accesses the block's words: no owner built from another
-    /// proof lives at the same time, and no esp-hal owner of `USB_DEVICE`
-    /// writes them.
+    /// other code accesses the block's words, and no esp-hal owner of
+    /// `USB_DEVICE` writes them. An owner built from another proof lives at
+    /// the same time only if it never accesses the block again from the
+    /// moment this proof is made: the code that holds it is suspended for
+    /// good, as the console's driver is under the fatal takeover.
     #[allow(
         unsafe_code,
         reason = "the platform proves exclusive USB Serial/JTAG ownership"

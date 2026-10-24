@@ -4,24 +4,29 @@
 //! The USB Serial/JTAG console of Espressif chips, over the registers the
 //! chip HAL lends ([`EndpointRegisters`], [`InterruptRegisters`]).
 //!
-//! The block has one owner at a time. From reset the [`early`] writer owns
-//! it: it builds the HAL's owner for each record, writes while the FIFO has
-//! room, waits for room within a budget before an executor exists, and
-//! drops and counts the rest. Once the console's driver takes the block,
-//! the early writer is retired and refuses every write. The driver is one
-//! duplex [`Endpoint`] (`embedded-io-async` `Read` and `Write`) of one task
-//! and its [`Interrupt`]: the handler reads the pending events,
-//! acknowledges exactly those and raises the endpoint's static
+//! The block has one holder at a time, which the chip HAL's [`ownership`]
+//! state names and every writer takes with one compare-and-swap, never
+//! waiting for it. From reset the early writer may hold it for one record at
+//! a time: it builds the HAL's owner for each record, writes while the FIFO
+//! has room, waits for room within a budget before an executor exists, and
+//! drops and counts the rest, as it does with a record that finds the block
+//! held. The console's driver takes only a free block; then every early
+//! record goes to the driver. The driver is one duplex [`Endpoint`]
+//! (`embedded-io-async` `Read` and `Write`) of one task and its
+//! [`Interrupt`]: the handler reads the pending events, acknowledges exactly
+//! those and raises the endpoint's static
 //! [`IrqSignal`](oer_interrupt_table::signal::IrqSignal); it calls no
 //! waker, and the interrupt enables belong to the task, which sets them once,
-//! so the two share no register and no lock.
+//! so the two share no register and no lock. A fatal path takes the block
+//! from a driver that can never run again; the driver's
+//! [`Guarded`](ownership::Guarded) parts then make no access.
 
 #[cfg(test)]
 extern crate std;
 
-pub mod early;
 mod endpoint;
 mod interrupt;
+pub mod ownership;
 
 pub use endpoint::{Endpoint, Error};
 pub use interrupt::{AlreadyInstalled, Interrupt};

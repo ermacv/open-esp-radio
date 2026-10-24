@@ -211,7 +211,8 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         executor,
         interrupts.wake,
         usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
             interrupts.console_usb,
         ),
         crate::Rng::new(
@@ -225,7 +226,8 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         executor,
         interrupts.wake,
         usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
             interrupts.console_usb,
         ),
         crate::Rng::new(
@@ -244,7 +246,8 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     #[cfg(feature = "boot-smoke")]
     executor.run(interrupts.wake, move |spawner| {
         let console = boot_smoke_console::BootSmokeConsole::new(usb::open(
-            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE)
+                .expect("no early record holds the USB Serial/JTAG at the console handoff"),
             interrupts.console_usb,
         ));
         if BootSmokeTasks::boot_smoke(spawner, console).is_err() {
@@ -360,12 +363,11 @@ fn early(note: &Note<'_>) {
 }
 
 /// Reports a failed boot check and halts. It takes the block from the
-/// console for the report; the critical section keeps the console's driver
-/// from running meanwhile.
+/// console for the report; the critical section, held for good, keeps the
+/// console's driver from running again.
 fn fail(reason: &'static str) -> ! {
     critical_section::with(|section| {
-        oer_esp32s31_hal::usb_serial_jtag::fatal_note(&Note::runtime_fail(reason), section);
-        halt()
+        oer_esp32s31_hal::usb_serial_jtag::fatal_note(&Note::runtime_fail(reason), section, halt)
     })
 }
 

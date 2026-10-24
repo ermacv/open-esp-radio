@@ -3,18 +3,18 @@
 //! executor and its interrupt, which raises the endpoint's static signal.
 
 use oer_esp32s31_hal::usb_serial_jtag::{
-    UsbEndpoint, UsbInterrupt, UsbPads, UsbSerialJtagRegisters, console_parts,
+    ConsoleEndpoint, ConsoleInterrupt, UsbPads, UsbSerialJtagRegisters, console_parts,
 };
 use oer_espressif_executor::Executor;
 use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
 
 /// The console's endpoint, polled by the core-0 executor's console task.
-pub(crate) type Console = Endpoint<Executor<0>, UsbEndpoint>;
+pub(crate) type Console = Endpoint<Executor<0>, ConsoleEndpoint>;
 
 oer_espressif_staged_runtime::placed_static! {
     /// The console's interrupt: its handler's registers and the endpoint's
     /// signal.
-    static INTERRUPT: Interrupt<Executor<0>, UsbInterrupt> = Interrupt::new(), in critical_data "console_usb";
+    static INTERRUPT: Interrupt<Executor<0>, ConsoleInterrupt> = Interrupt::new(), in critical_data "console_usb";
 }
 
 /// The console's `Hardware` interrupt handler: it acknowledges the events

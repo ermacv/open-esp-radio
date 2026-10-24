@@ -1,10 +1,13 @@
 //! The USB Serial/JTAG console on this chip: the early writer before the
 //! console's driver exists, and the parts the driver is built from.
 //!
-//! The early writer builds the block's owner for each record it writes,
-//! until the esp-hal adapter retires it ([`retire_early_writer`]) and takes
-//! the block for the driver; then every early write is refused and output
-//! goes through the driver ([`oer_espressif_usb_serial_jtag::Endpoint`]).
+//! The block's holder is this chip's one
+//! [`Ownership`](oer_espressif_usb_serial_jtag::ownership::Ownership): the
+//! early writer builds the block's owner for each record it holds the block
+//! for, until the esp-hal adapter retires it ([`retire_early_writer`]) and
+//! takes the block for the driver; then every early record goes through the
+//! driver ([`oer_espressif_usb_serial_jtag::Endpoint`]), whose parts
+//! ([`console_parts`]) check that the driver still holds the block.
 
 use oer_diagnostics::Note;
 use oer_esp32c5_pac::platform::{UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters};
@@ -12,14 +15,33 @@ pub use oer_esp32c5_pac::platform::{
     UsbPadRegisters as UsbPads, UsbSerialJtagHandoff, UsbSerialJtagPlacement,
     UsbSerialJtagRegisters,
 };
-use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters, early::Early};
+pub use oer_espressif_usb_serial_jtag::ownership::RetireError;
+use oer_espressif_usb_serial_jtag::ownership::{Guarded, Owner, Ownership};
+use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
 use oer_mmio::Placement;
 
 #[cfg(test)]
 mod tests;
 
-/// The early writer of the chip.
-static EARLY: Early = Early::new();
+/// The holder of the chip's block.
+static OWNERSHIP: Ownership = Ownership::new();
+
+/// The chip's console, whose [`Ownership`] the driver's parts check.
+pub struct ChipConsole;
+
+impl Owner for ChipConsole {
+    fn ownership() -> &'static Ownership {
+        &OWNERSHIP
+    }
+}
+
+/// The driver's task registers: they make no access once the fatal path
+/// took the block.
+pub type ConsoleEndpoint = Guarded<ChipConsole, UsbEndpoint>;
+
+/// The driver's interrupt handler registers: they read and acknowledge
+/// nothing once the fatal path took the block.
+pub type ConsoleInterrupt = Guarded<ChipConsole, UsbInterrupt>;
 
 /// The task's registers of the console.
 pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>);
@@ -27,8 +49,17 @@ pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegiste
 /// The interrupt handler's registers of the console.
 pub struct UsbInterrupt<P: Placement = UsbSerialJtagPlacement>(UsbInterruptRegisters<P>);
 
-/// The console's endpoint, interrupt and pads from the block's owner.
-pub fn console_parts<P: Placement>(
+/// The console driver's endpoint, interrupt and pads from the block's
+/// owner the esp-hal adapter took.
+pub fn console_parts(
+    registers: UsbSerialJtagRegisters,
+) -> (ConsoleEndpoint, ConsoleInterrupt, UsbPads) {
+    let (endpoint, interrupt, pads) = parts(registers);
+    (Guarded::new(endpoint), Guarded::new(interrupt), pads)
+}
+
+/// The endpoint, interrupt and pads of a block's owner.
+fn parts<P: Placement>(
     registers: UsbSerialJtagRegisters<P>,
 ) -> (UsbEndpoint<P>, UsbInterrupt<P>, UsbPads<P>) {
     let (endpoint, interrupt, pads) = registers.into_parts();
@@ -81,42 +112,46 @@ impl<P: Placement> InterruptRegisters for UsbInterrupt<P> {
     reason = "the early writer's capture of the block for one record"
 )]
 fn capture() -> UsbEndpoint {
-    // SAFETY: `EARLY` calls this only until `retire_early_writer`, and the
-    // esp-hal adapter retires it before it makes the driver's owner; the
-    // early writer runs on the boot hart before any executor or interrupt
-    // handler uses the block, one record at a time, and drops this owner
-    // when the record is written.
+    // SAFETY: `OWNERSHIP` calls this only after its compare-and-swap moved
+    // the block from free to this one early record, and it frees the block
+    // only after this owner is dropped. Neither the esp-hal adapter's
+    // handoff (`retire_early_writer`) nor another record takes a block that
+    // is not free, so no other owner of the block exists while this lives.
     let handoff = unsafe { UsbSerialJtagHandoff::assume_exclusive() };
-    console_parts(UsbSerialJtagRegisters::from_handoff(handoff)).0
+    parts(UsbSerialJtagRegisters::from_handoff(handoff)).0
 }
-
-/// Writes `note` as one `OER-DIAG:01` line through the early writer.
-/// Returns whether it still owns the block; the driver writes notes after
-/// [`retire_early_writer`].
+/// Writes `note` as one `OER-DIAG:01` line through the early writer, or
+/// drops and counts it while another record holds the block. Returns
+/// `false` once the driver or the fatal path took the block: the driver
+/// writes notes after [`retire_early_writer`].
 pub fn early_note(note: &Note<'_>) -> bool {
-    EARLY.write(capture, |writer| writer.note(note))
+    OWNERSHIP.write(capture, |writer| writer.note(note))
 }
 
-/// Writes `bytes` as they are, for the bootstrap's `OER_BOOT` lines.
-/// Returns whether the early writer still owns the block.
+/// Writes `bytes` as they are, for the bootstrap's `OER_BOOT` lines, or
+/// drops and counts them while another record holds the block. Returns
+/// `false` once the driver or the fatal path took the block.
 pub fn early_text(bytes: &[u8]) -> bool {
-    EARLY.write(capture, |writer| writer.text(bytes))
+    OWNERSHIP.write(capture, |writer| writer.text(bytes))
 }
 
 /// Bytes the early writer dropped since the last call, for the driver's
 /// owner to report: a loss is never silent.
 pub fn take_early_lost() -> u32 {
-    EARLY.take_lost()
+    OWNERSHIP.take_lost()
 }
 
-/// Proof that the early writer is retired: it builds no owner of the block
-/// any more.
+/// Proof that the console's driver holds the block: the early writer
+/// builds no owner of it any more.
 #[must_use = "the driver's handoff relies on the retired early writer"]
 pub struct EarlyWriterRetired(());
 
-/// Retire the early writer for good, before the console's driver takes the
-/// block: no early write succeeds after this call.
-pub fn retire_early_writer() -> EarlyWriterRetired {
-    EARLY.retire();
-    EarlyWriterRetired(())
+/// Give the block to the console's driver for good, if no one holds it: no
+/// early record takes the block after this call. Never waits.
+///
+/// # Errors
+/// An early record holds the block now ([`RetireError::Busy`]), or the
+/// driver or the fatal path took it before ([`RetireError::Taken`]).
+pub fn retire_early_writer() -> Result<EarlyWriterRetired, RetireError> {
+    OWNERSHIP.retire().map(|()| EarlyWriterRetired(()))
 }

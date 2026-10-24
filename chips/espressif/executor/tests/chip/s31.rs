@@ -53,7 +53,9 @@ pub fn reset_causes(lp_aon: LP_AON_CLK_RST<'static>) {
     let _second = take_reset_causes(lp_aon); // ui-error: E0382
 }
 pub fn usb(usb: USB_DEVICE<'static>) {
-    let (_endpoint, _interrupt, pads) = take_usb_serial_jtag(usb).into_parts();
+    let (_endpoint, _interrupt, pads) = take_usb_serial_jtag(usb)
+        .expect("no early record holds the block")
+        .into_parts();
     pads.disconnect();
     #[cfg(ui_reject)]
     pads.disconnect(); // ui-error: E0382
