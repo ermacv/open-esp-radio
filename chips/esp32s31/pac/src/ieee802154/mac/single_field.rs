@@ -342,7 +342,8 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_get_security_offset`.
     pub fn security_payload_offset(&self) -> Ieee802154SecurityPayloadOffset {
-        Ieee802154SecurityPayloadOffset::from_field(self.registers.security_payload_offset())
+        Ieee802154SecurityPayloadOffset::new(self.registers.security_payload_offset())
+            .expect("the payload-offset field is seven bits wide")
     }
 
     /// `ieee802154_ll_set_security_addr`.

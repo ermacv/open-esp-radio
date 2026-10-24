@@ -766,7 +766,8 @@ impl Ieee802154RegisterLease<'_> {
         let control = self.registers.transmit_security_control();
         Ieee802154TransmitSecurityControl::new(
             control.enabled(),
-            Ieee802154SecurityPayloadOffset::from_field(control.payload_offset()),
+            Ieee802154SecurityPayloadOffset::new(control.payload_offset())
+                .expect("the payload-offset field is seven bits wide"),
         )
     }
 
