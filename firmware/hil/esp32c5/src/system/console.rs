@@ -2,7 +2,6 @@
 //! this chip's USB Serial/JTAG endpoint, serving the SoC deadline watchdog
 //! and an intentional panic through the HIL panic hook.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_esp32c5_hal::platform::{Entropy, ResetCauses};
 use oer_esp32c5_hal::watchdog::{DeadlineBudget, Watchdogs};
 use oer_hil_agent::base::{Either, Intake, PanicRequest, Platform, WatchdogRequest};
@@ -20,17 +19,16 @@ use static_cell::StaticCell;
 pub(crate) type DeadlineWatchdog =
     oer_esp32c5_hal::watchdog::DeadlineWatchdog<oer_embassy_time::EmbassyClock>;
 
-/// Writes a note through the early USB writer, until the driver owns the
-/// peripheral.
+/// Writes a note through the early USB writer, until the console opens.
 pub(crate) struct EarlyUsb;
 
 impl Immediate for EarlyUsb {
     fn note(note: &oer_diagnostics::Note<'_>) -> bool {
-        oer_espressif_usb_fifo::note(note)
+        oer_esp32c5_hal::usb_serial_jtag::early_note(note)
     }
 
     fn take_lost() -> u32 {
-        oer_espressif_usb_fifo::take_lost()
+        oer_esp32c5_hal::usb_serial_jtag::take_early_lost()
     }
 }
 
@@ -60,10 +58,10 @@ impl Platform for Chip {
 pub(crate) type Rng = Entropy<oer_embassy_time::EmbassyClock>;
 
 /// What the console task serves with: the USB Serial/JTAG peripheral with
-/// the token of its table entry, whose handler is esp-hal's async driver's,
-/// the SoC deadline watchdog, the entropy owner and the boot's reset cause.
+/// the token of its table entry, the SoC deadline watchdog, the entropy
+/// owner and the boot's reset cause.
 pub(crate) struct Console {
-    usb: esp_hal::peripherals::USB_DEVICE<'static>,
+    usb: oer_esp32c5_hal::usb_serial_jtag::UsbSerialJtagRegisters,
     route: crate::ConsoleUsb,
     service: DeadlineWatchdog,
     rng: Rng,
@@ -72,7 +70,7 @@ pub(crate) struct Console {
 
 impl Console {
     pub(crate) fn new(
-        usb: esp_hal::peripherals::USB_DEVICE<'static>,
+        usb: oer_esp32c5_hal::usb_serial_jtag::UsbSerialJtagRegisters,
         route: crate::ConsoleUsb,
         watchdogs: Watchdogs,
         rng: Rng,
@@ -88,12 +86,10 @@ impl Console {
     }
 }
 
-/// Serve the host until the chip resets. It routes the console's source
-/// before the driver turns async, which requires the route.
+/// Serve the host until the chip resets. It opens the console first: until
+/// then the early writer writes the notes.
 pub(crate) async fn run(mut console: Console) {
-    oer_espressif_esp_hal_irq::enable(&console.route)
-        .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
-    let usb = UsbSerialJtag::new(oer_espressif_usb_fifo::hand_over(console.usb)).into_async();
+    let usb = crate::usb::open(console.usb, console.route);
     // The boot identity only has to differ between boots.
     let boot = u64::from_le_bytes(console.rng.random_bytes()).max(1);
     CONSOLE.start(boot);
@@ -103,10 +99,8 @@ pub(crate) async fn run(mut console: Console) {
     static KEYS: StaticCell<ImageKeys> = StaticCell::new();
     let keys = KEYS.init(image_keys(&|feature| feature == "system-watchdog"));
     let intake = Intake::new(boot, ImageKeySet::new(keys), 0);
-    let (rx, tx) = usb.split();
     let serving = CONSOLE.run(
-        rx,
-        tx,
+        usb,
         intake,
         &Chip {
             causes: console.causes,

@@ -1,6 +1,6 @@
 //! The per-domain transfers of platform blocks from esp-hal's singletons to
 //! the chip PAC: the eFuse MAC words, the true random number generator, the
-//! reset causes and the watchdogs.
+//! reset causes, the watchdogs and the USB Serial/JTAG console.
 //!
 //! Each function consumes the domain's esp-hal singletons, which esp-hal
 //! hands out once, and never returns them, so it runs at most once per
@@ -8,7 +8,10 @@
 //! `EFUSE` singleton, so the eFuse transfer succeeds once per program by a
 //! flag instead. No function makes an MMIO access.
 
-use esp_hal::peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1};
+use esp_hal::peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, RNG, TIMG0, TIMG1, USB_DEVICE};
+use oer_esp32s31_hal::usb_serial_jtag::{
+    UsbSerialJtagHandoff, UsbSerialJtagRegisters, retire_early_writer,
+};
 use oer_esp32s31_pac::platform::{
     EfuseHandoff, EfuseRegisters, EntropyHandoff, EntropyRegisters, ResetCauseHandoff,
     ResetCauseRegisters,
@@ -94,4 +97,28 @@ pub fn take_watchdogs(
     // writes are not part of the watchdog blocks.
     let handoff = unsafe { WatchdogHandoff::assume_exclusive() };
     WatchdogBlocks::from_handoff(handoff)
+}
+
+/// Transfer the USB Serial/JTAG console's blocks from the early writer and
+/// esp-hal to the console's driver.
+///
+/// The early writer is retired first: no early write succeeds afterwards,
+/// and the driver's owner reports what the early writer dropped
+/// (`take_early_lost`).
+pub fn take_usb_serial_jtag(usb_device: USB_DEVICE<'static>) -> UsbSerialJtagRegisters {
+    let _consumed = usb_device;
+    let _retired = retire_early_writer();
+    #[allow(
+        unsafe_code,
+        reason = "the consumed esp-hal owner and the retired early writer prove the console handoff"
+    )]
+    // SAFETY: esp-hal issues `USB_DEVICE` once; it is consumed above and
+    // never returned, so this runs at most once and no esp-hal driver of the
+    // block exists. esp-hal's console and its `esp_hal::init` never write
+    // the block without that singleton. The early writer, the block's only
+    // other owner, is retired above and builds no owner after it; the fatal
+    // path's capture takes the block only on a path that never returns to
+    // the driver.
+    let handoff = unsafe { UsbSerialJtagHandoff::assume_exclusive() };
+    UsbSerialJtagRegisters::from_handoff(handoff)
 }

@@ -106,7 +106,7 @@ jobs:
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
-              | select(.manifest_path | test("/chips/(esp32c5/board|esp32s31/board|espressif/(staged-(runtime|bootstrap)|usb-fifo))/") | not) | "-p " + .name')
+              | select(.manifest_path | test("/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
@@ -122,7 +122,7 @@ jobs:
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/(staged-(runtime|bootstrap)|usb-fifo))/"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
@@ -161,7 +161,7 @@ jobs:
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/(staged-(runtime|bootstrap)|usb-fifo))/"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"

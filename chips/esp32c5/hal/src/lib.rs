@@ -20,6 +20,7 @@ pub mod dma_static;
 pub mod ieee802154;
 pub mod modem_clock;
 pub mod platform;
+pub mod usb_serial_jtag;
 
 pub mod root;
 pub mod watchdog;

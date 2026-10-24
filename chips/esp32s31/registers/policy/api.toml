@@ -6,8 +6,9 @@ device-access = true
 allow-clippy-empty-docs = true
 # Typed register blocks over `oer-mmio`; svd2rust renders every other
 # exposed peripheral. The platform blocks (eFuse, TRNG, reset cause,
-# watchdogs) are claimed by their own platform handoffs, as are the step-4
-# blocks (system timer, software interrupt lines, interrupt matrix and CLIC).
+# watchdogs, the USB Serial/JTAG console) are claimed by their own platform
+# handoffs, as are the step-4 blocks (system timer, software interrupt lines,
+# interrupt matrix and CLIC).
 typed-peripherals = [
     "IEEE802154_MAC",
     "IEEE802154_INTERRUPT_ROUTE",
@@ -33,8 +34,17 @@ typed-peripherals = [
     "INTERRUPT_CORE0_STATUS",
     "INTERRUPT_CORE1",
     "INTERRUPT_CORE1_STATUS",
+    "USB_SERIAL_JTAG",
+    "USB_SERIAL_JTAG_PADS",
 ]
 
+
+[[ownership-partitions]]
+name = "UsbSerialJtagPeripherals"
+member = "usb_serial_jtag"
+description = "The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after."
+peripherals = ["USB_SERIAL_JTAG", "USB_SERIAL_JTAG_PADS"]
+handoff = true
 
 [[ownership-partitions]]
 name = "EfusePeripherals"
@@ -11160,3 +11170,21 @@ sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
 peripheral = "SYSTIMER_ACKNOWLEDGE"
 description = "The comparators' acknowledgements: each alarm handler strobes its own bit from its own context."
 sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[register-sides]]
+peripheral = "USB_SERIAL_JTAG"
+irq = ["INT_CLR"]
+irq-observes = ["INT_ST"]
+description = "The interrupt handler reads INT_ST and acknowledges exactly what it read in INT_CLR; the task owns the FIFO, its configuration and the interrupt enables, which the handler never touches."
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[[write-trigger-fields]]
+peripheral = "USB_SERIAL_JTAG"
+register = "EP1_CONF"
+field = "WR_DONE"
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]
+
+[[fifo-ports]]
+peripheral = "USB_SERIAL_JTAG"
+register = "EP1"
+sources = ["ESP_IDF_4D59230D_S31_USB_SERIAL_JTAG"]

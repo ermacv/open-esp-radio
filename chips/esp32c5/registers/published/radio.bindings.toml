@@ -3488,6 +3488,170 @@ bit-width = 1
 access = "read-write"
 
 [[registers]]
+address = 1610674176
+width = 32
+access = "read-write"
+identity = "USB_SERIAL_JTAG.EP1"
+peripheral = "USB_SERIAL_JTAG"
+peripheral-type = "UsbSerialJtag"
+peripheral-module = "usb_serial_jtag"
+scope = []
+register-method = "ep1"
+
+[[registers.fields]]
+svd-name = "RDWR_BYTE"
+method = "rdwr_byte"
+bit-offset = 0
+bit-width = 8
+access = "read-write"
+
+[[registers]]
+address = 1610674180
+width = 32
+access = "read-write"
+identity = "USB_SERIAL_JTAG.EP1_CONF"
+peripheral = "USB_SERIAL_JTAG"
+peripheral-type = "UsbSerialJtag"
+peripheral-module = "usb_serial_jtag"
+scope = []
+register-method = "ep1_conf"
+
+[[registers.fields]]
+svd-name = "WR_DONE"
+method = "wr_done"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "SERIAL_IN_EP_DATA_FREE"
+method = "serial_in_ep_data_free"
+bit-offset = 1
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "SERIAL_OUT_EP_DATA_AVAIL"
+method = "serial_out_ep_data_avail"
+bit-offset = 2
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610674188
+width = 32
+access = "read-only"
+identity = "USB_SERIAL_JTAG.INT_ST"
+peripheral = "USB_SERIAL_JTAG"
+peripheral-type = "UsbSerialJtag"
+peripheral-module = "usb_serial_jtag"
+scope = []
+register-method = "int_st"
+
+[[registers.fields]]
+svd-name = "SERIAL_OUT_RECV_PKT_INT_ST"
+method = "serial_out_recv_pkt_int_st"
+bit-offset = 2
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "SERIAL_IN_EMPTY_INT_ST"
+method = "serial_in_empty_int_st"
+bit-offset = 3
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610674192
+width = 32
+access = "read-write"
+identity = "USB_SERIAL_JTAG.INT_ENA"
+peripheral = "USB_SERIAL_JTAG"
+peripheral-type = "UsbSerialJtag"
+peripheral-module = "usb_serial_jtag"
+scope = []
+register-method = "int_ena"
+
+[[registers.fields]]
+svd-name = "SERIAL_OUT_RECV_PKT_INT_ENA"
+method = "serial_out_recv_pkt_int_ena"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SERIAL_IN_EMPTY_INT_ENA"
+method = "serial_in_empty_int_ena"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1610674196
+width = 32
+access = "write-only"
+identity = "USB_SERIAL_JTAG.INT_CLR"
+peripheral = "USB_SERIAL_JTAG"
+peripheral-type = "UsbSerialJtag"
+peripheral-module = "usb_serial_jtag"
+scope = []
+register-method = "int_clr"
+
+[[registers.fields]]
+svd-name = "SERIAL_OUT_RECV_PKT_INT_CLR"
+method = "serial_out_recv_pkt_int_clr"
+bit-offset = 2
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "SERIAL_IN_EMPTY_INT_CLR"
+method = "serial_in_empty_int_clr"
+bit-offset = 3
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 1610674200
+width = 32
+access = "read-write"
+identity = "USB_SERIAL_JTAG_PADS.CONF0"
+peripheral = "USB_SERIAL_JTAG_PADS"
+peripheral-type = "UsbSerialJtagPads"
+peripheral-module = "usb_serial_jtag_pads"
+scope = []
+register-method = "conf0"
+
+[[registers.fields]]
+svd-name = "PAD_PULL_OVERRIDE"
+method = "pad_pull_override"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DP_PULLUP"
+method = "dp_pullup"
+bit-offset = 9
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DM_PULLUP"
+method = "dm_pullup"
+bit-offset = 11
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "USB_PAD_ENABLE"
+method = "usb_pad_enable"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers]]
 address = 1610678272
 width = 32
 access = "read-only"

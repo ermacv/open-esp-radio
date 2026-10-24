@@ -9,7 +9,7 @@ use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 pub fn report_stack_guard() {
     let (control, address) = trap::stack_watchpoint();
     let hart = esp_hal::system::Cpu::current() as usize;
-    oer_espressif_usb_fifo::note(&Note::stack_guard(
+    crate::usb::early(&Note::stack_guard(
         hart as u32,
         control as u32,
         address as u32,

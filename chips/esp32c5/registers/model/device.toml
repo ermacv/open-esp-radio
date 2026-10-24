@@ -17,6 +17,7 @@ fragments = [
     "peripherals/pcr-radio.toml",
     "peripherals/lpperi-rng.toml",
     "peripherals/lp-clkrst-reset-cause.toml",
+    "peripherals/usb-serial-jtag.toml",
     "peripherals/wifi-mac-aux-tsf-control.toml",
     "peripherals/wifi-mac-bssid-policy.toml",
     "peripherals/wifi-mac-interrupt.toml",

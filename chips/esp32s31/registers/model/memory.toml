@@ -175,6 +175,14 @@ end-exclusive = 0x20200000
 permissions = "rw"
 
 [[regions]]
+name = "usb-serial-jtag"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20391000
+end-exclusive = 0x2039101C
+permissions = "rw"
+
+[[regions]]
 name = "hp-system-before-timg0-wdt"
 address-space = "cpu"
 kind = "mmio"

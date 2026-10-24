@@ -189,19 +189,19 @@ pub(crate) fn report_previous() {
         ..
     } = *slot;
     if slot.kind == EXCEPTION {
-        oer_espressif_usb_fifo::note(&Note::fatal_exception(
+        crate::usb::early(&Note::fatal_exception(
             hart, mcause, mepc, mtval, ra, mscratch,
         ));
     } else {
-        oer_espressif_usb_fifo::note(&Note::fatal_panic(hart, stage, mcause, mepc, mtval));
+        crate::usb::early(&Note::fatal_panic(hart, stage, mcause, mepc, mtval));
     }
-    oer_espressif_usb_fifo::note(&Note::fatal_irq_vector(
+    crate::usb::early(&Note::fatal_irq_vector(
         mcause & 0x0fff,
         line,
         mtvec,
         mtvt,
         mtvt_slot,
     ));
-    oer_espressif_usb_fifo::note(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5));
-    oer_espressif_usb_fifo::note(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5));
+    crate::usb::early(&Note::fatal_irq_pending(p0, p1, p2, p3, p4, p5));
+    crate::usb::early(&Note::fatal_irq_routed(r0, r1, r2, r3, r4, r5));
 }

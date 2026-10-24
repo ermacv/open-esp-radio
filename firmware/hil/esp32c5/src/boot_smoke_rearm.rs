@@ -17,18 +17,18 @@ async fn elapsed_after(delay_ms: u64) -> u64 {
     start.elapsed().as_micros()
 }
 
-fn check(
+async fn check(
     step: u8,
     delay_ms: u64,
     elapsed_us: u64,
-    report: &mut impl FnMut(&Measurement),
+    report: &mut impl AsyncFnMut(&Measurement),
 ) -> Result<(), Measurement> {
     let measurement = Measurement {
         step,
         delay_ms,
         elapsed_us,
     };
-    report(&measurement);
+    report(&measurement).await;
     if (delay_ms * 1_000..=delay_ms * 1_000 + 5_000).contains(&elapsed_us) {
         Ok(())
     } else {
@@ -37,10 +37,10 @@ fn check(
 }
 
 /// Check successive alarms, an earlier deadline and cancellation before PASS.
-pub(crate) async fn run(mut report: impl FnMut(&Measurement)) -> Result<(), Measurement> {
+pub(crate) async fn run(mut report: impl AsyncFnMut(&Measurement)) -> Result<(), Measurement> {
     for delay_ms in 1..=5 {
         let elapsed_us = elapsed_after(delay_ms).await;
-        check(1, delay_ms, elapsed_us, &mut report)?;
+        check(1, delay_ms, elapsed_us, &mut report).await?;
     }
 
     // Join: poll the long timer first so its 100 ms deadline is installed
@@ -66,8 +66,8 @@ pub(crate) async fn run(mut report: impl FnMut(&Measurement)) -> Result<(), Meas
         }
     })
     .await;
-    check(2, 10, short_elapsed, &mut report)?;
-    check(2, 100, long_elapsed, &mut report)?;
+    check(2, 10, short_elapsed, &mut report).await?;
+    check(2, 100, long_elapsed, &mut report).await?;
 
     // Select: both futures are dropped at the end of this scope, cancelling
     // the losing 100 ms timer before the next 20 ms timer is registered.
@@ -85,7 +85,7 @@ pub(crate) async fn run(mut report: impl FnMut(&Measurement)) -> Result<(), Meas
         })
         .await
     };
-    check(3, 10, elapsed_us, &mut report)?;
+    check(3, 10, elapsed_us, &mut report).await?;
     if !short_won {
         return Err(Measurement {
             step: 3,
@@ -94,5 +94,5 @@ pub(crate) async fn run(mut report: impl FnMut(&Measurement)) -> Result<(), Meas
         });
     }
     let elapsed_us = elapsed_after(20).await;
-    check(3, 20, elapsed_us, &mut report)
+    check(3, 20, elapsed_us, &mut report).await
 }

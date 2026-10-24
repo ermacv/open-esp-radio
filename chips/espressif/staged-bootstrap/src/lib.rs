@@ -24,6 +24,11 @@ use oer_espressif_staged_layout::{
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };
 
+#[cfg(feature = "esp32c5")]
+use oer_esp32c5_hal::usb_serial_jtag::early_text;
+#[cfg(feature = "esp32s31")]
+use oer_esp32s31_hal::usb_serial_jtag::early_text;
+
 #[allow(unsafe_code, reason = "the stack guard symbol")]
 unsafe extern "C" {
     static __stack_chk_guard: u32;
@@ -348,10 +353,10 @@ unsafe fn jump_to_runtime<const ENTRY: usize>() -> ! {
 }
 
 /// Print one `OER_BOOT` line through the early USB writer, which drops what
-/// the FIFO has no room for and counts it. The bootstrap never hands the
-/// peripheral to a driver, so the writer owns it throughout.
+/// the FIFO has no room for and counts it. The bootstrap never retires the
+/// writer, so it owns the block throughout.
 pub fn print(message: &'static str) {
-    oer_espressif_usb_fifo::text(message.as_bytes());
+    early_text(message.as_bytes());
 }
 
 fn print_crc_failure(reason: &'static str, expected: u32, observed: u32) -> ! {
@@ -375,7 +380,7 @@ fn print_hex(word: u32) {
             .copied()
             .unwrap_or(b'?');
     }
-    oer_espressif_usb_fifo::text(&digits);
+    early_text(&digits);
 }
 
 /// Print `message` and halt.

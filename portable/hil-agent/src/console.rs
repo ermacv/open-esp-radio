@@ -1,9 +1,8 @@
 //! The target's one HIL console.
 //!
 //! Every chip and image uses this console. The chip supplies its byte
-//! transport (the halves of an `embedded-io-async` endpoint) and the early
-//! writer of its USB FIFO for the time before the transport owns the
-//! peripheral; the image supplies its [`crate::base::Platform`] and
+//! transport (one duplex `embedded-io-async` endpoint) and the early writer
+//! of its USB FIFO for the time before the transport owns the peripheral; the image supplies its [`crate::base::Platform`] and
 //! serves its own requests. The console owns everything between: the ordered
 //! queue of outgoing messages, the queue of diagnostic notes, the request
 //! intake with the base module, and the link counters.
@@ -261,8 +260,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     /// not block; the base module's requests are answered here.
     pub async fn run<C: Requests>(
         &self,
-        mut rx: impl Read,
-        mut tx: impl Write,
+        mut endpoint: impl Read + Write,
         mut intake: Intake<'_>,
         platform: &impl Platform,
         mut serve: impl FnMut(RequestIdentity, C),
@@ -270,25 +268,25 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         self.running.store(true, Ordering::Release);
         let image_keys = intake.image_keys();
         match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
-            Ok(hello) => self.write_message(&mut tx, &hello).await,
+            Ok(hello) => self.write_message(&mut endpoint, &hello).await,
             Err(_) => self.lose_message(),
         }
         // What the early writer dropped before it gave up the peripheral: a
         // loss is never silent.
         let lost = P::take_lost();
         if lost != 0 {
-            self.write_note(&mut tx, &Note::diag_lost(lost)).await;
+            self.write_note(&mut endpoint, &Note::diag_lost(lost)).await;
         }
         let mut chunk = [0_u8; RX_CHUNK];
         loop {
             match select3(
                 self.messages.receive(),
-                rx.read(&mut chunk),
+                endpoint.read(&mut chunk),
                 self.notes.receive(),
             )
             .await
             {
-                Either3::First(message) => self.write_message(&mut tx, &message).await,
+                Either3::First(message) => self.write_message(&mut endpoint, &message).await,
                 Either3::Second(Ok(length)) => {
                     intake.receive_each::<C>(
                         &chunk[..length],
@@ -305,13 +303,13 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
                         .lock(|received| *received.borrow_mut() = counters);
                 }
                 Either3::Second(Err(_)) => {}
-                Either3::Third(note) => self.write_note(&mut tx, &note).await,
+                Either3::Third(note) => self.write_note(&mut endpoint, &note).await,
             }
             for _ in 1..DRAIN_BATCH {
                 if let Ok(message) = self.messages.try_receive() {
-                    self.write_message(&mut tx, &message).await;
+                    self.write_message(&mut endpoint, &message).await;
                 } else if let Ok(note) = self.notes.try_receive() {
-                    self.write_note(&mut tx, &note).await;
+                    self.write_note(&mut endpoint, &note).await;
                 } else {
                     break;
                 }

@@ -1,6 +1,7 @@
 //! Platform blocks the image takes from esp-hal one domain at a time: the
 //! random number generator and the reset cause, the system timer, the
-//! software interrupt lines, and the interrupt matrix with the CLIC.
+//! software interrupt lines, the interrupt matrix with the CLIC, and the USB
+//! Serial/JTAG console ([`usb_serial_jtag`]).
 //!
 //! Each domain has a handoff proof, made once by the owner that consumed the
 //! domain's esp-hal singletons, and an owner built from it that claims only
@@ -19,6 +20,13 @@ use crate::generated::{
 
 #[cfg(test)]
 mod tests;
+
+pub mod usb_serial_jtag;
+
+pub use usb_serial_jtag::{
+    UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters, UsbPadRegisters, UsbSerialJtagHandoff,
+    UsbSerialJtagPlacement, UsbSerialJtagRegisters,
+};
 
 /// Proof that the platform transferred esp-hal's `RNG` and `LP_PERI`
 /// singletons.

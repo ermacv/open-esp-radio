@@ -16715,6 +16715,555 @@ pub mod timg1_wdt {
     }
 }
 
+/// The `USB_SERIAL_JTAG` register block.
+///
+/// USB Serial/JTAG controller: the CDC-ACM data FIFO, its configuration and the two interrupts of the serial endpoints. The JTAG side and the other interrupt sources are not described.
+pub mod usb_serial_jtag {
+    /// The block's base address.
+    pub const BASE: usize = 0x6000f000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x18;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0xc, 0x10, 0x14];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x6000f000>, BlockWords>;
+
+    /// The exclusive owner of the `USB_SERIAL_JTAG` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct UsbSerialJtag<P: oer_mmio::Placement = oer_mmio::Fixed<0x6000f000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl UsbSerialJtag {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+
+        /// The block again, from the two owners of its one split.
+        pub fn join(rest: UsbSerialJtagTask, part: UsbSerialJtagIrq) -> Self {
+            Self(oer_mmio::Block::join(rest.0, part.0))
+        }
+    }
+
+    impl<'a> UsbSerialJtag<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+
+        /// The block again, from the two owners of one split; owners of
+        /// two blocks are refused and returned.
+        pub fn try_join(
+            rest: UsbSerialJtagTask<oer_mmio::Host<'a>>,
+            part: UsbSerialJtagIrq<oer_mmio::Host<'a>>,
+        ) -> Result<
+            Self,
+            oer_mmio::NotOneSplit<
+                UsbSerialJtagTask<oer_mmio::Host<'a>>,
+                UsbSerialJtagIrq<oer_mmio::Host<'a>>,
+            >,
+        > {
+            oer_mmio::Block::try_join(rest.0, part.0)
+                .map(Self)
+                .map_err(|refused| oer_mmio::NotOneSplit {
+                    first: UsbSerialJtagTask(refused.first),
+                    second: UsbSerialJtagIrq(refused.second),
+                })
+        }
+    }
+
+    impl<P: oer_mmio::Placement> UsbSerialJtag<P> {
+        /// Divide the block: [`UsbSerialJtagTask`] owns every register but those [`UsbSerialJtagIrq`] owns.
+        pub fn split(self) -> (UsbSerialJtagTask<P>, UsbSerialJtagIrq<P>) {
+            let (rest, part) = self.0.split::<TaskWords, IrqWords>();
+            (UsbSerialJtagTask(rest), UsbSerialJtagIrq(part))
+        }
+
+        /// Take the next element out of the FIFO port `EP1`.
+        #[inline]
+        pub fn pop_ep1(&mut self) -> u8 {
+            let value = self.0.read::<0x0>();
+            (value) as u8
+        }
+
+        /// Put one element into the FIFO port `EP1`; every other bit is zero.
+        #[inline]
+        pub fn push_ep1(&mut self, value: u8) {
+            self.0.write::<0x0>(u32::from(value));
+        }
+
+        /// Read `EP1_CONF`.
+        #[inline]
+        pub fn read_ep1_conf(&self) -> ep1_conf::R {
+            ep1_conf::R(self.0.read::<0x4>())
+        }
+
+        /// Write one to the write-trigger field `WR_DONE` of `EP1_CONF`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_ep1_conf_wr_done(&mut self) {
+            self.0
+                .write::<0x4>((self.0.read::<0x4>() & !ep1_conf::TRIGGERS) | 0x00000001);
+        }
+
+        /// Read `INT_ST`.
+        #[inline]
+        pub fn read_int_st(&self) -> int_st::R {
+            int_st::R(self.0.read::<0xc>())
+        }
+
+        /// Read `INT_ENA`.
+        #[inline]
+        pub fn read_int_ena(&self) -> int_ena::R {
+            int_ena::R(self.0.read::<0x10>())
+        }
+
+        /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+            let mut value = int_ena::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+
+        /// Write `INT_CLR` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_int_clr(&mut self, change: impl FnOnce(&mut int_clr::W)) {
+            let mut value = int_clr::W(0);
+            change(&mut value);
+            self.0.write::<0x14>(value.0);
+        }
+    }
+
+    /// One owner of a split `USB_SERIAL_JTAG` block.
+    #[must_use = "a split owner must be joined to recover the block"]
+    pub struct UsbSerialJtagTask<P: oer_mmio::Placement = oer_mmio::Fixed<0x6000f000>>(
+        oer_mmio::Part<P, BlockWords, TaskWords>,
+    );
+
+    impl<P: oer_mmio::Placement> UsbSerialJtagTask<P> {
+        /// Take the next element out of the FIFO port `EP1`.
+        #[inline]
+        pub fn pop_ep1(&mut self) -> u8 {
+            let value = self.0.read::<0x0>();
+            (value) as u8
+        }
+
+        /// Put one element into the FIFO port `EP1`; every other bit is zero.
+        #[inline]
+        pub fn push_ep1(&mut self, value: u8) {
+            self.0.write::<0x0>(u32::from(value));
+        }
+
+        /// Read `EP1_CONF`.
+        #[inline]
+        pub fn read_ep1_conf(&self) -> ep1_conf::R {
+            ep1_conf::R(self.0.read::<0x4>())
+        }
+
+        /// Write one to the write-trigger field `WR_DONE` of `EP1_CONF`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_ep1_conf_wr_done(&mut self) {
+            self.0
+                .write::<0x4>((self.0.read::<0x4>() & !ep1_conf::TRIGGERS) | 0x00000001);
+        }
+
+        /// Read `INT_ST`.
+        #[inline]
+        pub fn read_int_st(&self) -> int_st::R {
+            int_st::R(self.0.read::<0xc>())
+        }
+
+        /// Read `INT_ENA`.
+        #[inline]
+        pub fn read_int_ena(&self) -> int_ena::R {
+            int_ena::R(self.0.read::<0x10>())
+        }
+
+        /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+            let mut value = int_ena::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+    }
+
+    /// One owner of a split `USB_SERIAL_JTAG` block.
+    #[must_use = "a split owner must be joined to recover the block"]
+    pub struct UsbSerialJtagIrq<P: oer_mmio::Placement = oer_mmio::Fixed<0x6000f000>>(
+        oer_mmio::Part<P, BlockWords, IrqWords>,
+    );
+
+    impl<P: oer_mmio::Placement> UsbSerialJtagIrq<P> {
+        /// Read `INT_ST`.
+        #[inline]
+        pub fn read_int_st(&self) -> int_st::R {
+            int_st::R(self.0.read::<0xc>())
+        }
+
+        /// Write `INT_CLR` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_int_clr(&mut self, change: impl FnOnce(&mut int_clr::W)) {
+            let mut value = int_clr::W(0);
+            change(&mut value);
+            self.0.write::<0x14>(value.0);
+        }
+    }
+
+    /// The words [`UsbSerialJtagTask`] owns and observes.
+    pub struct TaskWords;
+
+    impl oer_mmio::Words for TaskWords {
+        const OWNED: &'static [usize] = &[0x0, 0x4, 0xc, 0x10];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The words [`UsbSerialJtagIrq`] owns and observes.
+    pub struct IrqWords;
+
+    impl oer_mmio::Words for IrqWords {
+        const OWNED: &'static [usize] = &[0x14];
+        const OBSERVED: &'static [usize] = &[0xc];
+    }
+
+    // SOURCE: ESP_IDF_4D59230D_C5_USB_SERIAL_JTAG. The interrupt handler reads INT_ST and acknowledges exactly what it read in INT_CLR; the task owns the FIFO, its configuration and the interrupt enables, which the handler never touches.
+    const _: () = assert!(
+        oer_mmio::check::sides_cover(
+            <BlockWords as oer_mmio::Registers>::WORDS,
+            <TaskWords as oer_mmio::Words>::OWNED,
+            <IrqWords as oer_mmio::Words>::OWNED,
+        ),
+        "every word of the block belongs to exactly one side"
+    );
+
+    /// The `EP1` register.
+    ///
+    /// FIFO access for the CDC-ACM data IN and OUT endpoints: a write appends a byte to the IN FIFO, a read takes one from the OUT FIFO.
+    pub mod ep1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000000ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+    }
+
+    /// The `EP1_CONF` register.
+    ///
+    /// Configuration and status of the CDC-ACM FIFOs.
+    pub mod ep1_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000007;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The IN FIFO has room for a byte. After WR_DONE it stays clear until the host has read the packet.
+            #[inline]
+            pub const fn serial_in_ep_data_free(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The OUT FIFO holds a byte to read.
+            #[inline]
+            pub const fn serial_out_ep_data_avail(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+        }
+    }
+
+    /// The `INT_ST` register.
+    ///
+    /// Masked interrupt status of the serial endpoints.
+    pub mod int_st {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000000c;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The OUT endpoint received a packet, and its interrupt is enabled.
+            #[inline]
+            pub const fn serial_out_recv_pkt_int_st(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The IN endpoint became empty, and its interrupt is enabled.
+            #[inline]
+            pub const fn serial_in_empty_int_st(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+        }
+    }
+
+    /// The `INT_ENA` register.
+    ///
+    /// Interrupt enables of the serial endpoints.
+    pub mod int_ena {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000000c;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enables the OUT endpoint's packet-received interrupt.
+            #[inline]
+            pub const fn serial_out_recv_pkt_int_ena(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enables the IN endpoint's empty interrupt.
+            #[inline]
+            pub const fn serial_in_empty_int_ena(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enables the OUT endpoint's packet-received interrupt.
+            #[inline]
+            pub const fn serial_out_recv_pkt_int_ena(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Enables the IN endpoint's empty interrupt.
+            #[inline]
+            pub const fn serial_in_empty_int_ena(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Set `SERIAL_OUT_RECV_PKT_INT_ENA`.
+            #[inline]
+            pub fn set_serial_out_recv_pkt_int_ena(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `SERIAL_IN_EMPTY_INT_ENA`.
+            #[inline]
+            pub fn set_serial_in_empty_int_ena(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                self
+            }
+        }
+    }
+
+    /// The `INT_CLR` register.
+    ///
+    /// Interrupt acknowledgement of the serial endpoints: writing one clears the event.
+    pub mod int_clr {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000000c;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x14;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `SERIAL_OUT_RECV_PKT_INT_CLR`.
+            #[inline]
+            pub fn set_serial_out_recv_pkt_int_clr(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `SERIAL_IN_EMPTY_INT_CLR`.
+            #[inline]
+            pub fn set_serial_in_empty_int_clr(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                self
+            }
+        }
+    }
+}
+
+/// The `USB_SERIAL_JTAG_PADS` register block.
+///
+/// USB Serial/JTAG pad configuration: the software override of the D+ and D- pull-ups and the pad enable.
+pub mod usb_serial_jtag_pads {
+    /// The block's base address.
+    pub const BASE: usize = 0x6000f000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x1c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x18];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x6000f000>, BlockWords>;
+
+    /// The exclusive owner of the `USB_SERIAL_JTAG_PADS` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct UsbSerialJtagPads<P: oer_mmio::Placement = oer_mmio::Fixed<0x6000f000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl UsbSerialJtagPads {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> UsbSerialJtagPads<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> UsbSerialJtagPads<P> {
+        /// Read `CONF0`.
+        #[inline]
+        pub fn read_conf0(&self) -> conf0::R {
+            conf0::R(self.0.read::<0x18>())
+        }
+
+        /// Read `CONF0`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_conf0(&mut self, change: impl FnOnce(&mut conf0::W)) {
+            let mut value = conf0::W(self.0.read::<0x18>());
+            change(&mut value);
+            self.0.write::<0x18>(value.0);
+        }
+    }
+
+    /// The `CONF0` register.
+    ///
+    /// PHY and pad configuration. Only the pull-up override and the pad enable are described.
+    pub mod conf0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00004b00;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x18;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Software controls the D+ and D- pull-ups and pull-downs.
+            #[inline]
+            pub const fn pad_pull_override(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// D+ pull-up, while PAD_PULL_OVERRIDE is set.
+            #[inline]
+            pub const fn dp_pullup(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// D- pull-up, while PAD_PULL_OVERRIDE is set.
+            #[inline]
+            pub const fn dm_pullup(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Enables the USB pad function.
+            #[inline]
+            pub const fn usb_pad_enable(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Software controls the D+ and D- pull-ups and pull-downs.
+            #[inline]
+            pub const fn pad_pull_override(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// D+ pull-up, while PAD_PULL_OVERRIDE is set.
+            #[inline]
+            pub const fn dp_pullup(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// D- pull-up, while PAD_PULL_OVERRIDE is set.
+            #[inline]
+            pub const fn dm_pullup(&self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Enables the USB pad function.
+            #[inline]
+            pub const fn usb_pad_enable(&self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Set `PAD_PULL_OVERRIDE`.
+            #[inline]
+            pub fn set_pad_pull_override(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `DP_PULLUP`.
+            #[inline]
+            pub fn set_dp_pullup(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `DM_PULLUP`.
+            #[inline]
+            pub fn set_dm_pullup(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                self
+            }
+
+            /// Set `USB_PAD_ENABLE`.
+            #[inline]
+            pub fn set_usb_pad_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                self
+            }
+        }
+    }
+}
+
 /// The `WIFI_MAC_AUX_TSF_CONTROL` register block.
 ///
 /// SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.
@@ -21446,6 +21995,34 @@ pub mod wifi_mac_tx_common {
 
 /// The ownership partitions of the typed register blocks.
 pub mod peripheral_ownership {
+    /// The USB Serial/JTAG console: its data FIFO, interrupts and pads, written by the early writer before the console's driver exists and by the driver after.
+    pub struct UsbSerialJtagPeripherals {
+        pub usb_serial_jtag: super::usb_serial_jtag::UsbSerialJtag,
+        pub usb_serial_jtag_pads: super::usb_serial_jtag_pads::UsbSerialJtagPads,
+    }
+
+    /// The device registers of [`UsbSerialJtagPeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type UsbSerialJtagPeripheralsClaims = (
+        super::usb_serial_jtag::Claim,
+        super::usb_serial_jtag_pads::Claim,
+    );
+
+    impl UsbSerialJtagPeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: UsbSerialJtagPeripheralsClaims) -> Self {
+            let (usb_serial_jtag, usb_serial_jtag_pads) = claims;
+            Self {
+                usb_serial_jtag: super::usb_serial_jtag::UsbSerialJtag::new(usb_serial_jtag),
+                usb_serial_jtag_pads: super::usb_serial_jtag_pads::UsbSerialJtagPads::new(
+                    usb_serial_jtag_pads,
+                ),
+            }
+        }
+    }
+
     /// The random number generator's clock gate, configuration and output, enabled and read by the entropy owner.
     pub struct EntropyPeripherals {
         pub lpperi_rng: super::lpperi_rng::LpperiRng,
@@ -21975,6 +22552,14 @@ const _: () = assert!(
         (
             timg1_wdt::BASE,
             <timg1_wdt::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            usb_serial_jtag::BASE,
+            <usb_serial_jtag::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            usb_serial_jtag_pads::BASE,
+            <usb_serial_jtag_pads::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             wifi_mac_aux_tsf_control::BASE,

@@ -136,6 +136,7 @@ members = [
     "chips/espressif/ieee80211-pac",
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/efuse",
+    "chips/espressif/usb-serial-jtag",
     "chips/espressif/watchdog",
     "chips/espressif/analog",
     "chips/espressif/modem-clock",
@@ -158,7 +159,6 @@ members = [
     "chips/espressif/staged-bootstrap",
     "chips/espressif/staged-layout",
     "chips/espressif/staged-runtime",
-    "chips/espressif/usb-fifo",
     "chips/esp32s31/board",
     "firmware/bootstrap/esp32s31",
     "chips/esp32s31/layout",
@@ -296,6 +296,7 @@ default-members = [
     "chips/espressif/ieee80211-pac",
     "chips/espressif/ieee802154-mac-values",
     "chips/espressif/efuse",
+    "chips/espressif/usb-serial-jtag",
     "chips/espressif/watchdog",
     "chips/espressif/analog",
     "chips/espressif/modem-clock",
@@ -336,7 +337,7 @@ esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774
 esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false }
 static_cell = "2.1.1"
 oer-espressif-staged-layout = { path = "chips/espressif/staged-layout" }
-oer-espressif-usb-fifo = { path = "chips/espressif/usb-fifo" }
+oer-espressif-usb-serial-jtag = { path = "chips/espressif/usb-serial-jtag" }
 oer-espressif-esp-hal-irq = { path = "chips/espressif/esp-hal-irq" }
 oer-esp32s31-layout = { path = "chips/esp32s31/layout" }
 oer-espressif-esp-hal-soc = { path = "chips/espressif/esp-hal/soc", features = ["esp32s31"] }

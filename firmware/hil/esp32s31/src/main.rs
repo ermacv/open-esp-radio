@@ -58,10 +58,8 @@ oer_espressif_staged_runtime::interrupt_table! {
     wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::wifi_station::irq::wifi_mac, Priority3, ProCpu, Hardware;
     #[cfg(feature = "wifi-station")]
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::wifi_station::irq::wifi_pwr, Priority3, ProCpu, Hardware;
-    #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset", feature = "wifi-station"))]
-    /// The USB Serial/JTAG console, to esp-hal's async driver.
-    console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu,
-        Exempt(WakerCall, "esp-hal async USB console wakes its task waker; removed by #441");
+    /// The USB Serial/JTAG console: it raises the console endpoint's signal.
+    console_usb: ConsoleUsb = USB_DEVICE => crate::usb::interrupt, Priority1, ProCpu, Hardware;
 }
 
 #[cfg(feature = "boot-smoke")]
@@ -90,6 +88,7 @@ mod system;
     feature = "wifi-station"
 ))]
 mod transport;
+mod usb;
 #[cfg(feature = "wifi-station")]
 mod wifi_station;
 
@@ -211,7 +210,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     system::panic_reset::start(
         executor,
         interrupts.wake,
-        transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb),
+        usb::open(
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+            interrupts.console_usb,
+        ),
         crate::Rng::new(
             oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
             oer_embassy_time::EmbassyClock,
@@ -222,7 +224,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     system::console::start(
         executor,
         interrupts.wake,
-        transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb),
+        usb::open(
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+            interrupts.console_usb,
+        ),
         crate::Rng::new(
             oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
             oer_embassy_time::EmbassyClock,
@@ -238,7 +243,10 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
     #[cfg(feature = "boot-smoke")]
     executor.run(interrupts.wake, move |spawner| {
-        let console = boot_smoke_console::BootSmokeConsole::new(peripherals.USB_DEVICE);
+        let console = boot_smoke_console::BootSmokeConsole::new(usb::open(
+            oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+            interrupts.console_usb,
+        ));
         if BootSmokeTasks::boot_smoke(spawner, console).is_err() {
             fail("task-allocation");
         }
@@ -247,15 +255,17 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
 #[cfg(feature = "boot-smoke")]
 async fn boot_smoke(mut console: boot_smoke_console::BootSmokeConsole) {
-    console.embassy_started();
+    console.embassy_started().await;
     Timer::after(Duration::from_millis(50)).await;
-    if let Err(failure) =
-        boot_smoke_rearm::run(|measurement| console.measurement(measurement)).await
-    {
-        console.rearm_failed(&failure);
+    let rearm = boot_smoke_rearm::run(async |measurement: &boot_smoke_rearm::Measurement| {
+        console.measurement(measurement).await;
+    })
+    .await;
+    if let Err(failure) = rearm {
+        console.rearm_failed(&failure).await;
         core::future::pending::<()>().await;
     }
-    console.timer_passed();
+    console.timer_passed().await;
     loop {
         Timer::after(Duration::from_secs(60)).await;
     }
@@ -344,17 +354,17 @@ pub(crate) fn check_entropy_source(entropy: &Rng) {
     }
 }
 
-/// Writes `note` before the console's transport owns the USB peripheral.
+/// Writes `note` before the console opens.
 fn early(note: &Note<'_>) {
-    oer_espressif_usb_fifo::note(note);
+    usb::early(note);
 }
 
-/// Reports a failed boot check and halts. It takes the peripheral from the
-/// console for the report; the critical section keeps the console's transport
+/// Reports a failed boot check and halts. It takes the block from the
+/// console for the report; the critical section keeps the console's driver
 /// from running meanwhile.
 fn fail(reason: &'static str) -> ! {
     critical_section::with(|section| {
-        oer_espressif_usb_fifo::fatal_note(&Note::runtime_fail(reason), section);
+        oer_esp32s31_hal::usb_serial_jtag::fatal_note(&Note::runtime_fail(reason), section);
         halt()
     })
 }

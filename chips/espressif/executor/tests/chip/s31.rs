@@ -1,14 +1,15 @@
 #![no_std]
 use esp_hal::{
     interrupt::{InterruptRoutes, software::SoftwareInterrupt},
-    peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, PSRAM, RNG, SYSTIMER, TIMG0, TIMG1},
-    usb::usb_serial_jtag::UsbPadControl,
+    peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, PSRAM, RNG, SYSTIMER, TIMG0, TIMG1, USB_DEVICE},
 };
 use oer_espressif_watchdog::{
     MainWatchdog, MainWatchdogRegisters, StoppedMainWatchdog,
     deadline::{DeadlineBudget, DeadlineWatchdog},
 };
-use oer_espressif_esp_hal_soc::handoff::{take_entropy, take_reset_causes, take_watchdogs};
+use oer_espressif_esp_hal_soc::handoff::{
+    take_entropy, take_reset_causes, take_usb_serial_jtag, take_watchdogs,
+};
 use oer_espressif_executor::{DoorbellAcknowledger, Executor};
 use oer_espressif_executor::systimer::{Comparator, ComparatorWriter};
 
@@ -51,10 +52,13 @@ pub fn reset_causes(lp_aon: LP_AON_CLK_RST<'static>) {
     #[cfg(ui_reject)]
     let _second = take_reset_causes(lp_aon); // ui-error: E0382
 }
-pub fn usb(pads: UsbPadControl<'static>) {
+pub fn usb(usb: USB_DEVICE<'static>) {
+    let (_endpoint, _interrupt, pads) = take_usb_serial_jtag(usb).into_parts();
     pads.disconnect();
     #[cfg(ui_reject)]
     pads.disconnect(); // ui-error: E0382
+    #[cfg(ui_reject)]
+    let _second = take_usb_serial_jtag(usb); // ui-error: E0382
 }
 pub fn psram(mut psram: PSRAM<'static>) {
     let _supply = esp_hal::psram::existing_supply_configuration(&mut psram);

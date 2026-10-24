@@ -40,8 +40,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     mac: MacToken = MODEM_ZB_MAC => ieee802154::interrupt, Priority2, ProCpu, Exempt(ExecutorLevel, "the IEEE 802.15.4 engine stays on P2 until its port to P3");
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
-    console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu,
-        Exempt(WakerCall, "esp-hal async USB console wakes its task waker; removed by #441");
+    console_usb: ConsoleUsb = USB_DEVICE => crate::transport::usb_interrupt, Priority1, ProCpu, Hardware;
 }
 
 const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
@@ -121,7 +120,7 @@ pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::Emba
 oer_espressif_staged_runtime::entry!(main);
 #[cfg(not(feature = "diagnostic-radio-health"))]
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
-    oer_espressif_usb_fifo::note(&oer_diagnostics::Note::diagnostic_start("phy"));
+    oer_esp32s31_hal::usb_serial_jtag::early_note(&oer_diagnostics::Note::diagnostic_start("phy"));
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (psram, adopted) = handoff.adopt(
         INTERRUPT_TABLE,
@@ -184,7 +183,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
         oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
     ));
-    let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
+    let usb = transport::open_usb(
+        oer_espressif_esp_hal_soc::handoff::take_usb_serial_jtag(peripherals.USB_DEVICE),
+        interrupts.console_usb,
+    );
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
     Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
@@ -200,7 +202,7 @@ async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
     transport::CONSOLE
-        .run(usb.rx, usb.tx, intake, &chip, |id, request: WireRequest| {
+        .run(usb, intake, &chip, |id, request: WireRequest| {
             if REQUESTS.try_send((id, Request::Wire(request))).is_err() {
                 transport::CONSOLE.publish(
                     id.session_id,

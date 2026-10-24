@@ -20,8 +20,6 @@ system-watchdog = [
     "dep:critical-section",
     "dep:embassy-futures",
     "dep:embassy-sync",
-    "dep:oer-esp32c5-esp-hal-soc",
-    "dep:oer-esp32c5-hal",
     "dep:oer-embassy-time",
     "dep:oer-hil-protocol",
     "dep:oer-hil-agent",
@@ -33,15 +31,17 @@ embassy-time.workspace = true
 esp-hal.workspace = true
 oer-espressif-staged-runtime = { workspace = true, features = ["esp32c5"] }
 oer-esp32c5-board.workspace = true
-oer-espressif-usb-fifo = { workspace = true, features = ["esp32c5"] }
+oer-espressif-usb-serial-jtag.workspace = true
+embedded-io-async = "0.7.0"
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-executor = { workspace = true, features = ["esp32c5"] }
 oer-espressif-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
 critical-section = { workspace = true, optional = true }
 embassy-futures = { workspace = true, optional = true }
 embassy-sync = { workspace = true, optional = true }
-oer-esp32c5-esp-hal-soc = { workspace = true, optional = true, features = ["esp32c5"] }
-oer-esp32c5-hal = { path = "../../../chips/esp32c5/hal", optional = true }
+oer-esp32c5-esp-hal-soc = { workspace = true, features = ["esp32c5"] }
+oer-esp32c5-hal = { path = "../../../chips/esp32c5/hal" }
 oer-embassy-time = { path = "../../../portable/embassy/time", optional = true }
 oer-hil-protocol = { workspace = true, optional = true }
 oer-hil-agent = { workspace = true, optional = true }

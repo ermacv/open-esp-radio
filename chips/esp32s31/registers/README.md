@@ -22,7 +22,7 @@ analysis read this model; neither owns a second copy.
 | `published/radio.bindings.toml` | Generated binding index |
 | `publication/registers.toml` | Source-only publication manifest |
 | `model/platform-device.toml`, `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause words the host reads through JTAG after a power cycle, from the same `peripherals/lp-aon-reset-cause.toml` fragment the firmware PAC renders; SVD and `published/platform.bindings.toml` only |
-| `model/peripherals/{efuse,trng,lp-periclkrst-rng,lp-aon-reset-cause}.toml` | Platform blocks rendered as typed register blocks (`typed-peripherals` in `policy/api.toml`): the eFuse MAC words, the TRNG, its clock and reset word, and both HP cores' reset causes. Each partition is claimed by its own platform handoff |
+| `model/peripherals/{efuse,trng,lp-periclkrst-rng,lp-aon-reset-cause,usb-serial-jtag}.toml` | Platform blocks rendered as typed register blocks (`typed-peripherals` in `policy/api.toml`): the eFuse MAC words, the TRNG, its clock and reset word, both HP cores' reset causes, and the USB Serial/JTAG console's data FIFO, interrupts and pads. Each partition is claimed by its own platform handoff |
 | `model/peripherals/{timg-wdt,hp-sys-clkrst-timg1,lp-wdt}.toml` | The watchdog blocks, typed and claimed by one platform handoff: both timer groups' main watchdog words (not their timers or RTC calibration words), timer group 1's clock and reset word, the RTC watchdog and the super watchdog (`LP_WDT`, `LP_WDT_SWD`) |
 
 The generic generator is
