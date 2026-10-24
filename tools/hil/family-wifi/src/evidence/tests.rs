@@ -307,3 +307,21 @@ fn rekey_requires_both_exact_arp_frames_in_the_same_epoch_and_generation() {
         fails(&e, 2);
     }
 }
+
+#[test]
+fn rekey_orders_air_stamps_only_against_each_other() {
+    let ok = |q: u64, a: u64, received: u64| {
+        let mut e = full();
+        let r = e.rekey.as_mut().expect("GTK");
+        r.request.as_mut().expect("request").air_us = Some(q);
+        r.request.as_mut().expect("request").received_us = received;
+        r.reply.as_mut().expect("reply").air_us = Some(a);
+        evaluate(&e)[2].passed()
+    };
+    // Air stamp 0.5 ms after the host received the note.
+    assert!(ok(41_000_500, 41_002_000, 41_000_000));
+    // Batched capture stamps may coincide.
+    assert!(ok(41_001_500, 41_001_500, 41_001_000));
+    // Reply before request fails.
+    assert!(!ok(41_002_001, 41_002_000, 41_001_000));
+}

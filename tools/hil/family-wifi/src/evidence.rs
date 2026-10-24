@@ -214,8 +214,7 @@ impl Rekey {
             && [request.received_us, reply.received_us, q_air, a_air]
                 .into_iter()
                 .all(within)
-            && q_air <= request.received_us
-            && q_air < a_air
+            && q_air <= a_air
     }
 }
 
