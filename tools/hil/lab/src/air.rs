@@ -166,7 +166,7 @@ impl AirCapture {
         mut self,
         target: [u8; 6],
         ap: [u8; 6],
-    ) -> Result<(Vec<station::StationFrame>, u32)> {
+    ) -> Result<(Vec<station::StationFrame>, u32, station::ProjectionStats)> {
         self.stop()?;
         let pcap = self
             .reader
@@ -180,7 +180,11 @@ impl AirCapture {
             "wlan.fc.type == 0 || wlan.fc.type == 2",
             &station::FIELDS,
         )?;
-        Ok((station::parse(&text, target, ap)?, drops))
+        Ok((
+            station::parse(&text, target, ap)?,
+            drops,
+            station::projection_stats(&text, ap)?,
+        ))
     }
 
     fn finish_stats(&mut self) -> Result<u32> {

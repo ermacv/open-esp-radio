@@ -53,6 +53,27 @@ pub fn verify_runtime(remote: &mut dyn Remote, radio: &str, interface: &str) -> 
     Ok(())
 }
 
+/// Read only the selected BSS's running GTK interval, never its credentials.
+pub fn group_rekey_seconds(remote: &mut dyn Remote, radio: &str, interface: &str) -> Result<u32> {
+    if !token(radio) || !token(interface) {
+        return Err("invalid GTK profile selection".into());
+    }
+    let script = format!(
+        "set +x\nphy=$(ubus call iwinfo phyname {} | jsonfilter -e '@.phyname')\ncase \"$phy\" in phy[0-9]*) ;; *) exit 1;; esac\nawk -F= -v iface={} '$1==\"interface\" || $1==\"bss\" {{selected=($2==iface)}} selected && $1==\"wpa_group_rekey\" {{print $2}}' \"/var/run/hostapd-$phy.conf\"",
+        quote(&format!("{{\"section\":\"{radio}\"}}"))?,
+        quote(interface)?
+    );
+    let output = Zeroizing::new(
+        remote
+            .run(&script)
+            .map_err(|_| "cannot read running GTK interval")?,
+    );
+    output
+        .trim()
+        .parse()
+        .map_err(|_| "missing or invalid running GTK interval".into())
+}
+
 /// Remove only the station's neighbor entry. The already running 100-echo
 /// router series supplies the next ping, making the kernel broadcast ARP.
 /// Only observed request/reply frames establish success.
@@ -116,6 +137,30 @@ mod tests {
             self.scripts.push(script.to_owned());
             self.answer.clone()
         }
+    }
+
+    #[test]
+    fn running_interval_is_numeric_and_rejects_missing_or_secret_output() {
+        let mut remote = Scripted {
+            answer: Ok("0\n".into()),
+            scripts: Vec::new(),
+        };
+        assert_eq!(
+            group_rekey_seconds(&mut remote, "radio1", "phy1-ap0").expect("disabled"),
+            0
+        );
+        remote.answer = Ok("30\n".into());
+        assert_eq!(
+            group_rekey_seconds(&mut remote, "radio1", "phy1-ap0").expect("W4"),
+            30
+        );
+        remote.answer = Ok("secret-passphrase".into());
+        assert!(
+            !group_rekey_seconds(&mut remote, "radio1", "phy1-ap0")
+                .expect_err("invalid")
+                .contains("secret-passphrase")
+        );
+        assert!(!remote.scripts[0].contains("wpa_passphrase"));
     }
 
     #[test]

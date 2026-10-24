@@ -87,3 +87,28 @@ pub fn arp(
         },
     );
 }
+
+pub fn receive_drop(attempt: super::Attempt, reason: oer_ieee80211_sta::machine::StaRxError) {
+    use oer_hil_protocol::wifi::{StationReceiveDrop, StationReceiveDropReason as R};
+    use oer_ieee80211_rsn::supplicant::{
+        RsnConnectedProcessError as S, RsnConnectedSupplicantError as E,
+    };
+    use oer_ieee80211_sta::machine::StaRxError;
+    use oer_ieee80211_upper_mac::receive::RxDropReason as F;
+    let reason = match reason {
+        StaRxError::Frame(F::Integrity) => R::Integrity,
+        StaRxError::Frame(F::Replay) => R::Replay,
+        StaRxError::Frame(F::Protection) => R::Protection,
+        StaRxError::Security(S::Supplicant(E::InvalidMic)) => R::InvalidMic,
+        StaRxError::Security(S::Supplicant(E::StaleReplayCounter)) => R::StaleReplay,
+        StaRxError::Security(_) => R::Security,
+        _ => return,
+    };
+    super::emit(
+        attempt.request,
+        &StationReceiveDrop {
+            epoch: super::EPOCH.load(Relaxed),
+            reason,
+        },
+    );
+}

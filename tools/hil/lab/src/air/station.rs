@@ -45,6 +45,48 @@ pub(super) const FIELDS: [&str; 15] = [
     "wlan.ccmp.extiv",
 ];
 
+/// Public observer health, including frames filtered out of the selected BSS.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ProjectionStats {
+    pub decoded: usize,
+    pub selected_bss: usize,
+    pub bad_fcs: usize,
+    pub frequencies: Vec<u16>,
+}
+pub(super) fn projection_stats(text: &str, ap: [u8; 6]) -> Result<ProjectionStats> {
+    let mut stats = ProjectionStats {
+        decoded: 0,
+        selected_bss: 0,
+        bad_fcs: 0,
+        frequencies: Vec::new(),
+    };
+    for line in text.lines() {
+        let fields: Vec<_> = line.split('\t').collect();
+        let Some((&frequency, &bssid, &fcs)) = fields
+            .get(1)
+            .zip(fields.get(5))
+            .zip(fields.get(12))
+            .map(|((a, b), c)| (a, b, c))
+        else {
+            return Err("invalid air field count".into());
+        };
+        stats.decoded += 1;
+        if !frequency.is_empty() {
+            let frequency = decimal(frequency)?;
+            if !stats.frequencies.contains(&frequency) {
+                stats.frequencies.push(frequency);
+            }
+        }
+        if optional(bssid, mac)? == Some(ap) {
+            stats.selected_bss += 1;
+            if matches!(fcs, "0" | "4") {
+                stats.bad_fcs += 1;
+            }
+        }
+    }
+    Ok(stats)
+}
+
 fn decimal<T: core::str::FromStr>(s: &str) -> Result<T> {
     s.parse()
         .map_err(|_| "invalid numeric air observation".into())
@@ -164,6 +206,14 @@ mod tests {
         );
         let frames = parse(input, STA, AP).expect("decoded station");
         assert_eq!(frames.len(), 2);
+        let health = projection_stats(input, AP).expect("observer health");
+        assert_eq!(
+            (health.decoded, health.selected_bss, health.bad_fcs),
+            (2, 2, 0)
+        );
+        assert_eq!(health.frequencies, [2437]);
+        let other = projection_stats(input, [2, 0, 0, 0, 0, 3]).expect("foreign BSS");
+        assert_eq!((other.decoded, other.selected_bss), (2, 0));
         assert_eq!(frames[0].handshake_message, Some(4));
         assert!(frames[0].eapol);
         assert!(!frames[0].protected);
