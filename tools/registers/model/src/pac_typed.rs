@@ -1064,6 +1064,15 @@ impl<'a> TypedBlock<'a> {
                 "PAC API {operation:?} writes {name}.{register}, which only its snapshot's acknowledgement writes"
             )));
         }
+        if let Some((register, field)) = triggers
+            .iter()
+            .chain(images.keys())
+            .find(|(register, _)| cleared.contains(register))
+        {
+            return Err(Error::message(format!(
+                "write-trigger or pointer field {name}.{register}.{field} writes a register only its snapshot's acknowledgement writes"
+            )));
+        }
         let split = policy
             .register_sides
             .iter()
@@ -2716,10 +2725,12 @@ impl<'a> TypedRegister<'a> {
             && (array.is_some()
                 || w1c
                 || fields.len() != 1
-                || fields.iter().any(|field| field.pointer))
+                || fields
+                    .iter()
+                    .any(|field| field.pointer || field.image.is_some()))
         {
             return Err(Error::message(format!(
-                "typed FIFO port {peripheral}.{} must be one register with one field",
+                "typed FIFO port {peripheral}.{} must be one register with one field that is no pointer field",
                 info.name
             )));
         }
@@ -2772,7 +2783,7 @@ impl<'a> TypedRegister<'a> {
                 "/// Read `{name}`.\n#[inline]\npub fn read_{module}({receiver}, {index}) -> {module}::R {{\n{module}::R(self.0.{read})\n}}\n"
             );
         }
-        if reach != Reach::Owned || (self.w1c && self.acknowledged) {
+        if reach != Reach::Owned || self.acknowledged {
             return;
         }
         if self.w1c {

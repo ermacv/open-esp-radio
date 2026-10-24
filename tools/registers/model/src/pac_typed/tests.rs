@@ -1164,3 +1164,35 @@ fn a_library_declares_no_read_capability() {
         .expect_err("the library is refused");
     assert!(error.to_string().contains("read capability"), "{error}");
 }
+
+#[test]
+fn a_fifo_port_takes_no_pointer_field() {
+    let mut pack = typed_pack();
+    pack.pointer_fields.push(crate::PointerField {
+        name: "base_pointer".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "BASE".to_owned(),
+        field: "ADDRESS".to_owned(),
+        points_to: "DESCRIPTOR".to_owned(),
+        member_offset: 0,
+        encoding: None,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack.fifo_ports.push(fifo("BASE"));
+    refused(
+        &pack,
+        &register("BASE", 0, "read-write", "", &field("ADDRESS", 0, 32, "")),
+        "must be one register with one field that is no pointer field",
+    );
+}
+
+#[test]
+fn an_acknowledged_clear_register_takes_no_write_trigger() {
+    let mut pack = snapshot_pack();
+    pack.write_trigger_fields.push(trigger("CLEAR", "DONE"));
+    refused(
+        &pack,
+        &events(&field("DONE", 0, 1, "")),
+        "writes a register only its snapshot's acknowledgement writes",
+    );
+}

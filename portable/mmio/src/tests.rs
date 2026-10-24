@@ -248,10 +248,14 @@ fn divided_parts_store_only_their_own_trigger_bits() {
     // Each store carries only the writer's bits; the others are zero.
     first.write_trigger::<12>(u32::MAX);
     assert_eq!(status.read::<8>(), 0x33);
-    drop((first, status));
-    second.write_trigger::<12>(0b0010);
-    drop(second);
-    assert_eq!(memory, [0x11, 0x22, 0x33, 0b0010]);
+    drop((first, second, status));
+    assert_eq!(memory, [0x11, 0x22, 0x33, 0b0001]);
+
+    let block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
+    let (first, mut second, status) = block.divide::<(FirstChannel, SecondChannel, Status)>();
+    second.write_trigger::<12>(u32::MAX);
+    drop((first, second, status));
+    assert_eq!(memory, [0x11, 0x22, 0x33, 0b0110]);
 }
 
 #[test]
