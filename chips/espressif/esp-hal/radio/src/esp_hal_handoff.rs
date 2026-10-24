@@ -7,7 +7,7 @@ use esp_hal::{
 };
 use oer_esp32s31_hal::{
     power::{PlatformClock, PlatformClockAbandonment},
-    root::{AnalogBusOwnership, RadioHardware},
+    root::{AnalogBusOwnership, RadioHandoff, RadioHardware},
 };
 
 use crate::PlatformClocks;
@@ -31,13 +31,6 @@ pub struct RadioSingletons {
     pub bt: BT<'static>,
     pub ieee802154: IEEE802154<'static>,
     pub lp_tsens: LP_TSENS<'static>,
-}
-
-/// The radio root was not handed over.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RadioHandoffError {
-    /// The radio PAC's register singleton was already taken.
-    RootTaken,
 }
 
 /// The radio's platform clocks on esp-hal.
@@ -80,29 +73,29 @@ impl PlatformClockBackend for EspHal {
 /// `singletons` are consumed: esp-hal hands each out once, so this runs at
 /// most once per program. `psram` proves that this image adopted PSRAM, whose
 /// MPLL reference esp-hal never releases.
-///
-/// # Errors
-///
-/// [`RadioHandoffError::RootTaken`] when the radio PAC's register singleton
-/// was already taken.
-pub fn take_radio(
-    singletons: RadioSingletons,
-    psram: &Psram,
-) -> Result<(RadioHardware, EspHalClocks), RadioHandoffError> {
+pub fn take_radio(singletons: RadioSingletons, psram: &Psram) -> (RadioHardware, EspHalClocks) {
     let _adopted: &Psram = psram;
     // The tokens are never handed back: no other owner of these blocks can
     // be constructed from esp-hal for the rest of the program.
     let _consumed: RadioSingletons = singletons;
     #[allow(
         unsafe_code,
-        reason = "the consumed I2C_ANA_MST singleton is the analog-bus ownership the token asserts"
+        reason = "the consumed esp-hal radio singletons are the ownership both tokens assert"
     )]
-    // SAFETY: `I2C_ANA_MST` was consumed above, and esp-hal hands it out once,
-    // so this runs at most once per program and no other owner of the
-    // analog-I2C master exists or can be constructed safely: esp-hal's only
-    // later writer of the bus, `rtc_cntl::brownout::configure`, needs the
+    // SAFETY: every radio singleton, `I2C_ANA_MST` included, was consumed
+    // above, and esp-hal hands each out once, so this runs at most once per
+    // program and no platform owner of the radio blocks or of the analog-I2C
+    // master remains or can be constructed safely: esp-hal's only later
+    // writer of the bus, `rtc_cntl::brownout::configure`, needs the
     // singleton.
-    let analog_bus = unsafe { AnalogBusOwnership::assume_exclusive() };
-    let hardware = RadioHardware::take(analog_bus).ok_or(RadioHandoffError::RootTaken)?;
-    Ok((hardware, EspHalClocks::new()))
+    let (handoff, analog_bus) = unsafe {
+        (
+            RadioHandoff::assume_exclusive(),
+            AnalogBusOwnership::assume_exclusive(),
+        )
+    };
+    (
+        RadioHardware::from_handoff(handoff, analog_bus),
+        EspHalClocks::new(),
+    )
 }

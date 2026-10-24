@@ -4,6 +4,29 @@
 
 use crate::{MacInterface, WifiRadioRegisters};
 
+/// The interface context of each receive queue in the cold policy: queues
+/// zero to two are also the first three interface contexts; queue three has
+/// none.
+const COLD_RECEIVE_QUEUE_INTERFACES: [Option<MacInterface>; 4] = [
+    Some(MacInterface::Station),
+    Some(MacInterface::AccessPoint),
+    Some(MacInterface::Context2),
+    None,
+];
+
+/// The cold policy's edge on one interface's high address word.
+///
+/// Zero is the complete low-half replacement performed by the mode-zero cold
+/// leaf; high policy bits are preserved.
+fn clear_cold_interface_address<P: oer_mmio::Placement>(
+    interfaces: &mut crate::generated::wifi_mac_interface_address::WifiMacInterfaceAddress<P>,
+    interface: MacInterface,
+) {
+    interfaces.modify_address_high(interface.index(), |w| {
+        w.set_bytes_4_5(0);
+    });
+}
+
 /// Read-only associated-STA receive-policy evidence.
 ///
 /// Only reviewed semantic fields cross the PAC boundary. Complete policy
@@ -203,15 +226,7 @@ impl WifiRadioRegisters {
             .wifi_mac_interface
             .wifi_mac_interface_address;
 
-        // Queues zero to two are also the first three interface contexts;
-        // queue three has none.
-        let contexts = [
-            Some(MacInterface::Station),
-            Some(MacInterface::AccessPoint),
-            Some(MacInterface::Context2),
-            None,
-        ];
-        for (queue, context) in contexts.into_iter().enumerate() {
+        for (queue, context) in COLD_RECEIVE_QUEUE_INTERFACES.into_iter().enumerate() {
             let filter = filters.policy(queue);
 
             filter.modify(|_, w| {
@@ -254,11 +269,7 @@ impl WifiRadioRegisters {
                 }
                 filter.modify(|_, w| w.dump_management_not_check_bssid().clear_bit());
                 bssid.modify(|_, w| w.address_check_enable().clear_bit());
-                // Zero is the complete low-half replacement performed by the
-                // mode-zero cold leaf; high policy bits are preserved.
-                interfaces.modify_address_high(interface.index(), |w| {
-                    w.set_bytes_4_5(0);
-                });
+                clear_cold_interface_address(interfaces, interface);
             }
         }
     }
@@ -526,3 +537,6 @@ impl WifiRadioRegisters {
         });
     }
 }
+
+#[cfg(test)]
+mod tests;

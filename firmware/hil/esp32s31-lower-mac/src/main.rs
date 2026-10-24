@@ -113,8 +113,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             lp_tsens: peripherals.LP_TSENS,
         },
         &psram,
-    )
-    .expect("diagnostic radio ownership");
+    );
     let (domain, partitions) = hardware.split(ConcurrentPhy::new());
     let (end, cells) = claim().expect("diagnostic radio actor");
     let lp = LpClock::<RcSlow>::claim().expect("diagnostic low power clock");

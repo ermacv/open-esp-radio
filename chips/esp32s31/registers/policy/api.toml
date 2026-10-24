@@ -7,7 +7,15 @@ allow-clippy-empty-docs = true
 # Typed register blocks over `oer-mmio`; svd2rust renders every other
 # exposed peripheral. The platform blocks (eFuse, TRNG, reset cause) are
 # claimed by their own platform handoffs.
-typed-peripherals = ["WIFI_MAC_INTERFACE_ADDRESS", "EFUSE", "TRNG", "LP_PERICLKRST_RNG", "LP_AON_RESET_CAUSE"]
+typed-peripherals = [
+    "IEEE802154_MAC",
+    "IEEE802154_INTERRUPT_ROUTE",
+    "WIFI_MAC_INTERFACE_ADDRESS",
+    "EFUSE",
+    "TRNG",
+    "LP_PERICLKRST_RNG",
+    "LP_AON_RESET_CAUSE",
+]
 
 
 [[ownership-partitions]]
@@ -234,13 +242,17 @@ peripherals = [
     "IEEE802154_INTERRUPT_ROUTE",
 ]
 
-[[w1c-register-snapshots]]
-name = "ieee802154_event_status"
+[[register-sides]]
 peripheral = "IEEE802154_MAC"
-register = "EVENT_STATUS"
-sources = [
-    "esp-idf-7b9cc1ac-ieee802154-common-ll",
-]
+irq = ["EVENT_STATUS"]
+irq-observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
+description = "The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included."
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[interrupt-sources]]
+peripheral = "IEEE802154_MAC"
+source = 132
+sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX", "ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"]
 
 [[enum-domains]]
 name = "ModemPowerTickTarget"
@@ -927,20 +939,6 @@ peripheral = "IEEE802154_MAC"
 register = "TIMER1_VALUE"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
-[[opaque-domains]]
-name = "Ieee802154TxDmaAddress"
-description = "Register-specific complete transmit frame-buffer address. Buffer provenance, alignment and lifetime remain HAL obligations."
-peripheral = "IEEE802154_MAC"
-register = "TX_DMA_ADDRESS"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
-[[opaque-domains]]
-name = "Ieee802154RxDmaAddress"
-description = "Register-specific complete receive frame-buffer address. Buffer provenance, alignment and lifetime remain HAL obligations."
-peripheral = "IEEE802154_MAC"
-register = "RX_DMA_ADDRESS"
-sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
-
 [[flag-domains]]
 name = "MacInterruptMask"
 description = "Reviewed writable images for the MAC interrupt-enable register."
@@ -1325,7 +1323,7 @@ name = "publish_ieee802154_tx_dma_address"
 peripheral = "IEEE802154_MAC"
 register = "TX_DMA_ADDRESS"
 field = "ADDRESS"
-domain = "Ieee802154TxDmaAddress"
+placement = "dma-window"
 exposure = "facade"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
@@ -1334,7 +1332,7 @@ name = "publish_ieee802154_rx_dma_address"
 peripheral = "IEEE802154_MAC"
 register = "RX_DMA_ADDRESS"
 field = "ADDRESS"
-domain = "Ieee802154RxDmaAddress"
+placement = "dma-window"
 exposure = "facade"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
@@ -5765,20 +5763,6 @@ fields = [{ field = "BITS_4_7_OPAQUE", source-bit-offset = 0 }]
 value = 0
 exposure = "facade"
 sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
-
-[[field-snapshot-reads]]
-name = "observe_ieee802154_core0_route"
-peripheral = "IEEE802154_INTERRUPT_ROUTE"
-register = "CORE0_ROUTE"
-fields = ["MAP", "PASS_LEVEL"]
-sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
-
-[[field-snapshot-reads]]
-name = "observe_ieee802154_core1_route"
-peripheral = "IEEE802154_INTERRUPT_ROUTE"
-register = "CORE1_ROUTE"
-fields = ["MAP", "PASS_LEVEL"]
-sources = ["ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"]
 
 [[field-replace-modifies]]
 name = "initialize_shared_modem_power_state_map"

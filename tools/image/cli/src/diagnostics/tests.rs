@@ -62,7 +62,7 @@ fn radio_root_round_trip_renders_every_clock_and_failure_as_before() {
     use oer_espressif_esp_hal_radio::diagnostics::RadioRoot::*;
     use oer_trace::Event;
     // The same explicit wire ids must decode as the original semantic event.
-    let mut events = vec![Handoff, RootTaken];
+    let mut events = vec![Handoff];
     for clock in 0..5 {
         events.push(RadioRoot::decode([2, clock]).unwrap());
         events.push(RadioRoot::decode([3, clock]).unwrap());
@@ -82,7 +82,6 @@ fn radio_root_round_trip_renders_every_clock_and_failure_as_before() {
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
     assert_eq!(lines[0], "OER radio-root handoff=ok");
-    assert_eq!(lines[1], "OER-RESULT: fail radio-root take_radio=RootTaken");
     for (i, clock) in [
         "Pll160m",
         "AnalogI2cMaster",
@@ -94,17 +93,18 @@ fn radio_root_round_trip_renders_every_clock_and_failure_as_before() {
     .enumerate()
     {
         assert_eq!(
-            lines[2 + i * 2],
+            lines[1 + i * 2],
             format!("OER radio-root clock={clock} acquired released")
         );
         assert_eq!(
-            lines[3 + i * 2],
+            lines[2 + i * 2],
             format!("OER radio-root clock={clock} refused=PlatformClockError")
         );
     }
-    assert_eq!(lines[12], "OER-RESULT: pass radio-root");
-    assert_eq!(lines[13], "OER-RESULT: fail radio-root clock");
+    assert_eq!(lines[11], "OER-RESULT: pass radio-root");
+    assert_eq!(lines[12], "OER-RESULT: fail radio-root clock");
     assert_eq!(RadioRoot::decode([99, 0]), None);
+    assert_eq!(RadioRoot::decode([1, 0]), None);
     assert_eq!(RadioRoot::decode([2, 5]), None);
     assert_eq!(RadioRoot::decode([0, 1]), None);
 }

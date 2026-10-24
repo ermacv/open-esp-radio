@@ -11,6 +11,7 @@ use super::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
     Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
+    multipan_register_index,
 };
 use crate::ieee802154::ownership::{RawDebugCounter, RawEvent};
 
@@ -202,7 +203,7 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_get_freq`.
     pub fn frequency_code(&self) -> Ieee802154FrequencyCode {
-        Ieee802154FrequencyCode(self.registers.frequency_code())
+        Ieee802154FrequencyCode::new(self.registers.frequency_code())
     }
 
     /// `ieee802154_ll_get_ack_timeout`.
@@ -212,23 +213,26 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_set_multipan_panid`.
     pub fn set_multipan_pan_id(&mut self, index: Ieee802154MultipanIndex, pan_id: u16) {
-        self.registers.set_multipan_pan_id(index.as_usize(), pan_id);
+        self.registers
+            .set_multipan_pan_id(multipan_register_index(index), pan_id);
     }
 
     /// `ieee802154_ll_get_multipan_panid`.
     pub fn multipan_pan_id(&self, index: Ieee802154MultipanIndex) -> u16 {
-        self.registers.multipan_pan_id(index.as_usize())
+        self.registers
+            .multipan_pan_id(multipan_register_index(index))
     }
 
     /// `ieee802154_ll_set_multipan_short_addr`.
     pub fn set_multipan_short_address(&mut self, index: Ieee802154MultipanIndex, address: u16) {
         self.registers
-            .set_multipan_short_address(index.as_usize(), address);
+            .set_multipan_short_address(multipan_register_index(index), address);
     }
 
     /// `ieee802154_ll_get_multipan_short_addr`.
     pub fn multipan_short_address(&self, index: Ieee802154MultipanIndex) -> u16 {
-        self.registers.multipan_short_address(index.as_usize())
+        self.registers
+            .multipan_short_address(multipan_register_index(index))
     }
 
     /// `ieee802154_ll_set_multipan_ext_addr`.
@@ -238,12 +242,13 @@ impl Ieee802154RegisterLease<'_> {
         address: [u8; 8],
     ) {
         self.registers
-            .set_multipan_extended_address(index.as_usize(), address);
+            .set_multipan_extended_address(multipan_register_index(index), address);
     }
 
     /// `ieee802154_ll_get_multipan_ext_addr`.
     pub fn multipan_extended_address(&self, index: Ieee802154MultipanIndex) -> [u8; 8] {
-        self.registers.multipan_extended_address(index.as_usize())
+        self.registers
+            .multipan_extended_address(multipan_register_index(index))
     }
 
     /// `ieee802154_ll_set_ed_sample_mode`.
@@ -311,9 +316,11 @@ impl Ieee802154RegisterLease<'_> {
     pub fn rx_status(&self) -> Ieee802154RxStatus {
         let status = self.registers.rx_status();
         Ieee802154RxStatus {
-            filter_fail_reason: status.filter_fail_reason,
-            abort_reason: Ieee802154RxAbortReasonObservation::from_field(status.abort_reason),
-            state: Ieee802154RxStateCode::from_field(status.state),
+            filter_fail_reason: crate::field_byte(status.filter_fail_reason),
+            abort_reason: Ieee802154RxAbortReasonObservation::from_field(crate::field_byte(
+                status.abort_reason,
+            )),
+            state: Ieee802154RxStateCode::from_field(crate::field_byte(status.state)),
             current_channel_index: status.current_channel_index,
             preamble_match: status.preamble_match,
             sfd_match: status.sfd_match,
@@ -324,9 +331,11 @@ impl Ieee802154RegisterLease<'_> {
     pub fn tx_status(&self) -> Ieee802154TxStatus {
         let status = self.registers.tx_status();
         Ieee802154TxStatus::new(
-            Ieee802154TxStateCode::from_field(status.state),
-            Ieee802154TxAbortReasonObservation::from_field(status.abort_reason),
-            Ieee802154TxSecurityErrorObservation::from_field(status.security_error),
+            Ieee802154TxStateCode::from_field(crate::field_byte(status.state)),
+            Ieee802154TxAbortReasonObservation::from_field(crate::field_byte(status.abort_reason)),
+            Ieee802154TxSecurityErrorObservation::from_field(crate::field_byte(
+                status.security_error,
+            )),
         )
     }
 
@@ -342,8 +351,10 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_get_security_offset`.
     pub fn security_payload_offset(&self) -> Ieee802154SecurityPayloadOffset {
-        Ieee802154SecurityPayloadOffset::new(self.registers.security_payload_offset())
-            .expect("the payload-offset field is seven bits wide")
+        Ieee802154SecurityPayloadOffset::new(crate::field_byte(
+            self.registers.security_payload_offset(),
+        ))
+        .expect("the payload-offset field is seven bits wide")
     }
 
     /// `ieee802154_ll_set_security_addr`.

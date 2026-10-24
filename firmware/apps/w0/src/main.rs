@@ -45,7 +45,6 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{DomainHealth, Failure};
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::RadioHandoffError;
 use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
@@ -150,18 +149,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (hardware, clocks) = match take_radio(singletons, &psram) {
-        Ok(radio) => radio,
-        Err(error) => {
-            note(
-                &mut console,
-                &Note::w0_take_radio_fail(match error {
-                    RadioHandoffError::RootTaken => "RootTaken",
-                }),
-            );
-            park()
-        }
-    };
+    let (hardware, clocks) = take_radio(singletons, &psram);
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     note(

@@ -58,3 +58,65 @@ fn each_interface_selects_its_own_address_pair() {
         }
     }
 }
+
+/// One hardware operation of an interface-address publication.
+#[derive(Debug, Eq, PartialEq)]
+enum Operation {
+    StoreLow(usize, u32),
+    StoreHigh(usize, u16),
+    EnableReceivePolicy(usize),
+}
+
+/// The operations in the order they were performed.
+#[derive(Default)]
+struct Recorder {
+    operations: [Option<Operation>; 4],
+    count: usize,
+}
+
+impl Recorder {
+    fn record(&mut self, operation: Operation) {
+        self.operations[self.count] = Some(operation);
+        self.count += 1;
+    }
+}
+
+impl super::InterfaceAddressPort for Recorder {
+    fn store_low(&mut self, index: oer_mmio::Index<4>, word: u32) {
+        self.record(Operation::StoreLow(index.get(), word));
+    }
+
+    fn store_high(&mut self, index: oer_mmio::Index<4>, bytes: u16) {
+        self.record(Operation::StoreHigh(index.get(), bytes));
+    }
+
+    fn enable_receive_policy(&mut self, index: oer_mmio::Index<4>) {
+        self.record(Operation::EnableReceivePolicy(index.get()));
+    }
+}
+
+#[test]
+fn the_low_store_the_high_store_and_the_enable_are_three_ordered_operations() {
+    let mut recorder = Recorder::default();
+    super::program(&mut recorder, MacInterface::Context2, ADDRESS);
+    assert_eq!(
+        recorder.operations,
+        [
+            Some(Operation::StoreLow(2, 0x3322_1102)),
+            Some(Operation::StoreHigh(2, 0x5544)),
+            Some(Operation::EnableReceivePolicy(2)),
+            None,
+        ]
+    );
+}
+
+#[test]
+fn the_enable_is_a_read_modify_write_of_the_high_word() {
+    let mut words = memory();
+    let mut block = WifiMacInterfaceAddress::host(&mut words).expect("memory holds the block");
+    super::InterfaceAddressPort::enable_receive_policy(&mut block, MacInterface::Station.index());
+    drop(block);
+    // The enable bit was already set: a read-modify-write keeps every other
+    // bit, a store would have replaced them.
+    assert_eq!(words, memory());
+}

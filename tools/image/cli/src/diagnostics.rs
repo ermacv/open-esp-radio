@@ -138,9 +138,6 @@ impl Decoder {
                     .ok_or_else(|| format!("unknown boot diagnostic event: {kind:?} {words:?}"))?;
                 match event {
                     RadioRoot::Handoff => "OER radio-root handoff=ok".into(),
-                    RadioRoot::RootTaken => {
-                        "OER-RESULT: fail radio-root take_radio=RootTaken".into()
-                    }
                     RadioRoot::ClockReleased(clock) => {
                         format!("OER radio-root clock={clock:?} acquired released")
                     }

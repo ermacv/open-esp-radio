@@ -32,6 +32,13 @@ mod generated;
 pub use phy::pbus;
 pub mod phy;
 
+/// A field of at most eight bits read back, as the byte the shared
+/// IEEE 802.15.4 value types take.
+pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) -> u8 {
+    const { assert!(WIDTH <= 8, "the field fits a byte") };
+    bits.get().to_le_bytes()[0]
+}
+
 pub(crate) use phy::table_memory;
 
 /// Reviewed writable MAC interrupt mask.
@@ -271,9 +278,9 @@ pub use ownership::{
     BluetoothTaskRegisters, CoexistencePartition, Ieee802154InterruptRegisters,
     Ieee802154InterruptSetup, Ieee802154Partition, Ieee802154TaskRegisters, MacInterruptEvents,
     MacInterruptObservation, MacInterruptSnapshot, MacLocalTime, MacPowerInterruptObservation,
-    MacPowerInterruptSnapshot, RadioPartitions, RadioPhyRegisters, SharedRadioPartition,
-    SharedRadioParts, SharedRadioRegisters, WifiMacPartition, WifiRadioRegisters,
-    WifiRxDmaRegisters,
+    MacPowerInterruptSnapshot, RadioHandoff, RadioPartitions, RadioPhyRegisters,
+    SharedRadioPartition, SharedRadioParts, SharedRadioRegisters, WifiMacPartition,
+    WifiRadioRegisters, WifiRxDmaRegisters,
 };
 
 pub(crate) use ownership::device_fence;

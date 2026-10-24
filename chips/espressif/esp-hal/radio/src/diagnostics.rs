@@ -6,7 +6,6 @@ use oer_trace::{Channel, Domain, Event, Kind};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioRoot {
     Handoff,
-    RootTaken,
     ClockReleased(PlatformClock),
     ClockRefused(PlatformClock),
     Passed,
@@ -27,7 +26,6 @@ impl Event for RadioRoot {
         };
         match *self {
             Self::Handoff => [0, 0],
-            Self::RootTaken => [1, 0],
             Self::ClockReleased(value) => [2, clock(value)],
             Self::ClockRefused(value) => [3, clock(value)],
             Self::Passed => [4, 0],
@@ -38,7 +36,6 @@ impl Event for RadioRoot {
     fn decode([event, clock]: [u32; 2]) -> Option<Self> {
         Some(match (event, clock) {
             (0, 0) => Self::Handoff,
-            (1, 0) => Self::RootTaken,
             (4, 0) => Self::Passed,
             (5, 0) => Self::ClockFailed,
             (2 | 3, 0..=4) => {

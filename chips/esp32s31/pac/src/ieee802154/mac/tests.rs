@@ -39,3 +39,25 @@ fn power_sequence_fields_keep_their_identity() {
     assert!(sequence.dcdc_control_enabled());
     assert!(!sequence.dcdc_raise_for_tx());
 }
+
+#[test]
+fn each_multipan_context_names_its_own_register_index() {
+    for context in 0..super::Ieee802154MultipanIndex::COUNT {
+        let index = super::Ieee802154MultipanIndex::new(context).expect("one of four contexts");
+        assert_eq!(
+            super::multipan_register_index(index).get(),
+            usize::from(context)
+        );
+    }
+}
+
+#[test]
+fn bounded_field_values_reach_their_writers_unchanged() {
+    let code = super::Ieee802154FrequencyCode::new(0xff);
+    assert_eq!(code.bits(), 0xff);
+    assert_eq!(code.value(), 0xff);
+    let pti = super::Ieee802154Pti::new(0x1f).expect("five bits");
+    assert_eq!(pti.bits().get(), 0x1f);
+    assert_eq!(pti.value(), 0x1f);
+    assert!(super::Ieee802154Pti::new(0x20).is_none());
+}

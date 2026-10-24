@@ -9,9 +9,7 @@
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockProvider as _};
-use oer_espressif_esp_hal_radio::{
-    RadioHandoffError, RadioSingletons, diagnostics::RadioRoot, take_radio,
-};
+use oer_espressif_esp_hal_radio::{RadioSingletons, diagnostics::RadioRoot, take_radio};
 use oer_espressif_staged_runtime::diagnostics::{self, Console};
 use oer_espressif_staged_runtime::panic;
 
@@ -39,33 +37,25 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let verdict = match take_radio(singletons, &psram) {
-        Err(RadioHandoffError::RootTaken) => {
-            let _ = diagnostics.event(&RadioRoot::RootTaken);
-            None
-        }
-        Ok((hardware, clocks)) => {
-            let _ = diagnostics.event(&RadioRoot::Handoff);
-            let mut passed = true;
-            for clock in PlatformClock::ALL {
-                match clocks.acquire(clock) {
-                    Ok(guard) => {
-                        guard.release();
-                        let _ = diagnostics.event(&RadioRoot::ClockReleased(clock));
-                    }
-                    Err(oer_esp32s31_hal::power::PlatformClockError) => {
-                        passed = false;
-                        let _ = diagnostics.event(&RadioRoot::ClockRefused(clock));
-                    }
-                }
+    let (_hardware, clocks) = take_radio(singletons, &psram);
+    let _ = diagnostics.event(&RadioRoot::Handoff);
+    let mut passed = true;
+    for clock in PlatformClock::ALL {
+        match clocks.acquire(clock) {
+            Ok(guard) => {
+                guard.release();
+                let _ = diagnostics.event(&RadioRoot::ClockReleased(clock));
             }
-            Some((hardware, passed))
+            Err(oer_esp32s31_hal::power::PlatformClockError) => {
+                passed = false;
+                let _ = diagnostics.event(&RadioRoot::ClockRefused(clock));
+            }
         }
-    };
-    if let Some((_hardware, true)) = &verdict {
-        let _ = diagnostics.event(&RadioRoot::Passed);
-    } else if verdict.is_some() {
-        let _ = diagnostics.event(&RadioRoot::ClockFailed);
     }
+    let _ = diagnostics.event(if passed {
+        &RadioRoot::Passed
+    } else {
+        &RadioRoot::ClockFailed
+    });
     oer_espressif_staged_runtime::idle()
 }
