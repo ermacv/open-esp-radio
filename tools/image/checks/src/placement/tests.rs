@@ -7,13 +7,13 @@ const SWAP: u32 = 0x3401_1173;
 /// `addi sp, sp, -16`.
 const PUSH: u32 = 0xff01_0113;
 
-/// An object whose `.text` holds the trap entry and the 47 PSRAM interrupt
+/// An object whose `.text` holds the trap entry and the 47 hart-0 interrupt
 /// entries, each beginning with `first(entry)`.
 fn entries(first: impl Fn(usize) -> u32) -> Vec<u8> {
     let mut writer = Writer::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
     let text = writer.section_id(StandardSection::Text);
     let mut names = vec!["_start_trap".to_owned()];
-    names.extend((1..=47).map(|number| format!("_runtime_psram_irq_entry_{number}")));
+    names.extend((1..=47).map(|number| format!("_runtime_irq_h0_l{number}")));
     for (index, name) in names.iter().enumerate() {
         let offset = writer.append_section_data(text, &first(index).to_le_bytes(), 4);
         writer.add_symbol(Symbol {
@@ -38,7 +38,7 @@ fn swapping() -> Vec<Symbols> {
             numbers: None,
         },
         Symbols {
-            name: "_runtime_psram_irq_entry_{n}".into(),
+            name: "_runtime_irq_h0_l{n}".into(),
             numbers: Some([1, 47]),
         },
     ]
@@ -57,10 +57,7 @@ fn every_psram_entry_swaps_to_the_interrupt_stack_first() {
 #[test]
 fn an_entry_that_touches_the_interrupted_stack_first_is_refused() {
     let error = audit_entries(&entries(|index| if index == 5 { PUSH } else { SWAP })).unwrap_err();
-    assert!(
-        error.to_string().contains("_runtime_psram_irq_entry_5"),
-        "{error}"
-    );
+    assert!(error.to_string().contains("_runtime_irq_h0_l5"), "{error}");
 }
 
 const SRAM: Region = Region {

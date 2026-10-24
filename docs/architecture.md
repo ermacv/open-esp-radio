@@ -75,6 +75,12 @@ moves; ownership, orchestration and wiring are rebuilt.
   unknown length is a timer-woken step with a deadline.
 - A lower-priority task wakes a higher-priority one only through
   `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
+- Each interrupt table entry binds one interrupt part, whose type names its
+  source, to one CPU line (16 to 47) at a level on a hart: the line's vector
+  calls the entry's handler directly, the handler holds the part, and
+  binding it returns the `Bound` proof a driver takes before it enables the
+  peripheral's interrupt. The table fails to compile when two entries share
+  a line or a source.
 - Each interrupt table entry declares its class: `Hardware` (capture,
   acknowledge, latch, raise a signal; never on its core's executor level),
   `Executor` (one per level and core; strict up to its task polls) or
@@ -128,11 +134,13 @@ moves; ownership, orchestration and wiring are rebuilt.
 ## Hardware
 
 - **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
-  owns parts of the SoC before the radio handoff: boot, clocks, interrupt
-  dispatch and the routes and CPU lines it writes, PSRAM, flash, console.
-  The executor's time, software interrupt lines and timer comparators, and
-  the interrupt table's checks of routes and lines, run on our typed
-  platform blocks. esp-hal, esp-pacs, esp-riscv-rt and
+  owns parts of the SoC before the radio handoff: boot, clocks, PSRAM,
+  flash, console, the panic's software reset. Stage two's traps are the
+  staged runtime's: its vector tables, entries and checked exit, the direct
+  call of each line's handler and the image's `critical-section`. The
+  interrupt table's router writes the routes and CPU lines through the
+  chip's controller. The executor's time, software interrupt lines and
+  timer comparators run on our typed platform blocks. esp-hal, esp-pacs, esp-riscv-rt and
   esp-metadata are used only at the sites listed in
   `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use
   elsewhere, and new platform code goes into our HAL and PAC crates. Each

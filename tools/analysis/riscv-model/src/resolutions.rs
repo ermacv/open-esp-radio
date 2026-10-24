@@ -2,18 +2,14 @@
 //! analysis left unresolved, with the fact each set comes from.
 //!
 //! Every fact gives a superset of what its sites can reach, so the facts of
-//! one site unite. An empty set resolves a site only where the fact is
-//! complete for it ([`Fact::proves_empty`]); otherwise it is a hole
-//! (a no-candidate hole), never a site that reaches nothing.
+//! one site unite. An empty set never resolves a site: it is a hole (a
+//! no-candidate hole), never a site that reaches nothing.
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Where a site's targets come from.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Fact {
-    /// The image's static interrupt table: a dispatcher reaches the
-    /// handlers of its level and core.
-    InterruptTable,
     /// The image's one waker vtable, the executor's, by a census by type
     /// and by layout: every use of a typed waker clone function's address is
     /// that vtable's first word, and every row of four function pointers in
@@ -65,22 +61,15 @@ impl std::fmt::Display for Assumption {
 }
 
 impl Fact {
-    /// What a resolution from this fact assumes: the interrupt table lists
-    /// every handler outright and the waker vtable census classifies every
-    /// vtable the DWARF and relocations show; the other facts found from
-    /// types rest on the executor invariant.
+    /// What a resolution from this fact assumes: the stage-two entry is
+    /// checked and the waker vtable census classifies every vtable the
+    /// DWARF and relocations show; the other facts found from types rest
+    /// on the executor invariant.
     pub fn assumption(self) -> Option<Assumption> {
         match self {
-            Self::InterruptTable | Self::StageTwoEntry | Self::WakerVtables => None,
+            Self::StageTwoEntry | Self::WakerVtables => None,
             Self::FieldType => Some(Assumption::ExecutorInvariant),
         }
-    }
-
-    /// Whether an empty set from this fact proves the site reaches nothing:
-    /// the interrupt table lists every handler. Waker vtables and field
-    /// types are found, not listed, so their empty set is a hole.
-    pub fn proves_empty(self) -> bool {
-        matches!(self, Self::InterruptTable)
     }
 }
 
@@ -92,10 +81,11 @@ pub struct Resolution {
 }
 
 impl Resolution {
-    /// Whether the site reaches exactly `targets`: a nonempty set, or an
-    /// empty one a fact proves.
+    /// Whether the site reaches exactly `targets`: a nonempty set. Waker
+    /// vtables and field types are found, not listed, so their empty set is
+    /// a hole.
     pub fn resolves(&self) -> bool {
-        !self.targets.is_empty() || self.facts.iter().any(|fact| fact.proves_empty())
+        !self.targets.is_empty()
     }
 }
 

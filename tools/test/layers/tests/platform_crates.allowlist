@@ -12,8 +12,6 @@ chips/esp32c5/esp-hal-soc/src/radio.rs 1
 chips/esp32s31/board/Cargo.toml 1
 chips/esp32s31/board/src/lib.rs 4
 chips/esp32s31/radio/system/src/lib.rs 2
-chips/espressif/esp-hal-irq/Cargo.toml 1
-chips/espressif/esp-hal-irq/src/table.rs 4
 chips/espressif/esp-hal/radio/Cargo.toml 1
 chips/espressif/esp-hal/radio/src/esp_hal_handoff.rs 1
 chips/espressif/esp-hal/soc/Cargo.toml 1
@@ -27,11 +25,7 @@ chips/espressif/executor/tests/chip/s31.rs 3
 chips/espressif/staged-bootstrap/Cargo.toml 1
 chips/espressif/staged-bootstrap/src/lib.rs 1
 chips/espressif/staged-runtime/Cargo.toml 1
-chips/espressif/staged-runtime/src/interrupts.rs 6
-chips/espressif/staged-runtime/src/lib.rs 2
 chips/espressif/staged-runtime/src/panic.rs 1
-chips/espressif/staged-runtime/src/stacks.rs 2
-chips/espressif/staged-runtime/src/trap.rs 1
 firmware/apps/b0/Cargo.toml 1
 firmware/apps/b0/src/entry.rs 1
 firmware/apps/b0/src/host.rs 2

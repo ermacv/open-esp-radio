@@ -3,10 +3,11 @@
 //!
 //! A hart takes interrupts at the levels of its table entries; a level
 //! preempts only a lower one, so the stack holds at most one interrupt per level at a time,
-//! with an exception on top. Each level costs its worst hardware-vector entry:
-//! the entry's frame below the interrupt stack's position plus the bound of
-//! the handler it calls, where the dispatcher's calls through the source
-//! table reach only the handlers the table routes to that hart at that level.
+//! with an exception on top. Each level costs its worst hardware-vector entry
+//! among the lines its table entries bind: the entry's frame below the
+//! interrupt stack's position plus the bound of the handler it calls. One
+//! line, one source, one direct call: the vector of an entry's line must call
+//! the entry's handler, or the stacks are refused.
 //!
 //! The sum over levels rests on the interrupt controller (CLIC): an interrupt
 //! preempts only above both the threshold and the running level
@@ -20,8 +21,8 @@
 //! half, that each line's CLIC level is its table entry's and stays so, is
 //! the image's configuration: the firmware gate checks where its writers run
 //! ([`crate::instances`]).
-use crate::{Analysis, Assumption, Bound, Fact, LevelDrop, Resolutions, TableEntry, TrapEntry};
-use oer_analysis_riscv_model::{Ledger, Result, RunControl};
+use crate::{Analysis, Assumption, Bound, LevelDrop, Resolutions, TableEntry, TrapEntry};
+use oer_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// What the stacks of an image are bounded from.
@@ -29,15 +30,20 @@ pub struct Stacks<'a> {
     pub table: &'a [TableEntry],
     /// The harts, by the table's core numbers.
     pub cores: &'a [u32],
-    /// The checked entries of the hardware vectors.
-    pub vectors: &'a [TrapEntry],
+    /// The checked entries of the hardware vectors, by hart and line.
+    pub vectors: &'a [Vector],
     /// The checked entry of exceptions.
     pub exception: TrapEntry,
-    /// The base of the dispatcher's source table: a call through it reaches
-    /// the handler of the source dispatched.
-    pub sources: u32,
-    /// Targets of other indirect sites, the same in every context.
+    /// Targets of indirect sites, the same in every context.
     pub resolutions: &'a Resolutions,
+}
+
+/// The checked entry of one hart's line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Vector {
+    pub hart: u32,
+    pub line: u32,
+    pub entry: TrapEntry,
 }
 
 /// One level of one hart.
@@ -96,29 +102,49 @@ impl HartStack {
 }
 
 impl Stacks<'_> {
-    /// The same context-specific dispatch facts used by the level's bound.
-    /// Priority zero denotes the exception, which adds no interrupt routes.
-    pub fn resolutions_for(&self, analysis: &Analysis, core: u32, level: u32) -> Resolutions {
-        let mut resolutions = self.resolutions.clone();
-        if level == 0 {
-            return resolutions;
-        }
-        let handlers: BTreeSet<u32> = self
+    /// The dispatch facts of a level's bound: the handlers are direct calls
+    /// of their lines' entries, so every context shares the image's.
+    pub fn resolutions_for(&self, _analysis: &Analysis, _core: u32, _level: u32) -> Resolutions {
+        self.resolutions.clone()
+    }
+
+    /// The checked entries of the lines `core`'s entries at `level` bind.
+    ///
+    /// # Errors
+    ///
+    /// A line with no vector, or whose vector calls another function than
+    /// its entry's handler.
+    fn entries_of(&self, core: u32, level: u32) -> Result<Vec<TrapEntry>> {
+        let invalid = |message: String| Error::new(ErrorCode::Integrity, message);
+        let mut entries = Vec::new();
+        for binding in self
             .table
             .iter()
             .filter(|entry| entry.core == core && entry.level == level)
-            .filter_map(|entry| entry.handler)
-            .collect();
-        for site in analysis
-            .functions
-            .values()
-            .flat_map(|facts| facts.table_bases.iter())
-            .filter(|&(_, &base)| base == self.sources)
-            .map(|(&site, _)| site)
         {
-            resolutions.add(site, Fact::InterruptTable, handlers.iter().copied());
+            let Some(handler) = binding.handler else {
+                continue;
+            };
+            let vector = self
+                .vectors
+                .iter()
+                .find(|vector| vector.hart == core && vector.line == binding.line)
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "hart {core} has no vector for line {} of source {}",
+                        binding.line, binding.source
+                    ))
+                })?;
+            if vector.entry.handler != handler {
+                return Err(invalid(format!(
+                    "the vector of line {} on hart {core} calls {:#010x}, the table binds \
+                     source {} to {handler:#010x}",
+                    binding.line, vector.entry.handler, binding.source
+                )));
+            }
+            entries.push(vector.entry);
         }
-        resolutions
+        Ok(entries)
     }
 }
 
@@ -139,12 +165,12 @@ pub fn interrupt_stacks(
             .collect();
         let mut level_stacks = Vec::new();
         for level in levels {
-            let resolutions = stacks.resolutions_for(analysis, core, level);
+            let entries = stacks.entries_of(core, level)?;
             level_stacks.push(worst(
                 analysis,
                 level,
-                stacks.vectors,
-                &resolutions,
+                &entries,
+                stacks.resolutions,
                 keep,
                 control,
             )?);

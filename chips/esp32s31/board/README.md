@@ -59,40 +59,34 @@ Stage-two assembly initializes application data and SRAM interrupt/DMA sections
 before entering `runtime_main`, which the image defines with
 `oer_espressif_staged_runtime::entry!`; it hands the image's `main` the one
 `Handoff`. The application calls `esp_hal::init`, then
-`handoff.adopt(INTERRUPT_TABLE, BootstrapPsram(peripherals.PSRAM))`: the
-board's `BootstrapPsram` implements the staged layout's
+`handoff.adopt(INTERRUPT_TABLE, controller, BootstrapPsram(peripherals.PSRAM))`:
+the board's `BootstrapPsram` implements the staged layout's
 `AdoptsBootstrapMapping`, the promise that it adopts the bootstrap's mapping
 without resetting or remapping PSRAM. The board does not link the runtime,
 whose panic entry would otherwise reach the bootstrap through the board.
-`adopt` also installs the interrupt table, which silences every source it
-lists, reinitializes vectoring and installs the per-core SRAM interrupt
-stack. It returns `Adopted`, whose `enable_interrupts` sets global interrupt
-enable once the application has bound its timers and executor handlers: a
-source is routed only by its token's owner, after it bound its handler.
-The runtime is the only owner of each hart's active vector table (MTVT):
-every CPU interrupt enters through its stack-switching vector entry and
-esp-hal's shared dispatcher. The esp-hal fork only vectors the
-inter-processor call's line (CLINT software interrupt 3) and runs the posted
-function from that dispatcher, instead of writing its own handler into the
-slot; `enable_interrupts` panics when any hardware-vector slot
-differs from the runtime's entries, so a later direct binding cannot run on
-the interrupted stack.
+`adopt` installs the per-core SRAM interrupt stack and the runtime's vectors
+(`mtvec` names the exception entry, `mtvt` the hart's table) and takes the
+hart's routes and lines through `controller`, the chip's
+`oer_interrupt_table::Controller`: it silences every source and disables
+every line. It returns `Adopted`, whose router binds each entry and whose
+`enable_interrupts` checks the vectors, routes and lines and sets global
+interrupt enable. The runtime owns each hart's vector table: the word of
+line `n` holds that line's entry, which switches to the SRAM stack, calls the
+line's handler directly and returns through the checked exit.
 
-Each image declares its peripheral interrupt sources once with
-`oer_espressif_staged_runtime::interrupt_table!` (source, handler, level,
-core; see [`oer-interrupt-table`](../../../portable/interrupt-table/README.md)):
-the macro links each handler into its source's slot of esp-hal's
-`__EXTERNAL_INTERRUPTS` and creates one token per source; the image hands its
-`INTERRUPT_TABLE` to `Handoff::adopt`. Each 12-byte entry holds the `Interrupt` (`u16`), the
-`Priority` (`u8`), the `Cpu` (a 4-byte C enum at offset 4) and the handler
-address at offset 8 (zero for an entry a `cfg` leaves out); compile-time
-assertions in `chips/espressif/esp-hal-irq/src/table.rs` keep that layout. Installing a hart's
-interrupt stack silences every source of that hart's entries and checks the
-slots; `enable_interrupts` checks again that every slot holds its
-handler and every table source is silent or routed to its level. An owner
-routes its source with `oer_espressif_esp_hal_soc::interrupt_table::enable` and
-its token, on the table's core only, and silences it with `disable`; the
-matrix lives in that adapter so that owners in `chips/` reach it. esp-hal's PMP region setup
+Each image declares its interrupt bindings once with
+`oer_espressif_staged_runtime::interrupt_table!` (interrupt part, handler,
+CPU line 16 to 47, level, hart, class; see
+[`oer-interrupt-table`](../../../portable/interrupt-table/README.md)): the
+source comes from the part's type, the macro defines each line's handler
+symbol and one token per entry, and the image hands its `INTERRUPT_TABLE` to
+`Handoff::adopt`. Each 12-byte entry holds the source (`u16`), the line, the
+level, the class and the hart (`u8` each) and the handler address at offset 8
+(zero for an entry a `cfg` leaves out); compile-time assertions in
+`portable/interrupt-table` keep that layout. Binding an entry moves its part
+where only its handler reaches it, writes the line and then the route, and
+returns the `Bound` proof the driver takes before it enables the
+peripheral's interrupt. esp-hal's PMP region setup
 (`ESP_HAL_CONFIG_ENABLE_PMP`) is off in the root Cargo configuration, because
 its single no-execute data region would span stage two's PSRAM code.
 

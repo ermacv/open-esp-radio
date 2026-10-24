@@ -229,6 +229,8 @@ pub struct InterruptContract {
     pub table_entry_bytes: u32,
     /// Fields of a table entry as `[offset, bytes]`.
     pub table_source: [u32; 2],
+    /// The CPU line the entry's source is routed to.
+    pub table_line: [u32; 2],
     pub table_level: [u32; 2],
     /// The entry's handler class (`oer_interrupt_table::Class`).
     pub table_class: [u32; 2],
@@ -237,9 +239,12 @@ pub struct InterruptContract {
     /// An exempt entry's reason is the bytes of the symbol named by this
     /// prefix and the entry's handler symbol.
     pub table_exemption_prefix: String,
+    /// Every hart's hardware-vector table, one after another.
     pub vector_table_symbol: String,
+    /// The words of one hart's table: the word of line `n` of hart `h` is
+    /// word `h * vector_table_hart_slots + n`.
+    pub vector_table_hart_slots: u32,
     pub exception_entry_symbol: String,
-    pub source_table_symbol: String,
     pub harts: Vec<u32>,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.

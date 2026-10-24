@@ -1,5 +1,5 @@
-//! An image's interrupt table: for each peripheral source its handler, level,
-//! handler class and core, read from the link's facts. The table is the slice an exported
+//! An image's interrupt table: for each binding its source, CPU line,
+//! level, handler class, hart and handler, read from the link's facts. The table is the slice an exported
 //! symbol holds (its pointer word relocated to the entries, then its length);
 //! every non-zero handler word carries the relocation that names it, and a
 //! zero word is an entry the build left out.
@@ -20,6 +20,7 @@ pub struct TableLayout {
     /// Bytes per entry.
     pub entry: u32,
     pub source: Field,
+    pub line: Field,
     pub level: Field,
     pub class: Field,
     pub core: Field,
@@ -76,6 +77,8 @@ impl std::fmt::Display for Class {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TableEntry {
     pub source: u32,
+    /// The CPU line the source is routed to, whose vector calls `handler`.
+    pub line: u32,
     pub level: u32,
     pub class: Class,
     pub core: u32,
@@ -131,8 +134,8 @@ pub fn interrupt_table(
     // first word outside the table, never on the budget or an allocation.
     let mut entries = Vec::new();
     for index in 0..length {
-        // Each entry reads its handler and four fields.
-        control.checkpoint(5)?;
+        // Each entry reads its handler and five fields.
+        control.checkpoint(6)?;
         let entry = first + index * layout.entry;
         let address = entry + layout.handler;
         let handler = word(address)?;
@@ -144,6 +147,7 @@ pub fn interrupt_table(
         let class = field(entry, layout.class)?;
         entries.push(TableEntry {
             source: field(entry, layout.source)?,
+            line: field(entry, layout.line)?,
             level: field(entry, layout.level)?,
             class: Class::of(class).ok_or_else(|| {
                 invalid(format!(

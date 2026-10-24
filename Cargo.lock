@@ -2943,19 +2943,6 @@ name = "oer-espressif-efuse"
 version = "0.1.0"
 
 [[package]]
-name = "oer-espressif-esp-hal-irq"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-esp32c5-hal",
- "oer-esp32s31-hal",
- "oer-interrupt-table",
- "oer-memory",
- "oer-mmio",
- "static_cell",
-]
-
-[[package]]
 name = "oer-espressif-esp-hal-radio"
 version = "0.1.0"
 dependencies = [
@@ -2973,7 +2960,6 @@ dependencies = [
  "esp-hal",
  "oer-esp32s31-hal",
  "oer-esp32s31-pac",
- "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
  "oer-memory",
 ]
@@ -2988,7 +2974,6 @@ dependencies = [
  "oer-cooperate",
  "oer-esp32c5-hal",
  "oer-esp32s31-hal",
- "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
  "oer-memory",
  "oer-mmio",
@@ -3059,9 +3044,9 @@ version = "0.1.0"
 name = "oer-espressif-staged-runtime"
 version = "0.1.0"
 dependencies = [
+ "critical-section",
  "esp-hal",
  "oer-diagnostics",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-staged-layout",
  "oer-interrupt-table",
  "oer-memory",
@@ -3106,7 +3091,6 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-system",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -3187,7 +3171,6 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-system",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -3223,7 +3206,6 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-system",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -3263,7 +3245,6 @@ dependencies = [
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-coex",
  "oer-esp32s31-radio-system",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -3326,7 +3307,6 @@ dependencies = [
  "oer-esp32c5-esp-hal-soc",
  "oer-esp32c5-hal",
  "oer-esp32c5-layout",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-executor",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-serial-jtag",
@@ -3361,7 +3341,6 @@ dependencies = [
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-coex",
  "oer-esp32s31-radio-system",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -3407,7 +3386,6 @@ dependencies = [
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-coex",
  "oer-esp32s31-radio-system",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -3447,7 +3425,6 @@ dependencies = [
  "oer-esp32s31-knowledge",
  "oer-esp32s31-layout",
  "oer-esp32s31-phy",
- "oer-espressif-esp-hal-irq",
  "oer-espressif-esp-hal-radio",
  "oer-espressif-esp-hal-soc",
  "oer-espressif-executor",
@@ -4091,6 +4068,11 @@ dependencies = [
 [[package]]
 name = "oer-interrupt-table"
 version = "0.1.0"
+dependencies = [
+ "oer-memory",
+ "oer-mmio",
+ "static_cell",
+]
 
 [[package]]
 name = "oer-lab-arbiter"

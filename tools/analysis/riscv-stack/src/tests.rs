@@ -16,6 +16,9 @@ mod task_polls;
 #[path = "reached_cut_tests.rs"]
 mod reached_cut;
 
+#[path = "trap_exit_tests.rs"]
+mod trap_exits;
+
 /// Working memory of a test's analysis: no test comes near it.
 const TEST_MEMORY: u64 = 1 << 32;
 
@@ -559,11 +562,10 @@ fn a_resolution_gives_an_unresolved_site_each_of_its_targets() {
     );
 }
 
-/// An empty set resolves a site only where its fact proves the site reaches
-/// nothing; otherwise the site is a hole, and the bound keeps the resolved
-/// part as `partial + ?`.
+/// An empty set never resolves a site: the site is a hole, and the bound
+/// keeps the resolved part as `partial + ?`.
 #[test]
-fn an_empty_candidate_set_is_a_hole_unless_its_fact_proves_it() {
+fn an_empty_candidate_set_is_a_hole() {
     let root = Symbol {
         name: "root",
         words: vec![
@@ -582,15 +584,6 @@ fn an_empty_candidate_set_is_a_hole_unless_its_fact_proves_it() {
     assert_eq!(hole.bytes, None);
     assert_eq!(hole.partial, 16);
     assert_eq!(hole.unresolved, [(site, Reason::NoCandidate)]);
-    let mut proven = Resolutions::new();
-    proven.add(site, Fact::InterruptTable, []);
-    assert_eq!(
-        analysis
-            .bound_with(TEXT, &proven, &mut crate::tests::ledger(), &mut || Ok(()))
-            .unwrap()
-            .bytes,
-        Some(16)
-    );
     // Facts unite: a field type's candidate joins a found-empty waker set.
     found.add(site, Fact::FieldType, [TEXT]);
     assert_eq!(found.get(site).unwrap().targets, BTreeSet::from([TEXT]));
@@ -1308,17 +1301,17 @@ fn a_vector_table_names_its_entries_by_relocations() {
     assert!(vector_table(&elf, "missing").is_err());
 }
 
-fn binding(source: u16, level: u8, class: u8, core: u32) -> [u32; 2] {
+fn binding(source: u16, line: u8, level: u8, class: u8, hart: u8) -> [u32; 2] {
     [
-        u32::from(source) | u32::from(level) << 16 | u32::from(class) << 24,
-        core,
+        u32::from(source) | u32::from(line) << 16 | u32::from(level) << 24,
+        u32::from(class) | u32::from(hart) << 8,
     ]
 }
 
-/// An image whose `__OER_INTERRUPT_TABLE` lists `entries` (source, level,
-/// class, core, handler symbol index or none) in the staged runtime's binding
-/// layout.
-fn table_image(entries: &[(u16, u8, u8, u32, Option<u32>)], relocate_handlers: bool) -> Vec<u8> {
+/// An image whose `__OER_INTERRUPT_TABLE` lists `entries` (source, line,
+/// level, class, hart, handler symbol index or none) in the interrupt
+/// table's binding layout.
+fn table_image(entries: &[(u16, u8, u8, u8, u8, Option<u32>)], relocate_handlers: bool) -> Vec<u8> {
     let handler = Symbol {
         name: "handler",
         words: vec![SP_DOWN_16, SP_UP_16, RET],
@@ -1326,8 +1319,8 @@ fn table_image(entries: &[(u16, u8, u8, u32, Option<u32>)], relocate_handlers: b
     };
     let mut words = vec![RODATA + 8, entries.len() as u32];
     let mut relocated = vec![0];
-    for &(source, level, class, core, target) in entries {
-        words.extend(binding(source, level, class, core));
+    for &(source, line, level, class, hart, target) in entries {
+        words.extend(binding(source, line, level, class, hart));
         if target.is_some() && relocate_handlers {
             relocated.push(words.len());
         }
@@ -1347,12 +1340,14 @@ fn table_image(entries: &[(u16, u8, u8, u32, Option<u32>)], relocate_handlers: b
     )
 }
 
-const S31_TABLE: TableLayout = TableLayout {
+/// `oer_interrupt_table::Binding`, as the chips' contracts give it.
+const TABLE: TableLayout = TableLayout {
     entry: 12,
     source: Field { offset: 0, size: 2 },
-    level: Field { offset: 2, size: 1 },
-    class: Field { offset: 3, size: 1 },
-    core: Field { offset: 4, size: 4 },
+    line: Field { offset: 2, size: 1 },
+    level: Field { offset: 3, size: 1 },
+    class: Field { offset: 4, size: 1 },
+    core: Field { offset: 5, size: 1 },
     handler: 8,
 };
 
@@ -1360,19 +1355,20 @@ const S31_TABLE: TableLayout = TableLayout {
 fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
     let elf = table_image(
         &[
-            (25, 1, 0, 0, Some(TEXT)),
-            (67, 8, 1, 1, None),
-            (68, 8, 2, 1, None),
-            (69, 8, 3, 1, None),
+            (25, 16, 1, 0, 0, Some(TEXT)),
+            (67, 20, 8, 1, 1, None),
+            (68, 21, 8, 2, 1, None),
+            (69, 47, 8, 3, 1, None),
         ],
         true,
     );
-    let entries = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap();
+    let entries = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).unwrap();
     assert_eq!(
         entries,
         [
             TableEntry {
                 source: 25,
+                line: 16,
                 level: 1,
                 class: Class::Hardware,
                 core: 0,
@@ -1380,6 +1376,7 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
             },
             TableEntry {
                 source: 67,
+                line: 20,
                 level: 8,
                 class: Class::Executor,
                 core: 1,
@@ -1387,6 +1384,7 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
             },
             TableEntry {
                 source: 68,
+                line: 21,
                 level: 8,
                 class: Class::Exempt(Violation::ExecutorLevel),
                 core: 1,
@@ -1394,6 +1392,7 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
             },
             TableEntry {
                 source: 69,
+                line: 47,
                 level: 8,
                 class: Class::Exempt(Violation::WakerCall),
                 core: 1,
@@ -1405,8 +1404,8 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
 
 #[test]
 fn an_unknown_handler_class_fails_the_table() {
-    let elf = table_image(&[(25, 1, 4, 0, Some(TEXT))], true);
-    let error = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap_err();
+    let elf = table_image(&[(25, 16, 1, 4, 0, Some(TEXT))], true);
+    let error = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).unwrap_err();
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
     assert!(error.to_string().contains("no handler class 4"), "{error}");
 }
@@ -1427,12 +1426,12 @@ fn an_empty_table_needs_no_pointer_relocation() {
         },
     );
     assert_eq!(
-        interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap(),
+        interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).unwrap(),
         []
     );
     // A table with entries still needs its pointer relocated.
     let mut words = vec![RODATA + 8, 1];
-    words.extend(binding(25, 1, 0, 0));
+    words.extend(binding(25, 16, 1, 0, 0));
     words.push(0);
     let elf = built(
         TEXT,
@@ -1443,12 +1442,12 @@ fn an_empty_table_needs_no_pointer_relocation() {
             objects: &[("__OER_INTERRUPT_TABLE", 0, 8), ("entries", 8, 12)],
         },
     );
-    assert!(interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).is_err());
+    assert!(interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).is_err());
 }
 
 #[test]
 fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
-    let mut elf = table_image(&[(25, 1, 0, 0, Some(TEXT))], true);
+    let mut elf = table_image(&[(25, 16, 1, 0, 0, Some(TEXT))], true);
     let at = {
         let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
         let table = file.symbol("__OER_INTERRUPT_TABLE").unwrap();
@@ -1457,7 +1456,7 @@ fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
     };
     elf[at..at + 4].copy_from_slice(&u32::MAX.to_le_bytes());
     let error = with_facts(&elf, |facts| {
-        crate::interrupt_table(facts, "__OER_INTERRUPT_TABLE", &S31_TABLE, &mut Units(1000))
+        crate::interrupt_table(facts, "__OER_INTERRUPT_TABLE", &TABLE, &mut Units(1000))
     })
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
@@ -1465,9 +1464,9 @@ fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
 
 #[test]
 fn a_handler_word_without_its_relocation_fails() {
-    let elf = table_image(&[(25, 1, 0, 0, Some(TEXT))], false);
-    assert!(interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).is_err());
-    assert!(interrupt_table(&elf, "__MISSING", &S31_TABLE).is_err());
+    let elf = table_image(&[(25, 16, 1, 0, 0, Some(TEXT))], false);
+    assert!(interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).is_err());
+    assert!(interrupt_table(&elf, "__MISSING", &TABLE).is_err());
 }
 
 /// `lui a1, upper` then `addi a1, a1, lower`: `a1 = value`.
@@ -2284,28 +2283,6 @@ fn a_typed_and_an_untyped_waker_vtable_are_two() {
 
 #[test]
 fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
-    // lui a5, 3 (the source table at 0x3000); add a5, a5, a0; lw a5, 0(a5).
-    const LUI_SOURCES: u32 = (3 << 12) | (15 << 7) | 0x37;
-    const ADD_INDEX: u32 = (10 << 20) | (15 << 15) | (15 << 7) | 0x33;
-    const LOAD_ENTRY: u32 = (15 << 15) | (2 << 12) | (15 << 7) | 0x03;
-    // slli a0, a0, 2: the source number scaled to a word index.
-    const SCALE_INDEX: u32 = (2 << 20) | (10 << 15) | (1 << 12) | (10 << 7) | 0x13;
-    let dispatcher = Symbol {
-        name: "dispatcher",
-        words: vec![
-            SP_DOWN_16,
-            SAVE_RA,
-            LUI_SOURCES,
-            SCALE_INDEX,
-            ADD_INDEX,
-            LOAD_ENTRY,
-            CALL_A5,
-            LOAD_RA,
-            SP_UP_16,
-            RET,
-        ],
-        frame: Some(16),
-    };
     let small = Symbol {
         name: "small",
         words: vec![SP_DOWN_16, SP_UP_16, RET],
@@ -2316,42 +2293,60 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
         words: vec![SP_DOWN_32, SP_UP_32, RET],
         frame: Some(32),
     };
-    let elf = executable(&[dispatcher, small, large]);
+    let elf = executable(&[small, large]);
     let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dispatcher, small, large) = (TEXT, TEXT + 40, TEXT + 52);
-    let entry = |level, core, handler| TableEntry {
+    let (small, large) = (TEXT, TEXT + 12);
+    let entry = |line, level, core, handler| TableEntry {
         source: 0,
+        line,
         level,
         class: Class::Hardware,
         core,
         handler: Some(handler),
     };
-    let table = [entry(1, 0, small), entry(8, 0, large), entry(1, 1, small)];
-    let vector = TrapEntry {
-        entry: 0x100,
-        frame: 80,
-        handler: dispatcher,
+    // One line, one handler: each line's vector calls its entry's handler.
+    let vector = |hart, line, handler| Vector {
+        hart,
+        line,
+        entry: TrapEntry {
+            entry: 0x100 + 4 * line,
+            frame: 96,
+            handler,
+        },
     };
+    let table = [
+        entry(16, 1, 0, small),
+        entry(17, 8, 0, large),
+        entry(16, 1, 1, small),
+    ];
+    let vectors = [
+        vector(0, 16, small),
+        vector(0, 17, large),
+        vector(1, 16, small),
+        // A line no entry binds costs no level.
+        vector(0, 18, large),
+    ];
     let exception = TrapEntry {
         entry: 0x200,
-        frame: 80,
+        frame: 96,
         handler: small,
     };
-    let harts = interrupt_stacks(
-        &analysis,
-        &Stacks {
-            table: &table,
-            cores: &[0, 1],
-            vectors: &[vector],
-            exception,
-            sources: 0x3000,
-            resolutions: &Resolutions::new(),
-        },
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
-    // Level 1: 80 + 16 + 16; level 8: 80 + 16 + 32; the exception 80 + 16.
+    let stacks = |table: &[TableEntry], vectors: &[Vector]| {
+        interrupt_stacks(
+            &analysis,
+            &Stacks {
+                table,
+                cores: &[0, 1],
+                vectors,
+                exception,
+                resolutions: &Resolutions::new(),
+            },
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+    };
+    let harts = stacks(&table, &vectors).unwrap();
+    // Level 1: 96 + 16; level 8: 96 + 32; the exception 96 + 16.
     let levels = |hart: &HartStack| {
         hart.levels
             .iter()
@@ -2359,11 +2354,23 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
             .collect::<Vec<_>>()
     };
     assert_eq!(levels(&harts[0]), [(1, Some(112)), (8, Some(128))]);
-    assert_eq!(harts[0].exception.bytes, Some(96));
-    assert_eq!(harts[0].bytes, Some(112 + 128 + 96));
+    assert_eq!(harts[0].exception.bytes, Some(112));
+    assert_eq!(harts[0].bytes, Some(112 + 128 + 112));
     // Hart 1 has no level-8 entry; its level 1 reaches the small handler only.
     assert_eq!(levels(&harts[1]), [(1, Some(112))]);
-    assert_eq!(harts[1].bytes, Some(112 + 96));
+    assert_eq!(harts[1].bytes, Some(112 + 112));
+
+    // A line's vector that calls another handler than its entry's, or no
+    // vector for an entry's line, refuses the stacks.
+    let mut crossed = vectors;
+    crossed[1] = vector(0, 17, small);
+    let error = stacks(&table, &crossed).unwrap_err();
+    assert!(
+        error.message.contains("the vector of line 17 on hart 0"),
+        "{error:?}"
+    );
+    let error = stacks(&table, &vectors[..2]).unwrap_err();
+    assert!(error.message.contains("no vector for line 16"), "{error:?}");
 }
 
 const HOOK_PROGRAM: &str = r#"
@@ -2606,10 +2613,8 @@ fn a_bound_assumes_what_the_resolutions_it_takes_assume() {
             .unwrap()
             .assumptions
     };
-    // The interrupt table lists its handlers outright and the waker vtable
-    // census enumerates every vtable; a field's type rests on the executor
-    // invariant.
-    assert_eq!(assumed(Fact::InterruptTable), BTreeSet::new());
+    // The waker vtable census enumerates every vtable; a field's type rests
+    // on the executor invariant.
     assert_eq!(assumed(Fact::WakerVtables), BTreeSet::new());
     assert_eq!(
         assumed(Fact::FieldType),
@@ -2776,10 +2781,10 @@ fn the_working_memory_and_the_work_budget_bound_the_analysis() {
 #[test]
 fn every_image_query_charges_its_reads_to_the_work_budget() {
     let limited = |error: Error| assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
-    let table = table_image(&[(25, 1, 0, 0, Some(TEXT))], true);
+    let table = table_image(&[(25, 16, 1, 0, 0, Some(TEXT))], true);
     with_facts(&table, |facts| {
         limited(
-            crate::interrupt_table(facts, "__OER_INTERRUPT_TABLE", &S31_TABLE, &mut Units(0))
+            crate::interrupt_table(facts, "__OER_INTERRUPT_TABLE", &TABLE, &mut Units(0))
                 .unwrap_err(),
         );
         limited(crate::taken_addresses(facts, &mut ledger(), &mut Units(0)).unwrap_err());

@@ -102,7 +102,6 @@ members = [
     "portable/time-virtual",
     "chips/espressif/esp-hal/radio",
     "chips/espressif/esp-hal/soc",
-    "chips/espressif/esp-hal-irq",
     "protocols/bluetooth/hci",
     "protocols/bluetooth/le/controller",
     "protocols/bluetooth/le/ll",
@@ -262,7 +261,6 @@ default-members = [
     "portable/time-virtual",
     "chips/espressif/esp-hal/radio",
     "chips/espressif/esp-hal/soc",
-    "chips/espressif/esp-hal-irq",
     "protocols/bluetooth/hci",
     "protocols/bluetooth/le/controller",
     "protocols/bluetooth/le/ll",
@@ -317,6 +315,7 @@ default-members = [
     "tools/registers/generate",
     "tools/test/layers",
     "chips/espressif/staged-layout",
+    "chips/espressif/staged-runtime",
     "chips/esp32s31/layout",
 ]
 resolver = "3"
@@ -338,7 +337,6 @@ esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "1f6
 static_cell = "2.1.1"
 oer-espressif-staged-layout = { path = "chips/espressif/staged-layout" }
 oer-espressif-usb-serial-jtag = { path = "chips/espressif/usb-serial-jtag" }
-oer-espressif-esp-hal-irq = { path = "chips/espressif/esp-hal-irq" }
 oer-esp32s31-layout = { path = "chips/esp32s31/layout" }
 oer-espressif-esp-hal-soc = { path = "chips/espressif/esp-hal/soc", features = ["esp32s31"] }
 # The HIL agent images' shared dependencies.

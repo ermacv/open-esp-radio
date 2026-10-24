@@ -58,8 +58,8 @@ contracts: [Hardware memory](hardware-memory.md).
   (`[core-start]` of `chip.toml`, also forbidden in `clippy.toml`) and no
   interrupt-table entry routes to it.
 - esp-hal's cross-core call (IPC) is off in every image: the fork's `ipc`
-  feature is not enabled, so `handle_interrupts` has no IPC dispatch and no
-  interrupt level is taken without a route in the image's table. The image
+  feature is not enabled, and no interrupt line is taken without its entry
+  in the image's table: each line's vector calls that entry's handler alone. The image
   gate fails an image that links any `esp_hal::interrupt::ipc` function
   (`ipc` of `[core-start]` in `chip.toml`) until the call is typed.
 - CPU0's task stack is in PSRAM; each used hart has an SRAM interrupt stack

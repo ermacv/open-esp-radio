@@ -67,6 +67,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let layout = TableLayout {
             entry: irq.table_entry_bytes,
             source: field(irq.table_source),
+            line: field(irq.table_line),
             level: field(irq.table_level),
             class: field(irq.table_class),
             core: field(irq.table_core),
@@ -372,6 +373,7 @@ struct InterruptContract {
     table_symbol: String,
     table_entry_bytes: u32,
     table_source: [u32; 2],
+    table_line: [u32; 2],
     table_level: [u32; 2],
     table_class: [u32; 2],
     table_core: [u32; 2],

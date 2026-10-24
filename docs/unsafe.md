@@ -43,7 +43,7 @@ Below it are, by directory (`/` ends a domain):
 | Generated register access | `chips/esp32s31/pac-raw` |
 | The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
-| Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
+| Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |

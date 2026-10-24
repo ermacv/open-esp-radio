@@ -213,6 +213,7 @@ pub fn take_previous() -> Option<PanicRecord> {
 }
 
 /// Record `info` in the retained slot without formatting.
+#[cfg(target_arch = "riscv32")]
 fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
     let hart: usize;
     let sp: usize;
@@ -269,7 +270,7 @@ fn record<'a>(info: &'a core::panic::PanicInfo<'_>) -> PanicDetails<'a> {
     details
 }
 
-#[cfg(feature = "panic-hook")]
+#[cfg(all(target_arch = "riscv32", feature = "panic-hook"))]
 unsafe extern "Rust" {
     /// The image's record of its own state after the platform's record. It
     /// formats nothing, like the entry: it runs in every context's stack
@@ -277,6 +278,7 @@ unsafe extern "Rust" {
     fn oer_platform_panic_hook(details: &PanicDetails<'_>);
 }
 
+#[cfg(target_arch = "riscv32")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     let details = record(info);

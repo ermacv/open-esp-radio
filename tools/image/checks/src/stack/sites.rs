@@ -23,7 +23,6 @@ pub const BOOTSTRAP_JSON: &str = "bootstrap-indirect-sites.json";
 pub enum Kind {
     JumpTable,
     ValueAnalysis,
-    InterruptTable,
     StageTwoEntry,
     WakerVtables,
     FieldType,
@@ -39,7 +38,6 @@ impl Kind {
 
     fn of_fact(fact: Fact) -> Self {
         match fact {
-            Fact::InterruptTable => Self::InterruptTable,
             Fact::StageTwoEntry => Self::StageTwoEntry,
             Fact::WakerVtables => Self::WakerVtables,
             Fact::FieldType => Self::FieldType,

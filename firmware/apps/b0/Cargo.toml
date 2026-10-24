@@ -35,7 +35,6 @@ oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", features = ["bluetooth"] }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", features = ["bluetooth"] }
-oer-espressif-esp-hal-irq = { workspace = true }
 [dev-dependencies]
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 [build-dependencies]

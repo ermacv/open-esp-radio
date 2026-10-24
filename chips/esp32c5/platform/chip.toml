@@ -71,40 +71,38 @@ task-stacks = "psram"
 # inter-processor call.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
-# `Binding<Interrupt, Priority, Cpu>`: source u16 at 0, level u8 at 2, class
-# u8 at 3 (`oer_interrupt_table::Class`), core u32 at 4, handler word at 8;
-# fields as [offset, bytes]. An exempt entry's reason is the bytes of the
-# symbol named by the prefix and the entry's handler symbol.
+# `oer_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
+# u8 at 3, class u8 at 4 (`oer_interrupt_table::Class`), hart u8 at 5,
+# handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
+# the bytes of the symbol named by the prefix and the entry's handler symbol.
 table-entry-bytes = 12
 table-source = [0, 2]
-table-level = [2, 1]
-table-class = [3, 1]
-table-core = [4, 4]
+table-line = [2, 1]
+table-level = [3, 1]
+table-class = [4, 1]
+table-core = [5, 1]
 table-handler = 8
 table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
-vector-table-symbol = "_runtime_psram_mtvt_source"
+# Each hart's table of 64 words, the word of line n at 4n; each line's
+# entry calls the line's handler directly and returns through the checked
+# exit (staged-runtime `vectors.s`).
+vector-table-symbol = "_runtime_mtvt"
+vector-table-hart-slots = 64
 exception-entry-symbol = "_start_trap"
-source-table-symbol = "__EXTERNAL_INTERRUPTS"
 harts = [0]
 # Maximum allocation of the hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-guard-bytes = { "0" = 4096 }
 irq-stack-margin-percent = 10
+# Routes and line levels are written through the interrupt table's router
+# (portable/interrupt-table) by the chip's controller, whose writer
+# functions this list names with the contexts they may run in.
+level-writers = []
 
 # esp-hal sets a CPU line's CLIC level only while it initializes vectoring
 # (the line's level from its constant priority map), and routes a source
 # only at start-up and through the table's routing capability.
-[[interrupts.level-writers]]
-writer = "esp_hal::interrupt::arch::cpu_int::set_priority_raw"
-contexts = ["esp_hal::interrupt::arch::init_vectoring"]
 
-[[interrupts.level-writers]]
-writer = "esp_hal::interrupt::map_raw"
-contexts = [
-    "esp_hal::interrupt::setup_interrupts",
-    "<esp_hal::interrupt::CoreInterruptRoutes>::enable",
-    "<esp_hal::interrupt::CoreInterruptRoutes>::disable",
-]
 
 # The mask ROM the stack analyses read: the pinned ROM ELF of the revision
 # the profile describes (chips/esp32c5/vendor/artifacts.toml) and the
@@ -132,9 +130,9 @@ range = [
 ]
 symbol = [
     { name = "_start_trap", bytes = 4, region = "sram" },
-    { name = "_runtime_psram_irq_entry_{n}", numbers = [1, 47], bytes = 4, region = "sram" },
-    { name = "_runtime_psram_mtvt_source", bytes = 192, region = "sram" },
-    { name = "_mtvt_table", bytes = 192, region = "sram" },
+    { name = "_runtime_irq_h0_l{n}", numbers = [1, 47], bytes = 4, region = "sram" },
+    { name = "_runtime_irq_exit", bytes = 4, region = "sram" },
+    { name = "_runtime_mtvt", bytes = 256, region = "sram" },
     { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
     { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
 ]
@@ -143,7 +141,7 @@ interrupt-handlers = ["sram", "rom"]
 section = [{ prefix = ".critical", region = "sram" }]
 stack-swap = [
     { name = "_start_trap" },
-    { name = "_runtime_psram_irq_entry_{n}", numbers = [1, 47] },
+    { name = "_runtime_irq_h0_l{n}", numbers = [1, 47] },
 ]
 
 # The staged boot's host contract: the stage-two header the image pipeline

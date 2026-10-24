@@ -1,0 +1,276 @@
+//! The one writer of a hart's routes and CPU lines: [`Router`] over the
+//! chip's [`Controller`].
+//!
+//! [`Router::install`] silences every source and disables every line of the
+//! hart; [`Router::bind`] places an entry's interrupt part where only its
+//! handler reaches it, configures and enables the entry's line, and only
+//! then routes the source to it; [`Router::verify`] checks the hart's
+//! routes and lines against the table before interrupts are enabled.
+
+use oer_mmio::InterruptSource;
+
+use crate::{Binding, Entry, Table, line_control};
+
+/// The trigger of a CPU line (the CLIC's `clicintattr.trig`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Trigger {
+    /// Positive level: the line follows its source. The only trigger the
+    /// table binds, so that a write of the line's word that keeps its
+    /// pending bit neither loses nor invents an interrupt.
+    PositiveLevel,
+    PositiveEdge,
+    NegativeLevel,
+    NegativeEdge,
+}
+
+/// One CPU line as its controller holds it (the CLIC's `clicintie`,
+/// `clicintattr.shv`, `clicintattr.trig` and `clicintctl`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LineState {
+    /// The line's interrupt enable.
+    pub enabled: bool,
+    /// Hardware vectoring: the hart enters through the line's vector.
+    pub vectored: bool,
+    pub trigger: Trigger,
+    /// The level and priority control byte.
+    pub control: u8,
+}
+
+impl LineState {
+    /// A disabled line.
+    pub const DISABLED: Self = Self {
+        enabled: false,
+        vectored: false,
+        trigger: Trigger::PositiveLevel,
+        control: 0,
+    };
+
+    /// The line of a bound entry at `level`, of a controller with
+    /// `level_bits` level bits: enabled, hardware-vectored,
+    /// positive-level-triggered, holding the level.
+    #[must_use]
+    pub const fn bound(level: u8, level_bits: u8) -> Self {
+        Self {
+            enabled: true,
+            vectored: true,
+            trigger: Trigger::PositiveLevel,
+            control: line_control(level, level_bits),
+        }
+    }
+}
+
+/// A hart's interrupt matrix bank and CLIC, as the table writes them. The
+/// chip implements it on its typed blocks; each method is one word's read
+/// or write, never a wait.
+pub trait Controller {
+    /// The sources of the chip's interrupt matrix: `0..SOURCES`.
+    const SOURCES: u16;
+    /// The CPU lines of the hart's CLIC: `0..LINES`, at most 64.
+    const LINES: u8;
+    /// The level bits of a line's control byte (`CLIC_INT_CONFIG.MNLBITS`).
+    const LEVEL_BITS: u8;
+
+    /// The hart whose bank and CLIC this controller writes.
+    fn hart(&self) -> u8;
+    /// Route `source` to `line` on this hart.
+    fn route(&mut self, source: u16, line: u8);
+    /// Route `source` nowhere on this hart.
+    fn silence(&mut self, source: u16);
+    /// The line `source` is routed to on this hart; `None` when silent.
+    fn routed(&self, source: u16) -> Option<u8>;
+    /// Write `line`'s enable, attributes and control, keeping its pending
+    /// bit.
+    fn set_line(&mut self, line: u8, state: LineState);
+    /// Read `line`'s enable, attributes and control.
+    fn line(&self, line: u8) -> LineState;
+}
+
+/// How a hart's routes and lines disagree with the table, or a binding the
+/// table refuses: a typed boot failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Error {
+    /// The entry of `source` belongs to `hart`; the router writes `current`.
+    WrongHart { source: u16, hart: u8, current: u8 },
+    /// The table holds no entry of the token's source, line, level and hart.
+    NotInTable { source: u16 },
+    /// `source` is routed to `line`, which no entry of this hart binds it to.
+    ForeignRoute { source: u16, line: u8 },
+    /// `line` holds `state`, not what the table's entries leave in it.
+    WrongLine {
+        line: u8,
+        state: LineState,
+        expected: LineState,
+    },
+}
+
+/// The proof that an entry's handler holds its interrupt part and its line
+/// is enabled and routed: the only way to enable the peripheral's interrupt.
+/// Neither `Copy` nor `Clone`; only [`Router::bind`] makes one.
+#[must_use = "the bound part's interrupt is enabled only with this proof"]
+pub struct Bound<P> {
+    _part: core::marker::PhantomData<fn() -> P>,
+}
+
+impl<P> core::fmt::Debug for Bound<P> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Bound")
+    }
+}
+
+impl<P: InterruptSource> Bound<P> {
+    /// The bound source.
+    pub const SOURCE: u16 = P::SOURCE;
+}
+
+/// What [`Router::bind`] refused, with the token and the part it gives back.
+pub struct Refused<E: Entry> {
+    pub error: Error,
+    pub token: E,
+    pub part: E::Part,
+}
+
+impl<E: Entry> core::fmt::Debug for Refused<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Refused")
+            .field("error", &self.error)
+            .finish()
+    }
+}
+
+/// The one writer of a hart's routes and lines, by the image's table.
+pub struct Router<C: Controller> {
+    pub(crate) controller: C,
+    table: &'static Table,
+}
+
+/// The entries of `table` the build holds, on `hart`.
+fn present(table: &Table, hart: u8) -> impl Iterator<Item = &Binding> {
+    table
+        .iter()
+        .filter(move |binding| binding.handler.is_some() && binding.hart == hart)
+}
+
+impl<C: Controller> Router<C> {
+    /// Take `controller`'s hart for `table`, the image's
+    /// `INTERRUPT_TABLE`: silence every source and disable every line of the
+    /// hart, then [`verify`](Self::verify). Interrupts must stay disabled on
+    /// the hart until it returns.
+    ///
+    /// # Errors
+    ///
+    /// As [`verify`](Self::verify): the controller did not take a write.
+    pub fn install(mut controller: C, table: &'static Table) -> Result<Self, Error> {
+        const { assert!(C::LINES <= 64, "a controller has at most 64 lines") };
+        for source in 0..C::SOURCES {
+            controller.silence(source);
+        }
+        for line in 0..C::LINES {
+            controller.set_line(line, LineState::DISABLED);
+        }
+        let router = Self { controller, table };
+        router.verify()?;
+        Ok(router)
+    }
+
+    /// Bind `token`'s entry: move `part` where only the entry's handler
+    /// reaches it, configure and enable the entry's line, then route the
+    /// source to it. The source is the part's ([`InterruptSource`]).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongHart`] when the entry belongs to another hart and
+    /// [`Error::NotInTable`] when the router's table lacks the entry;
+    /// nothing changes and the token and the part come back.
+    pub fn bind<E: Entry>(
+        &mut self,
+        token: E,
+        part: E::Part,
+    ) -> Result<Bound<E::Part>, Refused<E>> {
+        let source = <E::Part as InterruptSource>::SOURCE;
+        let current = self.controller.hart();
+        let refuse = |error, token, part| Err(Refused { error, token, part });
+        if E::HART != current {
+            return refuse(
+                Error::WrongHart {
+                    source,
+                    hart: E::HART,
+                    current,
+                },
+                token,
+                part,
+            );
+        }
+        if !present(self.table, current).any(|binding| {
+            binding.source == source && binding.line == E::LINE && binding.level == E::LEVEL
+        }) {
+            return refuse(Error::NotInTable { source }, token, part);
+        }
+        let _consumed = token;
+        let place = E::storage().init(part);
+        #[expect(
+            clippy::expect_used,
+            reason = "the token is unique, so its cell is empty until this install"
+        )]
+        let _installed = E::cell()
+            .install(place)
+            .ok()
+            .expect("an entry's part is installed once");
+        self.controller
+            .set_line(E::LINE, LineState::bound(E::LEVEL, C::LEVEL_BITS));
+        self.controller.route(source, E::LINE);
+        Ok(Bound {
+            _part: core::marker::PhantomData,
+        })
+    }
+
+    /// Check the hart's routes and lines against the table: every routed
+    /// source is an entry of this hart routed to its line, every line a
+    /// routed entry holds is bound at its level, and every other line is
+    /// disabled.
+    ///
+    /// # Errors
+    ///
+    /// The first disagreement.
+    pub fn verify(&self) -> Result<(), Error> {
+        let hart = self.controller.hart();
+        // Bit `line` of the lines a routed source holds; a line past 63
+        // is no line of a controller (`LINES` is at most 64).
+        let mut routed_lines = 0u64;
+        for source in 0..C::SOURCES {
+            let Some(line) = self.controller.routed(source) else {
+                continue;
+            };
+            let Some(binding) = present(self.table, hart)
+                .find(|binding| binding.source == source && binding.line == line)
+            else {
+                return Err(Error::ForeignRoute { source, line });
+            };
+            routed_lines |= 1u64.checked_shl(u32::from(line)).unwrap_or(0);
+            let expected = LineState::bound(binding.level, C::LEVEL_BITS);
+            let state = self.controller.line(line);
+            if state != expected {
+                return Err(Error::WrongLine {
+                    line,
+                    state,
+                    expected,
+                });
+            }
+        }
+        for line in (0..C::LINES).filter(|&line| routed_lines >> line & 1 == 0) {
+            let state = self.controller.line(line);
+            if state.enabled {
+                return Err(Error::WrongLine {
+                    line,
+                    state,
+                    expected: LineState::DISABLED,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The hart this router writes.
+    pub fn hart(&self) -> u8 {
+        self.controller.hart()
+    }
+}

@@ -1,64 +1,71 @@
 # oer-interrupt-table
 
-Each image's static table of its peripheral interrupt sources: for every
-source its handler, its level, its core and its handler's class, declared once per image with
-`interrupt_table!` (a chip's platform wraps it with its types, such as
-`oer_espressif_staged_runtime::interrupt_table!`).
+Each image's static table of its interrupt bindings, declared once per image
+with `interrupt_table!` (a chip's platform wraps it with its CPU lines, such
+as `oer_espressif_staged_runtime::interrupt_table!`), and the router that
+writes the routes and lines by it.
 
-The table says where a source may be routed; the source's owner decides when.
-For each entry the macro defines:
+One line, one source, one direct call. Each entry binds one interrupt part
+to one CPU line at a level on a hart:
 
-- the source's strong handler symbol, named as the source, which the chip's
-  vector slot of the source links to: a second handler for one source fails
-  the link;
+```text
+field: Token = Part => handler, line LINE, level LEVEL, hart HART, CLASS;
+```
+
+The source comes from the part's type (`oer_mmio::InterruptSource`, which
+the PAC generator implements for a block's interrupt side), never from the
+entry's text, and the handler is a `fn(&mut Part)`. For each entry the macro
+defines:
+
+- `__oer_interrupt_h<HART>_l<LINE>`, the strong symbol the line's vector
+  calls: it lends the bound part to the handler and runs nothing before the
+  part is bound, never panicking;
 - a token type, neither `Copy` nor `Clone`, which `Interrupts::take` hands out
-  once per image. `enable` and `disable` take only a token; `enable` routes
-  the source to the table's level on the table's core and fails on another
-  core, or for a token whose source the table does not list so. `Entry` is an
-  `unsafe` trait and the token's constructor an `unsafe fn`: only the macro
-  creates a token;
+  once per image; `Entry` is an `unsafe` trait and the token's constructor an
+  `unsafe fn`: only the macro creates a token;
 - for an `Exempt(VIOLATION, "reason")` entry, the reason's bytes exported as
-  `__OER_INTERRUPT_EXEMPT_<SOURCE>` for the image gate's report;
+  `__OER_INTERRUPT_EXEMPT_` followed by the handler's symbol, for the image
+  gate's report;
 - with `#[cfg(...)]` before its doc comment, nothing at all in a build that
   leaves the entry out: its table element has no handler (a zero word).
 
-Each entry ends with its `Class`: `Hardware` (capture, acknowledge, latch,
-raise a signal; strict code), `Executor` (an executor's interrupt: strict up
-to its task polls) or `Exempt(VIOLATION, "reason")`: a hardware handler that
-breaks the one named rule, `ExecutorLevel` (it sits on its core's executor
-level) or `WakerCall` (it calls a waker). The table fails to compile when two
-`Executor` entries share a level and core, a `Hardware` or
-`Exempt(WakerCall, ..)` entry sits on an executor's level of its core, or an
-`Exempt(ExecutorLevel, ..)` entry does not; the image gate checks each
-class's code and waives only the named rule.
+The table fails to compile when an entry's line, level or hart is outside
+the chip's `Lines`, when two entries share a line and hart or a source, when
+two `Executor` entries share a level and hart, a `Hardware` or
+`Exempt(WakerCall, ..)` entry sits on an executor's level of its hart, or an
+`Exempt(ExecutorLevel, ..)` entry does not. A handler that takes another
+part than its entry's, a token bound with a foreign part, a part bound twice
+and a `Bound` made outside a binding fail too (the crate's compile-fail
+tests). Each entry ends with its `Class`: `Hardware` (capture, acknowledge,
+latch, raise a signal; strict code), `Executor` (an executor's interrupt:
+strict up to its task polls) or `Exempt(VIOLATION, "reason")`: a hardware
+handler that breaks the one named rule, `ExecutorLevel` (it sits on its
+hart's executor level) or `WakerCall` (it calls a waker); the image gate
+checks each class's code and waives only the named rule.
 
-The table is `INTERRUPT_TABLE`, a slice of `#[repr(C)]` bindings exported as
-`__OER_INTERRUPT_TABLE` for the tools that read the image; the image hands it
-to its platform's runtime as a typed value.
+The table is `INTERRUPT_TABLE`, a slice of `#[repr(C)]` `Binding`s exported
+as `__OER_INTERRUPT_TABLE` for the tools that read the image: source `u16` at
+0, line at 2, level at 3, class at 4, hart at 5 (`u8` each), the handler's
+word at 8, 12 bytes on the chip.
 
-A `Route` is a token with its type erased: only consuming a token creates
-one, it is neither `Copy` nor `Clone`, and `enable_route`/`disable_route`
-check it as `enable`/`disable` check the token; an owner keeps its sources'
-routes behind a concrete type. `Adopted` holds the image's table for every
-core: adopted once (a second adoption is an error), absent before.
+`Router` is the one writer of a hart's routes and lines, over the chip's
+`Controller` (the hart's interrupt-matrix bank and CLIC):
 
-`install` silences every source of the current core's entries and checks each
-vector slot against the table; `verify` checks again that every slot holds its
-handler and every source is silent or routed to its level; `verify_required`
-checks that each source a driver waits on has an entry and, on its entry's
-core, is routed. `Matrix` is the
-chip's interrupt matrix as the table drives it; `__fake_matrix!` is a host
-model for tests.
+- `Router::install` silences every source and disables every line of the
+  hart, then verifies;
+- `Router::bind` consumes an entry's token and its part, moves the part where
+  only the entry's handler reaches it, writes the entry's line (enabled,
+  hardware-vectored, positive-level-triggered, its level in the control
+  byte, `line_control`) and only then routes the source to it, and returns
+  `Bound<Part>`, the proof a driver takes before it enables the peripheral's
+  interrupt; an entry of another hart or one the table lacks comes back with
+  its token and part;
+- `Router::verify` checks that every routed source is an entry of the hart
+  on its line, every routed line holds its entry's level, and every other
+  line is disabled.
 
-On the ESP32-S31 the table is the only owner of routes: every esp-hal build
-for the chip enables the fork's `static-interrupts`, under
-which esp-hal has no API that binds a handler or maps a source at run time.
-The platform's table adopts esp-hal's one routing capability; an esp-hal
-driver that needs its interrupt (`into_async`) panics unless the image's
-table holds the source's handler and its owner has already routed it, and
-records the source for `verify_required` before interrupts are enabled. An
-owner therefore routes its source with its token before it hands the driver
-its interrupt.
+An interrupt handler reaches its task only through a static signal
+(`signal`), never through the router or a lock.
 
 ```console
 cargo test -p oer-interrupt-table

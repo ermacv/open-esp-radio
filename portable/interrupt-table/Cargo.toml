@@ -5,7 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Each image's static table of peripheral interrupt sources: handler, level and core per source, unique tokens to enable and disable them"
+description = "Each image's static table of interrupt bindings: source from the part's type, CPU line, level, hart and handler per entry; the router that writes routes and lines"
+
+[dependencies]
+oer-memory = { path = "../memory" }
+oer-mmio = { path = "../mmio" }
+static_cell = "2.1.1"
 
 [lints]
 workspace = true

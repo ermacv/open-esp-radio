@@ -1,85 +1,68 @@
-//! Each image's static table of its peripheral interrupt sources: the handler,
-//! level and core of every source, declared once with [`interrupt_table!`].
+//! Each image's static table of its interrupt bindings: for every bound
+//! peripheral interrupt part its source, CPU line, level, hart, handler and
+//! handler class, declared once with [`interrupt_table!`].
 //!
-//! The table says *where* a source may be routed; the source's owner decides
-//! *when*. Every source starts silent ([`install`]); [`enable`] routes it to
-//! the table's level on the table's core, [`disable`] silences it again. Both
-//! take the entry's token, which the table's macro creates once per entry and
-//! hands out through its `take`: a source outside the table has no token, and
-//! no token carries another level or core. [`verify`] checks, before
-//! interrupts are enabled, that the matrix still agrees with the table.
+//! One line, one source, one direct call: each entry names the CPU line its
+//! source is routed to, and that line's vector calls the entry's handler and
+//! nothing else. The source comes from the bound part's type
+//! ([`InterruptSource`]), never from the entry's text. Every source starts
+//! silent ([`Router::install`]); [`Router::bind`] consumes the entry's token
+//! and the part, moves the part where only the handler reaches it, writes
+//! the line and the route, and returns the [`Bound`] proof a driver asks for
+//! before it enables the peripheral's interrupt.
 //!
-//! ```compile_fail,E0277
-//! # oer_interrupt_table::__fake_matrix!();
-//! # let mut matrix = FakeMatrix::new(Core::Zero);
-//! // Not a token of the table: no source to enable.
-//! struct Elsewhere;
-//! let _ = oer_interrupt_table::enable(&mut matrix, INTERRUPT_TABLE, &Elsewhere);
-//! ```
-//!
-//! ```compile_fail,E0271
-//! # oer_interrupt_table::__fake_matrix!();
-//! # let mut matrix = FakeMatrix::new(Core::Zero);
-//! # let tokens = Interrupts::take().unwrap();
-//! // A token of another chip's table names another matrix's source.
-//! struct OtherMatrix;
-//! # impl oer_interrupt_table::Matrix for OtherMatrix {
-//! #     type Source = u8; type Level = u8; type Core = u8;
-//! #     fn current_core(&self) -> u8 { 0 }
-//! #     fn route(&mut self, _: u8, _: u8) {}
-//! #     fn silence(&mut self, _: u8, _: u8) {}
-//! #     fn routed(&self, _: u8, _: u8) -> Option<u8> { None }
-//! #     fn slot(&self, _: u8) -> usize { 0 }
-//! # }
-//! let _ = oer_interrupt_table::enable(&mut OtherMatrix, &[], &tokens.timer);
+//! ```compile_fail,E0308
+//! # oer_interrupt_table::__fake_table!();
+//! # let mut router = fake_router(0);
+//! let tokens = Interrupts::take().unwrap();
+//! // The timer's entry binds the timer's part, not the radio's.
+//! let _ = router.bind(tokens.timer, RadioIrq);
 //! ```
 //!
 //! ```compile_fail,E0382
-//! # oer_interrupt_table::__fake_matrix!();
+//! # oer_interrupt_table::__fake_table!();
+//! # let mut router = fake_router(0);
+//! # let tokens = Interrupts::take().unwrap();
+//! // A part moves into its one binding.
+//! let part = TimerIrq;
+//! let _ = router.bind(tokens.timer, part);
+//! let _ = router.bind(tokens.timer, part);
+//! ```
+//!
+//! ```compile_fail,E0423
+//! # oer_interrupt_table::__fake_table!();
+//! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerIrq>) {}
+//! // Only a binding makes the proof the interrupt's enable takes.
+//! enable_timer_interrupt(&oer_interrupt_table::Bound { _part: core::marker::PhantomData });
+//! ```
+//!
+//! ```compile_fail,E0382
+//! # oer_interrupt_table::__fake_table!();
 //! // A token is unique: it is neither `Copy` nor `Clone`.
 //! let tokens = Interrupts::take().unwrap();
 //! let first = tokens.timer;
 //! let second = tokens.timer;
 //! ```
 //!
-//! The same fake matrix enables a token of its own table:
+//! The same fake binds its own part with its own token:
 //!
 //! ```
-//! # oer_interrupt_table::__fake_matrix!();
-//! # let mut matrix = FakeMatrix::new(Core::Zero);
+//! # oer_interrupt_table::__fake_table!();
+//! # let mut router = fake_router(0);
 //! let tokens = Interrupts::take().unwrap();
-//! oer_interrupt_table::enable(&mut matrix, INTERRUPT_TABLE, &tokens.timer).unwrap();
+//! let bound = router.bind(tokens.timer, TimerIrq).unwrap();
+//! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerIrq>) {}
+//! enable_timer_interrupt(&bound);
 //! ```
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
-use core::fmt::Debug;
-
-mod adopted;
-pub use adopted::{Adopted, AlreadyAdopted};
+mod router;
+pub use router::{Bound, Controller, Error, LineState, Refused, Router, Trigger};
 
 pub mod signal;
 
-/// A chip's interrupt matrix, as an image's interrupt table drives it.
-pub trait Matrix {
-    /// A peripheral interrupt source.
-    type Source: Copy + Eq + Debug;
-    /// A level the matrix routes a source to.
-    type Level: Copy + Eq + Debug;
-    /// A core.
-    type Core: Copy + Eq + Debug;
-
-    /// The core that runs the caller.
-    fn current_core(&self) -> Self::Core;
-    /// Route `source` to `level` on the current core.
-    fn route(&mut self, source: Self::Source, level: Self::Level);
-    /// Route `source` nowhere on `core`.
-    fn silence(&mut self, core: Self::Core, source: Self::Source);
-    /// The level `source` is routed to on `core`, if any.
-    fn routed(&self, core: Self::Core, source: Self::Source) -> Option<Self::Level>;
-    /// The address of the handler `source`'s vector slot holds.
-    fn slot(&self, source: Self::Source) -> usize;
-}
+pub use oer_mmio::InterruptSource;
 
 /// What an entry's handler may do. The image gate checks each interrupt
 /// context's code by the classes of its entries; [`interrupt_table!`] checks
@@ -89,423 +72,346 @@ pub trait Matrix {
 pub enum Class {
     /// Captures, acknowledges, latches and raises signals: strict code from
     /// SRAM or ROM with its data in SRAM, no task poll and no waker call.
-    /// Never on the level of its core's [`Class::Executor`].
+    /// Never on the level of its hart's [`Class::Executor`].
     Hardware = 0,
     /// An executor's interrupt: serves its signals and timers, then polls its
     /// tasks. Strict up to the poll, its tasks by the task rules; one per
-    /// level and core.
+    /// level and hart.
     Executor = 1,
-    /// A [`Class::Hardware`] handler on the level of its core's
+    /// A [`Class::Hardware`] handler on the level of its hart's
     /// [`Class::Executor`], the one rule it breaks; declared
     /// `Exempt(ExecutorLevel, "reason")`. The entry names its reason, which
     /// the image gate's report prints.
     ExemptExecutorLevel = 2,
     /// A [`Class::Hardware`] handler that calls a waker, the one rule it
-    /// breaks; declared `Exempt(WakerCall, "reason")`, never on its core's
+    /// breaks; declared `Exempt(WakerCall, "reason")`, never on its hart's
     /// executor level.
     ExemptWakerCall = 3,
 }
 
 /// One entry of an image's interrupt table, laid out for the tools that read
-/// it from the image.
+/// it from the image: source `u16` at 0, line at 2, level at 3, class at 4,
+/// hart at 5, the handler's word at 8, 12 bytes in all.
 #[derive(Debug)]
 #[repr(C)]
-pub struct Binding<S, L, C> {
-    pub source: S,
-    pub level: L,
+pub struct Binding {
+    /// The interrupt-matrix source, from the bound part's type.
+    pub source: u16,
+    /// The CPU line the source is routed to; its vector calls `handler`.
+    pub line: u8,
+    /// The line's level, 1 for the lowest.
+    pub level: u8,
     pub class: Class,
-    pub core: C,
-    /// The handler the vector slot of `source` holds from the link on;
-    /// `None` (a zero word) for an entry a `cfg` leaves out of the image.
+    pub hart: u8,
+    /// The function the line's vector calls; `None` (a zero word) for an
+    /// entry a `cfg` leaves out of the image.
     pub handler: Option<unsafe extern "C" fn()>,
 }
 
-/// The bindings of a matrix.
-pub type Table<M> = [Binding<<M as Matrix>::Source, <M as Matrix>::Level, <M as Matrix>::Core>];
+const _: () = {
+    use core::mem::{offset_of, size_of};
+    assert!(offset_of!(Binding, source) == 0);
+    assert!(offset_of!(Binding, line) == 2);
+    assert!(offset_of!(Binding, level) == 3);
+    assert!(offset_of!(Binding, class) == 4 && size_of::<Class>() == 1);
+    assert!(offset_of!(Binding, hart) == 5);
+    assert!(offset_of!(Binding, handler) == 8);
+    assert!(size_of::<Binding>() == 8 + size_of::<usize>());
+};
 
-/// The entries of `table` the image holds, with their handlers.
-fn present<S, L, C>(
-    table: &[Binding<S, L, C>],
-) -> impl Iterator<Item = (&Binding<S, L, C>, unsafe extern "C" fn())> {
-    table
-        .iter()
-        .filter_map(|binding| binding.handler.map(|handler| (binding, handler)))
+/// An image's table.
+pub type Table = [Binding];
+
+/// The control byte of a line at `level` (1 for the lowest) of a controller
+/// with `level_bits` level bits: the level, less one, in the top bits, every
+/// lower bit one (the CLIC's `clicintctl`; level `n` of three bits is
+/// `0x1f | (n - 1) << 5`).
+///
+/// SOURCE: RISC-V CLIC specification (`clicintctl`, `mnlbits`); ESP-IDF
+/// 4d59230d `riscv/include/riscv/csr_clic.h` (`NLBITS` 3 on the ESP32-S31
+/// and ESP32-C5).
+#[must_use]
+pub const fn line_control(level: u8, level_bits: u8) -> u8 {
+    let low = 8 - level_bits;
+    ((level - 1) << low) | ((1u16 << low) - 1) as u8
 }
 
-/// The token of one table entry: the only way to enable or disable its source.
+/// The token of one table entry: the only way to bind its part.
 ///
 /// # Safety
 ///
-/// Only [`interrupt_table!`] implements it: the image's table lists `SOURCE`
-/// with `LEVEL` and `CORE`, and the type has one value. [`enable`] still
-/// refuses a source the table does not list so.
+/// Only [`interrupt_table!`] implements it: the image's table lists the
+/// part's source with `LINE`, `LEVEL` and `HART`, the entry's handler
+/// reaches its part through `cell` alone, and the type has one value.
 #[allow(
     unsafe_code,
-    reason = "a token is the unique capability to route its source; forging one needs unsafe"
+    reason = "a token is the unique capability to bind its entry; forging one needs unsafe"
 )]
 pub unsafe trait Entry {
-    type Source;
-    type Level;
-    type Core;
-    const SOURCE: Self::Source;
-    const LEVEL: Self::Level;
-    const CORE: Self::Core;
+    /// The interrupt part the entry's handler holds.
+    type Part: InterruptSource + Send + 'static;
+    const LINE: u8;
+    const LEVEL: u8;
+    const HART: u8;
+    /// The place the bound part lives in.
+    #[doc(hidden)]
+    fn storage() -> &'static static_cell::StaticCell<Self::Part>;
+    /// The cell the entry's handler borrows the part from.
+    #[doc(hidden)]
+    fn cell() -> &'static oer_memory::HandlerCell<Self::Part>;
 }
 
-/// A matrix that disagrees with the table, or a source enabled on another
-/// core than the table's.
+/// The layout of a chip's CPU lines, which a chip's platform passes to
+/// [`interrupt_table!`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Error<S, L, C> {
-    /// The source's entry routes it to `core`, the caller runs on `current`.
-    WrongCore { source: S, core: C, current: C },
-    /// The source's vector slot holds another handler than the table's.
-    ForeignHandler { source: S },
-    /// The source is routed to another level than the table's.
-    WrongLevel { source: S, level: L },
-    /// The table lists the source twice.
-    Duplicate { source: S },
-    /// The table does not list the source with the token's level and core,
-    /// or does not list a source a driver requires.
-    NotInTable { source: S },
-    /// A source a driver requires is the current core's but not routed.
-    NotRouted { source: S },
-}
-
-/// The [`Error`] of a matrix.
-pub type MatrixError<M> = Error<<M as Matrix>::Source, <M as Matrix>::Level, <M as Matrix>::Core>;
-
-/// Route the token's source to its table level on its table core.
-///
-/// # Errors
-///
-/// [`Error::WrongCore`] when the caller runs on another core, and
-/// [`Error::NotInTable`] when `table` does not list the token's source with
-/// its level and core; nothing changes.
-pub fn enable<M, E>(matrix: &mut M, table: &Table<M>, _token: &E) -> Result<(), MatrixError<M>>
-where
-    M: Matrix,
-    E: Entry<Source = M::Source, Level = M::Level, Core = M::Core>,
-{
-    route(matrix, table, E::SOURCE, E::LEVEL, E::CORE)
-}
-
-/// Silence the token's source on its table core.
-pub fn disable<M, E>(matrix: &mut M, _token: &E)
-where
-    M: Matrix,
-    E: Entry<Source = M::Source, Level = M::Level, Core = M::Core>,
-{
-    matrix.silence(E::CORE, E::SOURCE);
-}
-
-/// A token whose type is erased: an owner that keeps several sources, or
-/// keeps them behind a concrete type, holds their routes. Only consuming a
-/// token creates one, and a route is neither `Copy` nor `Clone`.
-#[derive(Debug)]
-#[must_use = "a dropped route can never enable or disable its source again"]
-pub struct Route<S, L, C> {
-    source: S,
-    level: L,
-    core: C,
-}
-
-impl<S: Copy, L: Copy, C: Copy> Route<S, L, C> {
-    /// The route of `token`'s source.
-    pub fn new<E: Entry<Source = S, Level = L, Core = C>>(token: E) -> Self {
-        let _ = token;
-        Self {
-            source: E::SOURCE,
-            level: E::LEVEL,
-            core: E::CORE,
-        }
-    }
-
-    /// The route's source.
-    pub fn source(&self) -> S {
-        self.source
-    }
-}
-
-/// The [`Route`] of a matrix.
-pub type MatrixRoute<M> = Route<<M as Matrix>::Source, <M as Matrix>::Level, <M as Matrix>::Core>;
-
-/// [`enable`] by a route.
-///
-/// # Errors
-///
-/// As [`enable`].
-pub fn enable_route<M: Matrix>(
-    matrix: &mut M,
-    table: &Table<M>,
-    route: &MatrixRoute<M>,
-) -> Result<(), MatrixError<M>> {
-    self::route(matrix, table, route.source, route.level, route.core)
-}
-
-/// [`disable`] by a route.
-pub fn disable_route<M: Matrix>(matrix: &mut M, route: &MatrixRoute<M>) {
-    matrix.silence(route.core, route.source);
-}
-
-/// Route `source` to `level` on the current core, which must be `core`, when
-/// the table lists it so.
-fn route<M: Matrix>(
-    matrix: &mut M,
-    table: &Table<M>,
-    source: M::Source,
-    level: M::Level,
-    core: M::Core,
-) -> Result<(), MatrixError<M>> {
-    if !present(table).any(|(binding, _)| {
-        binding.source == source && binding.level == level && binding.core == core
-    }) {
-        return Err(Error::NotInTable { source });
-    }
-    let current = matrix.current_core();
-    if current != core {
-        return Err(Error::WrongCore {
-            source,
-            core,
-            current,
-        });
-    }
-    matrix.route(source, level);
-    Ok(())
-}
-
-/// Silence every source of the current core's entries, then [`verify`].
-///
-/// # Errors
-///
-/// As [`verify`].
-pub fn install<M: Matrix>(matrix: &mut M, table: &Table<M>) -> Result<(), MatrixError<M>> {
-    let current = matrix.current_core();
-    for (binding, _) in present(table).filter(|(binding, _)| binding.core == current) {
-        matrix.silence(binding.core, binding.source);
-    }
-    verify(matrix, table)
-}
-
-/// Check the current core's entries against the matrix: each source listed
-/// once, its vector slot holding its handler, and the source silent or routed
-/// to its level.
-///
-/// # Errors
-///
-/// The first disagreement.
-pub fn verify<M: Matrix>(matrix: &M, table: &Table<M>) -> Result<(), MatrixError<M>> {
-    for (index, (binding, _)) in present(table).enumerate() {
-        if present(table)
-            .take(index)
-            .any(|(other, _)| other.source == binding.source)
-        {
-            return Err(Error::Duplicate {
-                source: binding.source,
-            });
-        }
-    }
-    let current = matrix.current_core();
-    for (binding, handler) in present(table).filter(|(binding, _)| binding.core == current) {
-        if matrix.slot(binding.source) != handler as usize {
-            return Err(Error::ForeignHandler {
-                source: binding.source,
-            });
-        }
-        match matrix.routed(binding.core, binding.source) {
-            Some(level) if level != binding.level => {
-                return Err(Error::WrongLevel {
-                    source: binding.source,
-                    level,
-                });
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// Check that each `required` source, one a driver waits on, has an entry in
-/// `table` and, when that entry is the current core's, is routed: a driver
-/// whose interrupt nobody routes would wait forever.
-///
-/// # Errors
-///
-/// [`Error::NotInTable`] or [`Error::NotRouted`] for the first such source.
-pub fn verify_required<M: Matrix>(
-    matrix: &M,
-    table: &Table<M>,
-    required: impl IntoIterator<Item = M::Source>,
-) -> Result<(), MatrixError<M>> {
-    let current = matrix.current_core();
-    for source in required {
-        let Some((binding, _)) = present(table).find(|(binding, _)| binding.source == source)
-        else {
-            return Err(Error::NotInTable { source });
-        };
-        if binding.core == current && matrix.routed(current, source).is_none() {
-            return Err(Error::NotRouted { source });
-        }
-    }
-    Ok(())
+pub struct Lines {
+    /// The first line a peripheral source may be routed to.
+    pub first: u8,
+    /// The lines: `0..count`.
+    pub count: u8,
+    /// The levels a line can hold: `1..=levels`.
+    pub levels: u8,
+    /// The harts: `0..harts`.
+    pub harts: u8,
 }
 
 /// Declare an image's interrupt table: once per image, since it defines
 /// `INTERRUPT_TABLE` (exported as `__OER_INTERRUPT_TABLE` for the tools that
-/// read the image) and, for each source, the strong symbol of the source's
-/// name that its vector slot holds from the link on. The image hands
-/// `INTERRUPT_TABLE` to its platform's runtime.
+/// read the image) and, for each entry, the strong symbol
+/// `__oer_interrupt_h<HART>_l<LINE>` that the line's vector calls. The image
+/// hands `INTERRUPT_TABLE` to its platform's runtime.
 ///
-/// A chip's platform wraps it with its types; each entry reads
-/// `field: Token = SOURCE => handler, LEVEL, CORE, CLASS;` and defines the
-/// token type `Token`, while `Interrupts::take` hands out every token once.
-/// `CLASS` is a [`Class`]: `Hardware`, `Executor` or
-/// `Exempt(VIOLATION, "reason")`, where `VIOLATION` names the one hardware
-/// rule the entry breaks (`ExecutorLevel` or `WakerCall`); an exempt entry's
-/// reason is exported as
-/// `__OER_INTERRUPT_EXEMPT_<SOURCE>` for the image gate's report. The table
-/// fails to compile when two `Executor` entries share a level and core, when
-/// a `Hardware` or `Exempt(WakerCall, ..)` entry sits on the level of its
-/// core's `Executor`, or when an `Exempt(ExecutorLevel, ..)` entry does not. An entry's `#[cfg(...)]` attributes, before its
-/// doc comment, leave all of it out: token, handler symbol, reason and table
-/// entry.
+/// A chip's platform wraps it with its [`Lines`]; each entry reads
+/// `field: Token = Part => handler, line LINE, level LEVEL, hart HART, CLASS;`
+/// with literal numbers. `Part` implements [`InterruptSource`], `handler`
+/// is a `fn(&mut Part)`, and the macro defines the token type `Token`, while
+/// `Interrupts::take` hands out every token once. `CLASS` is a [`Class`]:
+/// `Hardware`, `Executor` or `Exempt(VIOLATION, "reason")`, where
+/// `VIOLATION` names the one hardware rule the entry breaks
+/// (`ExecutorLevel` or `WakerCall`); an exempt entry's reason is exported as
+/// `__OER_INTERRUPT_EXEMPT_` followed by the handler's symbol for the image
+/// gate's report.
+///
+/// The table fails to compile when a line lies outside
+/// `lines.first..lines.count`, a level outside `1..=lines.levels` or a hart
+/// outside `0..lines.harts`; when two entries share a line and hart or a
+/// source; when two `Executor` entries share a level and hart, a `Hardware`
+/// or `Exempt(WakerCall, ..)` entry sits on the level of its hart's
+/// `Executor`, or an `Exempt(ExecutorLevel, ..)` entry does not. An entry's
+/// `#[cfg(...)]` attributes, before its doc comment, leave all of it out:
+/// token, handler symbol, reason and table entry.
 ///
 /// ```compile_fail,E0080
-/// # oer_interrupt_table::__fake_types!();
-/// # pub fn on_timer() {}
-/// # pub fn on_radio() {}
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # pub fn on_radio(_: &mut RadioIrq) {}
 /// oer_interrupt_table::interrupt_table! {
-///     source: Source = Source,
-///     level: Level = Level,
-///     core: Core = Core,
+///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
+///     radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 0, Executor;
 ///     // A hardware handler would wait for the executor's whole poll.
-///     timer: TimerToken = Timer => on_timer, Two, Zero, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Hardware;
 /// }
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_interrupt_table::__fake_types!();
-/// # pub fn on_timer() {}
-/// # pub fn on_radio() {}
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # pub fn on_radio(_: &mut RadioIrq) {}
 /// oer_interrupt_table::interrupt_table! {
-///     source: Source = Source,
-///     level: Level = Level,
-///     core: Core = Core,
+///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     // One executor per level and core.
-///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
-///     timer: TimerToken = Timer => on_timer, Two, Zero, Executor;
+///     // One executor per level and hart.
+///     radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 0, Executor;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Executor;
 /// }
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_interrupt_table::__fake_types!();
-/// # pub fn on_timer() {}
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
 /// oer_interrupt_table::interrupt_table! {
-///     source: Source = Source,
-///     level: Level = Level,
-///     core: Core = Core,
+///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     // Nothing to exempt: no executor shares the level.
-///     timer: TimerToken = Timer => on_timer, Two, Zero, Exempt(ExecutorLevel, "no executor here");
-/// }
-/// ```
-///
-/// The same entries on another core, or an exemption beside the executor,
-/// compile:
-///
-/// ```
-/// # oer_interrupt_table::__fake_types!();
-/// # pub fn on_timer() {}
-/// # pub fn on_radio() {}
-/// # pub fn on_absent() {}
-/// oer_interrupt_table::interrupt_table! {
-///     source: Source = Source,
-///     level: Level = Level,
-///     core: Core = Core,
-///     handler_attributes: [];
-///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
-///     timer: TimerToken = Timer => on_timer, Two, One, Hardware;
-///     absent: AbsentToken = Absent => on_absent, Two, Zero, Exempt(ExecutorLevel, "until its port");
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Exempt(ExecutorLevel, "no executor here");
 /// }
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_interrupt_table::__fake_types!();
-/// # pub fn on_timer() {}
-/// # pub fn on_radio() {}
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # pub fn on_radio(_: &mut RadioIrq) {}
 /// oer_interrupt_table::interrupt_table! {
-///     source: Source = Source,
-///     level: Level = Level,
-///     core: Core = Core,
+///     lines: FAKE_LINES,
 ///     handler_attributes: [];
-///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
+///     radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 0, Executor;
 ///     // A waker exemption does not exempt the executor's level too.
-///     timer: TimerToken = Timer => on_timer, Two, Zero, Exempt(WakerCall, "its driver");
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 0, Exempt(WakerCall, "its driver");
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # pub fn on_radio(_: &mut RadioIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // One line, one source: a line's vector calls one handler.
+///     radio: RadioToken = RadioIrq => on_radio, line 16, level 3, hart 0, Hardware;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 3, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # pub fn on_again(_: &mut TimerIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // One source, one binding: the same part type binds once.
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 3, hart 0, Hardware;
+///     again: AgainToken = TimerIrq => on_again, line 17, level 3, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // Lines below the first external one are the core's own.
+///     timer: TimerToken = TimerIrq => on_timer, line 7, level 3, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // Three level bits hold eight levels.
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 9, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // The fake has two harts.
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 3, hart 2, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0308
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_radio(_: &mut RadioIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // A handler gets exactly its entry's part.
+///     timer: TimerToken = TimerIrq => on_radio, line 16, level 3, hart 0, Hardware;
+/// }
+/// ```
+///
+/// The same entries on other harts, lines and levels, or an exemption
+/// beside the executor, compile:
+///
+/// ```
+/// # oer_interrupt_table::__fake_parts!();
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # pub fn on_radio(_: &mut RadioIrq) {}
+/// # pub fn on_absent(_: &mut AbsentIrq) {}
+/// oer_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     radio: RadioToken = RadioIrq => on_radio, line 16, level 2, hart 0, Executor;
+///     timer: TimerToken = TimerIrq => on_timer, line 16, level 2, hart 1, Hardware;
+///     absent: AbsentToken = AbsentIrq => on_absent, line 47, level 2, hart 0, Exempt(ExecutorLevel, "until its port");
 /// }
 /// ```
 #[macro_export]
 macro_rules! interrupt_table {
     (
-        source: $source_ty:ty = $($sources:ident)::+,
-        level: $level_ty:ty = $($levels:ident)::+,
-        core: $core_ty:ty = $($cores:ident)::+,
+        lines: $lines:expr,
         handler_attributes: $handler_attributes:tt;
         $(
             $(#[cfg($cfg:meta)])*
             $(#[doc = $doc:literal])*
-            $field:ident: $token:ident = $source:ident => $handler:path, $level:ident, $core:ident,
+            $field:ident: $token:ident = $part:ty => $handler:path,
+                line $line:literal, level $level:literal, hart $hart:literal,
                 $class:ident $(($violation:ident, $reason:literal))?;
         )*
     ) => {
-        #[allow(unused_imports)]
-        use $($sources)::+ as __OerInterruptSources;
-        #[allow(unused_imports)]
-        use $($levels)::+ as __OerInterruptLevels;
-        #[allow(unused_imports)]
-        use $($cores)::+ as __OerInterruptCores;
-
         $(
             $(#[cfg($cfg)])*
             $(#[doc = $doc])*
-            #[must_use = "a dropped token can never enable or disable its source again"]
+            #[must_use = "a dropped token can never bind its part"]
             pub struct $token($crate::__private::Unique);
 
             $(#[cfg($cfg)])*
-            // SAFETY: the table below lists this source with this level and
-            // core, and `Interrupts::take` creates this token's one value.
+            // SAFETY: the table below lists this part's source with this
+            // line, level and hart; the handler below reaches the part only
+            // through `cell`, and `Interrupts::take` creates this token's one
+            // value.
             unsafe impl $crate::Entry for $token {
-                type Source = $source_ty;
-                type Level = $level_ty;
-                type Core = $core_ty;
-                const SOURCE: $source_ty = __OerInterruptSources::$source;
-                const LEVEL: $level_ty = __OerInterruptLevels::$level;
-                const CORE: $core_ty = __OerInterruptCores::$core;
+                type Part = $part;
+                const LINE: u8 = $line;
+                const LEVEL: u8 = $level;
+                const HART: u8 = $hart;
+                fn storage() -> &'static $crate::__private::StaticCell<$part> {
+                    static STORAGE: $crate::__private::StaticCell<$part> =
+                        $crate::__private::StaticCell::new();
+                    &STORAGE
+                }
+                fn cell() -> &'static $crate::__private::HandlerCell<$part> {
+                    static CELL: $crate::__private::HandlerCell<$part> =
+                        $crate::__private::HandlerCell::new();
+                    &CELL
+                }
             }
 
             $(#[cfg($cfg)])*
-            $crate::__interrupt_handler!($handler_attributes, $source, $handler);
-
-            $crate::__exemption!([$($cfg),*] $source $(, $reason)?);
+            const _: () = {
+                $crate::__interrupt_handler!($handler_attributes, $token, $handler, $hart, $line);
+                $crate::__exemption!($hart, $line $(, $reason)?);
+            };
         )*
 
-        const _: () = $crate::__private::check_classes(&[
-            $($crate::__private::Declared {
-                level: __OerInterruptLevels::$level as u32,
-                core: __OerInterruptCores::$core as u32,
-                class: $crate::__class!($class $($violation)?),
-                present: cfg!(all($($cfg),*)),
-            },)*
-        ]);
+        const _: () = $crate::__private::check(
+            $lines,
+            &[
+                $($crate::__private::Declared {
+                    source: {
+                        #[cfg(all($($cfg),*))]
+                        let source = <$part as $crate::InterruptSource>::SOURCE;
+                        #[cfg(not(all($($cfg),*)))]
+                        let source = 0;
+                        source
+                    },
+                    line: $line,
+                    level: $level,
+                    hart: $hart,
+                    class: $crate::__class!($class $($violation)?),
+                    present: cfg!(all($($cfg),*)),
+                },)*
+            ],
+        );
 
-        /// Every source token of the image's interrupt table.
-        #[allow(dead_code, reason = "an image without sources takes no token")]
+        /// Every token of the image's interrupt table.
+        #[allow(dead_code, reason = "an image without bindings takes no token")]
         pub struct Interrupts {
             $($(#[cfg($cfg)])* pub $field: $token,)*
         }
 
-        #[allow(dead_code, reason = "an image without sources takes no token")]
+        #[allow(dead_code, reason = "an image without bindings takes no token")]
         impl Interrupts {
             /// The tokens, once per image.
             pub fn take() -> ::core::option::Option<Self> {
@@ -526,54 +432,66 @@ macro_rules! interrupt_table {
         /// uses, which would leave the tools no symbol to find it by.
         #[used]
         #[unsafe(export_name = "__OER_INTERRUPT_TABLE")]
-        pub static INTERRUPT_TABLE: &[$crate::Binding<$source_ty, $level_ty, $core_ty>] = &[
-            $($crate::Binding {
-                source: __OerInterruptSources::$source,
-                level: __OerInterruptLevels::$level,
-                class: $crate::__class!($class $($violation)?),
-                core: __OerInterruptCores::$core,
-                handler: {
-                    #[cfg(all($($cfg),*))]
-                    let handler = ::core::option::Option::Some(
-                        $source as unsafe extern "C" fn(),
-                    );
-                    #[cfg(not(all($($cfg),*)))]
-                    let handler = ::core::option::Option::None;
-                    handler
-                },
+        pub static INTERRUPT_TABLE: &[$crate::Binding] = &[
+            $({
+                #[cfg(all($($cfg),*))]
+                let binding = $crate::Binding {
+                    source: <$part as $crate::InterruptSource>::SOURCE,
+                    line: $line,
+                    level: $level,
+                    class: $crate::__class!($class $($violation)?),
+                    hart: $hart,
+                    handler: ::core::option::Option::Some({
+                        unsafe extern "C" {
+                            #[link_name = concat!("__oer_interrupt_h", $hart, "_l", $line)]
+                            fn handler();
+                        }
+                        handler as unsafe extern "C" fn()
+                    }),
+                };
+                #[cfg(not(all($($cfg),*)))]
+                let binding = $crate::Binding {
+                    source: 0,
+                    line: $line,
+                    level: $level,
+                    class: $crate::__class!($class $($violation)?),
+                    hart: $hart,
+                    handler: ::core::option::Option::None,
+                };
+                binding
             },)*
         ];
     };
 }
 
-/// The strong symbol of one source, whose name its vector slot links to.
+/// The strong symbol a line's vector calls: it lends the entry's part to
+/// the handler. Before the binding placed the part the line is disabled
+/// and silent, so the cell always holds it; a cell found empty or lent runs
+/// nothing and never panics.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __interrupt_handler {
-    ([$(#[$attribute:meta])*], $source:ident, $handler:path) => {
+    ([$(#[$attribute:meta])*], $token:ident, $handler:path, $hart:literal, $line:literal) => {
         $(#[$attribute])*
-        #[allow(non_snake_case)]
-        #[unsafe(no_mangle)]
-        extern "C" fn $source() {
-            $handler()
+        #[unsafe(export_name = concat!("__oer_interrupt_h", $hart, "_l", $line))]
+        extern "C" fn handler() {
+            let handler: fn(&mut <$token as $crate::Entry>::Part) = $handler;
+            let _ = <$token as $crate::Entry>::cell().with(handler);
         }
     };
 }
 
 /// The exempt entry's reason, exported for the image gate's report: the
-/// bytes of `reason` named after the entry's source.
+/// bytes of `reason` named after the entry's handler symbol.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __exemption {
-    ([$($cfg:meta),*] $source:ident) => {};
-    ([$($cfg:meta),*] $source:ident, $reason:literal) => {
-        #[cfg(all($($cfg),*))]
-        const _: () = {
-            const REASON: &str = $reason;
-            #[used]
-            #[unsafe(export_name = concat!("__OER_INTERRUPT_EXEMPT_", stringify!($source)))]
-            static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
-        };
+    ($hart:literal, $line:literal) => {};
+    ($hart:literal, $line:literal, $reason:literal) => {
+        const REASON: &str = $reason;
+        #[used]
+        #[unsafe(export_name = concat!("__OER_INTERRUPT_EXEMPT___oer_interrupt_h", $hart, "_l", $line))]
+        static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
     };
 }
 
@@ -597,35 +515,67 @@ macro_rules! __class {
 
 #[doc(hidden)]
 pub mod __private {
-    use crate::Class;
+    use crate::{Class, Lines};
 
-    /// One entry as the class rules see it.
+    pub use oer_memory::HandlerCell;
+    pub use static_cell::StaticCell;
+
+    /// One entry as the table's rules see it.
     pub struct Declared {
-        pub level: u32,
-        pub core: u32,
+        pub source: u16,
+        pub line: u8,
+        pub level: u8,
+        pub hart: u8,
         pub class: Class,
         /// A `cfg` keeps the entry in this build.
         pub present: bool,
     }
 
-    /// The class rules of a table, at compile time: one `Executor` per
-    /// level and core, no `Hardware` or waker exemption on its level, every
-    /// level exemption on it.
-    pub const fn check_classes(entries: &[Declared]) {
+    /// The rules of a table, at compile time: each present entry's line,
+    /// level and hart in range, one entry per line and hart and per source,
+    /// one `Executor` per level and hart, no `Hardware` or waker exemption
+    /// on its level, every level exemption on it.
+    pub const fn check(lines: Lines, entries: &[Declared]) {
         let mut rest = entries;
+        let mut position = 0;
         while let [entry, tail @ ..] = rest {
             rest = tail;
+            position += 1;
             if !entry.present {
                 continue;
             }
+            assert!(
+                entry.line >= lines.first && entry.line < lines.count,
+                "an entry's line is no line a peripheral source can be routed to"
+            );
+            assert!(
+                entry.level >= 1 && entry.level <= lines.levels,
+                "an entry's level is no level a line can hold"
+            );
+            assert!(
+                entry.hart < lines.harts,
+                "an entry's hart is no hart of the image"
+            );
             let mut executors = 0;
             let mut others = entries;
-            while let [candidate, tail @ ..] = others {
+            let mut other_position = 0;
+            while let [other, tail @ ..] = others {
                 others = tail;
-                if candidate.present
-                    && candidate.level == entry.level
-                    && candidate.core == entry.core
-                    && matches!(candidate.class, Class::Executor)
+                other_position += 1;
+                let same = other_position == position;
+                if !other.present {
+                    continue;
+                }
+                if !same {
+                    assert!(
+                        !(other.line == entry.line && other.hart == entry.hart),
+                        "two entries share a line and hart"
+                    );
+                    assert!(other.source != entry.source, "two entries bind one source");
+                }
+                if other.level == entry.level
+                    && other.hart == entry.hart
+                    && matches!(other.class, Class::Executor)
                 {
                     executors += 1;
                 }
@@ -633,15 +583,15 @@ pub mod __private {
             match entry.class {
                 Class::Executor => assert!(
                     executors == 1,
-                    "two Executor entries share a level and core"
+                    "two Executor entries share a level and hart"
                 ),
                 Class::Hardware | Class::ExemptWakerCall => assert!(
                     executors == 0,
-                    "a Hardware entry shares the level of its core's Executor"
+                    "a Hardware entry shares the level of its hart's Executor"
                 ),
                 Class::ExemptExecutorLevel => assert!(
                     executors == 1,
-                    "an Exempt(ExecutorLevel) entry is not on the level of its core's Executor"
+                    "an Exempt(ExecutorLevel) entry is not on the level of its hart's Executor"
                 ),
             }
         }
@@ -678,106 +628,132 @@ pub mod __private {
     }
 }
 
-/// A host model of a two-core matrix with two sources and its interrupt
-/// table, for this crate's tests and examples; once per binary, as
-/// [`interrupt_table!`].
+/// Three fake interrupt parts and the fake's [`Lines`] (`FAKE_LINES`: lines
+/// 16 to 47, eight levels, two harts), for this crate's tests and examples.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __fake_matrix {
+macro_rules! __fake_parts {
     () => {
-        $crate::__fake_types!();
-
-        /// Routes by core and source, and the vector slots by source.
-        pub struct FakeMatrix {
-            pub current: Core,
-            pub routes: [[Option<Level>; 3]; 2],
-            pub slots: [usize; 3],
+        /// The timer's interrupt part, source 3.
+        pub struct TimerIrq;
+        impl $crate::InterruptSource for TimerIrq {
+            const SOURCE: u16 = 3;
         }
-
-        impl FakeMatrix {
-            /// Every source routed to level two on both cores, every slot
-            /// holding what the link put there.
-            pub fn new(current: Core) -> Self {
-                let mut slots = [0; 3];
-                for binding in INTERRUPT_TABLE {
-                    if let Some(handler) = binding.handler {
-                        slots[binding.source as usize] = handler as usize;
-                    }
-                }
-                Self {
-                    current,
-                    routes: [[Some(Level::Two); 3]; 2],
-                    slots,
-                }
-            }
+        /// The radio's interrupt part, source 5.
+        pub struct RadioIrq;
+        impl $crate::InterruptSource for RadioIrq {
+            const SOURCE: u16 = 5;
         }
-
-        impl $crate::Matrix for FakeMatrix {
-            type Source = Source;
-            type Level = Level;
-            type Core = Core;
-            fn current_core(&self) -> Core {
-                self.current
-            }
-            fn route(&mut self, source: Source, level: Level) {
-                self.routes[self.current as usize][source as usize] = Some(level);
-            }
-            fn silence(&mut self, core: Core, source: Source) {
-                self.routes[core as usize][source as usize] = None;
-            }
-            fn routed(&self, core: Core, source: Source) -> Option<Level> {
-                self.routes[core as usize][source as usize]
-            }
-            fn slot(&self, source: Source) -> usize {
-                self.slots[source as usize]
-            }
+        /// A part every build leaves out, source 6.
+        #[allow(dead_code, reason = "no build binds the absent part")]
+        pub struct AbsentIrq;
+        impl $crate::InterruptSource for AbsentIrq {
+            const SOURCE: u16 = 6;
         }
-
-        pub fn on_timer() {}
-        pub fn on_radio() {}
-
-        $crate::interrupt_table! {
-            source: Source = Source,
-            level: Level = Level,
-            core: Core = Core,
-            handler_attributes: [];
-            timer: TimerToken = Timer => on_timer, One, Zero, Hardware;
-            radio: RadioToken = Radio => on_radio, Two, One, Executor;
-            #[cfg(any())]
-            /// Left out of every build; on its own it would break the class
-            /// rules, which only the build's entries obey.
-            absent: AbsentToken = Absent => on_absent, Two, One, Hardware;
-        }
+        pub const FAKE_LINES: $crate::Lines = $crate::Lines {
+            first: 16,
+            count: 48,
+            levels: 8,
+            harts: 2,
+        };
     };
 }
 
-/// The fake matrix's source, level and core types.
+/// A host model of one hart's matrix bank and CLIC (`FakeController`,
+/// which records every write in order), and an interrupt table over the
+/// fake parts; once per binary, as [`interrupt_table!`].
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __fake_types {
+macro_rules! __fake_table {
     () => {
+        $crate::__fake_parts!();
+
+        /// One write of the fake controller.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Source {
-            Timer,
-            Radio,
-            Absent,
+        pub enum Write {
+            Route { source: u16, line: u8 },
+            Silence { source: u16 },
+            Line { line: u8, state: $crate::LineState },
         }
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Level {
-            One,
-            Two,
+
+        /// Eight sources, 48 lines, three level bits; the writes it took.
+        pub struct FakeController {
+            pub hart: u8,
+            pub routes: [Option<u8>; 8],
+            pub lines: [$crate::LineState; 48],
+            pub writes: ::std::vec::Vec<Write>,
         }
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub enum Core {
-            Zero,
-            One,
+
+        impl FakeController {
+            /// Every source routed to line 20 and every line enabled, as a
+            /// boot before the table might leave them.
+            pub fn new(hart: u8) -> Self {
+                Self {
+                    hart,
+                    routes: [Some(20); 8],
+                    lines: [$crate::LineState::bound(1, 3); 48],
+                    writes: ::std::vec::Vec::new(),
+                }
+            }
+        }
+
+        impl $crate::Controller for FakeController {
+            const SOURCES: u16 = 8;
+            const LINES: u8 = 48;
+            const LEVEL_BITS: u8 = 3;
+            fn hart(&self) -> u8 {
+                self.hart
+            }
+            fn route(&mut self, source: u16, line: u8) {
+                self.routes[usize::from(source)] = Some(line);
+                self.writes.push(Write::Route { source, line });
+            }
+            fn silence(&mut self, source: u16) {
+                self.routes[usize::from(source)] = None;
+                self.writes.push(Write::Silence { source });
+            }
+            fn routed(&self, source: u16) -> Option<u8> {
+                self.routes[usize::from(source)]
+            }
+            fn set_line(&mut self, line: u8, state: $crate::LineState) {
+                self.lines[usize::from(line)] = state;
+                self.writes.push(Write::Line { line, state });
+            }
+            fn line(&self, line: u8) -> $crate::LineState {
+                self.lines[usize::from(line)]
+            }
+        }
+
+        /// The handler of the timer's entry.
+        pub fn on_timer(_: &mut TimerIrq) {}
+        /// The handler of the radio's entry.
+        pub fn on_radio(_: &mut RadioIrq) {}
+
+        $crate::interrupt_table! {
+            lines: FAKE_LINES,
+            handler_attributes: [];
+            timer: TimerToken = TimerIrq => on_timer, line 16, level 1, hart 0, Hardware;
+            radio: RadioToken = RadioIrq => on_radio, line 17, level 2, hart 1, Executor;
+            #[cfg(any())]
+            /// Left out of every build; on its own it would break the line
+            /// rule, which only the build's entries obey.
+            absent: AbsentToken = AbsentIrq => on_absent, line 16, level 1, hart 0, Hardware;
+        }
+
+        /// A router of `hart` over a fresh fake controller and the table.
+        pub fn fake_router(hart: u8) -> $crate::Router<FakeController> {
+            $crate::Router::install(FakeController::new(hart), INTERRUPT_TABLE)
+                .expect("a fresh fake installs")
         }
     };
 }
 
 #[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
 #[allow(
     unsafe_code,
-    reason = "the tests' fake matrix declares an interrupt table"
+    reason = "the tests' fake controller declares an interrupt table"
 )]
 mod tests;

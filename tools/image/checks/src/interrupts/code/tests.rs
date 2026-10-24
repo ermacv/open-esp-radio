@@ -81,6 +81,7 @@ pub(in crate::interrupts) fn fixture(
         .collect();
     stacks.table = vec![TableEntry {
         source: 7,
+        line: 16,
         level: priority,
         class,
         core: 0,
@@ -95,7 +96,6 @@ pub(in crate::interrupts) fn fixture(
             handler: exception,
             frame: 0,
         },
-        sources: 0,
         resolutions: &resolutions,
     };
     stacks.code_placement = CodePlacement::of(

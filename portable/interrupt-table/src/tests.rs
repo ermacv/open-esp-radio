@@ -1,171 +1,175 @@
-use crate::{
-    Error, Matrix, Route, disable, disable_route, enable, enable_route, install, verify,
-    verify_required,
-};
+use crate::{Entry, Error, LineState, Router, Trigger, line_control};
 
-crate::__fake_matrix!();
+crate::__fake_table!();
 
 #[test]
-fn install_silences_the_current_core_s_sources_and_checks_their_slots() {
-    let mut matrix = FakeMatrix::new(Core::Zero);
-    install(&mut matrix, INTERRUPT_TABLE).unwrap();
-    // The timer is core zero's entry; core one's radio is not core zero's to
-    // touch.
-    assert_eq!(matrix.routed(Core::Zero, Source::Timer), None);
-    assert_eq!(matrix.routed(Core::One, Source::Radio), Some(Level::Two));
+fn a_line_s_control_byte_holds_its_level_in_the_top_bits() {
+    let controls: std::vec::Vec<u8> = (1..=8).map(|level| line_control(level, 3)).collect();
+    assert_eq!(controls, [0x1f, 0x3f, 0x5f, 0x7f, 0x9f, 0xbf, 0xdf, 0xff]);
+    assert_eq!(line_control(1, 4), 0x0f);
+    assert_eq!(line_control(16, 4), 0xff);
+}
 
-    let mut matrix = FakeMatrix::new(Core::Zero);
-    matrix.slots[Source::Timer as usize] = 0x1234;
+#[test]
+fn install_silences_every_source_and_disables_every_line_before_it_checks() {
+    let router = Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap();
+    let controller = &router.controller;
+    assert!(controller.routes.iter().all(Option::is_none));
+    assert!(
+        controller
+            .lines
+            .iter()
+            .all(|line| *line == LineState::DISABLED)
+    );
+    // Every source silent first: no line is touched while a source still
+    // holds it.
+    let first_line = controller
+        .writes
+        .iter()
+        .position(|write| matches!(write, Write::Line { .. }))
+        .unwrap();
+    assert_eq!(first_line, 8);
+    assert_eq!(controller.writes.len(), 8 + 48);
+}
+
+#[test]
+fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
+    let mut router = fake_router(0);
+    router.controller.routes[7] = Some(30);
     assert_eq!(
-        install(&mut matrix, INTERRUPT_TABLE),
-        Err(Error::ForeignHandler {
-            source: Source::Timer
+        router.verify(),
+        Err(Error::ForeignRoute {
+            source: 7,
+            line: 30
+        })
+    );
+
+    let mut router = fake_router(0);
+    // The timer's source on its own line, but the line at another level.
+    router.controller.routes[3] = Some(16);
+    router.controller.lines[16] = LineState::bound(2, 3);
+    assert_eq!(
+        router.verify(),
+        Err(Error::WrongLine {
+            line: 16,
+            state: LineState::bound(2, 3),
+            expected: LineState::bound(1, 3),
+        })
+    );
+    router.controller.lines[16] = LineState {
+        trigger: Trigger::PositiveEdge,
+        ..LineState::bound(1, 3)
+    };
+    assert!(matches!(
+        router.verify(),
+        Err(Error::WrongLine { line: 16, .. })
+    ));
+
+    // The timer's source on another entry's line of another hart.
+    let mut router = fake_router(0);
+    router.controller.routes[3] = Some(17);
+    assert_eq!(
+        router.verify(),
+        Err(Error::ForeignRoute {
+            source: 3,
+            line: 17
+        })
+    );
+
+    let mut router = fake_router(0);
+    router.controller.lines[40] = LineState::bound(3, 3);
+    assert_eq!(
+        router.verify(),
+        Err(Error::WrongLine {
+            line: 40,
+            state: LineState::bound(3, 3),
+            expected: LineState::DISABLED,
         })
     );
 }
 
+// The only test that takes the tokens and binds: both are once per image.
 #[test]
-fn a_token_routes_its_source_to_its_level_on_its_core_alone() {
+fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
+    unsafe extern "C" {
+        fn __oer_interrupt_h0_l16();
+    }
     let tokens = Interrupts::take().unwrap();
     assert!(Interrupts::take().is_none());
 
-    let mut matrix = FakeMatrix::new(Core::Zero);
-    install(&mut matrix, INTERRUPT_TABLE).unwrap();
-    enable(&mut matrix, INTERRUPT_TABLE, &tokens.timer).unwrap();
-    assert_eq!(matrix.routed(Core::Zero, Source::Timer), Some(Level::One));
-    verify(&matrix, INTERRUPT_TABLE).unwrap();
-    disable(&mut matrix, &tokens.timer);
-    assert_eq!(matrix.routed(Core::Zero, Source::Timer), None);
-
-    // The radio belongs to core one.
+    // The radio's entry is hart one's: hart zero's router refuses it and
+    // writes nothing.
+    let mut zero = fake_router(0);
+    let before = zero.controller.writes.len();
+    let refused = zero.bind(tokens.radio, RadioIrq).unwrap_err();
     assert_eq!(
-        enable(&mut matrix, INTERRUPT_TABLE, &tokens.radio),
-        Err(Error::WrongCore {
-            source: Source::Radio,
-            core: Core::One,
-            current: Core::Zero
-        })
+        refused.error,
+        Error::WrongHart {
+            source: 5,
+            hart: 1,
+            current: 0
+        }
     );
-    assert_eq!(matrix.routed(Core::Zero, Source::Radio), Some(Level::Two));
+    assert_eq!(zero.controller.writes.len(), before);
 
-    // A token whose source the table does not list enables nothing.
+    // Before its binding the timer's handler finds no part and runs nothing.
+    assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
+    // SAFETY: the table's handler of line 16 takes no arguments and only
+    // borrows the timer's cell.
+    unsafe { __oer_interrupt_h0_l16() };
+
+    let _bound: crate::Bound<TimerIrq> = zero.bind(tokens.timer, TimerIrq).unwrap();
+    assert_eq!(crate::Bound::<TimerIrq>::SOURCE, 3);
     assert_eq!(
-        enable(&mut matrix, &[], &tokens.timer),
-        Err(Error::NotInTable {
-            source: Source::Timer
-        })
+        zero.controller.writes[before..],
+        [
+            Write::Line {
+                line: 16,
+                state: LineState::bound(1, 3)
+            },
+            Write::Route {
+                source: 3,
+                line: 16
+            },
+        ]
     );
-    assert_eq!(matrix.routed(Core::Zero, Source::Timer), None);
+    zero.verify().unwrap();
+    assert!(<TimerToken as Entry>::cell().with(|_| ()).is_some());
+    // SAFETY: as above; the cell now lends the part to `on_timer`.
+    unsafe { __oer_interrupt_h0_l16() };
 
-    // A route enables and disables as its token did.
-    let timer = Route::new(tokens.timer);
-    assert_eq!(timer.source(), Source::Timer);
-    enable_route(&mut matrix, INTERRUPT_TABLE, &timer).unwrap();
-    assert_eq!(matrix.routed(Core::Zero, Source::Timer), Some(Level::One));
-    disable_route(&mut matrix, &timer);
-    assert_eq!(matrix.routed(Core::Zero, Source::Timer), None);
-    let radio = Route::new(tokens.radio);
-    assert!(matches!(
-        enable_route(&mut matrix, INTERRUPT_TABLE, &radio),
-        Err(Error::WrongCore { .. })
-    ));
+    let mut one = fake_router(1);
+    let _bound = one.bind(refused.token, refused.part).unwrap();
+    assert_eq!(one.controller.routes[5], Some(17));
+    assert_eq!(one.controller.lines[17], LineState::bound(2, 3));
+    one.verify().unwrap();
 }
 
 #[test]
-fn a_required_source_must_be_listed_and_routed_on_its_core() {
-    let mut matrix = FakeMatrix::new(Core::Zero);
-    install(&mut matrix, INTERRUPT_TABLE).unwrap();
-    // Installed, the timer is silent until its owner routes it.
+fn the_table_lays_out_each_entry_as_the_tools_read_it() {
+    let [timer, radio, absent] = INTERRUPT_TABLE else {
+        panic!("three entries");
+    };
     assert_eq!(
-        verify_required(&matrix, INTERRUPT_TABLE, [Source::Timer]),
-        Err(Error::NotRouted {
-            source: Source::Timer
-        })
+        (
+            timer.source,
+            timer.line,
+            timer.level,
+            timer.hart,
+            timer.class
+        ),
+        (3, 16, 1, 0, crate::Class::Hardware)
     );
-    matrix.route(Source::Timer, Level::One);
+    assert!(timer.handler.is_some());
     assert_eq!(
-        verify_required(&matrix, INTERRUPT_TABLE, [Source::Timer]),
-        Ok(())
+        (
+            radio.source,
+            radio.line,
+            radio.level,
+            radio.hart,
+            radio.class
+        ),
+        (5, 17, 2, 1, crate::Class::Executor)
     );
-    // Core one's radio is checked on core one.
-    matrix.silence(Core::One, Source::Radio);
-    assert_eq!(
-        verify_required(&matrix, INTERRUPT_TABLE, [Source::Radio]),
-        Ok(())
-    );
-    assert_eq!(
-        verify_required(&matrix, INTERRUPT_TABLE, [Source::Absent]),
-        Err(Error::NotInTable {
-            source: Source::Absent
-        })
-    );
-}
-
-#[test]
-fn verify_rejects_a_source_routed_to_another_level() {
-    let mut matrix = FakeMatrix::new(Core::Zero);
-    install(&mut matrix, INTERRUPT_TABLE).unwrap();
-    matrix.route(Source::Timer, Level::Two);
-    assert_eq!(
-        verify(&matrix, INTERRUPT_TABLE),
-        Err(Error::WrongLevel {
-            source: Source::Timer,
-            level: Level::Two
-        })
-    );
-}
-
-#[test]
-fn a_table_lists_each_source_once() {
-    let matrix = FakeMatrix::new(Core::Zero);
-    let twice = [
-        crate::Binding {
-            source: Source::Timer,
-            level: Level::One,
-            class: crate::Class::Hardware,
-            core: Core::Zero,
-            handler: Some(Timer as unsafe extern "C" fn()),
-        },
-        crate::Binding {
-            source: Source::Timer,
-            level: Level::One,
-            class: crate::Class::Hardware,
-            core: Core::Zero,
-            handler: Some(Timer as unsafe extern "C" fn()),
-        },
-    ];
-    assert_eq!(
-        verify(&matrix, &twice),
-        Err(Error::Duplicate {
-            source: Source::Timer
-        })
-    );
-}
-
-#[test]
-fn an_entry_its_cfg_leaves_out_has_no_binding() {
-    assert_eq!(INTERRUPT_TABLE.len(), 3);
-    assert_eq!(INTERRUPT_TABLE[2].source, Source::Absent);
-    assert!(INTERRUPT_TABLE[2].handler.is_none());
-}
-
-#[test]
-fn after_install_no_source_of_the_table_is_routed_until_its_token_enables_it() {
-    // A matrix the bootloader left with every source routed.
-    let mut matrix = FakeMatrix::new(Core::Zero);
-    install(&mut matrix, INTERRUPT_TABLE).unwrap();
-    // No entry of this core is routed: enabling interrupts now dispatches
-    // none of the table's handlers.
-    for (binding, _) in
-        crate::present(INTERRUPT_TABLE).filter(|(binding, _)| binding.core == Core::Zero)
-    {
-        assert_eq!(
-            matrix.routed(Core::Zero, binding.source),
-            None,
-            "{:?}",
-            binding.source
-        );
-    }
-    // Only the source's token routes it again
-    // (`a_token_routes_its_source_to_its_level_on_its_core_alone`).
+    assert!(absent.handler.is_none());
 }

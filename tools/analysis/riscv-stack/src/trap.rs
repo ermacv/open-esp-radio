@@ -1,6 +1,7 @@
 //! The entries of the traps: each must move `sp` to the hart's interrupt
 //! stack before its first memory access, and its frame below that stack's
-//! position counts toward every bound of the trap.
+//! position counts toward every bound of the trap. An interrupt's entry
+//! must also return the hart to what it interrupted ([`interrupt_entry`]).
 //!
 //! A trap arrives with the interrupted context's `sp` and with `mscratch`
 //! holding the other stack: the interrupt stack's top in thread mode, the
@@ -9,14 +10,28 @@
 //! the lower of the two. The check executes the entry symbolically from its
 //! first instruction to the call of its handler over every path: each memory
 //! access must address the frame below that position, which the entry may
-//! learn only from an unsigned comparison of the two values.
+//! learn only from an unsigned comparison of the two values. Before an entry
+//! admits nesting (sets `mstatus.MIE`) its frame must hold `mepc`, `mcause`
+//! and `mstatus` as the trap left them, and it calls its handler with the
+//! FPU off.
+//!
+//! An interrupt's exit is executed the same way from the handler's return
+//! to `mret`, on every path: the handler leaves the frame and the
+//! callee-saved registers as it found them and anything else unknown. At
+//! `mret` every register and `mscratch` must hold its value at the trap,
+//! `mepc`, `mcause` (whose `mpil` is the level `mret` returns to), the CLIC
+//! threshold and `mstatus` must hold theirs, restored from the frame, and
+//! interrupts must be masked: `mepc`, `mcause` and the threshold are
+//! restored only after `mstatus.MIE` is cleared, and nothing sets it again.
 use crate::image::Function;
 use crate::sweep::destination;
 use oer_analysis_elf::rv32::{self, Role};
 use oer_analysis_riscv_decode::{Extension, Extensions, Float, Inst, Instruction, decode};
 use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
 use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_riscv::machine::MSCRATCH;
+use oer_riscv::clic::MINTTHRESH;
+use oer_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
+use std::collections::BTreeMap;
 
 /// Instructions one path of an entry may execute before its handler.
 const MAX_STEPS: usize = 512;
@@ -102,6 +117,25 @@ pub fn trap_entry(
     entry: u32,
     control: &mut dyn RunControl,
 ) -> Result<TrapEntry> {
+    check(image, entry, false, control)
+}
+
+/// Check the interrupt entry at `entry` of `image` as [`trap_entry`] does,
+/// and its exit from the handler's return to `mret` on every path.
+pub fn interrupt_entry(
+    image: &ImageFacts<'_>,
+    entry: u32,
+    control: &mut dyn RunControl,
+) -> Result<TrapEntry> {
+    check(image, entry, true, control)
+}
+
+fn check(
+    image: &ImageFacts<'_>,
+    entry: u32,
+    returns: bool,
+    control: &mut dyn RunControl,
+) -> Result<TrapEntry> {
     let (file, functions) = (image.file(), image.functions());
     let name = |address: u32| {
         functions
@@ -125,7 +159,7 @@ pub fn trap_entry(
             return Err(fail(entry, "takes more paths than the check follows"));
         }
         let mut steps = 0;
-        let (frame, handler) = loop {
+        loop {
             steps += 1;
             control.checkpoint(1)?;
             if steps > MAX_STEPS {
@@ -133,6 +167,15 @@ pub fn trap_entry(
             }
             let pc = state.pc;
             let bytes = code(file, pc).ok_or_else(|| fail(pc, "leaves the code"))?;
+            if bytes.get(..4) == Some(&MRET.to_le_bytes()) {
+                match state.phase {
+                    Phase::Entry => return Err(fail(pc, "returns before calling its handler")),
+                    Phase::Exit => {
+                        state.returned().map_err(|message| fail(pc, message))?;
+                        break;
+                    }
+                }
+            }
             let (instruction, length) =
                 decode(bytes, Extensions::ALL).ok_or_else(|| fail(pc, "undecodable"))?;
             let next = pc.wrapping_add(length as u32);
@@ -143,36 +186,46 @@ pub fn trap_entry(
                     pending.push(*taken);
                     state.pc = next;
                 }
-                Step::Call(handler) => {
+                Step::Call(handler) if state.phase == Phase::Entry => {
                     let frame = state.frame().ok_or_else(|| {
                         fail(
                             pc,
                             "calls its handler before it moves sp to the interrupt stack",
                         )
                     })?;
-                    break (frame, handler);
+                    if !state.mstatus.fpu_off {
+                        return Err(fail(pc, "calls its handler with the FPU on"));
+                    }
+                    let this = TrapEntry {
+                        entry,
+                        frame,
+                        handler,
+                    };
+                    found = match found {
+                        None => Some(this),
+                        Some(other) if other.handler != handler => {
+                            return Err(fail(entry, "calls different handlers on different paths"));
+                        }
+                        Some(other) => Some(TrapEntry {
+                            frame: other.frame.max(frame),
+                            ..other
+                        }),
+                    };
+                    if !returns {
+                        break;
+                    }
+                    state.after_handler(next);
                 }
+                Step::Call(_) => return Err(fail(pc, "calls a function on its way out")),
                 Step::Fail(message) => return Err(fail(pc, message)),
             }
-        };
-        let this = TrapEntry {
-            entry,
-            frame,
-            handler,
-        };
-        found = match found {
-            None => Some(this),
-            Some(other) if other.handler != handler => {
-                return Err(fail(entry, "calls different handlers on different paths"));
-            }
-            Some(other) => Some(TrapEntry {
-                frame: other.frame.max(frame),
-                ..other
-            }),
-        };
+        }
     }
     found.ok_or_else(|| fail(entry, "never calls a handler"))
 }
+
+/// `mret`.
+const MRET: u32 = 0x3020_0073;
 
 /// The code bytes at `address`, to the end of their section.
 fn code<'a>(file: &oer_analysis_elf::Elf<'a>, address: u32) -> Option<&'a [u8]> {
@@ -194,6 +247,10 @@ enum Value {
     At(Base, i64),
     /// The exclusive or of two entry values: half of a register swap.
     Xor(Base, Base),
+    /// Register `n`'s value at the trap (other than `sp`).
+    Register(u8),
+    /// A CSR's value at the trap.
+    Csr(u16),
 }
 
 /// The values the entry starts from.
@@ -232,13 +289,109 @@ impl Value {
             _ => Value::Unknown,
         }
     }
+
+    fn rename(self, lower: Base) -> Value {
+        match self {
+            Value::At(base, offset) if base == lower => Value::At(Base::Stack, offset),
+            Value::Xor(x, y) if x == lower => Value::Xor(Base::Stack, y),
+            Value::Xor(x, y) if y == lower => Value::Xor(x, Base::Stack),
+            other => other,
+        }
+    }
+}
+
+/// Which part of the trap the check executes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Phase {
+    /// From the trap to the handler's call.
+    Entry,
+    /// From the handler's return to `mret`.
+    Exit,
+}
+
+/// `mstatus`, as the check knows it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Status {
+    /// The value it was written from: the trap's, or another one.
+    base: Value,
+    /// `MIE`; `None` when unknown.
+    enabled: Option<bool>,
+    /// `FS` cleared since the trap.
+    fpu_off: bool,
+    /// Bits other than `MIE` changed since `base`.
+    changed: bool,
+}
+
+impl Status {
+    /// As the trap left it: `MIE` clear, the rest the interrupted code's.
+    const TRAP: Self = Self {
+        base: Value::Csr(MSTATUS),
+        enabled: Some(false),
+        fpu_off: false,
+        changed: false,
+    };
+    const UNKNOWN: Self = Self {
+        base: Value::Unknown,
+        enabled: None,
+        fpu_off: false,
+        changed: true,
+    };
+
+    /// The value a read returns.
+    fn read(self) -> Value {
+        if self == Self::TRAP {
+            Value::Csr(MSTATUS)
+        } else {
+            Value::Unknown
+        }
+    }
+
+    fn write(value: Value) -> Self {
+        if value == Value::Csr(MSTATUS) {
+            Self::TRAP
+        } else {
+            Self::UNKNOWN
+        }
+    }
+
+    /// Set (`set`) or clear the bits of `mask`.
+    fn change(self, mask: Value, set: bool) -> Self {
+        let Value::Constant(mask) = mask else {
+            return Self::UNKNOWN;
+        };
+        let (mie, fs) = (status::MIE as u32, status::FS_MASK as u32);
+        let mut next = self;
+        if mask & mie != 0 {
+            next.enabled = Some(set);
+        }
+        if mask & fs != 0 {
+            next.fpu_off = !set && mask & fs == fs;
+            next.changed |= set || mask & fs != fs;
+        }
+        if mask & !(mie | fs) != 0 {
+            next.changed = true;
+        }
+        next
+    }
 }
 
 #[derive(Clone)]
 struct State {
     pc: u32,
+    phase: Phase,
     registers: [Value; 32],
     scratch: Value,
+    mstatus: Status,
+    /// `mepc`, `mcause` and the CLIC threshold.
+    mepc: Value,
+    mcause: Value,
+    threshold: Value,
+    /// The frame's words by their offset from the interrupt stack's
+    /// position.
+    memory: BTreeMap<i64, Value>,
+    /// The interrupted `sp` and `mscratch`, which `mret` must find again.
+    trap_sp: Value,
+    trap_scratch: Value,
 }
 
 enum Step {
@@ -251,16 +404,81 @@ enum Step {
     Fail(&'static str),
 }
 
+/// Registers a call preserves: `sp`, `gp`, `tp` and `s0` to `s11`.
+fn preserved(register: usize) -> bool {
+    matches!(register, 2..=4 | 8 | 9 | 18..=27)
+}
+
 impl State {
     fn entry(pc: u32) -> Self {
-        let mut registers = [Value::Unknown; 32];
+        let mut registers: [Value; 32] =
+            std::array::from_fn(|register| Value::Register(register as u8));
         registers[0] = Value::Constant(0);
         registers[2] = Value::At(Base::Sp, 0);
         Self {
             pc,
+            phase: Phase::Entry,
             registers,
             scratch: Value::At(Base::Scratch, 0),
+            mstatus: Status::TRAP,
+            mepc: Value::Csr(MEPC),
+            mcause: Value::Csr(MCAUSE),
+            threshold: Value::Csr(MINTTHRESH),
+            memory: BTreeMap::new(),
+            trap_sp: Value::At(Base::Sp, 0),
+            trap_scratch: Value::At(Base::Scratch, 0),
         }
+    }
+
+    /// The state at the handler's return to `next`: the frame, `mscratch`
+    /// and the preserved registers as the call found them; the rest unknown.
+    fn after_handler(&mut self, next: u32) {
+        self.pc = next;
+        self.phase = Phase::Exit;
+        for (register, value) in self.registers.iter_mut().enumerate() {
+            if register != 0 && !preserved(register) {
+                *value = Value::Unknown;
+            }
+        }
+        self.mstatus = Status::UNKNOWN;
+        self.mepc = Value::Unknown;
+        self.mcause = Value::Unknown;
+        self.threshold = Value::Unknown;
+    }
+
+    /// Whether `mret` here returns to what the trap interrupted.
+    fn returned(&self) -> std::result::Result<(), &'static str> {
+        if self.mstatus.enabled != Some(false) {
+            return Err("returns with interrupts enabled");
+        }
+        if self.mstatus != Status::TRAP {
+            return Err("returns without the trap's mstatus");
+        }
+        if self.mepc != Value::Csr(MEPC) {
+            return Err("returns without the trap's mepc");
+        }
+        if self.mcause != Value::Csr(MCAUSE) {
+            return Err("returns without the trap's mcause");
+        }
+        if self.threshold != Value::Csr(MINTTHRESH) {
+            return Err("returns without the trap's interrupt threshold");
+        }
+        if self.get(2) != self.trap_sp {
+            return Err("returns on another stack than the interrupted one");
+        }
+        if self.scratch != self.trap_scratch {
+            return Err("returns without the trap's mscratch");
+        }
+        let lost = self
+            .registers
+            .iter()
+            .enumerate()
+            .skip(1)
+            .any(|(register, value)| register != 2 && *value != Value::Register(register as u8));
+        if lost {
+            return Err("returns without restoring a register");
+        }
+        Ok(())
     }
 
     fn get(&self, register: u8) -> Value {
@@ -282,15 +500,48 @@ impl State {
         }
     }
 
-    /// Whether `base + offset` addresses `width` bytes of the frame: at or
-    /// above `sp`, below the interrupt stack's position.
-    fn in_frame(&self, base: u8, offset: i64, width: i64) -> bool {
+    /// The offset from the interrupt stack's position of `width` bytes at
+    /// `base + offset`, when they lie in the frame: at or above `sp`, below
+    /// the interrupt stack's position.
+    fn in_frame(&self, base: u8, offset: i64, width: i64) -> Option<i64> {
         let (Value::At(Base::Stack, address), Some(frame)) =
             (self.get(base).add(offset), self.frame())
         else {
-            return false;
+            return None;
         };
-        address >= -(frame as i64) && address + width <= 0
+        (address >= -(frame as i64) && address + width <= 0).then_some(address)
+    }
+
+    /// Load `width` bytes at `base + offset` into `dest`: a word the frame
+    /// holds keeps its value.
+    fn load(&mut self, base: u8, offset: i64, width: i64, dest: u8) -> Step {
+        let Some(address) = self.in_frame(base, offset, width) else {
+            return Step::Fail("accesses memory outside its frame on the interrupt stack");
+        };
+        let value = match width {
+            4 => self.memory.get(&address).copied().unwrap_or(Value::Unknown),
+            _ => Value::Unknown,
+        };
+        self.set(dest, value);
+        Step::Next
+    }
+
+    /// Store `width` bytes of `value` at `base + offset`.
+    fn store(&mut self, base: u8, offset: i64, width: i64, value: Value) -> Step {
+        let Some(address) = self.in_frame(base, offset, width) else {
+            return Step::Fail("accesses memory outside its frame on the interrupt stack");
+        };
+        self.memory
+            .retain(|&word, _| word + 4 <= address || word >= address + width);
+        if width == 4 {
+            self.memory.insert(address, value);
+        }
+        Step::Next
+    }
+
+    /// Whether the frame holds `value`.
+    fn saved(&self, value: Value) -> bool {
+        self.memory.values().any(|&saved| saved == value)
     }
 
     /// The paths an unsigned comparison of the interrupted `sp` and
@@ -307,51 +558,124 @@ impl State {
         }
         let rename = |state: &State, lower: Base| {
             let mut state = state.clone();
-            let swap = |value: Value| match value {
-                Value::At(base, offset) if base == lower => Value::At(Base::Stack, offset),
-                Value::Xor(x, y) if x == lower => Value::Xor(Base::Stack, y),
-                Value::Xor(x, y) if y == lower => Value::Xor(x, Base::Stack),
-                other => other,
-            };
             for register in state.registers.iter_mut() {
-                *register = swap(*register);
+                *register = register.rename(lower);
             }
-            state.scratch = swap(state.scratch);
+            for value in state.memory.values_mut() {
+                *value = value.rename(lower);
+            }
+            state.scratch = state.scratch.rename(lower);
+            state.trap_sp = state.trap_sp.rename(lower);
+            state.trap_scratch = state.trap_scratch.rename(lower);
             state
         };
         // Taken: `a < b`, so `a` is the interrupt stack; otherwise `b <= a`.
         Some((rename(self, a), rename(self, b)))
     }
 
-    fn step(&mut self, instruction: &Instruction, pc: u32) -> Step {
-        let access = |state: &State, base: u8, offset: i64, width: i64| {
-            if state.in_frame(base, offset, width) {
-                Step::Next
-            } else {
-                Step::Fail("accesses memory outside its frame on the interrupt stack")
-            }
+    /// A CSR access: `dest` takes the old value, `csr` the new one.
+    fn csr(
+        &mut self,
+        op: oer_analysis_riscv_decode::CsrOp,
+        dest: u8,
+        operand: Value,
+        writes: bool,
+        csr: u16,
+    ) -> Step {
+        use oer_analysis_riscv_decode::CsrOp;
+        // The entry runs at the interrupt's level until its handler, and
+        // the exit until `mret`: nothing on the way may lower it.
+        let masked = self.mstatus.enabled == Some(false);
+        let old = match csr {
+            MSCRATCH => self.scratch,
+            MSTATUS => self.mstatus.read(),
+            MEPC => self.mepc,
+            MCAUSE => self.mcause,
+            MINTTHRESH => self.threshold,
+            _ => Value::Unknown,
         };
+        if writes {
+            let next = match op {
+                CsrOp::Write => operand,
+                CsrOp::Set | CsrOp::Clear => Value::Unknown,
+            };
+            match csr {
+                MSCRATCH => self.scratch = next,
+                MSTATUS => {
+                    let before = self.mstatus;
+                    self.mstatus = match op {
+                        CsrOp::Write => Status::write(operand),
+                        CsrOp::Set => before.change(operand, true),
+                        CsrOp::Clear => before.change(operand, false),
+                    };
+                    if self.phase == Phase::Entry
+                        && self.mstatus.enabled != Some(false)
+                        && before.enabled == Some(false)
+                        && !(self.saved(Value::Csr(MEPC))
+                            && self.saved(Value::Csr(MCAUSE))
+                            && self.saved(Value::Csr(MSTATUS)))
+                    {
+                        return Step::Fail(
+                            "admits nesting before its frame holds mepc, mcause and mstatus",
+                        );
+                    }
+                }
+                MEPC | MCAUSE => {
+                    if self.phase == Phase::Entry {
+                        return Step::Fail("an entry that writes mepc or mcause");
+                    }
+                    if !masked {
+                        return Step::Fail("restores mepc or mcause with interrupts enabled");
+                    }
+                    if csr == MEPC {
+                        self.mepc = next;
+                    } else {
+                        self.mcause = next;
+                    }
+                }
+                MINTTHRESH => {
+                    // Raising the threshold masks; restoring it waits for
+                    // MIE to be clear.
+                    let raise = next == Value::Constant(0xff);
+                    if !raise && self.phase == Phase::Exit && !masked {
+                        return Step::Fail(
+                            "restores the interrupt threshold with interrupts enabled",
+                        );
+                    }
+                    if !raise && self.phase == Phase::Entry {
+                        return Step::Fail("an entry that lowers the interrupt threshold");
+                    }
+                    self.threshold = next;
+                }
+                _ => {}
+            }
+        }
+        self.set(dest, old);
+        Step::Next
+    }
+
+    fn step(&mut self, instruction: &Instruction, pc: u32) -> Step {
         match *instruction {
             Instruction::Unimp => Step::Fail("traps before calling its handler"),
             Instruction::Base(inst) => match inst {
                 Inst::Lb { offset, base, dest } | Inst::Lbu { offset, base, dest } => {
-                    let step = access(self, base.0, offset.as_i32().into(), 1);
-                    self.set(dest.0, Value::Unknown);
-                    step
+                    self.load(base.0, offset.as_i32().into(), 1, dest.0)
                 }
                 Inst::Lh { offset, base, dest } | Inst::Lhu { offset, base, dest } => {
-                    let step = access(self, base.0, offset.as_i32().into(), 2);
-                    self.set(dest.0, Value::Unknown);
-                    step
+                    self.load(base.0, offset.as_i32().into(), 2, dest.0)
                 }
                 Inst::Lw { offset, base, dest } => {
-                    let step = access(self, base.0, offset.as_i32().into(), 4);
-                    self.set(dest.0, Value::Unknown);
-                    step
+                    self.load(base.0, offset.as_i32().into(), 4, dest.0)
                 }
-                Inst::Sb { offset, base, .. } => access(self, base.0, offset.as_i32().into(), 1),
-                Inst::Sh { offset, base, .. } => access(self, base.0, offset.as_i32().into(), 2),
-                Inst::Sw { offset, base, .. } => access(self, base.0, offset.as_i32().into(), 4),
+                Inst::Sb { offset, base, src } => {
+                    self.store(base.0, offset.as_i32().into(), 1, self.get(src.0))
+                }
+                Inst::Sh { offset, base, src } => {
+                    self.store(base.0, offset.as_i32().into(), 2, self.get(src.0))
+                }
+                Inst::Sw { offset, base, src } => {
+                    self.store(base.0, offset.as_i32().into(), 4, self.get(src.0))
+                }
                 Inst::LrW { .. } | Inst::ScW { .. } | Inst::AmoW { .. } => {
                     Step::Fail("an atomic access in a trap entry")
                 }
@@ -421,10 +745,23 @@ impl State {
                     *self = fallthrough;
                     Step::Branch(Box::new(taken))
                 }
-                Inst::Beq { offset, .. }
-                | Inst::Bne { offset, .. }
-                | Inst::Blt { offset, .. }
-                | Inst::Bge { offset, .. } => self.fork(pc.wrapping_add(offset.as_u32())),
+                Inst::Beq { offset, src1, src2 } | Inst::Bne { offset, src1, src2 } => {
+                    let target = pc.wrapping_add(offset.as_u32());
+                    // A flag the frame holds decides the branch.
+                    match (self.get(src1.0), self.get(src2.0)) {
+                        (Value::Constant(a), Value::Constant(b)) => {
+                            if (a == b) == matches!(inst, Inst::Beq { .. }) {
+                                Step::Jump(target)
+                            } else {
+                                Step::Next
+                            }
+                        }
+                        _ => self.fork(target),
+                    }
+                }
+                Inst::Blt { offset, .. } | Inst::Bge { offset, .. } => {
+                    self.fork(pc.wrapping_add(offset.as_u32()))
+                }
                 Inst::Fence { .. } => Step::Next,
                 Inst::Ecall | Inst::Ebreak => Step::Fail("a nested trap in a trap entry"),
                 other => match destination(&Instruction::Base(other)) {
@@ -453,24 +790,10 @@ impl State {
                         Operand::Register(0) | Operand::Immediate(0)
                     )
                 );
-                // The entry runs at the interrupt's level until its handler:
-                // nothing on the way may lower it.
                 if crate::LevelDrop::of_csr(csr, op, source).is_some() {
                     return Step::Fail("an entry that lowers the interrupt level");
                 }
-                let old = if csr == MSCRATCH {
-                    self.scratch
-                } else {
-                    Value::Unknown
-                };
-                if csr == MSCRATCH && writes {
-                    self.scratch = match op {
-                        CsrOp::Write => operand,
-                        CsrOp::Set | CsrOp::Clear => Value::Unknown,
-                    };
-                }
-                self.set(dest, old);
-                Step::Next
+                self.csr(op, dest, operand, writes, csr)
             }
             Instruction::Extension(Extension::Memory {
                 load,
@@ -480,11 +803,11 @@ impl State {
                 width,
                 ..
             }) => {
-                let step = access(self, base, offset.into(), width.into());
                 if load {
-                    self.set(register, Value::Unknown);
+                    self.load(base, offset.into(), width.into(), register)
+                } else {
+                    self.store(base, offset.into(), width.into(), self.get(register))
                 }
-                step
             }
             Instruction::Extension(
                 Extension::Push { .. }
@@ -496,9 +819,14 @@ impl State {
                 self.set(dest, Value::Unknown);
                 Step::Next
             }
-            Instruction::Float(Float::Load { base, offset, .. })
-            | Instruction::Float(Float::Store { base, offset, .. }) => {
-                access(self, base, offset.into(), 4)
+            Instruction::Float(Float::Load { base, offset, .. }) => {
+                match self.in_frame(base, offset.into(), 4) {
+                    Some(_) => Step::Next,
+                    None => Step::Fail("accesses memory outside its frame on the interrupt stack"),
+                }
+            }
+            Instruction::Float(Float::Store { base, offset, .. }) => {
+                self.store(base, offset.into(), 4, Value::Unknown)
             }
             Instruction::Float(_) => match destination(instruction) {
                 Some(dest) => {

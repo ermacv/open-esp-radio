@@ -177,18 +177,12 @@ fn aliases_and_overlapping_selectors_count_one_implementation_and_missing_entrie
 
 #[test]
 fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
-    use oer_analysis_riscv_stack::{Stacks, TableEntry, TrapEntry};
-    let mut image = graph(false, true);
-    image
-        .analysis
-        .functions
-        .get_mut(&TEXT)
-        .unwrap()
-        .table_bases
-        .insert(TEXT + 12, 0x3000);
+    use oer_analysis_riscv_stack::{Stacks, TableEntry, TrapEntry, Vector};
+    let image = graph(false, true);
     let entries = [
         TableEntry {
             core: 0,
+            line: 16,
             level: 2,
             class: oer_analysis_riscv_stack::Class::Executor,
             source: 7,
@@ -196,23 +190,28 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
         },
         TableEntry {
             core: 1,
+            line: 16,
             level: 2,
             class: oer_analysis_riscv_stack::Class::Executor,
             source: 8,
             handler: Some(TEXT + 28),
         },
     ];
-    let vector = TrapEntry {
-        entry: TEXT,
-        handler: TEXT,
-        frame: 0,
+    // Each hart's line calls its entry's handler directly.
+    let vector = |hart, handler| Vector {
+        hart,
+        line: 16,
+        entry: TrapEntry {
+            entry: TEXT,
+            handler,
+            frame: 0,
+        },
     };
     let inputs = Stacks {
         table: &entries,
         cores: &[0, 1],
-        vectors: &[vector],
-        exception: vector,
-        sources: 0x3000,
+        vectors: &[vector(0, FORMATTER), vector(1, TEXT + 28)],
+        exception: vector(0, TEXT).entry,
         resolutions: &image.resolutions,
     };
     let (harts, _) = image

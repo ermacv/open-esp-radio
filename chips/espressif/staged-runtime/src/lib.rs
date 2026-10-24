@@ -1,24 +1,43 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(
+    not(target_arch = "riscv32"),
+    allow(
+        dead_code,
+        reason = "the host builds the chip-independent parts for their tests"
+    )
+)]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-//! Stage-two entry, relocation and interrupt-stack ownership of the
+//! Stage-two entry, relocation, traps and interrupt-stack ownership of the
 //! Espressif staged boot.
 //!
 //! The bootstrap copies stage two into PSRAM and jumps to `_runtime_start`
 //! ([`entry`](crate::entry)), which initializes the SRAM sections, switches to
-//! the CPU0 PSRAM task stack, installs the vectors and enters the image's
-//! `runtime_main` that [`entry!`] defines. The image's `main` adopts the
-//! bootstrap's PSRAM mapping through its board ([`Handoff::adopt`]) and
-//! enables interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the chip of esp-hal; `two-harts` adds the
-//! second hart's interrupt stack.
+//! the CPU0 PSRAM task stack, installs the runtime's vectors and enters the
+//! image's `runtime_main` that [`entry!`] defines. The image's `main` adopts
+//! the bootstrap's PSRAM mapping through its board and takes its hart's
+//! routes and lines ([`Handoff::adopt`]), binds its interrupts through the
+//! [`Router`](oer_interrupt_table::Router) it gets back and enables
+//! interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the
+//! chip; `two-harts` adds the second hart's interrupt stack and vectors.
+//!
+//! The runtime owns the traps ([`stacks`]: the vector tables, every entry
+//! and the checked exit, `vectors.s`), the image's `critical-section` (`critical`) and
+//! the panic record ([`panic`]); the interrupt table's router writes the
+//! routes and the CLIC lines through the chip's controller.
+#[allow(unsafe_code, reason = "the CLIC threshold and mstatus.MIE")]
+mod critical;
+#[cfg(target_arch = "riscv32")]
 #[allow(
     unsafe_code,
     reason = "exported default trap handlers and the abort loop"
 )]
 mod default_handlers;
 pub mod diagnostics;
+#[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
 pub mod interrupts;
+#[cfg(target_arch = "riscv32")]
 pub mod layout;
 #[allow(
     unsafe_code,
@@ -28,7 +47,7 @@ pub mod panic;
 pub mod placement;
 #[allow(
     unsafe_code,
-    reason = "per-hart interrupt stacks and the vector table switching onto them"
+    reason = "per-hart interrupt stacks and the trap entries switching onto them"
 )]
 pub mod stacks;
 #[allow(unsafe_code, reason = "trap entry and machine CSRs")]
@@ -38,7 +57,7 @@ pub mod trap;
 pub use oer_interrupt_table as __interrupt_table;
 
 /// The image's interrupt table as [`interrupt_table!`] declares it.
-pub type InterruptTable = oer_interrupt_table::Table<oer_espressif_esp_hal_irq::EspHalMatrix>;
+pub type InterruptTable = oer_interrupt_table::Table;
 
 pub use oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping;
 
@@ -67,82 +86,100 @@ impl Handoff {
     }
 
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
-    /// stage-two interrupt context: the image's interrupt table, esp-hal's
-    /// vectoring and the current hart's SRAM interrupt stack, and the
-    /// task-stack watchpoint. Interrupts stay disabled until
+    /// stage-two interrupt context of CPU0: its SRAM interrupt stack and
+    /// vectors, the task-stack watchpoint, and the hart's routes and lines,
+    /// which `controller` writes. Interrupts stay disabled until
     /// [`Adopted::enable_interrupts`].
     ///
-    /// `interrupt_table` is the image's `INTERRUPT_TABLE` ([`interrupt_table!`]):
-    /// every hart installs and checks it. Installing it silences every source
-    /// it lists, so from here a source is routed only by its token's owner.
+    /// `interrupt_table` is the image's `INTERRUPT_TABLE`
+    /// ([`interrupt_table!`]). Installing it silences every source and
+    /// disables every line of the hart, so from here a source is routed only
+    /// by binding its entry.
+    ///
+    /// # Panics
+    ///
+    /// When `controller` belongs to another hart or does not take the
+    /// silencing writes: a typed boot failure (`oer_interrupt_table::Error`).
+    #[cfg(target_arch = "riscv32")]
     #[allow(
         unsafe_code,
-        reason = "installs vectoring, the interrupt stack and the stack watchpoint"
+        reason = "installs the interrupt stack, the vectors and the stack watchpoint"
     )]
-    pub fn adopt<B: AdoptsBootstrapMapping>(
+    pub fn adopt<B: AdoptsBootstrapMapping, C: oer_interrupt_table::Controller>(
         self,
         interrupt_table: &'static InterruptTable,
+        controller: C,
         board: B,
-    ) -> (B::Mapping, Adopted) {
+    ) -> (B::Mapping, Adopted<C>) {
         let mapping = board.adopt(&self.proof);
+        assert!(
+            usize::from(controller.hart()) == oer_espressif_staged_layout::boot::BOOT_HART,
+            "the stage-two handoff runs on the boot hart"
+        );
         // SAFETY: the handoff proves interrupts are disabled on the only
-        // running hart, and no driver relies on the bootloader's interrupt
-        // mappings yet.
-        unsafe { esp_hal::interrupt::reinitialize_vectoring_after_handoff() };
-        // After esp-hal's vectoring: the table claims the matrix and the
-        // CLIC once esp-hal's last vectoring store of this boot is done.
-        oer_espressif_esp_hal_irq::adopt(interrupt_table);
-        // SAFETY: interrupts are disabled and this hart has not admitted one.
+        // running hart, which has not admitted one.
         unsafe { stacks::install_current_hart_interrupt_stack() };
+        let router = match oer_interrupt_table::Router::install(controller, interrupt_table) {
+            Ok(router) => router,
+            Err(error) => {
+                panic!("the hart's routes and lines disagree with the image's table: {error:?}")
+            }
+        };
         unsafe extern "C" {
             static _stack_end: u8;
         }
-        // SAFETY: `_stack_end` is the word-aligned bottom of the CPU0 task
-        // stack the runtime linker script places.
-        unsafe {
-            esp_hal::debugger::set_stack_watchpoint(core::ptr::addr_of!(_stack_end) as usize)
-        };
-        (mapping, Adopted { _once: () })
+        // SAFETY: interrupts are disabled and trigger 0 is the runtime's;
+        // `_stack_end` is the word-aligned bottom of the CPU0 task stack the
+        // runtime linker script places.
+        unsafe { stacks::watch_task_stack(core::ptr::addr_of!(_stack_end) as usize) };
+        (mapping, Adopted { router })
     }
 }
 
 /// The adopted stage-two interrupt context of CPU0, before interrupts are
-/// enabled.
+/// enabled: the hart's router, through which the image binds its entries.
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
-pub struct Adopted {
-    _once: (),
+pub struct Adopted<C: oer_interrupt_table::Controller> {
+    router: oer_interrupt_table::Router<C>,
 }
 
-impl Adopted {
-    /// Hand global interrupt enable (`mstatus.MIE`) to this hart's executor.
+impl<C: oer_interrupt_table::Controller> Adopted<C> {
+    /// The hart's router: bind entries before interrupts are enabled.
+    pub fn router(&mut self) -> &mut oer_interrupt_table::Router<C> {
+        &mut self.router
+    }
+
+    /// Check the hart's vectors, routes and lines and hand global interrupt
+    /// enable (`mstatus.MIE`) to this hart's executor; the router stays the
+    /// image's, for bindings made later.
     ///
     /// Safe at any point after [`Handoff::adopt`]: adoption silenced every
-    /// source of the image's table and esp-hal's vectoring reset unrouted
-    /// every peripheral source, and a source is routed again only through its
-    /// table token, by the owner that binds its handler first (the image
-    /// check refuses any other writer of the interrupt matrix).
+    /// source and disabled every line, and a source is routed again only by
+    /// binding its entry, after its handler holds its part.
     ///
     /// # Panics
-    /// When a hardware-vector slot of the hart's active MTVT is not the
-    /// runtime's stack-switching entry, or the interrupt matrix or a bound
-    /// CPU line disagrees with the image's interrupt table ([`interrupts`]):
-    /// the typed boot failure `oer_espressif_esp_hal_irq::VerifyError`.
+    /// When the hart dispatches through other vectors than the runtime's, or
+    /// a route or line disagrees with the image's table: the typed boot
+    /// failure `oer_interrupt_table::Error`.
+    #[cfg(target_arch = "riscv32")]
     #[allow(unsafe_code, reason = "sets mstatus.MIE")]
-    pub fn enable_interrupts(self) {
+    pub fn enable_interrupts(self) -> oer_interrupt_table::Router<C> {
         stacks::verify_current_hart_vectors();
-        if let Err(error) = oer_espressif_esp_hal_irq::verify_current_hart() {
-            panic!("the interrupt lines disagree with the image's table: {error:?}");
+        if let Err(error) = self.router.verify() {
+            panic!("the hart's routes and lines disagree with the image's table: {error:?}");
         }
-        // SAFETY: as above, no source is routed but by its bound owner;
-        // setting MIE touches no memory and leaves the stack unchanged.
+        // SAFETY: as above, no source is routed but by its binding; setting
+        // MIE touches no memory and leaves the stack unchanged.
         unsafe {
             core::arch::asm!("csrsi mstatus, {mie}", mie = const oer_riscv::machine::status::MIE, options(nomem, nostack))
         };
+        self.router
     }
 }
 
 /// Wait for interrupts forever: the rest of an image that has nothing left
 /// to do on this hart.
+#[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the wfi instruction")]
 pub fn idle() -> ! {
     loop {
