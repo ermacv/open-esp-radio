@@ -85,7 +85,17 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   checked at compile time, and a part writes only the words it owns. A
   block the policy divides into its interrupt-handler and task sides
   (`[[register-sides]]`, owners `<Block>Irq` and `<Block>Task`) is checked
-  at compile time to give every word to exactly one side.
+  at compile time to give every word to exactly one side. Two joined parts
+  own every word of their block, checked at compile time.
+- A division of a block into up to four parts (`Block::divide`), whose
+  owned words are disjoint and whose shared write-trigger words no part
+  owns, each part holding its own bits of them, checked at compile time;
+  `Part::write_trigger` stores only the part's bits, zero in the others.
+  A device word is not Rust memory, so the parts' stores from several
+  contexts are no data race; a host part is `!Send`.
+- `oer_mmio::Reader`, the `Copy` read-only authority a block or part
+  becomes when it gives up its writes: no owner writes the words it took
+  over, and every copy only reads.
 - `oer_mmio::fence`, the device-access ordering instruction.
 - `VolatileCell`, the volatile word of the generated memory layouts, and
   its `Zeroable` implementation, from which the layouts derive theirs; and
@@ -95,9 +105,10 @@ A generated register writer takes typed field values only: `bool`, a value
 enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`; a reader returns
 the same type, so a value read back is written again without a
 conversion. A read-modify-write keeps every other bit, reserved and
-undeclared ones included; a write-one-to-clear register is acknowledged
-with exactly one affine sample; a DMA address field is written only by its
-policy transaction, which takes a typed DMA address. Each rendered
+undeclared ones included; a write-one-to-clear register, or the clear
+register of a status-to-clear snapshot, is acknowledged with exactly one
+affine sample; a DMA address field is written only from a typed DMA
+reference: its policy transaction or the field's image of a `DmaRef`. Each rendered
 transaction asserts its masks against the register's declared fields in a
 `const` item beside it. The one exception is a policy fixed image marked
 `whole-word`: the vendor's store of a whole word, with its evidence

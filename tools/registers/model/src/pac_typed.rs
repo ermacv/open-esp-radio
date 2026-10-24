@@ -16,9 +16,15 @@
 //! own their register, with their masks checked by `const` assertions.
 //! A policy-declared write-trigger field is zero in every read-modify-write
 //! of its register and one only in its explicit trigger; a policy-declared
-//! FIFO port is only popped and pushed.
+//! FIFO port is only popped and pushed. A policy pointer field is set only
+//! from the image of a typed DMA reference; a status-to-clear snapshot
+//! acknowledges exactly what it sampled; a read capability gives up a
+//! block's writes for a reader; a division gives each owner its words,
+//! array elements and bits of shared write-trigger words; a field whose
+//! only permitted value is zero is zero in every write.
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
 };
@@ -29,7 +35,9 @@ use svd_rs::{
 };
 
 use crate::{
-    Error, FieldOrModify, FullRegisterValue, PacApiPack, RegisterSides, Result, SharedPeripheral,
+    Error, FieldOrModify, FullRegisterValue, InterruptSnapshot, PacApiPack, PointerField,
+    ReadCapability, RegisterDivision, RegisterPointerEncoding, RegisterSides, Result,
+    SharedPeripheral,
     pac_api_render::{domain_value_expression, push_doc, type_binding_name},
 };
 
@@ -59,6 +67,8 @@ impl PacApiPack {
         pack.interrupt_sources.clear();
         pack.write_trigger_fields.clear();
         pack.fifo_ports.clear();
+        pack.read_capabilities.clear();
+        pack.register_divisions.clear();
         macro_rules! retain {
             ($($operations:ident),* $(,)?) => {
                 $(pack.$operations.retain(|operation| !typed.contains(&operation.peripheral));)*
@@ -94,6 +104,13 @@ impl PacApiPack {
         }
         pack.ownership_partitions
             .retain(|partition| !partition.peripherals.is_empty());
+        let partitions = pack
+            .ownership_partitions
+            .iter()
+            .map(|partition| partition.name.clone())
+            .collect::<BTreeSet<_>>();
+        pack.partition_image_reads
+            .retain(|image| partitions.contains(&image.partition));
         pack
     }
 
@@ -143,10 +160,30 @@ impl PacApiPack {
                     .map(|trigger| trigger.peripheral.as_str()),
             )
             .chain(self.fifo_ports.iter().map(|port| port.peripheral.as_str()))
+            .chain(
+                self.interrupt_snapshots
+                    .iter()
+                    .map(|snapshot| snapshot.peripheral.as_str()),
+            )
+            .chain(
+                self.pointer_fields
+                    .iter()
+                    .map(|pointer| pointer.peripheral.as_str()),
+            )
+            .chain(
+                self.read_capabilities
+                    .iter()
+                    .map(|capability| capability.peripheral.as_str()),
+            )
+            .chain(
+                self.register_divisions
+                    .iter()
+                    .map(|division| division.peripheral.as_str()),
+            )
             .find(|peripheral| libraries.contains_key(*peripheral))
         {
             return Err(Error::message(format!(
-                "PAC API register sides, write-trigger field or FIFO port of {peripheral} change a block whose layout a register library renders; declare it in the library's API"
+                "PAC API register sides, write-trigger field, FIFO port, snapshot, pointer field, read capability or division of {peripheral} change a block whose layout a register library renders; declare it in the library's API"
             )));
         }
         let device = svd_parser::parse(svd).map_err(|error| Error::message(error.to_string()))?;
@@ -164,6 +201,19 @@ impl PacApiPack {
                 "unexposed peripheral {name:?} is not in the SVD"
             )));
         }
+        // The blocks of the partitions an image reads: each reads its words.
+        let imaged = self
+            .partition_image_reads
+            .iter()
+            .filter_map(|image| {
+                self.ownership_partitions
+                    .iter()
+                    .find(|partition| partition.name == image.partition)
+            })
+            .flat_map(|partition| &partition.peripherals)
+            .filter(|peripheral| typed.contains(peripheral.as_str()))
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
         let mut blocks = BTreeMap::new();
         for name in typed {
             let peripheral = device
@@ -174,15 +224,22 @@ impl PacApiPack {
                     Error::message(format!("typed peripheral {name:?} is not in the SVD"))
                 })?;
             if let Some(library) = libraries.get(name) {
+                if imaged.contains(name) {
+                    return Err(Error::message(format!(
+                        "a partition image reads {name}, whose layout a register library renders"
+                    )));
+                }
                 let (module, owner) = render_placed(&mut output, peripheral, library)?;
                 blocks.insert(name, (module, owner));
                 continue;
             }
-            let block = TypedBlock::new(&device, peripheral, self, Some(peripheral.base_address))?;
+            let mut block =
+                TypedBlock::new(&device, peripheral, self, Some(peripheral.base_address))?;
+            block.imaged = imaged.contains(name);
             block.render(&mut output, self)?;
             blocks.insert(name, (block.module.clone(), block.owner.clone()));
         }
-        output.push_str(&self.render_typed_partitions(&blocks)?);
+        output.push_str(&self.render_typed_partitions(&device, &blocks)?);
         Ok(output)
     }
 
@@ -202,9 +259,12 @@ impl PacApiPack {
         if !self.ownership_partitions.is_empty()
             || !self.register_sides.is_empty()
             || !self.interrupt_sources.is_empty()
+            || !self.read_capabilities.is_empty()
+            || !self.register_divisions.is_empty()
+            || !self.pointer_fields.is_empty()
         {
             return Err(Error::message(
-                "a register library's API declares no ownership partition, register sides or interrupt source: they belong to a chip",
+                "a register library's API declares no ownership partition, register sides, interrupt source, read capability, register division or pointer field: they belong to a chip",
             ));
         }
         let device = svd_parser::parse(svd).map_err(|error| Error::message(error.to_string()))?;
@@ -229,7 +289,11 @@ impl PacApiPack {
     /// The ownership partitions of the typed blocks, the claim of every
     /// typed block the PAC root makes at once, and the compile-time check
     /// that no two blocks list the same word.
-    fn render_typed_partitions(&self, blocks: &BTreeMap<&str, (String, String)>) -> Result<String> {
+    fn render_typed_partitions(
+        &self,
+        device: &Device,
+        blocks: &BTreeMap<&str, (String, String)>,
+    ) -> Result<String> {
         let partitions = self
             .ownership_partitions
             .iter()
@@ -266,6 +330,7 @@ impl PacApiPack {
                 }
                 push_doc(&mut output, &partition.description, "");
                 let _ = writeln!(output, "pub struct {} {{\n{fields}}}\n", partition.name);
+                output.push_str(&self.render_typed_partition_images(device, partition, blocks)?);
                 if partition.handoff {
                     let (claims, pattern) = claim_tuple(&own);
                     let _ = writeln!(
@@ -339,6 +404,65 @@ impl PacApiPack {
         Ok(output)
     }
 
+    /// The images of a typed partition: each reads every readable register
+    /// of its blocks once, by image index, through the block's
+    /// `read_image_word`.
+    fn render_typed_partition_images(
+        &self,
+        device: &Device,
+        partition: &crate::OwnershipPartition,
+        blocks: &BTreeMap<&str, (String, String)>,
+    ) -> Result<String> {
+        let mut output = String::new();
+        for image in self
+            .partition_image_reads
+            .iter()
+            .filter(|image| image.partition == partition.name)
+        {
+            let registers = self.partition_registers(device, &partition.name)?;
+            let mut arms = String::new();
+            for (index, register) in registers.iter().enumerate() {
+                let (module, _) = blocks.get(register.peripheral.as_str()).ok_or_else(|| {
+                    Error::message(format!(
+                        "partition image {} reads {}, which is not typed",
+                        image.name, register.peripheral
+                    ))
+                })?;
+                let base = device
+                    .peripherals
+                    .iter()
+                    .find(|peripheral| peripheral.name == register.peripheral)
+                    .map_or(0, |peripheral| peripheral.base_address);
+                let _ = writeln!(
+                    arms,
+                    "{index} => self.{module}.read_image_word(0x{:x}),",
+                    u64::from(register.address) - base
+                );
+            }
+            let length = format!("{}_LEN", image.name.to_ascii_uppercase());
+            let _ = writeln!(
+                output,
+                "impl {} {{\n\
+                 /// The registers [`Self::{name}`] reads.\n\
+                 pub const {length}: usize = {count};\n\n\
+                 /// Read register `index` of the partition image: every readable\n\
+                 /// register of the partition once, ascending by address; `None`\n\
+                 /// past its end.\n\
+                 ///\n\
+                 /// SOURCE: {}.\n\
+                 pub fn {name}(&self, index: usize) -> Option<u32> {{\n\
+                 match index {{\n{arms}_ => None,\n}}\n\
+                 }}\n\
+                 }}\n",
+                partition.name,
+                image.sources.join(", "),
+                name = image.name,
+                count = registers.len(),
+            );
+        }
+        Ok(output)
+    }
+
     /// The name and register of every transaction the typed backend renders
     /// on `peripheral`.
     fn typed_register_operations<'s>(
@@ -365,6 +489,7 @@ impl PacApiPack {
             field_clear_modifies,
             field_replace_modifies,
             zero_based_field_writes,
+            sampled_bit_zero_writes,
         );
         for operation in self
             .fixed_register_sequences
@@ -395,16 +520,13 @@ impl PacApiPack {
             };
         }
         refuse!(
-            interrupt_snapshots => "a typed W1C register samples and acknowledges itself",
             w1c_register_snapshots => "a typed W1C register samples and acknowledges itself",
-            pointer_fields => "the typed backend renders no composed pointer image yet",
             field_reads => "use the typed register reader",
             field_snapshot_reads => "use the typed register reader",
             fixed_register_writes => "the typed backend renders no fixed variant write yet",
             register_image_reads => "the typed backend renders no register image read yet",
             register_image_writes => "the typed backend renders no register image write yet",
-            sampled_bit_zero_writes => "the typed backend renders no sampled-bit write yet",
-            zero_register_writes => "the typed backend renders no zero write yet",
+            zero_register_writes => "a store of zero is the fixed image zero",
             field_argument_modifies => "the typed backend renders no multi-argument modify yet",
             indexed_bit_set_modifies => "the typed backend renders no indexed bit set yet",
         );
@@ -423,10 +545,20 @@ impl PacApiPack {
                     .map(|trigger| trigger.peripheral.as_str()),
             )
             .chain(self.fifo_ports.iter().map(|port| port.peripheral.as_str()))
+            .chain(
+                self.read_capabilities
+                    .iter()
+                    .map(|capability| capability.peripheral.as_str()),
+            )
+            .chain(
+                self.register_divisions
+                    .iter()
+                    .map(|division| division.peripheral.as_str()),
+            )
             .find(|peripheral| !typed.contains(peripheral))
         {
             return Err(Error::message(format!(
-                "PAC API register sides, interrupt source, write-trigger field or FIFO port of {peripheral} name a peripheral that is not typed"
+                "PAC API register sides, interrupt source, write-trigger field, FIFO port, read capability or register division of {peripheral} name a peripheral that is not typed"
             )));
         }
         Ok(())
@@ -463,12 +595,14 @@ impl FieldType {
     }
 }
 
+#[derive(Clone)]
 struct Enumeration {
     name: String,
     variants: Vec<(String, u64, Option<String>)>,
     complete: bool,
 }
 
+#[derive(Clone)]
 struct TypedField<'a> {
     info: &'a FieldInfo,
     method: String,
@@ -476,9 +610,15 @@ struct TypedField<'a> {
     width: u32,
     readable: bool,
     writable: bool,
+    /// A DMA address field: no integer writer.
     pointer: bool,
+    /// A policy pointer field: written only from the image of a typed
+    /// reference.
+    image: Option<&'a PointerField>,
     /// A write-trigger field: only its explicit trigger writes one to it.
     trigger: bool,
+    /// A field whose one permitted value is zero: zero in every write.
+    zero: bool,
     enumeration: Option<Enumeration>,
 }
 
@@ -513,13 +653,24 @@ impl TypedField<'_> {
     }
 
     fn has_setter(&self) -> bool {
-        self.writable && !self.pointer && !self.trigger
+        self.writable && !self.pointer && !self.trigger && !self.zero
+    }
+
+    /// Whether a writer changes the field: by a setter or, for a policy
+    /// pointer field, by the image of a typed reference.
+    fn writes(&self) -> bool {
+        self.has_setter() || self.image.is_some()
     }
 
     /// Whether a reader returns the field: a trigger reads back nothing the
-    /// register keeps.
+    /// register keeps, and a constant-zero field holds nothing.
     fn has_getter(&self) -> bool {
-        self.readable && !self.trigger
+        self.readable && !self.trigger && !self.zero
+    }
+
+    /// The type of a policy pointer field's image, in its register module.
+    fn image_type(&self) -> String {
+        format!("{}Image", type_binding_name(&self.info.name))
     }
 
     /// The field's value in `bits`, the register image.
@@ -543,6 +694,7 @@ impl TypedField<'_> {
     }
 }
 
+#[derive(Clone)]
 struct TypedRegister<'a> {
     info: &'a RegisterInfo,
     method: String,
@@ -554,6 +706,9 @@ struct TypedRegister<'a> {
     w1c: bool,
     /// A FIFO port: popped and pushed only.
     fifo: bool,
+    /// The clear register of a status-to-clear snapshot: written only by
+    /// the snapshot's acknowledgement.
+    acknowledged: bool,
     fields: Vec<TypedField<'a>>,
 }
 
@@ -574,7 +729,32 @@ impl TypedRegister<'_> {
     }
 
     fn has_setters(&self) -> bool {
-        !self.w1c && !self.fifo && self.fields.iter().any(TypedField::has_setter)
+        !self.w1c && !self.fifo && !self.acknowledged && self.fields.iter().any(TypedField::writes)
+    }
+
+    /// The bits of the register's constant-zero fields.
+    fn zeros(&self) -> u32 {
+        self.fields
+            .iter()
+            .filter(|field| field.zero)
+            .fold(0, |mask, field| mask | field.mask())
+    }
+
+    /// The bits of the register's DMA address fields.
+    fn pointers(&self) -> u32 {
+        self.fields
+            .iter()
+            .filter(|field| field.pointer || field.image.is_some())
+            .fold(0, |mask, field| mask | field.mask())
+    }
+
+    /// The declared fields a fixed image may set, as a constant expression.
+    fn settable_fields(&self) -> String {
+        if self.zeros() == 0 {
+            format!("{}::FIELDS", self.method)
+        } else {
+            format!("({0}::FIELDS & !{0}::ZERO)", self.method)
+        }
     }
 
     /// The bits of the register's write-trigger fields.
@@ -588,10 +768,15 @@ impl TypedRegister<'_> {
     /// The read a read-modify-write starts from: every write-trigger field
     /// zero, so writing the image back starts no hardware action.
     fn modify_read_call(&self) -> String {
-        if self.triggers() == 0 {
-            self.read_call()
-        } else {
-            format!("{} & !{}::TRIGGERS", self.read_call(), self.method)
+        match (self.triggers() != 0, self.zeros() != 0) {
+            (false, false) => self.read_call(),
+            (true, false) => format!("{} & !{}::TRIGGERS", self.read_call(), self.method),
+            (false, true) => format!("{} & !{}::ZERO", self.read_call(), self.method),
+            (true, true) => format!(
+                "{} & !({1}::TRIGGERS | {1}::ZERO)",
+                self.read_call(),
+                self.method
+            ),
         }
     }
 
@@ -623,31 +808,105 @@ impl TypedRegister<'_> {
 }
 
 /// What the policy declares about one register beyond the SVD.
-struct DeclaredKinds<'p> {
+struct DeclaredKinds<'k, 'p> {
     /// The `(register, field)` DMA address fields.
-    pointers: &'p BTreeSet<(&'p str, &'p str)>,
+    pointers: &'k BTreeSet<(&'p str, &'p str)>,
+    /// The `(register, field)` policy pointer fields.
+    images: &'k BTreeMap<(&'p str, &'p str), &'p PointerField>,
     /// The `(register, field)` write-trigger fields.
-    triggers: &'p BTreeSet<(&'p str, &'p str)>,
+    triggers: &'k BTreeSet<(&'p str, &'p str)>,
     /// Whether the register is a FIFO port.
     fifo: bool,
+    /// Whether the register is the clear register of a snapshot.
+    acknowledged: bool,
 }
 
 /// The owner type suffix of a block's interrupt-handler side.
 const IRQ_SIDE: &str = "Irq";
 /// The owner type suffix of a block's task side.
 const TASK_SIDE: &str = "Task";
+/// The owner type suffix of the registers a read capability leaves.
+const REST: &str = "Rest";
 
 /// How one owner reaches a register.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Reach {
     Owned,
     Observed,
+    /// The owner's bits of a write-trigger word it shares with the other
+    /// parts of a division.
+    Trigger(u32),
 }
 
+/// One owner type of a block: the whole owner, a side, a part, a reader.
 struct View {
     name: String,
     inner: String,
     reach: BTreeMap<String, Reach>,
+    /// The arrays the owner has only some elements of: their first element
+    /// and count.
+    elements: BTreeMap<String, (u64, u64)>,
+    /// The owner's type documentation; the whole owner's is rendered apart.
+    doc: String,
+    /// The owner is `Copy`: a reader every copy of which only reads.
+    copy: bool,
+}
+
+impl View {
+    /// `register` as the owner reaches it: an array it has only some
+    /// elements of starts at the first of them and counts only them.
+    fn register<'r, 'a>(&self, register: &'r TypedRegister<'a>) -> Cow<'r, TypedRegister<'a>> {
+        match (self.elements.get(&register.info.name), register.array) {
+            (Some(&(first, count)), Some((stride, _))) => {
+                let mut part = register.clone();
+                part.offset = register.offset + stride * first;
+                part.array = Some((stride, count));
+                Cow::Owned(part)
+            }
+            _ => Cow::Borrowed(register),
+        }
+    }
+
+    /// The element `index` of `register` as the owner indexes it, if it
+    /// has that element.
+    fn element(&self, register: &TypedRegister<'_>, index: u64) -> Option<u64> {
+        let (first, count) = match (self.elements.get(&register.info.name), register.array) {
+            (Some(&elements), _) => elements,
+            (None, Some((_, count))) => (0, count),
+            (None, None) => return None,
+        };
+        index
+            .checked_sub(first)
+            .filter(|relative| *relative < count)
+    }
+
+    fn owns(&self, register: &str) -> bool {
+        self.reach.get(register) == Some(&Reach::Owned)
+    }
+
+    fn reads(&self, register: &str) -> bool {
+        matches!(
+            self.reach.get(register),
+            Some(Reach::Owned | Reach::Observed)
+        )
+    }
+
+    /// The owner's bits of a shared trigger word; zero if it has none.
+    fn trigger_bits(&self, register: &str) -> u32 {
+        match self.reach.get(register) {
+            Some(Reach::Trigger(mask)) => *mask,
+            _ => 0,
+        }
+    }
+
+    /// Whether the owner may write `value` whole to `register`: it owns the
+    /// register, or `value` sets only its bits of a shared trigger word.
+    fn writes_image(&self, register: &str, value: u32) -> bool {
+        self.owns(register) || {
+            let mask = self.trigger_bits(register);
+            mask != 0 && value & !mask == 0
+        }
+    }
 }
 
 struct TypedBlock<'a> {
@@ -658,6 +917,12 @@ struct TypedBlock<'a> {
     base: Option<u64>,
     registers: Vec<TypedRegister<'a>>,
     split: Option<&'a RegisterSides>,
+    /// The status-to-clear snapshots of the block.
+    snapshots: Vec<&'a InterruptSnapshot>,
+    capability: Option<&'a ReadCapability>,
+    division: Option<&'a RegisterDivision>,
+    /// A partition image reads the block: its owner reads any readable word.
+    imaged: bool,
 }
 
 impl<'a> TypedBlock<'a> {
@@ -692,6 +957,21 @@ impl<'a> TypedBlock<'a> {
             .filter(|port| port.peripheral == name)
             .map(|port| port.register.as_str())
             .collect::<BTreeSet<_>>();
+        let images = policy
+            .pointer_fields
+            .iter()
+            .filter(|pointer| pointer.peripheral == name)
+            .map(|pointer| ((pointer.register.as_str(), pointer.field.as_str()), pointer))
+            .collect::<BTreeMap<_, _>>();
+        let snapshots = policy
+            .interrupt_snapshots
+            .iter()
+            .filter(|snapshot| snapshot.peripheral == name)
+            .collect::<Vec<_>>();
+        let cleared = snapshots
+            .iter()
+            .map(|snapshot| snapshot.clear_register.as_str())
+            .collect::<BTreeSet<_>>();
         let mut registers = Vec::new();
         for child in peripheral.registers.as_deref().unwrap_or_default() {
             let RegisterCluster::Register(register) = child else {
@@ -716,8 +996,10 @@ impl<'a> TypedBlock<'a> {
             };
             let kinds = DeclaredKinds {
                 pointers: &pointers,
+                images: &images,
                 triggers: &triggers,
                 fifo: fifos.contains(info.name.as_str()),
+                acknowledged: cleared.contains(info.name.as_str()),
             };
             registers.push(TypedRegister::new(name, info, access, array, &kinds)?);
         }
@@ -729,6 +1011,16 @@ impl<'a> TypedBlock<'a> {
         }) {
             return Err(Error::message(format!(
                 "write-trigger field {name}.{register}.{field} is not a field of the block"
+            )));
+        }
+        if let Some((register, field)) = images.keys().find(|(register, field)| {
+            !registers.iter().any(|typed| {
+                typed.info.name == *register
+                    && typed.fields.iter().any(|known| known.info.name == *field)
+            })
+        }) {
+            return Err(Error::message(format!(
+                "pointer field {name}.{register}.{field} is not a field of the block"
             )));
         }
         if let Some(register) = fifos
@@ -764,10 +1056,35 @@ impl<'a> TypedBlock<'a> {
                 "typed peripheral {name} has no register"
             )));
         }
+        if let Some((operation, register)) = policy
+            .typed_register_operations(name)
+            .find(|(_, register)| cleared.contains(register))
+        {
+            return Err(Error::message(format!(
+                "PAC API {operation:?} writes {name}.{register}, which only its snapshot's acknowledgement writes"
+            )));
+        }
         let split = policy
             .register_sides
             .iter()
             .find(|sides| sides.peripheral == name);
+        let capability = policy
+            .read_capabilities
+            .iter()
+            .find(|capability| capability.peripheral == name);
+        let division = policy
+            .register_divisions
+            .iter()
+            .find(|division| division.peripheral == name);
+        if usize::from(split.is_some())
+            + usize::from(capability.is_some())
+            + usize::from(division.is_some())
+            > 1
+        {
+            return Err(Error::message(format!(
+                "typed peripheral {name} takes at most one of register sides, a read capability and a register division"
+            )));
+        }
         let block = Self {
             peripheral,
             module: crate::pac_api_render::member_binding_name(name),
@@ -775,9 +1092,201 @@ impl<'a> TypedBlock<'a> {
             base,
             registers,
             split,
+            snapshots,
+            capability,
+            division,
+            imaged: false,
         };
         block.validate_split()?;
+        block.validate_snapshots()?;
+        block.validate_capability()?;
+        block.validate_division(policy)?;
         Ok(block)
+    }
+
+    /// Whether `register` is read without a side effect.
+    fn reads_freely(register: &TypedRegister<'_>) -> bool {
+        register.readable && !register.clears_on_read && !register.fifo
+    }
+
+    /// The bits a snapshot keeps and acknowledges: the status register's
+    /// declared fields that the clear register declares too.
+    fn snapshot_mask(&self, snapshot: &InterruptSnapshot) -> Result<u32> {
+        let status = self.register(&snapshot.status_register)?;
+        let clear = self.register(&snapshot.clear_register)?;
+        Ok(status.declared() & clear.declared())
+    }
+
+    fn validate_snapshots(&self) -> Result<()> {
+        let name = &self.peripheral.name;
+        for snapshot in &self.snapshots {
+            let status = self.register(&snapshot.status_register)?;
+            let clear = self.register(&snapshot.clear_register)?;
+            let refuse = |reason: &str| {
+                Err(Error::message(format!(
+                    "interrupt snapshot {:?} of {name}: {reason}",
+                    snapshot.name
+                )))
+            };
+            if !Self::reads_freely(status) || status.w1c || status.array.is_some() {
+                return refuse(
+                    "its status register is one word read without a side effect and acknowledged by its clear register",
+                );
+            }
+            let clears = clear.fields.iter().all(|field| {
+                field.info.modified_write_values == Some(ModifiedWriteValues::OneToClear)
+                    || (field.info.modified_write_values.is_none()
+                        && clear.info.modified_write_values
+                            == Some(ModifiedWriteValues::OneToClear))
+            });
+            if !clear.writable
+                || clear.array.is_some()
+                || clear.fifo
+                || clear.fields.is_empty()
+                || !clears
+            {
+                return refuse("its clear register is one word of write-one-to-clear fields");
+            }
+            let mask = self.snapshot_mask(snapshot)?;
+            if mask == 0 {
+                return refuse("its clear register acknowledges no field of its status register");
+            }
+            if let Some(field) = status
+                .fields
+                .iter()
+                .find(|field| field.mask() & mask != 0 && field.mask() & !mask != 0)
+            {
+                return refuse(&format!(
+                    "status field {} is acknowledged only in part",
+                    field.info.name
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_capability(&self) -> Result<()> {
+        let Some(capability) = self.capability else {
+            return Ok(());
+        };
+        let mut seen = BTreeSet::new();
+        for name in &capability.registers {
+            let register = self.register(name)?;
+            if !seen.insert(name) || !Self::reads_freely(register) {
+                return Err(Error::message(format!(
+                    "read capability {} of {} names {name} twice or reads it with a side effect",
+                    capability.name, self.peripheral.name
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_division(&self, policy: &PacApiPack) -> Result<()> {
+        let Some(division) = self.division else {
+            return Ok(());
+        };
+        let name = &self.peripheral.name;
+        let refuse = |part: &str, reason: String| {
+            Err(Error::message(format!(
+                "register division of {name}, part {part}: {reason}"
+            )))
+        };
+        let triggers = policy
+            .write_trigger_fields
+            .iter()
+            .filter(|trigger| &trigger.peripheral == name)
+            .map(|trigger| (trigger.register.as_str(), trigger.field.as_str()))
+            .collect::<BTreeSet<_>>();
+        // Each whole register, array element and trigger bit has one part.
+        let mut owned = BTreeMap::<&str, &str>::new();
+        let mut elements = BTreeMap::<(&str, u64), &str>::new();
+        let mut bits = BTreeMap::<&str, u32>::new();
+        for part in &division.parts {
+            for register in &part.registers {
+                self.register(register)?;
+                if owned.insert(register, &part.name).is_some() {
+                    return refuse(&part.name, format!("{register} has another owner"));
+                }
+            }
+            for range in &part.elements {
+                let register = self.register(&range.register)?;
+                let Some((_, count)) = register.array else {
+                    return refuse(&part.name, format!("{} is no array", range.register));
+                };
+                let (first, length) = (u64::from(range.first), u64::from(range.count));
+                if length == 0 || first + length > count {
+                    return refuse(
+                        &part.name,
+                        format!("elements of {} lie outside the array", range.register),
+                    );
+                }
+                for element in first..first + length {
+                    if elements
+                        .insert((range.register.as_str(), element), &part.name)
+                        .is_some()
+                    {
+                        return refuse(
+                            &part.name,
+                            format!("element {element} of {} has another owner", range.register),
+                        );
+                    }
+                }
+            }
+            for register in &part.observes {
+                if !Self::reads_freely(self.register(register)?) {
+                    return refuse(
+                        &part.name,
+                        format!("it observes {register}, which has no side-effect-free read"),
+                    );
+                }
+            }
+            for trigger in &part.triggers {
+                let register = self.register(&trigger.register)?;
+                if register.readable || !register.writable || register.array.is_some() {
+                    return refuse(
+                        &part.name,
+                        format!("{} is no write-only trigger word", trigger.register),
+                    );
+                }
+                let mut mask = 0;
+                for field in &trigger.fields {
+                    if !triggers.contains(&(trigger.register.as_str(), field.as_str())) {
+                        return refuse(
+                            &part.name,
+                            format!(
+                                "{}.{field} is no declared write-trigger field",
+                                trigger.register
+                            ),
+                        );
+                    }
+                    mask |= self::field(register, field)?.mask();
+                }
+                let shared = bits.entry(&trigger.register).or_default();
+                if trigger.fields.is_empty() || *shared & mask != 0 {
+                    return refuse(
+                        &part.name,
+                        format!(
+                            "its bits of {} are none or another part's",
+                            trigger.register
+                        ),
+                    );
+                }
+                *shared |= mask;
+            }
+        }
+        for register in &self.registers {
+            let whole = owned.contains_key(register.info.name.as_str());
+            let split = elements.keys().any(|(name, _)| *name == register.info.name);
+            let shared = bits.contains_key(register.info.name.as_str());
+            if usize::from(whole) + usize::from(split) + usize::from(shared) > 1 {
+                return Err(Error::message(format!(
+                    "register division of {name} gives {} whole, by element or by trigger bit at once",
+                    register.info.name
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Every declared word of the block, ascending.
@@ -836,7 +1345,15 @@ impl<'a> TypedBlock<'a> {
             name: self.owner.clone(),
             inner: "oer_mmio::Block<P, BlockWords>".to_owned(),
             reach: all,
+            elements: BTreeMap::new(),
+            doc: String::new(),
+            copy: false,
         }];
+        let side = format!(
+            "/// One owner of a split `{}` block.\n\
+             #[must_use = \"a split owner must be joined to recover the block\"]\n",
+            self.peripheral.name
+        );
         if let Some(split) = self.split {
             let part = self
                 .registers
@@ -862,12 +1379,108 @@ impl<'a> TypedBlock<'a> {
                 name: format!("{}{}", self.owner, TASK_SIDE),
                 inner: format!("oer_mmio::Part<P, BlockWords, {}Words>", TASK_SIDE),
                 reach: rest,
+                elements: BTreeMap::new(),
+                doc: side.clone(),
+                copy: false,
             });
             views.push(View {
                 name: format!("{}{}", self.owner, IRQ_SIDE),
                 inner: format!("oer_mmio::Part<P, BlockWords, {}Words>", IRQ_SIDE),
                 reach: part,
+                elements: BTreeMap::new(),
+                doc: side,
+                copy: false,
             });
+        }
+        if let Some(capability) = self.capability {
+            let read = capability
+                .registers
+                .iter()
+                .map(|register| (register.clone(), Reach::Observed))
+                .collect::<BTreeMap<_, _>>();
+            if read.len() != self.registers.len() {
+                views.push(View {
+                    name: format!("{}{REST}", self.owner),
+                    inner: format!("oer_mmio::Part<P, BlockWords, {REST}Words>"),
+                    reach: self
+                        .registers
+                        .iter()
+                        .filter(|register| !read.contains_key(&register.info.name))
+                        .map(|register| (register.info.name.clone(), Reach::Owned))
+                        .collect(),
+                    elements: BTreeMap::new(),
+                    doc: format!(
+                        "/// The `{}` registers but those [`{}{}`] reads: their one\n\
+                         /// writer once the reader is split off.\n\
+                         #[must_use = \"dropping a register owner permanently loses its register authority\"]\n",
+                        self.peripheral.name, self.owner, capability.name
+                    ),
+                    copy: false,
+                });
+            }
+            let mut doc = format!(
+                "/// A read-only owner of `{}` registers: {}\n///\n",
+                self.peripheral.name,
+                clean(&capability.description).replace('\n', " ")
+            );
+            if capability.copy {
+                doc.push_str(
+                    "/// It is `Copy`: every copy only reads, and nothing writes the\n\
+                     /// registers it reads any more.\n///\n",
+                );
+            }
+            let _ = writeln!(doc, "/// SOURCE: {}.", capability.sources.join(", "));
+            views.push(View {
+                name: format!("{}{}", self.owner, capability.name),
+                inner: format!("oer_mmio::Reader<P, BlockWords, {}Words>", capability.name),
+                reach: read,
+                elements: BTreeMap::new(),
+                doc,
+                copy: capability.copy,
+            });
+        }
+        if let Some(division) = self.division {
+            for part in &division.parts {
+                let mut reach = BTreeMap::new();
+                let mut elements = BTreeMap::new();
+                for register in &part.observes {
+                    reach.insert(register.clone(), Reach::Observed);
+                }
+                for register in &part.registers {
+                    reach.insert(register.clone(), Reach::Owned);
+                }
+                for range in &part.elements {
+                    reach.insert(range.register.clone(), Reach::Owned);
+                    elements.insert(
+                        range.register.clone(),
+                        (u64::from(range.first), u64::from(range.count)),
+                    );
+                }
+                for trigger in &part.triggers {
+                    let mask = self
+                        .register(&trigger.register)
+                        .map(|register| {
+                            register
+                                .fields
+                                .iter()
+                                .filter(|field| trigger.fields.contains(&field.info.name))
+                                .fold(0, |mask, field| mask | field.mask())
+                        })
+                        .unwrap_or_default();
+                    reach.insert(trigger.register.clone(), Reach::Trigger(mask));
+                }
+                views.push(View {
+                    name: format!("{}{}", self.owner, part.name),
+                    inner: format!("oer_mmio::Part<P, BlockWords, {}Words>", part.name),
+                    reach,
+                    elements,
+                    doc: format!(
+                        "/// One owner of a divided `{}` block, which nothing joins again.\n",
+                        self.peripheral.name
+                    ),
+                    copy: false,
+                });
+            }
         }
         views
     }
@@ -1021,20 +1634,32 @@ impl<'a> TypedBlock<'a> {
                     TASK_SIDE, IRQ_SIDE,
                 );
             }
+            if view.name == *owner {
+                self.render_dividers(&mut body);
+                self.render_image_word(&mut body)?;
+            }
             for register in &self.registers {
                 if let Some(reach) = view.reach.get(&register.info.name) {
-                    register.render_methods(&mut body, *reach);
+                    view.register(register).render_methods(&mut body, *reach);
                 }
             }
+            self.render_snapshot_methods(&mut body, view)?;
             self.render_transactions(&mut body, &mut asserts, policy, view)?;
             if view.name != *owner {
                 let _ = writeln!(
                     output,
-                    "/// One owner of a split `{}` block.\n\
-                     #[must_use = \"a split owner must be joined to recover the block\"]\n\
-                     pub struct {}<P: oer_mmio::Placement{default}>({});\n",
-                    self.peripheral.name, view.name, view.inner
+                    "{}pub struct {}<P: oer_mmio::Placement{default}>({});\n",
+                    view.doc, view.name, view.inner
                 );
+                if view.copy {
+                    let _ = writeln!(
+                        output,
+                        "impl<P: oer_mmio::Placement> Clone for {0}<P> {{\n\
+                         fn clone(&self) -> Self {{\n*self\n}}\n}}\n\n\
+                         impl<P: oer_mmio::Placement> Copy for {0}<P> {{}}\n",
+                        view.name
+                    );
+                }
             }
             let _ = writeln!(
                 output,
@@ -1082,11 +1707,254 @@ impl<'a> TypedBlock<'a> {
                 clean(&split.description).replace('\n', " ")
             );
         }
+        self.render_part_words(output, &views);
+        self.render_snapshot_types(output)?;
         for register in &self.registers {
             register.render_module(output);
         }
         output.push_str(&asserts);
         output.push_str("}\n\n");
+        Ok(())
+    }
+
+    /// The whole owner's methods that give its registers to a read
+    /// capability or to the parts of a division.
+    fn render_dividers(&self, body: &mut String) {
+        let owner = &self.owner;
+        if let Some(capability) = self.capability {
+            let reader = format!("{owner}{}", capability.name);
+            let method = snake(&capability.name);
+            if capability.registers.len() == self.registers.len() {
+                let _ = writeln!(
+                    body,
+                    "/// Give up every write: the block becomes [`{reader}`], which only\n\
+                     /// reads.\n\
+                     pub fn into_{method}(self) -> {reader}<P> {{\n\
+                     {reader}(self.0.into_reader::<{}Words>())\n\
+                     }}\n",
+                    capability.name
+                );
+            } else {
+                let _ = writeln!(
+                    body,
+                    "/// Give up the writes of the registers [`{reader}`] reads: split\n\
+                     /// the block into it and [`{owner}{REST}`], which owns every other\n\
+                     /// register.\n\
+                     pub fn split_{method}(self) -> ({owner}{REST}<P>, {reader}<P>) {{\n\
+                     let (rest, reader) = self.0.split::<{REST}Words, {}Words>();\n\
+                     ({owner}{REST}(rest), {reader}(reader.into_reader()))\n\
+                     }}\n",
+                    capability.name
+                );
+            }
+        }
+        if let Some(division) = self.division {
+            let types = division
+                .parts
+                .iter()
+                .map(|part| format!("{owner}{}<P>", part.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let words = division
+                .parts
+                .iter()
+                .map(|part| format!("{}Words", part.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let bindings = division
+                .parts
+                .iter()
+                .map(|part| snake(&part.name))
+                .collect::<Vec<_>>();
+            let built = division
+                .parts
+                .iter()
+                .zip(&bindings)
+                .map(|(part, binding)| format!("{owner}{}({binding})", part.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(
+                body,
+                "/// Divide the block between its owners: {}\n\
+                 ///\n\
+                 /// Nothing joins them again.\n\
+                 ///\n\
+                 /// SOURCE: {}.\n\
+                 pub fn divide(self) -> ({types}) {{\n\
+                 let ({}) = self.0.divide::<({words})>();\n\
+                 ({built})\n\
+                 }}\n",
+                clean(&division.description).replace('\n', " "),
+                division.sources.join(", "),
+                bindings.join(", "),
+            );
+        }
+    }
+
+    /// The whole owner's read of any readable word, for a partition image.
+    fn render_image_word(&self, body: &mut String) -> Result<()> {
+        if !self.imaged {
+            return Ok(());
+        }
+        let mut arms = String::new();
+        for register in self.registers.iter().filter(|register| register.readable) {
+            if !Self::reads_freely(register) {
+                return Err(Error::message(format!(
+                    "a partition image reads every readable register of {}, and {} changes when read",
+                    self.peripheral.name, register.info.name
+                )));
+            }
+            for word in register.words() {
+                let _ = writeln!(arms, "0x{word:x} => self.0.read::<0x{word:x}>(),");
+            }
+        }
+        let _ = writeln!(
+            body,
+            "/// One read of the readable word at byte `offset`, for its partition's\n\
+             /// image: every readable register reads without a side effect; `None`\n\
+             /// for any other offset.\n\
+             pub fn read_image_word(&self, offset: usize) -> Option<u32> {{\n\
+             Some(match offset {{\n{arms}_ => return None,\n}})\n\
+             }}\n"
+        );
+        Ok(())
+    }
+
+    /// The word lists of a read capability, the registers it leaves and the
+    /// parts of a division.
+    fn render_part_words(&self, output: &mut String, views: &[View]) {
+        if self.capability.is_none() && self.division.is_none() {
+            return;
+        }
+        for view in views.iter().skip(1) {
+            let suffix = view
+                .name
+                .strip_prefix(self.owner.as_str())
+                .unwrap_or_default();
+            let mut owned = Vec::new();
+            let mut observed = Vec::new();
+            let mut triggers = Vec::new();
+            for register in &self.registers {
+                let words = view.register(register).words();
+                match view.reach.get(&register.info.name) {
+                    // A reader's registers are its own: no owner writes them.
+                    Some(Reach::Owned) => owned.extend(words),
+                    Some(Reach::Observed) if self.capability.is_some() => {
+                        owned.extend(words);
+                    }
+                    Some(Reach::Observed) => observed.extend(words),
+                    Some(Reach::Trigger(mask)) => {
+                        triggers.push(format!("(0x{:x}, 0x{mask:08x})", register.offset));
+                    }
+                    None => {}
+                }
+            }
+            owned.sort_unstable();
+            observed.sort_unstable();
+            let list = |words: &[u64]| {
+                words
+                    .iter()
+                    .map(|word| format!("0x{word:x}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let triggers = if triggers.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "const TRIGGERS: &'static [(usize, u32)] = &[{}];\n",
+                    triggers.join(", ")
+                )
+            };
+            let _ = writeln!(
+                output,
+                "/// The words [`{}`] owns, observes and shares.\n\
+                 pub struct {suffix}Words;\n\n\
+                 impl oer_mmio::Words for {suffix}Words {{\n\
+                 const OWNED: &'static [usize] = &[{}];\n\
+                 const OBSERVED: &'static [usize] = &[{}];\n\
+                 {triggers}\
+                 }}\n",
+                view.name,
+                list(&owned),
+                list(&observed),
+            );
+        }
+    }
+
+    /// The affine snapshot type of each status-to-clear protocol.
+    fn render_snapshot_types(&self, output: &mut String) -> Result<()> {
+        for snapshot in &self.snapshots {
+            let status = self.register(&snapshot.status_register)?;
+            let mask = self.snapshot_mask(snapshot)?;
+            let name = format!("{}Snapshot", type_binding_name(&snapshot.name));
+            let _ = writeln!(
+                output,
+                "/// One sample of the `{}` events `{}` acknowledges, to\n\
+                 /// acknowledge once.\n\
+                 ///\n\
+                 /// SOURCE: {}.\n\
+                 #[must_use = \"a sampled event set must be acknowledged\"]\n\
+                 #[derive(Debug, Eq, PartialEq)]\n\
+                 pub struct {name}(u32);\n\n\
+                 impl {name} {{\n\
+                 /// The bits the snapshot keeps: the events the clear register\n\
+                 /// acknowledges.\n\
+                 pub const EVENTS: u32 = 0x{mask:08x};\n\n\
+                 /// Whether no event was sampled.\n\
+                 pub const fn is_clear(&self) -> bool {{\nself.0 == 0\n}}\n",
+                snapshot.status_register,
+                snapshot.clear_register,
+                snapshot.sources.join(", ")
+            );
+            for field in status
+                .fields
+                .iter()
+                .filter(|field| field.mask() & !mask == 0 && field.has_getter())
+            {
+                render_getter(output, field, "&self");
+                let _ = writeln!(
+                    output,
+                    "/// The snapshot without `{0}` unless `keep`: it is then not acknowledged.\n\
+                     pub const fn retain_{1}(self, keep: bool) -> Self {{\n\
+                     if keep {{ self }} else {{ Self(self.0 & !0x{2:08x}) }}\n}}\n",
+                    field.info.name,
+                    field.method.trim_start_matches("r#"),
+                    field.mask()
+                );
+            }
+            output.push_str("}\n\n");
+        }
+        Ok(())
+    }
+
+    /// Each snapshot's sample and acknowledgement, on an owner that owns its
+    /// clear register and reads its status register.
+    fn render_snapshot_methods(&self, body: &mut String, view: &View) -> Result<()> {
+        for snapshot in &self.snapshots {
+            if !view.owns(&snapshot.clear_register) || !view.reads(&snapshot.status_register) {
+                continue;
+            }
+            let status = self.register(&snapshot.status_register)?;
+            let clear = self.register(&snapshot.clear_register)?;
+            let name = format!("{}Snapshot", type_binding_name(&snapshot.name));
+            let _ = writeln!(
+                body,
+                "/// Sample `{}` once, keeping the events `{}` acknowledges.\n\
+                 #[inline]\npub fn sample_{method}(&self) -> {name} {{\n\
+                 {name}(self.0.{} & {name}::EVENTS)\n}}\n\n\
+                 /// Acknowledge exactly the sampled events: one to each bit of `{}`\n\
+                 /// the snapshot holds and zero to every other bit.\n\
+                 #[inline]\npub fn acknowledge_{method}(&mut self, snapshot: {name}) {{\n\
+                 self.0.{};\n}}\n",
+                snapshot.status_register,
+                snapshot.clear_register,
+                status.read_call(),
+                snapshot.clear_register,
+                clear.write_call("snapshot.0"),
+                method = snapshot.name,
+            );
+        }
         Ok(())
     }
 
@@ -1109,14 +1977,17 @@ impl<'a> TypedBlock<'a> {
                     .map(|domain| domain.name.as_str()),
             )
             .collect::<BTreeSet<_>>();
-        let owned = |register: &str| view.reach.get(register) == Some(&Reach::Owned);
         let first_view = view.name == self.owner;
+        // The register as this owner reaches it.
+        let reached = |register: &str| -> Result<Cow<'_, TypedRegister<'a>>> {
+            Ok(view.register(self.register(register)?))
+        };
         for operation in policy
             .full_register_writes
             .iter()
-            .filter(|operation| operation.peripheral == name && owned(&operation.register))
+            .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
         {
-            let register = self.register(&operation.register)?;
+            let register = reached(&operation.register)?;
             let (parameter, value) = match operation.value()? {
                 FullRegisterValue::Domain(domain) => (
                     format!("super::{domain}"),
@@ -1137,9 +2008,10 @@ impl<'a> TypedBlock<'a> {
             if register.array.is_some()
                 || register.fields.len() != 1
                 || register.declared() != u32::MAX
+                || register.fields.iter().any(|field| field.image.is_some())
             {
                 return Err(Error::message(format!(
-                    "typed full-register-write {:?} needs one register with one 32-bit field",
+                    "typed full-register-write {:?} needs one register with one 32-bit field that is no pointer field",
                     operation.name
                 )));
             }
@@ -1156,10 +2028,12 @@ impl<'a> TypedBlock<'a> {
                 register.write_call(&value)
             );
         }
-        for operation in policy.full_register_reads.iter().filter(|operation| {
-            operation.peripheral == name && view.reach.contains_key(&operation.register)
-        }) {
-            let register = self.register(&operation.register)?;
+        for operation in policy
+            .full_register_reads
+            .iter()
+            .filter(|operation| operation.peripheral == name && view.reads(&operation.register))
+        {
+            let register = reached(&operation.register)?;
             if !policy
                 .opaque_domains
                 .iter()
@@ -1186,15 +2060,19 @@ impl<'a> TypedBlock<'a> {
                 register.read_call()
             );
         }
-        for operation in policy
-            .fixed_register_images
-            .iter()
-            .filter(|operation| operation.peripheral == name && owned(&operation.register))
-        {
-            let register = self.register(&operation.register)?;
+        for operation in policy.fixed_register_images.iter().filter(|operation| {
+            operation.peripheral == name && view.writes_image(&operation.register, operation.value)
+        }) {
+            let register = reached(&operation.register)?;
             if operation.whole_word && operation.sources.is_empty() {
                 return Err(Error::message(format!(
                     "typed fixed-register-image {:?} writes a whole word without the vendor evidence for it",
+                    operation.name
+                )));
+            }
+            if operation.value & register.pointers() != 0 {
+                return Err(Error::message(format!(
+                    "typed fixed-register-image {:?} sets a DMA address field, which only a typed reference sets",
                     operation.name
                 )));
             }
@@ -1211,31 +2089,91 @@ impl<'a> TypedBlock<'a> {
                 &operation.register,
                 &operation.sources,
             );
+            let mask = view.trigger_bits(&operation.register);
+            let write = if mask == 0 {
+                register.write_call(&format!("0x{:08x}", operation.value))
+            } else {
+                format!(
+                    "write_trigger::<0x{:x}>(0x{:08x})",
+                    register.offset, operation.value
+                )
+            };
             let _ = writeln!(
                 body,
-                "#[inline]\npub fn {}(&mut self, {}) {{\nself.0.{};\n}}\n",
+                "#[inline]\npub fn {}(&mut self, {}) {{\nself.0.{write};\n}}\n",
                 operation.name,
                 register.index_parameter(),
-                register.write_call(&format!("0x{:08x}", operation.value))
             );
             if first_view && !operation.whole_word {
                 let _ = writeln!(
                     asserts,
-                    "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}::FIELDS), \"{} writes declared fields only\");",
-                    operation.value, register.method, operation.name
+                    "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}), \"{} writes declared fields only\");",
+                    operation.value,
+                    register.settable_fields(),
+                    operation.name
+                );
+            }
+            if mask != 0 {
+                let _ = writeln!(
+                    asserts,
+                    "const _: () = assert!(oer_mmio::check::within(0x{:08x}, 0x{mask:08x}), \"{}'s {} sets its own trigger bits only\");",
+                    operation.value, view.name, operation.name
                 );
             }
         }
-        for operation in policy.fixed_register_sequences.iter().filter(|operation| {
-            operation.peripheral == name && operation.steps.iter().all(|step| owned(&step.register))
-        }) {
+        for operation in policy
+            .fixed_register_sequences
+            .iter()
+            .filter(|operation| operation.peripheral == name)
+        {
             let mut writes = String::new();
+            let mut checks = String::new();
+            let mut reachable = true;
             for step in &operation.steps {
-                let register = self.register(&step.register)?;
-                let index = match (register.array, step.index) {
-                    (None, None) => String::new(),
+                let whole = self.register(&step.register)?;
+                if !whole.writable || whole.w1c || whole.acknowledged {
+                    return Err(Error::message(format!(
+                        "typed fixed-register-sequence {:?} writes {}, which takes no fixed image",
+                        operation.name, step.register
+                    )));
+                }
+                if step.value & whole.pointers() != 0 {
+                    return Err(Error::message(format!(
+                        "typed fixed-register-sequence {:?} sets a DMA address field of {}, which only a typed reference sets",
+                        operation.name, step.register
+                    )));
+                }
+                let mask = view.trigger_bits(&step.register);
+                if mask != 0 && step.value & !mask == 0 {
+                    let _ = writeln!(
+                        writes,
+                        "self.0.write_trigger::<0x{:x}>(0x{:08x});",
+                        whole.offset, step.value
+                    );
+                    let _ = writeln!(
+                        checks,
+                        "const _: () = assert!(oer_mmio::check::within(0x{:08x}, 0x{mask:08x}), \"{}'s {} sets its own trigger bits only\");",
+                        step.value, view.name, operation.name
+                    );
+                    continue;
+                }
+                if !view.owns(&step.register) {
+                    reachable = false;
+                    break;
+                }
+                let register = view.register(whole);
+                let call = match (whole.array, step.index) {
+                    (None, None) => register.write_call(&format!("0x{:08x}", step.value)),
                     (Some((_, count)), Some(index)) if (index as u64) < count => {
-                        format!("oer_mmio::Index::constant::<{index}>()")
+                        let Some(element) = view.element(whole, index as u64) else {
+                            reachable = false;
+                            break;
+                        };
+                        let (stride, count) = register.array.unwrap_or((0, 1));
+                        format!(
+                            "write_indexed::<0x{:x}, 0x{stride:x}, {count}>(oer_mmio::Index::constant::<{element}>(), 0x{:08x})",
+                            register.offset, step.value
+                        )
                     }
                     _ => {
                         return Err(Error::message(format!(
@@ -1244,28 +2182,27 @@ impl<'a> TypedBlock<'a> {
                         )));
                     }
                 };
-                if !register.writable || register.w1c {
-                    return Err(Error::message(format!(
-                        "typed fixed-register-sequence {:?} writes {}, which takes no fixed image",
-                        operation.name, step.register
-                    )));
-                }
-                let call = match register.array {
-                    None => register.write_call(&format!("0x{:08x}", step.value)),
-                    Some((stride, count)) => format!(
-                        "write_indexed::<0x{:x}, 0x{stride:x}, {count}>({index}, 0x{:08x})",
-                        register.offset, step.value
-                    ),
-                };
                 let _ = writeln!(writes, "self.0.{call};");
-                if first_view {
+                if first_view && !step.whole_word {
                     let _ = writeln!(
-                        asserts,
-                        "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}::FIELDS), \"{} writes declared fields only\");",
-                        step.value, register.method, operation.name
+                        checks,
+                        "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}), \"{} writes declared fields only\");",
+                        step.value,
+                        whole.settable_fields(),
+                        operation.name
                     );
                 }
             }
+            if !reachable {
+                continue;
+            }
+            if operation.steps.iter().any(|step| step.whole_word) && operation.sources.is_empty() {
+                return Err(Error::message(format!(
+                    "typed fixed-register-sequence {:?} writes a whole word without the vendor evidence for it",
+                    operation.name
+                )));
+            }
+            asserts.push_str(&checks);
             let registers = operation
                 .steps
                 .iter()
@@ -1274,7 +2211,11 @@ impl<'a> TypedBlock<'a> {
                 .join("`, `");
             transaction_doc(
                 body,
-                "Write the reviewed fixed images in order",
+                if operation.steps.iter().any(|step| step.whole_word) {
+                    "Write the reviewed fixed images in order, the vendor's whole-word ones with their undeclared bits"
+                } else {
+                    "Write the reviewed fixed images in order"
+                },
                 &registers,
                 &operation.sources,
             );
@@ -1287,9 +2228,15 @@ impl<'a> TypedBlock<'a> {
         for operation in policy
             .masked_register_modifies
             .iter()
-            .filter(|operation| operation.peripheral == name && owned(&operation.register))
+            .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
         {
-            let register = self.register(&operation.register)?;
+            let register = reached(&operation.register)?;
+            if (operation.input_mask | operation.set_mask) & register.pointers() != 0 {
+                return Err(Error::message(format!(
+                    "typed masked-register-modify {:?} changes a DMA address field, which only a typed reference sets",
+                    operation.name
+                )));
+            }
             let value = domain_value_expression(&operation.domain, &flag_or_enum);
             let mut image = format!(
                 "(bits & 0x{:08x}) | ({value} & 0x{:08x})",
@@ -1320,13 +2267,13 @@ impl<'a> TypedBlock<'a> {
                 let _ = writeln!(
                     asserts,
                     "const _: () = assert!(\n\
-                     oer_mmio::check::partition(0x{p:08x}, 0x{i:08x}, 0x{s:08x}, {m}::FIELDS),\n\
+                     oer_mmio::check::partition(0x{p:08x}, 0x{i:08x}, 0x{s:08x}, {m}),\n\
                      \"{n} partitions the word and changes declared fields only\"\n\
                      );",
                     p = operation.preserve_mask,
                     i = operation.input_mask,
                     s = operation.set_mask,
-                    m = register.method,
+                    m = register.settable_fields(),
                     n = operation.name
                 );
             }
@@ -1341,10 +2288,10 @@ impl<'a> TypedBlock<'a> {
                     .iter()
                     .map(|operation| (true, operation)),
             )
-            .filter(|(_, operation)| operation.peripheral == name && owned(&operation.register))
+            .filter(|(_, operation)| operation.peripheral == name && view.owns(&operation.register))
         {
-            let register = self.register(&operation.register)?;
-            let (parameter, input, image) = projected_image(register, operation, &flag_or_enum)?;
+            let register = reached(&operation.register)?;
+            let (parameter, input, image) = projected_image(&register, operation, &flag_or_enum)?;
             let update = if clear {
                 format!("bits & !({image})")
             } else {
@@ -1368,17 +2315,18 @@ impl<'a> TypedBlock<'a> {
             if first_view && operation.value.is_some() {
                 let _ = writeln!(
                     asserts,
-                    "const _: () = assert!(oer_mmio::check::within({image}, {}::FIELDS), \"{} changes declared fields only\");",
-                    register.method, operation.name
+                    "const _: () = assert!(oer_mmio::check::within({image}, {}), \"{} changes declared fields only\");",
+                    register.settable_fields(),
+                    operation.name
                 );
             }
         }
         for operation in policy
             .field_replace_modifies
             .iter()
-            .filter(|operation| operation.peripheral == name && owned(&operation.register))
+            .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
         {
-            let register = self.register(&operation.register)?;
+            let register = reached(&operation.register)?;
             let projection = FieldOrModify {
                 name: operation.name.clone(),
                 peripheral: operation.peripheral.clone(),
@@ -1389,11 +2337,11 @@ impl<'a> TypedBlock<'a> {
                 exposure: operation.exposure,
                 sources: operation.sources.clone(),
             };
-            let (parameter, input, image) = projected_image(register, &projection, &flag_or_enum)?;
+            let (parameter, input, image) = projected_image(&register, &projection, &flag_or_enum)?;
             let mask = operation
                 .fields
                 .iter()
-                .map(|projection| field(register, &projection.field).map(TypedField::mask))
+                .map(|projection| field(&register, &projection.field).map(TypedField::mask))
                 .try_fold(0, |mask, field| field.map(|field| mask | field))?;
             let transform = operation
                 .input_transform
@@ -1431,22 +2379,23 @@ impl<'a> TypedBlock<'a> {
             if first_view && operation.value.is_some() {
                 let _ = writeln!(
                     asserts,
-                    "const _: () = assert!(oer_mmio::check::within({image}, 0x{mask:08x}) && oer_mmio::check::within(0x{mask:08x}, {}::FIELDS), \"{} replaces declared fields only\");",
-                    register.method, operation.name
+                    "const _: () = assert!(oer_mmio::check::within({image}, 0x{mask:08x}) && oer_mmio::check::within(0x{mask:08x}, {}), \"{} replaces declared fields only\");",
+                    register.settable_fields(),
+                    operation.name
                 );
             }
         }
         for operation in policy
             .zero_based_field_writes
             .iter()
-            .filter(|operation| operation.peripheral == name && owned(&operation.register))
+            .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
         {
-            let register = self.register(&operation.register)?;
+            let register = reached(&operation.register)?;
             let mut parameters = String::new();
             let mut image = Vec::new();
             for field_name in &operation.fields {
-                let selected = field(register, field_name)?;
-                if !selected.has_setter() {
+                let selected = field(&register, field_name)?;
+                if !selected.writes() {
                     return Err(Error::message(format!(
                         "typed zero-based-field-write {:?} writes {field_name}, which has no writer",
                         operation.name
@@ -1457,13 +2406,20 @@ impl<'a> TypedBlock<'a> {
                 } else {
                     format!("{}_value", selected.method.trim_start_matches("r#"))
                 };
-                let write_type = selected.write_type();
-                let _ = write!(
-                    parameters,
-                    "{argument}: {}, ",
-                    qualified(&write_type, register)
-                );
-                let bits = write_type.bits().replace("value", &argument);
+                let (parameter, bits) = match selected.image {
+                    Some(_) => (
+                        format!("{}::{}", register.method, selected.image_type()),
+                        format!("{argument}.0"),
+                    ),
+                    None => {
+                        let write_type = selected.write_type();
+                        (
+                            qualified(&write_type, &register),
+                            write_type.bits().replace("value", &argument),
+                        )
+                    }
+                };
+                let _ = write!(parameters, "{argument}: {parameter}, ");
                 image.push(if selected.offset == 0 {
                     bits
                 } else {
@@ -1489,6 +2445,42 @@ impl<'a> TypedBlock<'a> {
                 register.write_call(&image.join(" | "))
             );
         }
+        for operation in policy
+            .sampled_bit_zero_writes
+            .iter()
+            .filter(|operation| operation.peripheral == name && view.owns(&operation.register))
+        {
+            let register = reached(&operation.register)?;
+            let selected = field(&register, &operation.field)?;
+            if !TypedBlock::reads_freely(&register)
+                || !register.writable
+                || register.w1c
+                || register.acknowledged
+                || !selected.has_setter()
+            {
+                return Err(Error::message(format!(
+                    "typed sampled-bit-zero-write {:?} needs a field with a setter in a register read without a side effect",
+                    operation.name
+                )));
+            }
+            transaction_doc(
+                body,
+                &format!(
+                    "Read the register once and write back `{}` as read, zero in every other bit",
+                    operation.field
+                ),
+                &operation.register,
+                &operation.sources,
+            );
+            let _ = writeln!(
+                body,
+                "#[inline]\npub fn {}(&mut self, {}) {{\nlet bits = self.0.{};\nself.0.{};\n}}\n",
+                operation.name,
+                register.index_parameter(),
+                register.read_call(),
+                register.write_call(&format!("bits & 0x{:08x}", selected.mask()))
+            );
+        }
         Ok(())
     }
 }
@@ -1501,6 +2493,15 @@ fn projected_image(
     operation: &FieldOrModify,
     flag_or_enum: &BTreeSet<&str>,
 ) -> Result<(String, String, String)> {
+    for projection in &operation.fields {
+        let selected = field(register, &projection.field)?;
+        if selected.pointer || selected.image.is_some() || selected.zero {
+            return Err(Error::message(format!(
+                "typed field transaction {:?} changes {}, which only a typed DMA reference or zero sets",
+                operation.name, projection.field
+            )));
+        }
+    }
     match (&operation.domain, operation.value) {
         (None, Some(value)) => {
             let mut image = 0_u32;
@@ -1640,7 +2641,7 @@ impl<'a> TypedRegister<'a> {
         info: &'a RegisterInfo,
         access: Access,
         array: Option<(u64, u64)>,
-        kinds: &DeclaredKinds<'_>,
+        kinds: &DeclaredKinds<'_, 'a>,
     ) -> Result<Self> {
         let readable = access.can_read();
         let writable = access.can_write();
@@ -1742,6 +2743,7 @@ impl<'a> TypedRegister<'a> {
             clears_on_read,
             w1c,
             fifo,
+            acknowledged: kinds.acknowledged,
             fields,
         })
     }
@@ -1755,6 +2757,10 @@ impl<'a> TypedRegister<'a> {
             self.render_fifo_methods(body, reach);
             return;
         }
+        if let Reach::Trigger(mask) = reach {
+            self.render_shared_triggers(body, mask);
+            return;
+        }
         if self.readable {
             let receiver = if self.clears_on_read {
                 "&mut self"
@@ -1766,7 +2772,7 @@ impl<'a> TypedRegister<'a> {
                 "/// Read `{name}`.\n#[inline]\npub fn read_{module}({receiver}, {index}) -> {module}::R {{\n{module}::R(self.0.{read})\n}}\n"
             );
         }
-        if reach != Reach::Owned {
+        if reach != Reach::Owned || (self.w1c && self.acknowledged) {
             return;
         }
         if self.w1c {
@@ -1852,6 +2858,31 @@ impl<'a> TypedRegister<'a> {
         }
     }
 
+    /// The triggers of a division part's own bits of a shared write-only
+    /// trigger word: each stores its field alone, zero in every other bit.
+    fn render_shared_triggers(&self, body: &mut String, mask: u32) {
+        let module = &self.method;
+        let name = &self.info.name;
+        for field in self
+            .fields
+            .iter()
+            .filter(|field| field.trigger && field.mask() & !mask == 0)
+        {
+            let _ = writeln!(
+                body,
+                "/// Write one to the write-trigger field `{}` of the shared word `{name}`,\n\
+                 /// starting its hardware action once; zero in every other bit, which\n\
+                 /// leaves the other owners' fields alone.\n\
+                 #[inline]\npub fn trigger_{module}_{}(&mut self) {{\n\
+                 self.0.write_trigger::<0x{:x}>(0x{:08x});\n}}\n",
+                field.info.name,
+                field.method.trim_start_matches("r#"),
+                self.offset,
+                field.mask()
+            );
+        }
+    }
+
     /// A FIFO port's `pop` (a read through `&mut`, which takes an element
     /// out) and `push` (a write from zero, which puts one in).
     fn render_fifo_methods(&self, body: &mut String, reach: Reach) {
@@ -1919,6 +2950,20 @@ impl<'a> TypedRegister<'a> {
                 self.triggers()
             );
         }
+        if self.zeros() != 0 {
+            let _ = writeln!(
+                output,
+                "/// The bits of the fields whose one permitted value is zero: zero in\n\
+                 /// every write.\n\
+                 pub const ZERO: u32 = 0x{:08x};\n",
+                self.zeros()
+            );
+        }
+        for field in &self.fields {
+            if let Some(pointer) = field.image {
+                render_image(output, field, pointer);
+            }
+        }
         if let Some((stride, count)) = self.array {
             let _ = writeln!(
                 output,
@@ -1944,7 +2989,7 @@ impl<'a> TypedRegister<'a> {
             }
             output.push_str("}\n\n");
         }
-        if self.w1c {
+        if self.w1c && !self.acknowledged {
             output.push_str(
                 "/// One sample of the register's asserted fields, to acknowledge once.\n\
                  #[must_use = \"a sampled write-one-to-clear set must be acknowledged\"]\n\
@@ -1980,9 +3025,18 @@ impl<'a> TypedRegister<'a> {
                     render_getter(output, field, "&self");
                 }
             }
-            for field in self.fields.iter().filter(|field| field.has_setter()) {
-                let write_type = field.write_type();
-                let bits = write_type.bits();
+            for field in self.fields.iter().filter(|field| field.writes()) {
+                let (parameter, bits, what) = match field.image {
+                    Some(_) => (
+                        field.image_type(),
+                        "value.0",
+                        format!("the image of a reference, `{}`", field.image_type()),
+                    ),
+                    None => {
+                        let write_type = field.write_type();
+                        (write_type.rust(), write_type.bits(), String::new())
+                    }
+                };
                 let value = if field.offset == 0 {
                     bits.to_owned()
                 } else {
@@ -1995,10 +3049,14 @@ impl<'a> TypedRegister<'a> {
                 };
                 let _ = writeln!(
                     output,
-                    "/// Set `{}`.\n#[inline]\npub fn set_{}(&mut self, value: {}) -> &mut Self {{\n{assignment}\nself\n}}\n",
+                    "/// Set `{}`{}.\n#[inline]\npub fn set_{}(&mut self, value: {parameter}) -> &mut Self {{\n{assignment}\nself\n}}\n",
                     field.info.name,
+                    if what.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" to {what}")
+                    },
                     field.method.trim_start_matches("r#"),
-                    write_type.rust(),
                 );
             }
             output.push_str("}\n\n");
@@ -2122,7 +3180,7 @@ impl<'a> TypedField<'a> {
         register: &RegisterInfo,
         info: &'a FieldInfo,
         register_access: Access,
-        kinds: &DeclaredKinds<'_>,
+        kinds: &DeclaredKinds<'_, 'a>,
     ) -> Result<Self> {
         let access = info.access.unwrap_or(register_access);
         let width = info.bit_width();
@@ -2139,15 +3197,39 @@ impl<'a> TypedField<'a> {
                 register.name, info.name
             )));
         }
-        if let Some(WriteConstraint::Range(range)) = info.write_constraint
-            && (range.min != 0 || range.max != u64::from(u32::MAX >> (32 - width)))
-        {
-            return Err(Error::message(format!(
-                "typed field {peripheral}.{}.{} has a range narrower than its width; the typed backend renders no bounded field yet",
-                register.name, info.name
-            )));
-        }
+        let zero = match info.write_constraint {
+            Some(WriteConstraint::Range(range)) if range.min == 0 && range.max == 0 => true,
+            Some(WriteConstraint::Range(range))
+                if range.min != 0 || range.max != u64::from(u32::MAX >> (32 - width)) =>
+            {
+                return Err(Error::message(format!(
+                    "typed field {peripheral}.{}.{} has a range narrower than its width but zero alone; the typed backend renders no bounded field yet",
+                    register.name, info.name
+                )));
+            }
+            _ => false,
+        };
         let enumeration = enumeration(peripheral, register, info, width)?;
+        let key = (register.name.as_str(), info.name.as_str());
+        let image = kinds.images.get(&key).copied();
+        if let Some(pointer) = image {
+            let fits = match pointer.encoding {
+                None => width == 32,
+                Some(RegisterPointerEncoding::BleCompressed) => width == 20,
+                Some(RegisterPointerEncoding::LowBits) => width < 32,
+            };
+            if !fits
+                || !access.can_write()
+                || zero
+                || enumeration.is_some()
+                || kinds.pointers.contains(&key)
+            {
+                return Err(Error::message(format!(
+                    "typed pointer field {peripheral}.{}.{} must be a writable field of its encoding's width, without values or another address write",
+                    register.name, info.name
+                )));
+            }
+        }
         Ok(Self {
             info,
             method: field_method(&info.name),
@@ -2155,12 +3237,10 @@ impl<'a> TypedField<'a> {
             width,
             readable: access.can_read(),
             writable: access.can_write(),
-            pointer: kinds
-                .pointers
-                .contains(&(register.name.as_str(), info.name.as_str())),
-            trigger: kinds
-                .triggers
-                .contains(&(register.name.as_str(), info.name.as_str())),
+            pointer: kinds.pointers.contains(&key),
+            image,
+            trigger: kinds.triggers.contains(&key),
+            zero,
             enumeration,
         })
     }
@@ -2215,6 +3295,104 @@ fn enumeration(
         variants,
         complete,
     }))
+}
+
+/// A policy pointer field's image type: made only from a typed reference
+/// (or null), in the hardware's encoding of the address.
+fn render_image(output: &mut String, field: &TypedField<'_>, pointer: &PointerField) {
+    let image = field.image_type();
+    let target = crate::layouts::camel(&pointer.points_to);
+    let window = "<super::super::layouts::DmaWindow as oer_mmio::DmaWindow>::RANGE";
+    let offset = pointer.member_offset;
+    let address = if offset == 0 {
+        "reference.bits()".to_owned()
+    } else {
+        format!("reference.bits().wrapping_add(0x{offset:x})")
+    };
+    // The address of a member of a referenced layout stays inside the
+    // address space, so adding its offset never wraps.
+    let plus = if offset == 0 {
+        String::new()
+    } else {
+        format!(" + 0x{offset:x}")
+    };
+    let mut checks = if offset == 0 {
+        String::new()
+    } else {
+        format!(
+            "const _: () = assert!(\n\
+             {window}.end as u64{plus} <= 1 << 32,\n\
+             \"a member of every layout in the DMA window lies inside the address space\"\n\
+             );\n"
+        )
+    };
+    let (result, body, encoding) = match pointer.encoding {
+        None => ("Self", format!("Self({address})"), "the address"),
+        Some(RegisterPointerEncoding::LowBits) => {
+            let width = field.width;
+            let _ = writeln!(
+                checks,
+                "const _: () = assert!(\n\
+                 ({window}.start as u64{plus}) >> {width} == ({window}.end as u64 - 1{plus}) >> {width},\n\
+                 \"every address of the DMA window shares the high bits the hardware supplies\"\n\
+                 );"
+            );
+            (
+                "Self",
+                format!("Self({address} & 0x{:08x})", u32::MAX >> (32 - width)),
+                "the address's low bits; the hardware supplies the high bits, which every address of the DMA window shares",
+            )
+        }
+        Some(RegisterPointerEncoding::BleCompressed) => (
+            "Option<Self>",
+            format!(
+                "let address = {address};\n\
+                 let index = (address >> 2) & 0x000f_ffff;\n\
+                 if address & 0xffc0_0003 != 0x2f00_0000 || index == 0 {{\nNone\n}} else {{\nSome(Self(index))\n}}"
+            ),
+            "the nonzero word index of an aligned address with the `0x2f` SRAM prefix; `None` if the address has no such index",
+        ),
+    };
+    let member = if offset == 0 {
+        String::new()
+    } else {
+        format!(", at its member `0x{offset:x}` bytes in")
+    };
+    let _ = writeln!(
+        output,
+        "/// The `{}` field's image of a reference to a `{}`: {encoding}.\n\
+         ///\n\
+         /// SOURCE: {}.\n\
+         #[derive(Clone, Copy, Debug, Eq, PartialEq)]\n\
+         pub struct {image}(pub(super) u32);\n\n\
+         impl {image} {{\n\
+         /// The null reference: zero.\n\
+         pub const NULL: Self = Self(0);\n\n\
+         /// The image of `reference`{member}.\n\
+         #[inline]\n\
+         pub const fn new(reference: super::super::layouts::DmaRef<super::super::layouts::{target}>) -> {result} {{\n\
+         {body}\n\
+         }}\n\n\
+         /// The image as the field holds it.\n\
+         pub const fn bits(self) -> u32 {{\nself.0\n}}\n\
+         }}\n\n\
+         {checks}",
+        field.info.name,
+        pointer.points_to,
+        pointer.sources.join(", "),
+    );
+}
+
+/// The snake-case method name of an upper-camel-case type suffix.
+fn snake(name: &str) -> String {
+    let mut snake = String::new();
+    for (index, character) in name.chars().enumerate() {
+        if character.is_ascii_uppercase() && index > 0 {
+            snake.push('_');
+        }
+        snake.push(character.to_ascii_lowercase());
+    }
+    snake
 }
 
 fn field_method(name: &str) -> String {
