@@ -21,11 +21,11 @@ embassy-sync = "0.8.0"
 oer-memory = { path = "../../memory" }
 oer-network = { path = "../../../protocols/network" }
 oer-ieee80211-datapath = { path = "../../../protocols/ieee80211/datapath" }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "1b606362bd9214fbc8f5835aaab4980971a41e89", features = ["async"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "b2dd237c491664d2c3bcb5ddca8e6d3d6953cc59", features = ["async"] }
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "2c93136deefdeea273f1d7539f9a078953e21379", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "a08440081886cfcbc6c282017a8402d65f389fba", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
 
 [lints]
 workspace = true

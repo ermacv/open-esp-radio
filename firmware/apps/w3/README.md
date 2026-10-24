@@ -21,8 +21,9 @@ yields. Both output readiness checks precede their input dequeue, so a full
 output retains the source owner. RX pool exhaustion waits for capacity while
 TX remains eligible to return those same pool owners. After a productive
 bounded step the bridge yields; idle waits use readiness wakes and the
-existing one-millisecond link timer. The packet ownership and copy boundaries
-are unchanged.
+existing one-millisecond link timer. The synchronous drain step stays out of
+the generated poll frame with `#[inline(never)]`; the loop has one await.
+The packet ownership and copy boundaries are unchanged.
 
 A local probe socket error or its 250 ms send deadline consumes that probe
 and is counted separately, without marking the link failed or ending the
