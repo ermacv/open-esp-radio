@@ -28,6 +28,9 @@ pub enum StationServiceEnd {
     },
     /// Admission ended without another disable; the port fail-stopped.
     Quarantined(StationServiceFault),
+    /// The radio front end never registered the station port, so no port
+    /// was installed and no service ran.
+    Unavailable,
 }
 
 /// The original failure that ended the station service.
