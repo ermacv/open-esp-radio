@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! The chip facts that two sources state: each pair is held equal by value,
 //! so the one that changes alone fails here.
 //!
@@ -154,7 +155,7 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
         assert!(moved(&|p| p.memory.as_mut().unwrap().sram.length += 16).len() == 1);
         assert!(moved(&|p| p.memory.as_mut().unwrap().flash_xip.origin += 16).len() == 1);
         assert!(
-            moved(&|p| p.memory.as_mut().unwrap().psram.as_mut().unwrap().length += 16).len() >= 1
+            !moved(&|p| p.memory.as_mut().unwrap().psram.as_mut().unwrap().length += 16).is_empty()
         );
         assert!(moved(&|p| p.memory.as_mut().unwrap().runtime_psram = None).len() == 1);
         assert!(!moved(&|p| p.interrupts.as_mut().unwrap().irq_stack_bytes += 16).is_empty());
