@@ -1,0 +1,103 @@
+# Words that a typed block or a write transaction of the ESP32-C5 radio PAC
+# and pinned esp-hal both store to, with how the two writers are kept from
+# racing. `cargo registers check shared-words` finds the shared words from
+# policy/api.toml (every declared word of a typed block counts),
+# published/radio.svd and the pinned esp-hal and platform PAC sources, and
+# fails on a shared word without an entry or an entry for a word no longer
+# shared. Reviewed against esp-hal 1f646c5.
+#
+# On the ESP32-C5 the radio handoff does not keep esp-hal's analog-I2C,
+# ADC, TSENS, sleep or interrupt-mapping paths away by type: they use
+# `regs()` or singletons the handoff does not consume. Each entry names
+# the lifecycle or the missing caller that separates the writers.
+#
+# coordination:
+#   shared-lock           both writers store only under the named lock
+#   disjoint-lifecycle    esp-hal stores only where no radio owner exists
+#   unreached-esp-hal-path  esp-hal's storing function has no caller here
+#   whole-word-stores     both sides store whole words, no read-modify-write
+schema = 1
+
+[[word]]
+address = 0x6000e000
+radio = "APB_SARADC_RADIO.CTRL"
+esp_hal = "APB_SARADC.ctrl in init_hardware (analog/adc/dig_ctrl.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Only the one-shot ADC driver stores it: Adc::<ADC1>::new and AdcConfig::adc_calibrate reach init_hardware (esp-hal 1f646c5 analog/adc/dig_ctrl.rs); the C5 does not self-calibrate at init (SUPPORTS_SELF_CALIBRATION is false for esp32c5) and no C5 image constructs an Adc or calls adc_calibrate. adc_calibrate needs no singleton, so only the missing caller keeps it away."
+
+[[word]]
+address = 0x6000e058
+radio = "APB_SARADC_RADIO.TSENS_CTRL"
+esp_hal = "APB_SARADC.tsens_ctrl in TemperatureSensor::power_up and power_down (tsens.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Only esp-hal's temperature-sensor driver stores it (esp-hal 1f646c5 tsens.rs, from TemperatureSensor::new or a direct power_up/power_down). No C5 image uses esp_hal::tsens, and TSENS is not a radio singleton, so only the missing caller keeps it away."
+
+[[word]]
+address = 0x6000e05c
+radio = "APB_SARADC_RADIO.TSENS_CTRL2"
+esp_hal = "APB_SARADC.tsens_ctrl2 in TemperatureSensor::apply_config (tsens.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Only TemperatureSensor::new and apply_config store it (esp-hal 1f646c5 tsens.rs); no C5 image constructs a TemperatureSensor. The radio's select_tsens_clock is a read-modify-write, so whole-word stores do not apply."
+
+[[word]]
+address = 0x60010030
+radio = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map[12] in map_raw (interrupt/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal maps every source, ZB_MAC included, to disabled in setup_interrupts, called before main and by reinitialize_vectoring_after_handoff from the staged runtime's Handoff::adopt (esp-hal 1f646c5 interrupt/mod.rs, interrupt/riscv.rs), both before any radio owner exists. esp-hal binds ZB_MAC only on an explicit interrupt::enable/bind_handler or IEEE802154::bind_mac_interrupt call, which no C5 image makes (esp-radio is not a dependency); the radio PAC only reads the word."
+
+[[word]]
+address = 0x600a9c0c
+radio = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST"
+esp_hal = "MODEM_SYSCON.clk_conf_power_st in modem_clock_domain_power_state_icg_map_init and modem_clk_domain_active_state_icg_map_preinit (rtc_cntl/rtc/esp32c5.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Written only by rtc::init inside esp_hal::init (esp-hal 1f646c5 rtc_cntl/rtc/esp32c5.rs), before any radio owner exists; the C5 sleep driver does not touch it. The radio PAC never writes it."
+
+[[word]]
+address = 0x600af018
+radio = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF"
+esp_hal = "MODEM_LPCON.clk_conf in regi2c_enable_block (soc/esp32c5/regi2c.rs), modem_clock_hal_enable_wifipwr_clock (rtc_cntl/rtc/esp32c5.rs) and enable_ble_lp_clk_impl (soc/esp32c5/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "In our images every esp-hal store happens inside esp_hal::init: rtc::init's analog-I2C accesses and Wi-Fi power clock, calibrate_ocode and the BBPLL enable (esp-hal 1f646c5). The later writers (ADC, light/deep sleep reconfigure_pll, clock::ll PLL and BLE_LP_CLK requests) have no caller in any C5 image. Unlike the ESP32-S31 there is no lock: both sides read, modify and write, so the lifecycle alone separates them."
+
+[[word]]
+address = 0x600af020
+radio = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST"
+esp_hal = "MODEM_LPCON.clk_conf_power_st in modem_clock_domain_power_state_icg_map_init and modem_clk_domain_active_state_icg_map_preinit (rtc_cntl/rtc/esp32c5.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Written only by rtc::init inside esp_hal::init (esp-hal 1f646c5 rtc_cntl/rtc/esp32c5.rs), before any radio owner exists. The radio PAC never writes it."
+
+[[word]]
+address = 0x600af800
+radio = "I2C_ANA_MST.I2C0_CTRL"
+esp_hal = "I2C_ANA_MST.i2c_ctrl(0) in regi2c_read and regi2c_write (soc/esp32c5/regi2c.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Every esp-hal analog-I2C transaction our images reach runs inside esp_hal::init (rtc::init, calibrate_ocode, the BBPLL enable; esp-hal 1f646c5). The ADC, sleep and clock::ll paths that reach regi2c later have no caller in any C5 image, and they need no singleton. Both sides store whole words, but a transaction spans the mask, the command, the busy poll and the data, so only the lifecycle keeps them apart."
+
+[[word]]
+address = 0x600af804
+radio = "I2C_ANA_MST.I2C1_CTRL"
+esp_hal = "I2C_ANA_MST.i2c_ctrl(1) in regi2c_read and regi2c_write (soc/esp32c5/regi2c.rs)"
+coordination = "disjoint-lifecycle"
+reason = "As I2C0_CTRL: esp-hal's analog-I2C transactions run inside esp_hal::init in our images, and its later regi2c callers (ADC, sleep, clock::ll) have no caller in any C5 image (esp-hal 1f646c5)."
+
+[[word]]
+address = 0x600af81c
+radio = "I2C_ANA_MST.ANA_CONF1"
+esp_hal = "I2C_ANA_MST.ana_conf1 in regi2c_enable_block (soc/esp32c5/regi2c.rs)"
+coordination = "disjoint-lifecycle"
+reason = "As I2C0_CTRL: the read mask is written for each esp-hal analog-I2C transaction, which our images reach only inside esp_hal::init (esp-hal 1f646c5). The mask must hold for a whole transaction, so the lifecycle, not the whole-word store, separates the writers."
+
+[[word]]
+address = 0x600b00cc
+radio = "PMU_RADIO.IMM_HP_CK_POWER"
+esp_hal = "PMU.imm_hp_ck_power in enable_pll_clk_impl (soc/esp32c5/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal stores it when the PLL reference count crosses zero: clock::init takes the reference inside esp_hal::init and never releases it, so later requests (PSRAM, ADC) do not cross zero (esp-hal 1f646c5 soc/esp32c5/clocks.rs, clock/mod.rs). The sleep path's reconfigure_pll has no caller in any C5 image. The radio's writer is a read-modify-write that only probe images run."
+
+[[word]]
+address = 0x600b0158
+radio = "PMU_RADIO.RF_PWC"
+esp_hal = "PMU.rf_pwc in rtc::init (rtc_cntl/rtc/esp32c5.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal's only ESP32-C5 store is rtc::init inside esp_hal::init (esp-hal 1f646c5 rtc_cntl/rtc/esp32c5.rs), before any radio owner exists; neither the sleep driver nor the clocks touch it. The radio's read-modify-write writers run after the handoff, in probe images only."
