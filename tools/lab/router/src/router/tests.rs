@@ -939,3 +939,22 @@ fn shell_quote_rejects_nul_and_preserves_other_words() {
         assert_eq!(words, [value]);
     }
 }
+
+#[test]
+fn initial_gtk_investigation_does_not_disable_w4_qualification_rekey() {
+    let diagnostic =
+        Profile::initial_gtk_diagnostic("radio9", "lab_ap", INTERFACE, 6, SSID, PASSPHRASE)
+            .expect("diagnostic profile");
+    assert!(
+        diagnostic
+            .apply_script()
+            .expect("script")
+            .contains("wireless.lab_ap.wpa_group_rekey=0")
+    );
+    assert!(
+        w4_profile()
+            .apply_script()
+            .expect("W4 script")
+            .contains("wireless.lab_ap.wpa_group_rekey=30")
+    );
+}

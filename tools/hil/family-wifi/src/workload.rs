@@ -43,7 +43,7 @@ fn now() -> u64 {
 const SHORT: Duration = Duration::from_secs(10);
 
 /// A failed workload still owns a running station until StopStation completes.
-fn stop_on_error<T>(work: Result<T>, stop: impl FnOnce() -> Result<()>) -> Result<T> {
+pub(super) fn stop_on_error<T>(work: Result<T>, stop: impl FnOnce() -> Result<()>) -> Result<T> {
     match work {
         Err(error) => {
             stop().map_err(|_| format!("{error}; W4 StopStation cleanup failed"))?;
@@ -58,14 +58,18 @@ struct Link {
     at_us: u64,
     body: StationLink,
 }
-struct Connected {
+pub(super) struct Connected {
     epoch: u32,
     at_us: u64,
     sequence: u32,
     router_authorized: bool,
     associated_us: u64,
 }
-fn authorized(capture: &SerialCapture, start: CommandHandle, epoch: u32) -> Result<Connected> {
+pub(super) fn authorized(
+    capture: &SerialCapture,
+    start: CommandHandle,
+    epoch: u32,
+) -> Result<Connected> {
     let (message,link)=capture.wait_for_after::<StationLink>(start.first_event(),Duration::from_secs(45),|message,link|
         start.correlates(message) && link.epoch>epoch && link.state==StationLinkState::Authorized)?
         .ok_or("station did not report Connected/Authorized; inspect the handshake trace before continuing")?;
@@ -96,7 +100,7 @@ fn authorized(capture: &SerialCapture, start: CommandHandle, epoch: u32) -> Resu
             .ok_or("association has no host timestamp")?,
     })
 }
-fn network(
+pub(super) fn network(
     capture: &SerialCapture,
     start: CommandHandle,
     connected: &Connected,
@@ -145,12 +149,25 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     )?;
     let applied = router::apply(&mut ssh, &profile)?;
     w4::verify_runtime(&mut ssh, &config.radio, &config.wireless_interface)?;
+    let interval = w4::group_rekey_seconds(&mut ssh, &config.radio, &config.wireless_interface)?;
+    context.results.observe("w4-rekey-seconds", &interval);
+    if interval != w4::GROUP_REKEY_SECONDS {
+        return Err("running W4 BSS has the wrong group rekey interval".into());
+    }
     drop(profile);
     let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid W4 station identity")?;
     let before = w3::station(&mut ssh, &config.wireless_interface, target)?;
     if before.present {
         return Err("W4 station was already associated before StartStation".into());
     }
+    let hostapd = super::diagnostic::hostapd(&ssh, target)?;
+    let dhcp = super::diagnostic::Observer::start(
+        &ssh,
+        &format!(
+            "exec timeout 240 tcpdump -n -e -tt -vvv -l -i {} 'udp port 67 or 68'",
+            router::quote(&config.wireless_interface)?
+        ),
+    )?;
     let air = AirCapture::start_in_run(applied.channel)?;
     let mut links = Vec::new();
     let mut connected = Vec::new();
@@ -311,11 +328,16 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     });
     let projected = air
         .finish_station(target.octets(), applied.bssid.octets())
-        .and_then(|(frames, drops)| {
+        .and_then(|(frames, drops, stats)| {
+            context.results.observe("w4-air-health", &stats);
             context.results.observe("w4-station-air", &frames);
             project(&mut evidence, &frames, drops, &connected, stop_at)?;
             Ok(())
         });
+    context.results.observe("w4-hostapd", &hostapd.finish()?);
+    context
+        .results
+        .observe("w4-dhcp", &super::diagnostic::dhcp(&dhcp.finish()?));
     context.results.observe("w4-link-events", &links);
     context.results.observe("w4-evidence", &evidence);
     let gates = evaluate(&evidence);

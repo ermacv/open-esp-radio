@@ -90,3 +90,19 @@ mod tests {
         }
     }
 }
+
+/// A protocol rejection category without frame or key bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationReceiveDropReason {
+    Integrity,
+    Replay,
+    Protection,
+    InvalidMic,
+    StaleReplay,
+    Security,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StationReceiveDrop {
+    pub epoch: u32,
+    pub reason: StationReceiveDropReason,
+}

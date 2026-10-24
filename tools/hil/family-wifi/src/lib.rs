@@ -1,5 +1,6 @@
 //! Wi-Fi HIL acceptance computed from secret-free device, router and air observations.
 #![forbid(unsafe_code)]
+mod diagnostic;
 pub mod evidence;
 mod keys;
 mod workload;
@@ -20,6 +21,7 @@ pub const FAMILY: Kind = Kind::of::<WifiScenario>("wifi");
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum WifiScenario {
     W4 {},
+    InitialGtkDiagnostic {},
 }
 impl ScenarioFamily for WifiScenario {
     fn validate(&self) -> Result<()> {
@@ -30,7 +32,10 @@ impl ScenarioFamily for WifiScenario {
         plan.requirements.station_network = true;
         plan.requirements.laptop_air_monitor = true;
         plan.wifi.link = Some(PhyExpectation::Ht20);
-        plan.checks = vec!["w4"];
+        plan.checks = match self {
+            Self::W4 {} => vec!["w4"],
+            Self::InitialGtkDiagnostic {} => vec!["initial-gtk-diagnostic"],
+        };
         plan
     }
     fn air_use(&self) -> Vec<AirUse> {
@@ -48,6 +53,9 @@ impl Workload for WifiScenario {
             oer_hil_lab::config::StationFixtureConfig::OpenWrt(config) if !config.read_only => {}
             _ => return Err("W4 requires the managed OpenWrt station fixture".into()),
         }
+        if matches!(self, Self::InitialGtkDiagnostic {}) {
+            return Ok(());
+        }
         let (_, proof) = keys::load(lab)?;
         if !proof.complete() {
             return Err("W4 key conformance evidence is incomplete or contradictory".into());
@@ -60,7 +68,10 @@ impl Workload for WifiScenario {
         Ok(())
     }
     fn run(&self, output: &Path, context: &Context<'_>, _: &Fixtures) -> Result<()> {
-        workload::run(output, context)
+        match self {
+            Self::W4 {} => workload::run(output, context),
+            Self::InitialGtkDiagnostic {} => diagnostic::run(output, context),
+        }
     }
 }
 

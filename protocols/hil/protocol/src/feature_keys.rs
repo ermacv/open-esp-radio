@@ -74,6 +74,7 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
             crate::wifi::StationCounters::KEY,
             crate::wifi::StationGroupKey::KEY,
             crate::wifi::StationArpFrame::KEY,
+            crate::wifi::StationReceiveDrop::KEY,
             crate::wifi::StopStation::KEY,
             crate::wifi::StationStopped::KEY,
             base::Accepted::KEY,

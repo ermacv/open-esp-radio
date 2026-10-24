@@ -32,3 +32,9 @@ After an accepted StartStation, workload errors also request StopStation;
 a cleanup failure is explicit and never replaces a gate with PASS.
 Credentials and key material enter no scenario, environment, log or result.
 PTK rekey and SAE are outside this workload.
+
+`w4-initial-gtk` is a separate investigation with group rekey disabled. It
+first requires captured AP beacons on the configured channel, then records
+initial-key DHCP, protected air metadata, fresh hostapd events and typed RX
+rejections. It stops the station on success or failure and makes no W4 claim.
+The qualification profile retains its 30-second GTK interval.
