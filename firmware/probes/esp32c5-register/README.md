@@ -3,7 +3,8 @@
 A standalone image that checks the published
 [ESP32-C5 register model](../../../chips/esp32c5/registers/README.md) on the
 board. It opens the IEEE 802.15.4 MAC clocks as esp-radio does, writes all
-ones to selected read-write MAC registers through the generated raw PAC and
+ones to selected read-write MAC registers through a raw `oer-mmio` block over
+the MAC's declared words, claimed after the typed owner is dropped, and
 reads each word back. The bits that stay set are the implemented ones, so
 every `PROBE` line is `MATCH` when the silicon has the field widths the model
 declares and `DIFF` otherwise. The MAC stays idle; no command is issued.

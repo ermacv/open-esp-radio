@@ -1,5 +1,10 @@
 #![no_std]
-use oer_mmio::{Block, Fixed, Span, Words};
+use oer_mmio::{Block, Fixed, Registers, Words};
+
+pub struct Pair;
+impl Registers for Pair {
+    const WORDS: &'static [usize] = &[0, 4];
+}
 
 pub struct Low;
 impl Words for Low {
@@ -13,11 +18,12 @@ impl Words for High {
     const OBSERVED: &'static [usize] = &[];
 }
 
-type First = Block<Fixed<0x1000>, 8>;
+type First = Block<Fixed<0x1000>, Pair>;
+type Second = Block<Fixed<0x1008>, Pair>;
 
-pub fn rejoin(first: Span<0x1000, 0x1008>, second: Span<0x1008, 0x1010>) {
-    let (low, first_high) = first.into_block::<8>().split::<Low, High>();
-    let (second_low, second_high) = second.into_block::<8>().split::<Low, High>();
+pub fn rejoin(first: First, second: Second) {
+    let (low, first_high) = first.split::<Low, High>();
+    let (second_low, second_high) = second.split::<Low, High>();
     // The parts of the one split of the block at 0x1000 join.
     #[cfg(not(ui_reject))]
     let (joined, rest) = (First::join(low, first_high), second_high);

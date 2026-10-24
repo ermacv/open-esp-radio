@@ -26,7 +26,7 @@ use svd_rs::{
 };
 
 use crate::{
-    Error, FieldOrModify, FullRegisterValue, PacApiPack, RegisterSplit, Result,
+    Error, FieldOrModify, FullRegisterValue, PacApiPack, RegisterSides, Result,
     pac_api_render::{domain_value_expression, push_doc, type_binding_name},
 };
 
@@ -52,7 +52,8 @@ impl PacApiPack {
             .collect::<BTreeSet<_>>();
         let mut pack = self.clone();
         pack.options.typed_peripherals.clear();
-        pack.register_splits.clear();
+        pack.register_sides.clear();
+        pack.interrupt_sources.clear();
         macro_rules! retain {
             ($($operations:ident),* $(,)?) => {
                 $(pack.$operations.retain(|operation| !typed.contains(&operation.peripheral));)*
@@ -117,6 +118,17 @@ impl PacApiPack {
             "// Typed register blocks over `oer-mmio`, rendered by `cargo registers`\n\
              // from the published SVD and the API policy; no `unsafe`, no raw write.\n\n",
         );
+        if let Some(name) = self.options.unexposed_peripherals.iter().find(|name| {
+            !device
+                .peripherals
+                .iter()
+                .any(|peripheral| &peripheral.name == *name)
+        }) {
+            return Err(Error::message(format!(
+                "unexposed peripheral {name:?} is not in the SVD"
+            )));
+        }
+        let mut blocks = BTreeMap::new();
         for name in typed {
             let peripheral = device
                 .peripherals
@@ -127,6 +139,93 @@ impl PacApiPack {
                 })?;
             let block = TypedBlock::new(&device, peripheral, self)?;
             block.render(&mut output, self)?;
+            blocks.insert(name, (block.module.clone(), block.owner.clone()));
+        }
+        output.push_str(&self.render_typed_partitions(&blocks)?);
+        Ok(output)
+    }
+
+    /// The ownership partitions of the typed blocks, the claim of every
+    /// typed block the PAC root makes at once, and the compile-time check
+    /// that no two blocks list the same word.
+    fn render_typed_partitions(&self, blocks: &BTreeMap<&str, (String, String)>) -> Result<String> {
+        let partitions = self
+            .ownership_partitions
+            .iter()
+            .filter(|partition| {
+                partition
+                    .peripherals
+                    .iter()
+                    .any(|peripheral| blocks.contains_key(peripheral.as_str()))
+            })
+            .collect::<Vec<_>>();
+        let mut output = String::new();
+        let mut ordered = Vec::new();
+        if !partitions.is_empty() {
+            output.push_str(
+                "/// The ownership partitions of the typed register blocks.\n\
+                 pub mod peripheral_ownership {\n",
+            );
+            let mut members = String::new();
+            let mut built = String::new();
+            for partition in &partitions {
+                let mut fields = String::new();
+                let mut values = String::new();
+                for peripheral in &partition.peripherals {
+                    let (module, owner) = blocks.get(peripheral.as_str()).ok_or_else(|| {
+                        Error::message(format!(
+                            "ownership partition {} mixes typed peripherals and {peripheral}, which is not typed",
+                            partition.name
+                        ))
+                    })?;
+                    let _ = writeln!(fields, "pub {module}: super::{module}::{owner},");
+                    let _ = writeln!(values, "{module}: super::{module}::{owner}::new({module}),");
+                    ordered.push(module.clone());
+                }
+                push_doc(&mut output, &partition.description, "");
+                let _ = writeln!(output, "pub struct {} {{\n{fields}}}\n", partition.name);
+                push_doc(&mut members, &partition.description, "");
+                let _ = writeln!(members, "pub {}: {},", partition.member, partition.name);
+                let _ = writeln!(
+                    built,
+                    "{}: {} {{\n{values}}},",
+                    partition.member, partition.name
+                );
+            }
+            let (claims, pattern) = claim_tuple(&ordered);
+            let _ = writeln!(
+                output,
+                "/// Every typed partition.\n\
+                 pub struct PeripheralPartitions {{\n{members}}}\n\n\
+                 /// The device registers of every typed block, which the PAC root\n\
+                 /// takes with one `oer_mmio::assume_owned`.\n\
+                 pub type Claims = {claims};\n\n\
+                 /// Give each claimed block to its owner in its partition.\n\
+                 #[inline]\n\
+                 pub fn partition(claims: Claims) -> PeripheralPartitions {{\n\
+                 let {pattern} = claims;\n\
+                 PeripheralPartitions {{\n{built}}}\n\
+                 }}\n\
+                 }}\n"
+            );
+        }
+        if !blocks.is_empty() {
+            let list = blocks
+                .values()
+                .map(|(module, _)| {
+                    format!(
+                        "({module}::BASE, <{module}::BlockWords as oer_mmio::Registers>::WORDS)"
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",\n");
+            let _ = writeln!(
+                output,
+                "const _: () = assert!(\n\
+                 oer_mmio::check::disjoint_blocks(&[\n{list}\n]),\n\
+                 \"no two typed blocks list the same word\"\n\
+                 );\n"
+            );
         }
         Ok(output)
     }
@@ -151,7 +250,6 @@ impl PacApiPack {
             field_reads => "use the typed register reader",
             field_snapshot_reads => "use the typed register reader",
             fixed_register_writes => "the typed backend renders no fixed variant write yet",
-            fixed_register_sequences => "the typed backend renders no register sequence yet",
             register_image_reads => "the typed backend renders no register image read yet",
             register_image_writes => "the typed backend renders no register image write yet",
             sampled_bit_zero_writes => "the typed backend renders no sampled-bit write yet",
@@ -159,14 +257,19 @@ impl PacApiPack {
             field_argument_modifies => "the typed backend renders no multi-argument modify yet",
             indexed_bit_set_modifies => "the typed backend renders no indexed bit set yet",
         );
-        if let Some(split) = self
-            .register_splits
+        if let Some(peripheral) = self
+            .register_sides
             .iter()
-            .find(|split| !typed.contains(split.peripheral.as_str()))
+            .map(|sides| sides.peripheral.as_str())
+            .chain(
+                self.interrupt_sources
+                    .iter()
+                    .map(|source| source.peripheral.as_str()),
+            )
+            .find(|peripheral| !typed.contains(peripheral))
         {
             return Err(Error::message(format!(
-                "PAC API register split of {} names a peripheral that is not typed",
-                split.peripheral
+                "PAC API register sides or interrupt source of {peripheral} name a peripheral that is not typed"
             )));
         }
         Ok(())
@@ -225,12 +328,15 @@ impl TypedField<'_> {
         (u32::MAX >> (32 - self.width)) << self.offset
     }
 
-    fn read_type(&self) -> &'static str {
+    /// The type a reader returns: the writer's type without the value
+    /// enum, so a value read back is written again without a conversion.
+    fn read_type(&self) -> FieldType {
         match self.width {
-            1 => "bool",
-            2..=8 => "u8",
-            9..=16 => "u16",
-            _ => "u32",
+            1 => FieldType::Bool,
+            8 => FieldType::Native("u8"),
+            16 => FieldType::Native("u16"),
+            32 => FieldType::Native("u32"),
+            width => FieldType::Bits(width),
         }
     }
 
@@ -261,14 +367,13 @@ impl TypedField<'_> {
         } else {
             format!("({bits} >> {})", self.offset)
         };
-        let value = if self.width == 32 {
-            shifted
-        } else {
-            format!("{shifted} & 0x{:x}", u32::MAX >> (32 - self.width))
-        };
         match self.read_type() {
-            "u32" => value,
-            native => format!("({value}) as {native}"),
+            FieldType::Native("u32") => shifted,
+            FieldType::Native(native) => format!("({shifted}) as {native}"),
+            _ => format!(
+                "oer_mmio::Bits::truncate({})",
+                shifted.trim_start_matches('(').trim_end_matches(')')
+            ),
         }
     }
 }
@@ -279,6 +384,7 @@ struct TypedRegister<'a> {
     offset: u64,
     array: Option<(u64, u64)>,
     readable: bool,
+    writable: bool,
     clears_on_read: bool,
     w1c: bool,
     fields: Vec<TypedField<'a>>,
@@ -292,10 +398,6 @@ impl TypedRegister<'_> {
                 .map(|index| self.offset + stride * index)
                 .collect(),
         }
-    }
-
-    fn end(&self) -> u64 {
-        self.words().last().copied().unwrap_or(self.offset) + 4
     }
 
     fn declared(&self) -> u32 {
@@ -335,6 +437,11 @@ impl TypedRegister<'_> {
     }
 }
 
+/// The owner type suffix of a block's interrupt-handler side.
+const IRQ_SIDE: &str = "Irq";
+/// The owner type suffix of a block's task side.
+const TASK_SIDE: &str = "Task";
+
 /// How one owner reaches a register.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Reach {
@@ -353,9 +460,8 @@ struct TypedBlock<'a> {
     module: String,
     owner: String,
     base: u64,
-    size: u64,
     registers: Vec<TypedRegister<'a>>,
-    split: Option<&'a RegisterSplit>,
+    split: Option<&'a RegisterSides>,
 }
 
 impl<'a> TypedBlock<'a> {
@@ -409,22 +515,36 @@ impl<'a> TypedBlock<'a> {
                 }
             }
         }
-        let size = registers.iter().map(TypedRegister::end).max().unwrap_or(0);
+        if registers.is_empty() {
+            return Err(Error::message(format!(
+                "typed peripheral {name} has no register"
+            )));
+        }
         let split = policy
-            .register_splits
+            .register_sides
             .iter()
-            .find(|split| split.peripheral == name);
+            .find(|sides| sides.peripheral == name);
         let block = Self {
             peripheral,
             module: crate::pac_api_render::member_binding_name(name),
             owner: type_binding_name(name),
             base: peripheral.base_address,
-            size,
             registers,
             split,
         };
         block.validate_split()?;
         Ok(block)
+    }
+
+    /// Every declared word of the block, ascending.
+    fn words(&self) -> Vec<u64> {
+        let mut words = self
+            .registers
+            .iter()
+            .flat_map(TypedRegister::words)
+            .collect::<Vec<_>>();
+        words.sort_unstable();
+        words
     }
 
     fn register(&self, name: &str) -> Result<&TypedRegister<'a>> {
@@ -440,14 +560,8 @@ impl<'a> TypedBlock<'a> {
         let Some(split) = self.split else {
             return Ok(());
         };
-        if split.part == split.rest || split.part.is_empty() || split.rest.is_empty() {
-            return Err(Error::message(format!(
-                "register split of {} needs two distinct owner names",
-                self.peripheral.name
-            )));
-        }
         let mut seen = BTreeSet::new();
-        for name in split.registers.iter().chain(&split.observes) {
+        for name in split.irq.iter().chain(&split.irq_observes) {
             self.register(name)?;
             if !seen.insert(name) {
                 return Err(Error::message(format!(
@@ -456,7 +570,7 @@ impl<'a> TypedBlock<'a> {
                 )));
             }
         }
-        for name in &split.observes {
+        for name in &split.irq_observes {
             let register = self.register(name)?;
             if !register.readable || register.clears_on_read {
                 return Err(Error::message(format!(
@@ -476,7 +590,7 @@ impl<'a> TypedBlock<'a> {
             .collect();
         let mut views = vec![View {
             name: self.owner.clone(),
-            inner: format!("oer_mmio::Block<P, 0x{:x}>", self.size),
+            inner: "oer_mmio::Block<P, BlockWords>".to_owned(),
             reach: all,
         }];
         if let Some(split) = self.split {
@@ -485,9 +599,9 @@ impl<'a> TypedBlock<'a> {
                 .iter()
                 .filter_map(|register| {
                     let name = &register.info.name;
-                    if split.registers.contains(name) {
+                    if split.irq.contains(name) {
                         Some((name.clone(), Reach::Owned))
-                    } else if split.observes.contains(name) {
+                    } else if split.irq_observes.contains(name) {
                         Some((name.clone(), Reach::Observed))
                     } else {
                         None
@@ -497,17 +611,17 @@ impl<'a> TypedBlock<'a> {
             let rest = self
                 .registers
                 .iter()
-                .filter(|register| !split.registers.contains(&register.info.name))
+                .filter(|register| !split.irq.contains(&register.info.name))
                 .map(|register| (register.info.name.clone(), Reach::Owned))
                 .collect();
             views.push(View {
-                name: format!("{}{}", self.owner, split.rest),
-                inner: format!("oer_mmio::Part<P, 0x{:x}, {}Words>", self.size, split.rest),
+                name: format!("{}{}", self.owner, TASK_SIDE),
+                inner: format!("oer_mmio::Part<P, BlockWords, {}Words>", TASK_SIDE),
                 reach: rest,
             });
             views.push(View {
-                name: format!("{}{}", self.owner, split.part),
-                inner: format!("oer_mmio::Part<P, 0x{:x}, {}Words>", self.size, split.part),
+                name: format!("{}{}", self.owner, IRQ_SIDE),
+                inner: format!("oer_mmio::Part<P, BlockWords, {}Words>", IRQ_SIDE),
                 reach: part,
             });
         }
@@ -517,17 +631,22 @@ impl<'a> TypedBlock<'a> {
     fn render(&self, output: &mut String, policy: &PacApiPack) -> Result<()> {
         let owner = &self.owner;
         let base = self.base;
-        let size = self.size;
-        let end = base + size;
+        let size = self.words().last().map_or(0, |last| last + 4);
+        let words = self
+            .words()
+            .iter()
+            .map(|word| format!("0x{word:x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let _ = writeln!(output, "/// The `{}` register block.", self.peripheral.name);
         if let Some(description) = &self.peripheral.description {
             output.push_str("///\n");
             push_doc(output, &clean(description), "");
         }
         let (fixed_join, host_join) = match self.split {
-            Some(split) => {
-                let rest = format!("{owner}{}", split.rest);
-                let part = format!("{owner}{}", split.part);
+            Some(_) => {
+                let rest = format!("{owner}{}", TASK_SIDE);
+                let part = format!("{owner}{}", IRQ_SIDE);
                 (
                     format!(
                         "\n/// The block again, from the two owners of its one split.\n\
@@ -554,22 +673,44 @@ impl<'a> TypedBlock<'a> {
             }
             None => (String::new(), String::new()),
         };
+        let source = policy
+            .interrupt_sources
+            .iter()
+            .find(|source| source.peripheral == self.peripheral.name)
+            .map_or_else(String::new, |source| {
+                format!(
+                    "/// The interrupt-matrix source of the block's interrupt.\n\
+                     ///\n\
+                     /// SOURCE: {}.\n\
+                     pub const SOURCE: u16 = {};\n\n",
+                    source.sources.join(", "),
+                    source.source
+                )
+            });
         let _ = writeln!(
             output,
             "pub mod {module} {{\n\
+             {source}\
              /// The block's base address.\n\
              pub const BASE: usize = 0x{base:x};\n\
-             /// The block's size in bytes.\n\
-             pub const SIZE: usize = 0x{size:x};\n\
-             /// The device registers of the block.\n\
-             pub type Span = oer_mmio::Span<0x{base:x}, 0x{end:x}>;\n\n\
+             /// The bytes from [`BASE`] to the end of the block's last word: the\n\
+             /// host memory a test block needs.\n\
+             pub const SIZE: usize = 0x{size:x};\n\n\
+             /// The block's declared words, as byte offsets from [`BASE`]: its\n\
+             /// whole register authority.\n\
+             pub struct BlockWords;\n\n\
+             impl oer_mmio::Registers for BlockWords {{\n\
+             const WORDS: &'static [usize] = &[{words}];\n\
+             }}\n\n\
+             /// The block's device registers, as the PAC root claims them.\n\
+             pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, BlockWords>;\n\n\
              /// The exclusive owner of the `{name}` registers.\n\
              #[must_use = \"dropping a register owner permanently loses its register authority\"]\n\
-             pub struct {owner}<P: oer_mmio::Placement = oer_mmio::Fixed<0x{base:x}>>(oer_mmio::Block<P, 0x{size:x}>);\n\n\
+             pub struct {owner}<P: oer_mmio::Placement = oer_mmio::Fixed<0x{base:x}>>(oer_mmio::Block<P, BlockWords>);\n\n\
              impl {owner} {{\n\
              /// The owner of the block's device registers.\n\
-             pub const fn new(span: Span) -> Self {{\n\
-             Self(span.into_block::<0x{size:x}>())\n\
+             pub const fn new(block: Claim) -> Self {{\n\
+             Self(block)\n\
              }}\n\
              {fixed_join}\
              }}\n\n\
@@ -587,11 +728,9 @@ impl<'a> TypedBlock<'a> {
         let mut asserts = String::new();
         for view in &views {
             let mut body = String::new();
-            if view.name == *owner
-                && let Some(split) = self.split
-            {
-                let rest = format!("{owner}{}", split.rest);
-                let part = format!("{owner}{}", split.part);
+            if view.name == *owner && self.split.is_some() {
+                let rest = format!("{owner}{}", TASK_SIDE);
+                let part = format!("{owner}{}", IRQ_SIDE);
                 let _ = writeln!(
                     body,
                     "/// Divide the block: [`{rest}`] owns every register but those [`{part}`] owns.\n\
@@ -599,7 +738,7 @@ impl<'a> TypedBlock<'a> {
                      let (rest, part) = self.0.split::<{}Words, {}Words>();\n\
                      ({rest}(rest), {part}(part))\n\
                      }}\n",
-                    split.rest, split.part,
+                    TASK_SIDE, IRQ_SIDE,
                 );
             }
             for register in &self.registers {
@@ -650,7 +789,15 @@ impl<'a> TypedBlock<'a> {
             }
             let _ = writeln!(
                 output,
-                "// SOURCE: {}. {}",
+                "// SOURCE: {}. {}\n\
+                 const _: () = assert!(\n\
+                 oer_mmio::check::sides_cover(\n\
+                 <BlockWords as oer_mmio::Registers>::WORDS,\n\
+                 <{TASK_SIDE}Words as oer_mmio::Words>::OWNED,\n\
+                 <{IRQ_SIDE}Words as oer_mmio::Words>::OWNED,\n\
+                 ),\n\
+                 \"every word of the block belongs to exactly one side\"\n\
+                 );\n",
                 split.sources.join(", "),
                 clean(&split.description).replace('\n', " ")
             );
@@ -765,9 +912,22 @@ impl<'a> TypedBlock<'a> {
             .filter(|operation| operation.peripheral == name && owned(&operation.register))
         {
             let register = self.register(&operation.register)?;
+            if operation.whole_word && operation.sources.is_empty() {
+                return Err(Error::message(format!(
+                    "typed fixed-register-image {:?} writes a whole word without the vendor evidence for it",
+                    operation.name
+                )));
+            }
             transaction_doc(
                 body,
-                &format!("Write the fixed image `0x{:08x}`", operation.value),
+                &if operation.whole_word {
+                    format!(
+                        "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included",
+                        operation.value
+                    )
+                } else {
+                    format!("Write the fixed image `0x{:08x}`", operation.value)
+                },
                 &operation.register,
                 &operation.sources,
             );
@@ -778,13 +938,71 @@ impl<'a> TypedBlock<'a> {
                 register.index_parameter(),
                 register.write_call(&format!("0x{:08x}", operation.value))
             );
-            if first_view {
+            if first_view && !operation.whole_word {
                 let _ = writeln!(
                     asserts,
                     "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}::FIELDS), \"{} writes declared fields only\");",
                     operation.value, register.method, operation.name
                 );
             }
+        }
+        for operation in policy.fixed_register_sequences.iter().filter(|operation| {
+            operation.peripheral == name && operation.steps.iter().all(|step| owned(&step.register))
+        }) {
+            let mut writes = String::new();
+            for step in &operation.steps {
+                let register = self.register(&step.register)?;
+                let index = match (register.array, step.index) {
+                    (None, None) => String::new(),
+                    (Some((_, count)), Some(index)) if (index as u64) < count => {
+                        format!("oer_mmio::Index::constant::<{index}>()")
+                    }
+                    _ => {
+                        return Err(Error::message(format!(
+                            "typed fixed-register-sequence {:?} indexes {} outside its array or not at all",
+                            operation.name, step.register
+                        )));
+                    }
+                };
+                if !register.writable || register.w1c {
+                    return Err(Error::message(format!(
+                        "typed fixed-register-sequence {:?} writes {}, which takes no fixed image",
+                        operation.name, step.register
+                    )));
+                }
+                let call = match register.array {
+                    None => register.write_call(&format!("0x{:08x}", step.value)),
+                    Some((stride, count)) => format!(
+                        "write_indexed::<0x{:x}, 0x{stride:x}, {count}>({index}, 0x{:08x})",
+                        register.offset, step.value
+                    ),
+                };
+                let _ = writeln!(writes, "self.0.{call};");
+                if first_view {
+                    let _ = writeln!(
+                        asserts,
+                        "const _: () = assert!(oer_mmio::check::within(0x{:08x}, {}::FIELDS), \"{} writes declared fields only\");",
+                        step.value, register.method, operation.name
+                    );
+                }
+            }
+            let registers = operation
+                .steps
+                .iter()
+                .map(|step| step.register.as_str())
+                .collect::<Vec<_>>()
+                .join("`, `");
+            transaction_doc(
+                body,
+                "Write the reviewed fixed images in order",
+                &registers,
+                &operation.sources,
+            );
+            let _ = writeln!(
+                body,
+                "#[inline]\npub fn {}(&mut self) {{\n{writes}}}\n",
+                operation.name
+            );
         }
         for operation in policy
             .masked_register_modifies
@@ -924,7 +1142,11 @@ impl<'a> TypedBlock<'a> {
                 operation.name,
                 register.index_parameter(),
                 register.read_call(),
-                register.write_call(&format!("(bits & !0x{mask:08x}) | {image}"))
+                register.write_call(&if image == "0x00000000" {
+                    format!("bits & !0x{mask:08x}")
+                } else {
+                    format!("(bits & !0x{mask:08x}) | {image}")
+                })
             );
             if first_view && operation.value.is_some() {
                 let _ = writeln!(
@@ -1046,6 +1268,26 @@ fn projected_image(
     }
 }
 
+/// The claim type of `modules`' blocks as nested tuples of at most eight
+/// (the arity `oer_mmio::Claim` takes), and the pattern that binds each
+/// block to its module's name.
+fn claim_tuple(modules: &[String]) -> (String, String) {
+    if let [module] = modules {
+        return (format!("super::{module}::Claim"), module.clone());
+    }
+    let groups = if modules.len() <= 8 {
+        modules.iter().map(std::slice::from_ref).collect::<Vec<_>>()
+    } else {
+        let size = modules.len().div_ceil(8);
+        modules.chunks(size).collect()
+    };
+    let (types, patterns): (Vec<_>, Vec<_>) = groups.into_iter().map(claim_tuple).unzip();
+    (
+        format!("({},)", types.join(", ")),
+        format!("({},)", patterns.join(", ")),
+    )
+}
+
 fn field<'r, 'a>(register: &'r TypedRegister<'a>, name: &str) -> Result<&'r TypedField<'a>> {
     register
         .fields
@@ -1103,8 +1345,11 @@ impl<'a> TypedRegister<'a> {
                         && info.modified_write_values == Some(ModifiedWriteValues::OneToClear))
             })
             .count();
-        let w1c = w1c_fields > 0;
-        if w1c && (w1c_fields != fields.len() || !readable || !writable) {
+        // A write-only register is always written from zero, so writing a
+        // one acknowledges exactly the bits the writer sets: it needs no
+        // sample.
+        let w1c = w1c_fields > 0 && readable;
+        if w1c && (w1c_fields != fields.len() || !writable) {
             return Err(Error::message(format!(
                 "typed register {peripheral}.{} mixes write-one-to-clear and other fields",
                 info.name
@@ -1149,6 +1394,7 @@ impl<'a> TypedRegister<'a> {
             offset: u64::from(info.address_offset),
             array,
             readable,
+            writable,
             clears_on_read,
             w1c,
             fields,
@@ -1330,7 +1576,7 @@ fn render_getter(output: &mut String, field: &TypedField<'_>, receiver: &str) {
         output,
         "#[inline]\npub const fn {}({receiver}) -> {} {{\n{}\n}}\n",
         field.method,
-        field.read_type(),
+        field.read_type().rust(),
         field.read_expression("self.0")
     );
     if let Some(enumeration) = &field.enumeration {
@@ -1351,11 +1597,15 @@ fn render_getter(output: &mut String, field: &TypedField<'_>, receiver: &str) {
         } else {
             (
                 format!("Option<{}>", enumeration.name),
-                format!(
-                    "{}::from_bits({shifted} & 0x{:x})",
-                    enumeration.name,
-                    u32::MAX >> (32 - field.width)
-                ),
+                if field.width == 32 {
+                    format!("{}::from_bits(self.0)", enumeration.name)
+                } else {
+                    format!(
+                        "{}::from_bits({shifted} & 0x{:x})",
+                        enumeration.name,
+                        u32::MAX >> (32 - field.width)
+                    )
+                },
             )
         };
         let _ = writeln!(

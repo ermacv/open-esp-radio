@@ -38,7 +38,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 /// The IEEE 802.15.4 MAC block, written raw: the probe looks for implemented
 /// bits the model does not declare, which no typed writer reaches.
-type MacBlock = oer_mmio::Block<oer_mmio::Fixed<{ mac::BASE }>, { mac::SIZE }>;
+type MacBlock = mac::Claim;
 
 /// Write all ones to the word at `OFFSET` and read it back.
 fn write_read<const OFFSET: usize>(block: &mut MacBlock) -> u32 {
@@ -324,7 +324,7 @@ fn main() -> ! {
     )]
     // SAFETY: the IEEE 802.15.4 partition, the MAC's only other owner, was
     // dropped above; the idle MAC has no user and the probe restores nothing.
-    let mut block: MacBlock = unsafe { mac::Span::assume_owned() }.into_block();
+    let mut block: MacBlock = unsafe { oer_mmio::assume_owned() };
     for probe in PROBES {
         let observed = (probe.write_read)(&mut block);
         let verdict = if observed == probe.expected {

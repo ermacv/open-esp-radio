@@ -1,13 +1,13 @@
 error[E0308]: mismatched types
-  --> tests/ui/join_takes_parts_of_one_split.rs:26:44
+  --> tests/ui/join_takes_parts_of_one_split.rs:32:44
    |
-26 |     let (joined, rest) = (First::join(low, second_high), first_high); // ui-error: E0308
+32 |     let (joined, rest) = (First::join(low, second_high), first_high); // ui-error: E0308
    |                           -----------      ^^^^^^^^^^^ expected `4096`, found `4104`
    |                           |
    |                           arguments to this function are incorrect
    |
-   = note: expected struct `Part<Fixed<4096>, 8, _>`
-              found struct `Part<Fixed<4104>, 8, High>`
+   = note: expected struct `Part<Fixed<4096>, Pair, _>`
+              found struct `Part<Fixed<4104>, Pair, High>`
 note: associated function defined here
   --> src/lib.rs
    |

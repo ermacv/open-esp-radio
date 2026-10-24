@@ -178,9 +178,8 @@ forbidden-packages = ["esp-rtos"]
 
 # The chip's packages by the role the repository policies give them.
 [packages]
-generated = ["oer-esp32c5-pac-raw"]
 closed-pac = ["oer-esp32c5-pac"]
-pac-consumers = ["oer-esp32c5-pac-raw", "oer-esp32c5-pac", "oer-esp32c5-hal"]
+pac-consumers = ["oer-esp32c5-pac", "oer-esp32c5-hal"]
 
 # The Rust probe images of the vendor comparison (firmware/probes).
 [[probe]]

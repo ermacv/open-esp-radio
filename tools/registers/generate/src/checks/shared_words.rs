@@ -161,7 +161,33 @@ pub fn api_write_registers(api: &str) -> Result<BTreeSet<(String, String)>> {
             }
         }
     }
+    let typed = policy
+        .get("options")
+        .and_then(|options| options.get("typed-peripherals"))
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if !typed.is_empty() {
+        registers.extend(
+            api_typed_registers(&typed)
+                .into_iter()
+                .map(|peripheral| (peripheral, TYPED_BLOCK.to_owned())),
+        );
+    }
     Ok(registers)
+}
+
+/// The register name standing for every word of a typed block: the block's
+/// claim reaches all of them, so each counts as written.
+const TYPED_BLOCK: &str = "*";
+
+fn api_typed_registers(typed: &BTreeSet<&str>) -> Vec<String> {
+    typed
+        .iter()
+        .map(|peripheral| (*peripheral).to_owned())
+        .collect()
 }
 
 /// Words the radio PAC's write transactions store to, with register names.
@@ -169,6 +195,19 @@ pub fn radio_written(svd: &str, api: &str) -> Result<BTreeMap<u32, BTreeSet<Stri
     let registers = radio_registers(svd)?;
     let mut words: BTreeMap<u32, BTreeSet<String>> = BTreeMap::new();
     for (peripheral, register) in api_write_registers(api)? {
+        if register == TYPED_BLOCK {
+            for ((owner, name), addresses) in &registers {
+                if *owner == peripheral {
+                    for address in addresses {
+                        words
+                            .entry(*address)
+                            .or_default()
+                            .insert(format!("{owner}.{name} (typed block)"));
+                    }
+                }
+            }
+            continue;
+        }
         let addresses = registers
             .get(&(peripheral.clone(), register.clone()))
             .ok_or_else(|| {

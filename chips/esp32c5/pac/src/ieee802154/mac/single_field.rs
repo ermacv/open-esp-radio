@@ -302,9 +302,11 @@ impl Ieee802154RegisterLease<'_> {
     pub fn rx_status(&self) -> Ieee802154RxStatus {
         let status = self.registers.rx_status();
         Ieee802154RxStatus {
-            filter_fail_reason: status.filter_fail_reason,
-            abort_reason: Ieee802154RxAbortReasonObservation::from_field(status.abort_reason),
-            state: Ieee802154RxStateCode::from_field(status.state),
+            filter_fail_reason: crate::field_byte(status.filter_fail_reason),
+            abort_reason: Ieee802154RxAbortReasonObservation::from_field(crate::field_byte(
+                status.abort_reason,
+            )),
+            state: Ieee802154RxStateCode::from_field(crate::field_byte(status.state)),
             preamble_match: status.preamble_match,
             sfd_match: status.sfd_match,
         }
@@ -314,9 +316,11 @@ impl Ieee802154RegisterLease<'_> {
     pub fn tx_status(&self) -> Ieee802154TxStatus {
         let status = self.registers.tx_status();
         Ieee802154TxStatus::new(
-            Ieee802154TxStateCode::from_field(status.state),
-            Ieee802154TxAbortReasonObservation::from_field(status.abort_reason),
-            Ieee802154TxSecurityErrorObservation::from_field(status.security_error),
+            Ieee802154TxStateCode::from_field(crate::field_byte(status.state)),
+            Ieee802154TxAbortReasonObservation::from_field(crate::field_byte(status.abort_reason)),
+            Ieee802154TxSecurityErrorObservation::from_field(crate::field_byte(
+                status.security_error,
+            )),
         )
     }
 
@@ -332,7 +336,9 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_get_security_offset`.
     pub fn security_payload_offset(&self) -> Ieee802154SecurityPayloadOffset {
-        Ieee802154SecurityPayloadOffset::from_field(self.registers.security_payload_offset())
+        Ieee802154SecurityPayloadOffset::from_field(crate::field_byte(
+            self.registers.security_payload_offset(),
+        ))
     }
 
     /// `ieee802154_ll_set_security_addr`.

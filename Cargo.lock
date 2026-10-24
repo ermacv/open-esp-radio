@@ -2795,19 +2795,9 @@ name = "oer-esp32c5-pac"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-esp32c5-pac-raw",
  "oer-espressif-analog",
  "oer-espressif-ieee802154-mac-values",
  "oer-mmio",
-]
-
-[[package]]
-name = "oer-esp32c5-pac-raw"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "oer-espressif-ieee80211-pac-raw",
- "vcell",
 ]
 
 [[package]]

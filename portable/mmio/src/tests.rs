@@ -1,11 +1,23 @@
-use super::{Bits, Block, Host, Index, IndexError, NotOneSplit, ValueError, VolatileCell, Words};
+use super::{
+    Bits, Block, Host, Index, IndexError, NotOneSplit, Registers, ValueError, VolatileCell, Words,
+};
 
-const SIZE: usize = 16;
+/// A block of four consecutive words.
+struct Four;
+impl Registers for Four {
+    const WORDS: &'static [usize] = &[0, 4, 8, 12];
+}
+
+/// A block whose words leave a hole at byte 4.
+struct Holed;
+impl Registers for Holed {
+    const WORDS: &'static [usize] = &[0, 8];
+}
 
 #[test]
 fn a_block_reads_and_writes_only_the_word_at_its_offset() {
     let mut memory = [0x1111_1111, 0x2222_2222, 0x3333_3333, 0x4444_4444];
-    let mut block = Block::<Host<'_>, SIZE>::host(&mut memory).expect("four words");
+    let mut block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
     assert_eq!(block.read::<8>(), 0x3333_3333);
     block.write::<4>(0xa5a5_a5a5);
     assert_eq!(block.read::<4>(), 0xa5a5_a5a5);
@@ -16,20 +28,36 @@ fn a_block_reads_and_writes_only_the_word_at_its_offset() {
 #[test]
 fn host_memory_smaller_than_the_block_is_refused() {
     let mut memory = [0_u32; 3];
-    let refused = Block::<Host<'_>, SIZE>::host(&mut memory).err();
+    let refused = Block::<Host<'_>, Four>::host(&mut memory).err();
     assert_eq!(
         refused,
         Some(super::HostTooSmall {
-            required: SIZE,
+            required: 16,
             available: 12
         })
     );
 }
 
 #[test]
+fn a_block_with_a_hole_writes_only_its_listed_words() {
+    let mut memory = [0x1111_1111, 0x2222_2222, 0x3333_3333];
+    let mut block = Block::<Host<'_>, Holed>::host(&mut memory).expect("three words");
+    block.write::<0>(0);
+    block.write::<8>(0);
+    drop(block);
+    assert_eq!(memory, [0, 0x2222_2222, 0]);
+}
+
+#[test]
+fn a_field_value_read_back_keeps_its_low_bits() {
+    assert_eq!(Bits::<7>::truncate(0xffff_ff85).get(), 0x05);
+    assert_eq!(Bits::<32>::truncate(u32::MAX).get(), u32::MAX);
+}
+
+#[test]
 fn an_indexed_access_reaches_the_element_its_index_names() {
     let mut memory = [0_u32; 4];
-    let mut block = Block::<Host<'_>, SIZE>::host(&mut memory).expect("four words");
+    let mut block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
     let index = Index::<2>::new(1).expect("index 1 of 2");
     block.write_indexed::<4, 8, 2>(index, 7);
     assert_eq!(block.read_indexed::<4, 8, 2>(index), 7);
@@ -78,7 +106,7 @@ impl Words for High {
 #[test]
 fn split_parts_write_their_own_words_and_read_observed_ones() {
     let mut memory = [0_u32; 4];
-    let block = Block::<Host<'_>, SIZE>::host(&mut memory).expect("four words");
+    let block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
     let (mut low, mut high) = block.split::<Low, High>();
     low.write::<4>(1);
     high.write::<8>(2);
@@ -93,10 +121,10 @@ fn split_parts_write_their_own_words_and_read_observed_ones() {
 fn parts_of_two_host_blocks_do_not_join() {
     let mut first = [0_u32; 4];
     let mut second = [0_u32; 4];
-    let (low, high) = Block::<Host<'_>, SIZE>::host(&mut first)
+    let (low, high) = Block::<Host<'_>, Four>::host(&mut first)
         .expect("four words")
         .split::<Low, High>();
-    let (other_low, other_high) = Block::<Host<'_>, SIZE>::host(&mut second)
+    let (other_low, other_high) = Block::<Host<'_>, Four>::host(&mut second)
         .expect("four words")
         .split::<Low, High>();
     // The refused parts come back and join with their own siblings.
@@ -126,20 +154,24 @@ fn a_volatile_cell_holds_the_value_last_written() {
 
 #[test]
 fn the_compile_time_predicates_accept_exactly_the_words_inside() {
-    use super::{all_in_block, array_in_block, array_listed, disjoint, in_block};
-    assert!(in_block(12, 16));
-    assert!(!in_block(16, 16));
-    assert!(!in_block(2, 16));
-    assert!(array_in_block(4, 8, 2, 16));
-    assert!(!array_in_block(4, 8, 3, 16));
-    assert!(!array_in_block(0, 4, 0, 16));
-    assert!(!array_in_block(0, usize::MAX, 2, 16));
-    assert!(disjoint(&[0, 4], &[8, 12]));
-    assert!(!disjoint(&[0, 4], &[4]));
-    assert!(all_in_block(&[0, 12], 16));
-    assert!(!all_in_block(&[0, 16], 16));
+    use super::{all_listed, array_listed, ascending, disjoint, end, listed};
+    assert!(ascending(&[0, 4, 0x10]));
+    assert!(!ascending(&[0, 0]));
+    assert!(!ascending(&[4, 0]));
+    assert!(!ascending(&[2]));
+    assert_eq!(end(&[0, 0x10]), 0x14);
+    assert_eq!(end(&[]), 0);
+    assert!(listed(&[0, 8, 0x10, 0x7c80], 0x7c80));
+    assert!(!listed(&[0, 8, 0x10], 4));
+    assert!(!listed(&[], 0));
     assert!(array_listed(&[4, 12], 4, 8, 2));
     assert!(!array_listed(&[4], 4, 8, 2));
+    assert!(!array_listed(&[0], 0, 4, 0));
+    assert!(!array_listed(&[0], 0, usize::MAX, 2));
+    assert!(disjoint(&[0, 4], &[8, 12]));
+    assert!(!disjoint(&[0, 4], &[4]));
+    assert!(all_listed(&[0, 12], &[0, 4, 12]));
+    assert!(!all_listed(&[0, 16], &[0, 12]));
 }
 
 #[test]
@@ -151,4 +183,25 @@ fn transaction_checks_accept_only_declared_partitions() {
     assert!(!partition(0xff00_0000, 0x00ff_ffff, 0, 0x0000_ffff));
     assert!(!partition(0xff00_0000, 0x00ff_fffe, 0, 0x00ff_ffff));
     assert!(!partition(0xff00_0000, 0x00ff_ffff, 1, 0x00ff_ffff));
+}
+
+#[test]
+fn interleaved_blocks_are_disjoint_unless_they_share_a_word() {
+    use super::check::disjoint_blocks;
+    // A block spanning another's range, with no word inside it.
+    let outer: (usize, &[usize]) = (0x1000, &[0, 0x40]);
+    let inner: (usize, &[usize]) = (0x1010, &[0, 4]);
+    assert!(disjoint_blocks(&[outer, inner]));
+    let touching: (usize, &[usize]) = (0x1038, &[8]);
+    assert!(!disjoint_blocks(&[outer, inner, touching]));
+    assert!(disjoint_blocks(&[]));
+}
+
+#[test]
+fn two_sides_cover_a_block_only_when_each_word_has_exactly_one() {
+    use super::check::sides_cover;
+    assert!(sides_cover(&[0, 4, 8], &[0, 8], &[4]));
+    assert!(!sides_cover(&[0, 4, 8], &[0], &[4]));
+    assert!(!sides_cover(&[0, 4, 8], &[0, 4], &[4, 8]));
+    assert!(!sides_cover(&[0, 4], &[0, 4], &[12]));
 }

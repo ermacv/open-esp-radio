@@ -69,9 +69,14 @@ struct LinkerOutput {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 struct PacOutputs {
-    raw: PathBuf,
+    /// The svd2rust crate of every peripheral the policy neither types nor
+    /// leaves unexposed; a PAC whose peripherals are all typed has none.
+    #[serde(default)]
+    raw: Option<PathBuf>,
     api: PathBuf,
-    crate_name: String,
+    /// The raw crate's Rust name, exactly when there is a raw crate.
+    #[serde(default)]
+    crate_name: Option<String>,
     target: String,
     edition: String,
 }
@@ -318,7 +323,13 @@ impl ChipPublication {
             {
                 return Err("unsupported PAC target or edition".into());
             }
-            oer_registers_model::validate_pac_crate_name(&pac.crate_name)?;
+            match (&pac.raw, &pac.crate_name) {
+                (Some(_), Some(crate_name)) => {
+                    oer_registers_model::validate_pac_crate_name(crate_name)?;
+                }
+                (None, None) => {}
+                _ => return Err("a PAC names its raw crate exactly when it has one".into()),
+            }
         }
         let mut input_paths: BTreeSet<_> = model.loaded_inputs().keys().cloned().collect();
         for p in m
@@ -335,7 +346,7 @@ impl ChipPublication {
         let pac = outputs
             .pac
             .as_mut()
-            .map(|pac| [&mut pac.raw, &mut pac.api])
+            .map(|pac| [Some(&mut pac.api), pac.raw.as_mut()].into_iter().flatten())
             .into_iter()
             .flatten();
         let linker = outputs.linker.as_mut().map(|linker| &mut linker.path);
@@ -367,7 +378,7 @@ impl ChipPublication {
         let pac = self.outputs.pac.as_ref();
         let bindings = oer_registers_model::generate_binding_index(
             &svd,
-            pac.map(|pac| pac.crate_name.as_str()),
+            pac.and_then(|pac| pac.crate_name.as_deref()),
         )?;
         let mut outputs = vec![(&self.outputs.bindings, bindings)];
         if let Some(path) = &self.outputs.analog {
@@ -378,7 +389,10 @@ impl ChipPublication {
         }
         if let (Some(pac), Some(policy)) = (pac, &self.api) {
             let (raw, api) = self.render_pac(&svd, pac, policy)?;
-            outputs.extend([(&pac.raw, raw), (&pac.api, api)]);
+            if let (Some(destination), Some(raw)) = (&pac.raw, raw) {
+                outputs.push((destination, raw));
+            }
+            outputs.push((&pac.api, api));
         }
         if let Some(linker) = &self.outputs.linker {
             let fragment = oer_registers_model::render_dma_linker_fragment(
@@ -392,13 +406,59 @@ impl ChipPublication {
         host::publish(&outputs, check)
     }
 
-    /// The raw PAC and its API facade.
+    /// The raw PAC, if the publication has one, and the PAC API module.
     fn render_pac(
         &self,
         svd: &str,
         pac: &PacOutputs,
         policy: &PacApiPack,
-    ) -> Result<(String, String)> {
+    ) -> Result<(Option<String>, String)> {
+        let raw = match &pac.raw {
+            Some(_) => Some(self.render_raw_pac(svd, pac, policy)?),
+            None => {
+                let rendered = policy.typed_peripherals();
+                let unexposed = policy
+                    .options
+                    .unexposed_peripherals
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<BTreeSet<_>>();
+                let document = roxmltree::Document::parse(svd)?;
+                if let Some(name) = document
+                    .descendants()
+                    .filter(|node| node.has_tag_name("peripheral"))
+                    .filter_map(|peripheral| {
+                        peripheral
+                            .children()
+                            .find(|child| child.has_tag_name("name"))
+                            .and_then(|child| child.text())
+                    })
+                    .find(|name| !rendered.contains(name) && !unexposed.contains(name))
+                {
+                    return Err(format!(
+                        "PAC without a raw crate leaves {name} neither typed nor unexposed"
+                    )
+                    .into());
+                }
+                if policy.options.device_access {
+                    return Err(
+                        "a PAC without a raw crate orders device accesses through oer-mmio".into(),
+                    );
+                }
+                None
+            }
+        };
+        self.model.validate_pointer_writes(policy)?;
+        let mut api = String::from("#![forbid(unsafe_code)]\n");
+        api.push_str(&policy.without_typed_operations().render_facade_rust()?);
+        api.push_str(&self.model.render_layouts_rust(&self.memory)?);
+        api.push_str(&policy.render_typed_rust(svd)?);
+        let api = host::format(&api, &pac.edition)?;
+        Ok((raw, api))
+    }
+
+    /// The svd2rust crate of the peripherals the policy does not type.
+    fn render_raw_pac(&self, svd: &str, pac: &PacOutputs, policy: &PacApiPack) -> Result<String> {
         let mut config = svd2rust::config::Config::default();
         config.target = if pac.target == "none" {
             svd2rust::Target::None
@@ -413,8 +473,15 @@ impl ChipPublication {
         config.strict = true;
         // svd2rust renders every peripheral the policy does not render as a
         // typed register block (`typed-peripherals`).
-        let typed = policy.typed_peripherals();
-        let raw_svd = svd_without(svd, &typed)?;
+        let mut cut = policy.typed_peripherals();
+        cut.extend(
+            policy
+                .options
+                .unexposed_peripherals
+                .iter()
+                .map(String::as_str),
+        );
+        let raw_svd = svd_without(svd, &cut)?;
         let mut raw = svd2rust::generate(&raw_svd, &config)
             .map_err(|e| e.to_string())?
             .lib_rs;
@@ -423,14 +490,7 @@ impl ChipPublication {
         }
         let mut raw =
             shared_blocks::reexport_library_blocks(&raw, self.model.shared_peripherals())?;
-        self.model.validate_pointer_writes(policy)?;
         raw.push_str(&policy.without_typed().render_rust(&raw_svd)?);
-        let raw = host::format(&raw, &pac.edition)?;
-        let mut api = String::from("#![forbid(unsafe_code)]\n");
-        api.push_str(&policy.without_typed_operations().render_facade_rust()?);
-        api.push_str(&self.model.render_layouts_rust(&self.memory)?);
-        api.push_str(&policy.render_typed_rust(svd)?);
-        let api = host::format(&api, &pac.edition)?;
-        Ok((raw, api))
+        host::format(&raw, &pac.edition)
     }
 }

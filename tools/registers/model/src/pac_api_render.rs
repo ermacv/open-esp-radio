@@ -106,8 +106,18 @@ impl PacApiPack {
                     "        if value >= 0x{min:08x} && value <= 0x{max:08x} {{ Some(Self(value)) }} else {{ None }}\n"
                 ),
             };
+            // A range of exactly every value of a field width takes that
+            // field's value read back without a check.
+            let whole_width = (domain.min == 0 && domain.max.checked_add(1).is_none_or(u32::is_power_of_two))
+                .then(|| 32 - domain.max.leading_zeros())
+                .filter(|width| *width > 0)
+                .map_or_else(String::new, |width| {
+                    format!(
+                        "\n    /// The value of a {width}-bit field, which the range holds whole.\n    pub const fn from_bits(bits: oer_mmio::Bits<{width}>) -> Self {{ Self(bits.get()) }}\n"
+                    )
+                });
             output.push_str(&format!(
-                "#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]\npub struct {}(u32);\n\nimpl {} {{\n    pub const MIN: u32 = 0x{:08x};\n    pub const MAX: u32 = 0x{:08x};\n\n    /// Construct a value only when it lies in the reviewed inclusive range.\n    pub const fn new(value: u32) -> Option<Self> {{\n{}    }}\n\n    /// Return the checked numeric value.\n    pub const fn get(self) -> u32 {{ self.0 }}\n}}\n\n",
+                "#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]\npub struct {}(u32);\n\nimpl {} {{\n    pub const MIN: u32 = 0x{:08x};\n    pub const MAX: u32 = 0x{:08x};\n\n    /// Construct a value only when it lies in the reviewed inclusive range.\n    pub const fn new(value: u32) -> Option<Self> {{\n{}    }}\n{whole_width}\n    /// Return the checked numeric value.\n    pub const fn get(self) -> u32 {{ self.0 }}\n}}\n\n",
                 domain.name, domain.name, domain.min, domain.max, constructor,
             ));
         }

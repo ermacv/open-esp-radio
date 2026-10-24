@@ -72,7 +72,9 @@ pub struct PacApiPack {
     pub indexed_bit_set_modifies: Vec<IndexedBitSetModify>,
     /// Typed register blocks divided between two owners by word.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub register_splits: Vec<RegisterSplit>,
+    pub register_sides: Vec<RegisterSides>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interrupt_sources: Vec<InterruptSource>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -86,23 +88,34 @@ pub struct PacApiOptions {
     /// instead of by svd2rust.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub typed_peripherals: Vec<String>,
+    /// Peripherals the SVD describes for bit-use coverage that no owner
+    /// reaches: they belong to no partition and are rendered by neither
+    /// backend.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unexposed_peripherals: Vec<String>,
 }
 
-/// One typed register block divided into two owners: `part` owns
-/// `registers` and observes (reads only) `observes`; `rest` owns every other
-/// register of the block.
+/// The two sides of one typed register block's words: the interrupt
+/// handler's side (`Irq`) owns `irq` and observes (reads only)
+/// `irq-observes`; the task side (`Task`) owns every other register. Every
+/// declared word belongs to exactly one side.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct RegisterSplit {
+pub struct RegisterSides {
     pub peripheral: String,
-    /// The owner type suffix of the listed registers, such as `Interrupt`.
-    pub part: String,
-    /// The owner type suffix of every other register, such as `Task`.
-    pub rest: String,
-    pub registers: Vec<String>,
+    pub irq: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub observes: Vec<String>,
+    pub irq_observes: Vec<String>,
     pub description: String,
+    pub sources: Vec<String>,
+}
+
+/// The interrupt-matrix source of a typed block's interrupt.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct InterruptSource {
+    pub peripheral: String,
+    pub source: u16,
     pub sources: Vec<String>,
 }
 
@@ -385,10 +398,22 @@ common_operation!(FixedRegisterWrite {
     field: String,
     variant: String,
 });
-common_operation!(FixedRegisterImage {
-    register: String,
-    value: u32,
-});
+/// One reviewed complete-register image.
+///
+/// Its value sets declared field bits only, unless `whole-word` names it the
+/// vendor's store of the whole word: then the image, with its evidence
+/// sources, also writes the bits the model leaves undeclared.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct FixedRegisterImage {
+    pub name: String,
+    pub peripheral: String,
+    pub register: String,
+    pub value: u32,
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub whole_word: bool,
+    pub sources: Vec<String>,
+}
 /// One reviewed ordered transaction composed only of fixed complete-register images.
 ///
 /// Array indices are facts of the transaction and therefore remain in the
@@ -1151,7 +1176,23 @@ impl PacApiPack {
                         "PAC API ownership assigns peripheral {peripheral:?} more than once"
                     )));
                 }
+                if self.options.unexposed_peripherals.contains(peripheral) {
+                    return Err(Error::message(format!(
+                        "PAC API ownership partition {} assigns unexposed peripheral {peripheral:?}",
+                        partition.name
+                    )));
+                }
             }
+        }
+        if let Some(peripheral) = self
+            .options
+            .unexposed_peripherals
+            .iter()
+            .find(|peripheral| self.options.typed_peripherals.contains(peripheral))
+        {
+            return Err(Error::message(format!(
+                "PAC API peripheral {peripheral:?} is both typed and unexposed"
+            )));
         }
         Ok(())
     }
@@ -1294,9 +1335,14 @@ impl PacApiPack {
                     .chain(self.field_argument_modifies.iter().map(Operation::sources))
                     .chain(self.indexed_bit_set_modifies.iter().map(Operation::sources))
                     .chain(
-                        self.register_splits
+                        self.register_sides
                             .iter()
-                            .map(|split| split.sources.as_slice()),
+                            .map(|sides| sides.sources.as_slice()),
+                    )
+                    .chain(
+                        self.interrupt_sources
+                            .iter()
+                            .map(|source| source.sources.as_slice()),
                     )
                     .flatten()
                     .map(String::as_str),
@@ -1831,7 +1877,8 @@ pub(crate) mod tests {
             field_replace_modifies: Vec::new(),
             field_argument_modifies: Vec::new(),
             indexed_bit_set_modifies: Vec::new(),
-            register_splits: Vec::new(),
+            register_sides: Vec::new(),
+            interrupt_sources: Vec::new(),
         }
     }
 

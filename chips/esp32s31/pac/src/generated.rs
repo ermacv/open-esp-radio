@@ -1057,6 +1057,11 @@ impl BluetoothDeviceTableEntryCount {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1078,6 +1083,11 @@ impl MacSlowClockCalibrationValue {
         } else {
             None
         }
+    }
+
+    /// The value of a 18-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<18>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1103,6 +1113,11 @@ impl WifiDescriptorAddressLow {
         }
     }
 
+    /// The value of a 20-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<20>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1124,6 +1139,11 @@ impl ExternalCoexNibble {
         } else {
             None
         }
+    }
+
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1149,6 +1169,11 @@ impl ExternalCoexWorkMode {
         }
     }
 
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1170,6 +1195,11 @@ impl ExternalCoexGrantDelay {
         } else {
             None
         }
+    }
+
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1195,6 +1225,11 @@ impl ExternalCoexSync {
         }
     }
 
+    /// The value of a 10-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<10>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1216,6 +1251,11 @@ impl ExternalCoexFlag {
         } else {
             None
         }
+    }
+
+    /// The value of a 1-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<1>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1241,6 +1281,11 @@ impl MacPti {
         }
     }
 
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1262,6 +1307,11 @@ impl PhyForcedPowerIndex {
         } else {
             None
         }
+    }
+
+    /// The value of a 6-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<6>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1310,6 +1360,11 @@ impl MacMinimumMpduStartSpacing {
         }
     }
 
+    /// The value of a 3-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1331,6 +1386,11 @@ impl MacHeBssColor {
         } else {
             None
         }
+    }
+
+    /// The value of a 6-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<6>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1356,6 +1416,11 @@ impl MacHeDefaultPacketExtensionDuration {
         }
     }
 
+    /// The value of a 3-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1377,6 +1442,11 @@ impl MacHePacketPaddingDuration {
         } else {
             None
         }
+    }
+
+    /// The value of a 5-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<5>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1402,6 +1472,11 @@ impl BluetoothMemoryListPointerBits {
         }
     }
 
+    /// The value of a 20-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<20>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1423,6 +1498,11 @@ impl BluetoothSchedulerListHeadBits {
         } else {
             None
         }
+    }
+
+    /// The value of a 20-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<20>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1448,6 +1528,11 @@ impl BluetoothCteSampleDescriptorPointerBits {
         }
     }
 
+    /// The value of a 20-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<20>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1469,6 +1554,11 @@ impl BluetoothHalInitByte {
         } else {
             None
         }
+    }
+
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1494,6 +1584,11 @@ impl PhyPowerDetectorRestoreByte {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1517,6 +1612,11 @@ impl PhyToneSelector {
         }
     }
 
+    /// The value of a 10-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<10>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1534,6 +1634,11 @@ impl PhyVendorRegisterArgument {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         Some(Self(value))
+    }
+
+    /// The value of a 32-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<32>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1559,6 +1664,11 @@ impl PhyIqCoefficientImageByte {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1580,6 +1690,11 @@ impl PhyToneByteImage {
         } else {
             None
         }
+    }
+
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1605,6 +1720,11 @@ impl PhyToneTwoBitImage {
         }
     }
 
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1626,6 +1746,11 @@ impl PhyToneThreeBitImage {
         } else {
             None
         }
+    }
+
+    /// The value of a 3-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1651,6 +1776,11 @@ impl PhyToneFourBitImage {
         }
     }
 
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1672,6 +1802,11 @@ impl PhyFrequencyBasebandMode {
         } else {
             None
         }
+    }
+
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1697,6 +1832,11 @@ impl PhyFrequencyMemoryAddress {
         }
     }
 
+    /// The value of a 11-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<11>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1718,6 +1858,11 @@ impl PhyFrequencyMemoryReadMode {
         } else {
             None
         }
+    }
+
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1743,6 +1888,11 @@ impl PhyFrequencyChannelIndex {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1764,6 +1914,11 @@ impl PhyFrequencyI2cNumberAddress {
         } else {
             None
         }
+    }
+
+    /// The value of a 5-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<5>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1789,6 +1944,11 @@ impl PhyChannelOffsetNibble {
         }
     }
 
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1810,6 +1970,11 @@ impl PhyChannelCbwTwoBitImage {
         } else {
             None
         }
+    }
+
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1835,6 +2000,11 @@ impl PhyChannelCbwThreeBitImage {
         }
     }
 
+    /// The value of a 3-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1856,6 +2026,11 @@ impl BluetoothPhyInitTimingByte {
         } else {
             None
         }
+    }
+
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1881,6 +2056,11 @@ impl BluetoothBasebandGainParameterByte {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1902,6 +2082,11 @@ impl ModemLowPowerClockDivider {
         } else {
             None
         }
+    }
+
+    /// The value of a 12-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -1927,6 +2112,11 @@ impl MacItwtClearIndex {
         }
     }
 
+    /// The value of a 5-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<5>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1950,6 +2140,11 @@ impl MacTxQueueIndex {
         }
     }
 
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -1971,6 +2166,11 @@ impl MacTxPtiCount {
         } else {
             None
         }
+    }
+
+    /// The value of a 12-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2019,6 +2219,11 @@ impl MacRxBlockAckEntryIndex {
         }
     }
 
+    /// The value of a 3-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2040,6 +2245,11 @@ impl MacExtraSoftApRxBlockAckEntryIndex {
         } else {
             None
         }
+    }
+
+    /// The value of a 3-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2065,6 +2275,11 @@ impl MacRxBlockAckTid {
         }
     }
 
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2086,6 +2301,11 @@ impl MacRxBlockAckStartingSequence {
         } else {
             None
         }
+    }
+
+    /// The value of a 12-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2134,6 +2354,11 @@ impl CoexTimerClockDividerMinusOne {
         }
     }
 
+    /// The value of a 12-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2155,6 +2380,11 @@ impl CoexTimerClientValue {
         } else {
             None
         }
+    }
+
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2180,6 +2410,11 @@ impl CoexTimerPtiValue {
         }
     }
 
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2197,6 +2432,11 @@ impl CoexTimerTickInput {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         Some(Self(value))
+    }
+
+    /// The value of a 32-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<32>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2222,6 +2462,11 @@ impl StationTbttTargetBits35To10 {
         }
     }
 
+    /// The value of a 26-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<26>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2243,6 +2488,11 @@ impl Ieee802154EdDurationUnits {
         } else {
             None
         }
+    }
+
+    /// The value of a 16-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<16>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2268,6 +2518,11 @@ impl Ieee802154TxPowerCode {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2289,6 +2544,11 @@ impl PhyRxDcoCalibrationControl {
         } else {
             None
         }
+    }
+
+    /// The value of a 2-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2314,6 +2574,11 @@ impl BluetoothSchedulerLockModifyHardwareListIndex {
         }
     }
 
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2335,6 +2600,11 @@ impl IqEstimatorControlWord {
         } else {
             None
         }
+    }
+
+    /// The value of a 16-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<16>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2360,6 +2630,11 @@ impl PhyMemoryIndex {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2381,6 +2656,11 @@ impl PhyPbusMemoryCommand {
         } else {
             None
         }
+    }
+
+    /// The value of a 10-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<10>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2406,6 +2686,11 @@ impl CfrValue {
         }
     }
 
+    /// The value of a 12-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<12>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2427,6 +2712,11 @@ impl ForcedRxGain {
         } else {
             None
         }
+    }
+
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2452,6 +2742,11 @@ impl PhyAgcParameterByte {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2469,6 +2764,11 @@ impl PhyRx11bLowRateArgument {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         Some(Self(value))
+    }
+
+    /// The value of a 32-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<32>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -2494,6 +2794,11 @@ impl PhyRxGainTableLastIndex {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2517,6 +2822,11 @@ impl PhyDigitalGainImage {
         }
     }
 
+    /// The value of a 8-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<8>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -2538,6 +2848,11 @@ impl BluetoothSchedulerCancellationHardwareListIndex {
         } else {
             None
         }
+    }
+
+    /// The value of a 4-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.

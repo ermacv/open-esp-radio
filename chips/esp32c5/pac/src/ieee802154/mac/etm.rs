@@ -46,55 +46,41 @@ impl Ieee802154EtmRoute {
 impl Ieee802154RegisterLease<'_> {
     /// Read the channel-enable word and report whether `channel` is enabled.
     pub fn etm_channel_enabled(&self, channel: Ieee802154EtmChannel) -> bool {
-        let status = self.etm.registers.channel_enable().read();
+        let status = self.etm.registers.read_channel_enable();
         match channel {
-            Ieee802154EtmChannel::Channel0 => status.ch0().bit(),
-            Ieee802154EtmChannel::Channel1 => status.ch1().bit(),
+            Ieee802154EtmChannel::Channel0 => status.ch0(),
+            Ieee802154EtmChannel::Channel1 => status.ch1(),
         }
     }
 
     /// Read the clear word and write it back with `channel`'s bit added, as
     /// `ieee802154_etm_channel_clear` does.
     pub fn disable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
-        let etm = &self.etm.registers;
+        let etm = &mut self.etm.registers;
         match channel {
-            Ieee802154EtmChannel::Channel0 => {
-                crate::svd::field_or_modify::disable_ieee802154_etm_channel0(etm);
-            }
-            Ieee802154EtmChannel::Channel1 => {
-                crate::svd::field_or_modify::disable_ieee802154_etm_channel1(etm);
-            }
+            Ieee802154EtmChannel::Channel0 => etm.disable_ieee802154_etm_channel0(),
+            Ieee802154EtmChannel::Channel1 => etm.disable_ieee802154_etm_channel1(),
         }
     }
 
     /// Read the set word and write it back with `channel`'s bit added, as
     /// `ieee802154_etm_set_event_task` does.
     pub fn enable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
-        let etm = &self.etm.registers;
+        let etm = &mut self.etm.registers;
         match channel {
-            Ieee802154EtmChannel::Channel0 => {
-                crate::svd::field_or_modify::enable_ieee802154_etm_channel0(etm);
-            }
-            Ieee802154EtmChannel::Channel1 => {
-                crate::svd::field_or_modify::enable_ieee802154_etm_channel1(etm);
-            }
+            Ieee802154EtmChannel::Channel0 => etm.enable_ieee802154_etm_channel0(),
+            Ieee802154EtmChannel::Channel1 => etm.enable_ieee802154_etm_channel1(),
         }
     }
 
     /// Write the complete event word, then the complete task word, of the
     /// route's channel.
     pub fn set_etm_route(&mut self, route: Ieee802154EtmRoute) {
-        let etm = &self.etm.registers;
+        let etm = &mut self.etm.registers;
         match route {
-            Ieee802154EtmRoute::Timer0ToTxStart => {
-                crate::svd::fixed_register_sequence::route_ieee802154_etm_timer0_to_tx_start(etm);
-            }
-            Ieee802154EtmRoute::Timer0ToCcaTx => {
-                crate::svd::fixed_register_sequence::route_ieee802154_etm_timer0_to_ed_trig_tx(etm);
-            }
-            Ieee802154EtmRoute::Timer1ToRxStart => {
-                crate::svd::fixed_register_sequence::route_ieee802154_etm_timer1_to_rx_start(etm);
-            }
+            Ieee802154EtmRoute::Timer0ToTxStart => etm.route_ieee802154_etm_timer0_to_tx_start(),
+            Ieee802154EtmRoute::Timer0ToCcaTx => etm.route_ieee802154_etm_timer0_to_ed_trig_tx(),
+            Ieee802154EtmRoute::Timer1ToRxStart => etm.route_ieee802154_etm_timer1_to_rx_start(),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    FixedRegisterImage, OwnershipPartition, PacApiPack, RegisterSplit, pac_api::tests::empty_pack,
+    FixedRegisterImage, OwnershipPartition, PacApiPack, RegisterSides, pac_api::tests::empty_pack,
 };
 
 /// One 32-bit register of `RADIO`, as SVD XML.
@@ -126,6 +126,7 @@ fn a_transaction_the_typed_backend_does_not_render_is_refused() {
 fn a_fixed_image_becomes_a_method_with_its_mask_asserted() {
     let mut pack = typed_pack();
     pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
         name: "issue_start".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "COMMAND".to_owned(),
@@ -150,12 +151,10 @@ fn a_split_observing_a_register_its_read_changes_is_refused() {
         "<readAction>clear</readAction>",
         &field("COUNT", 0, 16, ""),
     ) + &register("CONTROL", 4, "read-write", "", &field("ENABLE", 0, 1, ""));
-    pack.register_splits.push(RegisterSplit {
+    pack.register_sides.push(RegisterSides {
         peripheral: "RADIO".to_owned(),
-        part: "Interrupt".to_owned(),
-        rest: "Task".to_owned(),
-        registers: vec![],
-        observes: vec!["COUNTER".to_owned()],
+        irq: vec![],
+        irq_observes: vec!["COUNTER".to_owned()],
         description: "test".to_owned(),
         sources: vec!["SOURCE".to_owned()],
     });
@@ -184,6 +183,7 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
         },
     ];
     pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
         name: "issue_start".to_owned(),
         peripheral: "RADIO".to_owned(),
         register: "COMMAND".to_owned(),
@@ -195,4 +195,176 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
     assert!(legacy.options.typed_peripherals.is_empty());
     assert_eq!(legacy.ownership_partitions.len(), 1);
     assert_eq!(legacy.ownership_partitions[0].peripherals, ["OTHER"]);
+}
+
+#[test]
+fn a_field_reads_back_as_the_type_its_writer_takes() {
+    let rust = typed_pack().render_typed_rust(&svd(&block())).unwrap();
+    assert!(
+        rust.contains("pub const fn level(&self) -> oer_mmio::Bits<3>"),
+        "{rust}"
+    );
+    assert!(rust.contains("oer_mmio::Bits::truncate("), "{rust}");
+    assert!(
+        rust.contains("pub const fn enable(&self) -> bool"),
+        "{rust}"
+    );
+}
+
+#[test]
+fn a_write_only_clear_register_is_written_from_zero() {
+    let clear = register(
+        "CLEAR",
+        0,
+        "write-only",
+        "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+        &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
+    );
+    let rust = typed_pack().render_typed_rust(&svd(&clear)).unwrap();
+    assert!(rust.contains("pub fn write_clear("), "{rust}");
+    assert!(!rust.contains("pub fn sample_clear("), "{rust}");
+}
+
+#[test]
+fn only_a_whole_word_vendor_image_skips_the_declared_field_assertion() {
+    let mut pack = typed_pack();
+    for (name, whole_word) in [("set_declared", false), ("set_vendor_word", true)] {
+        pack.fixed_register_images.push(FixedRegisterImage {
+            whole_word,
+            name: name.to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "CONTROL".to_owned(),
+            value: 0x0f0f_0f01,
+            sources: vec!["SOURCE".to_owned()],
+        });
+    }
+    let rust = pack.render_typed_rust(&svd(&block())).unwrap();
+    assert!(
+        rust.contains("\"set_declared writes declared fields only\""),
+        "{rust}"
+    );
+    assert!(!rust.contains("set_vendor_word writes"), "{rust}");
+    assert!(rust.contains("undeclared bits included"), "{rust}");
+}
+
+#[test]
+fn a_fixed_sequence_writes_its_images_in_order() {
+    let mut pack = typed_pack();
+    pack.fixed_register_sequences
+        .push(crate::FixedRegisterSequence {
+            name: "start_then_enable".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            steps: vec![
+                crate::FixedRegisterSequenceStep {
+                    register: "COMMAND".to_owned(),
+                    index: None,
+                    value: 0x41,
+                },
+                crate::FixedRegisterSequenceStep {
+                    register: "CONTROL".to_owned(),
+                    index: None,
+                    value: 0x1,
+                },
+            ],
+            sources: vec!["SOURCE".to_owned()],
+        });
+    let rust = pack.render_typed_rust(&svd(&block())).unwrap();
+    let start = rust
+        .find("pub fn start_then_enable(&mut self)")
+        .expect("rendered");
+    let body = &rust[start..];
+    let command = body
+        .find("write::<0x0>(0x00000041)")
+        .expect("command write");
+    let control = body
+        .find("write::<0x4>(0x00000001)")
+        .expect("control write");
+    assert!(command < control, "{body}");
+}
+
+fn partitioned_pack() -> PacApiPack {
+    let mut pack = typed_pack();
+    pack.options.typed_peripherals.push("OTHER".to_owned());
+    pack.ownership_partitions = vec![
+        OwnershipPartition {
+            name: "RadioPeripherals".to_owned(),
+            member: "radio".to_owned(),
+            description: "test".to_owned(),
+            peripherals: vec!["RADIO".to_owned()],
+        },
+        OwnershipPartition {
+            name: "OtherPeripherals".to_owned(),
+            member: "other".to_owned(),
+            description: "test".to_owned(),
+            peripherals: vec!["OTHER".to_owned()],
+        },
+    ];
+    pack
+}
+
+#[test]
+fn the_root_claims_every_typed_block_at_once_and_checks_their_words() {
+    let rust = partitioned_pack()
+        .render_typed_rust(&svd(&block()))
+        .unwrap();
+    for item in [
+        "pub type Claims = (super::radio::Claim, super::other::Claim,);",
+        "pub fn partition(claims: Claims) -> PeripheralPartitions",
+        "oer_mmio::check::disjoint_blocks(",
+        "const WORDS: &'static [usize] = &[0x0, 0x4, 0x8];",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+}
+
+#[test]
+fn a_partition_mixing_typed_and_untyped_peripherals_is_refused() {
+    let mut pack = partitioned_pack();
+    pack.options
+        .typed_peripherals
+        .retain(|name| name != "OTHER");
+    pack.ownership_partitions[0]
+        .peripherals
+        .push("OTHER".to_owned());
+    pack.ownership_partitions.truncate(1);
+    let error = pack.render_typed_rust(&svd(&block())).unwrap_err();
+    assert!(
+        error.to_string().contains("mixes typed peripherals"),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_unexposed_peripheral_must_exist() {
+    let mut pack = typed_pack();
+    pack.options.unexposed_peripherals = vec!["MISSING".to_owned()];
+    let error = pack.render_typed_rust(&svd(&block())).unwrap_err();
+    assert!(error.to_string().contains("is not in the SVD"), "{error}");
+}
+
+#[test]
+fn the_two_sides_are_owners_whose_words_cover_the_block() {
+    let mut pack = typed_pack();
+    pack.register_sides.push(RegisterSides {
+        peripheral: "RADIO".to_owned(),
+        irq: vec!["STATUS".to_owned()],
+        irq_observes: vec!["CONTROL".to_owned()],
+        description: "test".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack.interrupt_sources.push(crate::InterruptSource {
+        peripheral: "RADIO".to_owned(),
+        source: 12,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let rust = pack.render_typed_rust(&svd(&block())).unwrap();
+    for item in [
+        "pub struct RadioIrq<",
+        "pub struct RadioTask<",
+        "pub fn split(self) -> (RadioTask<P>, RadioIrq<P>)",
+        "oer_mmio::check::sides_cover(",
+        "pub const SOURCE: u16 = 12;",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
 }

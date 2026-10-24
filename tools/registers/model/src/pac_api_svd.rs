@@ -732,7 +732,12 @@ impl PacApiPack {
         }
 
         let mut known = BTreeSet::new();
-        for peripheral in &device.peripherals {
+        for peripheral in device.peripherals.iter().filter(|peripheral| {
+            !self
+                .options
+                .unexposed_peripherals
+                .contains(&peripheral.name)
+        }) {
             if matches!(peripheral, MaybeArray::Array(_, _)) {
                 return Err(Error::message(format!(
                     "PAC API ownership does not support SVD peripheral arrays: {:?}",
@@ -781,7 +786,12 @@ impl PacApiPack {
             })
             .collect::<BTreeMap<_, _>>();
         let mut ranges = Vec::new();
-        for peripheral in &device.peripherals {
+        for peripheral in device.peripherals.iter().filter(|peripheral| {
+            !self
+                .options
+                .unexposed_peripherals
+                .contains(&peripheral.name)
+        }) {
             let partition = partitions.get(peripheral.name.as_str()).ok_or_else(|| {
                 Error::message(format!(
                     "PAC API ownership has no partition for SVD peripheral {:?}",

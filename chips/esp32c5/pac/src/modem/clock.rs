@@ -11,9 +11,8 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{
-    generated::{self, ModemClockGateState, ModemResetState},
-    svd,
+use crate::generated::{
+    ModemClockGateState, ModemResetState, peripheral_ownership::ModemClockPeripherals,
 };
 
 /// One modem clock device whose gates the PAC drives.
@@ -49,11 +48,11 @@ const fn gate(enable: bool) -> ModemClockGateState {
 /// Unique owner of the modem clock gates and the IEEE 802.15.4 MAC resets.
 #[must_use = "dropping the modem clock owner permanently loses its register authority"]
 pub struct ModemClockRegisters {
-    peripherals: svd::peripheral_ownership::ModemClockPeripherals,
+    peripherals: ModemClockPeripherals,
 }
 
 impl ModemClockRegisters {
-    pub(crate) const fn new(peripherals: svd::peripheral_ownership::ModemClockPeripherals) -> Self {
+    pub(crate) const fn new(peripherals: ModemClockPeripherals) -> Self {
         Self { peripherals }
     }
 
@@ -62,23 +61,23 @@ impl ModemClockRegisters {
     /// The write order within each action is the vendor order; every write
     /// preserves the other fields of its register.
     pub fn configure_modem_clock_device(&mut self, device: ModemClockDevice, enable: bool) {
-        let syscon = &self.peripherals.modem_syscon_radio;
+        let syscon = &mut self.peripherals.modem_syscon_radio;
         match device {
-            ModemClockDevice::Coexistence => generated::set_coexistence_clock(
-                &self.peripherals.modem_lpcon_shared_clock,
-                gate(enable),
-            ),
-            ModemClockDevice::Etm => generated::set_etm_clock(syscon, gate(enable)),
+            ModemClockDevice::Coexistence => self
+                .peripherals
+                .modem_lpcon_shared_clock
+                .set_coexistence_clock(gate(enable)),
+            ModemClockDevice::Etm => syscon.set_etm_clock(gate(enable)),
             ModemClockDevice::BluetoothApb => {
-                generated::set_bluetooth_apb_clock(syscon, gate(enable));
-                generated::set_modem_security_apb_clock(syscon, gate(enable));
+                syscon.set_bluetooth_apb_clock(gate(enable));
+                syscon.set_modem_security_apb_clock(gate(enable));
             }
             ModemClockDevice::BluetoothIeee802154CommonBaseband => {
-                generated::set_bluetooth_ieee802154_baseband_clock(syscon, gate(enable));
+                syscon.set_bluetooth_ieee802154_baseband_clock(gate(enable));
             }
             ModemClockDevice::Ieee802154Mac => {
-                generated::set_ieee802154_apb_clock(syscon, gate(enable));
-                generated::set_ieee802154_mac_clock(syscon, gate(enable));
+                syscon.set_ieee802154_apb_clock(gate(enable));
+                syscon.set_ieee802154_mac_clock(gate(enable));
             }
         }
     }
@@ -88,17 +87,18 @@ impl ModemClockRegisters {
     #[cfg(oer_probe)]
     pub fn modem_clock_device_enabled(&self, device: ModemClockDevice) -> bool {
         let syscon = &self.peripherals.modem_syscon_radio;
-        let (etm, zb_apb, zbmac, security_apb) =
-            svd::field_snapshot_read::observe_modem_clock_conf(syscon);
-        let (bt_apb, btbb) = svd::field_snapshot_read::observe_modem_clock_conf1(syscon);
+        let conf = syscon.read_clk_conf();
+        let conf1 = syscon.read_clk_conf1();
         match device {
-            ModemClockDevice::Coexistence => svd::field_read::observe_coexistence_clock(
-                &self.peripherals.modem_lpcon_shared_clock,
-            ),
-            ModemClockDevice::Etm => etm,
-            ModemClockDevice::BluetoothApb => bt_apb && security_apb,
-            ModemClockDevice::BluetoothIeee802154CommonBaseband => btbb,
-            ModemClockDevice::Ieee802154Mac => zb_apb && zbmac,
+            ModemClockDevice::Coexistence => self
+                .peripherals
+                .modem_lpcon_shared_clock
+                .read_clk_conf()
+                .clk_coex_en(),
+            ModemClockDevice::Etm => conf.clk_etm_en(),
+            ModemClockDevice::BluetoothApb => conf1.clk_bt_apb_en() && conf.clk_modem_sec_apb_en(),
+            ModemClockDevice::BluetoothIeee802154CommonBaseband => conf1.clk_btbb_en(),
+            ModemClockDevice::Ieee802154Mac => conf.clk_zb_apb_en() && conf.clk_zbmac_en(),
         }
     }
 
@@ -106,28 +106,29 @@ impl ModemClockRegisters {
     /// `modem_clock_module_mac_reset` does: each line is written asserted and
     /// then released.
     pub fn pulse_ieee802154_mac_reset(&mut self) {
-        let syscon = &self.peripherals.modem_syscon_radio;
-        generated::set_ieee802154_mac_reset(syscon, ModemResetState::Asserted);
-        generated::set_ieee802154_mac_reset(syscon, ModemResetState::Released);
-        generated::set_ieee802154_apb_reset(syscon, ModemResetState::Asserted);
-        generated::set_ieee802154_apb_reset(syscon, ModemResetState::Released);
+        let syscon = &mut self.peripherals.modem_syscon_radio;
+        syscon.set_ieee802154_mac_reset(ModemResetState::Asserted);
+        syscon.set_ieee802154_mac_reset(ModemResetState::Released);
+        syscon.set_ieee802154_apb_reset(ModemResetState::Asserted);
+        syscon.set_ieee802154_apb_reset(ModemResetState::Released);
     }
 
     /// Whether the analog register I2C master clock is enabled. The platform
     /// owns that gate and its reference count.
     #[cfg(oer_probe)]
     pub fn analog_i2c_master_clock_enabled(&self) -> bool {
-        svd::field_read::observe_analog_i2c_master_clock(&self.peripherals.modem_lpcon_shared_clock)
+        self.peripherals
+            .modem_lpcon_shared_clock
+            .read_clk_conf()
+            .clk_i2c_mst_en()
     }
 
     /// Sample both IEEE 802.15.4 reset lines.
     pub fn ieee802154_reset_observation(&self) -> Ieee802154ResetObservation {
-        let (apb_asserted, mac_asserted) = svd::field_snapshot_read::observe_ieee802154_resets(
-            &self.peripherals.modem_syscon_radio,
-        );
+        let resets = self.peripherals.modem_syscon_radio.read_modem_rst_conf();
         Ieee802154ResetObservation {
-            mac_released: !mac_asserted,
-            apb_released: !apb_asserted,
+            mac_released: !resets.rst_zbmac(),
+            apb_released: !resets.rst_zbmac_apb(),
         }
     }
 }

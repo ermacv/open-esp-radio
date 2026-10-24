@@ -34,7 +34,8 @@ system these rules serve.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers
   generate`), never written as a local mask or shift. Code preserves reserved
-  and unknown bits. Generated register code has no `unsafe`: volatile access
+  and unknown bits; the one exception is a PAC policy fixed image marked
+  `whole-word`, a vendor's store of a whole word with its `SOURCE:`. Generated register code has no `unsafe`: volatile access
   lives in `portable/mmio` alone (svd2rust-rendered PAC domains keep theirs
   until they move). `unsafe` stays in `portable/mmio`, the PAC (svd2rust-rendered
   domains and hand-written roots), probe images, the placement constructor and

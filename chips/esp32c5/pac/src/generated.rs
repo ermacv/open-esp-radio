@@ -233,6 +233,11 @@ impl Ieee802154EdDurationUnits {
         }
     }
 
+    /// The value of a 16-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<16>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -254,6 +259,11 @@ impl Ieee802154TxPowerCode {
         } else {
             None
         }
+    }
+
+    /// The value of a 5-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<5>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -279,6 +289,11 @@ impl PhyI2cSdaSideGuard {
         }
     }
 
+    /// The value of a 5-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<5>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -302,6 +317,11 @@ impl PhyI2cSclPulseDuration {
         }
     }
 
+    /// The value of a 6-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<6>) -> Self {
+        Self(bits.get())
+    }
+
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
         self.0
@@ -323,6 +343,11 @@ impl PhyRxEvmParameter {
         } else {
             None
         }
+    }
+
+    /// The value of a 7-bit field, which the range holds whole.
+    pub const fn from_bits(bits: oer_mmio::Bits<7>) -> Self {
+        Self(bits.get())
     }
 
     /// Return the checked numeric value.
@@ -425,528 +450,6 @@ impl PhyI2cInitializationLowCommand {
     pub(crate) const fn get(self) -> u32 {
         self.0
     }
-}
-
-/// Typed bridge for the reviewed `enable_ieee802154_etm_channel0` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_ieee802154_etm_channel0(registers: &crate::svd::ModemEtm) {
-    crate::svd::field_or_modify::enable_ieee802154_etm_channel0(registers);
-}
-
-/// Typed bridge for the reviewed `enable_ieee802154_etm_channel1` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_ieee802154_etm_channel1(registers: &crate::svd::ModemEtm) {
-    crate::svd::field_or_modify::enable_ieee802154_etm_channel1(registers);
-}
-
-/// Typed bridge for the reviewed `disable_ieee802154_etm_channel0` fixed field-OR transaction.
-#[inline]
-pub(crate) fn disable_ieee802154_etm_channel0(registers: &crate::svd::ModemEtm) {
-    crate::svd::field_or_modify::disable_ieee802154_etm_channel0(registers);
-}
-
-/// Typed bridge for the reviewed `disable_ieee802154_etm_channel1` fixed field-OR transaction.
-#[inline]
-pub(crate) fn disable_ieee802154_etm_channel1(registers: &crate::svd::ModemEtm) {
-    crate::svd::field_or_modify::disable_ieee802154_etm_channel1(registers);
-}
-
-/// Typed bridge for the reviewed `power_rf_analog_i2c` fixed field-OR transaction.
-#[inline]
-pub(crate) fn power_rf_analog_i2c(registers: &crate::svd::PmuRadio) {
-    crate::svd::field_or_modify::power_rf_analog_i2c(registers);
-}
-
-/// Typed bridge for the reviewed `tie_high_bb_analog_i2c_power` fixed field-OR transaction.
-#[inline]
-pub(crate) fn tie_high_bb_analog_i2c_power(registers: &crate::svd::PmuRadio) {
-    crate::svd::field_or_modify::tie_high_bb_analog_i2c_power(registers);
-}
-
-/// Typed bridge for the reviewed `power_peripheral_analog_i2c` fixed field-OR transaction.
-#[inline]
-pub(crate) fn power_peripheral_analog_i2c(registers: &crate::svd::PmuRadio) {
-    crate::svd::field_or_modify::power_peripheral_analog_i2c(registers);
-}
-
-/// Typed bridge for the reviewed `release_peripheral_analog_i2c_reset` fixed field-OR transaction.
-#[inline]
-pub(crate) fn release_peripheral_analog_i2c_reset(registers: &crate::svd::PmuRadio) {
-    crate::svd::field_or_modify::release_peripheral_analog_i2c_reset(registers);
-}
-
-/// Typed bridge for the reviewed `power_5g_clock_generator` fixed field-OR transaction.
-#[inline]
-pub(crate) fn power_5g_clock_generator(registers: &crate::svd::PmuRadio) {
-    crate::svd::field_or_modify::power_5g_clock_generator(registers);
-}
-
-/// Typed bridge for the reviewed `open_phy_fe_bb_clock` fixed field-OR transaction.
-#[inline]
-pub(crate) fn open_phy_fe_bb_clock(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::open_phy_fe_bb_clock(registers);
-}
-
-/// Typed bridge for the reviewed `enable_phy_i2c_master_registers` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_phy_i2c_master_registers(registers: &crate::svd::I2cAnaMst) {
-    crate::svd::field_or_modify::enable_phy_i2c_master_registers(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_front_end_init_0c08` fixed field-OR transaction.
-#[inline]
-pub(crate) fn set_phy_front_end_init_0c08(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::set_phy_front_end_init_0c08(registers);
-}
-
-/// Typed bridge for the reviewed `enable_phy_front_end_0894` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_phy_front_end_0894(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::enable_phy_front_end_0894(registers);
-}
-
-/// Typed bridge for the reviewed `enable_phy_front_end_init` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_phy_front_end_init(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::enable_phy_front_end_init(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_iq_correction_modes` fixed field-OR transaction.
-#[inline]
-pub(crate) fn set_phy_rx_iq_correction_modes(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::set_phy_rx_iq_correction_modes(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_tx_iq_correction_modes` fixed field-OR transaction.
-#[inline]
-pub(crate) fn set_phy_tx_iq_correction_modes(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::set_phy_tx_iq_correction_modes(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_front_end_iq_swap` fixed field-OR transaction.
-#[inline]
-pub(crate) fn set_phy_front_end_iq_swap(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::set_phy_front_end_iq_swap(registers);
-}
-
-/// Typed bridge for the reviewed `drive_saradc2_from_power_detector` fixed field-OR transaction.
-#[inline]
-pub(crate) fn drive_saradc2_from_power_detector(registers: &crate::svd::ApbSaradcRadio) {
-    crate::svd::field_or_modify::drive_saradc2_from_power_detector(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_power_detector_sar_mode` fixed field-OR transaction.
-#[inline]
-pub(crate) fn set_phy_power_detector_sar_mode(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::set_phy_power_detector_sar_mode(registers);
-}
-
-/// Typed bridge for the reviewed `enable_saradc_register_clock` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_saradc_register_clock(registers: &crate::svd::PcrRadio) {
-    crate::svd::field_or_modify::enable_saradc_register_clock(registers);
-}
-
-/// Typed bridge for the reviewed `enable_saradc_clocks` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_saradc_clocks(registers: &crate::svd::PcrRadio) {
-    crate::svd::field_or_modify::enable_saradc_clocks(registers);
-}
-
-/// Typed bridge for the reviewed `enable_tsens_clock` fixed field-OR transaction.
-#[inline]
-pub(crate) fn enable_tsens_clock(registers: &crate::svd::PcrRadio) {
-    crate::svd::field_or_modify::enable_tsens_clock(registers);
-}
-
-/// Typed bridge for the reviewed `select_tsens_clock` fixed field-OR transaction.
-#[inline]
-pub(crate) fn select_tsens_clock(registers: &crate::svd::ApbSaradcRadio) {
-    crate::svd::field_or_modify::select_tsens_clock(registers);
-}
-
-/// Typed bridge for the reviewed `assert_phy_rx_evm_memory_reset` fixed field-OR transaction.
-#[inline]
-pub(crate) fn assert_phy_rx_evm_memory_reset(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::assert_phy_rx_evm_memory_reset(registers);
-}
-
-/// Typed bridge for the reviewed `assert_phy_rx_evm_memory_reset_2` fixed field-OR transaction.
-#[inline]
-pub(crate) fn assert_phy_rx_evm_memory_reset_2(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_or_modify::assert_phy_rx_evm_memory_reset_2(registers);
-}
-
-/// Typed bridge for the reviewed `set_ieee802154_apb_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_ieee802154_apb_clock(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemClockGateState,
-) {
-    crate::svd::field_replace_modify::set_ieee802154_apb_clock(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_ieee802154_mac_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_ieee802154_mac_clock(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemClockGateState,
-) {
-    crate::svd::field_replace_modify::set_ieee802154_mac_clock(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_etm_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_etm_clock(registers: &crate::svd::ModemSysconRadio, value: ModemClockGateState) {
-    crate::svd::field_replace_modify::set_etm_clock(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_modem_security_apb_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_modem_security_apb_clock(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemClockGateState,
-) {
-    crate::svd::field_replace_modify::set_modem_security_apb_clock(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_bluetooth_apb_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_bluetooth_apb_clock(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemClockGateState,
-) {
-    crate::svd::field_replace_modify::set_bluetooth_apb_clock(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_bluetooth_ieee802154_baseband_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_bluetooth_ieee802154_baseband_clock(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemClockGateState,
-) {
-    crate::svd::field_replace_modify::set_bluetooth_ieee802154_baseband_clock(
-        registers,
-        value.bits(),
-    );
-}
-
-/// Typed bridge for the reviewed `set_ieee802154_mac_reset` field-replacement transaction.
-#[inline]
-pub(crate) fn set_ieee802154_mac_reset(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemResetState,
-) {
-    crate::svd::field_replace_modify::set_ieee802154_mac_reset(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_ieee802154_apb_reset` field-replacement transaction.
-#[inline]
-pub(crate) fn set_ieee802154_apb_reset(
-    registers: &crate::svd::ModemSysconRadio,
-    value: ModemResetState,
-) {
-    crate::svd::field_replace_modify::set_ieee802154_apb_reset(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_coexistence_clock` field-replacement transaction.
-#[inline]
-pub(crate) fn set_coexistence_clock(
-    registers: &crate::svd::ModemLpconSharedClock,
-    value: ModemClockGateState,
-) {
-    crate::svd::field_replace_modify::set_coexistence_clock(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `configure_phy_i2c_host_map` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn configure_phy_i2c_host_map(registers: &crate::svd::I2cAnaMst) {
-    crate::svd::field_replace_modify::configure_phy_i2c_host_map(registers);
-}
-
-/// Typed bridge for the reviewed `configure_phy_i2c_parallel_host_map` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn configure_phy_i2c_parallel_host_map(registers: &crate::svd::I2cAnaMst) {
-    crate::svd::field_replace_modify::configure_phy_i2c_parallel_host_map(registers);
-}
-
-/// Typed bridge for the reviewed `hold_peripheral_analog_i2c_reset` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn hold_peripheral_analog_i2c_reset(registers: &crate::svd::PmuRadio) {
-    crate::svd::field_replace_modify::hold_peripheral_analog_i2c_reset(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_host0_sda_side_guard` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_host0_sda_side_guard(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyI2cSdaSideGuard,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_host0_sda_side_guard(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_host0_scl_pulse_duration` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_host0_scl_pulse_duration(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyI2cSclPulseDuration,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_host0_scl_pulse_duration(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_host1_sda_side_guard` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_host1_sda_side_guard(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyI2cSdaSideGuard,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_host1_sda_side_guard(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_host1_scl_pulse_duration` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_host1_scl_pulse_duration(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyI2cSclPulseDuration,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_host1_scl_pulse_duration(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_hardware_host_sda_side_guard` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_hardware_host_sda_side_guard(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyI2cSdaSideGuard,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_hardware_host_sda_side_guard(
-        registers,
-        value.get(),
-    );
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_hardware_host_scl_pulse_duration` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_hardware_host_scl_pulse_duration(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyI2cSclPulseDuration,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_hardware_host_scl_pulse_duration(
-        registers,
-        value.get(),
-    );
-}
-
-/// Typed bridge for the reviewed `set_phy_adc_rate_high` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_adc_rate_high(registers: &crate::svd::PhyBasebandConfig, value: PhyRateBit) {
-    crate::svd::field_replace_modify::set_phy_adc_rate_high(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_phy_adc_rate_low` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_adc_rate_low(registers: &crate::svd::PhyBasebandConfig, value: PhyRateBit) {
-    crate::svd::field_replace_modify::set_phy_adc_rate_low(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `clear_phy_dac_rate_high` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_dac_rate_high(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_dac_rate_high(registers);
-}
-
-/// Typed bridge for the reviewed `clear_phy_dac_rate_low` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_dac_rate_low(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_dac_rate_low(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_master_register_mode` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_master_register_mode(registers: &crate::svd::I2cAnaMst) {
-    crate::svd::field_replace_modify::set_phy_i2c_master_register_mode(registers);
-}
-
-/// Typed bridge for the reviewed `clear_phy_front_end_init_0c08_first` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_front_end_init_0c08_first(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_front_end_init_0c08_first(registers);
-}
-
-/// Typed bridge for the reviewed `clear_phy_rx_dco_calibration_control` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_rx_dco_calibration_control(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_rx_dco_calibration_control(registers);
-}
-
-/// Typed bridge for the reviewed `clear_phy_front_end_clear_first` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_front_end_clear_first(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_front_end_clear_first(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_table_memory_base_index` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_table_memory_base_index(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::set_phy_table_memory_base_index(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_iq_scale_high` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_rx_iq_scale_high(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyRxIqScale,
-) {
-    crate::svd::field_replace_modify::set_phy_rx_iq_scale_high(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_iq_scale_low` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_rx_iq_scale_low(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyRxIqScale,
-) {
-    crate::svd::field_replace_modify::set_phy_rx_iq_scale_low(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `clear_phy_front_end_iq_swap` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_front_end_iq_swap(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_front_end_iq_swap(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_front_end_init_0c20` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_front_end_init_0c20(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::set_phy_front_end_init_0c20(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_pa_on_bt_delay` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_pa_on_bt_delay(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::set_phy_pa_on_bt_delay(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_power_detector_calibration_field` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_power_detector_calibration_field(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::set_phy_power_detector_calibration_field(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_power_detector_mode` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_power_detector_mode(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyPowerDetectorMode,
-) {
-    crate::svd::field_replace_modify::set_phy_power_detector_mode(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_sar2_power_detector_capacitor` field-replacement transaction.
-#[inline]
-pub(crate) fn set_sar2_power_detector_capacitor(
-    registers: &crate::svd::LpAonRadio,
-    value: PhySar2PowerDetectorCapacitor,
-) {
-    crate::svd::field_replace_modify::set_sar2_power_detector_capacitor(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_phy_dac_scale_high` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_dac_scale_high(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyDacScale,
-) {
-    crate::svd::field_replace_modify::set_phy_dac_scale_high(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_phy_dac_scale_low` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_dac_scale_low(registers: &crate::svd::PhyBasebandConfig, value: PhyDacScale) {
-    crate::svd::field_replace_modify::set_phy_dac_scale_low(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `clear_phy_power_detector_sar_config` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_power_detector_sar_config(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_power_detector_sar_config(registers);
-}
-
-/// Typed bridge for the reviewed `set_pcr_register_014c_low_byte` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_pcr_register_014c_low_byte(registers: &crate::svd::PcrRadio) {
-    crate::svd::field_replace_modify::set_pcr_register_014c_low_byte(registers);
-}
-
-/// Typed bridge for the reviewed `release_tsens_reset` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn release_tsens_reset(registers: &crate::svd::PcrRadio) {
-    crate::svd::field_replace_modify::release_tsens_reset(registers);
-}
-
-/// Typed bridge for the reviewed `set_tsens_power` field-replacement transaction.
-#[inline]
-pub(crate) fn set_tsens_power(registers: &crate::svd::ApbSaradcRadio, value: PhyRateBit) {
-    crate::svd::field_replace_modify::set_tsens_power(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_phy_i2c_bbpll_calibration_mode` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_i2c_bbpll_calibration_mode(
-    registers: &crate::svd::I2cAnaMst,
-    value: PhyBbpllCalibrationMode,
-) {
-    crate::svd::field_replace_modify::set_phy_i2c_bbpll_calibration_mode(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_evm_mode` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_rx_evm_mode(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::set_phy_rx_evm_mode(registers);
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_evm_third_parameter` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_rx_evm_third_parameter(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyRxEvmParameter,
-) {
-    crate::svd::field_replace_modify::set_phy_rx_evm_third_parameter(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_evm_second_parameter` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_rx_evm_second_parameter(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyRxEvmParameter,
-) {
-    crate::svd::field_replace_modify::set_phy_rx_evm_second_parameter(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `set_phy_rx_evm_enable` field-replacement transaction.
-#[inline]
-pub(crate) fn set_phy_rx_evm_enable(
-    registers: &crate::svd::PhyBasebandConfig,
-    value: PhyRxEvmEnable,
-) {
-    crate::svd::field_replace_modify::set_phy_rx_evm_enable(registers, value.bits());
-}
-
-/// Typed bridge for the reviewed `clear_phy_rx_evm_word_7920` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn clear_phy_rx_evm_word_7920(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::clear_phy_rx_evm_word_7920(registers);
-}
-
-/// Typed bridge for the reviewed `release_phy_rx_evm_memory_reset` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn release_phy_rx_evm_memory_reset(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::release_phy_rx_evm_memory_reset(registers);
-}
-
-/// Typed bridge for the reviewed `release_phy_rx_evm_memory_reset_2` fixed field-replacement transaction.
-#[inline]
-pub(crate) fn release_phy_rx_evm_memory_reset_2(registers: &crate::svd::PhyBasebandConfig) {
-    crate::svd::field_replace_modify::release_phy_rx_evm_memory_reset_2(registers);
 }
 
 /// Memory layouts: structures in RAM whose format the hardware defines,
@@ -1104,6 +607,1485 @@ pub mod layouts {
 // Typed register blocks over `oer-mmio`, rendered by `cargo registers`
 // from the published SVD and the API policy; no `unsafe`, no raw write.
 
+/// The `APB_SARADC_RADIO` register block.
+///
+/// ESP32-C5 APB_SARADC field the PHY's power-detector initialization drives. Other fields remain absent and are preserved by every field transaction.
+pub mod apb_saradc_radio {
+    /// The block's base address.
+    pub const BASE: usize = 0x6000e000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x60;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x58, 0x5c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x6000e000>, BlockWords>;
+
+    /// The exclusive owner of the `APB_SARADC_RADIO` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct ApbSaradcRadio<P: oer_mmio::Placement = oer_mmio::Fixed<0x6000e000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl ApbSaradcRadio {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> ApbSaradcRadio<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> ApbSaradcRadio<P> {
+        /// Read `CTRL`.
+        #[inline]
+        pub fn read_ctrl(&self) -> ctrl::R {
+            ctrl::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CTRL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_ctrl(&mut self, change: impl FnOnce(&mut ctrl::W)) {
+            let mut value = ctrl::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `TSENS_CTRL`.
+        #[inline]
+        pub fn read_tsens_ctrl(&self) -> tsens_ctrl::R {
+            tsens_ctrl::R(self.0.read::<0x58>())
+        }
+
+        /// Read `TSENS_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_tsens_ctrl(&mut self, change: impl FnOnce(&mut tsens_ctrl::W)) {
+            let mut value = tsens_ctrl::W(self.0.read::<0x58>());
+            change(&mut value);
+            self.0.write::<0x58>(value.0);
+        }
+
+        /// Read `TSENS_CTRL2`.
+        #[inline]
+        pub fn read_tsens_ctrl2(&self) -> tsens_ctrl2::R {
+            tsens_ctrl2::R(self.0.read::<0x5c>())
+        }
+
+        /// Read `TSENS_CTRL2`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_tsens_ctrl2(&mut self, change: impl FnOnce(&mut tsens_ctrl2::W)) {
+            let mut value = tsens_ctrl2::W(self.0.read::<0x5c>());
+            change(&mut value);
+            self.0.write::<0x5c>(value.0);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`CTRL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn drive_saradc2_from_power_detector(&mut self) {
+            let bits = self.0.read::<0x0>();
+            self.0.write::<0x0>(bits | 0x20000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`TSENS_CTRL2`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn select_tsens_clock(&mut self) {
+            let bits = self.0.read::<0x5c>();
+            self.0.write::<0x5c>(bits | 0x00008000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`TSENS_CTRL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn set_tsens_power(&mut self, value: super::PhyRateBit) {
+            let input = value.bits();
+            let bits = self.0.read::<0x58>();
+            self.0
+                .write::<0x58>((bits & !0x00400000) | ((input & 0x00000001) << 22));
+        }
+    }
+
+    /// The `CTRL` register.
+    ///
+    /// SAR ADC control word.
+    pub mod ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x20000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Drive SAR ADC2 from the power detector.
+            #[inline]
+            pub const fn saradc2_pwdet_drv(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Drive SAR ADC2 from the power detector.
+            #[inline]
+            pub const fn saradc2_pwdet_drv(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Set `SARADC2_PWDET_DRV`.
+            #[inline]
+            pub fn set_saradc2_pwdet_drv(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+        }
+    }
+
+    /// The `TSENS_CTRL` register.
+    ///
+    /// Temperature-sensor control.
+    pub mod tsens_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x58;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Power up the temperature sensor.
+            #[inline]
+            pub const fn tsens_pu(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_21_opaque(self) -> oer_mmio::Bits<22> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_31_opaque(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Power up the temperature sensor.
+            #[inline]
+            pub const fn tsens_pu(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_21_opaque(&self) -> oer_mmio::Bits<22> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_31_opaque(&self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Set `TSENS_PU`.
+            #[inline]
+            pub fn set_tsens_pu(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+
+            /// Set `BITS_0_21_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_21_opaque(&mut self, value: oer_mmio::Bits<22>) -> &mut Self {
+                self.0 = (self.0 & !0x003fffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_23_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_23_31_opaque(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & !0xff800000) | (value.get() << 23);
+                self
+            }
+        }
+    }
+
+    /// The `TSENS_CTRL2` register.
+    ///
+    /// Temperature-sensor control 2.
+    pub mod tsens_ctrl2 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00008000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x5c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Select the temperature-sensor clock.
+            #[inline]
+            pub const fn tsens_clk_sel(self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Select the temperature-sensor clock.
+            #[inline]
+            pub const fn tsens_clk_sel(&self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Set `TSENS_CLK_SEL`.
+            #[inline]
+            pub fn set_tsens_clk_sel(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                self
+            }
+        }
+    }
+
+    const _: () = assert!(
+        oer_mmio::check::within(0x20000000, ctrl::FIELDS),
+        "drive_saradc2_from_power_detector changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00008000, tsens_ctrl2::FIELDS),
+        "select_tsens_clock changes declared fields only"
+    );
+}
+
+/// The `I2C_ANA_MST` register block.
+///
+/// ESP32-C5 analog register I2C master at MODEM_BASE + 0xF800: the two command
+/// hosts, the read-mask word and the host-selection field that the libphy
+/// analog-register leaves drive. Other fields remain absent and are preserved by
+/// every field transaction.
+pub mod i2c_ana_mst {
+    /// The block's base address.
+    pub const BASE: usize = 0x600af800;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x30;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600af800>, BlockWords>;
+
+    /// The exclusive owner of the `I2C_ANA_MST` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct I2cAnaMst<P: oer_mmio::Placement = oer_mmio::Fixed<0x600af800>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl I2cAnaMst {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> I2cAnaMst<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> I2cAnaMst<P> {
+        /// Read `I2C0_CTRL`.
+        #[inline]
+        pub fn read_i2c0_ctrl(&self) -> i2c0_ctrl::R {
+            i2c0_ctrl::R(self.0.read::<0x0>())
+        }
+
+        /// Read `I2C0_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_i2c0_ctrl(&mut self, change: impl FnOnce(&mut i2c0_ctrl::W)) {
+            let mut value = i2c0_ctrl::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `I2C1_CTRL`.
+        #[inline]
+        pub fn read_i2c1_ctrl(&self) -> i2c1_ctrl::R {
+            i2c1_ctrl::R(self.0.read::<0x4>())
+        }
+
+        /// Read `I2C1_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_i2c1_ctrl(&mut self, change: impl FnOnce(&mut i2c1_ctrl::W)) {
+            let mut value = i2c1_ctrl::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `ANA_CONF0`.
+        #[inline]
+        pub fn read_ana_conf0(&self) -> ana_conf0::R {
+            ana_conf0::R(self.0.read::<0x18>())
+        }
+
+        /// Read `ANA_CONF0`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_ana_conf0(&mut self, change: impl FnOnce(&mut ana_conf0::W)) {
+            let mut value = ana_conf0::W(self.0.read::<0x18>());
+            change(&mut value);
+            self.0.write::<0x18>(value.0);
+        }
+
+        /// Read `ANA_CONF1`.
+        #[inline]
+        pub fn read_ana_conf1(&self) -> ana_conf1::R {
+            ana_conf1::R(self.0.read::<0x1c>())
+        }
+
+        /// Read `ANA_CONF1`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_ana_conf1(&mut self, change: impl FnOnce(&mut ana_conf1::W)) {
+            let mut value = ana_conf1::W(self.0.read::<0x1c>());
+            change(&mut value);
+            self.0.write::<0x1c>(value.0);
+        }
+
+        /// Read `ANA_CONF2`.
+        #[inline]
+        pub fn read_ana_conf2(&self) -> ana_conf2::R {
+            ana_conf2::R(self.0.read::<0x20>())
+        }
+
+        /// Read `ANA_CONF2`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_ana_conf2(&mut self, change: impl FnOnce(&mut ana_conf2::W)) {
+            let mut value = ana_conf2::W(self.0.read::<0x20>());
+            change(&mut value);
+            self.0.write::<0x20>(value.0);
+        }
+
+        /// Read `I2C0_CTRL1`.
+        #[inline]
+        pub fn read_i2c0_ctrl1(&self) -> i2c0_ctrl1::R {
+            i2c0_ctrl1::R(self.0.read::<0x24>())
+        }
+
+        /// Read `I2C0_CTRL1`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_i2c0_ctrl1(&mut self, change: impl FnOnce(&mut i2c0_ctrl1::W)) {
+            let mut value = i2c0_ctrl1::W(self.0.read::<0x24>());
+            change(&mut value);
+            self.0.write::<0x24>(value.0);
+        }
+
+        /// Read `I2C1_CTRL1`.
+        #[inline]
+        pub fn read_i2c1_ctrl1(&self) -> i2c1_ctrl1::R {
+            i2c1_ctrl1::R(self.0.read::<0x28>())
+        }
+
+        /// Read `I2C1_CTRL1`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_i2c1_ctrl1(&mut self, change: impl FnOnce(&mut i2c1_ctrl1::W)) {
+            let mut value = i2c1_ctrl1::W(self.0.read::<0x28>());
+            change(&mut value);
+            self.0.write::<0x28>(value.0);
+        }
+
+        /// Read `HW_I2C_CTRL`.
+        #[inline]
+        pub fn read_hw_i2c_ctrl(&self) -> hw_i2c_ctrl::R {
+            hw_i2c_ctrl::R(self.0.read::<0x2c>())
+        }
+
+        /// Read `HW_I2C_CTRL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_hw_i2c_ctrl(&mut self, change: impl FnOnce(&mut hw_i2c_ctrl::W)) {
+            let mut value = hw_i2c_ctrl::W(self.0.read::<0x2c>());
+            change(&mut value);
+            self.0.write::<0x2c>(value.0);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`ANA_CONF0`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn enable_phy_i2c_master_registers(&mut self) {
+            let bits = self.0.read::<0x18>();
+            self.0.write::<0x18>(bits | 0x00000040);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ANA_CONF2`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C, ESP_IDF_4D59230D_C5_I2C_ANA_MST, HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27.
+        #[inline]
+        pub fn configure_phy_i2c_host_map(&mut self) {
+            let bits = self.0.read::<0x20>();
+            self.0.write::<0x20>((bits & !0x0001fff0) | 0x00019c10);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ANA_CONF2`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C_INIT1.
+        #[inline]
+        pub fn configure_phy_i2c_parallel_host_map(&mut self) {
+            let bits = self.0.read::<0x20>();
+            self.0.write::<0x20>((bits & !0x0001fff0) | 0x00002060);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`I2C0_CTRL1`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_i2c_host0_sda_side_guard(&mut self, value: super::PhyI2cSdaSideGuard) {
+            let input = value.get();
+            let bits = self.0.read::<0x24>();
+            self.0
+                .write::<0x24>((bits & !0x000007c0) | ((input & 0x0000001f) << 6));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`I2C0_CTRL1`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_i2c_host0_scl_pulse_duration(
+            &mut self,
+            value: super::PhyI2cSclPulseDuration,
+        ) {
+            let input = value.get();
+            let bits = self.0.read::<0x24>();
+            self.0
+                .write::<0x24>((bits & !0x0000003f) | (input & 0x0000003f));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`I2C1_CTRL1`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_i2c_host1_sda_side_guard(&mut self, value: super::PhyI2cSdaSideGuard) {
+            let input = value.get();
+            let bits = self.0.read::<0x28>();
+            self.0
+                .write::<0x28>((bits & !0x000007c0) | ((input & 0x0000001f) << 6));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`I2C1_CTRL1`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_i2c_host1_scl_pulse_duration(
+            &mut self,
+            value: super::PhyI2cSclPulseDuration,
+        ) {
+            let input = value.get();
+            let bits = self.0.read::<0x28>();
+            self.0
+                .write::<0x28>((bits & !0x0000003f) | (input & 0x0000003f));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`HW_I2C_CTRL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_i2c_hardware_host_sda_side_guard(
+            &mut self,
+            value: super::PhyI2cSdaSideGuard,
+        ) {
+            let input = value.get();
+            let bits = self.0.read::<0x2c>();
+            self.0
+                .write::<0x2c>((bits & !0x000007c0) | ((input & 0x0000001f) << 6));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`HW_I2C_CTRL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_i2c_hardware_host_scl_pulse_duration(
+            &mut self,
+            value: super::PhyI2cSclPulseDuration,
+        ) {
+            let input = value.get();
+            let bits = self.0.read::<0x2c>();
+            self.0
+                .write::<0x2c>((bits & !0x0000003f) | (input & 0x0000003f));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ANA_CONF0`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_i2c_master_register_mode(&mut self) {
+            let bits = self.0.read::<0x18>();
+            self.0.write::<0x18>((bits & !0x00000600) | 0x00000400);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ANA_CONF0`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn set_phy_i2c_bbpll_calibration_mode(
+            &mut self,
+            value: super::PhyBbpllCalibrationMode,
+        ) {
+            let input = value.bits();
+            let bits = self.0.read::<0x18>();
+            self.0
+                .write::<0x18>((bits & !0x0000000c) | ((input & 0x00000003) << 2));
+        }
+
+        /// Write the listed fields and zero to every other bit (`ANA_CONF1`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C, ESP_IDF_4D59230D_C5_I2C_ANA_MST, HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27.
+        #[inline]
+        pub fn publish_phy_i2c_read_mask(&mut self, value: u32) {
+            self.0.write::<0x1c>(value);
+        }
+
+        /// Write the listed fields and zero to every other bit (`I2C0_CTRL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C, ESP_IDF_4D59230D_C5_I2C_ANA_MST, HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27.
+        #[inline]
+        pub fn publish_phy_i2c_host0_command(
+            &mut self,
+            slave_addr_value: u8,
+            slave_reg_addr_value: u8,
+            data_value: u8,
+            read_write_value: bool,
+            start_or_reset_value: bool,
+        ) {
+            self.0.write::<0x0>(
+                u32::from(slave_addr_value)
+                    | (u32::from(slave_reg_addr_value) << 8)
+                    | (u32::from(data_value) << 16)
+                    | (u32::from(read_write_value) << 24)
+                    | (u32::from(start_or_reset_value) << 26),
+            );
+        }
+
+        /// Write the listed fields and zero to every other bit (`I2C1_CTRL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_PHY_I2C, ESP_IDF_4D59230D_C5_I2C_ANA_MST, HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27.
+        #[inline]
+        pub fn publish_phy_i2c_host1_command(
+            &mut self,
+            slave_addr_value: u8,
+            slave_reg_addr_value: u8,
+            data_value: u8,
+            read_write_value: bool,
+            start_or_reset_value: bool,
+        ) {
+            self.0.write::<0x4>(
+                u32::from(slave_addr_value)
+                    | (u32::from(slave_reg_addr_value) << 8)
+                    | (u32::from(data_value) << 16)
+                    | (u32::from(read_write_value) << 24)
+                    | (u32::from(start_or_reset_value) << 26),
+            );
+        }
+    }
+
+    /// The `I2C0_CTRL` register.
+    ///
+    /// Host-0 analog-register command word.
+    pub mod i2c0_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x07ffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Analog block code.
+            #[inline]
+            pub const fn slave_addr(self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Project-assigned name. Register address inside the analog block.
+            #[inline]
+            pub const fn slave_reg_addr(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Project-assigned name. Byte written, or the byte read once the command completes.
+            #[inline]
+            pub const fn data(self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Project-assigned name. Set for a write command, clear for a read command.
+            #[inline]
+            pub const fn read_write(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. Set while the host executes a command.
+            #[inline]
+            pub const fn busy(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Set by every libphy command publication, above the public 25-bit control field.
+            #[inline]
+            pub const fn start_or_reset(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Analog block code.
+            #[inline]
+            pub const fn slave_addr(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Project-assigned name. Register address inside the analog block.
+            #[inline]
+            pub const fn slave_reg_addr(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Project-assigned name. Byte written, or the byte read once the command completes.
+            #[inline]
+            pub const fn data(&self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Project-assigned name. Set for a write command, clear for a read command.
+            #[inline]
+            pub const fn read_write(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. Set while the host executes a command.
+            #[inline]
+            pub const fn busy(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Set by every libphy command publication, above the public 25-bit control field.
+            #[inline]
+            pub const fn start_or_reset(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Set `SLAVE_ADDR`.
+            #[inline]
+            pub fn set_slave_addr(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+
+            /// Set `SLAVE_REG_ADDR`.
+            #[inline]
+            pub fn set_slave_reg_addr(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `DATA`.
+            #[inline]
+            pub fn set_data(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `READ_WRITE`.
+            #[inline]
+            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `START_OR_RESET`.
+            #[inline]
+            pub fn set_start_or_reset(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+        }
+    }
+
+    /// The `I2C1_CTRL` register.
+    ///
+    /// Host-1 analog-register command word.
+    pub mod i2c1_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Analog block code.
+            #[inline]
+            pub const fn slave_addr(self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Project-assigned name. Register address inside the analog block.
+            #[inline]
+            pub const fn slave_reg_addr(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Project-assigned name. Byte written, or the byte read once the command completes.
+            #[inline]
+            pub const fn data(self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Project-assigned name. Set for a write command, clear for a read command.
+            #[inline]
+            pub const fn read_write(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. Set while the host executes a command.
+            #[inline]
+            pub const fn busy(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Set by every libphy command publication, above the public 25-bit control field.
+            #[inline]
+            pub const fn start_or_reset(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_27_31_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Analog block code.
+            #[inline]
+            pub const fn slave_addr(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Project-assigned name. Register address inside the analog block.
+            #[inline]
+            pub const fn slave_reg_addr(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Project-assigned name. Byte written, or the byte read once the command completes.
+            #[inline]
+            pub const fn data(&self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Project-assigned name. Set for a write command, clear for a read command.
+            #[inline]
+            pub const fn read_write(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. Set while the host executes a command.
+            #[inline]
+            pub const fn busy(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Set by every libphy command publication, above the public 25-bit control field.
+            #[inline]
+            pub const fn start_or_reset(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_27_31_opaque(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Set `SLAVE_ADDR`.
+            #[inline]
+            pub fn set_slave_addr(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+
+            /// Set `SLAVE_REG_ADDR`.
+            #[inline]
+            pub fn set_slave_reg_addr(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `DATA`.
+            #[inline]
+            pub fn set_data(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `READ_WRITE`.
+            #[inline]
+            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `START_OR_RESET`.
+            #[inline]
+            pub fn set_start_or_reset(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BITS_27_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_27_31_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0xf8000000) | (value.get() << 27);
+                self
+            }
+        }
+    }
+
+    /// The `ANA_CONF0` register.
+    ///
+    /// Analog I2C master control used by PHY register mode and BBPLL calibration.
+    pub mod ana_conf0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000064c;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x18;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Two-bit BBPLL calibration mode.
+            #[inline]
+            pub const fn bbpll_cal_mode(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Project-assigned name. PHY register access enable.
+            #[inline]
+            pub const fn phy_register_enable(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Two-bit PHY register mode.
+            #[inline]
+            pub const fn phy_register_mode(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Two-bit BBPLL calibration mode.
+            #[inline]
+            pub const fn bbpll_cal_mode(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Project-assigned name. PHY register access enable.
+            #[inline]
+            pub const fn phy_register_enable(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Two-bit PHY register mode.
+            #[inline]
+            pub const fn phy_register_mode(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// Set `BBPLL_CAL_MODE`.
+            #[inline]
+            pub fn set_bbpll_cal_mode(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x0000000c) | (value.get() << 2);
+                self
+            }
+
+            /// Set `PHY_REGISTER_ENABLE`.
+            #[inline]
+            pub fn set_phy_register_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                self
+            }
+
+            /// Set `PHY_REGISTER_MODE`.
+            #[inline]
+            pub fn set_phy_register_mode(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00000600) | (value.get() << 9);
+                self
+            }
+        }
+    }
+
+    /// The `ANA_CONF1` register.
+    ///
+    /// Analog block read-mask word, published complete before every read.
+    pub mod ana_conf1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x1c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF.
+            #[inline]
+            pub const fn read_mask_complement(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF.
+            #[inline]
+            pub const fn read_mask_complement(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `READ_MASK_COMPLEMENT`.
+            #[inline]
+            pub fn set_read_mask_complement(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `ANA_CONF2` register.
+    ///
+    /// Analog block host-selection word.
+    pub mod ana_conf2 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x20;
+
+        /// The declared values of the `PHY_HOST_MAP` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum PhyHostMap {
+            ReviewedRadioMap = 0x19c1,
+            ParallelInitializationMap = 0x206,
+        }
+
+        impl PhyHostMap {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x19c1 => Some(Self::ReviewedRadioMap),
+                    0x206 => Some(Self::ParallelInitializationMap),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Host-selection field that libphy[phy_i2c.o]::phy_get_i2c_hostid_ replaces on every analog-register access while preserving the other bits.
+            #[inline]
+            pub const fn phy_host_map(self) -> oer_mmio::Bits<13> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// The `PHY_HOST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn phy_host_map_variant(self) -> Option<PhyHostMap> {
+                PhyHostMap::from_bits((self.0 >> 4) & 0x1fff)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_3_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_17_31_opaque(self) -> oer_mmio::Bits<15> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Host-selection field that libphy[phy_i2c.o]::phy_get_i2c_hostid_ replaces on every analog-register access while preserving the other bits.
+            #[inline]
+            pub const fn phy_host_map(&self) -> oer_mmio::Bits<13> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// The `PHY_HOST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn phy_host_map_variant(&self) -> Option<PhyHostMap> {
+                PhyHostMap::from_bits((self.0 >> 4) & 0x1fff)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_3_opaque(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_17_31_opaque(&self) -> oer_mmio::Bits<15> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Set `PHY_HOST_MAP`.
+            #[inline]
+            pub fn set_phy_host_map(&mut self, value: PhyHostMap) -> &mut Self {
+                self.0 = (self.0 & !0x0001fff0) | (value.bits() << 4);
+                self
+            }
+
+            /// Set `BITS_0_3_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_3_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0000000f) | value.get();
+                self
+            }
+
+            /// Set `BITS_17_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_17_31_opaque(&mut self, value: oer_mmio::Bits<15>) -> &mut Self {
+                self.0 = (self.0 & !0xfffe0000) | (value.get() << 17);
+                self
+            }
+        }
+    }
+
+    /// The `I2C0_CTRL1` register.
+    ///
+    /// Host-0 bus timing.
+    pub mod i2c0_ctrl1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x24;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. SCL pulse duration.
+            #[inline]
+            pub const fn scl_pulse_duration(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// SDA side guard.
+            #[inline]
+            pub const fn sda_side_guard(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. SCL pulse duration.
+            #[inline]
+            pub const fn scl_pulse_duration(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// SDA side guard.
+            #[inline]
+            pub const fn sda_side_guard(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Set `SCL_PULSE_DURATION`.
+            #[inline]
+            pub fn set_scl_pulse_duration(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x0000003f) | value.get();
+                self
+            }
+
+            /// Set `SDA_SIDE_GUARD`.
+            #[inline]
+            pub fn set_sda_side_guard(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x000007c0) | (value.get() << 6);
+                self
+            }
+        }
+    }
+
+    /// The `I2C1_CTRL1` register.
+    ///
+    /// Host-1 bus timing.
+    pub mod i2c1_ctrl1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x28;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. SCL pulse duration.
+            #[inline]
+            pub const fn scl_pulse_duration(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// SDA side guard.
+            #[inline]
+            pub const fn sda_side_guard(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. SCL pulse duration.
+            #[inline]
+            pub const fn scl_pulse_duration(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// SDA side guard.
+            #[inline]
+            pub const fn sda_side_guard(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Set `SCL_PULSE_DURATION`.
+            #[inline]
+            pub fn set_scl_pulse_duration(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x0000003f) | value.get();
+                self
+            }
+
+            /// Set `SDA_SIDE_GUARD`.
+            #[inline]
+            pub fn set_sda_side_guard(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x000007c0) | (value.get() << 6);
+                self
+            }
+        }
+    }
+
+    /// The `HW_I2C_CTRL` register.
+    ///
+    /// Hardware-host bus timing.
+    pub mod hw_i2c_ctrl {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x2c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. SCL pulse duration.
+            #[inline]
+            pub const fn scl_pulse_duration(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// SDA side guard.
+            #[inline]
+            pub const fn sda_side_guard(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_11_31_opaque(self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. SCL pulse duration.
+            #[inline]
+            pub const fn scl_pulse_duration(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// SDA side guard.
+            #[inline]
+            pub const fn sda_side_guard(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_11_31_opaque(&self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
+            }
+
+            /// Set `SCL_PULSE_DURATION`.
+            #[inline]
+            pub fn set_scl_pulse_duration(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x0000003f) | value.get();
+                self
+            }
+
+            /// Set `SDA_SIDE_GUARD`.
+            #[inline]
+            pub fn set_sda_side_guard(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x000007c0) | (value.get() << 6);
+                self
+            }
+
+            /// Set `BITS_11_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_11_31_opaque(&mut self, value: oer_mmio::Bits<21>) -> &mut Self {
+                self.0 = (self.0 & !0xfffff800) | (value.get() << 11);
+                self
+            }
+        }
+    }
+
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000040, ana_conf0::FIELDS),
+        "enable_phy_i2c_master_registers changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00019c10, 0x0001fff0)
+            && oer_mmio::check::within(0x0001fff0, ana_conf2::FIELDS),
+        "configure_phy_i2c_host_map replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00002060, 0x0001fff0)
+            && oer_mmio::check::within(0x0001fff0, ana_conf2::FIELDS),
+        "configure_phy_i2c_parallel_host_map replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000400, 0x00000600)
+            && oer_mmio::check::within(0x00000600, ana_conf0::FIELDS),
+        "set_phy_i2c_master_register_mode replaces declared fields only"
+    );
+}
+
+/// The `IEEE802154_INTERRUPT_ROUTE` register block.
+///
+/// The CPU interrupt-matrix word for ESP32-C5 modem source 12 (ZB_MAC). This
+/// source-specific view is retained with the IEEE 802.15.4 owner and publishes
+/// only the generated field readers needed to prove that a polled or validation
+/// transaction starts with the CPU route detached.
+pub mod ieee802154_interrupt_route {
+    /// The block's base address.
+    pub const BASE: usize = 0x60010030;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x4;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60010030>, BlockWords>;
+
+    /// The exclusive owner of the `IEEE802154_INTERRUPT_ROUTE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct Ieee802154InterruptRoute<P: oer_mmio::Placement = oer_mmio::Fixed<0x60010030>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl Ieee802154InterruptRoute {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> Ieee802154InterruptRoute<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Ieee802154InterruptRoute<P> {
+        /// Read `CORE0_ROUTE`.
+        #[inline]
+        pub fn read_core0_route(&self) -> core0_route::R {
+            core0_route::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CORE0_ROUTE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_core0_route(&mut self, change: impl FnOnce(&mut core0_route::W)) {
+            let mut value = core0_route::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+    }
+
+    /// The `CORE0_ROUTE` register.
+    ///
+    /// Project-assigned name. Destination and security routing for ZB_MAC.
+    pub mod core0_route {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000013f;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. CPU-interrupt destination selected for the peripheral source.
+            #[inline]
+            pub const fn map(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Secure-world pass-through selection for the peripheral source.
+            #[inline]
+            pub const fn pass_in_sec(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. CPU-interrupt destination selected for the peripheral source.
+            #[inline]
+            pub const fn map(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Secure-world pass-through selection for the peripheral source.
+            #[inline]
+            pub const fn pass_in_sec(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Set `MAP`.
+            #[inline]
+            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x0000003f) | value.get();
+                self
+            }
+
+            /// Set `PASS_IN_SEC`.
+            #[inline]
+            pub fn set_pass_in_sec(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+        }
+    }
+}
+
 /// The `IEEE802154_MAC` register block.
 ///
 /// Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This
@@ -1114,27 +2096,48 @@ pub mod layouts {
 /// regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep
 /// words remain deliberately absent and no reset values are claimed.
 pub mod ieee802154_mac {
+    /// The interrupt-matrix source of the block's interrupt.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES.
+    pub const SOURCE: u16 = 12;
+
     /// The block's base address.
     pub const BASE: usize = 0x600a3000;
-    /// The block's size in bytes.
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
     pub const SIZE: usize = 0x184;
-    /// The device registers of the block.
-    pub type Span = oer_mmio::Span<0x600a3000, 0x600a3184>;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+            0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x78,
+            0x7c, 0x80, 0x84, 0xa8, 0xac, 0xb0, 0xb4, 0xc4, 0xd0, 0xe0, 0x104, 0x10c, 0x110, 0x114,
+            0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144, 0x148, 0x14c, 0x150, 0x154,
+            0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174, 0x178, 0x17c, 0x180,
+        ];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a3000>, BlockWords>;
 
     /// The exclusive owner of the `IEEE802154_MAC` registers.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct Ieee802154Mac<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a3000>>(
-        oer_mmio::Block<P, 0x184>,
+        oer_mmio::Block<P, BlockWords>,
     );
 
     impl Ieee802154Mac {
         /// The owner of the block's device registers.
-        pub const fn new(span: Span) -> Self {
-            Self(span.into_block::<0x184>())
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
         }
 
         /// The block again, from the two owners of its one split.
-        pub fn join(rest: Ieee802154MacTask, part: Ieee802154MacInterrupt) -> Self {
+        pub fn join(rest: Ieee802154MacTask, part: Ieee802154MacIrq) -> Self {
             Self(oer_mmio::Block::join(rest.0, part.0))
         }
     }
@@ -1149,28 +2152,28 @@ pub mod ieee802154_mac {
         /// two blocks are refused and returned.
         pub fn try_join(
             rest: Ieee802154MacTask<oer_mmio::Host<'a>>,
-            part: Ieee802154MacInterrupt<oer_mmio::Host<'a>>,
+            part: Ieee802154MacIrq<oer_mmio::Host<'a>>,
         ) -> Result<
             Self,
             oer_mmio::NotOneSplit<
                 Ieee802154MacTask<oer_mmio::Host<'a>>,
-                Ieee802154MacInterrupt<oer_mmio::Host<'a>>,
+                Ieee802154MacIrq<oer_mmio::Host<'a>>,
             >,
         > {
             oer_mmio::Block::try_join(rest.0, part.0)
                 .map(Self)
                 .map_err(|refused| oer_mmio::NotOneSplit {
                     first: Ieee802154MacTask(refused.first),
-                    second: Ieee802154MacInterrupt(refused.second),
+                    second: Ieee802154MacIrq(refused.second),
                 })
         }
     }
 
     impl<P: oer_mmio::Placement> Ieee802154Mac<P> {
-        /// Divide the block: [`Ieee802154MacTask`] owns every register but those [`Ieee802154MacInterrupt`] owns.
-        pub fn split(self) -> (Ieee802154MacTask<P>, Ieee802154MacInterrupt<P>) {
-            let (rest, part) = self.0.split::<TaskWords, InterruptWords>();
-            (Ieee802154MacTask(rest), Ieee802154MacInterrupt(part))
+        /// Divide the block: [`Ieee802154MacTask`] owns every register but those [`Ieee802154MacIrq`] owns.
+        pub fn split(self) -> (Ieee802154MacTask<P>, Ieee802154MacIrq<P>) {
+            let (rest, part) = self.0.split::<TaskWords, IrqWords>();
+            (Ieee802154MacTask(rest), Ieee802154MacIrq(part))
         }
 
         /// Write `COMMAND` from zero: the fields set, zero in every other bit.
@@ -2062,7 +3065,7 @@ pub mod ieee802154_mac {
     /// One owner of a split `IEEE802154_MAC` block.
     #[must_use = "a split owner must be joined to recover the block"]
     pub struct Ieee802154MacTask<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a3000>>(
-        oer_mmio::Part<P, 0x184, TaskWords>,
+        oer_mmio::Part<P, BlockWords, TaskWords>,
     );
 
     impl<P: oer_mmio::Placement> Ieee802154MacTask<P> {
@@ -2935,11 +3938,11 @@ pub mod ieee802154_mac {
 
     /// One owner of a split `IEEE802154_MAC` block.
     #[must_use = "a split owner must be joined to recover the block"]
-    pub struct Ieee802154MacInterrupt<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a3000>>(
-        oer_mmio::Part<P, 0x184, InterruptWords>,
+    pub struct Ieee802154MacIrq<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a3000>>(
+        oer_mmio::Part<P, BlockWords, IrqWords>,
     );
 
-    impl<P: oer_mmio::Placement> Ieee802154MacInterrupt<P> {
+    impl<P: oer_mmio::Placement> Ieee802154MacIrq<P> {
         /// Read `ED_CONFIG`.
         #[inline]
         pub fn read_ed_config(&self) -> ed_config::R {
@@ -2992,15 +3995,24 @@ pub mod ieee802154_mac {
         const OBSERVED: &'static [usize] = &[];
     }
 
-    /// The words [`Ieee802154MacInterrupt`] owns and observes.
-    pub struct InterruptWords;
+    /// The words [`Ieee802154MacIrq`] owns and observes.
+    pub struct IrqWords;
 
-    impl oer_mmio::Words for InterruptWords {
+    impl oer_mmio::Words for IrqWords {
         const OWNED: &'static [usize] = &[0x64];
         const OBSERVED: &'static [usize] = &[0x54, 0x80, 0x84];
     }
 
     // SOURCE: esp-idf-4d59230d-ieee802154-common-ll. The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included.
+    const _: () = assert!(
+        oer_mmio::check::sides_cover(
+            <BlockWords as oer_mmio::Registers>::WORDS,
+            <TaskWords as oer_mmio::Words>::OWNED,
+            <IrqWords as oer_mmio::Words>::OWNED,
+        ),
+        "every word of the block belongs to exactly one side"
+    );
+
     /// The `COMMAND` register.
     ///
     /// Write-only IEEE 802.15.4 MAC command opcode. The public common LL constrains commands to the listed values.
@@ -3167,7 +4179,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn coex_arb_delay(self) -> u8 {
-                ((self.0 >> 16) & 0xff) as u8
+                (self.0 >> 16) as u8
             }
 
             /// Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -3280,7 +4292,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn coex_arb_delay(&self) -> u8 {
-                ((self.0 >> 16) & 0xff) as u8
+                (self.0 >> 16) as u8
             }
 
             /// Project-assigned name. Open vendor conf.bit_order field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -3457,7 +4469,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn address(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
 
@@ -3468,7 +4480,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn address(&self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
 
             /// Set `ADDRESS`.
@@ -3502,7 +4514,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn pan_id(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
 
@@ -3513,7 +4525,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn pan_id(&self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
 
             /// Set `PAN_ID`.
@@ -3631,8 +4643,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number.
             #[inline]
-            pub const fn frequency_code(self) -> u8 {
-                (self.0 & 0x7f) as u8
+            pub const fn frequency_code(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23.
@@ -3648,8 +4660,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number.
             #[inline]
-            pub const fn frequency_code(&self) -> u8 {
-                (self.0 & 0x7f) as u8
+            pub const fn frequency_code(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Opaque: meaning not established. Implemented read-write bit observed by the register-width experiments; meaning unknown. SOURCE: HIL_OPEN_C5_CHANNEL_JTAG_2026_10_23.
@@ -3690,8 +4702,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name. Raw five-bit hardware code; no dBm conversion is claimed at the register boundary.
             #[inline]
-            pub const fn power_code(self) -> u8 {
-                (self.0 & 0x1f) as u8
+            pub const fn power_code(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
             }
         }
 
@@ -3701,8 +4713,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Project-assigned name. Raw five-bit hardware code; no dBm conversion is claimed at the register boundary.
             #[inline]
-            pub const fn power_code(&self) -> u8 {
-                (self.0 & 0x1f) as u8
+            pub const fn power_code(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Set `POWER_CODE`.
@@ -3730,14 +4742,14 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.
             #[inline]
-            pub const fn duration(self) -> u32 {
-                self.0 & 0xffffff
+            pub const fn duration(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
-            pub const fn delay(self) -> u8 {
-                ((self.0 >> 24) & 0xf) as u8
+            pub const fn delay(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
             }
         }
 
@@ -3747,14 +4759,14 @@ pub mod ieee802154_mac {
         impl W {
             /// Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.
             #[inline]
-            pub const fn duration(&self) -> u32 {
-                self.0 & 0xffffff
+            pub const fn duration(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Project-assigned name. Open vendor ed_duration.delay field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
-            pub const fn delay(&self) -> u8 {
-                ((self.0 >> 24) & 0xf) as u8
+            pub const fn delay(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
             }
 
             /// Set `DURATION`.
@@ -3885,13 +4897,13 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Eight-bit code written from an int8_t; signed physical units are intentionally left to the HAL.
             #[inline]
             pub const fn cca_threshold_code(self) -> u8 {
-                (self.0 & 0xff) as u8
+                (self.0) as u8
             }
 
             /// Project-assigned name.
             #[inline]
-            pub const fn ed_sample_rate(self) -> u8 {
-                ((self.0 >> 11) & 0x3) as u8
+            pub const fn ed_sample_rate(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
             }
 
             /// The `ED_SAMPLE_RATE` field as its declared value.
@@ -3914,8 +4926,8 @@ pub mod ieee802154_mac {
 
             /// The `CCA_MODE` field.
             #[inline]
-            pub const fn cca_mode(self) -> u8 {
-                ((self.0 >> 14) & 0x3) as u8
+            pub const fn cca_mode(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 14)
             }
 
             /// The `CCA_MODE` field as its declared value.
@@ -3927,7 +4939,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Eight-bit result returned as int8_t by the public common LL.
             #[inline]
             pub const fn ed_rss_code(self) -> u8 {
-                ((self.0 >> 16) & 0xff) as u8
+                (self.0 >> 16) as u8
             }
 
             /// The `CCA_BUSY` field.
@@ -3944,13 +4956,13 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Eight-bit code written from an int8_t; signed physical units are intentionally left to the HAL.
             #[inline]
             pub const fn cca_threshold_code(&self) -> u8 {
-                (self.0 & 0xff) as u8
+                (self.0) as u8
             }
 
             /// Project-assigned name.
             #[inline]
-            pub const fn ed_sample_rate(&self) -> u8 {
-                ((self.0 >> 11) & 0x3) as u8
+            pub const fn ed_sample_rate(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
             }
 
             /// The `ED_SAMPLE_RATE` field as its declared value.
@@ -3973,8 +4985,8 @@ pub mod ieee802154_mac {
 
             /// The `CCA_MODE` field.
             #[inline]
-            pub const fn cca_mode(&self) -> u8 {
-                ((self.0 >> 14) & 0x3) as u8
+            pub const fn cca_mode(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 14)
             }
 
             /// The `CCA_MODE` field as its declared value.
@@ -3986,7 +4998,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Eight-bit result returned as int8_t by the public common LL.
             #[inline]
             pub const fn ed_rss_code(&self) -> u8 {
-                ((self.0 >> 16) & 0xff) as u8
+                (self.0 >> 16) as u8
             }
 
             /// The `CCA_BUSY` field.
@@ -4042,7 +5054,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn timeout(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
 
@@ -4053,7 +5065,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn timeout(&self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
 
             /// Set `TIMEOUT`.
@@ -4704,8 +5716,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn rx_abort_en_9_14(self) -> u8 {
-                ((self.0 >> 9) & 0x3f) as u8
+            pub const fn rx_abort_en_9_14(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
             }
 
             /// Project-assigned name. Enable bit of abort reason 16 (tx ack timeout).
@@ -4734,8 +5746,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn rx_abort_en_19_22(self) -> u8 {
-                ((self.0 >> 19) & 0xf) as u8
+            pub const fn rx_abort_en_19_22(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
             }
 
             /// Project-assigned name. Enable bit of abort reason 24 (ed abort).
@@ -4758,8 +5770,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn rx_abort_en_26_30(self) -> u8 {
-                ((self.0 >> 26) & 0x1f) as u8
+            pub const fn rx_abort_en_26_30(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
             }
         }
 
@@ -4823,8 +5835,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor rx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn rx_abort_en_9_14(&self) -> u8 {
-                ((self.0 >> 9) & 0x3f) as u8
+            pub const fn rx_abort_en_9_14(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
             }
 
             /// Project-assigned name. Enable bit of abort reason 16 (tx ack timeout).
@@ -4853,8 +5865,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor rx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn rx_abort_en_19_22(&self) -> u8 {
-                ((self.0 >> 19) & 0xf) as u8
+            pub const fn rx_abort_en_19_22(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
             }
 
             /// Project-assigned name. Enable bit of abort reason 24 (ed abort).
@@ -4877,8 +5889,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor rx_abort_en field, bits 30:26; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn rx_abort_en_26_30(&self) -> u8 {
-                ((self.0 >> 26) & 0x1f) as u8
+            pub const fn rx_abort_en_26_30(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
             }
 
             /// Set `RX_STOP`.
@@ -5039,7 +6051,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn pending_timeout(self) -> u16 {
-                ((self.0 >> 16) & 0xffff) as u16
+                (self.0 >> 16) as u16
             }
         }
 
@@ -5056,7 +6068,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name. Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn pending_timeout(&self) -> u16 {
-                ((self.0 >> 16) & 0xffff) as u16
+                (self.0 >> 16) as u16
             }
 
             /// Set `FRAME_PENDING`.
@@ -5091,14 +6103,14 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name.
             #[inline]
-            pub const fn txrx_pti(self) -> u8 {
-                (self.0 & 0xf) as u8
+            pub const fn txrx_pti(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Project-assigned name.
             #[inline]
-            pub const fn ack_pti(self) -> u8 {
-                ((self.0 >> 4) & 0xf) as u8
+            pub const fn ack_pti(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
             }
 
             /// Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -5114,14 +6126,14 @@ pub mod ieee802154_mac {
         impl W {
             /// Project-assigned name.
             #[inline]
-            pub const fn txrx_pti(&self) -> u8 {
-                (self.0 & 0xf) as u8
+            pub const fn txrx_pti(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Project-assigned name.
             #[inline]
-            pub const fn ack_pti(&self) -> u8 {
-                ((self.0 >> 4) & 0xf) as u8
+            pub const fn ack_pti(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
             }
 
             /// Project-assigned name. Open vendor pti.close_rf_sel field. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -5223,8 +6235,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn tx_abort_en_9_14(self) -> u8 {
-                ((self.0 >> 9) & 0x3f) as u8
+            pub const fn tx_abort_en_9_14(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
             }
 
             /// Project-assigned name. Enable bit of abort reason 16 (rx ack timeout).
@@ -5253,8 +6265,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn tx_abort_en_19_22(self) -> u8 {
-                ((self.0 >> 19) & 0xf) as u8
+            pub const fn tx_abort_en_19_22(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
             }
 
             /// Project-assigned name. Enable bit of abort reason 24 (cca failed).
@@ -5271,8 +6283,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn tx_abort_en_25_30(self) -> u8 {
-                ((self.0 >> 25) & 0x3f) as u8
+            pub const fn tx_abort_en_25_30(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
             }
         }
 
@@ -5336,8 +6348,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor tx_abort_en field, bits 14:9; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn tx_abort_en_9_14(&self) -> u8 {
-                ((self.0 >> 9) & 0x3f) as u8
+            pub const fn tx_abort_en_9_14(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
             }
 
             /// Project-assigned name. Enable bit of abort reason 16 (rx ack timeout).
@@ -5366,8 +6378,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor tx_abort_en field, bits 22:19; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn tx_abort_en_19_22(&self) -> u8 {
-                ((self.0 >> 19) & 0xf) as u8
+            pub const fn tx_abort_en_19_22(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
             }
 
             /// Project-assigned name. Enable bit of abort reason 24 (cca failed).
@@ -5384,8 +6396,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Partition of the open vendor tx_abort_en field, bits 30:25; no individual event/reason meaning is assigned. SOURCE: ESP_IDF_4D59230D_C5_IEEE802154_STRUCT.
             #[inline]
-            pub const fn tx_abort_en_25_30(&self) -> u8 {
-                ((self.0 >> 25) & 0x3f) as u8
+            pub const fn tx_abort_en_25_30(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
             }
 
             /// Set `RX_ACK_STOP`.
@@ -5611,14 +6623,14 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name.
             #[inline]
-            pub const fn filter_fail_reason(self) -> u8 {
-                (self.0 & 0xf) as u8
+            pub const fn filter_fail_reason(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Project-assigned name.
             #[inline]
-            pub const fn abort_reason(self) -> u8 {
-                ((self.0 >> 4) & 0x1f) as u8
+            pub const fn abort_reason(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
             }
 
             /// The `ABORT_REASON` field as its declared value, if it is one.
@@ -5629,8 +6641,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name. Three-bit receive state. The public LL only establishes that value one is RECEIVE_SFD and tests for later states with a greater-than comparison.
             #[inline]
-            pub const fn state(self) -> u8 {
-                ((self.0 >> 16) & 0x7) as u8
+            pub const fn state(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
             }
 
             /// The `PREAMBLE_MATCH` field.
@@ -5753,14 +6765,14 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name.
             #[inline]
-            pub const fn state(self) -> u8 {
-                (self.0 & 0xf) as u8
+            pub const fn state(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Project-assigned name.
             #[inline]
-            pub const fn abort_reason(self) -> u8 {
-                ((self.0 >> 4) & 0x1f) as u8
+            pub const fn abort_reason(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
             }
 
             /// The `ABORT_REASON` field as its declared value, if it is one.
@@ -5771,8 +6783,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name.
             #[inline]
-            pub const fn security_error(self) -> u8 {
-                ((self.0 >> 16) & 0xf) as u8
+            pub const fn security_error(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
             }
 
             /// The `SECURITY_ERROR` field as its declared value, if it is one.
@@ -5887,8 +6899,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Project-assigned name.
             #[inline]
-            pub const fn sfd_wait_symbol_num(self) -> u8 {
-                (self.0 & 0xf) as u8
+            pub const fn sfd_wait_symbol_num(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
             }
         }
 
@@ -5898,8 +6910,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Project-assigned name.
             #[inline]
-            pub const fn sfd_wait_symbol_num(&self) -> u8 {
-                (self.0 & 0xf) as u8
+            pub const fn sfd_wait_symbol_num(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Set `SFD_WAIT_SYMBOL_NUM`.
@@ -5947,8 +6959,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Ten-bit preserving field written with literal 40 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn txon_delay(self) -> u16 {
-                (self.0 & 0x3ff) as u16
+            pub const fn txon_delay(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0)
             }
         }
 
@@ -5958,8 +6970,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Ten-bit preserving field written with literal 40 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn txon_delay(&self) -> u16 {
-                (self.0 & 0x3ff) as u16
+            pub const fn txon_delay(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Set `TXON_DELAY`.
@@ -5987,8 +6999,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Six-bit preserving field cleared to 0 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn txoff_delay(self) -> u8 {
-                (self.0 & 0x3f) as u8
+            pub const fn txoff_delay(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
             }
         }
 
@@ -5998,8 +7010,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Six-bit preserving field cleared to 0 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn txoff_delay(&self) -> u8 {
-                (self.0 & 0x3f) as u8
+            pub const fn txoff_delay(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Set `TXOFF_DELAY`.
@@ -6027,8 +7039,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Eleven-bit preserving field written with literal 50 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn rxon_delay(self) -> u16 {
-                (self.0 & 0x7ff) as u16
+            pub const fn rxon_delay(self) -> oer_mmio::Bits<11> {
+                oer_mmio::Bits::truncate(self.0)
             }
         }
 
@@ -6038,8 +7050,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Eleven-bit preserving field written with literal 50 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn rxon_delay(&self) -> u16 {
-                (self.0 & 0x7ff) as u16
+            pub const fn rxon_delay(&self) -> oer_mmio::Bits<11> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Set `RXON_DELAY`.
@@ -6067,8 +7079,8 @@ pub mod ieee802154_mac {
         impl R {
             /// Ten-bit preserving field written with literal 122 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn txrx_switch_delay(self) -> u16 {
-                (self.0 & 0x3ff) as u16
+            pub const fn txrx_switch_delay(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0)
             }
         }
 
@@ -6078,8 +7090,8 @@ pub mod ieee802154_mac {
         impl W {
             /// Ten-bit preserving field written with literal 122 by ieee802154_txon_delay_set.
             #[inline]
-            pub const fn txrx_switch_delay(&self) -> u16 {
-                (self.0 & 0x3ff) as u16
+            pub const fn txrx_switch_delay(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0)
             }
 
             /// Set `TXRX_SWITCH_DELAY`.
@@ -6113,8 +7125,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name.
             #[inline]
-            pub const fn payload_offset(self) -> u8 {
-                ((self.0 >> 8) & 0x7f) as u8
+            pub const fn payload_offset(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
             }
         }
 
@@ -6130,8 +7142,8 @@ pub mod ieee802154_mac {
 
             /// Project-assigned name.
             #[inline]
-            pub const fn payload_offset(&self) -> u8 {
-                ((self.0 >> 8) & 0x7f) as u8
+            pub const fn payload_offset(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
             }
 
             /// Set `TX_ENABLE`.
@@ -6238,7 +7250,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn sfd_timeout_count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6260,7 +7272,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn crc_error_count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6282,7 +7294,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6304,7 +7316,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6326,7 +7338,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6348,7 +7360,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6370,7 +7382,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6392,7 +7404,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6414,7 +7426,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6436,7 +7448,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6458,7 +7470,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6480,7 +7492,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6502,7 +7514,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6524,7 +7536,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6546,7 +7558,7 @@ pub mod ieee802154_mac {
             /// Project-assigned name.
             #[inline]
             pub const fn count(self) -> u16 {
-                (self.0 & 0xffff) as u16
+                (self.0) as u16
             }
         }
     }
@@ -6788,3 +7800,10339 @@ pub mod ieee802154_mac {
         "replace_ieee802154_tx_abort_baseline replaces declared fields only"
     );
 }
+
+/// The `LP_AON_RADIO` register block.
+///
+/// ESP32-C5 LP_AON field the PHY's power-detector SAR initialization drives. Other fields remain absent and are preserved by every field transaction.
+pub mod lp_aon_radio {
+    /// The block's base address.
+    pub const BASE: usize = 0x600b1000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x58;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x54];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600b1000>, BlockWords>;
+
+    /// The exclusive owner of the `LP_AON_RADIO` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpAonRadio<P: oer_mmio::Placement = oer_mmio::Fixed<0x600b1000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpAonRadio {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpAonRadio<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpAonRadio<P> {
+        /// Read `SAR_CCT`.
+        #[inline]
+        pub fn read_sar_cct(&self) -> sar_cct::R {
+            sar_cct::R(self.0.read::<0x54>())
+        }
+
+        /// Read `SAR_CCT`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_sar_cct(&mut self, change: impl FnOnce(&mut sar_cct::W)) {
+            let mut value = sar_cct::W(self.0.read::<0x54>());
+            change(&mut value);
+            self.0.write::<0x54>(value.0);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`SAR_CCT`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_sar2_power_detector_capacitor(
+            &mut self,
+            value: super::PhySar2PowerDetectorCapacitor,
+        ) {
+            let input = value.bits();
+            let bits = self.0.read::<0x54>();
+            self.0
+                .write::<0x54>((bits & !0xe0000000) | ((input & 0x00000007) << 29));
+        }
+    }
+
+    /// The `SAR_CCT` register.
+    ///
+    /// SAR control word.
+    pub mod sar_cct {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xe0000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x54;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Three-bit SAR2 power-detector capacitor code.
+            #[inline]
+            pub const fn sar2_pwdet_cct(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Three-bit SAR2 power-detector capacitor code.
+            #[inline]
+            pub const fn sar2_pwdet_cct(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Set `SAR2_PWDET_CCT`.
+            #[inline]
+            pub fn set_sar2_pwdet_cct(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
+                self
+            }
+        }
+    }
+}
+
+/// The `MODEM_ETM` register block.
+///
+/// ESP32-C5 modem event-task matrix at MODEM_BASE + 0x8800. The public
+/// IEEE 802.15.4 driver names the channel-enable, set and clear words and the
+/// per-channel event/task pair at an eight-byte stride from 0x18, and programs
+/// channels zero and one. Other channels and identifiers remain absent and no
+/// reset values are claimed.
+pub mod modem_etm {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a8800;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x28;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0x18, 0x1c, 0x20, 0x24];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a8800>, BlockWords>;
+
+    /// The exclusive owner of the `MODEM_ETM` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct ModemEtm<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a8800>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl ModemEtm {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> ModemEtm<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> ModemEtm<P> {
+        /// Read `CHANNEL_ENABLE`.
+        #[inline]
+        pub fn read_channel_enable(&self) -> channel_enable::R {
+            channel_enable::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CHANNEL_ENABLE_SET`.
+        #[inline]
+        pub fn read_channel_enable_set(&self) -> channel_enable_set::R {
+            channel_enable_set::R(self.0.read::<0x4>())
+        }
+
+        /// Read `CHANNEL_ENABLE_SET`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_channel_enable_set(
+            &mut self,
+            change: impl FnOnce(&mut channel_enable_set::W),
+        ) {
+            let mut value = channel_enable_set::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `CHANNEL_ENABLE_CLEAR`.
+        #[inline]
+        pub fn read_channel_enable_clear(&self) -> channel_enable_clear::R {
+            channel_enable_clear::R(self.0.read::<0x8>())
+        }
+
+        /// Read `CHANNEL_ENABLE_CLEAR`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_channel_enable_clear(
+            &mut self,
+            change: impl FnOnce(&mut channel_enable_clear::W),
+        ) {
+            let mut value = channel_enable_clear::W(self.0.read::<0x8>());
+            change(&mut value);
+            self.0.write::<0x8>(value.0);
+        }
+
+        /// Read `CH%s_EVENT`.
+        #[inline]
+        pub fn read_ch_event(&self, index: oer_mmio::Index<2>) -> ch_event::R {
+            ch_event::R(self.0.read_indexed::<0x18, 0x8, 2>(index))
+        }
+
+        /// Read `CH%s_EVENT`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_ch_event(
+            &mut self,
+            index: oer_mmio::Index<2>,
+            change: impl FnOnce(&mut ch_event::W),
+        ) {
+            let mut value = ch_event::W(self.0.read_indexed::<0x18, 0x8, 2>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x18, 0x8, 2>(index, value.0);
+        }
+
+        /// Read `CH%s_TASK`.
+        #[inline]
+        pub fn read_ch_task(&self, index: oer_mmio::Index<2>) -> ch_task::R {
+            ch_task::R(self.0.read_indexed::<0x1c, 0x8, 2>(index))
+        }
+
+        /// Read `CH%s_TASK`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_ch_task(
+            &mut self,
+            index: oer_mmio::Index<2>,
+            change: impl FnOnce(&mut ch_task::W),
+        ) {
+            let mut value = ch_task::W(self.0.read_indexed::<0x1c, 0x8, 2>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x1c, 0x8, 2>(index, value.0);
+        }
+
+        /// Write the reviewed fixed images in order (`CH%s_EVENT`, `CH%s_TASK`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn route_ieee802154_etm_timer0_to_tx_start(&mut self) {
+            self.0
+                .write_indexed::<0x18, 0x8, 2>(oer_mmio::Index::constant::<0>(), 0x0000003b);
+            self.0
+                .write_indexed::<0x1c, 0x8, 2>(oer_mmio::Index::constant::<0>(), 0x00000045);
+        }
+
+        /// Write the reviewed fixed images in order (`CH%s_EVENT`, `CH%s_TASK`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn route_ieee802154_etm_timer0_to_ed_trig_tx(&mut self) {
+            self.0
+                .write_indexed::<0x18, 0x8, 2>(oer_mmio::Index::constant::<0>(), 0x0000003b);
+            self.0
+                .write_indexed::<0x1c, 0x8, 2>(oer_mmio::Index::constant::<0>(), 0x00000041);
+        }
+
+        /// Write the reviewed fixed images in order (`CH%s_EVENT`, `CH%s_TASK`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn route_ieee802154_etm_timer1_to_rx_start(&mut self) {
+            self.0
+                .write_indexed::<0x18, 0x8, 2>(oer_mmio::Index::constant::<1>(), 0x0000003a);
+            self.0
+                .write_indexed::<0x1c, 0x8, 2>(oer_mmio::Index::constant::<1>(), 0x00000042);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`CHANNEL_ENABLE_SET`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn enable_ieee802154_etm_channel0(&mut self) {
+            let bits = self.0.read::<0x4>();
+            self.0.write::<0x4>(bits | 0x00000001);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`CHANNEL_ENABLE_SET`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn enable_ieee802154_etm_channel1(&mut self) {
+            let bits = self.0.read::<0x4>();
+            self.0.write::<0x4>(bits | 0x00000002);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`CHANNEL_ENABLE_CLEAR`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn disable_ieee802154_etm_channel0(&mut self) {
+            let bits = self.0.read::<0x8>();
+            self.0.write::<0x8>(bits | 0x00000001);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`CHANNEL_ENABLE_CLEAR`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_IEEE802154_DRIVER_ETM.
+        #[inline]
+        pub fn disable_ieee802154_etm_channel1(&mut self) {
+            let bits = self.0.read::<0x8>();
+            self.0.write::<0x8>(bits | 0x00000002);
+        }
+    }
+
+    /// The `CHANNEL_ENABLE` register.
+    ///
+    /// Project-assigned name. Channel-enable status word. The IEEE 802.15.4 driver reads it to decide whether a channel must be disabled.
+    pub mod channel_enable {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Enabled state of channel 0.
+            #[inline]
+            pub const fn ch0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Enabled state of channel 1.
+            #[inline]
+            pub const fn ch1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+        }
+    }
+
+    /// The `CHANNEL_ENABLE_SET` register.
+    ///
+    /// Project-assigned name. Channel-enable set word. The IEEE 802.15.4 driver reads it and writes it back with the selected channel bit added; the effect of writing other bits is not reviewed.
+    pub mod channel_enable_set {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Enable request of channel 0.
+            #[inline]
+            pub const fn ch0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Enable request of channel 1.
+            #[inline]
+            pub const fn ch1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Enable request of channel 0.
+            #[inline]
+            pub const fn ch0(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Enable request of channel 1.
+            #[inline]
+            pub const fn ch1(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Set `CH0`.
+            #[inline]
+            pub fn set_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `CH1`.
+            #[inline]
+            pub fn set_ch1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+        }
+    }
+
+    /// The `CHANNEL_ENABLE_CLEAR` register.
+    ///
+    /// Project-assigned name. Channel-enable clear word. The IEEE 802.15.4 driver reads it and writes it back with the selected channel bit added, only when that channel is enabled.
+    pub mod channel_enable_clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000003;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Disable request of channel 0.
+            #[inline]
+            pub const fn ch0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Disable request of channel 1.
+            #[inline]
+            pub const fn ch1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Disable request of channel 0.
+            #[inline]
+            pub const fn ch0(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Disable request of channel 1.
+            #[inline]
+            pub const fn ch1(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Set `CH0`.
+            #[inline]
+            pub fn set_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `CH1`.
+            #[inline]
+            pub fn set_ch1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+        }
+    }
+
+    /// The `CH%s_EVENT` register.
+    ///
+    /// Project-assigned name. Complete event identifier monitored by the selected channel.
+    pub mod ch_event {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x18;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 2;
+
+        /// The declared values of the `ID` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Id {
+            Ieee802154Timer1Overflow = 0x3a,
+            Ieee802154Timer0Overflow = 0x3b,
+        }
+
+        impl Id {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x3a => Some(Self::Ieee802154Timer1Overflow),
+                    0x3b => Some(Self::Ieee802154Timer0Overflow),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Event identifier written as a complete word.
+            #[inline]
+            pub const fn id(self) -> u32 {
+                self.0
+            }
+
+            /// The `ID` field as its declared value, if it is one.
+            #[inline]
+            pub const fn id_variant(self) -> Option<Id> {
+                Id::from_bits(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Event identifier written as a complete word.
+            #[inline]
+            pub const fn id(&self) -> u32 {
+                self.0
+            }
+
+            /// The `ID` field as its declared value, if it is one.
+            #[inline]
+            pub const fn id_variant(&self) -> Option<Id> {
+                Id::from_bits(self.0)
+            }
+
+            /// Set `ID`.
+            #[inline]
+            pub fn set_id(&mut self, value: Id) -> &mut Self {
+                self.0 = value.bits();
+                self
+            }
+        }
+    }
+
+    /// The `CH%s_TASK` register.
+    ///
+    /// Project-assigned name. Complete task identifier triggered when the selected channel's event occurs.
+    pub mod ch_task {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x1c;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 2;
+
+        /// The declared values of the `ID` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Id {
+            Ieee802154EdTrigTx = 0x41,
+            Ieee802154RxStart = 0x42,
+            Ieee802154TxStart = 0x45,
+        }
+
+        impl Id {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x41 => Some(Self::Ieee802154EdTrigTx),
+                    0x42 => Some(Self::Ieee802154RxStart),
+                    0x45 => Some(Self::Ieee802154TxStart),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Task identifier written as a complete word.
+            #[inline]
+            pub const fn id(self) -> u32 {
+                self.0
+            }
+
+            /// The `ID` field as its declared value, if it is one.
+            #[inline]
+            pub const fn id_variant(self) -> Option<Id> {
+                Id::from_bits(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Task identifier written as a complete word.
+            #[inline]
+            pub const fn id(&self) -> u32 {
+                self.0
+            }
+
+            /// The `ID` field as its declared value, if it is one.
+            #[inline]
+            pub const fn id_variant(&self) -> Option<Id> {
+                Id::from_bits(self.0)
+            }
+
+            /// Set `ID`.
+            #[inline]
+            pub fn set_id(&mut self, value: Id) -> &mut Self {
+                self.0 = value.bits();
+                self
+            }
+        }
+    }
+
+    const _: () = assert!(
+        oer_mmio::check::within(0x0000003b, ch_event::FIELDS),
+        "route_ieee802154_etm_timer0_to_tx_start writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000045, ch_task::FIELDS),
+        "route_ieee802154_etm_timer0_to_tx_start writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x0000003b, ch_event::FIELDS),
+        "route_ieee802154_etm_timer0_to_ed_trig_tx writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000041, ch_task::FIELDS),
+        "route_ieee802154_etm_timer0_to_ed_trig_tx writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x0000003a, ch_event::FIELDS),
+        "route_ieee802154_etm_timer1_to_rx_start writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000042, ch_task::FIELDS),
+        "route_ieee802154_etm_timer1_to_rx_start writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000001, channel_enable_set::FIELDS),
+        "enable_ieee802154_etm_channel0 changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000002, channel_enable_set::FIELDS),
+        "enable_ieee802154_etm_channel1 changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000001, channel_enable_clear::FIELDS),
+        "disable_ieee802154_etm_channel0 changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000002, channel_enable_clear::FIELDS),
+        "disable_ieee802154_etm_channel1 changes declared fields only"
+    );
+}
+
+/// The `MODEM_LPCON_SHARED_CLOCK` register block.
+///
+/// ESP32-C5 MODEM_LPCON clock gate at MODEM_BASE + 0xF000 driven by the vendor
+/// COEXIST modem clock device, and the power-state map of the analog I2C master
+/// clock. Other fields remain absent and are preserved by every field
+/// transaction.
+pub mod modem_lpcon_shared_clock {
+    /// The block's base address.
+    pub const BASE: usize = 0x600af000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x24;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x18, 0x20];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600af000>, BlockWords>;
+
+    /// The exclusive owner of the `MODEM_LPCON_SHARED_CLOCK` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct ModemLpconSharedClock<P: oer_mmio::Placement = oer_mmio::Fixed<0x600af000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl ModemLpconSharedClock {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> ModemLpconSharedClock<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> ModemLpconSharedClock<P> {
+        /// Read `CLK_CONF`.
+        #[inline]
+        pub fn read_clk_conf(&self) -> clk_conf::R {
+            clk_conf::R(self.0.read::<0x18>())
+        }
+
+        /// Read `CLK_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_clk_conf(&mut self, change: impl FnOnce(&mut clk_conf::W)) {
+            let mut value = clk_conf::W(self.0.read::<0x18>());
+            change(&mut value);
+            self.0.write::<0x18>(value.0);
+        }
+
+        /// Read `CLK_CONF_POWER_ST`.
+        #[inline]
+        pub fn read_clk_conf_power_st(&self) -> clk_conf_power_st::R {
+            clk_conf_power_st::R(self.0.read::<0x20>())
+        }
+
+        /// Read `CLK_CONF_POWER_ST`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_clk_conf_power_st(&mut self, change: impl FnOnce(&mut clk_conf_power_st::W)) {
+            let mut value = clk_conf_power_st::W(self.0.read::<0x20>());
+            change(&mut value);
+            self.0.write::<0x20>(value.0);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_coexistence_clock(&mut self, value: super::ModemClockGateState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x18>();
+            self.0
+                .write::<0x18>((bits & !0x00000002) | ((input & 0x00000001) << 1));
+        }
+    }
+
+    /// The `CLK_CONF` register.
+    ///
+    /// Low-power modem clock gates.
+    pub mod clk_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x18;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the coexistence clock.
+            #[inline]
+            pub const fn clk_coex_en(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the analog register I2C master clock; the platform keeps its reference count.
+            #[inline]
+            pub const fn clk_i2c_mst_en(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_3_31_opaque(self) -> oer_mmio::Bits<29> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the coexistence clock.
+            #[inline]
+            pub const fn clk_coex_en(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Enable the analog register I2C master clock; the platform keeps its reference count.
+            #[inline]
+            pub const fn clk_i2c_mst_en(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_3_31_opaque(&self) -> oer_mmio::Bits<29> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
+            }
+
+            /// Set `CLK_COEX_EN`.
+            #[inline]
+            pub fn set_clk_coex_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `CLK_I2C_MST_EN`.
+            #[inline]
+            pub fn set_clk_i2c_mst_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `BIT_0_OPAQUE`.
+            #[inline]
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_3_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_3_31_opaque(&mut self, value: oer_mmio::Bits<29>) -> &mut Self {
+                self.0 = (self.0 & !0xfffffff8) | (value.get() << 3);
+                self
+            }
+        }
+    }
+
+    /// The `CLK_CONF_POWER_ST` register.
+    ///
+    /// PMU power states in which each low-power modem clock domain runs.
+    pub mod clk_conf_power_st {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x20;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// PMU power states in which the analog register I2C master clock runs, one bit
+            /// per state (SLEEP, MODEM, ACTIVE). On ESP32-C5 v1.0 the MODEM bit must stay
+            /// clear: it survives the HP-system reset of a USB Serial/JTAG RTS pulse, after
+            /// which the ROM boots into UART/SDIO download (docs/hardware-errata.md,
+            /// ESP32-C5 rev 1.0 USB Serial/JTAG reset erratum).
+            #[inline]
+            pub const fn clk_i2c_mst_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_23_opaque(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_31_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// PMU power states in which the analog register I2C master clock runs, one bit
+            /// per state (SLEEP, MODEM, ACTIVE). On ESP32-C5 v1.0 the MODEM bit must stay
+            /// clear: it survives the HP-system reset of a USB Serial/JTAG RTS pulse, after
+            /// which the ROM boots into UART/SDIO download (docs/hardware-errata.md,
+            /// ESP32-C5 rev 1.0 USB Serial/JTAG reset erratum).
+            #[inline]
+            pub const fn clk_i2c_mst_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_23_opaque(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_31_opaque(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Set `CLK_I2C_MST_ST_MAP`.
+            #[inline]
+            pub fn set_clk_i2c_mst_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0f000000) | (value.get() << 24);
+                self
+            }
+
+            /// Set `BITS_0_23_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_23_opaque(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+                self.0 = (self.0 & !0x00ffffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_28_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_28_31_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0xf0000000) | (value.get() << 28);
+                self
+            }
+        }
+    }
+}
+
+/// The `MODEM_SYSCON_RADIO` register block.
+///
+/// ESP32-C5 MODEM_SYSCON clock gates and resets at MODEM_BASE + 0x9C00 driven
+/// by the vendor modem clock devices of the IEEE 802.15.4 module (802154_MAC,
+/// BT_I154_COMMON_BB, ETM, BT_APB) and its MAC reset. Other fields remain absent
+/// and are preserved by every field transaction.
+pub mod modem_syscon_radio {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a9c00;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x18;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x4, 0xc, 0x10, 0x14];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a9c00>, BlockWords>;
+
+    /// The exclusive owner of the `MODEM_SYSCON_RADIO` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct ModemSysconRadio<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a9c00>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl ModemSysconRadio {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> ModemSysconRadio<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> ModemSysconRadio<P> {
+        /// Read `CLK_CONF`.
+        #[inline]
+        pub fn read_clk_conf(&self) -> clk_conf::R {
+            clk_conf::R(self.0.read::<0x4>())
+        }
+
+        /// Read `CLK_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_clk_conf(&mut self, change: impl FnOnce(&mut clk_conf::W)) {
+            let mut value = clk_conf::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `CLK_CONF_POWER_ST`.
+        #[inline]
+        pub fn read_clk_conf_power_st(&self) -> clk_conf_power_st::R {
+            clk_conf_power_st::R(self.0.read::<0xc>())
+        }
+
+        /// Read `CLK_CONF_POWER_ST`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_clk_conf_power_st(&mut self, change: impl FnOnce(&mut clk_conf_power_st::W)) {
+            let mut value = clk_conf_power_st::W(self.0.read::<0xc>());
+            change(&mut value);
+            self.0.write::<0xc>(value.0);
+        }
+
+        /// Read `MODEM_RST_CONF`.
+        #[inline]
+        pub fn read_modem_rst_conf(&self) -> modem_rst_conf::R {
+            modem_rst_conf::R(self.0.read::<0x10>())
+        }
+
+        /// Read `MODEM_RST_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_modem_rst_conf(&mut self, change: impl FnOnce(&mut modem_rst_conf::W)) {
+            let mut value = modem_rst_conf::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+
+        /// Read `CLK_CONF1`.
+        #[inline]
+        pub fn read_clk_conf1(&self) -> clk_conf1::R {
+            clk_conf1::R(self.0.read::<0x14>())
+        }
+
+        /// Read `CLK_CONF1`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_clk_conf1(&mut self, change: impl FnOnce(&mut clk_conf1::W)) {
+            let mut value = clk_conf1::W(self.0.read::<0x14>());
+            change(&mut value);
+            self.0.write::<0x14>(value.0);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_ieee802154_apb_clock(&mut self, value: super::ModemClockGateState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x4>();
+            self.0
+                .write::<0x4>((bits & !0x00800000) | ((input & 0x00000001) << 23));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_ieee802154_mac_clock(&mut self, value: super::ModemClockGateState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x4>();
+            self.0
+                .write::<0x4>((bits & !0x01000000) | ((input & 0x00000001) << 24));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_etm_clock(&mut self, value: super::ModemClockGateState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x4>();
+            self.0
+                .write::<0x4>((bits & !0x00400000) | ((input & 0x00000001) << 22));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_modem_security_apb_clock(&mut self, value: super::ModemClockGateState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x4>();
+            self.0
+                .write::<0x4>((bits & !0x10000000) | ((input & 0x00000001) << 28));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF1`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_bluetooth_apb_clock(&mut self, value: super::ModemClockGateState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x14>();
+            self.0
+                .write::<0x14>((bits & !0x00010000) | ((input & 0x00000001) << 16));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`CLK_CONF1`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_bluetooth_ieee802154_baseband_clock(
+            &mut self,
+            value: super::ModemClockGateState,
+        ) {
+            let input = value.bits();
+            let bits = self.0.read::<0x14>();
+            self.0
+                .write::<0x14>((bits & !0x00020000) | ((input & 0x00000001) << 17));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`MODEM_RST_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_ieee802154_mac_reset(&mut self, value: super::ModemResetState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x10>();
+            self.0
+                .write::<0x10>((bits & !0x01000000) | ((input & 0x00000001) << 24));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`MODEM_RST_CONF`).
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_C5_MODEM_CLOCK, ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT, HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27.
+        #[inline]
+        pub fn set_ieee802154_apb_reset(&mut self, value: super::ModemResetState) {
+            let input = value.bits();
+            let bits = self.0.read::<0x10>();
+            self.0
+                .write::<0x10>((bits & !0x00800000) | ((input & 0x00000001) << 23));
+        }
+    }
+
+    /// The `CLK_CONF` register.
+    ///
+    /// Modem clock selectors and protocol clock gates.
+    pub mod clk_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xfffffffd;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the modem ETM clock.
+            #[inline]
+            pub const fn clk_etm_en(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Enable the IEEE 802.15.4 APB clock.
+            #[inline]
+            pub const fn clk_zb_apb_en(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Enable the IEEE 802.15.4 MAC clock.
+            #[inline]
+            pub const fn clk_zbmac_en(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Enable the modem-security APB clock.
+            #[inline]
+            pub const fn clk_modem_sec_apb_en(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_2_21_opaque(self) -> oer_mmio::Bits<20> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_25_27_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the modem ETM clock.
+            #[inline]
+            pub const fn clk_etm_en(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Enable the IEEE 802.15.4 APB clock.
+            #[inline]
+            pub const fn clk_zb_apb_en(&self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Enable the IEEE 802.15.4 MAC clock.
+            #[inline]
+            pub const fn clk_zbmac_en(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Enable the modem-security APB clock.
+            #[inline]
+            pub const fn clk_modem_sec_apb_en(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_2_21_opaque(&self) -> oer_mmio::Bits<20> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_25_27_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Set `CLK_ETM_EN`.
+            #[inline]
+            pub fn set_clk_etm_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+
+            /// Set `CLK_ZB_APB_EN`.
+            #[inline]
+            pub fn set_clk_zb_apb_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                self
+            }
+
+            /// Set `CLK_ZBMAC_EN`.
+            #[inline]
+            pub fn set_clk_zbmac_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `CLK_MODEM_SEC_APB_EN`.
+            #[inline]
+            pub fn set_clk_modem_sec_apb_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `BIT_0_OPAQUE`.
+            #[inline]
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_2_21_OPAQUE`.
+            #[inline]
+            pub fn set_bits_2_21_opaque(&mut self, value: oer_mmio::Bits<20>) -> &mut Self {
+                self.0 = (self.0 & !0x003ffffc) | (value.get() << 2);
+                self
+            }
+
+            /// Set `BITS_25_27_OPAQUE`.
+            #[inline]
+            pub fn set_bits_25_27_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x0e000000) | (value.get() << 25);
+                self
+            }
+
+            /// Set `BITS_29_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_29_31_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
+                self
+            }
+        }
+    }
+
+    /// The `CLK_CONF_POWER_ST` register.
+    ///
+    /// Modem clock power-state mapping. Only the documented fields at bits 31:8 have a known zero reset; bits 7:0 remain unknown. SOURCE: ESP_IDF_4D59230D_C5_MODEM_SYSCON_POWER_ST_RESET.
+    pub mod clk_conf_power_st {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffff00;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Power states that enable the IEEE 802.15.4 clock domain.
+            #[inline]
+            pub const fn clk_zb_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Power states that enable the front-end clock domain.
+            #[inline]
+            pub const fn clk_fe_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// Power states that enable the Bluetooth clock domain.
+            #[inline]
+            pub const fn clk_bt_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Power states that enable the Wi-Fi clock domain.
+            #[inline]
+            pub const fn clk_wifi_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Power states that enable the modem peripheral clock domain.
+            #[inline]
+            pub const fn clk_modem_peri_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
+            }
+
+            /// Power states that enable the modem APB clock domain.
+            #[inline]
+            pub const fn clk_modem_apb_st_map(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Power states that enable the IEEE 802.15.4 clock domain.
+            #[inline]
+            pub const fn clk_zb_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Power states that enable the front-end clock domain.
+            #[inline]
+            pub const fn clk_fe_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// Power states that enable the Bluetooth clock domain.
+            #[inline]
+            pub const fn clk_bt_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Power states that enable the Wi-Fi clock domain.
+            #[inline]
+            pub const fn clk_wifi_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Power states that enable the modem peripheral clock domain.
+            #[inline]
+            pub const fn clk_modem_peri_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
+            }
+
+            /// Power states that enable the modem APB clock domain.
+            #[inline]
+            pub const fn clk_modem_apb_st_map(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Set `CLK_ZB_ST_MAP`.
+            #[inline]
+            pub fn set_clk_zb_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x00000f00) | (value.get() << 8);
+                self
+            }
+
+            /// Set `CLK_FE_ST_MAP`.
+            #[inline]
+            pub fn set_clk_fe_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0000f000) | (value.get() << 12);
+                self
+            }
+
+            /// Set `CLK_BT_ST_MAP`.
+            #[inline]
+            pub fn set_clk_bt_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x000f0000) | (value.get() << 16);
+                self
+            }
+
+            /// Set `CLK_WIFI_ST_MAP`.
+            #[inline]
+            pub fn set_clk_wifi_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x00f00000) | (value.get() << 20);
+                self
+            }
+
+            /// Set `CLK_MODEM_PERI_ST_MAP`.
+            #[inline]
+            pub fn set_clk_modem_peri_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0f000000) | (value.get() << 24);
+                self
+            }
+
+            /// Set `CLK_MODEM_APB_ST_MAP`.
+            #[inline]
+            pub fn set_clk_modem_apb_st_map(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0xf0000000) | (value.get() << 28);
+                self
+            }
+        }
+    }
+
+    /// The `MODEM_RST_CONF` register.
+    ///
+    /// Modem protocol reset lines.
+    pub mod modem_rst_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x01800000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Hold the IEEE 802.15.4 APB interface in reset.
+            #[inline]
+            pub const fn rst_zbmac_apb(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Hold the IEEE 802.15.4 MAC in reset.
+            #[inline]
+            pub const fn rst_zbmac(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Hold the IEEE 802.15.4 APB interface in reset.
+            #[inline]
+            pub const fn rst_zbmac_apb(&self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Hold the IEEE 802.15.4 MAC in reset.
+            #[inline]
+            pub const fn rst_zbmac(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Set `RST_ZBMAC_APB`.
+            #[inline]
+            pub fn set_rst_zbmac_apb(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                self
+            }
+
+            /// Set `RST_ZBMAC`.
+            #[inline]
+            pub fn set_rst_zbmac(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+        }
+    }
+
+    /// The `CLK_CONF1` register.
+    ///
+    /// Wi-Fi, front-end and Bluetooth clock gates.
+    pub mod clk_conf1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x14;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the Bluetooth APB clock.
+            #[inline]
+            pub const fn clk_bt_apb_en(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Enable the baseband clock shared by Bluetooth LE and IEEE 802.15.4.
+            #[inline]
+            pub const fn clk_btbb_en(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_15_opaque(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_31_opaque(self) -> oer_mmio::Bits<14> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the Bluetooth APB clock.
+            #[inline]
+            pub const fn clk_bt_apb_en(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Enable the baseband clock shared by Bluetooth LE and IEEE 802.15.4.
+            #[inline]
+            pub const fn clk_btbb_en(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_15_opaque(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_31_opaque(&self) -> oer_mmio::Bits<14> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Set `CLK_BT_APB_EN`.
+            #[inline]
+            pub fn set_clk_bt_apb_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `CLK_BTBB_EN`.
+            #[inline]
+            pub fn set_clk_btbb_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
+                self
+            }
+
+            /// Set `BITS_0_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_15_opaque(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_18_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_18_31_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
+                self.0 = (self.0 & !0xfffc0000) | (value.get() << 18);
+                self
+            }
+        }
+    }
+}
+
+/// The `PCR_RADIO` register block.
+///
+/// ESP32-C5 PCR fields the PHY drives: the SAR ADC and temperature-sensor clocks and one word the public header does not describe. Other fields remain absent and are preserved by every field transaction.
+pub mod pcr_radio {
+    /// The block's base address.
+    pub const BASE: usize = 0x60096000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x150;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x88, 0x90, 0x14c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60096000>, BlockWords>;
+
+    /// The exclusive owner of the `PCR_RADIO` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct PcrRadio<P: oer_mmio::Placement = oer_mmio::Fixed<0x60096000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl PcrRadio {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> PcrRadio<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> PcrRadio<P> {
+        /// Read `SARADC_CONF`.
+        #[inline]
+        pub fn read_saradc_conf(&self) -> saradc_conf::R {
+            saradc_conf::R(self.0.read::<0x88>())
+        }
+
+        /// Read `SARADC_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_saradc_conf(&mut self, change: impl FnOnce(&mut saradc_conf::W)) {
+            let mut value = saradc_conf::W(self.0.read::<0x88>());
+            change(&mut value);
+            self.0.write::<0x88>(value.0);
+        }
+
+        /// Read `TSENS_CLK_CONF`.
+        #[inline]
+        pub fn read_tsens_clk_conf(&self) -> tsens_clk_conf::R {
+            tsens_clk_conf::R(self.0.read::<0x90>())
+        }
+
+        /// Read `TSENS_CLK_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_tsens_clk_conf(&mut self, change: impl FnOnce(&mut tsens_clk_conf::W)) {
+            let mut value = tsens_clk_conf::W(self.0.read::<0x90>());
+            change(&mut value);
+            self.0.write::<0x90>(value.0);
+        }
+
+        /// Read `WORD_014C_OPAQUE`.
+        #[inline]
+        pub fn read_word_014c_opaque(&self) -> word_014c_opaque::R {
+            word_014c_opaque::R(self.0.read::<0x14c>())
+        }
+
+        /// Read `WORD_014C_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_014c_opaque(&mut self, change: impl FnOnce(&mut word_014c_opaque::W)) {
+            let mut value = word_014c_opaque::W(self.0.read::<0x14c>());
+            change(&mut value);
+            self.0.write::<0x14c>(value.0);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`SARADC_CONF`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn enable_saradc_register_clock(&mut self) {
+            let bits = self.0.read::<0x88>();
+            self.0.write::<0x88>(bits | 0x00000004);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`SARADC_CONF`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn enable_saradc_clocks(&mut self) {
+            let bits = self.0.read::<0x88>();
+            self.0.write::<0x88>(bits | 0x00000005);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`TSENS_CLK_CONF`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn enable_tsens_clock(&mut self) {
+            let bits = self.0.read::<0x90>();
+            self.0.write::<0x90>(bits | 0x00500000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`WORD_014C_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn set_pcr_register_014c_low_byte(&mut self) {
+            let bits = self.0.read::<0x14c>();
+            self.0.write::<0x14c>((bits & !0x000000ff) | 0x0000000a);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`TSENS_CLK_CONF`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_4, ESP_IDF_4D59230D_C5_PCR_TSENS.
+        #[inline]
+        pub fn release_tsens_reset(&mut self) {
+            let bits = self.0.read::<0x90>();
+            self.0.write::<0x90>(bits & !0x00800000);
+        }
+    }
+
+    /// The `SARADC_CONF` register.
+    ///
+    /// SAR ADC clock and reset.
+    pub mod saradc_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000005;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x88;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enable the SAR ADC clock.
+            #[inline]
+            pub const fn saradc_clk_en(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the SAR ADC register clock.
+            #[inline]
+            pub const fn saradc_reg_clk_en(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enable the SAR ADC clock.
+            #[inline]
+            pub const fn saradc_clk_en(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Enable the SAR ADC register clock.
+            #[inline]
+            pub const fn saradc_reg_clk_en(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Set `SARADC_CLK_EN`.
+            #[inline]
+            pub fn set_saradc_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `SARADC_REG_CLK_EN`.
+            #[inline]
+            pub fn set_saradc_reg_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+        }
+    }
+
+    /// The `TSENS_CLK_CONF` register.
+    ///
+    /// Temperature-sensor clock and reset.
+    pub mod tsens_clk_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00d00000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x90;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Select the temperature-sensor clock source.
+            #[inline]
+            pub const fn tsens_clk_sel(self) -> bool {
+                (self.0 & 0x00100000) != 0
+            }
+
+            /// Enable the temperature-sensor clock.
+            #[inline]
+            pub const fn tsens_clk_en(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Hold the temperature sensor in reset.
+            #[inline]
+            pub const fn tsens_rst_en(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Select the temperature-sensor clock source.
+            #[inline]
+            pub const fn tsens_clk_sel(&self) -> bool {
+                (self.0 & 0x00100000) != 0
+            }
+
+            /// Enable the temperature-sensor clock.
+            #[inline]
+            pub const fn tsens_clk_en(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Hold the temperature sensor in reset.
+            #[inline]
+            pub const fn tsens_rst_en(&self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Set `TSENS_CLK_SEL`.
+            #[inline]
+            pub fn set_tsens_clk_sel(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                self
+            }
+
+            /// Set `TSENS_CLK_EN`.
+            #[inline]
+            pub fn set_tsens_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+
+            /// Set `TSENS_RST_EN`.
+            #[inline]
+            pub fn set_tsens_rst_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_014C_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. The public struct reserves the whole word between PCR_SAR_CLK_DIV and PCR_BS_CONF, but pinned phy_rf_init and phy_wakeup_init explicitly replace its low byte with 0x0A; that direct use overrides the reserved claim on low8 only.
+    pub mod word_014c_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000000ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x14c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Low byte; meaning unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Low byte; meaning unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000004, saradc_conf::FIELDS),
+        "enable_saradc_register_clock changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000005, saradc_conf::FIELDS),
+        "enable_saradc_clocks changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00500000, tsens_clk_conf::FIELDS),
+        "enable_tsens_clock changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x0000000a, 0x000000ff)
+            && oer_mmio::check::within(0x000000ff, word_014c_opaque::FIELDS),
+        "set_pcr_register_014c_low_byte replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00800000)
+            && oer_mmio::check::within(0x00800000, tsens_clk_conf::FIELDS),
+        "release_tsens_reset replaces declared fields only"
+    );
+}
+
+/// The `PHY_BASEBAND_CONFIG` register block.
+///
+/// ESP32-C5 PHY baseband configuration words recovered from complete pinned
+/// libphy leaves. Operation-derived fields keep UNKNOWN where no public
+/// documentation establishes their electrical meaning.
+pub mod phy_baseband_config {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a0000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x7c84;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[
+            0x400, 0x408, 0x40c, 0x434, 0x438, 0x43c, 0x444, 0x448, 0x800, 0x808, 0x80c, 0x810,
+            0x814, 0x818, 0x870, 0x888, 0x894, 0xc04, 0xc08, 0xc0c, 0xc20, 0x7920, 0x7a34, 0x7a38,
+            0x7c50, 0x7c80,
+        ];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a0000>, BlockWords>;
+
+    /// The exclusive owner of the `PHY_BASEBAND_CONFIG` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct PhyBasebandConfig<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a0000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl PhyBasebandConfig {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> PhyBasebandConfig<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> PhyBasebandConfig<P> {
+        /// Read `FE_CLOCK_GATE`.
+        #[inline]
+        pub fn read_fe_clock_gate(&self) -> fe_clock_gate::R {
+            fe_clock_gate::R(self.0.read::<0x400>())
+        }
+
+        /// Read `FE_CLOCK_GATE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_fe_clock_gate(&mut self, change: impl FnOnce(&mut fe_clock_gate::W)) {
+            let mut value = fe_clock_gate::W(self.0.read::<0x400>());
+            change(&mut value);
+            self.0.write::<0x400>(value.0);
+        }
+
+        /// Read `TABLE_MEMORY_INDEX_SOURCE`.
+        #[inline]
+        pub fn read_table_memory_index_source(&self) -> table_memory_index_source::R {
+            table_memory_index_source::R(self.0.read::<0x408>())
+        }
+
+        /// Read `TABLE_MEMORY_INDEX_SOURCE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_table_memory_index_source(
+            &mut self,
+            change: impl FnOnce(&mut table_memory_index_source::W),
+        ) {
+            let mut value = table_memory_index_source::W(self.0.read::<0x408>());
+            change(&mut value);
+            self.0.write::<0x408>(value.0);
+        }
+
+        /// Read `FRONT_END_AND_TONE_STOP_CONTROL`.
+        #[inline]
+        pub fn read_front_end_and_tone_stop_control(&self) -> front_end_and_tone_stop_control::R {
+            front_end_and_tone_stop_control::R(self.0.read::<0x40c>())
+        }
+
+        /// Read `FRONT_END_AND_TONE_STOP_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_front_end_and_tone_stop_control(
+            &mut self,
+            change: impl FnOnce(&mut front_end_and_tone_stop_control::W),
+        ) {
+            let mut value = front_end_and_tone_stop_control::W(self.0.read::<0x40c>());
+            change(&mut value);
+            self.0.write::<0x40c>(value.0);
+        }
+
+        /// Read `RX_DCO_CONTROL`.
+        #[inline]
+        pub fn read_rx_dco_control(&self) -> rx_dco_control::R {
+            rx_dco_control::R(self.0.read::<0x434>())
+        }
+
+        /// Read `RX_DCO_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rx_dco_control(&mut self, change: impl FnOnce(&mut rx_dco_control::W)) {
+            let mut value = rx_dco_control::W(self.0.read::<0x434>());
+            change(&mut value);
+            self.0.write::<0x434>(value.0);
+        }
+
+        /// Read `IQ_CORRECTION_CONTROL`.
+        #[inline]
+        pub fn read_iq_correction_control(&self) -> iq_correction_control::R {
+            iq_correction_control::R(self.0.read::<0x438>())
+        }
+
+        /// Read `IQ_CORRECTION_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_iq_correction_control(
+            &mut self,
+            change: impl FnOnce(&mut iq_correction_control::W),
+        ) {
+            let mut value = iq_correction_control::W(self.0.read::<0x438>());
+            change(&mut value);
+            self.0.write::<0x438>(value.0);
+        }
+
+        /// Read `RX_IQ_SCALE`.
+        #[inline]
+        pub fn read_rx_iq_scale(&self) -> rx_iq_scale::R {
+            rx_iq_scale::R(self.0.read::<0x43c>())
+        }
+
+        /// Read `RX_IQ_SCALE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rx_iq_scale(&mut self, change: impl FnOnce(&mut rx_iq_scale::W)) {
+            let mut value = rx_iq_scale::W(self.0.read::<0x43c>());
+            change(&mut value);
+            self.0.write::<0x43c>(value.0);
+        }
+
+        /// Read `FRONT_END_CLEAR_CONTROL`.
+        #[inline]
+        pub fn read_front_end_clear_control(&self) -> front_end_clear_control::R {
+            front_end_clear_control::R(self.0.read::<0x444>())
+        }
+
+        /// Read `FRONT_END_CLEAR_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_front_end_clear_control(
+            &mut self,
+            change: impl FnOnce(&mut front_end_clear_control::W),
+        ) {
+            let mut value = front_end_clear_control::W(self.0.read::<0x444>());
+            change(&mut value);
+            self.0.write::<0x444>(value.0);
+        }
+
+        /// Read `ADC_RATE_AND_FRONT_END_CONTROL`.
+        #[inline]
+        pub fn read_adc_rate_and_front_end_control(&self) -> adc_rate_and_front_end_control::R {
+            adc_rate_and_front_end_control::R(self.0.read::<0x448>())
+        }
+
+        /// Read `ADC_RATE_AND_FRONT_END_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_adc_rate_and_front_end_control(
+            &mut self,
+            change: impl FnOnce(&mut adc_rate_and_front_end_control::W),
+        ) {
+            let mut value = adc_rate_and_front_end_control::W(self.0.read::<0x448>());
+            change(&mut value);
+            self.0.write::<0x448>(value.0);
+        }
+
+        /// Read `FE_BB_CLOCK_CONTROL`.
+        #[inline]
+        pub fn read_fe_bb_clock_control(&self) -> fe_bb_clock_control::R {
+            fe_bb_clock_control::R(self.0.read::<0x800>())
+        }
+
+        /// Read `FE_BB_CLOCK_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_fe_bb_clock_control(
+            &mut self,
+            change: impl FnOnce(&mut fe_bb_clock_control::W),
+        ) {
+            let mut value = fe_bb_clock_control::W(self.0.read::<0x800>());
+            change(&mut value);
+            self.0.write::<0x800>(value.0);
+        }
+
+        /// Read `POWER_DETECTOR_CONTROL`.
+        #[inline]
+        pub fn read_power_detector_control(&self) -> power_detector_control::R {
+            power_detector_control::R(self.0.read::<0x808>())
+        }
+
+        /// Read `POWER_DETECTOR_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_power_detector_control(
+            &mut self,
+            change: impl FnOnce(&mut power_detector_control::W),
+        ) {
+            let mut value = power_detector_control::W(self.0.read::<0x808>());
+            change(&mut value);
+            self.0.write::<0x808>(value.0);
+        }
+
+        /// Read `POWER_DETECTOR_SAR_CONTROL_STATUS`.
+        #[inline]
+        pub fn read_power_detector_sar_control_status(
+            &self,
+        ) -> power_detector_sar_control_status::R {
+            power_detector_sar_control_status::R(self.0.read::<0x80c>())
+        }
+
+        /// Read `POWER_DETECTOR_SAR_CONTROL_STATUS`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_power_detector_sar_control_status(
+            &mut self,
+            change: impl FnOnce(&mut power_detector_sar_control_status::W),
+        ) {
+            let mut value = power_detector_sar_control_status::W(self.0.read::<0x80c>());
+            change(&mut value);
+            self.0.write::<0x80c>(value.0);
+        }
+
+        /// Read `WORD_0810_OPAQUE`.
+        #[inline]
+        pub fn read_word_0810_opaque(&self) -> word_0810_opaque::R {
+            word_0810_opaque::R(self.0.read::<0x810>())
+        }
+
+        /// Read `WORD_0814_OPAQUE`.
+        #[inline]
+        pub fn read_word_0814_opaque(&self) -> word_0814_opaque::R {
+            word_0814_opaque::R(self.0.read::<0x814>())
+        }
+
+        /// Read `WORD_0814_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_0814_opaque(&mut self, change: impl FnOnce(&mut word_0814_opaque::W)) {
+            let mut value = word_0814_opaque::W(self.0.read::<0x814>());
+            change(&mut value);
+            self.0.write::<0x814>(value.0);
+        }
+
+        /// Read `POWER_DETECTOR_REFERENCE`.
+        #[inline]
+        pub fn read_power_detector_reference(&self) -> power_detector_reference::R {
+            power_detector_reference::R(self.0.read::<0x818>())
+        }
+
+        /// Read `POWER_DETECTOR_REFERENCE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_power_detector_reference(
+            &mut self,
+            change: impl FnOnce(&mut power_detector_reference::W),
+        ) {
+            let mut value = power_detector_reference::W(self.0.read::<0x818>());
+            change(&mut value);
+            self.0.write::<0x818>(value.0);
+        }
+
+        /// Read `TX_PA_CONTROL_1`.
+        #[inline]
+        pub fn read_tx_pa_control_1(&self) -> tx_pa_control_1::R {
+            tx_pa_control_1::R(self.0.read::<0x870>())
+        }
+
+        /// Read `TX_PA_CONTROL_1`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_tx_pa_control_1(&mut self, change: impl FnOnce(&mut tx_pa_control_1::W)) {
+            let mut value = tx_pa_control_1::W(self.0.read::<0x870>());
+            change(&mut value);
+            self.0.write::<0x870>(value.0);
+        }
+
+        /// Read `WORD_0888_OPAQUE`.
+        #[inline]
+        pub fn read_word_0888_opaque(&self) -> word_0888_opaque::R {
+            word_0888_opaque::R(self.0.read::<0x888>())
+        }
+
+        /// Read `WORD_0888_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_0888_opaque(&mut self, change: impl FnOnce(&mut word_0888_opaque::W)) {
+            let mut value = word_0888_opaque::W(self.0.read::<0x888>());
+            change(&mut value);
+            self.0.write::<0x888>(value.0);
+        }
+
+        /// Read `WORD_0894_OPAQUE`.
+        #[inline]
+        pub fn read_word_0894_opaque(&self) -> word_0894_opaque::R {
+            word_0894_opaque::R(self.0.read::<0x894>())
+        }
+
+        /// Read `WORD_0894_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_0894_opaque(&mut self, change: impl FnOnce(&mut word_0894_opaque::W)) {
+            let mut value = word_0894_opaque::W(self.0.read::<0x894>());
+            change(&mut value);
+            self.0.write::<0x894>(value.0);
+        }
+
+        /// Read `DAC_SCALE`.
+        #[inline]
+        pub fn read_dac_scale(&self) -> dac_scale::R {
+            dac_scale::R(self.0.read::<0xc04>())
+        }
+
+        /// Read `DAC_SCALE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_dac_scale(&mut self, change: impl FnOnce(&mut dac_scale::W)) {
+            let mut value = dac_scale::W(self.0.read::<0xc04>());
+            change(&mut value);
+            self.0.write::<0xc04>(value.0);
+        }
+
+        /// Read `WORD_0C08_OPAQUE`.
+        #[inline]
+        pub fn read_word_0c08_opaque(&self) -> word_0c08_opaque::R {
+            word_0c08_opaque::R(self.0.read::<0xc08>())
+        }
+
+        /// Read `WORD_0C08_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_0c08_opaque(&mut self, change: impl FnOnce(&mut word_0c08_opaque::W)) {
+            let mut value = word_0c08_opaque::W(self.0.read::<0xc08>());
+            change(&mut value);
+            self.0.write::<0xc08>(value.0);
+        }
+
+        /// Read `IQ_CORRECTION_AUX`.
+        #[inline]
+        pub fn read_iq_correction_aux(&self) -> iq_correction_aux::R {
+            iq_correction_aux::R(self.0.read::<0xc0c>())
+        }
+
+        /// Read `IQ_CORRECTION_AUX`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_iq_correction_aux(&mut self, change: impl FnOnce(&mut iq_correction_aux::W)) {
+            let mut value = iq_correction_aux::W(self.0.read::<0xc0c>());
+            change(&mut value);
+            self.0.write::<0xc0c>(value.0);
+        }
+
+        /// Read `WORD_0C20_OPAQUE`.
+        #[inline]
+        pub fn read_word_0c20_opaque(&self) -> word_0c20_opaque::R {
+            word_0c20_opaque::R(self.0.read::<0xc20>())
+        }
+
+        /// Read `WORD_0C20_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_0c20_opaque(&mut self, change: impl FnOnce(&mut word_0c20_opaque::W)) {
+            let mut value = word_0c20_opaque::W(self.0.read::<0xc20>());
+            change(&mut value);
+            self.0.write::<0xc20>(value.0);
+        }
+
+        /// Read `WORD_7920_OPAQUE`.
+        #[inline]
+        pub fn read_word_7920_opaque(&self) -> word_7920_opaque::R {
+            word_7920_opaque::R(self.0.read::<0x7920>())
+        }
+
+        /// Read `WORD_7920_OPAQUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_word_7920_opaque(&mut self, change: impl FnOnce(&mut word_7920_opaque::W)) {
+            let mut value = word_7920_opaque::W(self.0.read::<0x7920>());
+            change(&mut value);
+            self.0.write::<0x7920>(value.0);
+        }
+
+        /// Read `RX_EVM_CONTROL`.
+        #[inline]
+        pub fn read_rx_evm_control(&self) -> rx_evm_control::R {
+            rx_evm_control::R(self.0.read::<0x7a34>())
+        }
+
+        /// Read `RX_EVM_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rx_evm_control(&mut self, change: impl FnOnce(&mut rx_evm_control::W)) {
+            let mut value = rx_evm_control::W(self.0.read::<0x7a34>());
+            change(&mut value);
+            self.0.write::<0x7a34>(value.0);
+        }
+
+        /// Read `RX_EVM_CONFIG`.
+        #[inline]
+        pub fn read_rx_evm_config(&self) -> rx_evm_config::R {
+            rx_evm_config::R(self.0.read::<0x7a38>())
+        }
+
+        /// Read `RX_EVM_CONFIG`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rx_evm_config(&mut self, change: impl FnOnce(&mut rx_evm_config::W)) {
+            let mut value = rx_evm_config::W(self.0.read::<0x7a38>());
+            change(&mut value);
+            self.0.write::<0x7a38>(value.0);
+        }
+
+        /// Read `RX_EVM_MEMORY_RESET`.
+        #[inline]
+        pub fn read_rx_evm_memory_reset(&self) -> rx_evm_memory_reset::R {
+            rx_evm_memory_reset::R(self.0.read::<0x7c50>())
+        }
+
+        /// Read `RX_EVM_MEMORY_RESET`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rx_evm_memory_reset(
+            &mut self,
+            change: impl FnOnce(&mut rx_evm_memory_reset::W),
+        ) {
+            let mut value = rx_evm_memory_reset::W(self.0.read::<0x7c50>());
+            change(&mut value);
+            self.0.write::<0x7c50>(value.0);
+        }
+
+        /// Read `BB_CLOCK_GATE`.
+        #[inline]
+        pub fn read_bb_clock_gate(&self) -> bb_clock_gate::R {
+            bb_clock_gate::R(self.0.read::<0x7c80>())
+        }
+
+        /// Read `BB_CLOCK_GATE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_bb_clock_gate(&mut self, change: impl FnOnce(&mut bb_clock_gate::W)) {
+            let mut value = bb_clock_gate::W(self.0.read::<0x7c80>());
+            change(&mut value);
+            self.0.write::<0x7c80>(value.0);
+        }
+
+        /// Write the fixed image `0x000001e7` (`FE_CLOCK_GATE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn open_phy_front_end_clock_gate(&mut self) {
+            self.0.write::<0x400>(0x000001e7);
+        }
+
+        /// Write the fixed image `0xffffffff` (`BB_CLOCK_GATE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn open_phy_baseband_clock_gate(&mut self) {
+            self.0.write::<0x7c80>(0xffffffff);
+        }
+
+        /// Write the vendor's whole-word image `0x0f0f0fff`, undeclared bits included (`WORD_0810_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_power_detector_word_810(&mut self) {
+            self.0.write::<0x810>(0x0f0f0fff);
+        }
+
+        /// Write the vendor's whole-word image `0x00ff0f64`, undeclared bits included (`WORD_0814_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_power_detector_word_814(&mut self) {
+            self.0.write::<0x814>(0x00ff0f64);
+        }
+
+        /// Write the fixed image `0x0000aaaa` (`POWER_DETECTOR_REFERENCE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_power_detector_reference(&mut self) {
+            self.0.write::<0x818>(0x0000aaaa);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`FE_BB_CLOCK_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn open_phy_fe_bb_clock(&mut self) {
+            let bits = self.0.read::<0x800>();
+            self.0.write::<0x800>(bits | 0x00000003);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`WORD_0C08_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_front_end_init_0c08(&mut self) {
+            let bits = self.0.read::<0xc08>();
+            self.0.write::<0xc08>(bits | 0x06000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`WORD_0894_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn enable_phy_front_end_0894(&mut self) {
+            let bits = self.0.read::<0x894>();
+            self.0.write::<0x894>(bits | 0x00400000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`FRONT_END_AND_TONE_STOP_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn enable_phy_front_end_init(&mut self) {
+            let bits = self.0.read::<0x40c>();
+            self.0.write::<0x40c>(bits | 0x00000004);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`IQ_CORRECTION_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_rx_iq_correction_modes(&mut self) {
+            let bits = self.0.read::<0x438>();
+            self.0.write::<0x438>(bits | 0xe0000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`IQ_CORRECTION_AUX`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_tx_iq_correction_modes(&mut self) {
+            let bits = self.0.read::<0xc0c>();
+            self.0.write::<0xc0c>(bits | 0x00006000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`WORD_0888_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_front_end_iq_swap(&mut self) {
+            let bits = self.0.read::<0x888>();
+            self.0.write::<0x888>(bits | 0x20000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`POWER_DETECTOR_SAR_CONTROL_STATUS`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_power_detector_sar_mode(&mut self) {
+            let bits = self.0.read::<0x80c>();
+            self.0.write::<0x80c>(bits | 0x00003000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`RX_EVM_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn assert_phy_rx_evm_memory_reset(&mut self) {
+            let bits = self.0.read::<0x7a34>();
+            self.0.write::<0x7a34>(bits | 0x00000002);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`RX_EVM_MEMORY_RESET`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn assert_phy_rx_evm_memory_reset_2(&mut self) {
+            let bits = self.0.read::<0x7c50>();
+            self.0.write::<0x7c50>(bits | 0x00000100);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ADC_RATE_AND_FRONT_END_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_adc_rate_high(&mut self, value: super::PhyRateBit) {
+            let input = value.bits();
+            let bits = self.0.read::<0x448>();
+            self.0
+                .write::<0x448>((bits & !0x00000002) | ((input & 0x00000001) << 1));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ADC_RATE_AND_FRONT_END_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn set_phy_adc_rate_low(&mut self, value: super::PhyRateBit) {
+            let input = value.bits();
+            let bits = self.0.read::<0x448>();
+            self.0
+                .write::<0x448>((bits & !0x00000001) | (input & 0x00000001));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ADC_RATE_AND_FRONT_END_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn clear_phy_dac_rate_high(&mut self) {
+            let bits = self.0.read::<0x448>();
+            self.0.write::<0x448>(bits & !0x00000008);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`ADC_RATE_AND_FRONT_END_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES.
+        #[inline]
+        pub fn clear_phy_dac_rate_low(&mut self) {
+            let bits = self.0.read::<0x448>();
+            self.0.write::<0x448>(bits & !0x00000004);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`WORD_0C08_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn clear_phy_front_end_init_0c08_first(&mut self) {
+            let bits = self.0.read::<0xc08>();
+            self.0.write::<0xc08>(bits & !0x02000000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_DCO_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn clear_phy_rx_dco_calibration_control(&mut self) {
+            let bits = self.0.read::<0x434>();
+            self.0.write::<0x434>(bits & !0x00c00000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`FRONT_END_CLEAR_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn clear_phy_front_end_clear_first(&mut self) {
+            let bits = self.0.read::<0x444>();
+            self.0.write::<0x444>(bits & !0x00000100);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`TABLE_MEMORY_INDEX_SOURCE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_table_memory_base_index(&mut self) {
+            let bits = self.0.read::<0x408>();
+            self.0.write::<0x408>((bits & !0xff000000) | 0xb4000000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_IQ_SCALE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_rx_iq_scale_high(&mut self, value: super::PhyRxIqScale) {
+            let input = value.bits();
+            let bits = self.0.read::<0x43c>();
+            self.0
+                .write::<0x43c>((bits & !0x0000ff00) | ((input & 0x000000ff) << 8));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_IQ_SCALE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_rx_iq_scale_low(&mut self, value: super::PhyRxIqScale) {
+            let input = value.bits();
+            let bits = self.0.read::<0x43c>();
+            self.0
+                .write::<0x43c>((bits & !0x000000ff) | (input & 0x000000ff));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`WORD_0888_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn clear_phy_front_end_iq_swap(&mut self) {
+            let bits = self.0.read::<0x888>();
+            self.0.write::<0x888>(bits & !0x20000000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`WORD_0C20_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_front_end_init_0c20(&mut self) {
+            let bits = self.0.read::<0xc20>();
+            self.0.write::<0xc20>((bits & !0x000000ff) | 0x00000057);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`TX_PA_CONTROL_1`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_pa_on_bt_delay(&mut self) {
+            let bits = self.0.read::<0x870>();
+            self.0.write::<0x870>((bits & !0x0000ff00) | 0x00009600);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`POWER_DETECTOR_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_power_detector_calibration_field(&mut self) {
+            let bits = self.0.read::<0x808>();
+            self.0.write::<0x808>((bits & !0x00000ff0) | 0x00000500);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`POWER_DETECTOR_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_power_detector_mode(&mut self, value: super::PhyPowerDetectorMode) {
+            let input = value.bits();
+            let bits = self.0.read::<0x808>();
+            self.0
+                .write::<0x808>((bits & !0x00700000) | ((input & 0x00000007) << 20));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`DAC_SCALE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_dac_scale_high(&mut self, value: super::PhyDacScale) {
+            let input = value.bits();
+            let bits = self.0.read::<0xc04>();
+            self.0
+                .write::<0xc04>((bits & !0x00ff0000) | ((input & 0x000000ff) << 16));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`DAC_SCALE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn set_phy_dac_scale_low(&mut self, value: super::PhyDacScale) {
+            let input = value.bits();
+            let bits = self.0.read::<0xc04>();
+            self.0
+                .write::<0xc04>((bits & !0x0000ff00) | ((input & 0x000000ff) << 8));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`POWER_DETECTOR_SAR_CONTROL_STATUS`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_2.
+        #[inline]
+        pub fn clear_phy_power_detector_sar_config(&mut self) {
+            let bits = self.0.read::<0x80c>();
+            self.0.write::<0x80c>(bits & !0x00000200);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_EVM_CONFIG`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn set_phy_rx_evm_mode(&mut self) {
+            let bits = self.0.read::<0x7a38>();
+            self.0.write::<0x7a38>((bits & !0x0000007c) | 0x00000060);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_EVM_CONFIG`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn set_phy_rx_evm_third_parameter(&mut self, value: super::PhyRxEvmParameter) {
+            let input = value.get();
+            let bits = self.0.read::<0x7a38>();
+            self.0
+                .write::<0x7a38>((bits & !0x1fc00000) | ((input & 0x0000007f) << 22));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_EVM_CONFIG`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn set_phy_rx_evm_second_parameter(&mut self, value: super::PhyRxEvmParameter) {
+            let input = value.get();
+            let bits = self.0.read::<0x7a38>();
+            self.0
+                .write::<0x7a38>((bits & !0x003f8000) | ((input & 0x0000007f) << 15));
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_EVM_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn set_phy_rx_evm_enable(&mut self, value: super::PhyRxEvmEnable) {
+            let input = value.bits();
+            let bits = self.0.read::<0x7a34>();
+            self.0.write::<0x7a34>(
+                (bits & !0x00000007)
+                    | ((input & 0x00000001)
+                        | (((input >> 1) & 0x00000001) << 1)
+                        | (((input >> 2) & 0x00000001) << 2)),
+            );
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`WORD_7920_OPAQUE`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn clear_phy_rx_evm_word_7920(&mut self) {
+            let bits = self.0.read::<0x7920>();
+            self.0.write::<0x7920>(bits & !0x0000f000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_EVM_CONTROL`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn release_phy_rx_evm_memory_reset(&mut self) {
+            let bits = self.0.read::<0x7a34>();
+            self.0.write::<0x7a34>(bits & !0x00000002);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RX_EVM_MEMORY_RESET`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES_5.
+        #[inline]
+        pub fn release_phy_rx_evm_memory_reset_2(&mut self) {
+            let bits = self.0.read::<0x7c50>();
+            self.0.write::<0x7c50>(bits & !0x00000100);
+        }
+    }
+
+    /// The `FE_CLOCK_GATE` register.
+    ///
+    /// Project-assigned name. Front-end clock-gate word; libphy[phy_init.o]::phy_open_fe_bb_clk writes 0x1E7.
+    pub mod fe_clock_gate {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x400;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Complete front-end clock-gate image; individual gate meanings are unknown.
+            #[inline]
+            pub const fn state(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Complete front-end clock-gate image; individual gate meanings are unknown.
+            #[inline]
+            pub const fn state(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `STATE`.
+            #[inline]
+            pub fn set_state(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `TABLE_MEMORY_INDEX_SOURCE` register.
+    ///
+    /// Project-assigned name. Word whose bits 31:24 libphy[phy_reg.o]::phy_fe_reg_init replaces with 0xB4.
+    pub mod table_memory_index_source {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x408;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Base index byte.
+            #[inline]
+            pub const fn base_index(self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_23_opaque(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Base index byte.
+            #[inline]
+            pub const fn base_index(&self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_23_opaque(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `BASE_INDEX`.
+            #[inline]
+            pub fn set_base_index(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `BITS_0_23_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_23_opaque(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+                self.0 = (self.0 & !0x00ffffff) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `FRONT_END_AND_TONE_STOP_CONTROL` register.
+    ///
+    /// Project-assigned name. Word whose bit 2 libphy[phy_reg.o]::phy_fe_reg_init sets.
+    pub mod front_end_and_tone_stop_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000007;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x40c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Front-end initialization enable; meaning unknown.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Front-end initialization enable; meaning unknown.
+            #[inline]
+            pub const fn bit_2_opaque(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `BIT_2_OPAQUE`.
+            #[inline]
+            pub fn set_bit_2_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `BITS_0_1_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_1_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00000003) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `RX_DCO_CONTROL` register.
+    ///
+    /// Project-assigned name. Word whose bits 23:22 phy_iq_swap_set clears.
+    pub mod rx_dco_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00c000ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x434;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Two-bit calibration control; meaning unknown.
+            #[inline]
+            pub const fn bits_22_23_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Two-bit calibration control; meaning unknown.
+            #[inline]
+            pub const fn bits_22_23_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Set `BITS_22_23_OPAQUE`.
+            #[inline]
+            pub fn set_bits_22_23_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00c00000) | (value.get() << 22);
+                self
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `IQ_CORRECTION_CONTROL` register.
+    ///
+    /// Project-assigned name. Word whose bits 31:29 libphy[phy_reg.o]::phy_fe_reg_init sets.
+    pub mod iq_correction_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x438;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. RX IQ correction mode, low bit.
+            #[inline]
+            pub const fn rx_iq_correction_mode_low(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name. RX IQ correction mode, high bit.
+            #[inline]
+            pub const fn rx_iq_correction_mode_high(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Opaque: meaning not established. Front-end initialization bit; meaning unknown.
+            #[inline]
+            pub const fn bit_31_opaque(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_28_opaque(self) -> oer_mmio::Bits<29> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. RX IQ correction mode, low bit.
+            #[inline]
+            pub const fn rx_iq_correction_mode_low(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name. RX IQ correction mode, high bit.
+            #[inline]
+            pub const fn rx_iq_correction_mode_high(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Opaque: meaning not established. Front-end initialization bit; meaning unknown.
+            #[inline]
+            pub const fn bit_31_opaque(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_28_opaque(&self) -> oer_mmio::Bits<29> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `RX_IQ_CORRECTION_MODE_LOW`.
+            #[inline]
+            pub fn set_rx_iq_correction_mode_low(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `RX_IQ_CORRECTION_MODE_HIGH`.
+            #[inline]
+            pub fn set_rx_iq_correction_mode_high(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `BIT_31_OPAQUE`.
+            #[inline]
+            pub fn set_bit_31_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BITS_0_28_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_28_opaque(&mut self, value: oer_mmio::Bits<29>) -> &mut Self {
+                self.0 = (self.0 & !0x1fffffff) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `RX_IQ_SCALE` register.
+    ///
+    /// Project-assigned name. Word whose bits 15:8 and 7:0 libphy[phy_reg.o]::phy_fe_reg_init clears and phy_rxiq_scale_set replaces.
+    pub mod rx_iq_scale {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000ffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x43c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Low RX IQ scale byte.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Opaque: meaning not established. High RX IQ scale byte.
+            #[inline]
+            pub const fn bits_8_15_opaque(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Low RX IQ scale byte.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Opaque: meaning not established. High RX IQ scale byte.
+            #[inline]
+            pub const fn bits_8_15_opaque(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_8_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_8_15_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                self
+            }
+        }
+    }
+
+    /// The `FRONT_END_CLEAR_CONTROL` register.
+    ///
+    /// Project-assigned name. Word whose bit 8 libphy[phy_reg.o]::phy_fe_reg_init clears.
+    pub mod front_end_clear_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0c000900;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x444;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Front-end initialization clear bit; meaning unknown.
+            #[inline]
+            pub const fn bit_8_opaque(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_11_opaque(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_26_27_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Front-end initialization clear bit; meaning unknown.
+            #[inline]
+            pub const fn bit_8_opaque(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_11_opaque(&self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_26_27_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// Set `BIT_8_OPAQUE`.
+            #[inline]
+            pub fn set_bit_8_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BIT_11_OPAQUE`.
+            #[inline]
+            pub fn set_bit_11_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                self
+            }
+
+            /// Set `BITS_26_27_OPAQUE`.
+            #[inline]
+            pub fn set_bits_26_27_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x0c000000) | (value.get() << 26);
+                self
+            }
+        }
+    }
+
+    /// The `ADC_RATE_AND_FRONT_END_CONTROL` register.
+    ///
+    /// Project-assigned name. Word whose bits 1:0 libphy[phy_i2c.o]::phy_adc_rate_set replaces with its rate bit and whose bits 3:2 libphy[phy_i2c.o]::phy_dac_rate_set clears.
+    pub mod adc_rate_and_front_end_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x448;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Bit 0, set to the ADC rate bit by libphy[phy_i2c.o]::phy_adc_rate_set.
+            #[inline]
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Bit 1, set to the ADC rate bit by libphy[phy_i2c.o]::phy_adc_rate_set.
+            #[inline]
+            pub const fn bit_1_opaque(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Opaque: meaning not established. Bit 2, cleared by libphy[phy_i2c.o]::phy_dac_rate_set.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Bit 3, cleared by libphy[phy_i2c.o]::phy_dac_rate_set.
+            #[inline]
+            pub const fn bit_3_opaque(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_4_31_opaque(self) -> oer_mmio::Bits<28> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Bit 0, set to the ADC rate bit by libphy[phy_i2c.o]::phy_adc_rate_set.
+            #[inline]
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Bit 1, set to the ADC rate bit by libphy[phy_i2c.o]::phy_adc_rate_set.
+            #[inline]
+            pub const fn bit_1_opaque(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Opaque: meaning not established. Bit 2, cleared by libphy[phy_i2c.o]::phy_dac_rate_set.
+            #[inline]
+            pub const fn bit_2_opaque(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Bit 3, cleared by libphy[phy_i2c.o]::phy_dac_rate_set.
+            #[inline]
+            pub const fn bit_3_opaque(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_4_31_opaque(&self) -> oer_mmio::Bits<28> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// Set `BIT_0_OPAQUE`.
+            #[inline]
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `BIT_1_OPAQUE`.
+            #[inline]
+            pub fn set_bit_1_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `BIT_2_OPAQUE`.
+            #[inline]
+            pub fn set_bit_2_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `BIT_3_OPAQUE`.
+            #[inline]
+            pub fn set_bit_3_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `BITS_4_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_4_31_opaque(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                self.0 = (self.0 & !0xfffffff0) | (value.get() << 4);
+                self
+            }
+        }
+    }
+
+    /// The `FE_BB_CLOCK_CONTROL` register.
+    ///
+    /// Project-assigned name. Word whose bits 1:0 libphy[phy_init.o]::phy_open_fe_bb_clk sets.
+    pub mod fe_bb_clock_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x800;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Two-bit front-end and baseband clock enable; individual meanings unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_2_31_opaque(self) -> oer_mmio::Bits<30> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Two-bit front-end and baseband clock enable; individual meanings unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_2_31_opaque(&self) -> oer_mmio::Bits<30> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Set `BITS_0_1_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_1_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00000003) | value.get();
+                self
+            }
+
+            /// Set `BITS_2_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_2_31_opaque(&mut self, value: oer_mmio::Bits<30>) -> &mut Self {
+                self.0 = (self.0 & !0xfffffffc) | (value.get() << 2);
+                self
+            }
+        }
+    }
+
+    /// The `POWER_DETECTOR_CONTROL` register.
+    ///
+    /// Project-assigned name. Power-detector control word.
+    pub mod power_detector_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x808;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Byte libphy[phy_pwdet.o]::phy_pwdet_reg_init replaces with 0x50.
+            #[inline]
+            pub const fn bits_4_11_opaque(self) -> u8 {
+                (self.0 >> 4) as u8
+            }
+
+            /// Opaque: meaning not established. Three-bit mode libphy[phy_pwdet.o]::phy_pwdet_reg_init sets to 2 and libphy[phy_pwdet.o]::phy_pwdet_sar2_init to 6.
+            #[inline]
+            pub const fn bits_20_22_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_3_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_12_19_opaque(self) -> u8 {
+                (self.0 >> 12) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_31_opaque(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Byte libphy[phy_pwdet.o]::phy_pwdet_reg_init replaces with 0x50.
+            #[inline]
+            pub const fn bits_4_11_opaque(&self) -> u8 {
+                (self.0 >> 4) as u8
+            }
+
+            /// Opaque: meaning not established. Three-bit mode libphy[phy_pwdet.o]::phy_pwdet_reg_init sets to 2 and libphy[phy_pwdet.o]::phy_pwdet_sar2_init to 6.
+            #[inline]
+            pub const fn bits_20_22_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_3_opaque(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_12_19_opaque(&self) -> u8 {
+                (self.0 >> 12) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_31_opaque(&self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Set `BITS_4_11_OPAQUE`.
+            #[inline]
+            pub fn set_bits_4_11_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x00000ff0) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `BITS_20_22_OPAQUE`.
+            #[inline]
+            pub fn set_bits_20_22_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00700000) | (value.get() << 20);
+                self
+            }
+
+            /// Set `BITS_0_3_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_3_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0000000f) | value.get();
+                self
+            }
+
+            /// Set `BITS_12_19_OPAQUE`.
+            #[inline]
+            pub fn set_bits_12_19_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                self
+            }
+
+            /// Set `BITS_23_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_23_31_opaque(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & !0xff800000) | (value.get() << 23);
+                self
+            }
+        }
+    }
+
+    /// The `POWER_DETECTOR_SAR_CONTROL_STATUS` register.
+    ///
+    /// Project-assigned name. Power-detector SAR control word.
+    pub mod power_detector_sar_control_status {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x7f01f200;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x80c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Bit libphy[phy_pwdet.o]::phy_pwdet_sar2_init clears.
+            #[inline]
+            pub const fn bit_9_opaque(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Opaque: meaning not established. Two bits libphy[phy_pwdet.o]::phy_pwdet_sar2_init sets.
+            #[inline]
+            pub const fn bits_12_13_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_14_16_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 14)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_24_30_opaque(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Bit libphy[phy_pwdet.o]::phy_pwdet_sar2_init clears.
+            #[inline]
+            pub const fn bit_9_opaque(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Opaque: meaning not established. Two bits libphy[phy_pwdet.o]::phy_pwdet_sar2_init sets.
+            #[inline]
+            pub const fn bits_12_13_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_14_16_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 14)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_24_30_opaque(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 24)
+            }
+
+            /// Set `BIT_9_OPAQUE`.
+            #[inline]
+            pub fn set_bit_9_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `BITS_12_13_OPAQUE`.
+            #[inline]
+            pub fn set_bits_12_13_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00003000) | (value.get() << 12);
+                self
+            }
+
+            /// Set `BITS_14_16_OPAQUE`.
+            #[inline]
+            pub fn set_bits_14_16_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x0001c000) | (value.get() << 14);
+                self
+            }
+
+            /// Set `BITS_24_30_OPAQUE`.
+            #[inline]
+            pub fn set_bits_24_30_opaque(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                self.0 = (self.0 & !0x7f000000) | (value.get() << 24);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_0810_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word libphy[phy_pwdet.o]::phy_pwdet_reg_init writes 0x0F0F0FFF.
+    pub mod word_0810_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x810;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {}
+    }
+
+    /// The `WORD_0814_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word libphy[phy_pwdet.o]::phy_pwdet_reg_init writes 0x00FF0F64.
+    pub mod word_0814_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000000ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x814;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Low byte explicitly replaced by phy_txdc_cal_pwdet_init; high24 have only whole-image initialization evidence and unknown reset.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Low byte explicitly replaced by phy_txdc_cal_pwdet_init; high24 have only whole-image initialization evidence and unknown reset.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `POWER_DETECTOR_REFERENCE` register.
+    ///
+    /// Project-assigned name. Word libphy[phy_pwdet.o]::phy_pwdet_reg_init and libphy[phy_pwdet.o]::phy_pwdet_sar2_init write 0xAAAA.
+    pub mod power_detector_reference {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x818;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Complete image; the low halfword is the power-detector reference code.
+            #[inline]
+            pub const fn state(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Complete image; the low halfword is the power-detector reference code.
+            #[inline]
+            pub const fn state(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `STATE`.
+            #[inline]
+            pub fn set_state(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `TX_PA_CONTROL_1` register.
+    ///
+    /// Project-assigned name. Word whose bits 15:8 libphy[phy_reg.o]::phy_fe_reg_init replaces with 0x96.
+    pub mod tx_pa_control_1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffff00;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x870;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. PA-on delay byte.
+            #[inline]
+            pub const fn pa_on_bt_delay(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_31_opaque(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. PA-on delay byte.
+            #[inline]
+            pub const fn pa_on_bt_delay(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_31_opaque(&self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Set `PA_ON_BT_DELAY`.
+            #[inline]
+            pub fn set_pa_on_bt_delay(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BITS_16_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_31_opaque(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_0888_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word whose bit 29 libphy[phy_reg.o]::phy_fe_reg_init sets when phy_param byte 0x2A (set for a channel of at least 3001 MHz) is set and clears otherwise.
+    pub mod word_0888_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x28000014;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x888;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Band-dependent bit that libphy[phy_reg.o]::phy_fe_reg_init sets in the 5 GHz band; meaning unknown.
+            #[inline]
+            pub const fn bit_29_opaque(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_4_opaque(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_27_opaque(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Band-dependent bit that libphy[phy_reg.o]::phy_fe_reg_init sets in the 5 GHz band; meaning unknown.
+            #[inline]
+            pub const fn bit_29_opaque(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_2_opaque(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_4_opaque(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_27_opaque(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Set `BIT_29_OPAQUE`.
+            #[inline]
+            pub fn set_bit_29_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `BIT_2_OPAQUE`.
+            #[inline]
+            pub fn set_bit_2_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `BIT_4_OPAQUE`.
+            #[inline]
+            pub fn set_bit_4_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `BIT_27_OPAQUE`.
+            #[inline]
+            pub fn set_bit_27_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_0894_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word whose bit 22 libphy[phy_reg.o]::phy_fe_reg_init sets.
+    pub mod word_0894_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x894;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Front-end initialization enable; meaning unknown.
+            #[inline]
+            pub const fn bit_22_opaque(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_21_opaque(self) -> oer_mmio::Bits<22> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_31_opaque(self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Front-end initialization enable; meaning unknown.
+            #[inline]
+            pub const fn bit_22_opaque(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_21_opaque(&self) -> oer_mmio::Bits<22> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_31_opaque(&self) -> oer_mmio::Bits<9> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Set `BIT_22_OPAQUE`.
+            #[inline]
+            pub fn set_bit_22_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+
+            /// Set `BITS_0_21_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_21_opaque(&mut self, value: oer_mmio::Bits<22>) -> &mut Self {
+                self.0 = (self.0 & !0x003fffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_23_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_23_31_opaque(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                self.0 = (self.0 & !0xff800000) | (value.get() << 23);
+                self
+            }
+        }
+    }
+
+    /// The `DAC_SCALE` register.
+    ///
+    /// Project-assigned name. Word whose bits 23:16 and then 15:8 phy_dac_scale_set replaces with 0xFF or 0.
+    pub mod dac_scale {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc04;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Second DAC scale byte.
+            #[inline]
+            pub const fn bits_8_15_opaque(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Opaque: meaning not established. First DAC scale byte.
+            #[inline]
+            pub const fn bits_16_23_opaque(self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_24_31_opaque(self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Second DAC scale byte.
+            #[inline]
+            pub const fn bits_8_15_opaque(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Opaque: meaning not established. First DAC scale byte.
+            #[inline]
+            pub const fn bits_16_23_opaque(&self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_24_31_opaque(&self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Set `BITS_8_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_8_15_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BITS_16_23_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_23_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_24_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_24_31_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_0C08_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word whose bit 25 phy_iq_swap_set clears when phy_param byte 0x2A is set, and whose bits 26:25 it sets otherwise.
+    pub mod word_0c08_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x06000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc08;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. First bit; meaning unknown.
+            #[inline]
+            pub const fn bit_25_opaque(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Second bit; meaning unknown.
+            #[inline]
+            pub const fn bit_26_opaque(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. First bit; meaning unknown.
+            #[inline]
+            pub const fn bit_25_opaque(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Second bit; meaning unknown.
+            #[inline]
+            pub const fn bit_26_opaque(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Set `BIT_25_OPAQUE`.
+            #[inline]
+            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `BIT_26_OPAQUE`.
+            #[inline]
+            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+        }
+    }
+
+    /// The `IQ_CORRECTION_AUX` register.
+    ///
+    /// Project-assigned name. Word whose bits 14:13 libphy[phy_reg.o]::phy_fe_reg_init sets.
+    pub mod iq_correction_aux {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc0c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. TX IQ correction mode, low bit.
+            #[inline]
+            pub const fn tx_iq_correction_mode_low(self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Project-assigned name. TX IQ correction mode, high bit.
+            #[inline]
+            pub const fn tx_iq_correction_mode_high(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_12_opaque(self) -> oer_mmio::Bits<13> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_15_31_opaque(self) -> oer_mmio::Bits<17> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. TX IQ correction mode, low bit.
+            #[inline]
+            pub const fn tx_iq_correction_mode_low(&self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Project-assigned name. TX IQ correction mode, high bit.
+            #[inline]
+            pub const fn tx_iq_correction_mode_high(&self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_12_opaque(&self) -> oer_mmio::Bits<13> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_15_31_opaque(&self) -> oer_mmio::Bits<17> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// Set `TX_IQ_CORRECTION_MODE_LOW`.
+            #[inline]
+            pub fn set_tx_iq_correction_mode_low(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                self
+            }
+
+            /// Set `TX_IQ_CORRECTION_MODE_HIGH`.
+            #[inline]
+            pub fn set_tx_iq_correction_mode_high(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                self
+            }
+
+            /// Set `BITS_0_12_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_12_opaque(&mut self, value: oer_mmio::Bits<13>) -> &mut Self {
+                self.0 = (self.0 & !0x00001fff) | value.get();
+                self
+            }
+
+            /// Set `BITS_15_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_15_31_opaque(&mut self, value: oer_mmio::Bits<17>) -> &mut Self {
+                self.0 = (self.0 & !0xffff8000) | (value.get() << 15);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_0C20_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word whose bits 7:0 libphy[phy_reg.o]::phy_fe_reg_init replaces with 0x57.
+    pub mod word_0c20_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000000ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc20;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Low byte; meaning unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Low byte; meaning unknown.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_7920_OPAQUE` register.
+    ///
+    /// Opaque: meaning not established. Word whose bits 15:12 phy_rxevm_init_cfg clears.
+    pub mod word_7920_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000f000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x7920;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Four bits phy_rxevm_init_cfg clears; meaning unknown.
+            #[inline]
+            pub const fn bits_12_15_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Four bits phy_rxevm_init_cfg clears; meaning unknown.
+            #[inline]
+            pub const fn bits_12_15_opaque(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// Set `BITS_12_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_12_15_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0000f000) | (value.get() << 12);
+                self
+            }
+        }
+    }
+
+    /// The `RX_EVM_CONTROL` register.
+    ///
+    /// Project-assigned name. RX EVM measurement control.
+    pub mod rx_evm_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000007;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x7a34;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Set with bit 2 when phy_rxevm_init_cfg enables the measurement.
+            #[inline]
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Pulsed by phy_rxevm_reset_mem.
+            #[inline]
+            pub const fn bit_1_opaque(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Opaque: meaning not established. Set with bit 0 when phy_rxevm_init_cfg enables the measurement.
+            #[inline]
+            pub const fn bit_2_opaque(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Set with bit 2 when phy_rxevm_init_cfg enables the measurement.
+            #[inline]
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Opaque: meaning not established. Pulsed by phy_rxevm_reset_mem.
+            #[inline]
+            pub const fn bit_1_opaque(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Opaque: meaning not established. Set with bit 0 when phy_rxevm_init_cfg enables the measurement.
+            #[inline]
+            pub const fn bit_2_opaque(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Set `BIT_0_OPAQUE`.
+            #[inline]
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `BIT_1_OPAQUE`.
+            #[inline]
+            pub fn set_bit_1_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `BIT_2_OPAQUE`.
+            #[inline]
+            pub fn set_bit_2_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+        }
+    }
+
+    /// The `RX_EVM_CONFIG` register.
+    ///
+    /// Project-assigned name. RX EVM measurement configuration.
+    pub mod rx_evm_config {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x7a38;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Five bits phy_rxevm_init_cfg sets to 0x18.
+            #[inline]
+            pub const fn bits_2_6_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Project-assigned name. The second argument of phy_rxevm_init_cfg.
+            #[inline]
+            pub const fn second_parameter(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// Project-assigned name. The third argument of phy_rxevm_init_cfg.
+            #[inline]
+            pub const fn third_parameter(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_7_14_opaque(self) -> u8 {
+                (self.0 >> 7) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Five bits phy_rxevm_init_cfg sets to 0x18.
+            #[inline]
+            pub const fn bits_2_6_opaque(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 2)
+            }
+
+            /// Project-assigned name. The second argument of phy_rxevm_init_cfg.
+            #[inline]
+            pub const fn second_parameter(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// Project-assigned name. The third argument of phy_rxevm_init_cfg.
+            #[inline]
+            pub const fn third_parameter(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_7_14_opaque(&self) -> u8 {
+                (self.0 >> 7) as u8
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Set `BITS_2_6_OPAQUE`.
+            #[inline]
+            pub fn set_bits_2_6_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x0000007c) | (value.get() << 2);
+                self
+            }
+
+            /// Set `SECOND_PARAMETER`.
+            #[inline]
+            pub fn set_second_parameter(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                self.0 = (self.0 & !0x003f8000) | (value.get() << 15);
+                self
+            }
+
+            /// Set `THIRD_PARAMETER`.
+            #[inline]
+            pub fn set_third_parameter(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                self.0 = (self.0 & !0x1fc00000) | (value.get() << 22);
+                self
+            }
+
+            /// Set `BITS_0_1_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_1_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00000003) | value.get();
+                self
+            }
+
+            /// Set `BITS_7_14_OPAQUE`.
+            #[inline]
+            pub fn set_bits_7_14_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x00007f80) | (u32::from(value) << 7);
+                self
+            }
+
+            /// Set `BITS_29_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_29_31_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
+                self
+            }
+        }
+    }
+
+    /// The `RX_EVM_MEMORY_RESET` register.
+    ///
+    /// Project-assigned name. Word whose bit 8 phy_rxevm_reset_mem pulses.
+    pub mod rx_evm_memory_reset {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000101;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x7c50;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Pulsed by phy_rxevm_reset_mem.
+            #[inline]
+            pub const fn bit_8_opaque(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_0_opaque(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Pulsed by phy_rxevm_reset_mem.
+            #[inline]
+            pub const fn bit_8_opaque(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_0_opaque(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Set `BIT_8_OPAQUE`.
+            #[inline]
+            pub fn set_bit_8_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BIT_0_OPAQUE`.
+            #[inline]
+            pub fn set_bit_0_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `BB_CLOCK_GATE` register.
+    ///
+    /// Project-assigned name. Baseband clock-gate word; libphy[phy_init.o]::phy_open_fe_bb_clk writes all ones.
+    pub mod bb_clock_gate {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x7c80;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Complete baseband clock-gate image; individual gate meanings are unknown.
+            #[inline]
+            pub const fn state(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Complete baseband clock-gate image; individual gate meanings are unknown.
+            #[inline]
+            pub const fn state(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `STATE`.
+            #[inline]
+            pub fn set_state(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    const _: () = assert!(
+        oer_mmio::check::within(0x000001e7, fe_clock_gate::FIELDS),
+        "open_phy_front_end_clock_gate writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0xffffffff, bb_clock_gate::FIELDS),
+        "open_phy_baseband_clock_gate writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x0000aaaa, power_detector_reference::FIELDS),
+        "set_phy_power_detector_reference writes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000003, fe_bb_clock_control::FIELDS),
+        "open_phy_fe_bb_clock changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x06000000, word_0c08_opaque::FIELDS),
+        "set_phy_front_end_init_0c08 changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00400000, word_0894_opaque::FIELDS),
+        "enable_phy_front_end_0894 changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000004, front_end_and_tone_stop_control::FIELDS),
+        "enable_phy_front_end_init changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0xe0000000, iq_correction_control::FIELDS),
+        "set_phy_rx_iq_correction_modes changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00006000, iq_correction_aux::FIELDS),
+        "set_phy_tx_iq_correction_modes changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x20000000, word_0888_opaque::FIELDS),
+        "set_phy_front_end_iq_swap changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00003000, power_detector_sar_control_status::FIELDS),
+        "set_phy_power_detector_sar_mode changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000002, rx_evm_control::FIELDS),
+        "assert_phy_rx_evm_memory_reset changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000100, rx_evm_memory_reset::FIELDS),
+        "assert_phy_rx_evm_memory_reset_2 changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00000008)
+            && oer_mmio::check::within(0x00000008, adc_rate_and_front_end_control::FIELDS),
+        "clear_phy_dac_rate_high replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00000004)
+            && oer_mmio::check::within(0x00000004, adc_rate_and_front_end_control::FIELDS),
+        "clear_phy_dac_rate_low replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x02000000)
+            && oer_mmio::check::within(0x02000000, word_0c08_opaque::FIELDS),
+        "clear_phy_front_end_init_0c08_first replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00c00000)
+            && oer_mmio::check::within(0x00c00000, rx_dco_control::FIELDS),
+        "clear_phy_rx_dco_calibration_control replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00000100)
+            && oer_mmio::check::within(0x00000100, front_end_clear_control::FIELDS),
+        "clear_phy_front_end_clear_first replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0xb4000000, 0xff000000)
+            && oer_mmio::check::within(0xff000000, table_memory_index_source::FIELDS),
+        "set_phy_table_memory_base_index replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x20000000)
+            && oer_mmio::check::within(0x20000000, word_0888_opaque::FIELDS),
+        "clear_phy_front_end_iq_swap replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000057, 0x000000ff)
+            && oer_mmio::check::within(0x000000ff, word_0c20_opaque::FIELDS),
+        "set_phy_front_end_init_0c20 replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00009600, 0x0000ff00)
+            && oer_mmio::check::within(0x0000ff00, tx_pa_control_1::FIELDS),
+        "set_phy_pa_on_bt_delay replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000500, 0x00000ff0)
+            && oer_mmio::check::within(0x00000ff0, power_detector_control::FIELDS),
+        "set_phy_power_detector_calibration_field replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00000200)
+            && oer_mmio::check::within(0x00000200, power_detector_sar_control_status::FIELDS),
+        "clear_phy_power_detector_sar_config replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000060, 0x0000007c)
+            && oer_mmio::check::within(0x0000007c, rx_evm_config::FIELDS),
+        "set_phy_rx_evm_mode replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x0000f000)
+            && oer_mmio::check::within(0x0000f000, word_7920_opaque::FIELDS),
+        "clear_phy_rx_evm_word_7920 replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00000002)
+            && oer_mmio::check::within(0x00000002, rx_evm_control::FIELDS),
+        "release_phy_rx_evm_memory_reset replaces declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x00000100)
+            && oer_mmio::check::within(0x00000100, rx_evm_memory_reset::FIELDS),
+        "release_phy_rx_evm_memory_reset_2 replaces declared fields only"
+    );
+}
+
+/// The `PMU_RADIO` register block.
+///
+/// ESP32-C5 PMU fields that the PHY drives: the analog I2C power and reset
+/// controls of the RF blocks and the immediate BB I2C power tie. Other fields
+/// remain absent and are preserved by every field transaction.
+pub mod pmu_radio {
+    /// The block's base address.
+    pub const BASE: usize = 0x600b0000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x15c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0xcc, 0x158];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600b0000>, BlockWords>;
+
+    /// The exclusive owner of the `PMU_RADIO` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct PmuRadio<P: oer_mmio::Placement = oer_mmio::Fixed<0x600b0000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl PmuRadio {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> PmuRadio<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> PmuRadio<P> {
+        /// Read `IMM_HP_CK_POWER`.
+        #[inline]
+        pub fn read_imm_hp_ck_power(&self) -> imm_hp_ck_power::R {
+            imm_hp_ck_power::R(self.0.read::<0xcc>())
+        }
+
+        /// Read `IMM_HP_CK_POWER`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_imm_hp_ck_power(&mut self, change: impl FnOnce(&mut imm_hp_ck_power::W)) {
+            let mut value = imm_hp_ck_power::W(self.0.read::<0xcc>());
+            change(&mut value);
+            self.0.write::<0xcc>(value.0);
+        }
+
+        /// Read `RF_PWC`.
+        #[inline]
+        pub fn read_rf_pwc(&self) -> rf_pwc::R {
+            rf_pwc::R(self.0.read::<0x158>())
+        }
+
+        /// Read `RF_PWC`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rf_pwc(&mut self, change: impl FnOnce(&mut rf_pwc::W)) {
+            let mut value = rf_pwc::W(self.0.read::<0x158>());
+            change(&mut value);
+            self.0.write::<0x158>(value.0);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`RF_PWC`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES, ESP_IDF_4D59230D_C5_PMU.
+        #[inline]
+        pub fn power_rf_analog_i2c(&mut self) {
+            let bits = self.0.read::<0x158>();
+            self.0.write::<0x158>(bits | 0xf3000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`IMM_HP_CK_POWER`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES, ESP_IDF_4D59230D_C5_PMU.
+        #[inline]
+        pub fn tie_high_bb_analog_i2c_power(&mut self) {
+            let bits = self.0.read::<0xcc>();
+            self.0.write::<0xcc>(bits | 0x10000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`RF_PWC`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES, ESP_IDF_4D59230D_C5_PMU.
+        #[inline]
+        pub fn power_peripheral_analog_i2c(&mut self) {
+            let bits = self.0.read::<0x158>();
+            self.0.write::<0x158>(bits | 0x08000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`RF_PWC`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES, ESP_IDF_4D59230D_C5_PMU.
+        #[inline]
+        pub fn release_peripheral_analog_i2c_reset(&mut self) {
+            let bits = self.0.read::<0x158>();
+            self.0.write::<0x158>(bits | 0x04000000);
+        }
+
+        /// Set one reviewed image in its fields, keeping every other bit (`RF_PWC`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES, ESP_IDF_4D59230D_C5_PMU.
+        #[inline]
+        pub fn power_5g_clock_generator(&mut self) {
+            let bits = self.0.read::<0x158>();
+            self.0.write::<0x158>(bits | 0x00800000);
+        }
+
+        /// Replace the listed fields from one reviewed image, keeping every other bit (`RF_PWC`).
+        ///
+        /// SOURCE: C5_BLOB_LIBPHY_RF_INIT_LEAVES, ESP_IDF_4D59230D_C5_PMU.
+        #[inline]
+        pub fn hold_peripheral_analog_i2c_reset(&mut self) {
+            let bits = self.0.read::<0x158>();
+            self.0.write::<0x158>(bits & !0x04000000);
+        }
+    }
+
+    /// The `IMM_HP_CK_POWER` register.
+    ///
+    /// Immediate HP clock and analog power ties.
+    pub mod imm_hp_ck_power {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x10000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xcc;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Tie the BB analog I2C power high; ESP-IDF declares the field write-trigger.
+            #[inline]
+            pub const fn tie_high_xpd_bb_i2c(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Tie the BB analog I2C power high; ESP-IDF declares the field write-trigger.
+            #[inline]
+            pub const fn tie_high_xpd_bb_i2c(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Set `TIE_HIGH_XPD_BB_I2C`.
+            #[inline]
+            pub fn set_tie_high_xpd_bb_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                self
+            }
+        }
+    }
+
+    /// The `RF_PWC` register.
+    ///
+    /// Analog I2C power and reset of the RF blocks.
+    pub mod rf_pwc {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x158;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Power the 5 GHz clock generator.
+            #[inline]
+            pub const fn xpd_ckgen5g(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Power the analog I2C of the 5 GHz transceiver.
+            #[inline]
+            pub const fn xpd_tc5g_i2c(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Power the analog I2C of the 5 GHz receiver.
+            #[inline]
+            pub const fn xpd_rx5g_i2c(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Release the peripheral analog I2C from reset when set.
+            #[inline]
+            pub const fn perif_i2c_rstb(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Power the peripheral analog I2C.
+            #[inline]
+            pub const fn xpd_perif_i2c(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Power the analog I2C of the RF transmitter.
+            #[inline]
+            pub const fn xpd_txrf_i2c(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Power the RF receiver PBus.
+            #[inline]
+            pub const fn xpd_rfrx_pbus(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Power the analog I2C of the clock generator.
+            #[inline]
+            pub const fn xpd_ckgen_i2c(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Power the analog I2C of the PLL.
+            #[inline]
+            pub const fn xpd_pll_i2c(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_22_opaque(self) -> oer_mmio::Bits<23> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Power the 5 GHz clock generator.
+            #[inline]
+            pub const fn xpd_ckgen5g(&self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Power the analog I2C of the 5 GHz transceiver.
+            #[inline]
+            pub const fn xpd_tc5g_i2c(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Power the analog I2C of the 5 GHz receiver.
+            #[inline]
+            pub const fn xpd_rx5g_i2c(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Release the peripheral analog I2C from reset when set.
+            #[inline]
+            pub const fn perif_i2c_rstb(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Power the peripheral analog I2C.
+            #[inline]
+            pub const fn xpd_perif_i2c(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Power the analog I2C of the RF transmitter.
+            #[inline]
+            pub const fn xpd_txrf_i2c(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Power the RF receiver PBus.
+            #[inline]
+            pub const fn xpd_rfrx_pbus(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Power the analog I2C of the clock generator.
+            #[inline]
+            pub const fn xpd_ckgen_i2c(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Power the analog I2C of the PLL.
+            #[inline]
+            pub const fn xpd_pll_i2c(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_22_opaque(&self) -> oer_mmio::Bits<23> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `XPD_CKGEN5G`.
+            #[inline]
+            pub fn set_xpd_ckgen5g(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                self
+            }
+
+            /// Set `XPD_TC5G_I2C`.
+            #[inline]
+            pub fn set_xpd_tc5g_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `XPD_RX5G_I2C`.
+            #[inline]
+            pub fn set_xpd_rx5g_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `PERIF_I2C_RSTB`.
+            #[inline]
+            pub fn set_perif_i2c_rstb(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `XPD_PERIF_I2C`.
+            #[inline]
+            pub fn set_xpd_perif_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `XPD_TXRF_I2C`.
+            #[inline]
+            pub fn set_xpd_txrf_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `XPD_RFRX_PBUS`.
+            #[inline]
+            pub fn set_xpd_rfrx_pbus(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `XPD_CKGEN_I2C`.
+            #[inline]
+            pub fn set_xpd_ckgen_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `XPD_PLL_I2C`.
+            #[inline]
+            pub fn set_xpd_pll_i2c(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BITS_0_22_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_22_opaque(&mut self, value: oer_mmio::Bits<23>) -> &mut Self {
+                self.0 = (self.0 & !0x007fffff) | value.get();
+                self
+            }
+        }
+    }
+
+    const _: () = assert!(
+        oer_mmio::check::within(0xf3000000, rf_pwc::FIELDS),
+        "power_rf_analog_i2c changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x10000000, imm_hp_ck_power::FIELDS),
+        "tie_high_bb_analog_i2c_power changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x08000000, rf_pwc::FIELDS),
+        "power_peripheral_analog_i2c changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x04000000, rf_pwc::FIELDS),
+        "release_peripheral_analog_i2c_reset changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00800000, rf_pwc::FIELDS),
+        "power_5g_clock_generator changes declared fields only"
+    );
+    const _: () = assert!(
+        oer_mmio::check::within(0x00000000, 0x04000000)
+            && oer_mmio::check::within(0x04000000, rf_pwc::FIELDS),
+        "hold_peripheral_analog_i2c_reset replaces declared fields only"
+    );
+}
+
+/// The `WIFI_MAC_AUX_TSF_CONTROL` register block.
+///
+/// SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.
+pub mod wifi_mac_aux_tsf_control {
+    /// The block's base address.
+    pub const BASE: usize = 0x600ad860;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x14;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x8, 0x10];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600ad860>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_AUX_TSF_CONTROL` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacAuxTsfControl<P: oer_mmio::Placement = oer_mmio::Fixed<0x600ad860>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacAuxTsfControl {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacAuxTsfControl<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacAuxTsfControl<P> {
+        /// Read `SOFTAP_CONTROL`.
+        #[inline]
+        pub fn read_softap_control(&self) -> softap_control::R {
+            softap_control::R(self.0.read::<0x0>())
+        }
+
+        /// Read `SOFTAP_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_softap_control(&mut self, change: impl FnOnce(&mut softap_control::W)) {
+            let mut value = softap_control::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `NAN_CONTROL`.
+        #[inline]
+        pub fn read_nan_control(&self) -> nan_control::R {
+            nan_control::R(self.0.read::<0x8>())
+        }
+
+        /// Read `NAN_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_nan_control(&mut self, change: impl FnOnce(&mut nan_control::W)) {
+            let mut value = nan_control::W(self.0.read::<0x8>());
+            change(&mut value);
+            self.0.write::<0x8>(value.0);
+        }
+
+        /// Read `BTWT_CONTROL`.
+        #[inline]
+        pub fn read_btwt_control(&self) -> btwt_control::R {
+            btwt_control::R(self.0.read::<0x10>())
+        }
+
+        /// Read `BTWT_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_btwt_control(&mut self, change: impl FnOnce(&mut btwt_control::W)) {
+            let mut value = btwt_control::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+    }
+
+    /// The `SOFTAP_CONTROL` register.
+    ///
+    /// Project-assigned name. Complete hal_disable_softap_tsf clears bits 31:30. Generic TSF enable/disable leaves independently identify bit 31 as the domain enable; bit 30 remains unknown.
+    pub mod softap_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_29_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_24_opaque(self) -> oer_mmio::Bits<25> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_26_27_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_29_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_24_opaque(&self) -> oer_mmio::Bits<25> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_26_27_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `TSF_ENABLE`.
+            #[inline]
+            pub fn set_tsf_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BIT_25_OPAQUE`.
+            #[inline]
+            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `BITS_28_29_OPAQUE`.
+            #[inline]
+            pub fn set_bits_28_29_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x30000000) | (value.get() << 28);
+                self
+            }
+
+            /// Set `BITS_0_24_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_24_opaque(&mut self, value: oer_mmio::Bits<25>) -> &mut Self {
+                self.0 = (self.0 & !0x01ffffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_26_27_OPAQUE`.
+            #[inline]
+            pub fn set_bits_26_27_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x0c000000) | (value.get() << 26);
+                self
+            }
+        }
+    }
+
+    /// The `NAN_CONTROL` register.
+    ///
+    /// Project-assigned name. Complete NAN enable/disable leaves use the same two-stage gate and mode transaction as station TSF at this distinct word.
+    pub mod nan_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_mode(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_low(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_high(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_29_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_18_opaque(self) -> oer_mmio::Bits<19> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_26_opaque(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_mode(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_low(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_high(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_29_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_18_opaque(&self) -> oer_mmio::Bits<19> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_26_opaque(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Set `TSF_MODE`.
+            #[inline]
+            pub fn set_tsf_mode(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x00780000) | (value.get() << 19);
+                self
+            }
+
+            /// Set `TSF_ENABLE_LOW`.
+            #[inline]
+            pub fn set_tsf_enable_low(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `TSF_ENABLE_HIGH`.
+            #[inline]
+            pub fn set_tsf_enable_high(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BIT_25_OPAQUE`.
+            #[inline]
+            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `BITS_28_29_OPAQUE`.
+            #[inline]
+            pub fn set_bits_28_29_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x30000000) | (value.get() << 28);
+                self
+            }
+
+            /// Set `BITS_0_18_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_18_opaque(&mut self, value: oer_mmio::Bits<19>) -> &mut Self {
+                self.0 = (self.0 & !0x0007ffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_23_24_OPAQUE`.
+            #[inline]
+            pub fn set_bits_23_24_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x01800000) | (value.get() << 23);
+                self
+            }
+
+            /// Set `BIT_26_OPAQUE`.
+            #[inline]
+            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+        }
+    }
+
+    /// The `BTWT_CONTROL` register.
+    ///
+    /// Project-assigned name. Complete hal_enable_sta_btwt_tsf enables or disables the broadcast-TWT TSF domain using the same gate and mode masks as station TSF.
+    pub mod btwt_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_mode(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_low(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_high(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_29_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_18_opaque(self) -> oer_mmio::Bits<19> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_26_opaque(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_mode(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_low(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn tsf_enable_high(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_29_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_18_opaque(&self) -> oer_mmio::Bits<19> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_23_24_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_26_opaque(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Set `TSF_MODE`.
+            #[inline]
+            pub fn set_tsf_mode(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x00780000) | (value.get() << 19);
+                self
+            }
+
+            /// Set `TSF_ENABLE_LOW`.
+            #[inline]
+            pub fn set_tsf_enable_low(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `TSF_ENABLE_HIGH`.
+            #[inline]
+            pub fn set_tsf_enable_high(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BIT_25_OPAQUE`.
+            #[inline]
+            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `BITS_28_29_OPAQUE`.
+            #[inline]
+            pub fn set_bits_28_29_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x30000000) | (value.get() << 28);
+                self
+            }
+
+            /// Set `BITS_0_18_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_18_opaque(&mut self, value: oer_mmio::Bits<19>) -> &mut Self {
+                self.0 = (self.0 & !0x0007ffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_23_24_OPAQUE`.
+            #[inline]
+            pub fn set_bits_23_24_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x01800000) | (value.get() << 23);
+                self
+            }
+
+            /// Set `BIT_26_OPAQUE`.
+            #[inline]
+            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_BSSID_POLICY` register block.
+///
+/// Per-interface BSSID address and policy words used by scan and associated-STA receive filtering.
+pub mod wifi_mac_bssid_policy {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a4000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x20;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a4000>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_BSSID_POLICY` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacBssidPolicy<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a4000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacBssidPolicy {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacBssidPolicy<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacBssidPolicy<P> {
+        /// Read `BSSID_LOW%s`.
+        #[inline]
+        pub fn read_bssid_low(&self, index: oer_mmio::Index<4>) -> bssid_low::R {
+            bssid_low::R(self.0.read_indexed::<0x0, 0x8, 4>(index))
+        }
+
+        /// Read `BSSID_LOW%s`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_bssid_low(
+            &mut self,
+            index: oer_mmio::Index<4>,
+            change: impl FnOnce(&mut bssid_low::W),
+        ) {
+            let mut value = bssid_low::W(self.0.read_indexed::<0x0, 0x8, 4>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x0, 0x8, 4>(index, value.0);
+        }
+
+        /// Read `BSSID_HIGH%s`.
+        #[inline]
+        pub fn read_bssid_high(&self, index: oer_mmio::Index<4>) -> bssid_high::R {
+            bssid_high::R(self.0.read_indexed::<0x4, 0x8, 4>(index))
+        }
+
+        /// Read `BSSID_HIGH%s`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_bssid_high(
+            &mut self,
+            index: oer_mmio::Index<4>,
+            change: impl FnOnce(&mut bssid_high::W),
+        ) {
+            let mut value = bssid_high::W(self.0.read_indexed::<0x4, 0x8, 4>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x4, 0x8, 4>(index, value.0);
+        }
+    }
+
+    /// The `BSSID_LOW%s` register.
+    ///
+    /// Project-assigned name. BSSID bytes 0..3 for interfaces 0..3; hal_mac_set_bssid publishes a complete full-word store.
+    pub mod bssid_low {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bytes_0_3(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bytes_0_3(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `BYTES_0_3`.
+            #[inline]
+            pub fn set_bytes_0_3(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `BSSID_HIGH%s` register.
+    ///
+    /// Project-assigned name. Canonical high BSSID, association identity and interface policy word for interfaces 0..3. Complete dbg_read_rx_misc independently decodes every field; the HE association leaf updates the MMSS/AID fields of interface zero rather than defining a second register identity.
+    pub mod bssid_high {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bssid_high(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name. Eleven-bit AID printed by dbg_read_rx_misc.
+            #[inline]
+            pub const fn association_id(self) -> oer_mmio::Bits<11> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. Three-bit MMSS value printed by dbg_read_rx_misc.
+            #[inline]
+            pub const fn minimum_mpdu_start_spacing(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Project-assigned name. Cleared for interface zero by the associated-STA policy-five transaction.
+            #[inline]
+            pub const fn interface_is_soft_ap(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. MACBSSID_EN: hal_mac_set_bssid clears this bit before changing the address and sets it after publication; the reachable associated-STA policy branch also sets it.
+            #[inline]
+            pub const fn address_check_enable(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bssid_high(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name. Eleven-bit AID printed by dbg_read_rx_misc.
+            #[inline]
+            pub const fn association_id(&self) -> oer_mmio::Bits<11> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. Three-bit MMSS value printed by dbg_read_rx_misc.
+            #[inline]
+            pub const fn minimum_mpdu_start_spacing(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Project-assigned name. Cleared for interface zero by the associated-STA policy-five transaction.
+            #[inline]
+            pub const fn interface_is_soft_ap(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. MACBSSID_EN: hal_mac_set_bssid clears this bit before changing the address and sets it after publication; the reachable associated-STA policy branch also sets it.
+            #[inline]
+            pub const fn address_check_enable(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `BSSID_HIGH`.
+            #[inline]
+            pub fn set_bssid_high(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+
+            /// Set `ASSOCIATION_ID`.
+            #[inline]
+            pub fn set_association_id(&mut self, value: oer_mmio::Bits<11>) -> &mut Self {
+                self.0 = (self.0 & !0x07ff0000) | (value.get() << 16);
+                self
+            }
+
+            /// Set `MINIMUM_MPDU_START_SPACING`.
+            #[inline]
+            pub fn set_minimum_mpdu_start_spacing(
+                &mut self,
+                value: oer_mmio::Bits<3>,
+            ) -> &mut Self {
+                self.0 = (self.0 & !0x38000000) | (value.get() << 27);
+                self
+            }
+
+            /// Set `INTERFACE_IS_SOFT_AP`.
+            #[inline]
+            pub fn set_interface_is_soft_ap(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `ADDRESS_CHECK_ENABLE`.
+            #[inline]
+            pub fn set_address_check_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_ERSU_ACK_RATE` register block.
+///
+/// Four byte lanes independently replaced by hal_he_set_ersu_ack_rate; no bit-level rate encoding is assigned. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+pub mod wifi_mac_ersu_ack_rate {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a4404;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x4;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a4404>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_ERSU_ACK_RATE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacErsuAckRate<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a4404>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacErsuAckRate {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacErsuAckRate<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacErsuAckRate<P> {
+        /// Read `VALUE`.
+        #[inline]
+        pub fn read_value(&self) -> value::R {
+            value::R(self.0.read::<0x0>())
+        }
+
+        /// Read `VALUE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_value(&mut self, change: impl FnOnce(&mut value::W)) {
+            let mut value = value::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+    }
+
+    /// The `VALUE` register.
+    ///
+    /// Project-assigned name. Four ordered fresh-read byte replacements at +0, +8, +16 and +24 bits. Each publishes 0x80 or 0xa0 while preserving the other three bytes.
+    pub mod value {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_0_7_opaque(self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_8_15_opaque(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_16_23_opaque(self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_24_31_opaque(self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Byte lane 0 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_0_7_opaque(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Opaque: meaning not established. Byte lane 1 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_8_15_opaque(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Opaque: meaning not established. Byte lane 2 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_16_23_opaque(&self) -> u8 {
+                (self.0 >> 16) as u8
+            }
+
+            /// Opaque: meaning not established. Byte lane 3 explicitly replaced by complete hal_he_set_ersu_ack_rate; inner encoding unknown. SOURCE: C5_LIBPP_ROM_ERSU_ACK_RATE.
+            #[inline]
+            pub const fn bits_24_31_opaque(&self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Set `BITS_0_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_8_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_8_15_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BITS_16_23_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_23_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BITS_24_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_24_31_opaque(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_INTERFACE_ADDRESS` register block.
+///
+/// Four interface-address pairs consumed by MAC receive filtering.
+pub mod wifi_mac_interface_address {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a405c;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x20;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a405c>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_INTERFACE_ADDRESS` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacInterfaceAddress<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a405c>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacInterfaceAddress {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacInterfaceAddress<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacInterfaceAddress<P> {
+        /// Read `ADDRESS_LOW%s`.
+        #[inline]
+        pub fn read_address_low(&self, index: oer_mmio::Index<4>) -> address_low::R {
+            address_low::R(self.0.read_indexed::<0x0, 0x8, 4>(index))
+        }
+
+        /// Read `ADDRESS_LOW%s`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_address_low(
+            &mut self,
+            index: oer_mmio::Index<4>,
+            change: impl FnOnce(&mut address_low::W),
+        ) {
+            let mut value = address_low::W(self.0.read_indexed::<0x0, 0x8, 4>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x0, 0x8, 4>(index, value.0);
+        }
+
+        /// Read `ADDRESS_HIGH%s`.
+        #[inline]
+        pub fn read_address_high(&self, index: oer_mmio::Index<4>) -> address_high::R {
+            address_high::R(self.0.read_indexed::<0x4, 0x8, 4>(index))
+        }
+
+        /// Read `ADDRESS_HIGH%s`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_address_high(
+            &mut self,
+            index: oer_mmio::Index<4>,
+            change: impl FnOnce(&mut address_high::W),
+        ) {
+            let mut value = address_high::W(self.0.read_indexed::<0x4, 0x8, 4>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x4, 0x8, 4>(index, value.0);
+        }
+    }
+
+    /// The `ADDRESS_LOW%s` register.
+    ///
+    /// Project-assigned name. Interface MAC bytes 0..3 in little-endian order, published by the first full-word store.
+    pub mod address_low {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bytes_0_3(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bytes_0_3(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `BYTES_0_3`.
+            #[inline]
+            pub fn set_bytes_0_3(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `ADDRESS_HIGH%s` register.
+    ///
+    /// Project-assigned name. Interface MAC bytes 4..5 are published as a full-word store before a separate fresh-read RMW sets receive-policy enable bit 16.
+    pub mod address_high {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bytes_4_5(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name. Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
+            #[inline]
+            pub const fn rx_policy_enable(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_17_31_opaque(self) -> oer_mmio::Bits<15> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn bytes_4_5(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name. Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
+            #[inline]
+            pub const fn rx_policy_enable(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_17_31_opaque(&self) -> oer_mmio::Bits<15> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Set `BYTES_4_5`.
+            #[inline]
+            pub fn set_bytes_4_5(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+
+            /// Set `RX_POLICY_ENABLE`.
+            #[inline]
+            pub fn set_rx_policy_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BITS_17_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_17_31_opaque(&mut self, value: oer_mmio::Bits<15>) -> &mut Self {
+                self.0 = (self.0 & !0xfffe0000) | (value.get() << 17);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_INTERRUPT` register block.
+///
+/// Wi-Fi MAC interrupt mask, masked status and write-to-clear aperture.
+/// The two complete hal_mac leaves independently prove the status and
+/// clear addresses. The recovered common FIQ and cold initializer prove
+/// the event-bit mapping and mask transaction used by the open ISR.
+pub mod wifi_mac_interrupt {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a4c40;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x10;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a4c40>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_INTERRUPT` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacInterrupt<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a4c40>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacInterrupt {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacInterrupt<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacInterrupt<P> {
+        /// Read `ENABLE`.
+        #[inline]
+        pub fn read_enable(&self) -> enable::R {
+            enable::R(self.0.read::<0x0>())
+        }
+
+        /// Read `ENABLE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_enable(&mut self, change: impl FnOnce(&mut enable::W)) {
+            let mut value = enable::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `RAW`.
+        #[inline]
+        pub fn read_raw(&self) -> raw::R {
+            raw::R(self.0.read::<0x4>())
+        }
+
+        /// Read `RAW`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_raw(&mut self, change: impl FnOnce(&mut raw::W)) {
+            let mut value = raw::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `STATUS`.
+        #[inline]
+        pub fn read_status(&self) -> status::R {
+            status::R(self.0.read::<0x8>())
+        }
+
+        /// Write `CLEAR` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_clear(&mut self, change: impl FnOnce(&mut clear::W)) {
+            let mut value = clear::W(0);
+            change(&mut value);
+            self.0.write::<0xc>(value.0);
+        }
+    }
+
+    /// The `ENABLE` register.
+    ///
+    /// Project-assigned name. Complete hal_init first publishes 0x19a879e0 here before its remaining tail. Complete hal_enable_mac independently publishes its argument after clearing the shared MAC disable gates. The common FIQ samples it with each interrupt status snapshot.
+    pub mod enable {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_0_4_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
+            #[inline]
+            pub const fn rx_associated_auxiliary_5(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_6_opaque(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Enable for the TX-complete event.
+            #[inline]
+            pub const fn tx_complete(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Project-assigned name. Enable for the HE BSS-color collision event.
+            #[inline]
+            pub const fn bss_color_collision(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_9_10_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// Project-assigned name. Enable for the MAC watchdog event.
+            #[inline]
+            pub const fn watchdog(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_12_opaque(self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_13_opaque(self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Project-assigned name. Enable for successful receive completion.
+            #[inline]
+            pub const fn rx_success(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Project-assigned name. Enable for the station beacon-filter event; the complete disable leaf clears this bit after disabling the filter hardware.
+            #[inline]
+            pub const fn sta_beacon_filter(self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_16_18_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. Enable for the hardware TX queue timeout/abort event.
+            #[inline]
+            pub const fn tx_timeout(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bit whose event identity remains unknown.
+            #[inline]
+            pub const fn bit_20_opaque(self) -> bool {
+                (self.0 & 0x00100000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_21_opaque(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bit whose event identity remains unknown.
+            #[inline]
+            pub const fn bit_22_opaque(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_23_opaque(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Project-assigned name. Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
+            #[inline]
+            pub const fn rx_associated_auxiliary_24(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_25_26_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_27_opaque(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_28_opaque(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_0_4_opaque(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
+            #[inline]
+            pub const fn rx_associated_auxiliary_5(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_6_opaque(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Enable for the TX-complete event.
+            #[inline]
+            pub const fn tx_complete(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Project-assigned name. Enable for the HE BSS-color collision event.
+            #[inline]
+            pub const fn bss_color_collision(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_9_10_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// Project-assigned name. Enable for the MAC watchdog event.
+            #[inline]
+            pub const fn watchdog(&self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_12_opaque(&self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_13_opaque(&self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Project-assigned name. Enable for successful receive completion.
+            #[inline]
+            pub const fn rx_success(&self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Project-assigned name. Enable for the station beacon-filter event; the complete disable leaf clears this bit after disabling the filter hardware.
+            #[inline]
+            pub const fn sta_beacon_filter(&self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_16_18_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. Enable for the hardware TX queue timeout/abort event.
+            #[inline]
+            pub const fn tx_timeout(&self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bit whose event identity remains unknown.
+            #[inline]
+            pub const fn bit_20_opaque(&self) -> bool {
+                (self.0 & 0x00100000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_21_opaque(&self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bit whose event identity remains unknown.
+            #[inline]
+            pub const fn bit_22_opaque(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_23_opaque(&self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Project-assigned name. Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
+            #[inline]
+            pub const fn rx_associated_auxiliary_24(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_25_26_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_27_opaque(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.
+            #[inline]
+            pub const fn bit_28_opaque(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Set `BITS_0_4_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_4_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x0000001f) | value.get();
+                self
+            }
+
+            /// Set `RX_ASSOCIATED_AUXILIARY_5`.
+            #[inline]
+            pub fn set_rx_associated_auxiliary_5(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                self
+            }
+
+            /// Set `BIT_6_OPAQUE`.
+            #[inline]
+            pub fn set_bit_6_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                self
+            }
+
+            /// Set `TX_COMPLETE`.
+            #[inline]
+            pub fn set_tx_complete(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                self
+            }
+
+            /// Set `BSS_COLOR_COLLISION`.
+            #[inline]
+            pub fn set_bss_color_collision(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BITS_9_10_OPAQUE`.
+            #[inline]
+            pub fn set_bits_9_10_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00000600) | (value.get() << 9);
+                self
+            }
+
+            /// Set `WATCHDOG`.
+            #[inline]
+            pub fn set_watchdog(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                self
+            }
+
+            /// Set `BIT_12_OPAQUE`.
+            #[inline]
+            pub fn set_bit_12_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                self
+            }
+
+            /// Set `BIT_13_OPAQUE`.
+            #[inline]
+            pub fn set_bit_13_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                self
+            }
+
+            /// Set `RX_SUCCESS`.
+            #[inline]
+            pub fn set_rx_success(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                self
+            }
+
+            /// Set `STA_BEACON_FILTER`.
+            #[inline]
+            pub fn set_sta_beacon_filter(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                self
+            }
+
+            /// Set `BITS_16_18_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_18_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00070000) | (value.get() << 16);
+                self
+            }
+
+            /// Set `TX_TIMEOUT`.
+            #[inline]
+            pub fn set_tx_timeout(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                self
+            }
+
+            /// Set `BIT_20_OPAQUE`.
+            #[inline]
+            pub fn set_bit_20_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                self
+            }
+
+            /// Set `BIT_21_OPAQUE`.
+            #[inline]
+            pub fn set_bit_21_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                self
+            }
+
+            /// Set `BIT_22_OPAQUE`.
+            #[inline]
+            pub fn set_bit_22_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+
+            /// Set `BIT_23_OPAQUE`.
+            #[inline]
+            pub fn set_bit_23_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                self
+            }
+
+            /// Set `RX_ASSOCIATED_AUXILIARY_24`.
+            #[inline]
+            pub fn set_rx_associated_auxiliary_24(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `BITS_25_26_OPAQUE`.
+            #[inline]
+            pub fn set_bits_25_26_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x06000000) | (value.get() << 25);
+                self
+            }
+
+            /// Set `BIT_27_OPAQUE`.
+            #[inline]
+            pub fn set_bit_27_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `BIT_28_OPAQUE`.
+            #[inline]
+            pub fn set_bit_28_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `BITS_29_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_29_31_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
+                self
+            }
+        }
+    }
+
+    /// The `RAW` register.
+    ///
+    /// Project-assigned name. Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE.
+    pub mod raw {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn events(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn events(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `EVENTS`.
+            #[inline]
+            pub fn set_events(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `STATUS` register.
+    ///
+    /// Project-assigned name. Masked MAC event snapshot read by the complete hal_mac_interrupt_get_event leaf. Its bit geometry matches the complete ENABLE event bank; only independently recovered event identities are named semantically.
+    pub mod status {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established. Masked event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_0_4_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity.
+            #[inline]
+            pub const fn rx_associated_auxiliary_5(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_6_opaque(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. At least one hardware TX queue completed.
+            #[inline]
+            pub const fn tx_complete(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Project-assigned name. HE BSS-color collision event.
+            #[inline]
+            pub const fn bss_color_collision(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_9_10_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// Project-assigned name. MAC watchdog event cleared by the complete dedicated leaf.
+            #[inline]
+            pub const fn watchdog(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_12_opaque(self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_13_opaque(self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Project-assigned name. Successfully received frame is ready for the RX completion path.
+            #[inline]
+            pub const fn rx_success(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// Project-assigned name. Masked station beacon-filter event. The paired ENABLE field identity is recovered from the complete disable leaf; no task-side dispatch is claimed here.
+            #[inline]
+            pub const fn sta_beacon_filter(self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_16_18_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. Hardware TX queue timeout/abort event.
+            #[inline]
+            pub const fn tx_timeout(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit whose identity remains unknown.
+            #[inline]
+            pub const fn bit_20_opaque(self) -> bool {
+                (self.0 & 0x00100000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_21_opaque(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit whose identity remains unknown.
+            #[inline]
+            pub const fn bit_22_opaque(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_23_opaque(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Project-assigned name. Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity.
+            #[inline]
+            pub const fn rx_associated_auxiliary_24(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_25_26_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_27_opaque(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.
+            #[inline]
+            pub const fn bit_28_opaque(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_29_31_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+        }
+    }
+
+    /// The `CLEAR` register.
+    ///
+    /// Project-assigned name. Full event snapshot written by the complete clear leaf to acknowledge pending MAC events.
+    pub mod clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `EVENTS`.
+            #[inline]
+            pub fn set_events(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_POWER_INTERRUPT` register block.
+///
+/// WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR.
+pub mod wifi_mac_power_interrupt {
+    /// The block's base address.
+    pub const BASE: usize = 0x600ad8b0;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x10;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600ad8b0>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_POWER_INTERRUPT` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacPowerInterrupt<P: oer_mmio::Placement = oer_mmio::Fixed<0x600ad8b0>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacPowerInterrupt {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacPowerInterrupt<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacPowerInterrupt<P> {
+        /// Read `ENABLE`.
+        #[inline]
+        pub fn read_enable(&self) -> enable::R {
+            enable::R(self.0.read::<0x0>())
+        }
+
+        /// Read `ENABLE`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_enable(&mut self, change: impl FnOnce(&mut enable::W)) {
+            let mut value = enable::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `RAW`.
+        #[inline]
+        pub fn read_raw(&self) -> raw::R {
+            raw::R(self.0.read::<0x4>())
+        }
+
+        /// Read `STATUS`.
+        #[inline]
+        pub fn read_status(&self) -> status::R {
+            status::R(self.0.read::<0x8>())
+        }
+
+        /// Read `CLEAR`.
+        #[inline]
+        pub fn read_clear(&self) -> clear::R {
+            clear::R(self.0.read::<0xc>())
+        }
+
+        /// Sample `CLEAR` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_clear(&self) -> clear::Snapshot {
+            clear::Snapshot(self.0.read::<0xc>() & clear::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: write one to each bit the
+        /// snapshot holds and zero to every other bit.
+        #[inline]
+        pub fn acknowledge_clear(&mut self, snapshot: clear::Snapshot) {
+            self.0.write::<0xc>(snapshot.0);
+        }
+    }
+
+    /// The `ENABLE` register.
+    ///
+    /// Project-assigned name. WDEVPWR_ENABLE diagnostic snapshot and writable event mask. Complete guarded TSF-timer leaves independently identify bits 7 through 4, and complete TBTT interrupt leaves bits 3 through 0.
+    pub mod enable {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Enable the TSF-3 TBTT event.
+            #[inline]
+            pub const fn tbtt_3(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Enable the TSF-2 TBTT event.
+            #[inline]
+            pub const fn tbtt_2(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Enable the TSF-1 TBTT event.
+            #[inline]
+            pub const fn tbtt_1(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name. Enable the TSF-0 TBTT event. TSF 0 is the station TSF.
+            #[inline]
+            pub const fn tbtt_0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-three event.
+            #[inline]
+            pub const fn tsf_timer_3(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-two event.
+            #[inline]
+            pub const fn tsf_timer_2(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-one event.
+            #[inline]
+            pub const fn tsf_timer_1(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-zero event.
+            #[inline]
+            pub const fn tsf_timer_0(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Opaque: meaning not established. Enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Enable the TSF-3 TBTT event.
+            #[inline]
+            pub const fn tbtt_3(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Enable the TSF-2 TBTT event.
+            #[inline]
+            pub const fn tbtt_2(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Enable the TSF-1 TBTT event.
+            #[inline]
+            pub const fn tbtt_1(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name. Enable the TSF-0 TBTT event. TSF 0 is the station TSF.
+            #[inline]
+            pub const fn tbtt_0(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-three event.
+            #[inline]
+            pub const fn tsf_timer_3(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-two event.
+            #[inline]
+            pub const fn tsf_timer_2(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-one event.
+            #[inline]
+            pub const fn tsf_timer_1(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Enable the guarded TSF timer-zero event.
+            #[inline]
+            pub const fn tsf_timer_0(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Opaque: meaning not established. Enable bits whose event identities remain unknown.
+            #[inline]
+            pub const fn bits_8_31_opaque(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// Set `TBTT_3`.
+            #[inline]
+            pub fn set_tbtt_3(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `TBTT_2`.
+            #[inline]
+            pub fn set_tbtt_2(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `TBTT_1`.
+            #[inline]
+            pub fn set_tbtt_1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `TBTT_0`.
+            #[inline]
+            pub fn set_tbtt_0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `TSF_TIMER_3`.
+            #[inline]
+            pub fn set_tsf_timer_3(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `TSF_TIMER_2`.
+            #[inline]
+            pub fn set_tsf_timer_2(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                self
+            }
+
+            /// Set `TSF_TIMER_1`.
+            #[inline]
+            pub fn set_tsf_timer_1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                self
+            }
+
+            /// Set `TSF_TIMER_0`.
+            #[inline]
+            pub fn set_tsf_timer_0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                self
+            }
+
+            /// Set `BITS_8_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_8_31_opaque(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+                self.0 = (self.0 & !0xffffff00) | (value.get() << 8);
+                self
+            }
+        }
+    }
+
+    /// The `RAW` register.
+    ///
+    /// Project-assigned name. WDEVPWR_RAW diagnostic snapshot with the same event geometry as ENABLE, STATUS and CLEAR.
+    pub mod raw {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Raw TSF-3 TBTT event.
+            #[inline]
+            pub const fn tbtt_3(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Raw TSF-2 TBTT event.
+            #[inline]
+            pub const fn tbtt_2(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Raw TSF-1 TBTT event.
+            #[inline]
+            pub const fn tbtt_1(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name. Raw TSF-0 TBTT event. TSF 0 is the station TSF.
+            #[inline]
+            pub const fn tbtt_0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Raw guarded TSF timer-three event.
+            #[inline]
+            pub const fn tsf_timer_3(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Raw guarded TSF timer-two event.
+            #[inline]
+            pub const fn tsf_timer_2(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Raw guarded TSF timer-one event.
+            #[inline]
+            pub const fn tsf_timer_1(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Raw guarded TSF timer-zero event.
+            #[inline]
+            pub const fn tsf_timer_0(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Opaque: meaning not established. Raw event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+        }
+    }
+
+    /// The `STATUS` register.
+    ///
+    /// Project-assigned name. Masked WDEVPWR event image returned by complete hal_pwr_interrupt_get_event, with TSF timer causes identified by the guarded timer leaves.
+    pub mod status {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Masked TSF-3 TBTT event.
+            #[inline]
+            pub const fn tbtt_3(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Masked TSF-2 TBTT event.
+            #[inline]
+            pub const fn tbtt_2(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Masked TSF-1 TBTT event.
+            #[inline]
+            pub const fn tbtt_1(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name. Masked TSF-0 TBTT event. TSF 0 is the station TSF.
+            #[inline]
+            pub const fn tbtt_0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Masked guarded TSF timer-three event.
+            #[inline]
+            pub const fn tsf_timer_3(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Masked guarded TSF timer-two event.
+            #[inline]
+            pub const fn tsf_timer_2(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Masked guarded TSF timer-one event.
+            #[inline]
+            pub const fn tsf_timer_1(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Masked guarded TSF timer-zero event.
+            #[inline]
+            pub const fn tsf_timer_0(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Opaque: meaning not established. Masked event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+        }
+    }
+
+    /// The `CLEAR` register.
+    ///
+    /// Project-assigned name. Write-one-to-clear event bank used by complete hal_pwr_interrupt_clr_event. Complete guarded TSF-timer leaves independently identify bits 7 through 4.
+    pub mod clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Acknowledge the TSF-3 TBTT event.
+            #[inline]
+            pub const fn tbtt_3(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-2 TBTT event.
+            #[inline]
+            pub const fn tbtt_2(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-1 TBTT event.
+            #[inline]
+            pub const fn tbtt_1(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF.
+            #[inline]
+            pub const fn tbtt_0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-three event.
+            #[inline]
+            pub const fn tsf_timer_3(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-two event.
+            #[inline]
+            pub const fn tsf_timer_2(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-one event.
+            #[inline]
+            pub const fn tsf_timer_1(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-zero event.
+            #[inline]
+            pub const fn tsf_timer_0(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// Opaque: meaning not established. Acknowledge event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_8_31_opaque(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+        }
+
+        /// One sample of the register's asserted fields, to acknowledge once.
+        #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+        #[derive(Debug, Eq, PartialEq)]
+        pub struct Snapshot(pub(super) u32);
+
+        impl Snapshot {
+            /// Whether no declared field was asserted.
+            pub const fn is_clear(&self) -> bool {
+                self.0 == 0
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-3 TBTT event.
+            #[inline]
+            pub const fn tbtt_3(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The snapshot without `TBTT_3` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tbtt_3(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000001)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-2 TBTT event.
+            #[inline]
+            pub const fn tbtt_2(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The snapshot without `TBTT_2` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tbtt_2(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000002)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-1 TBTT event.
+            #[inline]
+            pub const fn tbtt_1(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The snapshot without `TBTT_1` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tbtt_1(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000004)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF.
+            #[inline]
+            pub const fn tbtt_0(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The snapshot without `TBTT_0` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tbtt_0(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000008)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-three event.
+            #[inline]
+            pub const fn tsf_timer_3(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The snapshot without `TSF_TIMER_3` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tsf_timer_3(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000010)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-two event.
+            #[inline]
+            pub const fn tsf_timer_2(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// The snapshot without `TSF_TIMER_2` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tsf_timer_2(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000020)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-one event.
+            #[inline]
+            pub const fn tsf_timer_1(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// The snapshot without `TSF_TIMER_1` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tsf_timer_1(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000040)
+                }
+            }
+
+            /// Project-assigned name. Acknowledge the guarded TSF timer-zero event.
+            #[inline]
+            pub const fn tsf_timer_0(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The snapshot without `TSF_TIMER_0` unless `keep`: it is then not acknowledged.
+            pub const fn retain_tsf_timer_0(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000080)
+                }
+            }
+
+            /// Opaque: meaning not established. Acknowledge event bits whose identities remain unknown.
+            #[inline]
+            pub const fn bits_8_31_opaque(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0 >> 8)
+            }
+
+            /// The snapshot without `BITS_8_31_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bits_8_31_opaque(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0xffffff00)
+                }
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_RTC_TIMER_UPDATE` register block.
+///
+/// Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.
+pub mod wifi_mac_rtc_timer_update {
+    /// The block's base address.
+    pub const BASE: usize = 0x600ad830;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x4c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0x10, 0x14, 0x24, 0x28, 0x2c, 0x48];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600ad830>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_RTC_TIMER_UPDATE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacRtcTimerUpdate<P: oer_mmio::Placement = oer_mmio::Fixed<0x600ad830>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacRtcTimerUpdate {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacRtcTimerUpdate<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacRtcTimerUpdate<P> {
+        /// Read `CONTROL`.
+        #[inline]
+        pub fn read_control(&self) -> control::R {
+            control::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_control(&mut self, change: impl FnOnce(&mut control::W)) {
+            let mut value = control::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `SOC_WAKEUP_CLEAR`.
+        #[inline]
+        pub fn read_soc_wakeup_clear(&self) -> soc_wakeup_clear::R {
+            soc_wakeup_clear::R(self.0.read::<0x4>())
+        }
+
+        /// Read `SOC_WAKEUP_CLEAR`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_soc_wakeup_clear(&mut self, change: impl FnOnce(&mut soc_wakeup_clear::W)) {
+            let mut value = soc_wakeup_clear::W(self.0.read::<0x4>());
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Read `MODEM_SLEEP_LIMIT_CONTROL`.
+        #[inline]
+        pub fn read_modem_sleep_limit_control(&self) -> modem_sleep_limit_control::R {
+            modem_sleep_limit_control::R(self.0.read::<0x8>())
+        }
+
+        /// Read `MODEM_SLEEP_LIMIT_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_modem_sleep_limit_control(
+            &mut self,
+            change: impl FnOnce(&mut modem_sleep_limit_control::W),
+        ) {
+            let mut value = modem_sleep_limit_control::W(self.0.read::<0x8>());
+            change(&mut value);
+            self.0.write::<0x8>(value.0);
+        }
+
+        /// Read `STA_LIGHT_SLEEP_WAKE_AHEAD`.
+        #[inline]
+        pub fn read_sta_light_sleep_wake_ahead(&self) -> sta_light_sleep_wake_ahead::R {
+            sta_light_sleep_wake_ahead::R(self.0.read::<0x10>())
+        }
+
+        /// Read `STA_LIGHT_SLEEP_WAKE_AHEAD`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_sta_light_sleep_wake_ahead(
+            &mut self,
+            change: impl FnOnce(&mut sta_light_sleep_wake_ahead::W),
+        ) {
+            let mut value = sta_light_sleep_wake_ahead::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+
+        /// Read `TBTT_RF_CONTROL_WAIT_CYCLES`.
+        #[inline]
+        pub fn read_tbtt_rf_control_wait_cycles(&self) -> tbtt_rf_control_wait_cycles::R {
+            tbtt_rf_control_wait_cycles::R(self.0.read::<0x14>())
+        }
+
+        /// Read `TBTT_RF_CONTROL_WAIT_CYCLES`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_tbtt_rf_control_wait_cycles(
+            &mut self,
+            change: impl FnOnce(&mut tbtt_rf_control_wait_cycles::W),
+        ) {
+            let mut value = tbtt_rf_control_wait_cycles::W(self.0.read::<0x14>());
+            change(&mut value);
+            self.0.write::<0x14>(value.0);
+        }
+
+        /// Read `RX_BEACON_TIME_LOW`.
+        #[inline]
+        pub fn read_rx_beacon_time_low(&self) -> rx_beacon_time_low::R {
+            rx_beacon_time_low::R(self.0.read::<0x24>())
+        }
+
+        /// Read `RX_BEACON_TIME_LOW`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rx_beacon_time_low(
+            &mut self,
+            change: impl FnOnce(&mut rx_beacon_time_low::W),
+        ) {
+            let mut value = rx_beacon_time_low::W(self.0.read::<0x24>());
+            change(&mut value);
+            self.0.write::<0x24>(value.0);
+        }
+
+        /// Read `STA_TSF_CONTROL`.
+        #[inline]
+        pub fn read_sta_tsf_control(&self) -> sta_tsf_control::R {
+            sta_tsf_control::R(self.0.read::<0x28>())
+        }
+
+        /// Read `STA_TSF_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_sta_tsf_control(&mut self, change: impl FnOnce(&mut sta_tsf_control::W)) {
+            let mut value = sta_tsf_control::W(self.0.read::<0x28>());
+            change(&mut value);
+            self.0.write::<0x28>(value.0);
+        }
+
+        /// Read `STA_TBTT_INTERVAL`.
+        #[inline]
+        pub fn read_sta_tbtt_interval(&self) -> sta_tbtt_interval::R {
+            sta_tbtt_interval::R(self.0.read::<0x2c>())
+        }
+
+        /// Read `STA_TBTT_INTERVAL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_sta_tbtt_interval(&mut self, change: impl FnOnce(&mut sta_tbtt_interval::W)) {
+            let mut value = sta_tbtt_interval::W(self.0.read::<0x2c>());
+            change(&mut value);
+            self.0.write::<0x2c>(value.0);
+        }
+
+        /// Read `SLOW_CLOCK_CALIBRATION`.
+        #[inline]
+        pub fn read_slow_clock_calibration(&self) -> slow_clock_calibration::R {
+            slow_clock_calibration::R(self.0.read::<0x48>())
+        }
+
+        /// Read `SLOW_CLOCK_CALIBRATION`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_slow_clock_calibration(
+            &mut self,
+            change: impl FnOnce(&mut slow_clock_calibration::W),
+        ) {
+            let mut value = slow_clock_calibration::W(self.0.read::<0x48>());
+            change(&mut value);
+            self.0.write::<0x48>(value.0);
+        }
+    }
+
+    /// The `CONTROL` register.
+    ///
+    /// Project-assigned name. Enabled hal_timer_update_by_rtc sets bit 27. hal_set_sta_tsf_wakeup sets or clears bit 21 together with the STA TSF wakeup bit at 0x600ad858.
+    pub mod control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. hal_set_sta_tsf_wakeup sets or clears this bit in the same branch as STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE.
+            #[inline]
+            pub const fn sta_tsf_wakeup_enable(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Opaque: meaning not established. Set when the leaf's enable argument is nonzero.
+            #[inline]
+            pub const fn bit_27_opaque(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_20_opaque(self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_22_26_opaque(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_31_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. hal_set_sta_tsf_wakeup sets or clears this bit in the same branch as STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE.
+            #[inline]
+            pub const fn sta_tsf_wakeup_enable(&self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Opaque: meaning not established. Set when the leaf's enable argument is nonzero.
+            #[inline]
+            pub const fn bit_27_opaque(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_20_opaque(&self) -> oer_mmio::Bits<21> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_22_26_opaque(&self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_28_31_opaque(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Set `STA_TSF_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_sta_tsf_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                self
+            }
+
+            /// Set `BIT_27_OPAQUE`.
+            #[inline]
+            pub fn set_bit_27_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `BITS_0_20_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_20_opaque(&mut self, value: oer_mmio::Bits<21>) -> &mut Self {
+                self.0 = (self.0 & !0x001fffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_22_26_OPAQUE`.
+            #[inline]
+            pub fn set_bits_22_26_opaque(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                self.0 = (self.0 & !0x07c00000) | (value.get() << 22);
+                self
+            }
+
+            /// Set `BITS_28_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_28_31_opaque(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0xf0000000) | (value.get() << 28);
+                self
+            }
+        }
+    }
+
+    /// The `SOC_WAKEUP_CLEAR` register.
+    ///
+    /// Project-assigned name. Complete libpp[hal_tsf.o]::hal_tsf_clear_soc_wakeup_request sets bit 30. Complete modem-power leaves independently expose status bits and clear pulses in this shared word; hardware transition behavior is not inferred.
+    pub mod soc_wakeup_clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. The dedicated setter replaces bits 9:0.
+            #[inline]
+            pub const fn beacon_filter_force_sync_limit(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit 10.
+            #[inline]
+            pub const fn beacon_filter_force_sync_enable(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Project-assigned name. The dedicated setter replaces bits 17:11.
+            #[inline]
+            pub const fn beacon_filter_force_dump_limit(self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit 21.
+            #[inline]
+            pub const fn beacon_filter_force_dump_enable(self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Project-assigned name. Dedicated clear leaf sets bit 28.
+            #[inline]
+            pub const fn clear_beacon_sleep_counter(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. Dedicated clear leaf sets bit 29.
+            #[inline]
+            pub const fn clear_beacon_miss_counter(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn clear_request(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. Dedicated clear leaf sets bit 31.
+            #[inline]
+            pub const fn clear_beacon_info(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_20_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_22_27_opaque(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. The dedicated setter replaces bits 9:0.
+            #[inline]
+            pub const fn beacon_filter_force_sync_limit(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit 10.
+            #[inline]
+            pub const fn beacon_filter_force_sync_enable(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Project-assigned name. The dedicated setter replaces bits 17:11.
+            #[inline]
+            pub const fn beacon_filter_force_dump_limit(&self) -> oer_mmio::Bits<7> {
+                oer_mmio::Bits::truncate(self.0 >> 11)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit 21.
+            #[inline]
+            pub const fn beacon_filter_force_dump_enable(&self) -> bool {
+                (self.0 & 0x00200000) != 0
+            }
+
+            /// Project-assigned name. Dedicated clear leaf sets bit 28.
+            #[inline]
+            pub const fn clear_beacon_sleep_counter(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. Dedicated clear leaf sets bit 29.
+            #[inline]
+            pub const fn clear_beacon_miss_counter(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn clear_request(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. Dedicated clear leaf sets bit 31.
+            #[inline]
+            pub const fn clear_beacon_info(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_20_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_22_27_opaque(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Set `BEACON_FILTER_FORCE_SYNC_LIMIT`.
+            #[inline]
+            pub fn set_beacon_filter_force_sync_limit(
+                &mut self,
+                value: oer_mmio::Bits<10>,
+            ) -> &mut Self {
+                self.0 = (self.0 & !0x000003ff) | value.get();
+                self
+            }
+
+            /// Set `BEACON_FILTER_FORCE_SYNC_ENABLE`.
+            #[inline]
+            pub fn set_beacon_filter_force_sync_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                self
+            }
+
+            /// Set `BEACON_FILTER_FORCE_DUMP_LIMIT`.
+            #[inline]
+            pub fn set_beacon_filter_force_dump_limit(
+                &mut self,
+                value: oer_mmio::Bits<7>,
+            ) -> &mut Self {
+                self.0 = (self.0 & !0x0003f800) | (value.get() << 11);
+                self
+            }
+
+            /// Set `BEACON_FILTER_FORCE_DUMP_ENABLE`.
+            #[inline]
+            pub fn set_beacon_filter_force_dump_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                self
+            }
+
+            /// Set `CLEAR_BEACON_SLEEP_COUNTER`.
+            #[inline]
+            pub fn set_clear_beacon_sleep_counter(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `CLEAR_BEACON_MISS_COUNTER`.
+            #[inline]
+            pub fn set_clear_beacon_miss_counter(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `CLEAR_REQUEST`.
+            #[inline]
+            pub fn set_clear_request(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `CLEAR_BEACON_INFO`.
+            #[inline]
+            pub fn set_clear_beacon_info(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BITS_18_20_OPAQUE`.
+            #[inline]
+            pub fn set_bits_18_20_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x001c0000) | (value.get() << 18);
+                self
+            }
+
+            /// Set `BITS_22_27_OPAQUE`.
+            #[inline]
+            pub fn set_bits_22_27_opaque(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0x0fc00000) | (value.get() << 22);
+                self
+            }
+        }
+    }
+
+    /// The `MODEM_SLEEP_LIMIT_CONTROL` register.
+    ///
+    /// Project-assigned name. Complete no-call setters prove two bounded modem counters and their independent limit-exceeded wake gates. Units and hardware transition behavior remain unknown.
+    pub mod modem_sleep_limit_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Low four argument bits published by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_limit.
+            #[inline]
+            pub const fn beacon_miss_limit(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit four.
+            #[inline]
+            pub const fn beacon_miss_limit_wakeup_enable(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Low ten argument bits published in bits 14:5 by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_sleep_limit.
+            #[inline]
+            pub const fn modem_state_sleep_limit(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit fifteen.
+            #[inline]
+            pub const fn modem_state_sleep_limit_wakeup_enable(self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_31_opaque(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Low four argument bits published by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_limit.
+            #[inline]
+            pub const fn beacon_miss_limit(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit four.
+            #[inline]
+            pub const fn beacon_miss_limit_wakeup_enable(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. Low ten argument bits published in bits 14:5 by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_sleep_limit.
+            #[inline]
+            pub const fn modem_state_sleep_limit(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// Project-assigned name. Dedicated enable/disable leaves set or clear bit fifteen.
+            #[inline]
+            pub const fn modem_state_sleep_limit_wakeup_enable(&self) -> bool {
+                (self.0 & 0x00008000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_31_opaque(&self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Set `BEACON_MISS_LIMIT`.
+            #[inline]
+            pub fn set_beacon_miss_limit(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                self.0 = (self.0 & !0x0000000f) | value.get();
+                self
+            }
+
+            /// Set `BEACON_MISS_LIMIT_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_beacon_miss_limit_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `MODEM_STATE_SLEEP_LIMIT`.
+            #[inline]
+            pub fn set_modem_state_sleep_limit(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                self.0 = (self.0 & !0x00007fe0) | (value.get() << 5);
+                self
+            }
+
+            /// Set `MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_modem_state_sleep_limit_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                self
+            }
+
+            /// Set `BITS_16_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_31_opaque(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                self
+            }
+        }
+    }
+
+    /// The `STA_LIGHT_SLEEP_WAKE_AHEAD` register.
+    ///
+    /// Project-assigned name. Complete hal_set_sta_light_sleep_wake_ahead_time replaces the high sixteen bits. Complete hal_set_sta_tbtt independently publishes its fifth argument to the same field.
+    pub mod sta_light_sleep_wake_ahead {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn time(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_15_opaque(self) -> u16 {
+                (self.0) as u16
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn time(&self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_15_opaque(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Set `TIME`.
+            #[inline]
+            pub fn set_time(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BITS_0_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_15_opaque(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `TBTT_RF_CONTROL_WAIT_CYCLES` register.
+    ///
+    /// Project-assigned name. Complete libpp[hal_tsf.o]::tsf_hal_set_tbtt_rf_ctrl_wait_cycles replaces the low twenty-four bits; units and hardware transition behavior remain unknown.
+    pub mod tbtt_rf_control_wait_cycles {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00ffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x14;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn wait_cycles(self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn wait_cycles(&self) -> oer_mmio::Bits<24> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set `WAIT_CYCLES`.
+            #[inline]
+            pub fn set_wait_cycles(&mut self, value: oer_mmio::Bits<24>) -> &mut Self {
+                self.0 = (self.0 & !0x00ffffff) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `RX_BEACON_TIME_LOW` register.
+    ///
+    /// Project-assigned name. Complete hal_set_rx_beacon_time and libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_timeout independently replace the same low sixteen bits. The mode-dependent hardware interpretation is not inferred.
+    pub mod rx_beacon_time_low {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x24;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn value(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_31_opaque(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn value(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_31_opaque(&self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Set `VALUE`.
+            #[inline]
+            pub fn set_value(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_16_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_31_opaque(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                self
+            }
+        }
+    }
+
+    /// The `STA_TSF_CONTROL` register.
+    ///
+    /// Project-assigned name. Shared STA TSF scheduler, TBTT and modem-state wakeup control word used by hal_enable_sta_tsf, hal_disable_sta_tsf, hal_enable_sta_tbtt, hal_disable_sta_tbtt, hal_set_sta_tbtt_ahead_time, hal_set_sta_tsf_wakeup, and the wakeup-protect enable/disable leaves.
+    pub mod sta_tsf_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x28;
+
+        /// The declared values of the `STA_TSF_MODE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum StaTsfMode {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl StaTsfMode {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Disabled),
+                    0x1 => Some(Self::Enabled),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed.
+            #[inline]
+            pub const fn sta_tbtt_ahead_time(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name. hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them.
+            #[inline]
+            pub const fn sta_tsf_mode(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The `STA_TSF_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn sta_tsf_mode_variant(self) -> Option<StaTsfMode> {
+                StaTsfMode::from_bits((self.0 >> 19) & 0xf)
+            }
+
+            /// Project-assigned name. libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_enable sets this bit and the corresponding disable leaf clears it.
+            #[inline]
+            pub const fn modem_state_wakeup_protect_enable(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit.
+            #[inline]
+            pub const fn sta_tbtt_enable(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.
+            #[inline]
+            pub const fn sta_tsf_enable_low(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE.
+            #[inline]
+            pub const fn sta_tsf_wakeup_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name. hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.
+            #[inline]
+            pub const fn sta_tsf_enable_high(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_18_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_23_opaque(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_28_opaque(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed.
+            #[inline]
+            pub const fn sta_tbtt_ahead_time(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name. hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them.
+            #[inline]
+            pub const fn sta_tsf_mode(&self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The `STA_TSF_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn sta_tsf_mode_variant(&self) -> Option<StaTsfMode> {
+                StaTsfMode::from_bits((self.0 >> 19) & 0xf)
+            }
+
+            /// Project-assigned name. libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_enable sets this bit and the corresponding disable leaf clears it.
+            #[inline]
+            pub const fn modem_state_wakeup_protect_enable(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit.
+            #[inline]
+            pub const fn sta_tbtt_enable(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.
+            #[inline]
+            pub const fn sta_tsf_enable_low(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE.
+            #[inline]
+            pub const fn sta_tsf_wakeup_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name. hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.
+            #[inline]
+            pub const fn sta_tsf_enable_high(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_16_18_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_23_opaque(&self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_25_opaque(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_28_opaque(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Set `STA_TBTT_AHEAD_TIME`.
+            #[inline]
+            pub fn set_sta_tbtt_ahead_time(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+
+            /// Set `STA_TSF_MODE`.
+            #[inline]
+            pub fn set_sta_tsf_mode(&mut self, value: StaTsfMode) -> &mut Self {
+                self.0 = (self.0 & !0x00780000) | (value.bits() << 19);
+                self
+            }
+
+            /// Set `MODEM_STATE_WAKEUP_PROTECT_ENABLE`.
+            #[inline]
+            pub fn set_modem_state_wakeup_protect_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `STA_TBTT_ENABLE`.
+            #[inline]
+            pub fn set_sta_tbtt_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `STA_TSF_ENABLE_LOW`.
+            #[inline]
+            pub fn set_sta_tsf_enable_low(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `STA_TSF_WAKEUP_ENABLE`.
+            #[inline]
+            pub fn set_sta_tsf_wakeup_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `STA_TSF_ENABLE_HIGH`.
+            #[inline]
+            pub fn set_sta_tsf_enable_high(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+
+            /// Set `BITS_16_18_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_18_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00070000) | (value.get() << 16);
+                self
+            }
+
+            /// Set `BIT_23_OPAQUE`.
+            #[inline]
+            pub fn set_bit_23_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                self
+            }
+
+            /// Set `BIT_25_OPAQUE`.
+            #[inline]
+            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `BIT_28_OPAQUE`.
+            #[inline]
+            pub fn set_bit_28_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+        }
+    }
+
+    /// The `STA_TBTT_INTERVAL` register.
+    ///
+    /// Project-assigned name. Complete hal_set_sta_tbtt_interval replaces bits 25:0 with its 32-bit argument shifted right by ten and preserves bits 31:26. Complete hal_set_sta_tbtt performs the same update from its third argument, and libpp[hal_tsf.o]::tsf_hal_get_tbtt_interval reads the interval back as this field shifted left by ten.
+    pub mod sta_tbtt_interval {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x2c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. The TBTT interval in station TSF units of 1024 µs.
+            #[inline]
+            pub const fn interval_tsf_bits_35_10(self) -> oer_mmio::Bits<26> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_26_31_opaque(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. The TBTT interval in station TSF units of 1024 µs.
+            #[inline]
+            pub const fn interval_tsf_bits_35_10(&self) -> oer_mmio::Bits<26> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_26_31_opaque(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0 >> 26)
+            }
+
+            /// Set `INTERVAL_TSF_BITS_35_10`.
+            #[inline]
+            pub fn set_interval_tsf_bits_35_10(&mut self, value: oer_mmio::Bits<26>) -> &mut Self {
+                self.0 = (self.0 & !0x03ffffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_26_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_26_31_opaque(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & !0xfc000000) | (value.get() << 26);
+                self
+            }
+        }
+    }
+
+    /// The `SLOW_CLOCK_CALIBRATION` register.
+    ///
+    /// Project-assigned name. Enabled hal_timer_update_by_rtc replaces bits 17:0 with the low eighteen bits returned by g_wifi_osi_funcs._slowclk_cal_get.
+    pub mod slow_clock_calibration {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x48;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Any eighteen-bit value returned by the OS-adapter calibration callback is published without interpretation.
+            #[inline]
+            pub const fn value(self) -> oer_mmio::Bits<18> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_31_opaque(self) -> oer_mmio::Bits<14> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Any eighteen-bit value returned by the OS-adapter calibration callback is published without interpretation.
+            #[inline]
+            pub const fn value(&self) -> oer_mmio::Bits<18> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_31_opaque(&self) -> oer_mmio::Bits<14> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Set `VALUE`.
+            #[inline]
+            pub fn set_value(&mut self, value: oer_mmio::Bits<18>) -> &mut Self {
+                self.0 = (self.0 & !0x0003ffff) | value.get();
+                self
+            }
+
+            /// Set `BITS_18_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_18_31_opaque(&mut self, value: oer_mmio::Bits<14>) -> &mut Self {
+                self.0 = (self.0 & !0xfffc0000) | (value.get() << 18);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_STA_BEACON_FILTER` register block.
+///
+/// Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits are toggled together; individual hardware meanings remain unknown.
+pub mod wifi_mac_sta_beacon_filter {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a42b4;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x4;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a42b4>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_STA_BEACON_FILTER` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacStaBeaconFilter<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a42b4>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacStaBeaconFilter {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacStaBeaconFilter<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacStaBeaconFilter<P> {
+        /// Read `CONTROL`.
+        #[inline]
+        pub fn read_control(&self) -> control::R {
+            control::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_control(&mut self, change: impl FnOnce(&mut control::W)) {
+            let mut value = control::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+    }
+
+    /// The `CONTROL` register.
+    ///
+    /// Project-assigned name. hal_enable_sta_beacon_filter sets bits 2:0 after enabling the matching interrupt; hal_disable_sta_beacon_filter clears them before disabling that interrupt.
+    pub mod control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_0_2_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_3_31_opaque(self) -> oer_mmio::Bits<29> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_0_2_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_3_31_opaque(&self) -> oer_mmio::Bits<29> {
+                oer_mmio::Bits::truncate(self.0 >> 3)
+            }
+
+            /// Set `BITS_0_2_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_2_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00000007) | value.get();
+                self
+            }
+
+            /// Set `BITS_3_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_3_31_opaque(&mut self, value: oer_mmio::Bits<29>) -> &mut Self {
+                self.0 = (self.0 & !0xfffffff8) | (value.get() << 3);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_STA_TSF_LOAD` register block.
+///
+/// Shared station TSF load and coherent snapshot transaction.
+pub mod wifi_mac_sta_tsf_load {
+    /// The block's base address.
+    pub const BASE: usize = 0x600ad814;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x18;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600ad814>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_STA_TSF_LOAD` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacStaTsfLoad<P: oer_mmio::Placement = oer_mmio::Fixed<0x600ad814>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacStaTsfLoad {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacStaTsfLoad<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacStaTsfLoad<P> {
+        /// Read `CONTROL`.
+        #[inline]
+        pub fn read_control(&self) -> control::R {
+            control::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_control(&mut self, change: impl FnOnce(&mut control::W)) {
+            let mut value = control::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Write `VALUE_LOW` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_value_low(&mut self, change: impl FnOnce(&mut value_low::W)) {
+            let mut value = value_low::W(0);
+            change(&mut value);
+            self.0.write::<0x4>(value.0);
+        }
+
+        /// Write `VALUE_HIGH` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_value_high(&mut self, change: impl FnOnce(&mut value_high::W)) {
+            let mut value = value_high::W(0);
+            change(&mut value);
+            self.0.write::<0x8>(value.0);
+        }
+
+        /// Read `SNAPSHOT_LOW`.
+        #[inline]
+        pub fn read_snapshot_low(&self) -> snapshot_low::R {
+            snapshot_low::R(self.0.read::<0xc>())
+        }
+
+        /// Read `SNAPSHOT_HIGH`.
+        #[inline]
+        pub fn read_snapshot_high(&self) -> snapshot_high::R {
+            snapshot_high::R(self.0.read::<0x10>())
+        }
+
+        /// Read `TSF_DEVIATION_CONTROL`.
+        #[inline]
+        pub fn read_tsf_deviation_control(&self) -> tsf_deviation_control::R {
+            tsf_deviation_control::R(self.0.read::<0x14>())
+        }
+
+        /// Read `TSF_DEVIATION_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_tsf_deviation_control(
+            &mut self,
+            change: impl FnOnce(&mut tsf_deviation_control::W),
+        ) {
+            let mut value = tsf_deviation_control::W(self.0.read::<0x14>());
+            change(&mut value);
+            self.0.write::<0x14>(value.0);
+        }
+    }
+
+    /// The `CONTROL` register.
+    ///
+    /// Project-assigned name. Complete hal_set_sta_tsf asserts bit four after writing both station TSF value words; the SoftAP path of complete hal_mac_tsf_reset asserts bit five after clearing both shared TSF value words; complete libpp[hal_tsf.o]::hal_get_sta_tsf sets then clears bit zero around its snapshot reads.
+    pub mod control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Complete libpp[hal_tsf.o]::hal_get_sta_tsf sets this bit before either station TSF word is sampled and clears it after the optional reads.
+            #[inline]
+            pub const fn snapshot_station_tsf(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Station TSF load request asserted by the final fresh-read RMW in hal_set_sta_tsf.
+            #[inline]
+            pub const fn load_station_tsf(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. SoftAP TSF load request asserted after the two zero-value writes by the arg0=0 path of complete hal_mac_tsf_reset.
+            #[inline]
+            pub const fn load_softap_tsf(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target.
+            #[inline]
+            pub const fn load_station_tbtt_target(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_1_3_opaque(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_6_7_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_9_31_opaque(self) -> oer_mmio::Bits<23> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Complete libpp[hal_tsf.o]::hal_get_sta_tsf sets this bit before either station TSF word is sampled and clears it after the optional reads.
+            #[inline]
+            pub const fn snapshot_station_tsf(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name. Station TSF load request asserted by the final fresh-read RMW in hal_set_sta_tsf.
+            #[inline]
+            pub const fn load_station_tsf(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Project-assigned name. SoftAP TSF load request asserted after the two zero-value writes by the arg0=0 path of complete hal_mac_tsf_reset.
+            #[inline]
+            pub const fn load_softap_tsf(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// Project-assigned name. Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target.
+            #[inline]
+            pub const fn load_station_tbtt_target(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_1_3_opaque(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 1)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_6_7_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_9_31_opaque(&self) -> oer_mmio::Bits<23> {
+                oer_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// Set `SNAPSHOT_STATION_TSF`.
+            #[inline]
+            pub fn set_snapshot_station_tsf(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `LOAD_STATION_TSF`.
+            #[inline]
+            pub fn set_load_station_tsf(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `LOAD_SOFTAP_TSF`.
+            #[inline]
+            pub fn set_load_softap_tsf(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                self
+            }
+
+            /// Set `LOAD_STATION_TBTT_TARGET`.
+            #[inline]
+            pub fn set_load_station_tbtt_target(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `BITS_1_3_OPAQUE`.
+            #[inline]
+            pub fn set_bits_1_3_opaque(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x0000000e) | (value.get() << 1);
+                self
+            }
+
+            /// Set `BITS_6_7_OPAQUE`.
+            #[inline]
+            pub fn set_bits_6_7_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x000000c0) | (value.get() << 6);
+                self
+            }
+
+            /// Set `BITS_9_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_9_31_opaque(&mut self, value: oer_mmio::Bits<23>) -> &mut Self {
+                self.0 = (self.0 & !0xfffffe00) | (value.get() << 9);
+                self
+            }
+        }
+    }
+
+    /// The `VALUE_LOW` register.
+    ///
+    /// Project-assigned name. Low 32 bits written first by complete hal_set_sta_tsf.
+    pub mod value_low {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `VALUE`.
+            #[inline]
+            pub fn set_value(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `VALUE_HIGH` register.
+    ///
+    /// Project-assigned name. High 32 bits written second by complete hal_set_sta_tsf.
+    pub mod value_high {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x8;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `VALUE`.
+            #[inline]
+            pub fn set_value(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `SNAPSHOT_LOW` register.
+    ///
+    /// Project-assigned name. Coherently latched low 32 bits conditionally read by complete libpp[hal_tsf.o]::hal_get_sta_tsf.
+    pub mod snapshot_low {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn value(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `SNAPSHOT_HIGH` register.
+    ///
+    /// Project-assigned name. Coherently latched high 32 bits conditionally read by complete libpp[hal_tsf.o]::hal_get_sta_tsf.
+    pub mod snapshot_high {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn value(self) -> u32 {
+                self.0
+            }
+        }
+    }
+
+    /// The `TSF_DEVIATION_CONTROL` register.
+    ///
+    /// Project-assigned name. Complete ROM leaves independently replace the TSF deviation value and set two synchronization controls; omitted bits remain semantically unknown.
+    pub mod tsf_deviation_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x14;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn deviation(self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn rx_beacon_abort_sync_enable(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn deviation_sync_enable(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_17_18_opaque(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn deviation(&self) -> u16 {
+                (self.0) as u16
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn rx_beacon_abort_sync_enable(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn deviation_sync_enable(&self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_17_18_opaque(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_20_31_opaque(&self) -> oer_mmio::Bits<12> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Set `DEVIATION`.
+            #[inline]
+            pub fn set_deviation(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                self
+            }
+
+            /// Set `RX_BEACON_ABORT_SYNC_ENABLE`.
+            #[inline]
+            pub fn set_rx_beacon_abort_sync_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `DEVIATION_SYNC_ENABLE`.
+            #[inline]
+            pub fn set_deviation_sync_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                self
+            }
+
+            /// Set `BITS_17_18_OPAQUE`.
+            #[inline]
+            pub fn set_bits_17_18_opaque(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00060000) | (value.get() << 17);
+                self
+            }
+
+            /// Set `BITS_20_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_20_31_opaque(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & !0xfff00000) | (value.get() << 20);
+                self
+            }
+        }
+    }
+}
+
+/// The `WIFI_MAC_TX_COMMON` register block.
+///
+/// Shared Wi-Fi CCA, timeout and completion state used by MAC transmit queues and the PHY-owned Wi-Fi CCA gate.
+pub mod wifi_mac_tx_common {
+    /// The block's base address.
+    pub const BASE: usize = 0x600a4c5c;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x60;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x50, 0x54, 0x58, 0x5c];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a4c5c>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_TX_COMMON` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct WifiMacTxCommon<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a4c5c>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl WifiMacTxCommon {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> WifiMacTxCommon<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> WifiMacTxCommon<P> {
+        /// Read `CCA_CONTROL`.
+        #[inline]
+        pub fn read_cca_control(&self) -> cca_control::R {
+            cca_control::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CCA_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_cca_control(&mut self, change: impl FnOnce(&mut cca_control::W)) {
+            let mut value = cca_control::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Write `QUEUE_STATE_CLEAR` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_queue_state_clear(&mut self, change: impl FnOnce(&mut queue_state_clear::W)) {
+            let mut value = queue_state_clear::W(0);
+            change(&mut value);
+            self.0.write::<0x50>(value.0);
+        }
+
+        /// Read `QUEUE_STATE`.
+        #[inline]
+        pub fn read_queue_state(&self) -> queue_state::R {
+            queue_state::R(self.0.read::<0x54>())
+        }
+
+        /// Read `COMPLETE_CLEAR`.
+        #[inline]
+        pub fn read_complete_clear(&self) -> complete_clear::R {
+            complete_clear::R(self.0.read::<0x58>())
+        }
+
+        /// Sample `COMPLETE_CLEAR` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_complete_clear(&self) -> complete_clear::Snapshot {
+            complete_clear::Snapshot(self.0.read::<0x58>() & complete_clear::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: write one to each bit the
+        /// snapshot holds and zero to every other bit.
+        #[inline]
+        pub fn acknowledge_complete_clear(&mut self, snapshot: complete_clear::Snapshot) {
+            self.0.write::<0x58>(snapshot.0);
+        }
+
+        /// Read `COMPLETE_STATE`.
+        #[inline]
+        pub fn read_complete_state(&self) -> complete_state::R {
+            complete_state::R(self.0.read::<0x5c>())
+        }
+    }
+
+    /// The `CCA_CONTROL` register.
+    ///
+    /// Project-assigned name. Global Wi-Fi TX CCA control; complete PHY enable/disable leaves update the high two fields through separate fresh reads.
+    pub mod cca_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xf0000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero in their second fresh-read edge.
+            #[inline]
+            pub const fn phy_aux_force(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Project-assigned name. Value three suppresses CCA while invalidating a timed-out queue. Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero.
+            #[inline]
+            pub const fn force(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 30)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero in their second fresh-read edge.
+            #[inline]
+            pub const fn phy_aux_force(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// Project-assigned name. Value three suppresses CCA while invalidating a timed-out queue. Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero.
+            #[inline]
+            pub const fn force(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 30)
+            }
+
+            /// Set `PHY_AUX_FORCE`.
+            #[inline]
+            pub fn set_phy_aux_force(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x30000000) | (value.get() << 28);
+                self
+            }
+
+            /// Set `FORCE`.
+            #[inline]
+            pub fn set_force(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0xc0000000) | (value.get() << 30);
+                self
+            }
+        }
+    }
+
+    /// The `QUEUE_STATE_CLEAR` register.
+    ///
+    /// Project-assigned name. Queue collision/timeout state acknowledgement.
+    pub mod queue_state_clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x50;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `COLLISION_QUEUE_0`.
+            #[inline]
+            pub fn set_collision_queue_0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `COLLISION_QUEUE_1`.
+            #[inline]
+            pub fn set_collision_queue_1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `COLLISION_QUEUE_2`.
+            #[inline]
+            pub fn set_collision_queue_2(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `COLLISION_QUEUE_3`.
+            #[inline]
+            pub fn set_collision_queue_3(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `BITS_4_15_OPAQUE`.
+            #[inline]
+            pub fn set_bits_4_15_opaque(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & !0x0000fff0) | (value.get() << 4);
+                self
+            }
+
+            /// Set `TIMEOUT_QUEUE_0`.
+            #[inline]
+            pub fn set_timeout_queue_0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `TIMEOUT_QUEUE_1`.
+            #[inline]
+            pub fn set_timeout_queue_1(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
+                self
+            }
+
+            /// Set `TIMEOUT_QUEUE_2`.
+            #[inline]
+            pub fn set_timeout_queue_2(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00040000) | (u32::from(value) << 18);
+                self
+            }
+
+            /// Set `TIMEOUT_QUEUE_3`.
+            #[inline]
+            pub fn set_timeout_queue_3(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                self
+            }
+
+            /// Set `BITS_20_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_20_31_opaque(&mut self, value: oer_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & !0xfff00000) | (value.get() << 20);
+                self
+            }
+        }
+    }
+
+    /// The `QUEUE_STATE` register.
+    ///
+    /// Project-assigned name. Per-queue timeout and trigger-flow state. The complete trigger-flow HAL getter returns the entire high byte; the complete completion dispatcher then right-shifts it by the completed queue number and tests bit zero.
+    pub mod queue_state {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffff00ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x54;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn collision_queue_0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn collision_queue_1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn collision_queue_2(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn collision_queue_3(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_4_7_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn timeout_queue_0(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn timeout_queue_1(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn timeout_queue_2(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn timeout_queue_3(self) -> bool {
+                (self.0 & 0x00080000) != 0
+            }
+
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_20_23_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Project-assigned name. Queue zero is participating in the hardware Trigger-based transmit flow.
+            #[inline]
+            pub const fn trigger_flow_queue_0(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn trigger_flow_queue_1(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn trigger_flow_queue_2(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn trigger_flow_queue_3(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Opaque: meaning not established. The complete HAL returns four additional high bitmap bits whose bounded ordinary-queue meaning remains unresolved.
+            #[inline]
+            pub const fn bits_28_31_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+        }
+    }
+
+    /// The `COMPLETE_CLEAR` register.
+    ///
+    /// Project-assigned name. Preserved-image acknowledgement for ordinary queue completion bits.
+    pub mod complete_clear {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x58;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_2(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_3(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_4_31_opaque(self) -> oer_mmio::Bits<28> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+        }
+
+        /// One sample of the register's asserted fields, to acknowledge once.
+        #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+        #[derive(Debug, Eq, PartialEq)]
+        pub struct Snapshot(pub(super) u32);
+
+        impl Snapshot {
+            /// Whether no declared field was asserted.
+            pub const fn is_clear(&self) -> bool {
+                self.0 == 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_0(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The snapshot without `QUEUE_0` unless `keep`: it is then not acknowledged.
+            pub const fn retain_queue_0(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000001)
+                }
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_1(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The snapshot without `QUEUE_1` unless `keep`: it is then not acknowledged.
+            pub const fn retain_queue_1(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000002)
+                }
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_2(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The snapshot without `QUEUE_2` unless `keep`: it is then not acknowledged.
+            pub const fn retain_queue_2(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000004)
+                }
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_3(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The snapshot without `QUEUE_3` unless `keep`: it is then not acknowledged.
+            pub const fn retain_queue_3(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0x00000008)
+                }
+            }
+
+            /// Opaque: meaning not established.
+            #[inline]
+            pub const fn bits_4_31_opaque(&self) -> oer_mmio::Bits<28> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// The snapshot without `BITS_4_31_OPAQUE` unless `keep`: it is then not acknowledged.
+            pub const fn retain_bits_4_31_opaque(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & !0xfffffff0)
+                }
+            }
+        }
+    }
+
+    /// The `COMPLETE_STATE` register.
+    ///
+    /// Project-assigned name. Low four bits report completed ordinary queues 0..3.
+    pub mod complete_state {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000000ff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x5c;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_1(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_2(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Project-assigned name.
+            #[inline]
+            pub const fn queue_3(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Opaque: meaning not established. Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_4_7_opaque(self) -> oer_mmio::Bits<4> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+        }
+    }
+}
+
+/// The ownership partitions of the typed register blocks.
+pub mod peripheral_ownership {
+    /// IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle.
+    pub struct Ieee802154Peripherals {
+        pub ieee802154_mac: super::ieee802154_mac::Ieee802154Mac,
+        pub ieee802154_interrupt_route: super::ieee802154_interrupt_route::Ieee802154InterruptRoute,
+    }
+
+    /// Modem event-task matrix channels zero and one, programmed by the IEEE 802.15.4 driver.
+    pub struct ModemEtmPeripherals {
+        pub modem_etm: super::modem_etm::ModemEtm,
+    }
+
+    /// Modem clock gates and MAC resets driven by the vendor modem clock devices; owned by the modem clock owner.
+    pub struct ModemClockPeripherals {
+        pub modem_syscon_radio: super::modem_syscon_radio::ModemSysconRadio,
+        pub modem_lpcon_shared_clock: super::modem_lpcon_shared_clock::ModemLpconSharedClock,
+    }
+
+    /// Analog register I2C master hosts, read mask and host selection driven by the PHY.
+    pub struct PhyI2cPeripherals {
+        pub i2c_ana_mst: super::i2c_ana_mst::I2cAnaMst,
+    }
+
+    /// PMU analog I2C power controls and PHY baseband configuration words driven by the PHY.
+    pub struct PhyRadioPeripherals {
+        pub pmu_radio: super::pmu_radio::PmuRadio,
+        pub phy_baseband_config: super::phy_baseband_config::PhyBasebandConfig,
+        pub lp_aon_radio: super::lp_aon_radio::LpAonRadio,
+        pub apb_saradc_radio: super::apb_saradc_radio::ApbSaradcRadio,
+        pub pcr_radio: super::pcr_radio::PcrRadio,
+    }
+
+    /// ESP32-C5 Wi-Fi MAC register views owned by the Wi-Fi hardware lifecycle.
+    pub struct WifiMacPeripherals {
+        pub wifi_mac_aux_tsf_control: super::wifi_mac_aux_tsf_control::WifiMacAuxTsfControl,
+        pub wifi_mac_bssid_policy: super::wifi_mac_bssid_policy::WifiMacBssidPolicy,
+        pub wifi_mac_interface_address: super::wifi_mac_interface_address::WifiMacInterfaceAddress,
+        pub wifi_mac_rtc_timer_update: super::wifi_mac_rtc_timer_update::WifiMacRtcTimerUpdate,
+        pub wifi_mac_sta_beacon_filter: super::wifi_mac_sta_beacon_filter::WifiMacStaBeaconFilter,
+        pub wifi_mac_sta_tsf_load: super::wifi_mac_sta_tsf_load::WifiMacStaTsfLoad,
+        pub wifi_mac_tx_common: super::wifi_mac_tx_common::WifiMacTxCommon,
+        pub wifi_mac_ersu_ack_rate: super::wifi_mac_ersu_ack_rate::WifiMacErsuAckRate,
+    }
+
+    /// Wi-Fi interrupt banks transferred from cold setup to the hard interrupt handlers.
+    pub struct WifiInterruptPeripherals {
+        pub wifi_mac_interrupt: super::wifi_mac_interrupt::WifiMacInterrupt,
+        pub wifi_mac_power_interrupt: super::wifi_mac_power_interrupt::WifiMacPowerInterrupt,
+    }
+
+    /// Every typed partition.
+    pub struct PeripheralPartitions {
+        /// IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle.
+        pub ieee802154: Ieee802154Peripherals,
+        /// Modem event-task matrix channels zero and one, programmed by the IEEE 802.15.4 driver.
+        pub modem_etm: ModemEtmPeripherals,
+        /// Modem clock gates and MAC resets driven by the vendor modem clock devices; owned by the modem clock owner.
+        pub modem_clock: ModemClockPeripherals,
+        /// Analog register I2C master hosts, read mask and host selection driven by the PHY.
+        pub phy_i2c: PhyI2cPeripherals,
+        /// PMU analog I2C power controls and PHY baseband configuration words driven by the PHY.
+        pub phy_radio: PhyRadioPeripherals,
+        /// ESP32-C5 Wi-Fi MAC register views owned by the Wi-Fi hardware lifecycle.
+        pub wifi_mac: WifiMacPeripherals,
+        /// Wi-Fi interrupt banks transferred from cold setup to the hard interrupt handlers.
+        pub wifi_interrupts: WifiInterruptPeripherals,
+    }
+
+    /// The device registers of every typed block, which the PAC root
+    /// takes with one `oer_mmio::assume_owned`.
+    pub type Claims = (
+        (
+            super::ieee802154_mac::Claim,
+            super::ieee802154_interrupt_route::Claim,
+            super::modem_etm::Claim,
+        ),
+        (
+            super::modem_syscon_radio::Claim,
+            super::modem_lpcon_shared_clock::Claim,
+            super::i2c_ana_mst::Claim,
+        ),
+        (
+            super::pmu_radio::Claim,
+            super::phy_baseband_config::Claim,
+            super::lp_aon_radio::Claim,
+        ),
+        (
+            super::apb_saradc_radio::Claim,
+            super::pcr_radio::Claim,
+            super::wifi_mac_aux_tsf_control::Claim,
+        ),
+        (
+            super::wifi_mac_bssid_policy::Claim,
+            super::wifi_mac_interface_address::Claim,
+            super::wifi_mac_rtc_timer_update::Claim,
+        ),
+        (
+            super::wifi_mac_sta_beacon_filter::Claim,
+            super::wifi_mac_sta_tsf_load::Claim,
+            super::wifi_mac_tx_common::Claim,
+        ),
+        (
+            super::wifi_mac_ersu_ack_rate::Claim,
+            super::wifi_mac_interrupt::Claim,
+            super::wifi_mac_power_interrupt::Claim,
+        ),
+    );
+
+    /// Give each claimed block to its owner in its partition.
+    #[inline]
+    pub fn partition(claims: Claims) -> PeripheralPartitions {
+        let (
+            (ieee802154_mac, ieee802154_interrupt_route, modem_etm),
+            (modem_syscon_radio, modem_lpcon_shared_clock, i2c_ana_mst),
+            (pmu_radio, phy_baseband_config, lp_aon_radio),
+            (apb_saradc_radio, pcr_radio, wifi_mac_aux_tsf_control),
+            (wifi_mac_bssid_policy, wifi_mac_interface_address, wifi_mac_rtc_timer_update),
+            (wifi_mac_sta_beacon_filter, wifi_mac_sta_tsf_load, wifi_mac_tx_common),
+            (wifi_mac_ersu_ack_rate, wifi_mac_interrupt, wifi_mac_power_interrupt),
+        ) = claims;
+        PeripheralPartitions {
+            ieee802154: Ieee802154Peripherals {
+                ieee802154_mac: super::ieee802154_mac::Ieee802154Mac::new(ieee802154_mac),
+                ieee802154_interrupt_route:
+                    super::ieee802154_interrupt_route::Ieee802154InterruptRoute::new(
+                        ieee802154_interrupt_route,
+                    ),
+            },
+            modem_etm: ModemEtmPeripherals {
+                modem_etm: super::modem_etm::ModemEtm::new(modem_etm),
+            },
+            modem_clock: ModemClockPeripherals {
+                modem_syscon_radio: super::modem_syscon_radio::ModemSysconRadio::new(
+                    modem_syscon_radio,
+                ),
+                modem_lpcon_shared_clock:
+                    super::modem_lpcon_shared_clock::ModemLpconSharedClock::new(
+                        modem_lpcon_shared_clock,
+                    ),
+            },
+            phy_i2c: PhyI2cPeripherals {
+                i2c_ana_mst: super::i2c_ana_mst::I2cAnaMst::new(i2c_ana_mst),
+            },
+            phy_radio: PhyRadioPeripherals {
+                pmu_radio: super::pmu_radio::PmuRadio::new(pmu_radio),
+                phy_baseband_config: super::phy_baseband_config::PhyBasebandConfig::new(
+                    phy_baseband_config,
+                ),
+                lp_aon_radio: super::lp_aon_radio::LpAonRadio::new(lp_aon_radio),
+                apb_saradc_radio: super::apb_saradc_radio::ApbSaradcRadio::new(apb_saradc_radio),
+                pcr_radio: super::pcr_radio::PcrRadio::new(pcr_radio),
+            },
+            wifi_mac: WifiMacPeripherals {
+                wifi_mac_aux_tsf_control:
+                    super::wifi_mac_aux_tsf_control::WifiMacAuxTsfControl::new(
+                        wifi_mac_aux_tsf_control,
+                    ),
+                wifi_mac_bssid_policy: super::wifi_mac_bssid_policy::WifiMacBssidPolicy::new(
+                    wifi_mac_bssid_policy,
+                ),
+                wifi_mac_interface_address:
+                    super::wifi_mac_interface_address::WifiMacInterfaceAddress::new(
+                        wifi_mac_interface_address,
+                    ),
+                wifi_mac_rtc_timer_update:
+                    super::wifi_mac_rtc_timer_update::WifiMacRtcTimerUpdate::new(
+                        wifi_mac_rtc_timer_update,
+                    ),
+                wifi_mac_sta_beacon_filter:
+                    super::wifi_mac_sta_beacon_filter::WifiMacStaBeaconFilter::new(
+                        wifi_mac_sta_beacon_filter,
+                    ),
+                wifi_mac_sta_tsf_load: super::wifi_mac_sta_tsf_load::WifiMacStaTsfLoad::new(
+                    wifi_mac_sta_tsf_load,
+                ),
+                wifi_mac_tx_common: super::wifi_mac_tx_common::WifiMacTxCommon::new(
+                    wifi_mac_tx_common,
+                ),
+                wifi_mac_ersu_ack_rate: super::wifi_mac_ersu_ack_rate::WifiMacErsuAckRate::new(
+                    wifi_mac_ersu_ack_rate,
+                ),
+            },
+            wifi_interrupts: WifiInterruptPeripherals {
+                wifi_mac_interrupt: super::wifi_mac_interrupt::WifiMacInterrupt::new(
+                    wifi_mac_interrupt,
+                ),
+                wifi_mac_power_interrupt:
+                    super::wifi_mac_power_interrupt::WifiMacPowerInterrupt::new(
+                        wifi_mac_power_interrupt,
+                    ),
+            },
+        }
+    }
+}
+
+const _: () = assert!(
+    oer_mmio::check::disjoint_blocks(&[
+        (
+            apb_saradc_radio::BASE,
+            <apb_saradc_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            i2c_ana_mst::BASE,
+            <i2c_ana_mst::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            ieee802154_interrupt_route::BASE,
+            <ieee802154_interrupt_route::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            ieee802154_mac::BASE,
+            <ieee802154_mac::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            lp_aon_radio::BASE,
+            <lp_aon_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            modem_etm::BASE,
+            <modem_etm::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            modem_lpcon_shared_clock::BASE,
+            <modem_lpcon_shared_clock::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            modem_syscon_radio::BASE,
+            <modem_syscon_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            pcr_radio::BASE,
+            <pcr_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            phy_baseband_config::BASE,
+            <phy_baseband_config::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            pmu_radio::BASE,
+            <pmu_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_aux_tsf_control::BASE,
+            <wifi_mac_aux_tsf_control::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_bssid_policy::BASE,
+            <wifi_mac_bssid_policy::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_ersu_ack_rate::BASE,
+            <wifi_mac_ersu_ack_rate::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_interface_address::BASE,
+            <wifi_mac_interface_address::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_interrupt::BASE,
+            <wifi_mac_interrupt::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_power_interrupt::BASE,
+            <wifi_mac_power_interrupt::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_rtc_timer_update::BASE,
+            <wifi_mac_rtc_timer_update::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_sta_beacon_filter::BASE,
+            <wifi_mac_sta_beacon_filter::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_sta_tsf_load::BASE,
+            <wifi_mac_sta_tsf_load::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            wifi_mac_tx_common::BASE,
+            <wifi_mac_tx_common::BlockWords as oer_mmio::Registers>::WORDS
+        )
+    ]),
+    "no two typed blocks list the same word"
+);

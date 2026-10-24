@@ -1,38 +1,22 @@
-//! Tests of generated field readers over initialized host memory.
+//! Tests of generated field readers over host memory.
+
+use crate::generated::ieee802154_interrupt_route::Ieee802154InterruptRoute;
+
+/// The route classification of one interrupt-matrix word image.
+fn classify(word: u32) -> crate::Ieee802154RouteState {
+    let mut memory = [word];
+    let route = Ieee802154InterruptRoute::host(&mut memory)
+        .expect("one word holds the route block")
+        .read_core0_route();
+    crate::Ieee802154RouteState::from_observation(route.map().get() != 0, route.pass_in_sec())
+}
 
 #[test]
-#[allow(
-    unsafe_code,
-    reason = "synthetic register block backed by initialized host memory"
-)]
 fn reserved_route_bits_do_not_change_named_reset_classification() {
     use crate::Ieee802154RouteState;
-    let word = 0xfffffec0u32;
-    // SAFETY: the register block is exactly one u32 register. This local
-    // initialized word supplies its size and alignment and outlives the
-    // read; no hardware address or mutable alias is involved.
-    let registers = unsafe {
-        &*core::ptr::from_ref(&word).cast::<crate::svd::ieee802154_interrupt_route::RegisterBlock>()
-    };
-    let route = registers.core0_route().read();
+    assert_eq!(classify(0xffff_fec0), Ieee802154RouteState::ResetDetached);
     assert_eq!(
-        Ieee802154RouteState::from_observation(
-            route.map().bits() != 0,
-            route.pass_in_sec().bit_is_set()
-        ),
-        Ieee802154RouteState::ResetDetached
-    );
-    let word = 0xffffffc0u32;
-    // SAFETY: the same initialized, aligned single-register host storage.
-    let registers = unsafe {
-        &*core::ptr::from_ref(&word).cast::<crate::svd::ieee802154_interrupt_route::RegisterBlock>()
-    };
-    let route = registers.core0_route().read();
-    assert_eq!(
-        Ieee802154RouteState::from_observation(
-            route.map().bits() != 0,
-            route.pass_in_sec().bit_is_set()
-        ),
+        classify(0xffff_ffc0),
         Ieee802154RouteState::PassLevelConfigured
     );
 }
