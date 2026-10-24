@@ -33281,7 +33281,10 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
       <description>The two CPU interrupt-matrix words for ESP32-S31 modem source 132
 (MODEM_ZB_MAC). This source-specific view is retained with the IEEE 802.15.4
 owner and publishes only the generated field readers needed to prove that a
-polled or validation transaction starts with both CPU routes detached.</description>
+polled or validation transaction starts with both CPU routes detached. Its
+read-only access states the radio's access: the hardware words are
+read-write, and esp-hal's interrupt table (InterruptRoutes) is their only
+writer.</description>
       <baseAddress>0x20585210</baseAddress>
       <registers>
         <register>
@@ -33289,7 +33292,7 @@ polled or validation transaction starts with both CPU routes detached.</descript
           <description>Project-assigned name. Core-zero destination and privilege routing for MODEM_ZB_MAC.</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -33311,7 +33314,7 @@ polled or validation transaction starts with both CPU routes detached.</descript
           <description>Project-assigned name. Core-one destination and privilege routing for MODEM_ZB_MAC.</description>
           <addressOffset>0x800</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>

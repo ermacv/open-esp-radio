@@ -114,13 +114,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (hardware, clocks) = match take_radio(singletons, &psram) {
-        Ok(pair) => pair,
-        Err(_) => {
-            let _ = console.write(b"OER-RESULT: fail w3 take-radio\r\n");
-            park()
-        }
-    };
+    let (hardware, clocks) = take_radio(singletons, &psram);
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {

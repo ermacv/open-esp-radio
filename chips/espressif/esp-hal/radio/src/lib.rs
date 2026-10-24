@@ -44,7 +44,7 @@ use oer_esp32s31_hal::power::{
 mod esp_hal_handoff;
 
 #[cfg(feature = "esp32s31")]
-pub use esp_hal_handoff::{EspHal, EspHalClocks, RadioHandoffError, RadioSingletons, take_radio};
+pub use esp_hal_handoff::{EspHal, EspHalClocks, RadioSingletons, take_radio};
 
 /// The radio's platform clock provider over the backend `B`.
 pub struct PlatformClocks<B> {

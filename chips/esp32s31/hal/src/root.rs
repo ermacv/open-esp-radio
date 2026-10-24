@@ -10,6 +10,9 @@
 /// The read-only Wi-Fi MAC local-time capability a [`WifiPartition`]
 /// lends.
 pub use oer_esp32s31_pac::MacLocalTime;
+/// The platform's proof that it consumed every radio singleton, which
+/// [`RadioHardware::from_handoff`] takes.
+pub use oer_esp32s31_pac::RadioHandoff;
 
 use crate::power::PlatformClockBackend;
 use oer_esp32s31_pac::{
@@ -27,16 +30,18 @@ use crate::{
 };
 
 /// Proof that its holder owns the chip's analog-I2C master (regi2c) for the
-/// rest of the program, as [`RadioHardware::take`] requires.
+/// rest of the program, as [`RadioHardware::from_handoff`] requires.
 ///
 /// The platform that owns the master hands it out once: on ESP-HAL,
 /// `oer-espressif-esp-hal-radio`'s `take_radio`, which consumes the
 /// `I2C_ANA_MST` singleton. Without it there is no radio root:
 ///
-/// ```compile_fail
-/// use oer_esp32s31_hal::root::RadioHardware;
+/// ```compile_fail,E0061
+/// use oer_esp32s31_hal::root::{RadioHandoff, RadioHardware};
 ///
-/// let _hardware = RadioHardware::take();
+/// fn root(handoff: RadioHandoff) -> RadioHardware {
+///     RadioHardware::from_handoff(handoff)
+/// }
 /// ```
 #[derive(Debug)]
 #[must_use = "the radio root needs the analog bus ownership"]
@@ -94,16 +99,16 @@ impl RadioHardware {
         }
     }
 
-    /// Acquire the radio register singleton once.
+    /// Adopt the radio registers from the platform handoff.
     ///
     /// `analog_bus` proves the caller owns the analog-I2C master: the PHY
     /// writes analog registers through transactions split across executor
     /// polls, which no other writer may interleave.
-    pub fn take(_analog_bus: AnalogBusOwnership) -> Option<Self> {
-        RadioPartitions::take().map(|partitions| Self {
-            partitions,
+    pub fn from_handoff(handoff: RadioHandoff, _analog_bus: AnalogBusOwnership) -> Self {
+        Self {
+            partitions: RadioPartitions::from_handoff(handoff),
             phy_registration: PhyRegistration::new(),
-        })
+        }
     }
 
     /// The complete root of an isolated probe image (`cfg(oer_probe)`).

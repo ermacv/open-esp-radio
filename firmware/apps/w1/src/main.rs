@@ -57,7 +57,7 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{Failure, LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_esp_hal_radio::{PlatformClocks, RadioHandoffError, RadioSingletons, take_radio};
+use oer_espressif_esp_hal_radio::{PlatformClocks, RadioSingletons, take_radio};
 use oer_espressif_executor::{
     Executor, InterruptExecutor, LevelOrder, Spawner, timer_observation::Window,
 };
@@ -264,18 +264,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     };
     // esp-hal's clocks come back as a provider over its backend; the image
     // times the same backend instead.
-    let (hardware, _esp_hal_clocks) = match take_radio(singletons, &psram) {
-        Ok(radio) => radio,
-        Err(error) => {
-            note(
-                &mut console,
-                &Note::w1_take_radio_fail(match error {
-                    RadioHandoffError::RootTaken => "RootTaken",
-                }),
-            );
-            park()
-        }
-    };
+    let (hardware, _esp_hal_clocks) = take_radio(singletons, &psram);
     let (domain, partitions) = hardware.split::<TimedEspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         note(&mut console, &Note::w1_fail("claim"));

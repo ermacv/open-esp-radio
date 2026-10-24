@@ -13,6 +13,8 @@
 #   disjoint-lifecycle    esp-hal stores only where no radio owner exists
 #   unreached-esp-hal-path  esp-hal's storing function has no caller here
 #   whole-word-stores     both sides store whole words, no read-modify-write
+#   radio-reads-only      the radio view is read-only in the publication and no
+#                         API transaction stores to it (checked); esp-hal alone writes
 schema = 1
 
 [[word]]
@@ -56,6 +58,20 @@ radio = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST"
 esp_hal = "MODEM_LPCON.clk_conf_power_st in modem_clock_domain_power_state_icg_map_init (rtc_cntl/rtc/esp32s31.rs)"
 coordination = "disjoint-lifecycle"
 reason = "Written only by modem_clock_domain_power_state_icg_map_init at the end of rtc::init inside esp_hal::init (esp-hal 4fd4ba9b), which ORs in the modem clock-domain ICG maps before any radio owner exists."
+
+[[word]]
+address = 0x20585210
+radio = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map[132] in map_raw and reinitialize_vectoring_after_handoff (interrupt/mod.rs)"
+coordination = "radio-reads-only"
+reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff (called from the staged runtime's Handoff::adopt) map every source, MODEM_ZB_MAC included, to disabled, and the table's InterruptRoutes owner (oer-espressif-esp-hal-irq) routes MODEM_ZB_MAC when an image's table binds it (esp-hal 1f646c5 interrupt/mod.rs)."
+
+[[word]]
+address = 0x20585a10
+radio = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE"
+esp_hal = "INTERRUPT_CORE1.core_1_intr_map[132] in map_raw and reinitialize_vectoring_after_handoff (interrupt/mod.rs)"
+coordination = "radio-reads-only"
+reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff (called from the staged runtime's Handoff::adopt) map every source, MODEM_ZB_MAC included, to disabled, and the table's InterruptRoutes owner (oer-espressif-esp-hal-irq) routes MODEM_ZB_MAC when an image's table binds it (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x2070401c

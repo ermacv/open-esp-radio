@@ -25,7 +25,8 @@ pub(crate) struct WifiRadioPeripheralOwners {
 /// depends on belong to the shared radio partition.
 pub(crate) struct Ieee802154TaskPeripheralOwners {
     pub(crate) ieee802154_mac: crate::ieee802154::ownership::TaskRegisters,
-    pub(crate) ieee802154_interrupt_route: svd::Ieee802154InterruptRoute,
+    pub(crate) ieee802154_interrupt_route:
+        generated::ieee802154_interrupt_route::Ieee802154InterruptRoute,
     pub(crate) etm: crate::modem::etm::Ieee802154EtmChannels,
     pub(crate) rx_info: crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
 }
@@ -200,23 +201,58 @@ pub struct SharedRadioPartition(svd::peripheral_ownership::SharedRadioPeripheral
 /// Opaque IEEE 802.15.4 MAC and interrupt-route register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154Partition {
-    peripherals: svd::peripheral_ownership::Ieee802154Peripherals,
+    peripherals: generated::peripheral_ownership::Ieee802154Peripherals,
     etm: crate::modem::etm::Ieee802154EtmChannels,
     rx_info: crate::ieee802154::baseband::Ieee802154BasebandRxInfo,
 }
 
-/// Every reviewed ESP32-S31 radio register partition.
+/// Proof that the platform transferred every ESP32-S31 radio singleton.
+#[must_use = "the radio root needs the consumed platform ownership"]
+pub struct RadioHandoff(());
+
+impl RadioHandoff {
+    /// Assert the platform's unique, permanent radio ownership handoff.
+    ///
+    /// # Safety
+    /// Call at most once. The caller consumed the platform's analog-I2C,
+    /// modem clock, Wi-Fi, Bluetooth and IEEE 802.15.4 singletons, and no
+    /// other code may access their radio register partitions thereafter.
+    #[allow(
+        unsafe_code,
+        reason = "the platform proves exclusive radio MMIO ownership"
+    )]
+    pub const unsafe fn assume_exclusive() -> Self {
+        Self(())
+    }
+}
+
+/// Every reviewed ESP32-S31 radio register partition, from the platform
+/// handoff.
 ///
 /// This is the sole production acquisition point. The partitions carry no
 /// protocol route or lifecycle policy: the HAL composes them into register
 /// sets and returns them here only as an ownership bundle.
 ///
-/// ```compile_fail
+/// ```compile_fail,E0061
 /// use oer_esp32s31_pac::RadioPartitions;
+/// let partitions = RadioPartitions::from_handoff();
+/// ```
 ///
-/// let partitions = RadioPartitions::take().unwrap();
-/// let _first = partitions.wifi_mac;
-/// let _second = partitions.wifi_mac;
+/// ```compile_fail,E0382
+/// use oer_esp32s31_pac::{RadioHandoff, RadioPartitions};
+/// fn duplicate(handoff: RadioHandoff) {
+///     let first = RadioPartitions::from_handoff(handoff);
+///     let second = RadioPartitions::from_handoff(handoff);
+/// }
+/// ```
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_pac::{RadioHandoff, RadioPartitions};
+/// fn duplicate(handoff: RadioHandoff) {
+///     let partitions = RadioPartitions::from_handoff(handoff);
+///     let _first = partitions.wifi_mac;
+///     let _second = partitions.wifi_mac;
+/// }
 /// ```
 #[must_use = "dropping the radio partitions permanently loses the unique hardware capability"]
 pub struct RadioPartitions {
@@ -233,34 +269,42 @@ pub struct RadioPartitions {
 }
 
 impl RadioPartitions {
-    /// Acquire the generated radio singleton and claim the typed blocks
-    /// once.
+    /// Adopt the platform's consumed radio owners without a second
+    /// singleton, and claim the typed blocks once.
     #[allow(
         unsafe_code,
-        reason = "the radio root claims the typed blocks once, with the generated singleton"
+        reason = "the consumed handoff proves unique register ownership"
     )]
-    pub fn take() -> Option<Self> {
-        let peripherals = svd::Peripherals::take()?;
+    pub fn from_handoff(_handoff: RadioHandoff) -> Self {
         #[allow(
             clippy::disallowed_methods,
-            reason = "the radio root claims the typed blocks once, with the generated singleton"
+            reason = "the radio root claims the typed blocks once, from the handoff"
         )]
-        // SAFETY: `svd::Peripherals::take` returns the radio singleton at
-        // most once, so this claim is made once. The typed blocks' words lie
-        // in no svd2rust partition (the generator renders a typed peripheral
-        // only as its typed block), so no other owner reaches them. The
-        // generated `const` assertion beside `Claims` checks that no two
-        // typed blocks list the same word; words esp-hal also writes are
-        // reviewed with their coordination in `registers/shared-words.toml`.
-        let claims = unsafe { oer_mmio::assume_owned::<Claims>() };
-        Some(Self::from_peripherals(peripherals, claims))
+        // SAFETY: `RadioHandoff`'s constructor guarantees exclusive, permanent
+        // ownership of every radio register partition, and it is consumed
+        // here, so this root is built once: no other owner of the generated
+        // singleton's peripherals or of the typed blocks' words exists. The
+        // typed blocks' words lie in no svd2rust partition (the generator
+        // renders a typed peripheral only as its typed block). The generated
+        // `const` assertion beside `Claims` checks that no two typed blocks
+        // list the same word; words esp-hal also writes are reviewed with
+        // their coordination in `registers/shared-words.toml`.
+        let (peripherals, claims) = unsafe {
+            (
+                svd::Peripherals::steal(),
+                oer_mmio::assume_owned::<Claims>(),
+            )
+        };
+        Self::from_peripherals(peripherals, claims)
     }
 
     /// Bind the generated singleton and the claimed typed blocks to the
     /// opaque partition owners.
     pub(crate) fn from_peripherals(peripherals: svd::Peripherals, claims: Claims) -> Self {
-        let generated::peripheral_ownership::PeripheralPartitions { wifi_mac_interface } =
-            generated::peripheral_ownership::partition(claims);
+        let generated::peripheral_ownership::PeripheralPartitions {
+            wifi_mac_interface,
+            ieee802154,
+        } = generated::peripheral_ownership::partition(claims);
         let svd::peripheral_ownership::PeripheralPartitions {
             wifi_mac,
             wifi_rx_dma,
@@ -271,7 +315,6 @@ impl RadioPartitions {
             bluetooth_modem_lp_timer,
             bluetooth_interrupts,
             shared_radio,
-            ieee802154,
             modem_etm,
             mac_local_time,
             // Inventory-only word views have no safe runtime owner.
@@ -745,7 +788,7 @@ impl Ieee802154TaskRegisters {
     pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
         let Ieee802154Partition {
             peripherals:
-                svd::peripheral_ownership::Ieee802154Peripherals {
+                generated::peripheral_ownership::Ieee802154Peripherals {
                     ieee802154_mac,
                     ieee802154_interrupt_route,
                 },
@@ -779,7 +822,7 @@ impl Ieee802154TaskRegisters {
         } = self.peripherals;
         let ieee802154_mac = crate::ieee802154::ownership::reunite(task_mac, interrupts.registers);
         Ieee802154Partition {
-            peripherals: svd::peripheral_ownership::Ieee802154Peripherals {
+            peripherals: generated::peripheral_ownership::Ieee802154Peripherals {
                 ieee802154_mac,
                 ieee802154_interrupt_route,
             },

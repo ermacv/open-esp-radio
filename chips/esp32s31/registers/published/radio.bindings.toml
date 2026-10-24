@@ -53968,7 +53968,7 @@ access = "write-only"
 [[registers]]
 address = 542659088
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
 peripheral = "IEEE802154_INTERRUPT_ROUTE"
 peripheral-type = "Ieee802154InterruptRoute"
@@ -53981,19 +53981,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_LEVEL"
 method = "pass_level"
 bit-offset = 8
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 542661136
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE"
 peripheral = "IEEE802154_INTERRUPT_ROUTE"
 peripheral-type = "Ieee802154InterruptRoute"
@@ -54006,14 +54006,14 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_LEVEL"
 method = "pass_level"
 bit-offset = 8
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 542666816

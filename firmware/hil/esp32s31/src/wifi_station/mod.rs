@@ -114,13 +114,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         ieee802154: peripherals.IEEE802154,
         lp_tsens: peripherals.LP_TSENS,
     };
-    let (hardware, clocks) = match take_radio(singletons, &psram) {
-        Ok(pair) => pair,
-        Err(_) => {
-            crate::early(&oer_diagnostics::Note::runtime_fail("take-radio"));
-            park()
-        }
-    };
+    let (hardware, clocks) = take_radio(singletons, &psram);
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {

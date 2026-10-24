@@ -18,6 +18,8 @@
 #   disjoint-lifecycle    esp-hal stores only where no radio owner exists
 #   unreached-esp-hal-path  esp-hal's storing function has no caller here
 #   whole-word-stores     both sides store whole words, no read-modify-write
+#   radio-reads-only      the radio view is read-only in the publication and no
+#                         API transaction stores to it (checked); esp-hal alone writes
 schema = 1
 
 [[word]]

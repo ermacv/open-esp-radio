@@ -9,8 +9,8 @@ clocks on esp-hal.
   `WIFI`, `BT`, `IEEE802154`, `LP_TSENS`) and returns the HAL's
   `RadioHardware` and the clock provider. The adopted `Psram` proves that
   esp-hal holds its never-released MPLL reference, so the radio's MPLL
-  requests never cross zero. Its one `unsafe` asserts the analog-bus
-  ownership, which the consumed `I2C_ANA_MST` makes true.
+  requests never cross zero. Its one `unsafe` asserts the radio handoff
+  and the analog-bus ownership, which the consumed singletons make true.
 - Blocks where the radio owns only single words (PMU, HP_SYS_CLKRST,
   LP_AON_CLK_RST, LP_PERICLKRST, the interrupt matrix) stay esp-hal's; their
   shared words are reviewed in `chips/esp32s31/registers/shared-words.toml`.

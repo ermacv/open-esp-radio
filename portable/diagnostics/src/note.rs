@@ -828,8 +828,6 @@ topics! {
         ("cause" cause: name);
     W0TrackFailed = 155, w0_track_failed, "OER w0 track failed"
         ("cause" cause: name);
-    W0TakeRadioFail = 152, w0_take_radio_fail, "OER-RESULT: fail w0 take_radio="
-        ("" error: name);
     W0Fail = 153, w0_fail, "OER-RESULT: fail w0 "
         ("" reason: name);
     W0Pass = 154, w0_pass, "OER-RESULT: pass w0" ();
@@ -955,8 +953,6 @@ topics! {
         ("" reason: name);
     W1FailNotExercised = 262, w1_fail_not_exercised, " not exercised" ();
     W1FailEnd = 263, w1_fail_end, "" ();
-    W1TakeRadioFail = 264, w1_take_radio_fail, "OER-RESULT: fail w1 take_radio="
-        ("" error: name);
     W1DoorbellFail = 265, w1_doorbell_fail, "OER-RESULT: fail w1 doorbell="
         ("" error: name, "source" source: dec, "first" first: dec, "second" second: dec);
     W1Fail = 266, w1_fail, "OER-RESULT: fail w1 "

@@ -21,8 +21,8 @@ OER radio-root clock=Pll160m acquired released
 OER-RESULT: pass radio-root
 ```
 
-A failed handoff reports `take_radio=RootTaken`; a refused clock reports
-`clock=<name> refused=PlatformClockError` followed by a failing clock verdict.
+A refused clock reports `clock=<name> refused=PlatformClockError` followed
+by a failing clock verdict.
 The shared previous-panic record keeps every retained field, including
 whether the static message was absent or empty. No target formatter runs.
 The records use `oer_trace::Event` without changing `portable/trace` or
