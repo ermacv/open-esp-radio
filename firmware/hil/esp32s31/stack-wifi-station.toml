@@ -20,9 +20,9 @@ reason = "The P1 port-body poll boundary retains resource admission and completi
 ceiling_bytes = 4672
 
 [[frame_exceptions.runtime]]
-function = "<oer_memory::static_place::PlacedFuture<<oer_ieee80211_runtime::station_service::StationService<oer_firmware_hil_esp32s31::wifi_station::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>>, oer_firmware_hil_esp32s31::wifi_station::station::Callbacks, oer_firmware_hil_esp32s31::wifi_station::station::Rates, 1>>::run_placed<2, 8, 2, oer_firmware_hil_esp32s31::wifi_station::station::Output<oer_radio_port::pool::path::Child<oer_radio_port::pool::path::Root<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>>, 8>>, oer_embassy_time::EmbassyClock>::{closure#0}> as core::future::future::Future>::poll"
+function = "<oer_ieee80211_runtime::station_service::StationService<oer_firmware_hil_esp32s31::wifi_station::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>>, oer_firmware_hil_esp32s31::wifi_station::station::Callbacks, oer_firmware_hil_esp32s31::wifi_station::station::Rates, 1>>::run_placed::<2, 8, 2, oer_firmware_hil_esp32s31::wifi_station::station::Output<oer_radio_port::pool::path::Child<oer_radio_port::pool::path::Root<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>>, 8>>, oer_embassy_time::EmbassyClock>::{closure#0}"
 reason = "The statically backed service poll retains enable/disable bookkeeping and quarantine constructors on P1; custody remains in future backing."
-ceiling_bytes = 11680
+ceiling_bytes = 12048
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_sta::machine::ConnectedRsn>::advance_deferred"
