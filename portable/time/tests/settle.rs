@@ -16,6 +16,7 @@ impl Clock for Stepping {
     }
 }
 
+#[expect(clippy::expect_used, reason = "a test helper outside a test function")]
 fn limit(micros: u64) -> SettleLimit {
     SettleLimit::new(Duration::from_micros(micros)).expect("a test limit is a valid settle limit")
 }

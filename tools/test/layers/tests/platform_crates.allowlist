@@ -7,6 +7,7 @@ Cargo.toml 2
 chips/esp32c5/board/Cargo.toml 1
 chips/esp32c5/board/src/lib.rs 1
 chips/esp32c5/esp-hal-soc/Cargo.toml 1
+chips/esp32c5/esp-hal-soc/src/handoff.rs 1
 chips/esp32c5/esp-hal-soc/src/radio.rs 1
 chips/esp32c5/esp-hal-soc/src/watchdog.rs 1
 chips/esp32s31/board/Cargo.toml 1
@@ -64,8 +65,7 @@ firmware/hil/esp32c5/Cargo.toml 1
 firmware/hil/esp32c5/src/boot_smoke_rearm.rs 1
 firmware/hil/esp32c5/src/boot_smoke.rs 1
 firmware/hil/esp32c5/src/main.rs 4
-firmware/hil/esp32c5/src/system/console.rs 7
-firmware/hil/esp32c5/src/system/mod.rs 2
+firmware/hil/esp32c5/src/system/console.rs 4
 firmware/hil/esp32c5/src/system/postmortem.rs 1
 firmware/hil/esp32s31/Cargo.toml 1
 firmware/hil/esp32s31-lower-mac/Cargo.toml 1

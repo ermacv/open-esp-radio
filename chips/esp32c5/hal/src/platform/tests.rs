@@ -49,10 +49,12 @@ fn the_reset_cause_decodes_with_the_chip_table() {
 fn owning_the_generator_enables_it() {
     let mut words = memory(BLOCK_BYTES, 0);
     let clock = Stepping(Cell::new(0));
-    drop(Entropy::new(
-        EntropyRegisters::host(&mut words).expect("host memory holds the block"),
-        &clock,
-    ));
+    {
+        let _entropy = Entropy::new(
+            EntropyRegisters::host(&mut words).expect("host memory holds the block"),
+            &clock,
+        );
+    }
     assert!(
         words.iter().any(|&word| word != 0),
         "making the owner configured the stopped generator"
