@@ -781,6 +781,7 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
     fn a_radio_reads_only_review_of_a_writable_word_fails() {
         let word = |coordination| ReviewedWord {
             address: 0x1000,
+            words: 1,
             radio: "ROUTE.CORE0".into(),
             esp_hal: "INTERRUPT_CORE0.core_0_intr_map".into(),
             coordination,

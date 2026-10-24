@@ -7,7 +7,9 @@ The core-local interrupt controller of the hart that accesses it, as 32-bit
 words: each line's word holds its pending, enable, attribute and control
 bytes. Invariant: every vectored line is level-triggered, so a write of the
 word that changes its enable or control writes back the pending bit read
-without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES)."""
+without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). The read-only
+access states our access: the hardware words are read-write, and
+esp-hal's vectoring is their only writer until the table writes the lines."""
 baseAddress = 0x20800000
 
 [[peripherals.registers]]
@@ -20,7 +22,7 @@ name = "CTRL%s"
 description = "Line %s: pending, enable, attribute and level control."
 addressOffset = 0x1000
 size = 32
-access = "read-write"
+access = "read-only"
 resetValue = 0x0
 
 [[peripherals.registers.register.fields]]

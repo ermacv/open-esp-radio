@@ -22774,7 +22774,9 @@ pub mod layouts {
 /// words: each line's word holds its pending, enable, attribute and control
 /// bytes. Invariant: every vectored line is level-triggered, so a write of the
 /// word that changes its enable or control writes back the pending bit read
-/// without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES).
+/// without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). The read-only
+/// access states our access: the hardware words are read-write, and
+/// esp-hal's vectoring is their only writer until the table writes the lines.
 pub mod clic {
     /// The block's base address.
     pub const BASE: usize = 0x10800000;
@@ -22824,19 +22826,6 @@ pub mod clic {
         #[inline]
         pub fn read_ctrl(&self, index: oer_mmio::Index<48>) -> ctrl::R {
             ctrl::R(self.0.read_indexed::<0x1000, 0x4, 48>(index))
-        }
-
-        /// Read `CTRL%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_ctrl(
-            &mut self,
-            index: oer_mmio::Index<48>,
-            change: impl FnOnce(&mut ctrl::W),
-        ) {
-            let mut value = ctrl::W(self.0.read_indexed::<0x1000, 0x4, 48>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x1000, 0x4, 48>(index, value.0);
         }
     }
 
@@ -22893,89 +22882,6 @@ pub mod clic {
             #[inline]
             pub const fn ctl(self) -> u8 {
                 (self.0 >> 24) as u8
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. The line's pending bit; for a level-triggered line it follows the source.
-            #[inline]
-            pub const fn ip(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// Project-assigned name. Enables the line.
-            #[inline]
-            pub const fn ie(&self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// Project-assigned name. Selects hardware vectoring for the line.
-            #[inline]
-            pub const fn attr_shv(&self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// Project-assigned name. Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity.
-            #[inline]
-            pub const fn attr_trig(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 17)
-            }
-
-            /// Project-assigned name. Privilege mode of the line.
-            #[inline]
-            pub const fn attr_mode(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// Project-assigned name. Level and priority control; with three level bits a level-n line holds 0x1f | (n - 1) << 5.
-            #[inline]
-            pub const fn ctl(&self) -> u8 {
-                (self.0 >> 24) as u8
-            }
-
-            /// Set `IP`.
-            #[inline]
-            pub fn set_ip(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000001) | u32::from(value);
-                self
-            }
-
-            /// Set `IE`.
-            #[inline]
-            pub fn set_ie(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
-                self
-            }
-
-            /// Set `ATTR_SHV`.
-            #[inline]
-            pub fn set_attr_shv(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `ATTR_TRIG`.
-            #[inline]
-            pub fn set_attr_trig(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00060000) | (value.get() << 17);
-                self
-            }
-
-            /// Set `ATTR_MODE`.
-            #[inline]
-            pub fn set_attr_mode(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00c00000) | (value.get() << 22);
-                self
-            }
-
-            /// Set `CTL`.
-            #[inline]
-            pub fn set_ctl(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
-                self
             }
         }
     }
@@ -30376,7 +30282,9 @@ pub mod ieee802154_mac {
 /// The interrupt-matrix route words of core 0, one per peripheral source, by source
 /// number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 /// IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-/// around it.
+/// around it. Their read-only access states our access: the hardware words
+/// are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
+/// only writer until the table writes the routes.
 pub mod interrupt_core0 {
     /// The block's base address.
     pub const BASE: usize = 0x20585000;
@@ -30437,36 +30345,10 @@ pub mod interrupt_core0 {
             map_low::R(self.0.read_indexed::<0x0, 0x4, 132>(index))
         }
 
-        /// Read `MAP_LOW%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_map_low(
-            &mut self,
-            index: oer_mmio::Index<132>,
-            change: impl FnOnce(&mut map_low::W),
-        ) {
-            let mut value = map_low::W(self.0.read_indexed::<0x0, 0x4, 132>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x0, 0x4, 132>(index, value.0);
-        }
-
         /// Read `MAP_HIGH%s`.
         #[inline]
         pub fn read_map_high(&self, index: oer_mmio::Index<36>) -> map_high::R {
             map_high::R(self.0.read_indexed::<0x214, 0x4, 36>(index))
-        }
-
-        /// Read `MAP_HIGH%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_map_high(
-            &mut self,
-            index: oer_mmio::Index<36>,
-            change: impl FnOnce(&mut map_high::W),
-        ) {
-            let mut value = map_high::W(self.0.read_indexed::<0x214, 0x4, 36>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x214, 0x4, 36>(index, value.0);
         }
     }
 
@@ -30501,37 +30383,6 @@ pub mod interrupt_core0 {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
         }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Remap level of the source: zero none, one S-level, two or three M-level.
-            #[inline]
-            pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_LEVEL`.
-            #[inline]
-            pub fn set_pass_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00000300) | (value.get() << 8);
-                self
-            }
-        }
     }
 
     /// The `MAP_HIGH%s` register.
@@ -30563,37 +30414,6 @@ pub mod interrupt_core0 {
             #[inline]
             pub const fn pass_level(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Remap level of the source: zero none, one S-level, two or three M-level.
-            #[inline]
-            pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_LEVEL`.
-            #[inline]
-            pub fn set_pass_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00000300) | (value.get() << 8);
-                self
             }
         }
     }
@@ -30825,7 +30645,9 @@ pub mod interrupt_core0_status {
 /// The interrupt-matrix route words of core 1, one per peripheral source, by source
 /// number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 /// IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-/// around it.
+/// around it. Their read-only access states our access: the hardware words
+/// are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
+/// only writer until the table writes the routes.
 pub mod interrupt_core1 {
     /// The block's base address.
     pub const BASE: usize = 0x20585800;
@@ -30886,36 +30708,10 @@ pub mod interrupt_core1 {
             map_low::R(self.0.read_indexed::<0x0, 0x4, 132>(index))
         }
 
-        /// Read `MAP_LOW%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_map_low(
-            &mut self,
-            index: oer_mmio::Index<132>,
-            change: impl FnOnce(&mut map_low::W),
-        ) {
-            let mut value = map_low::W(self.0.read_indexed::<0x0, 0x4, 132>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x0, 0x4, 132>(index, value.0);
-        }
-
         /// Read `MAP_HIGH%s`.
         #[inline]
         pub fn read_map_high(&self, index: oer_mmio::Index<36>) -> map_high::R {
             map_high::R(self.0.read_indexed::<0x214, 0x4, 36>(index))
-        }
-
-        /// Read `MAP_HIGH%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_map_high(
-            &mut self,
-            index: oer_mmio::Index<36>,
-            change: impl FnOnce(&mut map_high::W),
-        ) {
-            let mut value = map_high::W(self.0.read_indexed::<0x214, 0x4, 36>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x214, 0x4, 36>(index, value.0);
         }
     }
 
@@ -30950,37 +30746,6 @@ pub mod interrupt_core1 {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
         }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Remap level of the source: zero none, one S-level, two or three M-level.
-            #[inline]
-            pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_LEVEL`.
-            #[inline]
-            pub fn set_pass_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00000300) | (value.get() << 8);
-                self
-            }
-        }
     }
 
     /// The `MAP_HIGH%s` register.
@@ -31012,37 +30777,6 @@ pub mod interrupt_core1 {
             #[inline]
             pub const fn pass_level(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Remap level of the source: zero none, one S-level, two or three M-level.
-            #[inline]
-            pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_LEVEL`.
-            #[inline]
-            pub fn set_pass_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00000300) | (value.get() << 8);
-                self
             }
         }
     }

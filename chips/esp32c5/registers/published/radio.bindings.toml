@@ -6,7 +6,7 @@ schema = 2
 [[registers]]
 address = 545263616
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL0"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -20,47 +20,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263620
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL1"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -74,47 +74,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263624
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL2"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -128,47 +128,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263628
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL3"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -182,47 +182,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263632
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL4"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -236,47 +236,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263636
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL5"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -290,47 +290,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263640
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL6"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -344,47 +344,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263644
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL7"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -398,47 +398,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263648
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL8"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -452,47 +452,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263652
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL9"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -506,47 +506,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263656
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL10"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -560,47 +560,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263660
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL11"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -614,47 +614,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263664
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL12"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -668,47 +668,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263668
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL13"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -722,47 +722,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263672
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL14"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -776,47 +776,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263676
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL15"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -830,47 +830,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263680
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL16"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -884,47 +884,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263684
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL17"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -938,47 +938,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263688
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL18"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -992,47 +992,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263692
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL19"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1046,47 +1046,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263696
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL20"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1100,47 +1100,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263700
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL21"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1154,47 +1154,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263704
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL22"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1208,47 +1208,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263708
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL23"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1262,47 +1262,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263712
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL24"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1316,47 +1316,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263716
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL25"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1370,47 +1370,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263720
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL26"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1424,47 +1424,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263724
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL27"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1478,47 +1478,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263728
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL28"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1532,47 +1532,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263732
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL29"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1586,47 +1586,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263736
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL30"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1640,47 +1640,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263740
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL31"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1694,47 +1694,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263744
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL32"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1748,47 +1748,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263748
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL33"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1802,47 +1802,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263752
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL34"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1856,47 +1856,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263756
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL35"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1910,47 +1910,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263760
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL36"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -1964,47 +1964,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263764
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL37"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2018,47 +2018,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263768
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL38"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2072,47 +2072,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263772
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL39"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2126,47 +2126,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263776
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL40"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2180,47 +2180,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263780
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL41"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2234,47 +2234,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263784
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL42"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2288,47 +2288,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263788
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL43"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2342,47 +2342,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263792
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL44"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2396,47 +2396,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263796
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL45"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2450,47 +2450,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263800
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL46"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2504,47 +2504,47 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 545263804
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "CLIC.CTRL47"
 peripheral = "CLIC"
 peripheral-type = "Clic"
@@ -2558,42 +2558,42 @@ svd-name = "IP"
 method = "ip"
 bit-offset = 0
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "IE"
 method = "ie"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_SHV"
 method = "attr_shv"
 bit-offset = 16
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_TRIG"
 method = "attr_trig"
 bit-offset = 17
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "ATTR_MODE"
 method = "attr_mode"
 bit-offset = 22
 bit-width = 2
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "CTL"
 method = "ctl"
 bit-offset = 24
 bit-width = 8
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610645576
@@ -3490,7 +3490,7 @@ access = "read-write"
 [[registers]]
 address = 1610678272
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW0"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3504,19 +3504,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678276
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW1"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3530,19 +3530,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678280
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW2"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3556,19 +3556,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678284
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW3"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3582,19 +3582,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678288
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW4"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3608,19 +3608,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678292
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW5"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3634,19 +3634,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678296
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW6"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3660,19 +3660,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678300
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW7"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3686,19 +3686,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678304
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW8"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3712,19 +3712,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678308
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW9"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3738,19 +3738,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678312
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW10"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3764,19 +3764,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678316
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_LOW11"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3790,14 +3790,14 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678320
@@ -3827,7 +3827,7 @@ access = "read-write"
 [[registers]]
 address = 1610678324
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH0"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3841,19 +3841,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678328
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH1"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3867,19 +3867,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678332
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH2"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3893,19 +3893,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678336
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH3"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3919,19 +3919,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678340
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH4"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3945,19 +3945,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678344
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH5"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3971,19 +3971,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678348
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH6"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -3997,19 +3997,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678352
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH7"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4023,19 +4023,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678356
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH8"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4049,19 +4049,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678360
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH9"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4075,19 +4075,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678364
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH10"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4101,19 +4101,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678368
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH11"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4127,19 +4127,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678372
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH12"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4153,19 +4153,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678376
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH13"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4179,19 +4179,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678380
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH14"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4205,19 +4205,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678384
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH15"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4231,19 +4231,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678388
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH16"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4257,19 +4257,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678392
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH17"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4283,19 +4283,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678396
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH18"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4309,19 +4309,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678400
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH19"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4335,19 +4335,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678404
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH20"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4361,19 +4361,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678408
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH21"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4387,19 +4387,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678412
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH22"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4413,19 +4413,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678416
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH23"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4439,19 +4439,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678420
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH24"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4465,19 +4465,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678424
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH25"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4491,19 +4491,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678428
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH26"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4517,19 +4517,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678432
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH27"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4543,19 +4543,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678436
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH28"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4569,19 +4569,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678440
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH29"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4595,19 +4595,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678444
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH30"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4621,19 +4621,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678448
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH31"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4647,19 +4647,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678452
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH32"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4673,19 +4673,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678456
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH33"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4699,19 +4699,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678460
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH34"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4725,19 +4725,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678464
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH35"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4751,19 +4751,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678468
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH36"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4777,19 +4777,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678472
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH37"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4803,19 +4803,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678476
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH38"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4829,19 +4829,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678480
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH39"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4855,19 +4855,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678484
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH40"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4881,19 +4881,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678488
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH41"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4907,19 +4907,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678492
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH42"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4933,19 +4933,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678496
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH43"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4959,19 +4959,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678500
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH44"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -4985,19 +4985,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678504
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH45"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5011,19 +5011,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678508
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH46"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5037,19 +5037,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678512
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH47"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5063,19 +5063,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678516
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH48"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5089,19 +5089,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678520
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH49"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5115,19 +5115,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678524
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH50"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5141,19 +5141,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678528
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH51"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5167,19 +5167,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678532
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH52"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5193,19 +5193,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678536
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH53"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5219,19 +5219,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678540
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH54"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5245,19 +5245,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678544
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH55"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5271,19 +5271,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678548
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH56"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5297,19 +5297,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678552
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH57"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5323,19 +5323,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678556
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH58"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5349,19 +5349,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678560
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH59"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5375,19 +5375,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678564
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH60"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5401,19 +5401,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678568
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH61"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5427,19 +5427,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678572
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH62"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5453,19 +5453,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678576
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH63"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5479,19 +5479,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678580
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH64"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5505,19 +5505,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678584
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH65"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5531,19 +5531,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678588
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH66"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5557,19 +5557,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678592
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH67"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5583,19 +5583,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678596
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH68"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5609,19 +5609,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678600
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH69"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5635,19 +5635,19 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678604
 width = 32
-access = "read-write"
+access = "read-only"
 identity = "INTERRUPT_CORE0.MAP_HIGH70"
 peripheral = "INTERRUPT_CORE0"
 peripheral-type = "InterruptCore0"
@@ -5661,14 +5661,14 @@ svd-name = "MAP"
 method = "map"
 bit-offset = 0
 bit-width = 6
-access = "read-write"
+access = "read-only"
 
 [[registers.fields]]
 svd-name = "PASS_IN_SEC"
 method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
-access = "read-write"
+access = "read-only"
 
 [[registers]]
 address = 1610678608

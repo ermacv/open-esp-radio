@@ -34493,7 +34493,9 @@ register is stored whole.</description>
 words: each line's word holds its pending, enable, attribute and control
 bytes. Invariant: every vectored line is level-triggered, so a write of the
 word that changes its enable or control writes back the pending bit read
-without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES).</description>
+without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). The read-only
+access states our access: the hardware words are read-write, and
+esp-hal's vectoring is their only writer until the table writes the lines.</description>
       <baseAddress>0x10800000</baseAddress>
       <registers>
         <register>
@@ -34504,7 +34506,7 @@ without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LIN
           <description>Project-assigned name. Line %s: pending, enable, attribute and level control.</description>
           <addressOffset>0x1000</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34552,7 +34554,9 @@ without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LIN
       <description>The interrupt-matrix route words of core 0, one per peripheral source, by source
 number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it.</description>
+around it. Their read-only access states our access: the hardware words
+are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
+only writer until the table writes the routes.</description>
       <baseAddress>0x20585000</baseAddress>
       <registers>
         <register>
@@ -34563,7 +34567,7 @@ around it.</description>
           <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34588,7 +34592,7 @@ around it.</description>
           <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
           <addressOffset>0x214</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34716,7 +34720,9 @@ Every context polls it, so it is a shared block of side-effect-free reads.</desc
       <description>The interrupt-matrix route words of core 1, one per peripheral source, by source
 number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it.</description>
+around it. Their read-only access states our access: the hardware words
+are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
+only writer until the table writes the routes.</description>
       <baseAddress>0x20585800</baseAddress>
       <registers>
         <register>
@@ -34727,7 +34733,7 @@ around it.</description>
           <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34752,7 +34758,7 @@ around it.</description>
           <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
           <addressOffset>0x214</addressOffset>
           <size>0x20</size>
-          <access>read-write</access>
+          <access>read-only</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>

@@ -130,26 +130,26 @@ reason = "esp-hal 1f646c5 stores the super watchdog's key only through Rtc's Swd
 [[word]]
 address = 0x20801000
 words = 48
-radio = "CLIC.CTRL%s (typed block, read only)"
+radio = "CLIC.CTRL%s (typed block)"
 esp_hal = "CLIC.int_ie, int_ip, int_attr and int_ctl in init, init_vectoring and the CpuInterrupt methods (interrupt/riscv.rs, interrupt/riscv/clic.rs)"
-coordination = "disjoint-lifecycle"
-reason = "esp-hal stores the line words in init_vectoring, from esp_hal::init and from reinitialize_vectoring_after_handoff, which Handoff::adopt calls before oer-espressif-esp-hal-irq installs the hart and claims the block (esp-hal 1f646c5). The CpuInterrupt and enable_direct writers have no caller in our images: chip.toml [interrupts] level-writers pins the level writers. Until step 5 the typed owner only reads the words to check each bound line; it never writes them."
+coordination = "radio-reads-only"
+reason = "The CLIC view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound line. esp-hal is the only writer: init_vectoring, from esp_hal::init and from reinitialize_vectoring_after_handoff in the staged runtime's Handoff::adopt, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
 
 [[word]]
 address = 0x60010000
 words = 12
-radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block, read only)"
+radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block)"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "shared-lock"
-reason = "esp-hal stores the route words in map_raw: zeroing them in esp_hal::init and reinitialize_vectoring_after_handoff, before the table claims the block, and through CoreInterruptRoutes::enable and disable (esp-hal 1f646c5). The table keeps each core's CoreInterruptRoutes inside that core's matrix owner, beside the typed block, behind one HandlerCell: every route store runs inside that borrow. Until step 5 the typed owner only reads the words to check each bound route; it never writes them."
+coordination = "radio-reads-only"
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x60010034
 words = 71
-radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block, read only)"
+radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block)"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
-coordination = "shared-lock"
-reason = "esp-hal stores the route words in map_raw: zeroing them in esp_hal::init and reinitialize_vectoring_after_handoff, before the table claims the block, and through CoreInterruptRoutes::enable and disable (esp-hal 1f646c5). The table keeps each core's CoreInterruptRoutes inside that core's matrix owner, beside the typed block, behind one HandlerCell: every route store runs inside that borrow. Until step 5 the typed owner only reads the words to check each bound route; it never writes them."
+coordination = "radio-reads-only"
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x6000a000

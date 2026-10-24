@@ -6,7 +6,9 @@ description = """
 The interrupt-matrix route words of core 0, one per peripheral source, by source
 number. Source 12 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it."""
+around it. Their read-only access states our access: the hardware words
+are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
+only writer until the table writes the routes."""
 baseAddress = 0x60010000
 
 [[peripherals.registers]]
@@ -19,7 +21,7 @@ name = "MAP_LOW%s"
 description = "Route of source %s (sources 0 to 11)."
 addressOffset = 0x0
 size = 32
-access = "read-write"
+access = "read-only"
 reserved = { mask = 0xfffffec0, sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX"] }
 resetValue = 0x0
 
@@ -45,7 +47,7 @@ name = "MAP_HIGH%s"
 description = "Route of source 13 + %s (sources 13 to 83)."
 addressOffset = 0x34
 size = 32
-access = "read-write"
+access = "read-only"
 reserved = { mask = 0xfffffec0, sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX"] }
 resetValue = 0x0
 
