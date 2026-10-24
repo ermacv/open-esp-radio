@@ -183,7 +183,7 @@ Each ELF contains:
   its bound took (`Bound::sites`): the site, its function and offset, the
   number of targets, the facts that give them (`JumpTable` and
   `ValueAnalysis` from the machine code; `InterruptTable`, `StageTwoEntry`,
-  `IpcPosts`, `WakerVtables`, `FieldType`, `TaskPolls`, `NoTasks` from outside
+  `WakerVtables`, `FieldType`, `TaskPolls`, `NoTasks` from outside
   it) and what they assume. Each root counts its sites by fact; the totals
   count the distinct sites by fact and by assumption, `none` for proven
   sites. The reports read the bounds the gates computed and change no

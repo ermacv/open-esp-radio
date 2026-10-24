@@ -25,7 +25,7 @@ pub mod handoff;
 pub mod reachability;
 pub mod sites;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 use std::rc::Rc;

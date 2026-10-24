@@ -25,7 +25,6 @@ pub enum Kind {
     ValueAnalysis,
     InterruptTable,
     StageTwoEntry,
-    IpcPosts,
     WakerVtables,
     FieldType,
     TaskPolls,
@@ -44,7 +43,6 @@ impl Kind {
         match fact {
             Fact::InterruptTable => Self::InterruptTable,
             Fact::StageTwoEntry => Self::StageTwoEntry,
-            Fact::IpcPosts => Self::IpcPosts,
             Fact::WakerVtables => Self::WakerVtables,
             Fact::FieldType => Self::FieldType,
             Fact::TaskPolls => Self::TaskPolls,
