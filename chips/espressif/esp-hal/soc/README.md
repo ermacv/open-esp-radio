@@ -8,17 +8,6 @@ ownership remains in `chips/esp32s31/pac`.
 
 The private source modules follow the resources and operations they own:
 
-`watchdog` is the public, non-radio TIMG1 deadline service. The board passes
-its peripheral singleton once and moves the service into its task by value.
-Each explicit nonzero `DeadlineBudget` moves the complete service into a
-single non-cloneable lease. Timely completion disarms and returns the service
-for the next obligation; cancellation, forgotten leases and late completion
-never disarm or renew it. There is no task/interrupt mutex, no
-periodic feed or timeout default. The pinned HAL uses XTAL; sleep and clock
-changes while armed are unsupported. Reserve TIMG1 exclusively, including
-independently constructible HAL Wdt handles. Expiry needs no task or ISR.
-These are engineering limits, not measured worst-case reset/RF-off bounds.
-
 - `cache/performance.rs`: cache counter snapshots and the retained CACHE witness.
 - `flash/mmu.rs`: flash MMU operations with the retained SPI0 witness.
 - `handoff.rs`: the per-domain transfers of platform blocks to the chip PAC.
@@ -28,6 +17,11 @@ These are engineering limits, not measured worst-case reset/RF-off bounds.
   return the PAC owner of its typed blocks, which the HAL's `platform`
   module reads (`FactoryIdentity`, `Entropy`, `ResetCauses`). esp-hal still
   enables the TRNG inside `esp_hal::init`; the entropy owner only reads it.
+  `take_watchdogs` consumes `TIMG0`, `TIMG1` and `LP_WDT` and returns the
+  watchdog blocks, which the HAL's `watchdog::Watchdogs` owns; timer group
+  1's main watchdog serves the system deadline
+  (`oer-espressif-watchdog::deadline`). esp-hal still stops every watchdog
+  inside `esp_hal::init`.
 - `oer-espressif-esp-hal-irq`: the ESP32-S31 interrupt matrix the image's interrupt
   table (`oer-interrupt-table`) drives. The platform runtime's handoff adopts the
   image's table, silences each hart's sources when it installs the hart's

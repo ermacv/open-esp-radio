@@ -1,13 +1,14 @@
 #![no_std]
 use esp_hal::{
     interrupt::{InterruptRoutes, software::SoftwareInterrupt},
-    peripherals::{LP_AON_CLK_RST, LP_PERI, PSRAM, RNG, SYSTIMER},
+    peripherals::{LP_AON_CLK_RST, LP_PERI, LP_WDT, PSRAM, RNG, SYSTIMER, TIMG0, TIMG1},
     usb::usb_serial_jtag::UsbPadControl,
 };
-use oer_espressif_esp_hal_soc::{
-    handoff::{take_entropy, take_reset_causes},
-    watchdog::{DeadlineBudget, DeadlineWatchdog},
+use oer_espressif_watchdog::{
+    MainWatchdog, MainWatchdogRegisters, StoppedMainWatchdog,
+    deadline::{DeadlineBudget, DeadlineWatchdog},
 };
+use oer_espressif_esp_hal_soc::handoff::{take_entropy, take_reset_causes, take_watchdogs};
 use oer_espressif_executor::{DoorbellAcknowledger, Executor};
 use oer_espressif_executor::systimer::{Comparator, ComparatorWriter};
 
@@ -69,10 +70,33 @@ pub fn no_free_matrix() {
     #[cfg(ui_reject)]
     let _matrix = oer_espressif_esp_hal_irq::EspHalMatrix; // ui-error: E0423
 }
-pub fn watchdog(owner: DeadlineWatchdog, budget: DeadlineBudget) {
+pub fn watchdog<R: MainWatchdogRegisters, C: oer_time::Clock>(
+    owner: DeadlineWatchdog<R, C>,
+    budget: DeadlineBudget,
+) {
     let _lease = owner.arm(budget);
     #[cfg(ui_reject)]
     let _second = owner.arm(budget); // ui-error: E0382
+}
+pub fn watchdogs(
+    timg0: TIMG0<'static>,
+    timg1: TIMG1<'static>,
+    lp_wdt: LP_WDT<'static>,
+) {
+    let blocks = take_watchdogs(timg0, timg1, lp_wdt);
+    let mut main0 = StoppedMainWatchdog::new(blocks.mwdt0);
+    main0.disable();
+    #[cfg(ui_reject)]
+    let _second = take_watchdogs(
+        timg0,  // ui-error: E0382
+        timg1,  // ui-error: E0382
+        lp_wdt, // ui-error: E0382
+    );
+}
+pub fn locked_watchdog<R: MainWatchdogRegisters>(mut main: MainWatchdog<R>) {
+    main.with_unlocked(|session| session.feed());
+    #[cfg(ui_reject)]
+    main.feed(); // ui-error: E0599
 }
 
 /// Declared tasks are bound to their executor by type.

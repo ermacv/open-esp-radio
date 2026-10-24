@@ -5,8 +5,8 @@ schema = 5
 device-access = true
 allow-clippy-empty-docs = true
 # Typed register blocks over `oer-mmio`; svd2rust renders every other
-# exposed peripheral. The platform blocks (eFuse, TRNG, reset cause) are
-# claimed by their own platform handoffs.
+# exposed peripheral. The platform blocks (eFuse, TRNG, reset cause,
+# watchdogs) are claimed by their own platform handoffs.
 typed-peripherals = [
     "IEEE802154_MAC",
     "IEEE802154_INTERRUPT_ROUTE",
@@ -15,6 +15,11 @@ typed-peripherals = [
     "TRNG",
     "LP_PERICLKRST_RNG",
     "LP_AON_RESET_CAUSE",
+    "TIMG0_WDT",
+    "TIMG1_WDT",
+    "HP_SYS_CLKRST_TIMG1",
+    "LP_WDT",
+    "LP_WDT_SWD",
 ]
 
 
@@ -37,6 +42,13 @@ name = "ResetCausePeripherals"
 member = "reset_cause"
 description = "The reset-cause words of both HP cores, read by the reset-cause owner."
 peripherals = ["LP_AON_RESET_CAUSE"]
+handoff = true
+
+[[ownership-partitions]]
+name = "WatchdogPeripherals"
+member = "watchdog"
+description = "The main watchdogs of both timer groups, timer group 1's clock and reset, and the RTC and super watchdogs, owned by the watchdog owners."
+peripherals = ["TIMG0_WDT", "TIMG1_WDT", "HP_SYS_CLKRST_TIMG1", "LP_WDT", "LP_WDT_SWD"]
 handoff = true
 
 [[ownership-partitions]]
@@ -10993,3 +11005,39 @@ peripheral = "TRNG"
 register = "DEBUG_CONF"
 field = "HEALTH_TEST_END"
 sources = ["ESP_IDF_4D59230D_S31_TRNG"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG0_WDT"
+register = "WDTCONFIG0"
+field = "WDT_CONF_UPDATE_EN"
+sources = ["ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG0_WDT"
+register = "WDTCONFIG1"
+field = "WDT_DIVCNT_RST"
+sources = ["ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG1_WDT"
+register = "WDTCONFIG0"
+field = "WDT_CONF_UPDATE_EN"
+sources = ["ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG1_WDT"
+register = "WDTCONFIG1"
+field = "WDT_DIVCNT_RST"
+sources = ["ESP_IDF_4D59230D_S31_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "LP_WDT_SWD"
+register = "SWD_CONFIG"
+field = "SWD_RST_FLAG_CLR"
+sources = ["ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "LP_WDT_SWD"
+register = "SWD_CONFIG"
+field = "SWD_FEED"
+sources = ["ESP_IDF_4D59230D_S31_RTC_WDT"]

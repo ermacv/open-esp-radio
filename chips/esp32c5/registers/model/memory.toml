@@ -384,3 +384,43 @@ kind = "mmio"
 start = 0x600B2824
 end-exclusive = 0x600B282C
 permissions = "rw"
+
+[[regions]]
+name = "timg0-wdt"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60008048
+end-exclusive = 0x60008068
+permissions = "rw"
+
+[[regions]]
+name = "timg1-wdt"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60009048
+end-exclusive = 0x60009068
+permissions = "rw"
+
+[[regions]]
+name = "pcr-timg1-conf"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60096060
+end-exclusive = 0x60096064
+permissions = "rw"
+
+[[regions]]
+name = "pcr-timg1-wdt-clk-conf"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60096068
+end-exclusive = 0x6009606C
+permissions = "rw"
+
+[[regions]]
+name = "lp-wdt"
+address-space = "cpu"
+kind = "mmio"
+start = 0x600B1C00
+end-exclusive = 0x600B1C24
+permissions = "rw"

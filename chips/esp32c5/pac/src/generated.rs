@@ -8243,6 +8243,612 @@ pub mod lp_clkrst_reset_cause {
     }
 }
 
+/// The `LP_WDT` register block.
+///
+/// The RTC watchdog (RWDT) of the low-power watchdog block: its configuration word and write protection. The super watchdog's words are the separate LP_WDT_SWD view.
+pub mod lp_wdt {
+    /// The block's base address.
+    pub const BASE: usize = 0x600b1c00;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x1c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x18];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600b1c00>, BlockWords>;
+
+    /// The exclusive owner of the `LP_WDT` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpWdt<P: oer_mmio::Placement = oer_mmio::Fixed<0x600b1c00>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpWdt {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpWdt<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpWdt<P> {
+        /// Read `CONFIG0`.
+        #[inline]
+        pub fn read_config0(&self) -> config0::R {
+            config0::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CONFIG0`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_config0(&mut self, change: impl FnOnce(&mut config0::W)) {
+            let mut value = config0::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `WPROTECT`.
+        #[inline]
+        pub fn read_wprotect(&self) -> wprotect::R {
+            wprotect::R(self.0.read::<0x18>())
+        }
+
+        /// Read `WPROTECT`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_wprotect(&mut self, change: impl FnOnce(&mut wprotect::W)) {
+            let mut value = wprotect::W(self.0.read::<0x18>());
+            change(&mut value);
+            self.0.write::<0x18>(value.0);
+        }
+    }
+
+    /// The `CONFIG0` register.
+    ///
+    /// RTC watchdog enable, stage actions and reset lengths; written only while unlocked.
+    pub mod config0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Chip reset signal width.
+            #[inline]
+            pub const fn wdt_chip_reset_width(self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Enables the chip reset on timeout.
+            #[inline]
+            pub const fn wdt_chip_reset_en(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Pauses the watchdog while the chip sleeps.
+            #[inline]
+            pub const fn wdt_pause_in_slp(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Unmasks the CPU reset of the application core.
+            #[inline]
+            pub const fn wdt_appcpu_reset_en(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Unmasks the CPU reset of the protocol core.
+            #[inline]
+            pub const fn wdt_procpu_reset_en(self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Flash boot protection: the ROM arms it; a timeout resets even while WDT_EN is clear.
+            #[inline]
+            pub const fn wdt_flashboot_mod_en(self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// System reset signal length selector.
+            #[inline]
+            pub const fn wdt_sys_reset_length(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 13)
+            }
+
+            /// CPU reset signal length selector.
+            #[inline]
+            pub const fn wdt_cpu_reset_length(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg3(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg2(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg1(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg0(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// RTC watchdog enable.
+            #[inline]
+            pub const fn wdt_en(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Chip reset signal width.
+            #[inline]
+            pub const fn wdt_chip_reset_width(&self) -> u8 {
+                (self.0) as u8
+            }
+
+            /// Enables the chip reset on timeout.
+            #[inline]
+            pub const fn wdt_chip_reset_en(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Pauses the watchdog while the chip sleeps.
+            #[inline]
+            pub const fn wdt_pause_in_slp(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Unmasks the CPU reset of the application core.
+            #[inline]
+            pub const fn wdt_appcpu_reset_en(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Unmasks the CPU reset of the protocol core.
+            #[inline]
+            pub const fn wdt_procpu_reset_en(&self) -> bool {
+                (self.0 & 0x00000800) != 0
+            }
+
+            /// Flash boot protection: the ROM arms it; a timeout resets even while WDT_EN is clear.
+            #[inline]
+            pub const fn wdt_flashboot_mod_en(&self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// System reset signal length selector.
+            #[inline]
+            pub const fn wdt_sys_reset_length(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 13)
+            }
+
+            /// CPU reset signal length selector.
+            #[inline]
+            pub const fn wdt_cpu_reset_length(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg3(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg2(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg1(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.
+            #[inline]
+            pub const fn wdt_stg0(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// RTC watchdog enable.
+            #[inline]
+            pub const fn wdt_en(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `WDT_CHIP_RESET_WIDTH`.
+            #[inline]
+            pub fn set_wdt_chip_reset_width(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                self
+            }
+
+            /// Set `WDT_CHIP_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_chip_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `WDT_PAUSE_IN_SLP`.
+            #[inline]
+            pub fn set_wdt_pause_in_slp(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `WDT_APPCPU_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_appcpu_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                self
+            }
+
+            /// Set `WDT_PROCPU_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_procpu_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                self
+            }
+
+            /// Set `WDT_FLASHBOOT_MOD_EN`.
+            #[inline]
+            pub fn set_wdt_flashboot_mod_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                self
+            }
+
+            /// Set `WDT_SYS_RESET_LENGTH`.
+            #[inline]
+            pub fn set_wdt_sys_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x0000e000) | (value.get() << 13);
+                self
+            }
+
+            /// Set `WDT_CPU_RESET_LENGTH`.
+            #[inline]
+            pub fn set_wdt_cpu_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00070000) | (value.get() << 16);
+                self
+            }
+
+            /// Set `WDT_STG3`.
+            #[inline]
+            pub fn set_wdt_stg3(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00380000) | (value.get() << 19);
+                self
+            }
+
+            /// Set `WDT_STG2`.
+            #[inline]
+            pub fn set_wdt_stg2(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x01c00000) | (value.get() << 22);
+                self
+            }
+
+            /// Set `WDT_STG1`.
+            #[inline]
+            pub fn set_wdt_stg1(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x0e000000) | (value.get() << 25);
+                self
+            }
+
+            /// Set `WDT_STG0`.
+            #[inline]
+            pub fn set_wdt_stg0(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x70000000) | (value.get() << 28);
+                self
+            }
+
+            /// Set `WDT_EN`.
+            #[inline]
+            pub fn set_wdt_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+
+    /// The `WPROTECT` register.
+    ///
+    /// RTC watchdog write protection: the key unlocks CONFIG0 to FEED, any other value locks them.
+    pub mod wprotect {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x18;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn wdt_wkey(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn wdt_wkey(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `WDT_WKEY`.
+            #[inline]
+            pub fn set_wdt_wkey(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+}
+
+/// The `LP_WDT_SWD` register block.
+///
+/// The super watchdog (SWD) of the low-power watchdog block: its configuration word and write protection.
+pub mod lp_wdt_swd {
+    /// The block's base address.
+    pub const BASE: usize = 0x600b1c00;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x24;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x1c, 0x20];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600b1c00>, BlockWords>;
+
+    /// The exclusive owner of the `LP_WDT_SWD` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpWdtSwd<P: oer_mmio::Placement = oer_mmio::Fixed<0x600b1c00>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpWdtSwd {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpWdtSwd<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpWdtSwd<P> {
+        /// Read `SWD_CONFIG`.
+        #[inline]
+        pub fn read_swd_config(&self) -> swd_config::R {
+            swd_config::R(self.0.read::<0x1c>())
+        }
+
+        /// Write one to the write-trigger field `SWD_RST_FLAG_CLR` of `SWD_CONFIG`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_swd_config_swd_rst_flag_clr(&mut self) {
+            self.0
+                .write::<0x1c>((self.0.read::<0x1c>() & !swd_config::TRIGGERS) | 0x00080000);
+        }
+
+        /// Write one to the write-trigger field `SWD_FEED` of `SWD_CONFIG`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_swd_config_swd_feed(&mut self) {
+            self.0
+                .write::<0x1c>((self.0.read::<0x1c>() & !swd_config::TRIGGERS) | 0x80000000);
+        }
+
+        /// Read `SWD_CONFIG`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_swd_config(&mut self, change: impl FnOnce(&mut swd_config::W)) {
+            let mut value = swd_config::W(self.0.read::<0x1c>() & !swd_config::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x1c>(value.0);
+        }
+
+        /// Read `SWD_WPROTECT`.
+        #[inline]
+        pub fn read_swd_wprotect(&self) -> swd_wprotect::R {
+            swd_wprotect::R(self.0.read::<0x20>())
+        }
+
+        /// Read `SWD_WPROTECT`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_swd_wprotect(&mut self, change: impl FnOnce(&mut swd_wprotect::W)) {
+            let mut value = swd_wprotect::W(self.0.read::<0x20>());
+            change(&mut value);
+            self.0.write::<0x20>(value.0);
+        }
+    }
+
+    /// The `SWD_CONFIG` register.
+    ///
+    /// Super watchdog control; written only while unlocked.
+    pub mod swd_config {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xfffc0001;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x1c;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x80080000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Set when the super watchdog reset the chip.
+            #[inline]
+            pub const fn swd_reset_flag(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The hardware feeds the super watchdog by itself.
+            #[inline]
+            pub const fn swd_auto_feed_en(self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Width of the super watchdog's reset signal.
+            #[inline]
+            pub const fn swd_signal_width(self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Disables the super watchdog.
+            #[inline]
+            pub const fn swd_disable(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set when the super watchdog reset the chip.
+            #[inline]
+            pub const fn swd_reset_flag(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The hardware feeds the super watchdog by itself.
+            #[inline]
+            pub const fn swd_auto_feed_en(&self) -> bool {
+                (self.0 & 0x00040000) != 0
+            }
+
+            /// Width of the super watchdog's reset signal.
+            #[inline]
+            pub const fn swd_signal_width(&self) -> oer_mmio::Bits<10> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Disables the super watchdog.
+            #[inline]
+            pub const fn swd_disable(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Set `SWD_AUTO_FEED_EN`.
+            #[inline]
+            pub fn set_swd_auto_feed_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00040000) | (u32::from(value) << 18);
+                self
+            }
+
+            /// Set `SWD_SIGNAL_WIDTH`.
+            #[inline]
+            pub fn set_swd_signal_width(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                self.0 = (self.0 & !0x3ff00000) | (value.get() << 20);
+                self
+            }
+
+            /// Set `SWD_DISABLE`.
+            #[inline]
+            pub fn set_swd_disable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                self
+            }
+        }
+    }
+
+    /// The `SWD_WPROTECT` register.
+    ///
+    /// Super watchdog write protection: the key unlocks SWD_CONFIG, any other value locks it.
+    pub mod swd_wprotect {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x20;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn swd_wkey(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn swd_wkey(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `SWD_WKEY`.
+            #[inline]
+            pub fn set_swd_wkey(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+}
+
 /// The `MODEM_ETM` register block.
 ///
 /// ESP32-C5 modem event-task matrix at MODEM_BASE + 0x8800. The public
@@ -10066,6 +10672,213 @@ pub mod pcr_radio {
             && oer_mmio::check::within(0x00800000, tsens_clk_conf::FIELDS),
         "release_tsens_reset replaces declared fields only"
     );
+}
+
+/// The `PCR_TIMG1` register block.
+///
+/// Peripheral clock/reset registers: timer group 1's bus clock, reset and watchdog clock words.
+pub mod pcr_timg1 {
+    /// The block's base address.
+    pub const BASE: usize = 0x60096000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x6c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x60, 0x68];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60096000>, BlockWords>;
+
+    /// The exclusive owner of the `PCR_TIMG1` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct PcrTimg1<P: oer_mmio::Placement = oer_mmio::Fixed<0x60096000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl PcrTimg1 {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> PcrTimg1<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> PcrTimg1<P> {
+        /// Read `TIMERGROUP1_CONF`.
+        #[inline]
+        pub fn read_timergroup1_conf(&self) -> timergroup1_conf::R {
+            timergroup1_conf::R(self.0.read::<0x60>())
+        }
+
+        /// Read `TIMERGROUP1_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_timergroup1_conf(&mut self, change: impl FnOnce(&mut timergroup1_conf::W)) {
+            let mut value = timergroup1_conf::W(self.0.read::<0x60>());
+            change(&mut value);
+            self.0.write::<0x60>(value.0);
+        }
+
+        /// Read `TIMERGROUP1_WDT_CLK_CONF`.
+        #[inline]
+        pub fn read_timergroup1_wdt_clk_conf(&self) -> timergroup1_wdt_clk_conf::R {
+            timergroup1_wdt_clk_conf::R(self.0.read::<0x68>())
+        }
+
+        /// Read `TIMERGROUP1_WDT_CLK_CONF`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_timergroup1_wdt_clk_conf(
+            &mut self,
+            change: impl FnOnce(&mut timergroup1_wdt_clk_conf::W),
+        ) {
+            let mut value = timergroup1_wdt_clk_conf::W(self.0.read::<0x68>());
+            change(&mut value);
+            self.0.write::<0x68>(value.0);
+        }
+    }
+
+    /// The `TIMERGROUP1_CONF` register.
+    ///
+    /// Timer group 1 bus clock and reset.
+    pub mod timergroup1_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00000007;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x60;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Timer group 1 bus clock enable.
+            #[inline]
+            pub const fn tg1_clk_en(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Holds timer group 1 in reset while set.
+            #[inline]
+            pub const fn tg1_rst_en(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The watchdog is out of reset and ready.
+            #[inline]
+            pub const fn tg1_wdt_ready(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Timer group 1 bus clock enable.
+            #[inline]
+            pub const fn tg1_clk_en(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Holds timer group 1 in reset while set.
+            #[inline]
+            pub const fn tg1_rst_en(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The watchdog is out of reset and ready.
+            #[inline]
+            pub const fn tg1_wdt_ready(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// Set `TG1_CLK_EN`.
+            #[inline]
+            pub fn set_tg1_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `TG1_RST_EN`.
+            #[inline]
+            pub fn set_tg1_rst_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                self
+            }
+        }
+    }
+
+    /// The `TIMERGROUP1_WDT_CLK_CONF` register.
+    ///
+    /// Timer group 1 watchdog clock source and enable.
+    pub mod timergroup1_wdt_clk_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x00700000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x68;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Watchdog clock source: 0 XTAL, 1 PLL_F80M, 2 RC_FAST.
+            #[inline]
+            pub const fn tg1_wdt_clk_sel(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Watchdog clock enable.
+            #[inline]
+            pub const fn tg1_wdt_clk_en(self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Watchdog clock source: 0 XTAL, 1 PLL_F80M, 2 RC_FAST.
+            #[inline]
+            pub const fn tg1_wdt_clk_sel(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// Watchdog clock enable.
+            #[inline]
+            pub const fn tg1_wdt_clk_en(&self) -> bool {
+                (self.0 & 0x00400000) != 0
+            }
+
+            /// Set `TG1_WDT_CLK_SEL`.
+            #[inline]
+            pub fn set_tg1_wdt_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                self
+            }
+
+            /// Set `TG1_WDT_CLK_EN`.
+            #[inline]
+            pub fn set_tg1_wdt_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                self
+            }
+        }
+    }
 }
 
 /// The `PHY_BASEBAND_CONFIG` register block.
@@ -13257,6 +14070,984 @@ pub mod pmu_radio {
             && oer_mmio::check::within(0x04000000, rf_pwc::FIELDS),
         "hold_peripheral_analog_i2c_reset replaces declared fields only"
     );
+}
+
+/// The `TIMG0_WDT` register block.
+///
+/// Timer group 0's main watchdog (MWDT0): only its configuration, feed and write-protect words; the timers and the RTC calibration words of the group are not part of this view.
+pub mod timg0_wdt {
+    /// The block's base address.
+    pub const BASE: usize = 0x60008000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x68;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x48, 0x4c, 0x50, 0x60, 0x64];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60008000>, BlockWords>;
+
+    /// The exclusive owner of the `TIMG0_WDT` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct Timg0Wdt<P: oer_mmio::Placement = oer_mmio::Fixed<0x60008000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl Timg0Wdt {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> Timg0Wdt<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Timg0Wdt<P> {
+        /// Read `WDTCONFIG0`.
+        #[inline]
+        pub fn read_wdtconfig0(&self) -> wdtconfig0::R {
+            wdtconfig0::R(self.0.read::<0x48>())
+        }
+
+        /// Write one to the write-trigger field `WDT_CONF_UPDATE_EN` of `WDTCONFIG0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_wdtconfig0_wdt_conf_update_en(&mut self) {
+            self.0
+                .write::<0x48>((self.0.read::<0x48>() & !wdtconfig0::TRIGGERS) | 0x00400000);
+        }
+
+        /// Read `WDTCONFIG0`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_wdtconfig0(&mut self, change: impl FnOnce(&mut wdtconfig0::W)) {
+            let mut value = wdtconfig0::W(self.0.read::<0x48>() & !wdtconfig0::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x48>(value.0);
+        }
+
+        /// Read `WDTCONFIG1`.
+        #[inline]
+        pub fn read_wdtconfig1(&self) -> wdtconfig1::R {
+            wdtconfig1::R(self.0.read::<0x4c>())
+        }
+
+        /// Write one to the write-trigger field `WDT_DIVCNT_RST` of `WDTCONFIG1`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_wdtconfig1_wdt_divcnt_rst(&mut self) {
+            self.0
+                .write::<0x4c>((self.0.read::<0x4c>() & !wdtconfig1::TRIGGERS) | 0x00000001);
+        }
+
+        /// Read `WDTCONFIG1`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_wdtconfig1(&mut self, change: impl FnOnce(&mut wdtconfig1::W)) {
+            let mut value = wdtconfig1::W(self.0.read::<0x4c>() & !wdtconfig1::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x4c>(value.0);
+        }
+
+        /// Read `WDTCONFIG2`.
+        #[inline]
+        pub fn read_wdtconfig2(&self) -> wdtconfig2::R {
+            wdtconfig2::R(self.0.read::<0x50>())
+        }
+
+        /// Read `WDTCONFIG2`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_wdtconfig2(&mut self, change: impl FnOnce(&mut wdtconfig2::W)) {
+            let mut value = wdtconfig2::W(self.0.read::<0x50>());
+            change(&mut value);
+            self.0.write::<0x50>(value.0);
+        }
+
+        /// Write `WDTFEED` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_wdtfeed(&mut self, change: impl FnOnce(&mut wdtfeed::W)) {
+            let mut value = wdtfeed::W(0);
+            change(&mut value);
+            self.0.write::<0x60>(value.0);
+        }
+
+        /// Read `WDTWPROTECT`.
+        #[inline]
+        pub fn read_wdtwprotect(&self) -> wdtwprotect::R {
+            wdtwprotect::R(self.0.read::<0x64>())
+        }
+
+        /// Read `WDTWPROTECT`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_wdtwprotect(&mut self, change: impl FnOnce(&mut wdtwprotect::W)) {
+            let mut value = wdtwprotect::W(self.0.read::<0x64>());
+            change(&mut value);
+            self.0.write::<0x64>(value.0);
+        }
+    }
+
+    /// The `WDTCONFIG0` register.
+    ///
+    /// Main watchdog enable, stage actions, reset lengths and the configuration latch; written only while unlocked.
+    pub mod wdtconfig0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffdff000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x48;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00400000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Unmasks the CPU reset of the application core.
+            #[inline]
+            pub const fn wdt_appcpu_reset_en(self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Unmasks the CPU reset of the protocol core.
+            #[inline]
+            pub const fn wdt_procpu_reset_en(self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear.
+            #[inline]
+            pub const fn wdt_flashboot_mod_en(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_sys_reset_length(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_cpu_reset_length(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg3(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg2(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg1(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg0(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Main watchdog enable.
+            #[inline]
+            pub const fn wdt_en(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Unmasks the CPU reset of the application core.
+            #[inline]
+            pub const fn wdt_appcpu_reset_en(&self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Unmasks the CPU reset of the protocol core.
+            #[inline]
+            pub const fn wdt_procpu_reset_en(&self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear.
+            #[inline]
+            pub const fn wdt_flashboot_mod_en(&self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_sys_reset_length(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_cpu_reset_length(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg3(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg2(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg1(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg0(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Main watchdog enable.
+            #[inline]
+            pub const fn wdt_en(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `WDT_APPCPU_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_appcpu_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                self
+            }
+
+            /// Set `WDT_PROCPU_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_procpu_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                self
+            }
+
+            /// Set `WDT_FLASHBOOT_MOD_EN`.
+            #[inline]
+            pub fn set_wdt_flashboot_mod_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                self
+            }
+
+            /// Set `WDT_SYS_RESET_LENGTH`.
+            #[inline]
+            pub fn set_wdt_sys_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00038000) | (value.get() << 15);
+                self
+            }
+
+            /// Set `WDT_CPU_RESET_LENGTH`.
+            #[inline]
+            pub fn set_wdt_cpu_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x001c0000) | (value.get() << 18);
+                self
+            }
+
+            /// Set `WDT_STG3`.
+            #[inline]
+            pub fn set_wdt_stg3(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x01800000) | (value.get() << 23);
+                self
+            }
+
+            /// Set `WDT_STG2`.
+            #[inline]
+            pub fn set_wdt_stg2(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x06000000) | (value.get() << 25);
+                self
+            }
+
+            /// Set `WDT_STG1`.
+            #[inline]
+            pub fn set_wdt_stg1(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x18000000) | (value.get() << 27);
+                self
+            }
+
+            /// Set `WDT_STG0`.
+            #[inline]
+            pub fn set_wdt_stg0(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x60000000) | (value.get() << 29);
+                self
+            }
+
+            /// Set `WDT_EN`.
+            #[inline]
+            pub fn set_wdt_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+
+    /// The `WDTCONFIG1` register.
+    ///
+    /// Main watchdog clock prescaler and divider reset; written only while unlocked.
+    pub mod wdtconfig1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffff0001;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4c;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Watchdog tick = source clock period times this prescaler.
+            #[inline]
+            pub const fn wdt_clk_prescale(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Watchdog tick = source clock period times this prescaler.
+            #[inline]
+            pub const fn wdt_clk_prescale(&self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Set `WDT_CLK_PRESCALE`.
+            #[inline]
+            pub fn set_wdt_clk_prescale(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                self
+            }
+        }
+    }
+
+    /// The `WDTCONFIG2` register.
+    ///
+    /// Stage 0 timeout; written only while unlocked.
+    pub mod wdtconfig2 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x50;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Stage 0 timeout in watchdog ticks.
+            #[inline]
+            pub const fn wdt_stg0_hold(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Stage 0 timeout in watchdog ticks.
+            #[inline]
+            pub const fn wdt_stg0_hold(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `WDT_STG0_HOLD`.
+            #[inline]
+            pub fn set_wdt_stg0_hold(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `WDTFEED` register.
+    ///
+    /// Writing any value feeds the main watchdog while unlocked.
+    pub mod wdtfeed {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x60;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `WDT_FEED`.
+            #[inline]
+            pub fn set_wdt_feed(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `WDTWPROTECT` register.
+    ///
+    /// Main watchdog write protection: the key unlocks the watchdog words, any other value locks them.
+    pub mod wdtwprotect {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x64;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn wdt_wkey(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn wdt_wkey(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `WDT_WKEY`.
+            #[inline]
+            pub fn set_wdt_wkey(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+}
+
+/// The `TIMG1_WDT` register block.
+///
+/// Timer group 1's main watchdog (MWDT1): only its configuration, feed and write-protect words; the timers and the RTC calibration words of the group are not part of this view.
+pub mod timg1_wdt {
+    /// The block's base address.
+    pub const BASE: usize = 0x60009000;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x68;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x48, 0x4c, 0x50, 0x60, 0x64];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x60009000>, BlockWords>;
+
+    /// The exclusive owner of the `TIMG1_WDT` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct Timg1Wdt<P: oer_mmio::Placement = oer_mmio::Fixed<0x60009000>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl Timg1Wdt {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> Timg1Wdt<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> Timg1Wdt<P> {
+        /// Read `WDTCONFIG0`.
+        #[inline]
+        pub fn read_wdtconfig0(&self) -> wdtconfig0::R {
+            wdtconfig0::R(self.0.read::<0x48>())
+        }
+
+        /// Write one to the write-trigger field `WDT_CONF_UPDATE_EN` of `WDTCONFIG0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_wdtconfig0_wdt_conf_update_en(&mut self) {
+            self.0
+                .write::<0x48>((self.0.read::<0x48>() & !wdtconfig0::TRIGGERS) | 0x00400000);
+        }
+
+        /// Read `WDTCONFIG0`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_wdtconfig0(&mut self, change: impl FnOnce(&mut wdtconfig0::W)) {
+            let mut value = wdtconfig0::W(self.0.read::<0x48>() & !wdtconfig0::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x48>(value.0);
+        }
+
+        /// Read `WDTCONFIG1`.
+        #[inline]
+        pub fn read_wdtconfig1(&self) -> wdtconfig1::R {
+            wdtconfig1::R(self.0.read::<0x4c>())
+        }
+
+        /// Write one to the write-trigger field `WDT_DIVCNT_RST` of `WDTCONFIG1`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_wdtconfig1_wdt_divcnt_rst(&mut self) {
+            self.0
+                .write::<0x4c>((self.0.read::<0x4c>() & !wdtconfig1::TRIGGERS) | 0x00000001);
+        }
+
+        /// Read `WDTCONFIG1`, change fields and write it back; every other bit keeps
+        /// the value read and every write-trigger field is zero.
+        #[inline]
+        pub fn modify_wdtconfig1(&mut self, change: impl FnOnce(&mut wdtconfig1::W)) {
+            let mut value = wdtconfig1::W(self.0.read::<0x4c>() & !wdtconfig1::TRIGGERS);
+            change(&mut value);
+            self.0.write::<0x4c>(value.0);
+        }
+
+        /// Read `WDTCONFIG2`.
+        #[inline]
+        pub fn read_wdtconfig2(&self) -> wdtconfig2::R {
+            wdtconfig2::R(self.0.read::<0x50>())
+        }
+
+        /// Read `WDTCONFIG2`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_wdtconfig2(&mut self, change: impl FnOnce(&mut wdtconfig2::W)) {
+            let mut value = wdtconfig2::W(self.0.read::<0x50>());
+            change(&mut value);
+            self.0.write::<0x50>(value.0);
+        }
+
+        /// Write `WDTFEED` from zero: the fields set, zero in every other bit.
+        #[inline]
+        pub fn write_wdtfeed(&mut self, change: impl FnOnce(&mut wdtfeed::W)) {
+            let mut value = wdtfeed::W(0);
+            change(&mut value);
+            self.0.write::<0x60>(value.0);
+        }
+
+        /// Read `WDTWPROTECT`.
+        #[inline]
+        pub fn read_wdtwprotect(&self) -> wdtwprotect::R {
+            wdtwprotect::R(self.0.read::<0x64>())
+        }
+
+        /// Read `WDTWPROTECT`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_wdtwprotect(&mut self, change: impl FnOnce(&mut wdtwprotect::W)) {
+            let mut value = wdtwprotect::W(self.0.read::<0x64>());
+            change(&mut value);
+            self.0.write::<0x64>(value.0);
+        }
+    }
+
+    /// The `WDTCONFIG0` register.
+    ///
+    /// Main watchdog enable, stage actions, reset lengths and the configuration latch; written only while unlocked.
+    pub mod wdtconfig0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffdff000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x48;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00400000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Unmasks the CPU reset of the application core.
+            #[inline]
+            pub const fn wdt_appcpu_reset_en(self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Unmasks the CPU reset of the protocol core.
+            #[inline]
+            pub const fn wdt_procpu_reset_en(self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear.
+            #[inline]
+            pub const fn wdt_flashboot_mod_en(self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_sys_reset_length(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_cpu_reset_length(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg3(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg2(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg1(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg0(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Main watchdog enable.
+            #[inline]
+            pub const fn wdt_en(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Unmasks the CPU reset of the application core.
+            #[inline]
+            pub const fn wdt_appcpu_reset_en(&self) -> bool {
+                (self.0 & 0x00001000) != 0
+            }
+
+            /// Unmasks the CPU reset of the protocol core.
+            #[inline]
+            pub const fn wdt_procpu_reset_en(&self) -> bool {
+                (self.0 & 0x00002000) != 0
+            }
+
+            /// Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear.
+            #[inline]
+            pub const fn wdt_flashboot_mod_en(&self) -> bool {
+                (self.0 & 0x00004000) != 0
+            }
+
+            /// System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_sys_reset_length(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 15)
+            }
+
+            /// CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
+            #[inline]
+            pub const fn wdt_cpu_reset_length(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg3(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 23)
+            }
+
+            /// Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg2(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 25)
+            }
+
+            /// Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg1(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.
+            #[inline]
+            pub const fn wdt_stg0(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// Main watchdog enable.
+            #[inline]
+            pub const fn wdt_en(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `WDT_APPCPU_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_appcpu_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                self
+            }
+
+            /// Set `WDT_PROCPU_RESET_EN`.
+            #[inline]
+            pub fn set_wdt_procpu_reset_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                self
+            }
+
+            /// Set `WDT_FLASHBOOT_MOD_EN`.
+            #[inline]
+            pub fn set_wdt_flashboot_mod_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                self
+            }
+
+            /// Set `WDT_SYS_RESET_LENGTH`.
+            #[inline]
+            pub fn set_wdt_sys_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x00038000) | (value.get() << 15);
+                self
+            }
+
+            /// Set `WDT_CPU_RESET_LENGTH`.
+            #[inline]
+            pub fn set_wdt_cpu_reset_length(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & !0x001c0000) | (value.get() << 18);
+                self
+            }
+
+            /// Set `WDT_STG3`.
+            #[inline]
+            pub fn set_wdt_stg3(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x01800000) | (value.get() << 23);
+                self
+            }
+
+            /// Set `WDT_STG2`.
+            #[inline]
+            pub fn set_wdt_stg2(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x06000000) | (value.get() << 25);
+                self
+            }
+
+            /// Set `WDT_STG1`.
+            #[inline]
+            pub fn set_wdt_stg1(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x18000000) | (value.get() << 27);
+                self
+            }
+
+            /// Set `WDT_STG0`.
+            #[inline]
+            pub fn set_wdt_stg0(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x60000000) | (value.get() << 29);
+                self
+            }
+
+            /// Set `WDT_EN`.
+            #[inline]
+            pub fn set_wdt_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+
+    /// The `WDTCONFIG1` register.
+    ///
+    /// Main watchdog clock prescaler and divider reset; written only while unlocked.
+    pub mod wdtconfig1 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffff0001;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x4c;
+
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000001;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Watchdog tick = source clock period times this prescaler.
+            #[inline]
+            pub const fn wdt_clk_prescale(self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Watchdog tick = source clock period times this prescaler.
+            #[inline]
+            pub const fn wdt_clk_prescale(&self) -> u16 {
+                (self.0 >> 16) as u16
+            }
+
+            /// Set `WDT_CLK_PRESCALE`.
+            #[inline]
+            pub fn set_wdt_clk_prescale(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                self
+            }
+        }
+    }
+
+    /// The `WDTCONFIG2` register.
+    ///
+    /// Stage 0 timeout; written only while unlocked.
+    pub mod wdtconfig2 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x50;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Stage 0 timeout in watchdog ticks.
+            #[inline]
+            pub const fn wdt_stg0_hold(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Stage 0 timeout in watchdog ticks.
+            #[inline]
+            pub const fn wdt_stg0_hold(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `WDT_STG0_HOLD`.
+            #[inline]
+            pub fn set_wdt_stg0_hold(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `WDTFEED` register.
+    ///
+    /// Writing any value feeds the main watchdog while unlocked.
+    pub mod wdtfeed {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x60;
+
+        /// The value written to the register.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Set `WDT_FEED`.
+            #[inline]
+            pub fn set_wdt_feed(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `WDTWPROTECT` register.
+    ///
+    /// Main watchdog write protection: the key unlocks the watchdog words, any other value locks them.
+    pub mod wdtwprotect {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x64;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn wdt_wkey(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Write key; 0x50D83AA1 unlocks.
+            #[inline]
+            pub const fn wdt_wkey(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `WDT_WKEY`.
+            #[inline]
+            pub fn set_wdt_wkey(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
 }
 
 /// The `WIFI_MAC_AUX_TSF_CONTROL` register block.
@@ -18034,6 +19825,41 @@ pub mod peripheral_ownership {
         }
     }
 
+    /// The main watchdogs of both timer groups, timer group 1's clock and reset, and the RTC and super watchdogs, owned by the watchdog owners.
+    pub struct WatchdogPeripherals {
+        pub timg0_wdt: super::timg0_wdt::Timg0Wdt,
+        pub timg1_wdt: super::timg1_wdt::Timg1Wdt,
+        pub pcr_timg1: super::pcr_timg1::PcrTimg1,
+        pub lp_wdt: super::lp_wdt::LpWdt,
+        pub lp_wdt_swd: super::lp_wdt_swd::LpWdtSwd,
+    }
+
+    /// The device registers of [`WatchdogPeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type WatchdogPeripheralsClaims = (
+        super::timg0_wdt::Claim,
+        super::timg1_wdt::Claim,
+        super::pcr_timg1::Claim,
+        super::lp_wdt::Claim,
+        super::lp_wdt_swd::Claim,
+    );
+
+    impl WatchdogPeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: WatchdogPeripheralsClaims) -> Self {
+            let (timg0_wdt, timg1_wdt, pcr_timg1, lp_wdt, lp_wdt_swd) = claims;
+            Self {
+                timg0_wdt: super::timg0_wdt::Timg0Wdt::new(timg0_wdt),
+                timg1_wdt: super::timg1_wdt::Timg1Wdt::new(timg1_wdt),
+                pcr_timg1: super::pcr_timg1::PcrTimg1::new(pcr_timg1),
+                lp_wdt: super::lp_wdt::LpWdt::new(lp_wdt),
+                lp_wdt_swd: super::lp_wdt_swd::LpWdtSwd::new(lp_wdt_swd),
+            }
+        }
+    }
+
     /// IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle.
     pub struct Ieee802154Peripherals {
         pub ieee802154_mac: super::ieee802154_mac::Ieee802154Mac,
@@ -18259,6 +20085,14 @@ const _: () = assert!(
             <lp_clkrst_reset_cause::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
+            lp_wdt::BASE,
+            <lp_wdt::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            lp_wdt_swd::BASE,
+            <lp_wdt_swd::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
             modem_etm::BASE,
             <modem_etm::BlockWords as oer_mmio::Registers>::WORDS
         ),
@@ -18275,12 +20109,24 @@ const _: () = assert!(
             <pcr_radio::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
+            pcr_timg1::BASE,
+            <pcr_timg1::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
             phy_baseband_config::BASE,
             <phy_baseband_config::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             pmu_radio::BASE,
             <pmu_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            timg0_wdt::BASE,
+            <timg0_wdt::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            timg1_wdt::BASE,
+            <timg1_wdt::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             wifi_mac_aux_tsf_control::BASE,

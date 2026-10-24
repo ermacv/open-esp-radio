@@ -119,3 +119,10 @@ radio = "LPPERI_RNG.CLK_EN (typed block)"
 esp_hal = "LP_PERI.clk_en in LpI2c::enable (i2c/lp_i2c/lp_i2c.rs); analog/adc/p4.rs and soc/esp32h4/mod.rs are other chips' paths"
 coordination = "unreached-esp-hal-path"
 reason = "On the ESP32-C5 esp-hal 1f646c5 stores the word only from the LP I2C driver: LpI2c::init (from LpI2c::new) and LpI2c::disable call enable, a read-modify-write of LP_EXT_I2C_CK_EN, and constructing an LpI2c takes the LP_I2C0 singleton. No C5 image constructs an LpI2c, and esp_hal::init does not store the word. The P4 ADC and the H4 init writers are compiled for other chips only. The entropy owner sets only RNG_CK_EN, by a read-modify-write that keeps the other gates."
+
+[[word]]
+address = 0x600b1c20
+radio = "LP_WDT_SWD.SWD_WPROTECT (typed block)"
+esp_hal = "LP_WDT.swd_wprotect in Swd::set_write_protection (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores the super watchdog's key only through Rtc's Swd, which only esp_hal::init builds (rtc.swd.disable()); the watchdog handoff consumes LP_WDT after esp_hal::init and no image builds an Rtc. The super watchdog owner alone writes the key afterwards."

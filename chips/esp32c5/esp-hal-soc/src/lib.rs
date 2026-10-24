@@ -3,14 +3,12 @@
 
 //! ESP32-C5 SoC services backed by esp-hal peripheral witnesses.
 //!
-//! Radio registers belong to `oer-esp32c5-pac`. This crate owns esp-hal
-//! singleton witnesses for non-radio platform blocks, separate from radio
-//! protocol policy. [`handoff`] transfers the entropy and reset-cause blocks
-//! to the chip PAC.
+//! Radio registers belong to `oer-esp32c5-pac`. This crate consumes esp-hal
+//! singleton witnesses and transfers their blocks: [`handoff`] the entropy,
+//! reset-cause and watchdog blocks, [`radio`] the radio blocks.
 
 #[cfg(feature = "esp32c5")]
 pub mod handoff;
-pub mod watchdog;
 
 #[cfg(feature = "esp32c5")]
 pub mod radio;

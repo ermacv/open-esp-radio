@@ -175,10 +175,42 @@ end-exclusive = 0x20200000
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-before-ieee802154-core0-route"
+name = "hp-system-before-timg0-wdt"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20500000
+end-exclusive = 0x20580048
+permissions = "rw"
+
+[[regions]]
+name = "timg0-wdt"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20580048
+end-exclusive = 0x20580068
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-timg-wdts"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20580068
+end-exclusive = 0x20581048
+permissions = "rw"
+
+[[regions]]
+name = "timg1-wdt"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20581048
+end-exclusive = 0x20581068
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-timg1-wdt-and-ieee802154-core0-route"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20581068
 end-exclusive = 0x20585210
 permissions = "rw"
 
@@ -223,10 +255,26 @@ end-exclusive = 0x20587044
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-between-radio-modem-control-and-modem-configuration"
+name = "hp-system-between-radio-modem-control-and-timg1-clock"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20587044
+end-exclusive = 0x2058711C
+permissions = "rw"
+
+[[regions]]
+name = "hp-sys-clkrst-timg1"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2058711C
+end-exclusive = 0x20587120
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-timg1-clock-and-radio-modem-configuration"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20587120
 end-exclusive = 0x205871E0
 permissions = "rw"
 
@@ -463,10 +511,26 @@ end-exclusive = 0x20800000
 permissions = "rw"
 
 [[regions]]
-name = "lp-peripheral-before-trng"
+name = "lp-peripheral-before-lp-wdt"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20800000
+end-exclusive = 0x20801000
+permissions = "rw"
+
+[[regions]]
+name = "lp-wdt"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20801000
+end-exclusive = 0x20801024
+permissions = "rw"
+
+[[regions]]
+name = "lp-peripheral-between-lp-wdt-and-trng"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20801024
 end-exclusive = 0x20814000
 permissions = "rw"
 

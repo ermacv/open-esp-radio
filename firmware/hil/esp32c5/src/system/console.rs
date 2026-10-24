@@ -3,8 +3,8 @@
 //! and an intentional panic through the HIL panic hook.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
-use oer_esp32c5_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
 use oer_esp32c5_hal::platform::{Entropy, ResetCauses};
+use oer_esp32c5_hal::watchdog::{DeadlineBudget, Watchdogs};
 use oer_hil_agent::base::{Either, Intake, PanicRequest, Platform, WatchdogRequest};
 use oer_hil_agent::console::{Console as HilConsole, Immediate};
 use oer_hil_protocol::RequestIdentity;
@@ -14,6 +14,11 @@ use oer_hil_protocol::base::{
 use oer_hil_protocol::feature_keys::{ImageKeys, image_keys};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use static_cell::StaticCell;
+
+/// The SoC deadline service on timer group 1's main watchdog, measured on
+/// the image clock.
+pub(crate) type DeadlineWatchdog =
+    oer_esp32c5_hal::watchdog::DeadlineWatchdog<oer_embassy_time::EmbassyClock>;
 
 /// Writes a note through the early USB writer, until the driver owns the
 /// peripheral.
@@ -69,14 +74,14 @@ impl Console {
     pub(crate) fn new(
         usb: esp_hal::peripherals::USB_DEVICE<'static>,
         route: crate::ConsoleUsb,
-        watchdog: esp_hal::peripherals::TIMG1<'static>,
+        watchdogs: Watchdogs,
         rng: Rng,
         causes: ResetCauses,
     ) -> Self {
         Self {
             usb,
             route,
-            service: DeadlineWatchdog::new(watchdog),
+            service: DeadlineWatchdog::new(watchdogs.main1, oer_embassy_time::EmbassyClock),
             rng,
             causes,
         }

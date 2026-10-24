@@ -53966,6 +53966,340 @@ bit-width = 8
 access = "write-only"
 
 [[registers]]
+address = 542638152
+width = 32
+access = "read-write"
+identity = "TIMG0_WDT.WDTCONFIG0"
+peripheral = "TIMG0_WDT"
+peripheral-type = "Timg0Wdt"
+peripheral-module = "timg0_wdt"
+scope = []
+register-method = "wdtconfig0"
+
+[[registers.fields]]
+svd-name = "WDT_APPCPU_RESET_EN"
+method = "wdt_appcpu_reset_en"
+bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_PROCPU_RESET_EN"
+method = "wdt_procpu_reset_en"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_FLASHBOOT_MOD_EN"
+method = "wdt_flashboot_mod_en"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_SYS_RESET_LENGTH"
+method = "wdt_sys_reset_length"
+bit-offset = 15
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_CPU_RESET_LENGTH"
+method = "wdt_cpu_reset_length"
+bit-offset = 18
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_CONF_UPDATE_EN"
+method = "wdt_conf_update_en"
+bit-offset = 22
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "WDT_STG3"
+method = "wdt_stg3"
+bit-offset = 23
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG2"
+method = "wdt_stg2"
+bit-offset = 25
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG1"
+method = "wdt_stg1"
+bit-offset = 27
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG0"
+method = "wdt_stg0"
+bit-offset = 29
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_EN"
+method = "wdt_en"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542638156
+width = 32
+access = "read-write"
+identity = "TIMG0_WDT.WDTCONFIG1"
+peripheral = "TIMG0_WDT"
+peripheral-type = "Timg0Wdt"
+peripheral-module = "timg0_wdt"
+scope = []
+register-method = "wdtconfig1"
+
+[[registers.fields]]
+svd-name = "WDT_DIVCNT_RST"
+method = "wdt_divcnt_rst"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "WDT_CLK_PRESCALE"
+method = "wdt_clk_prescale"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 542638160
+width = 32
+access = "read-write"
+identity = "TIMG0_WDT.WDTCONFIG2"
+peripheral = "TIMG0_WDT"
+peripheral-type = "Timg0Wdt"
+peripheral-module = "timg0_wdt"
+scope = []
+register-method = "wdtconfig2"
+
+[[registers.fields]]
+svd-name = "WDT_STG0_HOLD"
+method = "wdt_stg0_hold"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 542638176
+width = 32
+access = "write-only"
+identity = "TIMG0_WDT.WDTFEED"
+peripheral = "TIMG0_WDT"
+peripheral-type = "Timg0Wdt"
+peripheral-module = "timg0_wdt"
+scope = []
+register-method = "wdtfeed"
+
+[[registers.fields]]
+svd-name = "WDT_FEED"
+method = "wdt_feed"
+bit-offset = 0
+bit-width = 32
+access = "write-only"
+
+[[registers]]
+address = 542638180
+width = 32
+access = "read-write"
+identity = "TIMG0_WDT.WDTWPROTECT"
+peripheral = "TIMG0_WDT"
+peripheral-type = "Timg0Wdt"
+peripheral-module = "timg0_wdt"
+scope = []
+register-method = "wdtwprotect"
+
+[[registers.fields]]
+svd-name = "WDT_WKEY"
+method = "wdt_wkey"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 542642248
+width = 32
+access = "read-write"
+identity = "TIMG1_WDT.WDTCONFIG0"
+peripheral = "TIMG1_WDT"
+peripheral-type = "Timg1Wdt"
+peripheral-module = "timg1_wdt"
+scope = []
+register-method = "wdtconfig0"
+
+[[registers.fields]]
+svd-name = "WDT_APPCPU_RESET_EN"
+method = "wdt_appcpu_reset_en"
+bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_PROCPU_RESET_EN"
+method = "wdt_procpu_reset_en"
+bit-offset = 13
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_FLASHBOOT_MOD_EN"
+method = "wdt_flashboot_mod_en"
+bit-offset = 14
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_SYS_RESET_LENGTH"
+method = "wdt_sys_reset_length"
+bit-offset = 15
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_CPU_RESET_LENGTH"
+method = "wdt_cpu_reset_length"
+bit-offset = 18
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_CONF_UPDATE_EN"
+method = "wdt_conf_update_en"
+bit-offset = 22
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "WDT_STG3"
+method = "wdt_stg3"
+bit-offset = 23
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG2"
+method = "wdt_stg2"
+bit-offset = 25
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG1"
+method = "wdt_stg1"
+bit-offset = 27
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG0"
+method = "wdt_stg0"
+bit-offset = 29
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_EN"
+method = "wdt_en"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542642252
+width = 32
+access = "read-write"
+identity = "TIMG1_WDT.WDTCONFIG1"
+peripheral = "TIMG1_WDT"
+peripheral-type = "Timg1Wdt"
+peripheral-module = "timg1_wdt"
+scope = []
+register-method = "wdtconfig1"
+
+[[registers.fields]]
+svd-name = "WDT_DIVCNT_RST"
+method = "wdt_divcnt_rst"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "WDT_CLK_PRESCALE"
+method = "wdt_clk_prescale"
+bit-offset = 16
+bit-width = 16
+access = "read-write"
+
+[[registers]]
+address = 542642256
+width = 32
+access = "read-write"
+identity = "TIMG1_WDT.WDTCONFIG2"
+peripheral = "TIMG1_WDT"
+peripheral-type = "Timg1Wdt"
+peripheral-module = "timg1_wdt"
+scope = []
+register-method = "wdtconfig2"
+
+[[registers.fields]]
+svd-name = "WDT_STG0_HOLD"
+method = "wdt_stg0_hold"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 542642272
+width = 32
+access = "write-only"
+identity = "TIMG1_WDT.WDTFEED"
+peripheral = "TIMG1_WDT"
+peripheral-type = "Timg1Wdt"
+peripheral-module = "timg1_wdt"
+scope = []
+register-method = "wdtfeed"
+
+[[registers.fields]]
+svd-name = "WDT_FEED"
+method = "wdt_feed"
+bit-offset = 0
+bit-width = 32
+access = "write-only"
+
+[[registers]]
+address = 542642276
+width = 32
+access = "read-write"
+identity = "TIMG1_WDT.WDTWPROTECT"
+peripheral = "TIMG1_WDT"
+peripheral-type = "Timg1Wdt"
+peripheral-module = "timg1_wdt"
+scope = []
+register-method = "wdtwprotect"
+
+[[registers.fields]]
+svd-name = "WDT_WKEY"
+method = "wdt_wkey"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
 address = 542659088
 width = 32
 access = "read-only"
@@ -54030,6 +54364,45 @@ register-method = "modem_ctrl0"
 svd-name = "MODEM_CLK_EN"
 method = "modem_clk_en"
 bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542667036
+width = 32
+access = "read-write"
+identity = "HP_SYS_CLKRST_TIMG1.TIMERGRP1_CTRL0"
+peripheral = "HP_SYS_CLKRST_TIMG1"
+peripheral-type = "HpSysClkrstTimg1"
+peripheral-module = "hp_sys_clkrst_timg1"
+scope = []
+register-method = "timergrp1_ctrl0"
+
+[[registers.fields]]
+svd-name = "APB_CLK_EN"
+method = "apb_clk_en"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RST_EN"
+method = "rst_en"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_SRC_SEL"
+method = "wdt_src_sel"
+bit-offset = 9
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_CLK_EN"
+method = "wdt_clk_en"
+bit-offset = 11
 bit-width = 1
 access = "read-write"
 
@@ -54499,6 +54872,183 @@ method = "psram_cap"
 bit-offset = 31
 bit-width = 1
 access = "read-only"
+
+[[registers]]
+address = 545263616
+width = 32
+access = "read-write"
+identity = "LP_WDT.CONFIG0"
+peripheral = "LP_WDT"
+peripheral-type = "LpWdt"
+peripheral-module = "lp_wdt"
+scope = []
+register-method = "config0"
+
+[[registers.fields]]
+svd-name = "WDT_PAUSE_IN_SLP"
+method = "wdt_pause_in_slp"
+bit-offset = 9
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_APPCPU_RESET_EN"
+method = "wdt_appcpu_reset_en"
+bit-offset = 10
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_PROCPU_RESET_EN"
+method = "wdt_procpu_reset_en"
+bit-offset = 11
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_FLASHBOOT_MOD_EN"
+method = "wdt_flashboot_mod_en"
+bit-offset = 12
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_SYS_RESET_LENGTH"
+method = "wdt_sys_reset_length"
+bit-offset = 13
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_CPU_RESET_LENGTH"
+method = "wdt_cpu_reset_length"
+bit-offset = 16
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG3"
+method = "wdt_stg3"
+bit-offset = 19
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG2"
+method = "wdt_stg2"
+bit-offset = 22
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG1"
+method = "wdt_stg1"
+bit-offset = 25
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_STG0"
+method = "wdt_stg0"
+bit-offset = 28
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "WDT_EN"
+method = "wdt_en"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 545263640
+width = 32
+access = "read-write"
+identity = "LP_WDT.WPROTECT"
+peripheral = "LP_WDT"
+peripheral-type = "LpWdt"
+peripheral-module = "lp_wdt"
+scope = []
+register-method = "wprotect"
+
+[[registers.fields]]
+svd-name = "WDT_WKEY"
+method = "wdt_wkey"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 545263644
+width = 32
+access = "read-write"
+identity = "LP_WDT_SWD.SWD_CONFIG"
+peripheral = "LP_WDT_SWD"
+peripheral-type = "LpWdtSwd"
+peripheral-module = "lp_wdt_swd"
+scope = []
+register-method = "swd_config"
+
+[[registers.fields]]
+svd-name = "SWD_RESET_FLAG"
+method = "swd_reset_flag"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "SWD_AUTO_FEED_EN"
+method = "swd_auto_feed_en"
+bit-offset = 18
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SWD_RST_FLAG_CLR"
+method = "swd_rst_flag_clr"
+bit-offset = 19
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "SWD_SIGNAL_WIDTH"
+method = "swd_signal_width"
+bit-offset = 20
+bit-width = 10
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SWD_DISABLE"
+method = "swd_disable"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SWD_FEED"
+method = "swd_feed"
+bit-offset = 31
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 545263648
+width = 32
+access = "read-write"
+identity = "LP_WDT_SWD.SWD_WPROTECT"
+peripheral = "LP_WDT_SWD"
+peripheral-type = "LpWdtSwd"
+peripheral-module = "lp_wdt_swd"
+scope = []
+register-method = "swd_wprotect"
+
+[[registers.fields]]
+svd-name = "SWD_WKEY"
+method = "swd_wkey"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
 
 [[registers]]
 address = 545341440

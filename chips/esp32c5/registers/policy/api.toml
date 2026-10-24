@@ -30,6 +30,11 @@ typed-peripherals = [
     "WIFI_MAC_POWER_INTERRUPT",
     "LPPERI_RNG",
     "LP_CLKRST_RESET_CAUSE",
+    "TIMG0_WDT",
+    "TIMG1_WDT",
+    "PCR_TIMG1",
+    "LP_WDT",
+    "LP_WDT_SWD",
 ]
 # Source-qualified MMIO views retained for bit-use coverage; no owner reaches
 # them (their words lie in the typed blocks above or are not used).
@@ -47,6 +52,13 @@ name = "ResetCausePeripherals"
 member = "reset_cause"
 description = "The HP core's reset-cause word, read by the reset-cause owner."
 peripherals = ["LP_CLKRST_RESET_CAUSE"]
+handoff = true
+
+[[ownership-partitions]]
+name = "WatchdogPeripherals"
+member = "watchdog"
+description = "The main watchdogs of both timer groups, timer group 1's clock and reset, and the RTC and super watchdogs, owned by the watchdog owners."
+peripherals = ["TIMG0_WDT", "TIMG1_WDT", "PCR_TIMG1", "LP_WDT", "LP_WDT_SWD"]
 handoff = true
 
 [[ownership-partitions]]
@@ -1582,3 +1594,39 @@ register = "I2C0_CTRL"
 arguments = [{ name = "parameter", value-type = "u16", retain-mask = 3, left-shift = 20 }]
 output-mask = 0x00300000
 sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG0_WDT"
+register = "WDTCONFIG0"
+field = "WDT_CONF_UPDATE_EN"
+sources = ["ESP_IDF_4D59230D_C5_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG0_WDT"
+register = "WDTCONFIG1"
+field = "WDT_DIVCNT_RST"
+sources = ["ESP_IDF_4D59230D_C5_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG1_WDT"
+register = "WDTCONFIG0"
+field = "WDT_CONF_UPDATE_EN"
+sources = ["ESP_IDF_4D59230D_C5_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "TIMG1_WDT"
+register = "WDTCONFIG1"
+field = "WDT_DIVCNT_RST"
+sources = ["ESP_IDF_4D59230D_C5_TIMG_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "LP_WDT_SWD"
+register = "SWD_CONFIG"
+field = "SWD_RST_FLAG_CLR"
+sources = ["ESP_IDF_4D59230D_C5_LP_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "LP_WDT_SWD"
+register = "SWD_CONFIG"
+field = "SWD_FEED"
+sources = ["ESP_IDF_4D59230D_C5_LP_WDT"]

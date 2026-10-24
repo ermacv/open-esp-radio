@@ -292,6 +292,7 @@ pub mod platform;
 #[cfg(oer_probe)]
 #[doc(hidden)]
 pub mod validation;
+pub mod watchdog;
 pub(crate) mod wifi;
 
 // Generated analog-I2C identities, fields and transport routes.

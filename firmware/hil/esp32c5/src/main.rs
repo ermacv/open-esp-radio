@@ -81,7 +81,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let console = system::console::Console::new(
         peripherals.USB_DEVICE,
         interrupts.console_usb,
-        peripherals.TIMG1,
+        oer_esp32c5_esp_hal_soc::handoff::take_watchdogs(
+            peripherals.TIMG0,
+            peripherals.TIMG1,
+            peripherals.LP_WDT,
+        ),
         oer_esp32c5_hal::platform::Entropy::new(
             oer_esp32c5_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
             oer_embassy_time::EmbassyClock,

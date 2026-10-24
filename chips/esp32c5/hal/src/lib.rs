@@ -22,6 +22,7 @@ pub mod modem_clock;
 pub mod platform;
 
 pub mod root;
+pub mod watchdog;
 
 /// The PAC's memory layouts and typed addresses for hardware-shared RAM.
 pub use oer_esp32c5_pac::layouts;

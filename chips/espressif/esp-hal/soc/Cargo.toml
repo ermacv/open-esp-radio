@@ -15,7 +15,6 @@ esp32s31 = ["dep:esp-hal", "dep:oer-espressif-esp-hal-irq", "dep:oer-esp32s31-pa
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 oer-memory = { path = "../../../../portable/memory" }
 critical-section = "1.2.0"
-oer-time = { path = "../../../../portable/time" }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 oer-espressif-esp-hal-irq = { path = "../../esp-hal-irq", features = ["esp32s31"], optional = true }

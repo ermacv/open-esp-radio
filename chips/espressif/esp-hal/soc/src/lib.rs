@@ -6,7 +6,7 @@
 //! Radio registers belong to `oer-esp32s31-pac`. This crate owns
 //! esp-hal singleton witnesses for non-radio platform blocks. Cache and flash
 //! modules provide typed register operations; [`handoff`] transfers the
-//! eFuse, entropy and reset-cause blocks to the chip PAC. These services
+//! eFuse, entropy, reset-cause and watchdog blocks to the chip PAC. These services
 //! are separate from the generated radio PAC and from radio protocol policy.
 
 mod cache;
@@ -16,7 +16,6 @@ mod flash;
 pub mod handoff;
 #[cfg(any(test, feature = "esp32s31"))]
 mod once;
-pub mod watchdog;
 
 #[cfg(feature = "esp32s31")]
 pub use cache::performance::L1CachePerformanceCounters;
