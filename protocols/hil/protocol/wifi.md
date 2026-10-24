@@ -22,7 +22,8 @@ leave reason); `RadioFailure` means only that the radio front end refused the
 station port. A service that ends without a stop command publishes, after
 the link's last `Disconnected`, one `StationServiceEnded`, correlated with
 the start request: how the port was left (`Failed`, `Poisoned` with the
-disable's fault, `Quarantined`) and the original `StationServiceFault` with
+disable's fault, `Quarantined`, or `Unavailable` when the front end never
+registered the port) and the original `StationServiceFault` with
 its backend fault, contract violation or missing terminal. After it, and
 while a stop is pending, `StopStation` and `ProbeStation` are refused with
 `InvalidState` (`StopStation::refusal`, `ProbeStation::refusal`), so every
