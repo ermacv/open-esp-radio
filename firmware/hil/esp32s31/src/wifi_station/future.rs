@@ -4,8 +4,8 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-pub struct Boundary<'a, F: ?Sized>(pub Pin<&'a mut F>);
-impl<F: Future + ?Sized> Future for Boundary<'_, F> {
+pub struct Boundary<'a, F>(pub Pin<&'a mut F>);
+impl<F: Future> Future for Boundary<'_, F> {
     type Output = F::Output;
     #[inline(never)]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

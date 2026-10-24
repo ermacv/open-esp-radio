@@ -28,7 +28,7 @@ protocol state machines they drive never wait.
 
 | Module | Responsibility |
 | --- | --- |
-| `ieee80211/runtime/src/{monitor,connected_tasks,station_network,stack_boundary}` | Portable capture/injection handoffs, task shutdown, association-scoped network ownership and explicit polling boundary |
+| `ieee80211/runtime/src/{monitor,connected_tasks,station_network}` | Portable capture/injection handoffs, task shutdown and association-scoped network ownership |
 
 Hardware transactions and finite chip state remain below these packages. A
 runtime retains their affine owners across borrowed waits, returns the same
