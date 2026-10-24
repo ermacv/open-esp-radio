@@ -66,8 +66,6 @@ mod sealed {
 
 /// A client of the radio system and the payloads of its requests.
 pub trait Client: sealed::Sealed + Sized + 'static {
-    /// The client a poison of this client's request names.
-    const RADIO: oer_esp32s31_hal::domain::RadioClient;
     /// What `join` lends: the client's cold partition.
     type Join: Send;
     /// What a successful `join` gives back beside the membership.

@@ -20,8 +20,6 @@ pub enum Bluetooth {}
 impl sealed::Sealed for Bluetooth {}
 
 impl Client for Bluetooth {
-    const RADIO: oer_esp32s31_hal::domain::RadioClient =
-        oer_esp32s31_hal::domain::RadioClient::Bluetooth;
     type Join = BluetoothJoin;
     type Joined = BluetoothJoined;
     type JoinReturned = BluetoothJoin;

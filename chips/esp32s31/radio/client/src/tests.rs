@@ -21,8 +21,6 @@ enum TestClient {}
 impl sealed::Sealed for TestClient {}
 
 impl Client for TestClient {
-    const RADIO: oer_esp32s31_hal::domain::RadioClient =
-        oer_esp32s31_hal::domain::RadioClient::Wifi;
     type Join = u32;
     type Joined = u32;
     type JoinReturned = u32;
