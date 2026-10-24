@@ -41,6 +41,7 @@ Below it are, by directory (`/` ends a domain):
 | Kind | Directories |
 | --- | --- |
 | Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
+| The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout` |
@@ -49,6 +50,34 @@ Below it are, by directory (`/` ends a domain):
 | Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
 
 ## Generated access and trusted handwritten code
+
+Typed register blocks are generated without `unsafe`. The register
+generator renders the peripherals a chip's API policy lists in
+`typed-peripherals` (on the ESP32-C5 the IEEE 802.15.4 MAC) into the chip
+PAC's `generated.rs`, which starts with `#![forbid(unsafe_code)]`; svd2rust
+renders the chip's other peripherals into its `pac-raw` package. The unsafe
+code under a typed block is `oer-mmio` (`portable/mmio`) alone:
+
+- `Span::assume_owned`, the promise that a register range is the caller's
+  alone. Only the chip PAC's radio root makes it, from the platform
+  handoff (clippy `disallowed-methods` refuses it elsewhere); a probe image
+  may take a block's span again after dropping the block's owner.
+- The volatile reads and writes of a `Block` and of a `Part`. Every offset,
+  stride and element count is a const generic, checked against the block's
+  size at compile time; an array index is an `Index<N>` from a checked
+  constructor; the two parts of a split own disjoint word lists, checked at
+  compile time, and a part writes only the words it owns.
+- `VolatileCell`, the volatile word of the generated memory layouts, and
+  its `Zeroable` implementation, from which the layouts derive theirs; and
+  the `unsafe` constructors of `DmaWindowAddress` and `DmaRef`.
+
+A generated register writer takes typed field values only: `bool`, a value
+enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`. A read-modify-write
+keeps every other bit, reserved and undeclared ones included; a
+write-one-to-clear register is acknowledged with exactly one affine sample;
+a DMA address field is written only by its policy transaction, which takes
+a typed DMA address. Each rendered transaction asserts its masks against
+the register's declared fields in a `const` item beside it.
 
 `esp32s31/pac-raw/` is the `oer-esp32s31-pac-raw` package and
 `espressif/ieee80211-pac-raw/` the `oer-espressif-ieee80211-pac-raw` package of the
@@ -138,8 +167,9 @@ it.
 
 Each chip's HAL has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
-`DmaRef` constructors of the PAC's generated `layouts` (clippy
-`disallowed-methods` refuses them elsewhere). Its `placed`/`placed_link`
+`DmaRef` constructors of `oer-mmio`, which the PAC's generated `layouts`
+bind to the chip's DMA window (clippy `disallowed-methods` refuses them
+elsewhere). Its `placed`/`placed_link`
 take an address of storage the caller keeps pinned in the DMA window: a
 placed static's descriptors and buffers, or a placed pool's buffer
 (`PlacedBacking`); each call site names its proof.
