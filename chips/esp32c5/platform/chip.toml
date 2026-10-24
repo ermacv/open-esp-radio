@@ -81,7 +81,6 @@ vector-table-symbol = "_runtime_psram_mtvt_source"
 exception-entry-symbol = "_start_trap"
 source-table-symbol = "__EXTERNAL_INTERRUPTS"
 harts = [0]
-always-levels = []
 # Maximum allocation of the hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-guard-bytes = { "0" = 4096 }

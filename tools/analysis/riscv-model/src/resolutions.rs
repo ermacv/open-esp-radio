@@ -14,8 +14,6 @@ pub enum Fact {
     /// The image's static interrupt table: a dispatcher reaches the
     /// handlers of its level and core.
     InterruptTable,
-    /// The handler arguments of every call that posts an IPC callback.
-    IpcPosts,
     /// The waker vtables of the image.
     WakerVtables,
     /// The functions whose type can be a static field's function pointer.
@@ -40,7 +38,7 @@ pub enum Assumption {
     /// The executor invariant: a task header's `poll_fn` matches the storage
     /// it heads, and a pointer erased to `()` or to bytes is read back as its
     /// own type. Every fact found from the image's types rests on it: a waker
-    /// vtable, an IPC callback or a field's function reaches a site only if
+    /// vtable or a field's function reaches a site only if
     /// no reinterpreted memory puts another function there. The points-to
     /// analysis of the interrupt-reachable sites is to prove it.
     ExecutorInvariant,
@@ -64,21 +62,18 @@ impl Fact {
     pub fn assumption(self) -> Option<Assumption> {
         match self {
             Self::InterruptTable | Self::StageTwoEntry => None,
-            Self::IpcPosts
-            | Self::WakerVtables
-            | Self::FieldType
-            | Self::TaskPolls
-            | Self::NoTasks => Some(Assumption::ExecutorInvariant),
+            Self::WakerVtables | Self::FieldType | Self::TaskPolls | Self::NoTasks => {
+                Some(Assumption::ExecutorInvariant)
+            }
         }
     }
 
     /// Whether an empty set from this fact proves the site reaches nothing:
-    /// the interrupt table lists every handler, and the IPC posts are every
-    /// call of the one function that posts. No tasks proves the executor's
+    /// the interrupt table lists every handler. No tasks proves the executor's
     /// dequeue call unreachable. Waker vtables and field types are found,
     /// not listed, so their empty set is a hole.
     pub fn proves_empty(self) -> bool {
-        matches!(self, Self::InterruptTable | Self::IpcPosts | Self::NoTasks)
+        matches!(self, Self::InterruptTable | Self::NoTasks)
     }
 }
 

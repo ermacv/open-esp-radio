@@ -167,8 +167,8 @@ The image build pipeline invokes the gates in `oer-image-checks`.
 task-stack gate (`audit_runtime_stacks`) and the bootstrap stack gate
 (`audit_bootstrap_stack`). The checks analyze each ELF once with
 `oer-analysis-riscv-stack`, the pinned ROM and its summaries, and resolve
-indirect sites with the same facts (waker vtables, IPC posts, function-pointer
-field types). The runtime's task and interrupt gates share that analysis.
+indirect sites with the same facts (waker vtables, function-pointer field
+types). The runtime's task and interrupt gates share that analysis.
 The `frames` gate shares it too, and the bootstrap's frame and stack gates
 share one bootstrap analysis. Every record in `Image::stack_sizes` is checked,
 whether or not the function is reachable, against the same `max_move_bytes`

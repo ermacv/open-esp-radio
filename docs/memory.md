@@ -57,6 +57,11 @@ contracts: [Hardware memory](hardware-memory.md).
   staged boot stops any hart but 0, no image links a core starter
   (`[core-start]` of `chip.toml`, also forbidden in `clippy.toml`) and no
   interrupt-table entry routes to it.
+- esp-hal's cross-core call (IPC) is off in every image: the fork's `ipc`
+  feature is not enabled, so `handle_interrupts` has no IPC dispatch and no
+  interrupt level is taken without a route in the image's table. The image
+  gate fails an image that links any `esp_hal::interrupt::ipc` function
+  (`ipc` of `[core-start]` in `chip.toml`) until the call is typed.
 - CPU0's task stack is in PSRAM; each used hart has an SRAM interrupt stack
   with a guard region, a debug trigger and stack painting:
   [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).

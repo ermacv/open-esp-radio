@@ -570,7 +570,7 @@ fn an_empty_candidate_set_is_a_hole_unless_its_fact_proves_it() {
     assert_eq!(hole.partial, 16);
     assert_eq!(hole.unresolved, [(site, Reason::NoCandidate)]);
     let mut proven = Resolutions::new();
-    proven.add(site, Fact::IpcPosts, []);
+    proven.add(site, Fact::InterruptTable, []);
     assert_eq!(
         analysis
             .bound_with(TEXT, &proven, &mut crate::tests::ledger(), &mut || Ok(()))
@@ -2025,7 +2025,6 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
         &Stacks {
             table: &table,
             cores: &[0, 1],
-            always: &[1],
             vectors: &[vector],
             exception,
             sources: 0x3000,

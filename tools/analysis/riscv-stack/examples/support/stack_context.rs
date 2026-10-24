@@ -180,7 +180,6 @@ pub fn derive<'m>(
         &Stacks {
             table: &table,
             cores: &irq.harts,
-            always: &irq.always_levels,
             vectors: &vectors,
             exception,
             sources,

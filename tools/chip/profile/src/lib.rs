@@ -236,7 +236,6 @@ pub struct InterruptContract {
     pub exception_entry_symbol: String,
     pub source_table_symbol: String,
     pub harts: Vec<u32>,
-    pub always_levels: Vec<u32>,
     pub level_writers: Vec<LevelWriter>,
     /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
     pub irq_stack_bytes: u32,

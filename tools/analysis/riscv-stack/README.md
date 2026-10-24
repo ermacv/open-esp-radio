@@ -181,7 +181,7 @@ Facts outside the machine code close indirect sites through
 analysis left a target unresolved. Each site's targets carry the `Fact`s that
 gave them; the facts of one site unite, each being a superset of what the
 site reaches. An empty set resolves a site only where its fact is complete
-for it (`Fact::proves_empty`: the interrupt table, the IPC posts, no tasks); an empty
+for it (`Fact::proves_empty`: the interrupt table, no tasks); an empty
 set of found facts (waker vtables, field types) is a hole,
 `Reason::NoCandidate`, never a site that reaches nothing:
 
@@ -207,8 +207,7 @@ set of found facts (waker vtables, field types) is a hole,
 - `Analysis::constant_arguments` reads an argument register's exact value at
   every direct call of a function, complete when `taken_addresses` holds no
   relocation that takes the function's address other than a transfer: how
-  the ESP32-S31 image reads every function `Ipc::call_function` posts, the
-  targets of the IPC dispatch.
+  the task spawn facts read a spawner's constant arguments.
 
 `task_poll_resolutions` narrows each executor's poll targets when all uses
 of a task's poll address prove its storage initialization and executor
@@ -282,8 +281,7 @@ commands to reproduce the diagnostic without function/address allowlists. The
 normalized pair, changed use and changed candidate in the real w0/w1 results.
 
 `interrupt_stacks` bounds each hart's interrupt stack (`Stacks`): one
-interrupt per level the hart takes (its table entries' levels and the levels
-it always uses), each the worst hardware-vector entry's frame plus its
+interrupt per level the hart takes (its table entries' levels), each the worst hardware-vector entry's frame plus its
 handler's bound, where the dispatcher's calls through the source table reach
 only the handlers the table routes to that hart at that level; an exception
 on top. A level's bound is unknown when its handler's is.
@@ -301,7 +299,7 @@ the nesting rule checked; one with any is conditional on the rule those
 sites may break.
 
 A bound also names what it assumes (`Bound::assumptions`, `Assumption`): the
-facts found from the image's types (waker vtables, IPC posts, field types)
+facts found from the image's types (waker vtables, field types)
 rest on the executor invariant, that a task header's `poll_fn` matches its
 storage and an erased pointer is read back as its own type; the interrupt
 table assumes nothing. `HartStack::assumptions` gathers a hart's. A hart with
@@ -335,7 +333,7 @@ The nesting rule's other half, each source at its table level for good, is
 the image's configuration. `Dwarf::instances` finds every copy of a function in the
 DWARF, out of line or inlined; the firmware gate requires each copy of the
 CLIC level and route writers to run inside the functions its contract
-allows (start-up, the IPC line's install, the table's routes).
+allows (start-up, the table's routes).
 
 This is the repository's only stack analyzer. The image build pipeline
 (`oer-image-build`) invokes the gates in `oer-image-checks`:

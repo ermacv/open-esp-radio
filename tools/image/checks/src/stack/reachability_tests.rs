@@ -186,12 +186,20 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
         .unwrap()
         .table_bases
         .insert(TEXT + 12, 0x3000);
-    let entries = [TableEntry {
-        core: 0,
-        level: 2,
-        source: 7,
-        handler: Some(FORMATTER),
-    }];
+    let entries = [
+        TableEntry {
+            core: 0,
+            level: 2,
+            source: 7,
+            handler: Some(FORMATTER),
+        },
+        TableEntry {
+            core: 1,
+            level: 2,
+            source: 8,
+            handler: Some(TEXT + 28),
+        },
+    ];
     let vector = TrapEntry {
         entry: TEXT,
         handler: TEXT,
@@ -200,7 +208,6 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
     let inputs = Stacks {
         table: &entries,
         cores: &[0, 1],
-        always: &[2],
         vectors: &[vector],
         exception: vector,
         sources: 0x3000,

@@ -633,7 +633,6 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     let inputs = Stacks {
         table: &table,
         cores: &interrupts.harts,
-        always: &interrupts.always_levels,
         vectors: &vectors,
         exception,
         sources,
