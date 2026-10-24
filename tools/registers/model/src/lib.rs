@@ -51,12 +51,12 @@ mod shared;
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,
-    EnumDomain, EnumValue, FieldOrModify, FixedRegisterImage, FixedRegisterSequence,
+    EnumDomain, EnumValue, FieldOrModify, FifoPort, FixedRegisterImage, FixedRegisterSequence,
     FixedRegisterSequenceStep, FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead,
     FullRegisterValue, FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify,
     OpaqueDomain, OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack,
     PartitionImageRead, PointerField, RegisterImageRead, RegisterImageWrite, RegisterSides,
-    W1cRegisterSnapshot, ZeroBasedFieldWrite, ZeroRegisterWrite,
+    W1cRegisterSnapshot, WriteTriggerField, ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};
 pub use partition_image::PartitionRegister;

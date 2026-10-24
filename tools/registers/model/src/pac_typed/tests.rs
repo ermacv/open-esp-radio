@@ -440,3 +440,188 @@ fn the_two_sides_are_owners_whose_words_cover_the_block() {
         assert!(rust.contains(item), "{item}\n{rust}");
     }
 }
+
+fn trigger(register: &str, field: &str) -> crate::WriteTriggerField {
+    crate::WriteTriggerField {
+        peripheral: "RADIO".to_owned(),
+        register: register.to_owned(),
+        field: field.to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    }
+}
+
+fn fifo(register: &str) -> crate::FifoPort {
+    crate::FifoPort {
+        peripheral: "RADIO".to_owned(),
+        register: register.to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    }
+}
+
+/// `CONFIG` with an ordinary field and a write-only one-bit `UPDATE`.
+fn triggered() -> String {
+    register(
+        "CONFIG",
+        0,
+        "read-write",
+        "",
+        &(field("ENABLE", 0, 1, "") + &field("UPDATE", 31, 1, "<access>write-only</access>")),
+    )
+}
+
+#[test]
+fn an_undeclared_write_only_field_in_a_readable_register_is_still_refused() {
+    let error = typed_pack()
+        .render_typed_rust(&svd(&triggered()))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("a read-modify-write would replay"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_write_trigger_field_has_only_its_explicit_trigger() {
+    let mut pack = typed_pack();
+    pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
+    let rust = pack.render_typed_rust(&svd(&triggered())).unwrap();
+    for item in [
+        "pub fn trigger_config_update(",
+        "pub const TRIGGERS: u32",
+        "pub fn modify_config(",
+        "& !config::TRIGGERS",
+        "pub fn set_enable(",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    assert!(!rust.contains("pub fn set_update("), "{rust}");
+    assert!(!rust.contains("pub const fn update("), "{rust}");
+}
+
+#[test]
+fn a_write_trigger_field_wider_than_one_bit_is_refused() {
+    let wide = register(
+        "CONFIG",
+        0,
+        "read-write",
+        "",
+        &(field("ENABLE", 0, 1, "") + &field("UPDATE", 30, 2, "<access>write-only</access>")),
+    );
+    let mut pack = typed_pack();
+    pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
+    let error = pack.render_typed_rust(&svd(&wide)).unwrap_err();
+    assert!(error.to_string().contains("one writable bit"), "{error}");
+}
+
+#[test]
+fn a_write_trigger_field_the_block_lacks_is_refused() {
+    let mut pack = typed_pack();
+    pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
+    pack.write_trigger_fields.push(trigger("CONFIG", "MISSING"));
+    let error = pack.render_typed_rust(&svd(&triggered())).unwrap_err();
+    assert!(error.to_string().contains("is not a field"), "{error}");
+}
+
+/// A FIFO port `DATA` and an ordinary `CONTROL`.
+fn port() -> String {
+    register("DATA", 0, "read-write", "", &field("BYTE", 0, 8, ""))
+        + &register("CONTROL", 4, "read-write", "", &field("ENABLE", 0, 1, ""))
+}
+
+#[test]
+fn a_fifo_port_is_only_popped_and_pushed() {
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("DATA"));
+    let rust = pack.render_typed_rust(&svd(&port())).unwrap();
+    assert!(rust.contains("pub fn pop_data(&mut self) -> u8"), "{rust}");
+    assert!(
+        rust.contains("pub fn push_data(&mut self, value: u8)"),
+        "{rust}"
+    );
+    for absent in [
+        "pub fn read_data(",
+        "pub fn modify_data(",
+        "pub fn write_data(",
+    ] {
+        assert!(!rust.contains(absent), "{absent}\n{rust}");
+    }
+}
+
+#[test]
+fn a_fifo_port_its_read_declares_changing_is_still_pushed() {
+    let clearing = register(
+        "DATA",
+        0,
+        "read-write",
+        "<readAction>clear</readAction>",
+        &field("BYTE", 0, 8, ""),
+    );
+    let error = typed_pack().render_typed_rust(&svd(&clearing)).unwrap_err();
+    assert!(error.to_string().contains("changes when read"), "{error}");
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("DATA"));
+    let rust = pack.render_typed_rust(&svd(&clearing)).unwrap();
+    assert!(rust.contains("pub fn push_data("), "{rust}");
+}
+
+#[test]
+fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("DATA"));
+    pack.register_sides.push(RegisterSides {
+        peripheral: "RADIO".to_owned(),
+        irq: vec![],
+        irq_observes: vec!["DATA".to_owned()],
+        description: "test".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let error = pack.render_typed_rust(&svd(&port())).unwrap_err();
+    assert!(
+        error.to_string().contains("no side-effect-free read"),
+        "{error}"
+    );
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("DATA"));
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        name: "push_fixed".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "DATA".to_owned(),
+        value: 0x41,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let error = pack.render_typed_rust(&svd(&port())).unwrap_err();
+    assert!(
+        error.to_string().contains("only popped and pushed"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_register_narrower_than_a_word_is_refused() {
+    let byte = "<register><name>CTL</name><addressOffset>0x3</addressOffset>\
+                <size>8</size><access>read-write</access><fields>"
+        .to_owned()
+        + &field("LEVEL", 0, 8, "")
+        + "</fields></register>";
+    let error = typed_pack().render_typed_rust(&svd(&byte)).unwrap_err();
+    assert!(error.to_string().contains("not 32 bits wide"), "{error}");
+}
+
+#[test]
+fn trigger_and_fifo_declarations_need_a_typed_peripheral() {
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(crate::FifoPort {
+        peripheral: "OTHER".to_owned(),
+        ..fifo("WORD")
+    });
+    let error = pack.render_typed_rust(&svd(&block())).unwrap_err();
+    assert!(error.to_string().contains("is not typed"), "{error}");
+    let mut pack = typed_pack();
+    pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
+    pack.fifo_ports.push(fifo("DATA"));
+    let legacy = pack.without_typed();
+    assert!(legacy.write_trigger_fields.is_empty() && legacy.fifo_ports.is_empty());
+}

@@ -151,7 +151,26 @@ type; a read-only field and a DMA address field have no setter. A register
 changed by its read is read through `&mut`; a cluster, a field array, a
 register that is not 32 bits wide, mixed write-one-to-clear and ordinary
 fields in a readable register, a write-only field in a readable register
-and a write range narrower than the field are refused.
+that the policy does not declare a write trigger and a write range narrower
+than the field are refused.
+
+`[[write-trigger-fields]]` (`peripheral`, `register`, `field`, `sources`)
+declares a one-bit field whose written one starts a hardware action (an
+update, a feed, a reset or a done strobe). The field has no getter and no
+setter; the register module holds `TRIGGERS`, every read-modify-write of
+the register (`modify_<register>` and each policy transaction) writes zero
+there, and only `trigger_<register>_<field>` writes one: the value read with
+every trigger zero and this field one, or, in a write-only register, this
+field alone. `[[fifo-ports]]` (`peripheral`, `register`, `sources`)
+declares a register of one field whose read takes an element out:
+`pop_<register>(&mut self)` returns the field and `push_<register>` writes
+it from zero. A FIFO port has no `read_`, `modify_` or `write_`, no side
+observes it, no policy transaction names it, and its SVD read action does
+not refuse it. Registers are 32-bit words, never bytes: a CLIC line word
+holds its pending, enable, attribute and control bytes, so changing its
+enable or control writes back the pending bit read. That is sound only
+while every vectored line is level-triggered, and a CLIC block's model
+description records that invariant.
 
 The policy's `[[ownership-partitions]]` of typed peripherals become
 `peripheral_ownership`: a struct per partition holding its owners,
