@@ -192,6 +192,7 @@ pub fn idle() -> ! {
 /// Mask this hart's interrupts (`mstatus.MIE`) and wait for good: the end
 /// of a fatal path. It takes no lock and touches no other hart, which keeps
 /// running.
+#[cfg(target_arch = "riscv32")]
 #[allow(unsafe_code, reason = "the clear of mstatus.MIE")]
 pub fn halt() -> ! {
     // SAFETY: clearing MIE touches no memory and leaves the stack unchanged;
