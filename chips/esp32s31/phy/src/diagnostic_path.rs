@@ -146,11 +146,74 @@ impl<E: DiagnosticPath> DiagnosticPath for crate::executor::PhyParamTrackingRunE
     }
 }
 
+impl<E: DiagnosticPath> DiagnosticPath for crate::executor::PhyCalibrationTrackingRunError<E> {
+    fn push_path(&self, path: &mut DiagPath) {
+        use crate::tracking::calibration::{
+            PhyCalibrationTrackingFailure as Failure,
+            PhyCalibrationTrackingTransitionError as Transition,
+        };
+        match self {
+            Self::Port(error) => {
+                path.name("Port");
+                error.push_path(path);
+            }
+            Self::Transition(error) => {
+                path.name("Transition");
+                path.name(match error {
+                    Transition::WrongCompletion => "WrongCompletion",
+                    Transition::AlreadyComplete => "AlreadyComplete",
+                });
+            }
+            Self::Radio(failure) => {
+                path.name("Radio");
+                path.name(match failure {
+                    Failure::PbusClearTimedOut(_) => "PbusClearTimedOut",
+                    Failure::Dcode(_) => "Dcode",
+                    Failure::RxGain(_) => "RxGain",
+                    Failure::Channel(_) => "Channel",
+                    Failure::TxDcPwdet(_) => "TxDcPwdet",
+                });
+            }
+            Self::ParentEdgeLimit => path.name("ParentEdgeLimit"),
+        }
+    }
+}
+
 impl DiagnosticPath for crate::tracking::parameters::PhyParamTrackingTransitionError {
     fn push_path(&self, path: &mut DiagPath) {
         path.name(match self {
             Self::WrongCompletion => "WrongCompletion",
             Self::AlreadyComplete => "AlreadyComplete",
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use oer_diagnostics::{DiagPath, DiagnosticPath};
+
+    use crate::{executor::PhyCalibrationTrackingRunError, tracking::calibration};
+
+    struct Leaf;
+
+    impl DiagnosticPath for Leaf {
+        fn push_path(&self, path: &mut DiagPath) {
+            path.name("Leaf");
+        }
+    }
+
+    #[test]
+    fn a_calibration_tracking_error_names_its_own_step() {
+        let port = PhyCalibrationTrackingRunError::Port(Leaf);
+        assert_eq!(DiagPath::of(&port).names(), ["Port", "Leaf"]);
+        let transition = PhyCalibrationTrackingRunError::<Leaf>::Transition(
+            calibration::PhyCalibrationTrackingTransitionError::WrongCompletion,
+        );
+        assert_eq!(
+            DiagPath::of(&transition).names(),
+            ["Transition", "WrongCompletion"]
+        );
+        let limit = PhyCalibrationTrackingRunError::<Leaf>::ParentEdgeLimit;
+        assert_eq!(DiagPath::of(&limit).names(), ["ParentEdgeLimit"]);
     }
 }

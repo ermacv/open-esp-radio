@@ -50,7 +50,10 @@ use core::{
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
 pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
 pub use oer_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
-pub use poison::{PhyFault, Poison, PoisonCause, PoisonOrigin, RequestKind};
+pub use poison::{
+    CalibrationTrackingFailure, CalibrationTrackingFault, PhyFault, Poison, PoisonCause,
+    PoisonOrigin, RegistrationFailure, RegistrationFault, RequestKind,
+};
 
 /// The provisional bound of one poll of the actor future
 /// (docs/architecture.md, "Radio system").

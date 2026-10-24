@@ -8,11 +8,13 @@ use oer_esp32s31_ieee80211_driver::{
     rx::control::WifiRxCause,
 };
 use oer_esp32s31_phy::{
+    PhyRegisterBindingError, PhyRegisterStage,
     concurrent::ConcurrentPhyError,
     state::client::{PhyClientAcquireError, PhyTrackTimeError},
 };
 use oer_esp32s31_radio_client::{
-    Failure, PhyFault, Poison, PoisonCause, PoisonOrigin, RequestKind,
+    CalibrationTrackingFailure, CalibrationTrackingFault, Failure, PhyFault, Poison, PoisonCause,
+    PoisonOrigin, RegistrationFailure, RegistrationFault, RequestKind,
 };
 use oer_hil_protocol::wifi::*;
 use oer_ieee80211_arbiter::{LeaveReason, Refusal};
@@ -236,9 +238,10 @@ fn radio_poison(poison: Poison) -> StationRadioPoison {
         cause: match poison.cause {
             C::TrackingRefused(error) => W::TrackingRefused(phy_domain(error)),
             C::Tracking(fault) => W::Tracking(phy(fault)),
+            C::CalibrationTracking(fault) => W::CalibrationTracking(calibration_tracking(fault)),
             C::Channel(fault) => W::Channel(phy(fault)),
             C::Rf(fault) => W::Rf(phy(fault)),
-            C::Registration(fault) => W::Registration(phy(fault)),
+            C::Registration(fault) => W::Registration(registration(fault)),
             C::Domain(error) => W::Domain(phy_domain(error)),
             C::CommonPower(_) => W::CommonPower,
             C::ModemClock(_) => W::ModemClock,
@@ -259,7 +262,64 @@ fn phy(fault: PhyFault) -> StationPhyFault {
         PhyFault::RegistrationEpochMismatch => StationPhyFault::RegistrationEpochMismatch,
         PhyFault::DeadlineOverflow => StationPhyFault::DeadlineOverflow,
         PhyFault::Sequence => StationPhyFault::Sequence,
-        PhyFault::Radio => StationPhyFault::Radio,
+    }
+}
+
+fn calibration_tracking(fault: CalibrationTrackingFault) -> StationCalibrationTrackingFault {
+    use CalibrationTrackingFailure as F;
+    use StationCalibrationTrackingFailure as W;
+    match fault {
+        CalibrationTrackingFault::Step(fault) => StationCalibrationTrackingFault::Step(phy(fault)),
+        CalibrationTrackingFault::Radio(failure) => {
+            StationCalibrationTrackingFault::Radio(match failure {
+                F::PbusClearTimedOut => W::PbusClearTimedOut,
+                F::Dcode => W::Dcode,
+                F::RxGain => W::RxGain,
+                F::Channel => W::Channel,
+                F::TxDcPwdet => W::TxDcPwdet,
+            })
+        }
+    }
+}
+
+fn registration(fault: RegistrationFault) -> StationRegistrationFault {
+    use RegistrationFailure as F;
+    use StationRegistrationFailure as W;
+    match fault {
+        RegistrationFault::Step(fault) => StationRegistrationFault::Step(phy(fault)),
+        RegistrationFault::Lowering { stage, error } => StationRegistrationFault::Lowering {
+            stage: match stage {
+                PhyRegisterStage::Mmio => StationRegisterStage::Mmio,
+                PhyRegisterStage::Delay => StationRegisterStage::Delay,
+                PhyRegisterStage::I2cMasterResetSample => {
+                    StationRegisterStage::I2cMasterResetSample
+                }
+                PhyRegisterStage::Rf => StationRegisterStage::Rf,
+                PhyRegisterStage::Baseband => StationRegisterStage::Baseband,
+                PhyRegisterStage::Temperature => StationRegisterStage::Temperature,
+                PhyRegisterStage::FinalI2cRead => StationRegisterStage::FinalI2cRead,
+            },
+            error: match error {
+                PhyRegisterBindingError::UnsupportedAction => {
+                    StationRegisterBindingError::UnsupportedAction
+                }
+                PhyRegisterBindingError::IncompleteTransaction => {
+                    StationRegisterBindingError::IncompleteTransaction
+                }
+                PhyRegisterBindingError::UnexpectedOutcome => {
+                    StationRegisterBindingError::UnexpectedOutcome
+                }
+            },
+        },
+        RegistrationFault::Radio(failure) => StationRegistrationFault::Radio(match failure {
+            F::I2cMasterResetTimedOut { index, samples } => {
+                W::I2cMasterResetTimedOut { index, samples }
+            }
+            F::Rf => W::Rf,
+            F::Baseband => W::Baseband,
+            F::Temperature => W::Temperature,
+            F::FinalI2cDeadlineExceeded => W::FinalI2cDeadlineExceeded,
+        }),
     }
 }
 

@@ -160,10 +160,13 @@ pub enum StationRadioPoisonCause {
     /// Tracking was refused before register access: its clock or the
     /// domain's state.
     TrackingRefused(StationPhyDomainError),
+    /// Tracking failed in its own step or a leaf child.
     Tracking(StationPhyFault),
+    /// The calibration-tracking child of tracking failed.
+    CalibrationTracking(StationCalibrationTrackingFault),
     Channel(StationPhyFault),
     Rf(StationPhyFault),
-    Registration(StationPhyFault),
+    Registration(StationRegistrationFault),
     Domain(StationPhyDomainError),
     CommonPower,
     ModemClock,
@@ -183,7 +186,69 @@ pub enum StationPhyFault {
     RegistrationEpochMismatch,
     DeadlineOverflow,
     Sequence,
-    Radio,
+}
+
+/// How the calibration-tracking child of PHY tracking failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationCalibrationTrackingFault {
+    /// A step of the child failed.
+    Step(StationPhyFault),
+    /// The calibration sequence reported its own failure in this part.
+    Radio(StationCalibrationTrackingFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationCalibrationTrackingFailure {
+    PbusClearTimedOut,
+    Dcode,
+    RxGain,
+    Channel,
+    TxDcPwdet,
+}
+
+/// How the PHY registration failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRegistrationFault {
+    /// A step of the registration failed.
+    Step(StationPhyFault),
+    /// An action of `stage` could not be lowered to its hardware binding.
+    Lowering {
+        stage: StationRegisterStage,
+        error: StationRegisterBindingError,
+    },
+    /// The registration sequence reported its own failure in this part.
+    Radio(StationRegistrationFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRegisterStage {
+    Mmio,
+    Delay,
+    I2cMasterResetSample,
+    Rf,
+    Baseband,
+    Temperature,
+    FinalI2cRead,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRegisterBindingError {
+    UnsupportedAction,
+    IncompleteTransaction,
+    UnexpectedOutcome,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRegistrationFailure {
+    /// The I2C master reset at `index` did not clear within `samples`.
+    I2cMasterResetTimedOut {
+        index: u8,
+        samples: u16,
+    },
+    Rf,
+    Baseband,
+    Temperature,
+    FinalI2cDeadlineExceeded,
 }
 
 /// Why the PHY domain refused a step before register access.

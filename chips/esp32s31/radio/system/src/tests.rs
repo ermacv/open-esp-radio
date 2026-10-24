@@ -17,7 +17,7 @@ use oer_esp32s31_hal::{
 };
 use oer_esp32s31_phy::{PhyCalibrationPath, PhyState};
 use oer_esp32s31_radio_client::{
-    ClientCells, Leaving, PhyFault, RcSlow, RequestKind, claim_for_host_test,
+    ClientCells, Leaving, PhyFault, RcSlow, RegistrationFault, RequestKind, claim_for_host_test,
     wifi::{
         RetuneReport, TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
@@ -30,7 +30,8 @@ use oer_time_virtual::VirtualClock;
 use super::*;
 
 /// The model's failed preparation.
-pub(super) const PREPARE_CAUSE: PoisonCause = PoisonCause::Registration(PhyFault::EdgeTimedOut);
+pub(super) const PREPARE_CAUSE: PoisonCause =
+    PoisonCause::Registration(RegistrationFault::Step(PhyFault::EdgeTimedOut));
 /// The preparation poison every later request names.
 pub(super) const PREPARE_POISON: Poison = Poison {
     origin: PoisonOrigin::Prepare,

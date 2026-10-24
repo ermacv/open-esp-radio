@@ -25,16 +25,18 @@ use oer_esp32s31_hal::{
 };
 use oer_esp32s31_phy::{
     ConcurrentPhyRegisterFailure, ConcurrentPhyTrackingError, ConcurrentRfError,
-    ConcurrentWifiChannelError, PhyParamTrackingRunError, PhyRegisterConfig, PhyRegisterRunError,
-    PhyTargetObserver, PhyTargetPortError, RomShortDelay, TargetPhyParamTrackingError,
-    TargetPhyRegisterError, close_concurrent_rf,
+    ConcurrentWifiChannelError, PhyCalibrationTrackingFailure, PhyCalibrationTrackingRunError,
+    PhyParamTrackingPortError, PhyParamTrackingRunError, PhyRegisterConfig, PhyRegisterFailure,
+    PhyRegisterRunError, PhyTargetObserver, PhyTargetPortError, RomShortDelay,
+    TargetPhyParamTrackingError, TargetPhyRegisterError, close_concurrent_rf,
     concurrent::{ConcurrentAcquire, ConcurrentPhy, phy_ready},
     maintain_concurrent_phy, register_concurrent_phy, select_concurrent_wifi_channel,
     track_concurrent_phy, wake_concurrent_rf,
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
 };
 use oer_esp32s31_radio_client::{
-    DomainHealth, Failed, Failure, LpClock, PhyFault, PhyPreparation, Poison, PoisonCause, RcSlow,
+    CalibrationTrackingFailure, CalibrationTrackingFault, DomainHealth, Failed, Failure, LpClock,
+    PhyFault, PhyPreparation, Poison, PoisonCause, RcSlow, RegistrationFailure, RegistrationFault,
     RequestKind,
     wifi::{
         RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
@@ -76,16 +78,51 @@ pub(crate) const fn phy_fault(error: PhyTargetPortError) -> PhyFault {
 pub(crate) const fn tracking_cause(error: ConcurrentPhyTrackingError) -> PoisonCause {
     match error {
         ConcurrentPhyTrackingError::Rejected(error) => PoisonCause::TrackingRefused(error),
-        ConcurrentPhyTrackingError::Failed(error) => PoisonCause::Tracking(match error {
-            TargetPhyParamTrackingError::EpochMismatch => PhyFault::RegistrationEpochMismatch,
-            TargetPhyParamTrackingError::Run(PhyParamTrackingRunError::Port(error)) => {
-                phy_fault(error)
+        ConcurrentPhyTrackingError::Failed(error) => match error {
+            TargetPhyParamTrackingError::EpochMismatch => {
+                PoisonCause::Tracking(PhyFault::RegistrationEpochMismatch)
             }
+            TargetPhyParamTrackingError::Run(PhyParamTrackingRunError::Port(
+                PhyParamTrackingPortError::Step(error),
+            )) => PoisonCause::Tracking(phy_fault(error)),
+            TargetPhyParamTrackingError::Run(PhyParamTrackingRunError::Port(
+                PhyParamTrackingPortError::CalibrationTracking(error),
+            )) => PoisonCause::CalibrationTracking(calibration_tracking_fault(error)),
             TargetPhyParamTrackingError::Run(
                 PhyParamTrackingRunError::Transition(_) | PhyParamTrackingRunError::ParentEdgeLimit,
             )
-            | TargetPhyParamTrackingError::MissingCompletedOwner => PhyFault::Sequence,
-        }),
+            | TargetPhyParamTrackingError::MissingCompletedOwner => {
+                PoisonCause::Tracking(PhyFault::Sequence)
+            }
+        },
+    }
+}
+
+/// The fault of the calibration-tracking child of PHY tracking.
+const fn calibration_tracking_fault(
+    error: PhyCalibrationTrackingRunError<PhyTargetPortError>,
+) -> CalibrationTrackingFault {
+    match error {
+        PhyCalibrationTrackingRunError::Port(error) => {
+            CalibrationTrackingFault::Step(phy_fault(error))
+        }
+        PhyCalibrationTrackingRunError::Transition(_)
+        | PhyCalibrationTrackingRunError::ParentEdgeLimit => {
+            CalibrationTrackingFault::Step(PhyFault::Sequence)
+        }
+        PhyCalibrationTrackingRunError::Radio(failure) => {
+            CalibrationTrackingFault::Radio(match failure {
+                PhyCalibrationTrackingFailure::PbusClearTimedOut(_) => {
+                    CalibrationTrackingFailure::PbusClearTimedOut
+                }
+                PhyCalibrationTrackingFailure::Dcode(_) => CalibrationTrackingFailure::Dcode,
+                PhyCalibrationTrackingFailure::RxGain(_) => CalibrationTrackingFailure::RxGain,
+                PhyCalibrationTrackingFailure::Channel(_) => CalibrationTrackingFailure::Channel,
+                PhyCalibrationTrackingFailure::TxDcPwdet(_) => {
+                    CalibrationTrackingFailure::TxDcPwdet
+                }
+            })
+        }
     }
 }
 
@@ -106,13 +143,29 @@ fn registration_cause(failure: &ConcurrentPhyRegisterFailure) -> PoisonCause {
         ConcurrentPhyRegisterFailure::Rejected(error) => PoisonCause::Domain(*error),
         ConcurrentPhyRegisterFailure::Failed { failure, .. } => {
             PoisonCause::Registration(match failure.error() {
-                TargetPhyRegisterError::Run(PhyRegisterRunError::Port(error)) => phy_fault(error),
-                TargetPhyRegisterError::Run(PhyRegisterRunError::Lowering { .. }) => {
-                    PhyFault::UnexpectedBinding
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Port(error)) => {
+                    RegistrationFault::Step(phy_fault(error))
                 }
-                TargetPhyRegisterError::Run(PhyRegisterRunError::Radio(_)) => PhyFault::Radio,
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Lowering { stage, error }) => {
+                    RegistrationFault::Lowering { stage, error }
+                }
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Radio(failure)) => {
+                    RegistrationFault::Radio(match failure {
+                        PhyRegisterFailure::I2cMasterResetTimedOut { index, samples } => {
+                            RegistrationFailure::I2cMasterResetTimedOut { index, samples }
+                        }
+                        PhyRegisterFailure::Rf(_) => RegistrationFailure::Rf,
+                        PhyRegisterFailure::Baseband(_) => RegistrationFailure::Baseband,
+                        PhyRegisterFailure::Temperature(_) => RegistrationFailure::Temperature,
+                        PhyRegisterFailure::FinalI2cDeadlineExceeded => {
+                            RegistrationFailure::FinalI2cDeadlineExceeded
+                        }
+                    })
+                }
                 TargetPhyRegisterError::Run(PhyRegisterRunError::Transition(_))
-                | TargetPhyRegisterError::MissingCompletedModelOwner => PhyFault::Sequence,
+                | TargetPhyRegisterError::MissingCompletedModelOwner => {
+                    RegistrationFault::Step(PhyFault::Sequence)
+                }
             })
         }
         ConcurrentPhyRegisterFailure::CalibrationClock { error, .. } => {

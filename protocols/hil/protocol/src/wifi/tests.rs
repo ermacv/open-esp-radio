@@ -293,6 +293,34 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
         })),
         StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
             origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::CalibrationTracking(
+                StationCalibrationTrackingFault::Step(StationPhyFault::EdgeTimedOut),
+            ),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::CalibrationTracking(
+                StationCalibrationTrackingFault::Radio(StationCalibrationTrackingFailure::Dcode),
+            ),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::Prepare,
+            cause: StationRadioPoisonCause::Registration(StationRegistrationFault::Lowering {
+                stage: StationRegisterStage::FinalI2cRead,
+                error: StationRegisterBindingError::UnexpectedOutcome,
+            }),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::Prepare,
+            cause: StationRadioPoisonCause::Registration(StationRegistrationFault::Radio(
+                StationRegistrationFailure::I2cMasterResetTimedOut {
+                    index: u8::MAX,
+                    samples: u16::MAX,
+                },
+            )),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
             cause: StationRadioPoisonCause::TrackingRefused(StationPhyDomainError::TimeReversed {
                 previous_us: u64::MAX,
                 now_us: 0,
@@ -352,6 +380,14 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
             client: StationRadioClient::Wifi,
             request: StationRadioRequest::Retune,
         })
+    );
+    // A failed calibration-tracking child is not a binding error of the
+    // tracking parent.
+    assert_ne!(
+        StationRadioPoisonCause::CalibrationTracking(StationCalibrationTrackingFault::Step(
+            StationPhyFault::EdgeTimedOut
+        )),
+        StationRadioPoisonCause::Tracking(StationPhyFault::UnexpectedBinding)
     );
     // Enabling and submitting faults with the same cause stay distinct.
     let cause = StationBackendFault::Deadline;

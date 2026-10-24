@@ -130,6 +130,7 @@ pub use {
         gain::PhyRxGainInitOutcome,
         gain_calibration::{FINE_CODES as PHY_RX_FINE_DC_CODES, PhyRxGainDcQuality},
     },
+    tracking::calibration::{PhyCalibrationTrackingFailure, PhyCalibrationTrackingTransitionError},
     tx::dc_power_detector::PhyTxDcPwdetOutcome,
 };
 /// Shared finite observation/attempt bound used by target executors and host
@@ -152,8 +153,8 @@ pub use target_port::{
 #[cfg(target_arch = "riscv32")]
 pub use target_port::{
     NoopPhyTargetObserver, PhyDomainRegisterFailure, PhyDomainRegistered, PhyGrantProtectPort,
-    PhyRegisterConfig, PhyRfBoundary, PhyTargetObserver, PhyTargetPortCounters,
-    TargetPhyParamTrackingError, TargetPhyRegisterError,
+    PhyParamTrackingPortError, PhyRegisterConfig, PhyRfBoundary, PhyTargetObserver,
+    PhyTargetPortCounters, TargetPhyParamTrackingError, TargetPhyRegisterError,
 };
 #[cfg(all(target_arch = "riscv32", oer_probe))]
 pub use target_port::{

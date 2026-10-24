@@ -7,7 +7,7 @@
 //! PHY's target errors into [`PhyFault`].
 
 use oer_esp32s31_hal::domain::{CommonRadioPowerError, ModemClockError, RadioClient};
-use oer_esp32s31_phy::concurrent::ConcurrentPhyError;
+use oer_esp32s31_phy::{PhyRegisterBindingError, PhyRegisterStage, concurrent::ConcurrentPhyError};
 
 /// The first failure that poisoned the PHY domain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,14 +50,16 @@ pub enum PoisonCause {
     /// rejected or the domain was not in a state that tracks. A periodic
     /// tick refused this way would fall due again at once.
     TrackingRefused(ConcurrentPhyError),
-    /// PHY tracking started and failed.
+    /// PHY tracking started and failed in its own step or a leaf child.
     Tracking(PhyFault),
+    /// The calibration-tracking child of PHY tracking failed.
+    CalibrationTracking(CalibrationTrackingFault),
     /// A channel transaction started and failed.
     Channel(PhyFault),
     /// RF wake or close started and failed.
     Rf(PhyFault),
     /// The PHY registration started and failed.
-    Registration(PhyFault),
+    Registration(RegistrationFault),
     /// The PHY domain refused a step that its state should admit, or was
     /// found unsettled after a step that settles it.
     Domain(ConcurrentPhyError),
@@ -84,8 +86,7 @@ pub enum PhyFault {
     HardwareInvariant,
     /// The transaction exceeded its operation limit.
     RfOperationLimit,
-    /// An action could not be bound to the hardware, or a child failed and
-    /// its parent reports it as an unexpected binding.
+    /// An action could not be bound to the hardware.
     UnexpectedBinding,
     /// The registration no longer describes the borrowed PHY partition.
     RegistrationEpochMismatch,
@@ -94,9 +95,53 @@ pub enum PhyFault {
     /// The transaction's own sequence broke: a wrong completion, its edge
     /// limit or a missing terminal owner.
     Sequence,
-    /// The recovered radio sequence reported its own failure (a calibration
-    /// result out of its range).
-    Radio,
+}
+
+/// How the calibration-tracking child of PHY tracking failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CalibrationTrackingFault {
+    /// A step of the child failed.
+    Step(PhyFault),
+    /// The recovered calibration sequence reported its own failure.
+    Radio(CalibrationTrackingFailure),
+}
+
+/// Which calibration of the tracking child reported a failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CalibrationTrackingFailure {
+    PbusClearTimedOut,
+    Dcode,
+    RxGain,
+    Channel,
+    TxDcPwdet,
+}
+
+/// How the PHY registration failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RegistrationFault {
+    /// A step of the registration failed.
+    Step(PhyFault),
+    /// An action of `stage` could not be lowered to its hardware binding.
+    Lowering {
+        stage: PhyRegisterStage,
+        error: PhyRegisterBindingError,
+    },
+    /// The recovered registration sequence reported its own failure.
+    Radio(RegistrationFailure),
+}
+
+/// Which part of the registration reported a failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RegistrationFailure {
+    /// The I2C master reset at `index` did not clear within `samples`.
+    I2cMasterResetTimedOut {
+        index: u8,
+        samples: u16,
+    },
+    Rf,
+    Baseband,
+    Temperature,
+    FinalI2cDeadlineExceeded,
 }
 
 impl Poison {

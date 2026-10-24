@@ -30,7 +30,11 @@ cause: the MAC still active, or the radio system's refusal, client failure
 or poison. A poison names the first failure of the shared PHY domain: the
 operation that saw it (the periodic tracking tick, the preparation, the RF
 close or a client's request) and the failing step, so a retune refused after
-an earlier failed tick names that tick. After it, and
+an earlier failed tick names that tick. A failed calibration-tracking child
+of a tick is `CalibrationTracking` with its own step fault or the
+calibration that failed, not a fault of the tracking parent; a failed
+registration names its step fault, the stage it could not lower, or the part
+of the sequence that failed. After it, and
 while a stop is pending, `StopStation` and `ProbeStation` are refused with
 `InvalidState` (`StopStation::refusal`, `ProbeStation::refusal`), so every
 command is answered.
