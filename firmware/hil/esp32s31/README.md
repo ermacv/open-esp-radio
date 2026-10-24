@@ -57,7 +57,11 @@ The W4 host controls 100-echo and ten-echo windows through `ProbeStation` and
 ends the run with `StopStation`. The image reuses W3's checked ICMP codec and
 distinct-pair observer. Typed observations expose hardware GTK installation
 KeyIDs, decoded broadcast ARPs, timeouts/collisions and final deauthentication;
-the host computes acceptance. Only a clean service stop emits `StationStopped`.
+the host computes acceptance. Only a clean service stop emits `StationStopped`;
+a service that ends otherwise emits one `StationServiceEnded` with its typed
+fault, and the console then refuses `StopStation` and `ProbeStation` with
+`InvalidState`. Disconnect reasons and faults map to wire values by exhaustive
+matches (`wifi_station/report.rs`).
 
 The personal image's `stack-wifi-station.toml` names the measured P1
 frames that exceed the move limit, each with its own checked ceiling. IRQ

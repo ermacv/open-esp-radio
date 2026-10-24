@@ -5,7 +5,7 @@ fn failed_work_stops_the_station_before_returning_and_cleanup_failure_is_visible
     let active = std::cell::Cell::new(true);
     let result: Result<()> = stop_on_error(Err("DHCP missing".into()), || {
         active.set(false);
-        Ok(())
+        Ok(None)
     });
     assert!(!active.get());
     assert_eq!(
@@ -14,7 +14,7 @@ fn failed_work_stops_the_station_before_returning_and_cleanup_failure_is_visible
     );
     let result = stop_on_error(Ok(42), || {
         active.set(true);
-        Ok(())
+        Ok(None)
     });
     assert_eq!(result.expect("already stopped successful workload"), 42);
     assert!(!active.get());
@@ -24,6 +24,126 @@ fn failed_work_stops_the_station_before_returning_and_cleanup_failure_is_visible
     assert_eq!(
         result.expect_err("cleanup failed").to_string(),
         "DHCP missing; W4 StopStation cleanup failed"
+    );
+    let result: Result<()> =
+        stop_on_error(Err("no reconnection".into()), || Ok(Some(service_end())));
+    assert_eq!(
+        result.expect_err("service ended").to_string(),
+        "no reconnection; station service ended in epoch 2: \
+         Failed(EnableRefused(Core(KeyUseMismatch)))"
+    );
+}
+
+fn service_end() -> StationServiceEnded {
+    StationServiceEnded {
+        epoch: 2,
+        end: StationServiceEnd::Failed(StationServiceFault::EnableRefused(
+            StationBackendFault::Core(StationLowerMacFault::KeyUseMismatch),
+        )),
+    }
+}
+
+/// A station whose answers are fixed: `ended` before and after the stop,
+/// the stop's refusal, and what the stop's wait returns.
+struct Fake {
+    before: Option<StationServiceEnded>,
+    after: Option<StationServiceEnded>,
+    refused: bool,
+    waited: Option<StopEnd>,
+    calls: std::cell::RefCell<Vec<&'static str>>,
+}
+impl Fake {
+    fn new() -> Self {
+        Self {
+            before: None,
+            after: None,
+            refused: false,
+            waited: None,
+            calls: Default::default(),
+        }
+    }
+}
+impl StationStop for Fake {
+    type Pending = ();
+    fn ended(&self) -> Result<Option<StationServiceEnded>> {
+        let stopped = self.calls.borrow().contains(&"stop");
+        self.calls.borrow_mut().push("ended");
+        Ok(if stopped { self.after } else { self.before })
+    }
+    fn stop(&self) -> Result<()> {
+        self.calls.borrow_mut().push("stop");
+        if self.refused {
+            Err("device rejected wifi/station/stop: InvalidState".into())
+        } else {
+            Ok(())
+        }
+    }
+    fn stopped(&self, (): ()) -> Result<StopEnd> {
+        self.calls.borrow_mut().push("stopped");
+        match &self.waited {
+            Some(StopEnd::Stopped(counters)) => Ok(StopEnd::Stopped(*counters)),
+            Some(StopEnd::Ended(end)) => Ok(StopEnd::Ended(*end)),
+            None => Err("device did not complete wifi/station/stop".into()),
+        }
+    }
+}
+
+#[test]
+fn a_station_whose_service_ended_is_not_stopped_or_waited_for() {
+    let station = Fake {
+        before: Some(service_end()),
+        ..Fake::new()
+    };
+    assert_eq!(
+        stop_station(&station).expect("ended"),
+        StopEnd::Ended(service_end())
+    );
+    assert_eq!(*station.calls.borrow(), ["ended"]);
+}
+
+#[test]
+fn a_stop_refused_after_the_service_ended_returns_the_end_at_once() {
+    let station = Fake {
+        after: Some(service_end()),
+        refused: true,
+        ..Fake::new()
+    };
+    assert_eq!(
+        stop_station(&station).expect("ended"),
+        StopEnd::Ended(service_end())
+    );
+    assert_eq!(*station.calls.borrow(), ["ended", "stop", "ended"]);
+    // A refusal without a service end remains the stop's failure.
+    let station = Fake {
+        refused: true,
+        ..Fake::new()
+    };
+    assert!(stop_station(&station).is_err());
+    assert_eq!(*station.calls.borrow(), ["ended", "stop", "ended"]);
+}
+
+#[test]
+fn an_admitted_stop_ends_with_its_counters_or_the_service_end() {
+    let counters = StationCounters {
+        deauth_transmissions: 1,
+        ..Default::default()
+    };
+    let station = Fake {
+        waited: Some(StopEnd::Stopped(counters)),
+        ..Fake::new()
+    };
+    assert_eq!(
+        stop_station(&station).expect("stopped"),
+        StopEnd::Stopped(counters)
+    );
+    assert_eq!(*station.calls.borrow(), ["ended", "stop", "stopped"]);
+    let station = Fake {
+        waited: Some(StopEnd::Ended(service_end())),
+        ..Fake::new()
+    };
+    assert_eq!(
+        stop_station(&station).expect("ended"),
+        StopEnd::Ended(service_end())
     );
 }
 
