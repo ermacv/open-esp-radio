@@ -1,5 +1,5 @@
 //! Router actions for WPA2-Personal station runs. Credentials are write-only
-//! through [`crate::router::Profile::w4`]; no raw remote answer is evidence.
+//! through [`crate::router::Profile::w4`]; command evidence uses SSH redaction.
 
 use crate::{
     mac::Mac,
@@ -17,7 +17,7 @@ pub const GROUP_REKEY_SECONDS: u32 = 30;
 pub fn verify_observation_tools(remote: &mut dyn Remote) -> Result<()> {
     let _hidden = Zeroizing::new(
         remote
-            .run("ip -4 neigh show >/dev/null 2>&1 && command -v tcpdump >/dev/null 2>&1")
+            .run("ip -4 neigh show >/dev/null && command -v tcpdump >/dev/null")
             .map_err(|_| "W4 requires native ip neigh and tcpdump on the managed router")?,
     );
     Ok(())
@@ -74,40 +74,88 @@ pub fn group_rekey_seconds(remote: &mut dyn Remote, radio: &str, interface: &str
         .map_err(|_| "missing or invalid running GTK interval".into())
 }
 
-/// Remove only the station's neighbor entry. The already running 100-echo
-/// router series supplies the next ping, making the kernel broadcast ARP.
-/// Only observed request/reply frames establish success.
+#[derive(Debug, serde::Serialize)]
+pub struct NeighborRefresh {
+    pub before_present: bool,
+    pub delete_attempted: bool,
+    pub after_present: bool,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct NeighborState {
+    pub after_deletion: bool,
+    pub present: bool,
+}
+
+/// Establish an absent station neighbor, accepting an already absent entry
+/// and a racing deletion only after a successful confirming read. The next
+/// measured router ping triggers ARP; only air/target evidence passes gate c.
 pub fn refresh_neighbor(
-    remote: &mut dyn Remote,
+    mut execute: impl FnMut(&str) -> Result<std::process::Output>,
     interface: &str,
     address: std::net::Ipv4Addr,
-) -> Result<()> {
+    mut observe: impl FnMut(NeighborState),
+) -> Result<NeighborRefresh> {
     if !token(interface) || !crate::w3::usable_address(address) {
         return Err("invalid W4 ARP selection".to_owned());
     }
-    let script = format!(
-        "set +x\nip -4 neigh del {address} dev {} >/dev/null 2>&1",
+    let available = execute("command -v ip")?;
+    if !available.status.success() {
+        return Err("W4 native ip command is unavailable; see router command evidence".into());
+    }
+    let show = format!("ip -4 neigh show {address} dev {}", quote(interface)?);
+    let before = execute(&show)?;
+    if !before.status.success() {
+        return Err("W4 neighbor read failed; see router command evidence".into());
+    }
+    let present =
+        |output: &std::process::Output| !output.stdout.iter().all(u8::is_ascii_whitespace);
+    observe(NeighborState {
+        after_deletion: false,
+        present: present(&before),
+    });
+    if !present(&before) {
+        return Ok(NeighborRefresh {
+            before_present: false,
+            delete_attempted: false,
+            after_present: false,
+        });
+    }
+    let delete = execute(&format!(
+        "ip -4 neigh del {address} dev {}",
         quote(interface)?
-    );
-    let _hidden = Zeroizing::new(
-        remote
-            .run(&script)
-            .map_err(|_| "W4 neighbor refresh failed")?,
-    );
-    Ok(())
+    ))?;
+    if matches!(delete.status.code(), Some(126 | 127)) {
+        return Err("W4 native ip command became unavailable; see router command evidence".into());
+    }
+    let after = execute(&show)?;
+    if !after.status.success() {
+        return Err("W4 neighbor confirmation failed; see router command evidence".into());
+    }
+    observe(NeighborState {
+        after_deletion: true,
+        present: present(&after),
+    });
+    if present(&after) {
+        return Err("W4 neighbor remains after deletion; see router command evidence".into());
+    }
+    Ok(NeighborRefresh {
+        before_present: true,
+        delete_attempted: true,
+        after_present: false,
+    })
 }
 
 /// Ask the selected AP to deauthenticate one station for the reconnect gate.
 /// The caller holds router and air ownership for the complete run. The full
-/// MAC is used only in the stdin script; remote stdout/stderr stay remote.
+/// MAC is used only in the stdin script and redacted in command evidence.
 pub fn deauthenticate(remote: &mut dyn Remote, interface: &str, station: Mac) -> Result<()> {
     if !token(interface) {
         return Err("invalid router AP interface".to_owned());
     }
     let address = station.octets().map(|byte| format!("{byte:02x}")).join(":");
     let script = format!(
-        "set +x\n{{\nreply=$(hostapd_cli -i {} deauthenticate {}) && test \"$reply\" = OK\n\
-         }} >/dev/null 2>&1",
+        "set +x\nreply=$(hostapd_cli -i {} deauthenticate {}) && test \"$reply\" = OK",
         quote(interface)?,
         quote(&address)?,
     );
@@ -180,15 +228,6 @@ mod tests {
                 .expect_err("remote failure")
                 .contains("secret-passphrase")
         );
-        assert!(
-            !refresh_neighbor(
-                &mut remote,
-                "br-oer-w3",
-                "10.231.0.100".parse().expect("IP")
-            )
-            .expect_err("remote failure")
-            .contains("secret-passphrase")
-        );
     }
 
     #[test]
@@ -202,35 +241,88 @@ mod tests {
         assert!(!error.contains("private-"));
         assert_eq!(
             remote.scripts,
-            ["ip -4 neigh show >/dev/null 2>&1 && command -v tcpdump >/dev/null 2>&1"]
+            ["ip -4 neigh show >/dev/null && command -v tcpdump >/dev/null"]
         );
         remote.answer = Ok(String::new());
         verify_observation_tools(&mut remote).expect("read-only admission");
     }
 
     #[test]
-    fn neighbor_refresh_removes_only_the_selected_station_without_installing_software() {
-        let mut remote = Scripted {
-            answer: Ok(String::new()),
-            scripts: Vec::new(),
+    fn neighbor_state_is_observed_before_and_after_even_when_delete_fails() {
+        use std::{
+            collections::VecDeque,
+            os::unix::process::ExitStatusExt,
+            process::{ExitStatus, Output},
         };
-        refresh_neighbor(
-            &mut remote,
-            "br-oer-w3",
-            "10.231.0.100".parse().expect("IP"),
-        )
-        .expect("refresh");
-        assert_eq!(
-            remote.scripts,
-            ["set +x\nip -4 neigh del 10.231.0.100 dev br-oer-w3 >/dev/null 2>&1"]
-        );
+        let ip = "10.231.0.100".parse().expect("IP");
+        // Present/deleted, absent, deletion racing with another remover,
+        // deletion failure retaining the entry, and missing native command.
+        for (answers, success, deleted) in [
+            (
+                vec![(0, "ip"), (0, "neighbor"), (0, ""), (0, "")],
+                true,
+                true,
+            ),
+            (vec![(0, "ip"), (0, "")], true, false),
+            (
+                vec![(0, "ip"), (0, "neighbor"), (2, ""), (0, "")],
+                true,
+                true,
+            ),
+            (
+                vec![(0, "ip"), (0, "neighbor"), (2, ""), (0, "neighbor")],
+                false,
+                true,
+            ),
+            (vec![(127, "")], false, false),
+            (vec![(1, "")], false, false),
+            (vec![(0, "ip"), (127, "")], false, false),
+            (vec![(0, "ip"), (0, "neighbor"), (127, "")], false, true),
+        ] {
+            let mut answers = VecDeque::from(answers);
+            let mut scripts = Vec::new();
+            let mut states = Vec::new();
+            let result = refresh_neighbor(
+                |script| {
+                    scripts.push(script.to_owned());
+                    let (code, stdout) = answers.pop_front().expect("scripted command");
+                    Ok(Output {
+                        status: ExitStatus::from_raw(code << 8),
+                        stdout: stdout.as_bytes().to_vec(),
+                        stderr: b"RTNETLINK diagnostic\n".to_vec(),
+                    })
+                },
+                "br-oer-w3",
+                ip,
+                |state| states.push(state),
+            );
+            assert_eq!(result.is_ok(), success);
+            assert!(answers.is_empty());
+            assert_eq!(
+                scripts.iter().any(|script| script.contains(" neigh del ")),
+                deleted
+            );
+            assert!(scripts.iter().all(|script| !script.contains("/dev/null")));
+            if let Ok(observation) = result {
+                assert_eq!(observation.before_present, deleted);
+                assert_eq!(observation.delete_attempted, deleted);
+                assert!(!observation.after_present);
+                assert!(!states.last().expect("observed state").present);
+            } else if states.len() == 2 {
+                assert!(states[1].after_deletion && states[1].present);
+            }
+        }
         for interface in ["", "br-oer-w3;opkg", "-i"] {
             assert!(
-                refresh_neighbor(&mut remote, interface, "10.231.0.100".parse().expect("IP"))
-                    .is_err()
+                refresh_neighbor(
+                    |_| panic!("invalid input never executes"),
+                    interface,
+                    ip,
+                    |_| panic!("invalid input never observes")
+                )
+                .is_err()
             );
         }
-        assert_eq!(remote.scripts.len(), 1);
     }
 
     #[test]
@@ -246,7 +338,7 @@ mod tests {
         assert!(script.contains("hostapd_cli -i phy7-ap3 deauthenticate 02:ab:cd:ef:f6:d0"));
         assert!(script.contains("&& test \"$reply\" = OK"));
         assert!(script.starts_with("set +x\n"));
-        assert!(script.ends_with("} >/dev/null 2>&1"));
+        assert!(!script.contains("/dev/null"));
         assert!(!script.contains("disassociate"));
     }
 

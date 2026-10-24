@@ -19,7 +19,7 @@ use oer_lab_router::{
     credentials,
     mac::Mac,
     router,
-    ssh::Ssh,
+    ssh::{COMMAND_TIMEOUT, CommandLog, Ssh},
     w3::{
         self,
         stream::{Capture, Departure},
@@ -136,9 +136,23 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     };
     let directory = oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Runtime, "routers")?;
     let _router = oer_lab_router::lock::router(&directory, &config.ssh_target)?;
-    let mut ssh = Ssh::new(&config.ssh_target)?;
     let ssid = credentials::ssid("oer-w4")?;
     let passphrase = credentials::passphrase()?;
+    let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid W4 station identity")?;
+    let target_text = target.octets().map(|byte| format!("{byte:02x}")).join(":");
+    let results = context.results.clone();
+    let log = CommandLog::new(
+        &[
+            ssid.expose(),
+            passphrase.expose(),
+            &config.ssh_target,
+            &config.wireless_interface,
+            &target_text,
+        ],
+        move |record| results.observe("w4-router-command", &record),
+    );
+    let mut ssh = Ssh::new(&config.ssh_target)?.with_log(log);
+    w4::verify_observation_tools(&mut ssh)?;
     let profile = router::Profile::w4(
         &config.radio,
         &config.ap_section,
@@ -155,7 +169,6 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         return Err("running W4 BSS has the wrong group rekey interval".into());
     }
     drop(profile);
-    let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid W4 station identity")?;
     let before = w3::station(&mut ssh, &config.wireless_interface, target)?;
     if before.present {
         return Err("W4 station was already associated before StartStation".into());
@@ -396,7 +409,7 @@ fn traffic(
     {
         return Err("probe readiness belongs to another traffic window".into());
     }
-    let ping_ssh = Ssh::new(&config.ssh_target)?;
+    let ping_ssh = ssh.parallel();
     let (finished, ping, rekey) = std::thread::scope(|scope| -> Result<_> {
         let ping = scope.spawn(|| w3::ping(&ping_ssh, address, count));
         let work: Result<_> = (|| {
@@ -419,7 +432,13 @@ fn traffic(
                 let before = capture.request(0, GetStationCounters, SHORT)?;
                 let cursor = capture.event_cursor();
                 let triggered_us = now();
-                w4::refresh_neighbor(ssh, w3::network::BRIDGE, address)?;
+                let neighbor = w4::refresh_neighbor(
+                    |script| ssh.output(script, COMMAND_TIMEOUT),
+                    w3::network::BRIDGE,
+                    address,
+                    |state| context.results.observe("w4-neighbor-state", &state),
+                )?;
+                context.results.observe("w4-neighbor-refresh", &neighbor);
                 let deadline = Instant::now() + Duration::from_secs(5);
                 let observe = |transmitted: bool| -> Result<ArpObservation> {
                     let (message, frame) = capture
