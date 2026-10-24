@@ -2623,6 +2623,7 @@ name = "oer-chip-profile"
 version = "0.1.0"
 dependencies = [
  "oer-esp32c5-layout",
+ "oer-esp32s31-knowledge",
  "oer-esp32s31-layout",
  "oer-espressif-staged-layout",
  "oer-os-durable",
@@ -2925,6 +2926,10 @@ dependencies = [
  "oer-ieee802154-mac",
  "oer-radio-coex",
 ]
+
+[[package]]
+name = "oer-espressif-efuse"
+version = "0.1.0"
 
 [[package]]
 name = "oer-espressif-esp-hal-irq"

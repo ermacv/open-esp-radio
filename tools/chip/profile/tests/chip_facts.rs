@@ -4,7 +4,8 @@
 //!
 //! The sources are a chip's `chip.toml`, its `LAYOUT` (the linker scripts and
 //! the bootstrap read it), the stage-two header and the zeroed sections of
-//! `oer-espressif-staged-layout`, and the `two-harts` feature of the images.
+//! `oer-espressif-staged-layout`, the `two-harts` feature of the images and
+//! the S31 reset-cause table of `oer-esp32s31-knowledge`.
 
 use std::{
     collections::BTreeSet,
@@ -408,4 +409,14 @@ fn a_changed_core_fact_on_any_side_is_reported() {
 
     let feature = vec![(PathBuf::from("image"), id.to_string(), false)];
     assert_eq!(core_mismatches(&base, &layout, &feature).len(), 1);
+}
+
+#[test]
+fn s31_power_on_code_is_the_reset_cause_table() {
+    use oer_esp32s31_knowledge::reset_cause::ResetCause;
+    let reset_cause = profile("esp32s31")
+        .reset_cause
+        .expect("the S31 stand reads the reset cause");
+    let power_on = u8::try_from(reset_cause.power_on).expect("a reset-cause code fits a byte");
+    assert_eq!(ResetCause::from_code(power_on), ResetCause::ChipPowerOn);
 }

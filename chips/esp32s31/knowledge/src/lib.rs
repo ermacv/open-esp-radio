@@ -2,6 +2,7 @@
 //! drivers and the host tools share, without hardware access.
 //!
 //! - [`calibration_cache`]: the hardware-free S31 calibration record codec.
+//! - [`reset_cause`]: why an HP core last left reset.
 //! - [`tx_power`]: the BTBB provider's transmit-power levels.
 #![no_std]
 #![forbid(unsafe_code)]
@@ -10,6 +11,8 @@
 pub mod calibration_cache;
 
 pub mod phy_relation;
+
+pub mod reset_cause;
 
 pub mod tx_power;
 

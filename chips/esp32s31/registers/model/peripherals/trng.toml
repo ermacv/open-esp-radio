@@ -1,0 +1,175 @@
+schema = 2
+
+[[peripherals]]
+name = "TRNG"
+description = "True random number generator: the configuration and health-test words its owner observes, the health-error flag and the conditioned random output."
+baseAddress = 0x20814000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CONF"
+description = "Noise source, health-test cutoffs and output configuration."
+addressOffset = 0x00
+size = 32
+access = "read-write"
+resetValue = 0x40000000
+
+[[peripherals.registers.register.fields]]
+name = "NOISE_SOURCE_SEL"
+description = "Noise source selection, one-hot; zero selects none."
+bitOffset = 0
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "NOISE_POS_SEL"
+description = "Sampling-enable selection of the noise source."
+bitOffset = 5
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "REPETITION_VALUE_C"
+description = "Cutoff of the repetition-count health test."
+bitOffset = 10
+bitWidth = 9
+
+[[peripherals.registers.register.fields]]
+name = "ADPATIVE_VALUE_C"
+description = "Cutoff of the adaptive-proportion health test."
+bitOffset = 19
+bitWidth = 9
+
+[[peripherals.registers.register.fields]]
+name = "FIFO_RESET"
+description = "Writing one resets the output FIFO; reads zero."
+bitOffset = 28
+bitWidth = 1
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "RANDOM_OUTPUT_MODE"
+description = "Output mode of the random data."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "NOISE_CRC_EN"
+description = "Enables the CRC conditioner of the noise samples."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SAMPLE_ENABLE"
+description = "Enables noise sampling."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "DEBUG_CONF"
+description = "Startup and continuous health-test control and result."
+addressOffset = 0x04
+size = 32
+access = "read-write"
+resetValue = 0x00000800
+reserved = { mask = 0x80000000, sources = ["ESP_IDF_4D59230D_S31_TRNG"] }
+
+[[peripherals.registers.register.fields]]
+name = "STARTUP_TEST_START"
+description = "Writing one starts the startup health test; reads zero."
+bitOffset = 0
+bitWidth = 1
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "STARTUP_TEST_LIMIT"
+description = "Number of samples the startup health test takes."
+bitOffset = 1
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "DEBUG_DATA"
+description = "Debug output data."
+bitOffset = 17
+bitWidth = 8
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "DEBUG_MODE"
+description = "Debug mode enable."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HEALTH_TEST_ERROR_CODE"
+description = "Error code of the last failed health test."
+bitOffset = 26
+bitWidth = 3
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "HEALTH_TEST_END"
+description = "Writing one ends the health test; reads zero."
+bitOffset = 29
+bitWidth = 1
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "HEALTH_TEST_BYPASS"
+description = "Bypasses the health tests."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "INT_RAW"
+description = "Raw health-error interrupt status."
+addressOffset = 0x2c
+size = 32
+access = "read-write"
+modifiedWriteValues = "oneToClear"
+resetValue = 0
+reserved = { mask = 0xfffffffe, sources = ["ESP_IDF_4D59230D_S31_TRNG"] }
+
+[[peripherals.registers.register.fields]]
+name = "ERROR_INT_RAW"
+description = "Set by hardware when a startup or continuous health test fails; writing one clears it."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CRC_SYNC_DATA"
+description = "Conditioned random output, synchronized to the bus clock."
+addressOffset = 0x48
+size = 32
+access = "read-only"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "SW_CRC_RANDOM_DATA_SYNC"
+description = "One 32-bit random word."
+bitOffset = 0
+bitWidth = 32
+
+[[peripheral-review]]
+entity = "TRNG"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
