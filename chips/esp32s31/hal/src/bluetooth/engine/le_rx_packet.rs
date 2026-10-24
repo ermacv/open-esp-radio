@@ -148,9 +148,7 @@ impl LeRxPacketAddress {
     }
 
     pub(crate) const fn compressed_image(self) -> u32 {
-        self.0
-            .ble_compressed()
-            .expect("a placed RX packet has a nonzero encodable address")
+        ble_word_index(self.0.get()).expect("a placed RX packet has a nonzero encodable address")
     }
 }
 

@@ -1,0 +1,21 @@
+[package]
+name = "oer-mmio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The one volatile register-access core under the generated register code"
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false }
+
+[dev-dependencies]
+oer-test-ui-cases = { path = "../../tools/test/ui-cases" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "contract"
+platform = "portable"

@@ -1,5 +1,5 @@
 use super::{
-    MultipanIdentityProgrammingPort, TransmitSecurityProgrammingPort,
+    KeyWordIndex, MultipanIdentityProgrammingPort, MultipanIndex, TransmitSecurityProgrammingPort,
     execute_multipan_identity_configuration, execute_transmit_security_configuration,
     execute_transmit_security_disable,
 };
@@ -28,8 +28,8 @@ impl TransmitSecurityProgrammingPort for RecordingPort {
         self.operations.push(Operation::AddressHigh(word));
     }
 
-    fn write_key_word(&mut self, index: usize, word: u32) {
-        self.operations.push(Operation::KeyWord(index, word));
+    fn write_key_word(&mut self, index: KeyWordIndex, word: u32) {
+        self.operations.push(Operation::KeyWord(index.get(), word));
     }
 
     fn write_payload_offset(&mut self, offset: u8) {
@@ -56,28 +56,28 @@ struct RecordingMultipanPort {
 }
 
 impl MultipanIdentityProgrammingPort for RecordingMultipanPort {
-    fn enable_context(&mut self, index: usize) {
-        self.operations.push(MultipanOperation::Enable(index));
+    fn enable_context(&mut self, index: MultipanIndex) {
+        self.operations.push(MultipanOperation::Enable(index.get()));
     }
 
-    fn write_pan_id(&mut self, index: usize, pan_id: u16) {
+    fn write_pan_id(&mut self, index: MultipanIndex, pan_id: u16) {
         self.operations
-            .push(MultipanOperation::PanId(index, pan_id));
+            .push(MultipanOperation::PanId(index.get(), pan_id));
     }
 
-    fn write_short_address(&mut self, index: usize, short_address: u16) {
+    fn write_short_address(&mut self, index: MultipanIndex, short_address: u16) {
         self.operations
-            .push(MultipanOperation::ShortAddress(index, short_address));
+            .push(MultipanOperation::ShortAddress(index.get(), short_address));
     }
 
-    fn write_extended_address_low(&mut self, index: usize, word: u32) {
+    fn write_extended_address_low(&mut self, index: MultipanIndex, word: u32) {
         self.operations
-            .push(MultipanOperation::ExtendedLow(index, word));
+            .push(MultipanOperation::ExtendedLow(index.get(), word));
     }
 
-    fn write_extended_address_high(&mut self, index: usize, word: u32) {
+    fn write_extended_address_high(&mut self, index: MultipanIndex, word: u32) {
         self.operations
-            .push(MultipanOperation::ExtendedHigh(index, word));
+            .push(MultipanOperation::ExtendedHigh(index.get(), word));
     }
 }
 
@@ -118,7 +118,8 @@ fn transmit_security_disable_only_clears_enable() {
 
 #[test]
 fn multipan_identity_transaction_has_exact_enable_and_write_order_for_every_context() {
-    for index in 0..4 {
+    for context in 0..4 {
+        let index = MultipanIndex::new(context).expect("one of four contexts");
         let mut port = RecordingMultipanPort::default();
         execute_multipan_identity_configuration(
             &mut port,
@@ -130,13 +131,13 @@ fn multipan_identity_transaction_has_exact_enable_and_write_order_for_every_cont
         assert_eq!(
             port.operations,
             [
-                MultipanOperation::Enable(index),
-                MultipanOperation::PanId(index, 0x1234),
-                MultipanOperation::Enable(index),
-                MultipanOperation::ShortAddress(index, 0x5678),
-                MultipanOperation::Enable(index),
-                MultipanOperation::ExtendedLow(index, 0x7654_3210),
-                MultipanOperation::ExtendedHigh(index, 0xfedc_ba98),
+                MultipanOperation::Enable(index.get()),
+                MultipanOperation::PanId(index.get(), 0x1234),
+                MultipanOperation::Enable(index.get()),
+                MultipanOperation::ShortAddress(index.get(), 0x5678),
+                MultipanOperation::Enable(index.get()),
+                MultipanOperation::ExtendedLow(index.get(), 0x7654_3210),
+                MultipanOperation::ExtendedHigh(index.get(), 0xfedc_ba98),
             ]
         );
     }

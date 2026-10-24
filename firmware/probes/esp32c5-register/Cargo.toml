@@ -16,7 +16,7 @@ esp-println = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca
 esp32c5 = { git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", default-features = false }
 oer-esp32c5-hal = { path = "../../../chips/esp32c5/hal" }
 oer-esp32c5-pac = { path = "../../../chips/esp32c5/pac" }
-oer-esp32c5-pac-raw = { path = "../../../chips/esp32c5/pac-raw" }
+oer-mmio = { path = "../../../portable/mmio" }
 oer-espressif-analog = { path = "../../../chips/espressif/analog" }
 
 [lints]

@@ -38,6 +38,7 @@ mod pac_api;
 mod pac_api_render;
 mod pac_api_svd;
 mod pac_bindings;
+mod pac_typed;
 mod partition_image;
 mod peripherals;
 mod register_evidence;
@@ -54,8 +55,8 @@ pub use pac_api::{
     FixedRegisterSequenceStep, FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead,
     FullRegisterValue, FullRegisterWrite, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain,
     OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack, PartitionImageRead,
-    PointerField, RegisterImageRead, RegisterImageWrite, W1cRegisterSnapshot, ZeroBasedFieldWrite,
-    ZeroRegisterWrite,
+    PointerField, RegisterImageRead, RegisterImageWrite, RegisterSplit, W1cRegisterSnapshot,
+    ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};
 pub use partition_image::PartitionRegister;

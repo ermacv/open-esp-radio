@@ -1,0 +1,7 @@
+error[E0133]: call to unsafe function `Span::<START, END>::assume_owned` is unsafe and requires unsafe block
+  --> tests/ui/span_needs_its_promise.rs:13:5
+   |
+13 |     Span::assume_owned() // ui-error: E0133
+   |     ^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: consult the function's documentation for information on how to avoid undefined behavior

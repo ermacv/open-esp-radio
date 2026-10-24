@@ -83,8 +83,7 @@ impl DtmRxPacketAddress {
     }
 
     const fn compressed_image(self) -> u32 {
-        self.base
-            .ble_compressed()
+        ble_word_index(self.base.get())
             .expect("a placed DTM RX packet has a nonzero encodable address")
     }
 }

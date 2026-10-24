@@ -16,6 +16,7 @@ pub(crate) struct Ieee802154TaskPeripheralOwners {
 /// Opaque IEEE 802.15.4 MAC and interrupt-route register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154Partition {
+    mac: crate::generated::ieee802154_mac::Ieee802154Mac,
     peripherals: svd::peripheral_ownership::Ieee802154Peripherals,
     etm: crate::modem::etm::Ieee802154EtmChannels,
 }
@@ -87,12 +88,32 @@ impl RadioPartitions {
     )]
     pub fn from_handoff(_handoff: RadioHandoff) -> Self {
         // SAFETY: RadioHandoff's constructor guarantees exclusive, permanent
-        // ownership. No independent generated singleton is acquired.
-        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
+        // ownership of every radio register partition. No independent
+        // generated singleton is acquired.
+        let peripherals = unsafe { svd::Peripherals::steal() };
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the radio root takes the typed blocks' registers once, from the handoff"
+        )]
+        // SAFETY: as above; the IEEE 802.15.4 MAC block is one of the
+        // partitions the handoff transferred. One raw view overlaps its span:
+        // `svd::Peripherals` holds `MODEM_IEEE802154_OBSERVED`, whose only
+        // register is the span's word at +0x98. `from_peripherals` moves that
+        // token into `unexposed` and drops it without an access (it is a
+        // zero-sized handle without `Drop`). No second token exists: the
+        // single `steal` above made the only one and set the singleton flag,
+        // so `Peripherals::take` returns `None`. Only the typed block reaches
+        // the span's words.
+        let ieee802154_mac = unsafe { crate::generated::ieee802154_mac::Span::assume_owned() };
+        Self::from_peripherals(peripherals, ieee802154_mac)
     }
 
-    /// Bind the generated singleton to the opaque partition owners.
-    pub(crate) fn from_peripherals(peripherals: svd::Peripherals) -> Self {
+    /// Bind the generated singleton and the typed blocks' spans to the
+    /// opaque partition owners.
+    pub(crate) fn from_peripherals(
+        peripherals: svd::Peripherals,
+        ieee802154_mac: crate::generated::ieee802154_mac::Span,
+    ) -> Self {
         let svd::peripheral_ownership::PeripheralPartitions {
             ieee802154,
             modem_etm,
@@ -101,11 +122,14 @@ impl RadioPartitions {
             phy_radio,
             wifi_mac,
             wifi_interrupts,
-            // Inventory-only word views have no safe runtime owner.
+            // Inventory-only word views have no runtime owner: dropped here
+            // without an access. `MODEM_IEEE802154_OBSERVED` among them lies
+            // inside the typed MAC block's span, which alone reaches it.
             unexposed: _,
         } = svd::peripheral_ownership::partition(peripherals);
         Self {
             ieee802154: Ieee802154Partition {
+                mac: crate::generated::ieee802154_mac::Ieee802154Mac::new(ieee802154_mac),
                 peripherals: ieee802154,
                 etm: crate::modem::etm::ieee802154_channels(modem_etm),
             },
@@ -128,7 +152,16 @@ impl RadioPartitions {
         // SAFETY: only host tests and validation probes build this root. In
         // a host test it is fictitious: no real MMIO exists behind it, so the
         // singleton need not be unique; a probe image takes it once.
-        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
+        let peripherals = unsafe { svd::Peripherals::steal() };
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "a validation root takes the typed blocks' registers once"
+        )]
+        // SAFETY: as above, for the typed IEEE 802.15.4 MAC block; the
+        // `MODEM_IEEE802154_OBSERVED` token over its word at +0x98 is dropped
+        // unused in `from_peripherals`, as in `from_handoff`.
+        let ieee802154_mac = unsafe { crate::generated::ieee802154_mac::Span::assume_owned() };
+        Self::from_peripherals(peripherals, ieee802154_mac)
     }
 }
 
@@ -148,14 +181,14 @@ impl Ieee802154TaskRegisters {
     /// disjoint task and interrupt owners. This performs no MMIO.
     pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
         let Ieee802154Partition {
+            mac,
             peripherals:
                 svd::peripheral_ownership::Ieee802154Peripherals {
-                    ieee802154_mac,
                     ieee802154_interrupt_route,
                 },
             etm,
         } = partition;
-        let (task_mac, interrupt_mac) = crate::ieee802154::ownership::split(ieee802154_mac);
+        let (task_mac, interrupt_mac) = crate::ieee802154::ownership::split(mac);
         (
             Self {
                 peripherals: Ieee802154TaskPeripheralOwners {
@@ -178,10 +211,9 @@ impl Ieee802154TaskRegisters {
             ieee802154_interrupt_route,
             etm,
         } = self.peripherals;
-        let ieee802154_mac = crate::ieee802154::ownership::reunite(task_mac, interrupts.registers);
         Ieee802154Partition {
+            mac: crate::ieee802154::ownership::reunite(task_mac, interrupts.registers),
             peripherals: svd::peripheral_ownership::Ieee802154Peripherals {
-                ieee802154_mac,
                 ieee802154_interrupt_route,
             },
             etm,

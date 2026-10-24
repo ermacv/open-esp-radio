@@ -129,6 +129,40 @@ impl ChipSources {
     }
 }
 
+/// `svd` without the peripherals `names`: each `<peripheral>` element is
+/// cut out of the text, so every other byte stays as published.
+fn svd_without(svd: &str, names: &BTreeSet<&str>) -> Result<String> {
+    if names.is_empty() {
+        return Ok(svd.to_owned());
+    }
+    let document = roxmltree::Document::parse(svd)?;
+    let mut cuts = Vec::new();
+    for peripheral in document
+        .descendants()
+        .filter(|node| node.has_tag_name("peripheral"))
+    {
+        let name = peripheral
+            .children()
+            .find(|child| child.has_tag_name("name"))
+            .and_then(|child| child.text())
+            .unwrap_or_default();
+        if names.contains(name) {
+            cuts.push(peripheral.range());
+        }
+    }
+    if cuts.len() != names.len() {
+        return Err("a typed peripheral is missing from the published SVD".into());
+    }
+    let mut output = String::with_capacity(svd.len());
+    let mut start = 0;
+    for cut in cuts {
+        output.push_str(svd.get(start..cut.start).ok_or("SVD cut out of range")?);
+        start = cut.end;
+    }
+    output.push_str(svd.get(start..).ok_or("SVD cut out of range")?);
+    Ok(output)
+}
+
 /// One validated publication: a chip's register project, or a register
 /// library of layouts shared between chips.
 pub enum Publication {
@@ -377,7 +411,11 @@ impl ChipPublication {
             svd2rust::config::RustEdition::E2021
         };
         config.strict = true;
-        let mut raw = svd2rust::generate(svd, &config)
+        // svd2rust renders every peripheral the policy does not render as a
+        // typed register block (`typed-peripherals`).
+        let typed = policy.typed_peripherals();
+        let raw_svd = svd_without(svd, &typed)?;
+        let mut raw = svd2rust::generate(&raw_svd, &config)
             .map_err(|e| e.to_string())?
             .lib_rs;
         if policy.options.allow_clippy_empty_docs {
@@ -386,10 +424,12 @@ impl ChipPublication {
         let mut raw =
             shared_blocks::reexport_library_blocks(&raw, self.model.shared_peripherals())?;
         self.model.validate_pointer_writes(policy)?;
-        raw.push_str(&policy.render_rust(svd)?);
+        raw.push_str(&policy.without_typed().render_rust(&raw_svd)?);
         let raw = host::format(&raw, &pac.edition)?;
-        let mut api = policy.render_facade_rust()?;
+        let mut api = String::from("#![forbid(unsafe_code)]\n");
+        api.push_str(&policy.without_typed_operations().render_facade_rust()?);
         api.push_str(&self.model.render_layouts_rust(&self.memory)?);
+        api.push_str(&policy.render_typed_rust(svd)?);
         let api = host::format(&api, &pac.edition)?;
         Ok((raw, api))
     }

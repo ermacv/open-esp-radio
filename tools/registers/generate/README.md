@@ -1,7 +1,8 @@
 # Reviewed register publication
 
 `oer-registers-generate` validates source-owned hardware descriptions and generates
-SVD, raw PAC, restricted PAC API and the binding index.
+SVD, raw PAC, restricted PAC API with its typed register blocks and the binding
+index.
 
 `cargo registers check inventory --chip <chip>` checks vendor uses of register
 bits against the source model. It calls Blobray's `library::register_accesses`
@@ -115,6 +116,51 @@ transactions. It writes the raw crate and API bridges, but no SVD or binding
 index, since a library has no addresses. A chip that places a library layout
 re-exports the library's module from its raw PAC and may not define
 transactions on that peripheral. See [`chips/espressif/registers/ieee80211`](../../../chips/espressif/registers/ieee80211/README.md).
+
+## Typed register blocks
+
+A PAC API policy's `[options] typed-peripherals` lists the peripherals the
+generator renders itself, as typed register blocks over `oer-mmio`
+([`portable/mmio`](../../../portable/mmio/src/lib.rs)), into the PAC API
+output (`generated.rs`, which starts with `#![forbid(unsafe_code)]`).
+svd2rust renders the other peripherals from the published SVD with the
+typed ones cut out; their transactions, pointer fields, register-bound
+domains and partition members leave its policy.
+
+A typed block is a module named after the peripheral with `BASE`, `SIZE`,
+its `Span` and an owner type generic over its placement: device registers
+(`new(Span)`) or host memory (`host(&mut [u32])`, for tests of the
+accessors). Per register the owner has `read_<register>` (an `R` value with
+a getter per field), `modify_<register>` (a read-modify-write through a `W`
+that keeps every bit no setter changes) or, for a write-only register,
+`write_<register>` (a `W` from zero). A write-one-to-clear register has
+`sample_<register>`, an affine `Snapshot` of its declared fields that
+`retain_<field>` narrows, and `acknowledge_<register>`, which writes
+exactly that snapshot. An array takes an `oer_mmio::Index<N>`. Each
+register module holds `FIELDS`, `OFFSET` and a value enum per enumerated
+field (`<field>_variant` reads it). A field setter takes `bool`, the value
+enum, the exact native integer (8, 16, 32 bits) or `oer_mmio::Bits<WIDTH>`;
+a read-only field and a DMA address field have none. A register changed by
+its read is read through `&mut`; a cluster, a field array, a register that
+is not 32 bits wide, mixed write-one-to-clear and ordinary fields, a
+write-only field in a readable register and a write range narrower than the
+field are refused.
+
+`[[register-splits]]` divides one typed block between two owners by word:
+`part` owns `registers` and observes (reads only) `observes`, which must
+have no read side effect; `rest` owns every other register. The block's
+`split` and `join` move between the whole owner and the two, and
+`oer-mmio` checks at compile time that the owned word lists are disjoint.
+
+The policy's transactions on a typed peripheral become methods of every
+owner that owns their register (a read: owns or observes):
+`full-register-writes`, `full-register-reads` (opaque domain),
+`fixed-register-images`, `masked-register-modifies`, `field-or-modifies`,
+`field-clear-modifies`, `field-replace-modifies` and
+`zero-based-field-writes`. Their masks are asserted against the register's
+declared fields in `const` items beside them. The other transaction kinds
+are refused on a typed peripheral; a W1C register needs no
+`w1c-register-snapshots` entry.
 
 ## Peripheral review defaults
 
@@ -280,8 +326,9 @@ identical to its applicable default are errors.
 
 A layout has no address: it is not in the SVD or the binding index. The PAC
 API output gains a `layouts` module: a constant per named RAM region; per
-word layout a `#[repr(C, align(N))]` type of volatile cells with `zeroed`,
-`SIZE`, `ALIGN`, `PLACEMENT` and `bytemuck::Zeroable`, each cell with `read`
+word layout a `#[repr(C, align(N))]` type of `oer_mmio::VolatileCell` words
+with `zeroed`, `SIZE`, `ALIGN`, `PLACEMENT` and a derived
+`bytemuck::Zeroable`, each cell with `read`
 and `write` of a value type, which has `from_bits`, `bits`, a getter per
 field and a `with_*` builder (`Option<Self>` when the value may not fit);
 per byte layout a decoder over `&[u8; N]` with a value type per range and a
@@ -289,9 +336,11 @@ getter per field; a byte layout with CPU-written fields also gains a writer
 over `&mut [u8; N]` (`set_<range>` and the range getter) and `from_bits` and
 `with_*` builders on the ranges the CPU writes, never on a hardware-written
 field. When the memory map has a `dma-window` RAM region it also gains the typed
-addresses of the DMA region: `DmaWindowAddress` for a buffer and
-`DmaRef<L>` for a layout placed there (the sealed `DmaLayout`), both with an
-`unsafe` constructor only the chip HAL's `dma_address` module calls. An address
+addresses of the DMA region, `oer-mmio`'s bound to the chip's `DmaWindow`:
+`DmaWindowAddress` for a buffer and `DmaRef<L>` for a layout placed there
+(`DmaLayout`), both with an `unsafe` constructor in `oer-mmio` that only the
+chip HAL's `dma_address` module calls. A model with BLE-compressed pointers
+also gains `ble_word_index`, the const encoder of an address. An address
 field's builder takes that type (`Option<DmaRef<L>>` for a link, `None` for
 none); its getter returns the word as read. No ordering, fence or ownership
 is generated.
@@ -302,9 +351,10 @@ fragment with `DMA_WINDOW_ORIGIN` and `DMA_WINDOW_LENGTH` (the memory map's
 `dma-window` region) and `DMA_ADDRESS_LOW_BITS` (that field's width, from
 bit 0, up to the complete 32-bit address), which the runtime linker script includes.
 
-A complete-register write in the API policy takes either a `domain` or, for
-a register the hardware reads as a pointer, `points-to = "<LAYOUT>"`: its
-bridge then takes a `DmaRef` to that layout of the model.
+A complete-register write in the API policy takes a `domain`, or, for a
+register the hardware reads as a pointer, `points-to = "<LAYOUT>"` (its
+bridge then takes a `DmaRef` to that layout of the model) or
+`placement = "dma-window"` for a buffer address (a `DmaWindowAddress`).
 
 For a pointer field inside a composed transaction, `[[pointer-fields]]`
 declares `name`, `peripheral`, `register`, `field`, `points-to`, optional

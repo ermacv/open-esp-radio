@@ -4,6 +4,8 @@ schema = 5
 [options]
 device-access = true
 allow-clippy-empty-docs = true
+# Rendered as typed register blocks over `oer-mmio`; svd2rust renders the rest.
+typed-peripherals = ["IEEE802154_MAC"]
 
 
 [[ownership-partitions]]
@@ -66,10 +68,13 @@ peripherals = [
     "WIFI_MAC_POWER_INTERRUPT",
 ]
 
-[[w1c-register-snapshots]]
-name = "ieee802154_event_status"
+[[register-splits]]
 peripheral = "IEEE802154_MAC"
-register = "EVENT_STATUS"
+part = "Interrupt"
+rest = "Task"
+registers = ["EVENT_STATUS"]
+observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
+description = "The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included."
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 
 [[enum-domains]]
@@ -154,20 +159,6 @@ peripheral = "IEEE802154_MAC"
 register = "TIMER1_VALUE"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 
-[[opaque-domains]]
-name = "Ieee802154TxDmaAddress"
-description = "Register-specific complete transmit frame-buffer address. Buffer provenance, alignment and lifetime remain HAL obligations."
-peripheral = "IEEE802154_MAC"
-register = "TX_DMA_ADDRESS"
-sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
-
-[[opaque-domains]]
-name = "Ieee802154RxDmaAddress"
-description = "Register-specific complete receive frame-buffer address. Buffer provenance, alignment and lifetime remain HAL obligations."
-peripheral = "IEEE802154_MAC"
-register = "RX_DMA_ADDRESS"
-sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
-
 [[zero-based-field-writes]]
 name = "publish_ieee802154_security_address_low"
 peripheral = "IEEE802154_MAC"
@@ -194,7 +185,7 @@ name = "publish_ieee802154_tx_dma_address"
 peripheral = "IEEE802154_MAC"
 register = "TX_DMA_ADDRESS"
 field = "ADDRESS"
-domain = "Ieee802154TxDmaAddress"
+placement = "dma-window"
 exposure = "facade"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 
@@ -203,7 +194,7 @@ name = "publish_ieee802154_rx_dma_address"
 peripheral = "IEEE802154_MAC"
 register = "RX_DMA_ADDRESS"
 field = "ADDRESS"
-domain = "Ieee802154RxDmaAddress"
+placement = "dma-window"
 exposure = "facade"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 

@@ -80,7 +80,7 @@ const fn event_observation(
 
 /// The shared observation of one affine `EVENT_STATUS` snapshot.
 fn snapshot_observation(
-    snapshot: &crate::svd::w1c_register_snapshot::Ieee802154EventStatusSnapshot,
+    snapshot: &crate::generated::ieee802154_mac::event_status::Snapshot,
 ) -> Ieee802154EventObservation {
     event_observation(
         crate::ieee802154::ownership::Ieee802154EventReadback::from_event_status_snapshot(snapshot),
@@ -118,22 +118,34 @@ const fn operation_rx_abort_enable_observation(
 /// still represents the complete ESP32-C5 field rather than silently
 /// narrowing register geometry to one operating mode.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Ieee802154FrequencyCode(u8);
+pub struct Ieee802154FrequencyCode(oer_mmio::Bits<7>);
 
 impl Ieee802154FrequencyCode {
     pub const MAX: u8 = 0x7f;
 
     /// Accept a code that fits the seven-bit field.
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_mmio::Bits::new(value as u32) {
+            Ok(bits) => Some(Self(bits)),
+            Err(_) => None,
+        }
+    }
+
+    /// The code the seven-bit field reader returned.
+    const fn from_field(value: u8) -> Self {
+        match Self::new(value) {
+            Some(code) => code,
+            None => panic!("the frequency-code reader returns seven bits"),
         }
     }
 
     /// Return the field value, not a complete register image.
     pub const fn value(self) -> u8 {
+        self.0.get() as u8
+    }
+
+    /// The field value as its register writer takes it.
+    pub(crate) const fn bits(self) -> oer_mmio::Bits<7> {
         self.0
     }
 }
@@ -144,22 +156,48 @@ impl Ieee802154FrequencyCode {
 /// lease places it through named generated fields and preserves all unrelated
 /// bits.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Ieee802154Pti(u8);
+pub struct Ieee802154Pti(oer_mmio::Bits<4>);
 
 impl Ieee802154Pti {
     pub const MAX: u8 = 0xf;
 
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_mmio::Bits::new(value as u32) {
+            Ok(bits) => Some(Self(bits)),
+            Err(_) => None,
+        }
+    }
+
+    /// The priority the four-bit field reader returned.
+    const fn from_field(value: u8) -> Self {
+        match Self::new(value) {
+            Some(pti) => pti,
+            None => panic!("the PTI field reader returns four bits"),
         }
     }
 
     /// Return the bounded field value, not a shifted register image.
     pub const fn value(self) -> u8 {
+        self.0.get() as u8
+    }
+
+    /// The field value as its register writer takes it.
+    pub(crate) const fn bits(self) -> oer_mmio::Bits<4> {
         self.0
+    }
+}
+
+/// The register index of one of the four multipan contexts.
+pub(crate) const fn multipan_register_index(
+    index: Ieee802154MultipanIndex,
+) -> crate::ieee802154::ownership::MultipanIndex {
+    use crate::ieee802154::ownership::MultipanIndex;
+    match index {
+        Ieee802154MultipanIndex::CONTEXT0 => MultipanIndex::constant::<0>(),
+        Ieee802154MultipanIndex::CONTEXT1 => MultipanIndex::constant::<1>(),
+        Ieee802154MultipanIndex::CONTEXT2 => MultipanIndex::constant::<2>(),
+        // An index is below four by construction: the fourth context.
+        _ => MultipanIndex::constant::<3>(),
     }
 }
 
@@ -517,12 +555,12 @@ pub struct Ieee802154TimerLease<'registers> {
 impl Ieee802154TimerLease<'_> {
     /// Publish one complete TIMER0 threshold without assigning clock units.
     pub fn set_timer0_threshold(&mut self, threshold: Ieee802154Timer0ThresholdWord) {
-        self.registers.publish_timer0_threshold(threshold.get());
+        self.registers.publish_timer0_threshold(threshold);
     }
 
     /// Observe one complete TIMER0 counter word without assigning clock units.
     pub fn timer0_value(&self) -> Ieee802154Timer0ValueWord {
-        Ieee802154Timer0ValueWord::new(self.registers.observe_timer0_value())
+        self.registers.observe_timer0_value()
     }
 
     /// Issue exactly the reviewed TIMER0-start command image.
@@ -537,12 +575,12 @@ impl Ieee802154TimerLease<'_> {
 
     /// Publish one complete TIMER1 threshold without assigning clock units.
     pub fn set_timer1_threshold(&mut self, threshold: Ieee802154Timer1ThresholdWord) {
-        self.registers.publish_timer1_threshold(threshold.get());
+        self.registers.publish_timer1_threshold(threshold);
     }
 
     /// Observe one complete TIMER1 counter word without assigning clock units.
     pub fn timer1_value(&self) -> Ieee802154Timer1ValueWord {
-        Ieee802154Timer1ValueWord::new(self.registers.observe_timer1_value())
+        self.registers.observe_timer1_value()
     }
 
     /// Issue exactly the reviewed TIMER1-start command image.
@@ -570,10 +608,6 @@ impl Ieee802154RegisterLease<'_> {
     /// the public `uint16_t` bitfield assignment does and preserves the
     /// adjacent unowned high byte.
     pub fn set_ed_duration(&mut self, duration: Ieee802154EdDurationUnits) {
-        let duration = match u16::try_from(duration.get()) {
-            Ok(duration) => duration,
-            Err(_) => unreachable!("generated ED-duration domain is bounded to sixteen bits"),
-        };
         self.registers.set_ed_duration(duration);
     }
 
@@ -625,14 +659,14 @@ impl Ieee802154RegisterLease<'_> {
 
     /// Replace only the generated seven-bit MAC frequency-code field.
     pub fn set_frequency_code(&mut self, code: Ieee802154FrequencyCode) {
-        self.registers.set_frequency_code(code.value());
+        self.registers.set_frequency_code(code.bits());
     }
 
     /// Replace only the raw five-bit transmit-power field.
     ///
     /// This preserving update makes no dBm or calibration-table claim.
     pub fn set_tx_power_code(&mut self, code: Ieee802154TxPowerCode) {
-        self.registers.set_tx_power_code(code.get());
+        self.registers.set_tx_power_code(code);
     }
 
     /// Replace the CCA mode through the generated enumerated field.
@@ -684,7 +718,7 @@ impl Ieee802154RegisterLease<'_> {
         identity: Ieee802154PanIdentity,
     ) {
         self.registers.set_multipan_identity(
-            index.as_usize(),
+            multipan_register_index(index),
             identity.pan_id(),
             identity.short_address(),
             identity.extended_address(),
@@ -698,7 +732,10 @@ impl Ieee802154RegisterLease<'_> {
 
     /// Read one complete PAN identity without changing its enable bit.
     pub fn multipan_identity(&self, index: Ieee802154MultipanIndex) -> Ieee802154PanIdentity {
-        raw_identity_to_typed(self.registers.multipan_identity(index.as_usize()))
+        raw_identity_to_typed(
+            self.registers
+                .multipan_identity(multipan_register_index(index)),
+        )
     }
 
     /// Read all four named multipan enable fields.
@@ -772,12 +809,12 @@ impl Ieee802154RegisterLease<'_> {
 
     /// Replace only the generated four-bit TX/RX coexistence PTI field.
     pub fn set_txrx_pti(&mut self, pti: Ieee802154Pti) {
-        self.registers.set_txrx_pti(pti.value());
+        self.registers.set_txrx_pti(pti.bits());
     }
 
     /// Replace only the generated four-bit ACK coexistence PTI field.
     pub fn set_ack_pti(&mut self, pti: Ieee802154Pti) {
-        self.registers.set_ack_pti(pti.value());
+        self.registers.set_ack_pti(pti.bits());
     }
 
     /// Sample the complete static MAC-policy subset once per backing word.
@@ -785,7 +822,7 @@ impl Ieee802154RegisterLease<'_> {
         let readback = self.registers.static_mac_policy_readback();
         let identity = readback.identity();
         Ieee802154MacPolicySnapshot {
-            frequency_code: Ieee802154FrequencyCode(readback.frequency_code()),
+            frequency_code: Ieee802154FrequencyCode::from_field(readback.frequency_code()),
             cca_mode: Ieee802154CcaMode::from_field(readback.cca_mode()),
             cca_threshold_code: readback.cca_threshold_code() as i8,
             ack_timeout: Ieee802154AckTimeoutUnits::new(readback.ack_timeout()),
@@ -822,7 +859,7 @@ impl Ieee802154RegisterLease<'_> {
             raw_identity_to_typed(readback.identity(3)),
         ];
         Ieee802154MacConfigurationReadback {
-            frequency_code: Ieee802154FrequencyCode(readback.frequency_code()),
+            frequency_code: Ieee802154FrequencyCode::from_field(readback.frequency_code()),
             tx_power_code: Ieee802154TxPowerCode::new(u32::from(readback.tx_power_code()))
                 .expect("raw PAC field is eight bits"),
             cca_mode: Ieee802154CcaMode::from_field(readback.cca_mode()),
@@ -956,8 +993,8 @@ impl Ieee802154PolledRegisterLease<'_> {
             rx_aborts_masked: readback.rx_aborts_masked(),
             tx_aborts_masked: readback.tx_aborts_masked(),
             ed_uses_average: readback.ed_uses_average(),
-            txrx_pti: Ieee802154Pti(readback.txrx_pti()),
-            ack_pti: Ieee802154Pti(readback.ack_pti()),
+            txrx_pti: Ieee802154Pti::from_field(readback.txrx_pti()),
+            ack_pti: Ieee802154Pti::from_field(readback.ack_pti()),
             txon_delay_applied: readback.txon_delay_applied(),
         }
     }
@@ -1022,7 +1059,7 @@ struct Ieee802154PacInterruptTransitionPort<'task> {
 }
 
 impl Ieee802154InterruptTransitionPort for Ieee802154PacInterruptTransitionPort<'_> {
-    type EventSnapshot = crate::svd::w1c_register_snapshot::Ieee802154EventStatusSnapshot;
+    type EventSnapshot = crate::generated::ieee802154_mac::event_status::Snapshot;
 
     fn stop_operation(&mut self) {
         self.task.peripherals.ieee802154_mac.issue_stop();

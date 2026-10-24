@@ -218,8 +218,9 @@ See the [peripheral format and example](../tools/registers/generate/README.md#pe
 The generator emits, in the chip's PAC (`generated.rs`, not the raw PAC,
 since svd2rust has no notion of an unplaced layout):
 
-- a `#[repr(C, align(N))]` type of the layout's words, `Zeroable`, with
-  compile-time size and alignment checks;
+- a `#[repr(C, align(N))]` type of the layout's words, `Zeroable` by derive
+  over `oer-mmio`'s volatile cells, with compile-time size and alignment
+  checks;
 - for each `shared` word, a cell with volatile `read() -> Value` and
   `write(Value)` only; for each word a `Value` type with typed getters and
   `with_*` builders, as the PAC's register values have;

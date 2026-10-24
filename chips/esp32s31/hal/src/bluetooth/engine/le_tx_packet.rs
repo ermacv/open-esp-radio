@@ -48,16 +48,14 @@ impl<const ALLOCATION_BYTES: usize> LeTxPacketAddress<ALLOCATION_BYTES> {
 
     pub(super) const fn base_link(self) -> LeTxPacketBaseLink {
         LeTxPacketBaseLink(
-            self.base
-                .ble_compressed()
+            ble_word_index(self.base.get())
                 .expect("a placed TX buffer has a nonzero encodable address"),
         )
     }
 
     pub(super) const fn pdu_target_link(self) -> LeTxPduTargetLink {
         LeTxPduTargetLink(
-            self.header_packet_target
-                .ble_compressed()
+            ble_word_index(self.header_packet_target.get())
                 .expect("the placed TX PDU target is encodable"),
         )
     }

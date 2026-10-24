@@ -6,7 +6,10 @@
 //! this module are built from the same port steps, so both paths keep the
 //! vendor write order.
 
-use super::{MultipanIdentityProgrammingPort, TaskRegisters, TransmitSecurityProgrammingPort};
+use super::{
+    KEY_WORDS, MultipanIdentityProgrammingPort, MultipanIndex, TaskRegisters,
+    TransmitSecurityProgrammingPort, mac,
+};
 
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,134 +71,117 @@ impl TaskRegisters {
     /// `ieee802154_ll_set_tx_auto_ack`.
     #[doc(hidden)]
     pub fn set_auto_ack_tx(&mut self, enable: bool) {
-        self.registers
-            .control()
-            .modify(|_, writer| writer.auto_ack_tx().bit(enable));
+        self.registers.modify_control(|writer| {
+            writer.set_auto_ack_tx(enable);
+        });
     }
 
     /// `ieee802154_ll_get_tx_auto_ack`.
     #[doc(hidden)]
     pub fn auto_ack_tx(&self) -> bool {
-        self.registers.control().read().auto_ack_tx().bit_is_set()
+        self.registers.read_control().auto_ack_tx()
     }
 
     /// `ieee802154_ll_set_rx_auto_ack`.
     #[doc(hidden)]
     pub fn set_auto_ack_rx(&mut self, enable: bool) {
-        self.registers
-            .control()
-            .modify(|_, writer| writer.auto_ack_rx().bit(enable));
+        self.registers.modify_control(|writer| {
+            writer.set_auto_ack_rx(enable);
+        });
     }
 
     /// `ieee802154_ll_get_rx_auto_ack`.
     #[doc(hidden)]
     pub fn auto_ack_rx(&self) -> bool {
-        self.registers.control().read().auto_ack_rx().bit_is_set()
+        self.registers.read_control().auto_ack_rx()
     }
 
     /// `ieee802154_ll_set_tx_enhance_ack`.
     #[doc(hidden)]
     pub fn set_enhanced_ack_tx(&mut self, enable: bool) {
-        self.registers
-            .control()
-            .modify(|_, writer| writer.enhanced_ack_tx().bit(enable));
+        self.registers.modify_control(|writer| {
+            writer.set_enhanced_ack_tx(enable);
+        });
     }
 
     /// `ieee802154_ll_get_tx_enhance_ack`.
     #[doc(hidden)]
     pub fn enhanced_ack_tx(&self) -> bool {
-        self.registers
-            .control()
-            .read()
-            .enhanced_ack_tx()
-            .bit_is_set()
+        self.registers.read_control().enhanced_ack_tx()
     }
 
     /// `ieee802154_ll_set_coordinator`.
     #[doc(hidden)]
     pub fn set_coordinator(&mut self, enable: bool) {
-        self.registers
-            .control()
-            .modify(|_, writer| writer.coordinator().bit(enable));
+        self.registers.modify_control(|writer| {
+            writer.set_coordinator(enable);
+        });
     }
 
     /// `ieee802154_ll_set_promiscuous`.
     #[doc(hidden)]
     pub fn set_promiscuous(&mut self, enable: bool) {
-        self.registers
-            .control()
-            .modify(|_, writer| writer.promiscuous().bit(enable));
+        self.registers.modify_control(|writer| {
+            writer.set_promiscuous(enable);
+        });
     }
 
     /// `ieee802154_ll_set_pending_mode`.
     #[doc(hidden)]
     pub fn set_pending_enhanced(&mut self, enable: bool) {
-        self.registers
-            .control()
-            .modify(|_, writer| writer.pending_enhanced().bit(enable));
+        self.registers.modify_control(|writer| {
+            writer.set_pending_enhanced(enable);
+        });
     }
 
     /// `ieee802154_ll_get_pending_mode`.
     #[doc(hidden)]
     pub fn pending_enhanced(&self) -> bool {
-        self.registers
-            .control()
-            .read()
-            .pending_enhanced()
-            .bit_is_set()
+        self.registers.read_control().pending_enhanced()
     }
 
     /// `ieee802154_ll_get_freq`.
     #[doc(hidden)]
     pub fn frequency_code(&self) -> u8 {
-        self.registers.channel().read().frequency_code().bits()
+        self.registers.read_channel().frequency_code()
     }
 
     /// `ieee802154_ll_get_ack_timeout`.
     #[doc(hidden)]
     pub fn ack_timeout(&self) -> u16 {
-        self.registers.ack_timeout().read().timeout().bits()
+        self.registers.read_ack_timeout().timeout()
     }
 
     /// `ieee802154_ll_set_multipan_panid`: enable the context, then write.
     #[doc(hidden)]
-    pub fn set_multipan_pan_id(&mut self, index: usize, pan_id: u16) {
-        assert!(index < 4, "multipan index exceeds four contexts");
+    pub fn set_multipan_pan_id(&mut self, index: MultipanIndex, pan_id: u16) {
         self.registers.enable_context(index);
         self.registers.write_pan_id(index, pan_id);
     }
 
     /// `ieee802154_ll_get_multipan_panid`.
     #[doc(hidden)]
-    pub fn multipan_pan_id(&self, index: usize) -> u16 {
-        assert!(index < 4, "multipan index exceeds four contexts");
-        self.registers.multipan_pan_id(index).read().pan_id().bits()
+    pub fn multipan_pan_id(&self, index: MultipanIndex) -> u16 {
+        self.registers.read_multipan_pan_id(index).pan_id()
     }
 
     /// `ieee802154_ll_set_multipan_short_addr`: enable the context, then write.
     #[doc(hidden)]
-    pub fn set_multipan_short_address(&mut self, index: usize, short_address: u16) {
-        assert!(index < 4, "multipan index exceeds four contexts");
+    pub fn set_multipan_short_address(&mut self, index: MultipanIndex, short_address: u16) {
         self.registers.enable_context(index);
         self.registers.write_short_address(index, short_address);
     }
 
     /// `ieee802154_ll_get_multipan_short_addr`.
     #[doc(hidden)]
-    pub fn multipan_short_address(&self, index: usize) -> u16 {
-        assert!(index < 4, "multipan index exceeds four contexts");
-        self.registers
-            .multipan_short_address(index)
-            .read()
-            .address()
-            .bits()
+    pub fn multipan_short_address(&self, index: MultipanIndex) -> u16 {
+        self.registers.read_multipan_short_address(index).address()
     }
 
     /// `ieee802154_ll_set_multipan_ext_addr`: enable the context, then write
     /// the low and high little-endian words.
     #[doc(hidden)]
-    pub fn set_multipan_extended_address(&mut self, index: usize, address: [u8; 8]) {
-        assert!(index < 4, "multipan index exceeds four contexts");
+    pub fn set_multipan_extended_address(&mut self, index: MultipanIndex, address: [u8; 8]) {
         self.registers.enable_context(index);
         let [a0, a1, a2, a3, a4, a5, a6, a7] = address;
         self.registers
@@ -206,19 +192,20 @@ impl TaskRegisters {
 
     /// `ieee802154_ll_get_multipan_ext_addr`.
     #[doc(hidden)]
-    pub fn multipan_extended_address(&self, index: usize) -> [u8; 8] {
+    pub fn multipan_extended_address(&self, index: MultipanIndex) -> [u8; 8] {
         self.multipan_identity(index).extended_address
     }
 
     /// `ieee802154_ll_set_ed_sample_mode`.
     #[doc(hidden)]
     pub fn set_ed_sample_mode(&mut self, average: bool) {
-        self.registers.ed_config().modify(|_, writer| {
-            if average {
-                writer.ed_sample_mode().average()
-            } else {
-                writer.ed_sample_mode().maximum()
-            }
+        let mode = if average {
+            mac::ed_config::EdSampleMode::Average
+        } else {
+            mac::ed_config::EdSampleMode::Maximum
+        };
+        self.registers.modify_ed_config(|writer| {
+            writer.set_ed_sample_mode(mode);
         });
     }
 
@@ -227,113 +214,113 @@ impl TaskRegisters {
     /// covers.
     #[doc(hidden)]
     pub fn enable_all_events(&mut self) {
-        self.registers.event_enable().modify(|_, writer| {
-            writer.tx_done().set_bit();
-            writer.rx_done().set_bit();
-            writer.ack_tx_done().set_bit();
-            writer.ack_rx_done().set_bit();
-            writer.rx_abort().set_bit();
-            writer.tx_abort().set_bit();
-            writer.ed_done().set_bit();
-            writer.events_7().set_bit();
-            writer.timer0_overflow().set_bit();
-            writer.timer1_overflow().set_bit();
-            writer.clock_count_match().set_bit();
-            writer.tx_sfd_done().set_bit();
-            writer.rx_sfd_done().set_bit()
+        self.registers.modify_event_enable(|writer| {
+            writer.set_tx_done(true);
+            writer.set_rx_done(true);
+            writer.set_ack_tx_done(true);
+            writer.set_ack_rx_done(true);
+            writer.set_rx_abort(true);
+            writer.set_tx_abort(true);
+            writer.set_ed_done(true);
+            writer.set_events_7(true);
+            writer.set_timer0_overflow(true);
+            writer.set_timer1_overflow(true);
+            writer.set_clock_count_match(true);
+            writer.set_tx_sfd_done(true);
+            writer.set_rx_sfd_done(true);
         });
     }
 
     /// `ieee802154_ll_enable_events`/`disable_events` of one named event.
     #[doc(hidden)]
     pub fn set_event_enabled(&mut self, event: RawEvent, enable: bool) {
-        self.registers
-            .event_enable()
-            .modify(|_, writer| match event {
-                RawEvent::TxDone => writer.tx_done().bit(enable),
-                RawEvent::RxDone => writer.rx_done().bit(enable),
-                RawEvent::AckTxDone => writer.ack_tx_done().bit(enable),
-                RawEvent::AckRxDone => writer.ack_rx_done().bit(enable),
-                RawEvent::RxAbort => writer.rx_abort().bit(enable),
-                RawEvent::TxAbort => writer.tx_abort().bit(enable),
-                RawEvent::EdDone => writer.ed_done().bit(enable),
-                RawEvent::Timer0Overflow => writer.timer0_overflow().bit(enable),
-                RawEvent::Timer1Overflow => writer.timer1_overflow().bit(enable),
-                RawEvent::ClockCountMatch => writer.clock_count_match().bit(enable),
-                RawEvent::TxSfdDone => writer.tx_sfd_done().bit(enable),
-                RawEvent::RxSfdDone => writer.rx_sfd_done().bit(enable),
-            });
+        self.registers.modify_event_enable(|writer| {
+            match event {
+                RawEvent::TxDone => writer.set_tx_done(enable),
+                RawEvent::RxDone => writer.set_rx_done(enable),
+                RawEvent::AckTxDone => writer.set_ack_tx_done(enable),
+                RawEvent::AckRxDone => writer.set_ack_rx_done(enable),
+                RawEvent::RxAbort => writer.set_rx_abort(enable),
+                RawEvent::TxAbort => writer.set_tx_abort(enable),
+                RawEvent::EdDone => writer.set_ed_done(enable),
+                RawEvent::Timer0Overflow => writer.set_timer0_overflow(enable),
+                RawEvent::Timer1Overflow => writer.set_timer1_overflow(enable),
+                RawEvent::ClockCountMatch => writer.set_clock_count_match(enable),
+                RawEvent::TxSfdDone => writer.set_tx_sfd_done(enable),
+                RawEvent::RxSfdDone => writer.set_rx_sfd_done(enable),
+            };
+        });
     }
 
     /// The LL's `|=` of the rx-abort baseline set.
     #[doc(hidden)]
     pub fn enable_rx_abort_baseline(&mut self) {
-        crate::generated::enable_ieee802154_rx_abort_baseline(&self.registers);
+        self.registers.enable_ieee802154_rx_abort_baseline();
     }
 
     /// The LL's `|=` of the rx-abort all set.
     #[doc(hidden)]
     pub fn enable_rx_abort_all(&mut self) {
-        crate::generated::enable_ieee802154_rx_abort_all(&self.registers);
+        self.registers.enable_ieee802154_rx_abort_all();
     }
 
     /// The LL's `|=` of the tx-abort baseline set.
     #[doc(hidden)]
     pub fn enable_tx_abort_baseline(&mut self) {
-        crate::generated::enable_ieee802154_tx_abort_baseline(&self.registers);
+        self.registers.enable_ieee802154_tx_abort_baseline();
     }
 
     /// The LL's `|=` of the tx-abort all set.
     #[doc(hidden)]
     pub fn enable_tx_abort_all(&mut self) {
-        crate::generated::enable_ieee802154_tx_abort_all(&self.registers);
+        self.registers.enable_ieee802154_tx_abort_all();
     }
 
     /// The LL's `&= !` of the rx-abort baseline set.
     #[doc(hidden)]
     pub fn disable_rx_abort_baseline(&mut self) {
-        crate::generated::disable_ieee802154_rx_abort_baseline(&self.registers);
+        self.registers.disable_ieee802154_rx_abort_baseline();
     }
 
     /// The LL's `&= !` of the rx-abort all set.
     #[doc(hidden)]
     pub fn disable_rx_abort_all(&mut self) {
-        crate::generated::disable_ieee802154_rx_abort_all(&self.registers);
+        self.registers.disable_ieee802154_rx_abort_all();
     }
 
     /// The LL's `&= !` of the tx-abort baseline set.
     #[doc(hidden)]
     pub fn disable_tx_abort_baseline(&mut self) {
-        crate::generated::disable_ieee802154_tx_abort_baseline(&self.registers);
+        self.registers.disable_ieee802154_tx_abort_baseline();
     }
 
     /// The LL's `&= !` of the tx-abort all set.
     #[doc(hidden)]
     pub fn disable_tx_abort_all(&mut self) {
-        crate::generated::disable_ieee802154_tx_abort_all(&self.registers);
+        self.registers.disable_ieee802154_tx_abort_all();
     }
 
     /// `ieee802154_ll_get_rx_status`, decoded field by field.
     #[doc(hidden)]
     pub fn rx_status(&self) -> RawRxStatus {
-        let status = self.registers.rx_status().read();
+        let status = self.registers.read_rx_status();
         RawRxStatus {
-            filter_fail_reason: status.filter_fail_reason().bits(),
-            abort_reason: status.abort_reason().bits(),
-            state: status.state().bits(),
-            preamble_match: status.preamble_match().bit_is_set(),
-            sfd_match: status.sfd_match().bit_is_set(),
+            filter_fail_reason: status.filter_fail_reason(),
+            abort_reason: status.abort_reason(),
+            state: status.state(),
+            preamble_match: status.preamble_match(),
+            sfd_match: status.sfd_match(),
         }
     }
 
     /// `ieee802154_ll_get_tx_status`, decoded field by field.
     #[doc(hidden)]
     pub fn tx_status(&self) -> RawTxStatus {
-        let status = self.registers.tx_status().read();
+        let status = self.registers.read_tx_status();
         RawTxStatus {
-            state: status.state().bits(),
-            abort_reason: status.abort_reason().bits(),
-            security_error: status.security_error().bits(),
+            state: status.state(),
+            abort_reason: status.abort_reason(),
+            security_error: status.security_error(),
         }
     }
 
@@ -346,21 +333,13 @@ impl TaskRegisters {
     /// `ieee802154_ll_set_security_offset`.
     #[doc(hidden)]
     pub fn set_security_payload_offset(&mut self, offset: u8) {
-        assert!(
-            offset <= 0x7f,
-            "transmit-security payload offset exceeds seven bits"
-        );
         self.registers.write_payload_offset(offset);
     }
 
     /// `ieee802154_ll_get_security_offset`.
     #[doc(hidden)]
     pub fn security_payload_offset(&self) -> u8 {
-        self.registers
-            .security_control()
-            .read()
-            .payload_offset()
-            .bits()
+        self.registers.read_security_control().payload_offset()
     }
 
     /// `ieee802154_ll_set_security_addr`: low then high little-endian word.
@@ -376,11 +355,10 @@ impl TaskRegisters {
     /// `ieee802154_ll_set_security_key`: four little-endian words in order.
     #[doc(hidden)]
     pub fn set_security_key(&mut self, key: &[u8; 16]) {
-        for (index, word) in key.chunks_exact(4).enumerate() {
-            self.registers.write_key_word(
-                index,
-                u32::from_le_bytes([word[0], word[1], word[2], word[3]]),
-            );
+        let (words, _) = key.as_chunks::<4>();
+        for (index, word) in KEY_WORDS.into_iter().zip(words) {
+            self.registers
+                .write_key_word(index, u32::from_le_bytes(*word));
         }
     }
 
@@ -392,75 +370,76 @@ impl TaskRegisters {
     pub fn debug_counter(&self, counter: RawDebugCounter) -> u16 {
         let registers = &self.registers;
         match counter {
-            RawDebugCounter::SfdTimeout => registers
-                .sfd_timeout_counter()
-                .read()
-                .sfd_timeout_count()
-                .bits(),
-            RawDebugCounter::CrcError => registers
-                .crc_error_counter()
-                .read()
-                .crc_error_count()
-                .bits(),
-            RawDebugCounter::EdAbort => registers.ed_abort_counter().read().count().bits(),
-            RawDebugCounter::CcaFail => registers.cca_fail_counter().read().count().bits(),
-            RawDebugCounter::RxFilterFail => {
-                registers.rx_filter_fail_counter().read().count().bits()
-            }
-            RawDebugCounter::NoRssDetect => registers.no_rss_detect_counter().read().count().bits(),
-            RawDebugCounter::RxAbortCoex => registers.rx_abort_coex_counter().read().count().bits(),
-            RawDebugCounter::RxRestart => registers.rx_restart_counter().read().count().bits(),
-            RawDebugCounter::TxAckAbortCoex => {
-                registers.tx_ack_abort_coex_counter().read().count().bits()
-            }
-            RawDebugCounter::EdScanBreakCoex => {
-                registers.ed_scan_break_coex_counter().read().count().bits()
-            }
-            RawDebugCounter::RxAckAbortCoex => {
-                registers.rx_ack_abort_coex_counter().read().count().bits()
-            }
-            RawDebugCounter::RxAckTimeout => {
-                registers.rx_ack_timeout_counter().read().count().bits()
-            }
-            RawDebugCounter::TxBreakCoex => registers.tx_break_coex_counter().read().count().bits(),
-            RawDebugCounter::TxSecurityError => {
-                registers.tx_security_error_counter().read().count().bits()
-            }
-            RawDebugCounter::CcaBusy => registers.cca_busy_counter().read().count().bits(),
+            RawDebugCounter::SfdTimeout => registers.read_sfd_timeout_counter().sfd_timeout_count(),
+            RawDebugCounter::CrcError => registers.read_crc_error_counter().crc_error_count(),
+            RawDebugCounter::EdAbort => registers.read_ed_abort_counter().count(),
+            RawDebugCounter::CcaFail => registers.read_cca_fail_counter().count(),
+            RawDebugCounter::RxFilterFail => registers.read_rx_filter_fail_counter().count(),
+            RawDebugCounter::NoRssDetect => registers.read_no_rss_detect_counter().count(),
+            RawDebugCounter::RxAbortCoex => registers.read_rx_abort_coex_counter().count(),
+            RawDebugCounter::RxRestart => registers.read_rx_restart_counter().count(),
+            RawDebugCounter::TxAckAbortCoex => registers.read_tx_ack_abort_coex_counter().count(),
+            RawDebugCounter::EdScanBreakCoex => registers.read_ed_scan_break_coex_counter().count(),
+            RawDebugCounter::RxAckAbortCoex => registers.read_rx_ack_abort_coex_counter().count(),
+            RawDebugCounter::RxAckTimeout => registers.read_rx_ack_timeout_counter().count(),
+            RawDebugCounter::TxBreakCoex => registers.read_tx_break_coex_counter().count(),
+            RawDebugCounter::TxSecurityError => registers.read_tx_security_error_counter().count(),
+            RawDebugCounter::CcaBusy => registers.read_cca_busy_counter().count(),
         }
     }
 
     /// `ieee802154_ll_clear_debug_cnt` of one counter: a complete write of
-    /// the clear register with only that counter's bit set.
+    /// the clear register with only that counter's bit set, as the public LL
+    /// does.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the write-only clear register is written as one complete word, as the public LL does"
-    )]
     pub fn clear_debug_counter(&mut self, counter: RawDebugCounter) {
-        // SAFETY: `DIAGNOSTIC_COUNTER_CLEAR` is a write-only word of
-        // independent clear bits; the public LL writes it completely with only
-        // the selected bits set, so every other bit is zero.
-        let _ = unsafe {
-            self.registers
-                .diagnostic_counter_clear()
-                .write_with_zero(|writer| match counter {
-                    RawDebugCounter::SfdTimeout => writer.sfd_timeout().set_bit(),
-                    RawDebugCounter::CrcError => writer.crc_error().set_bit(),
-                    RawDebugCounter::EdAbort => writer.ed_abort().set_bit(),
-                    RawDebugCounter::CcaFail => writer.cca_fail().set_bit(),
-                    RawDebugCounter::RxFilterFail => writer.rx_filter_fail().set_bit(),
-                    RawDebugCounter::NoRssDetect => writer.no_rss_detect().set_bit(),
-                    RawDebugCounter::RxAbortCoex => writer.rx_abort_coex().set_bit(),
-                    RawDebugCounter::RxRestart => writer.rx_restart().set_bit(),
-                    RawDebugCounter::TxAckAbortCoex => writer.tx_ack_abort_coex().set_bit(),
-                    RawDebugCounter::EdScanBreakCoex => writer.ed_scan_break_coex().set_bit(),
-                    RawDebugCounter::RxAckAbortCoex => writer.rx_ack_abort_coex().set_bit(),
-                    RawDebugCounter::RxAckTimeout => writer.rx_ack_timeout().set_bit(),
-                    RawDebugCounter::TxBreakCoex => writer.tx_break_coex().set_bit(),
-                    RawDebugCounter::TxSecurityError => writer.tx_security_error().set_bit(),
-                    RawDebugCounter::CcaBusy => writer.cca_busy().set_bit(),
-                })
-        };
+        self.registers
+            .write_diagnostic_counter_clear(|writer| match counter {
+                RawDebugCounter::SfdTimeout => {
+                    writer.set_sfd_timeout(true);
+                }
+                RawDebugCounter::CrcError => {
+                    writer.set_crc_error(true);
+                }
+                RawDebugCounter::EdAbort => {
+                    writer.set_ed_abort(true);
+                }
+                RawDebugCounter::CcaFail => {
+                    writer.set_cca_fail(true);
+                }
+                RawDebugCounter::RxFilterFail => {
+                    writer.set_rx_filter_fail(true);
+                }
+                RawDebugCounter::NoRssDetect => {
+                    writer.set_no_rss_detect(true);
+                }
+                RawDebugCounter::RxAbortCoex => {
+                    writer.set_rx_abort_coex(true);
+                }
+                RawDebugCounter::RxRestart => {
+                    writer.set_rx_restart(true);
+                }
+                RawDebugCounter::TxAckAbortCoex => {
+                    writer.set_tx_ack_abort_coex(true);
+                }
+                RawDebugCounter::EdScanBreakCoex => {
+                    writer.set_ed_scan_break_coex(true);
+                }
+                RawDebugCounter::RxAckAbortCoex => {
+                    writer.set_rx_ack_abort_coex(true);
+                }
+                RawDebugCounter::RxAckTimeout => {
+                    writer.set_rx_ack_timeout(true);
+                }
+                RawDebugCounter::TxBreakCoex => {
+                    writer.set_tx_break_coex(true);
+                }
+                RawDebugCounter::TxSecurityError => {
+                    writer.set_tx_security_error(true);
+                }
+                RawDebugCounter::CcaBusy => {
+                    writer.set_cca_busy(true);
+                }
+            });
     }
 }

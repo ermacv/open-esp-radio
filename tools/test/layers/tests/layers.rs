@@ -69,8 +69,8 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
 
 /// The packages below the unsafe boundary (`docs/unsafe.md`), by directory
 /// or, ending in `/`, by domain: the generated and the semantic PACs, the
-/// HAL, the platform, executor and adapter bindings, the cores of memory the
-/// hardware shares, the host's operating-system bindings, the C-driver
+/// HAL, the platform, executor and adapter bindings, the volatile
+/// register-access core, the cores of memory the hardware shares, the host's operating-system bindings, the C-driver
 /// stand, and the bootstrap and probe images. Every other package forbids
 /// unsafe code.
 const BELOW_THE_BOUNDARY: &[&str] = &[
@@ -92,6 +92,7 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/esp32c5/esp-hal-soc",
     "portable/embassy/",
     "portable/memory",
+    "portable/mmio",
     "portable/interrupt-table",
     "tools/os/process",
     "tools/os/serial",
