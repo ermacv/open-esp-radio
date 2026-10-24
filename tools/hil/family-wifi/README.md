@@ -22,9 +22,9 @@ The managed router must provide native `ip neigh` and `tcpdump`; the run checks
 these before configuring the router and never installs fixture software.
 It generates the SSID/passphrase, applies WPA2-PSK/CCMP HT20 without HE/PMF,
 then sends `StartStation` at run time. The 100-echo window spans GTK replacement;
-the tool observes the station's neighbor entry, deletes it if present and
+the tool observes the station's neighbor entry, flushes it (`ip neigh flush to ADDRESS dev IFACE`, as BusyBox `ip` has no `del`) if present and
 confirms absence. An already absent entry is recorded as the required state;
-a failed deletion passes only if the confirming read observes absence. The
+a failed flush passes only if the confirming read observes absence. The
 next measured router ping triggers a kernel broadcast ARP. Gate c requires the decoded request
 on the new GTK and the station's ARP reply, each matched to its protected air
 frame by public Sequence Number, PN and KeyID. Missing either frame fails.
