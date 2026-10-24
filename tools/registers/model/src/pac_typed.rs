@@ -1519,3 +1519,6 @@ fn clean(description: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+#[cfg(test)]
+mod tests;
