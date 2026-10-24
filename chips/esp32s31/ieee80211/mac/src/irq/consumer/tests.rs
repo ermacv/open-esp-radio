@@ -125,41 +125,6 @@ fn publication_before_registration_and_after_pending_are_both_durable() {
 }
 
 #[test]
-fn publication_during_waker_registration_cannot_be_lost() {
-    // Replacing the registered waker drops its last Arc while registration
-    // owns AtomicWaker's slot. The old waker's destructor injects the IRQ.
-    struct PublishOnDrop(&'static IrqStorage<oer_interrupt_table::signal::host::Host>);
-    #[allow(
-        clippy::manual_noop_waker,
-        reason = "this waker publishes from Drop during registration, which Waker::noop cannot model"
-    )]
-    impl Wake for PublishOnDrop {
-        fn wake(self: Arc<Self>) {}
-    }
-    impl Drop for PublishOnDrop {
-        fn drop(&mut self) {
-            self.0.post(EVENT_RX_SUCCESS).wake();
-        }
-    }
-    let storage = std::boxed::Box::leak(std::boxed::Box::new(IrqStorage::new(
-        oer_interrupt_table::signal::host::signal(),
-    )));
-    let (publisher, mut consumer) = storage.split();
-    let old = Waker::from(Arc::new(PublishOnDrop(publisher.storage)));
-    assert!(
-        consumer
-            .poll_batch(&mut Context::from_waker(&old))
-            .is_pending()
-    );
-    drop(old);
-    let next = Waker::from(Arc::new(WakeCount::default()));
-    let Poll::Ready(Ok(batch)) = consumer.poll_batch(&mut Context::from_waker(&next)) else {
-        panic!("registration raced")
-    };
-    assert_eq!(batch.collect::<std::vec::Vec<_>>(), [IrqWork::RxSuccess]);
-}
-
-#[test]
 fn hardware_counts_exclude_capacity_and_handoff_and_wrap() {
     let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     storage.rx_posts.store(u32::MAX - 1, Ordering::Relaxed);

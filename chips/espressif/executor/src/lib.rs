@@ -54,6 +54,8 @@ pub use cooperative::Cooperative;
 pub mod systimer;
 #[cfg(any(feature = "chip", test))]
 mod systimer_ack;
+#[cfg(any(feature = "chip", all(test, feature = "trace-tests")))]
+mod task_handle;
 #[cfg(feature = "chip")]
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
@@ -68,6 +70,8 @@ pub use executor::{
     Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,
     wake_handler,
 };
+#[cfg(feature = "chip")]
+pub use task_handle::EmbassyTask;
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};
 
