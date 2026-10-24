@@ -16,9 +16,8 @@ use oer_analysis_elf::rv32::{self, Role};
 use oer_analysis_riscv_decode::{Extension, Extensions, Float, Inst, Instruction, decode};
 use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
 use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_riscv::machine::MSCRATCH;
 
-/// `mscratch`.
-const MSCRATCH: u16 = 0x340;
 /// Instructions one path of an entry may execute before its handler.
 const MAX_STEPS: usize = 512;
 /// Paths one entry may take before its handler.

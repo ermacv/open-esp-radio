@@ -15,6 +15,7 @@ oer-analysis-riscv-decode = { path = "../riscv-decode" }
 oer-analysis-riscv-lift = { path = "../riscv-lift" }
 oer-analysis-riscv-model = { path = "../riscv-model" }
 oer-analysis-riscv-program = { path = "../riscv-program" }
+oer-riscv = { path = "../../../portable/riscv" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 

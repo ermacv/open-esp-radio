@@ -98,7 +98,7 @@ _runtime_start:
     ori t0, t0, 3
     csrw mtvec, t0
     la t0, _runtime_mtvt_table
-    csrw 0x307, t0
+    csrw {mtvt}, t0
     .option pop
     call _runtime_enable_fpu
     tail runtime_main
@@ -110,7 +110,8 @@ _runtime_start:
     j 99b
     .size _runtime_start, . - _runtime_start
 
-"#
+"#,
+    mtvt = const oer_riscv::clic::MTVT,
 );
 
 // A core with the F extension (`riscv32imafc`) starts its task code with the
@@ -125,7 +126,7 @@ core::arch::global_asm!(
     .global _runtime_enable_fpu
     .type _runtime_enable_fpu, @function
 _runtime_enable_fpu:
-    li t0, 0x6000
+    li t0, {fs}
     csrrs zero, mstatus, t0
     .option push
     .option arch, +f
@@ -133,7 +134,8 @@ _runtime_enable_fpu:
     .option pop
     ret
     .size _runtime_enable_fpu, . - _runtime_enable_fpu
-"#
+"#,
+    fs = const oer_riscv::machine::status::FS_MASK,
 );
 
 #[cfg(not(target_feature = "f"))]

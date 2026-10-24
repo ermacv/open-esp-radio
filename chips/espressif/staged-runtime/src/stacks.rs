@@ -30,6 +30,12 @@ use core::{
 mod guard;
 mod watermark;
 
+use oer_riscv::{
+    clic,
+    machine::status,
+    trigger::{self, mcontrol},
+};
+
 /// The harts with an interrupt stack.
 const HARTS: usize = if cfg!(feature = "two-harts") { 2 } else { 1 };
 
@@ -140,8 +146,9 @@ pub unsafe fn install_current_hart_interrupt_stack() {
     // SAFETY: reading `mtvt` touches no memory.
     unsafe {
         asm!(
-            "csrr {table}, 0x307",
+            "csrr {table}, {mtvt}",
             table = out(reg) table,
+            mtvt = const clic::MTVT,
             options(nomem, nostack),
         )
     };
@@ -186,8 +193,9 @@ pub(crate) fn verify_current_hart_vectors() {
     // SAFETY: reading `mtvt` touches no memory.
     unsafe {
         asm!(
-            "csrr {table}, 0x307",
+            "csrr {table}, {mtvt}",
             table = out(reg) table,
+            mtvt = const clic::MTVT,
             options(nomem, nostack),
         )
     };
@@ -221,19 +229,21 @@ unsafe fn guard_interrupt_stack(bottom: usize, bytes: usize) {
         return;
     }
     // mcontrol: machine mode, store, NAPOT match.
-    const TDATA1_M_STORE_NAPOT: usize = (1 << 6) | (1 << 1) | (1 << 7);
-    // tcontrol.mte: triggers fire in machine mode.
-    const TCONTROL_MTE: usize = 1 << 3;
+    const TDATA1_M_STORE_NAPOT: usize = mcontrol::M | mcontrol::STORE | mcontrol::MATCH_NAPOT;
     // SAFETY: the caller's contract: interrupts are disabled and trigger
     // `IRQ_STACK_GUARD_TRIGGER` is ours; programming it touches no memory.
     unsafe {
         asm!(
-            "csrw 0x7a0, {select}",
-            "csrw 0x7a5, {control}",
-            "csrw 0x7a1, {data1}",
-            "csrw 0x7a2, {data2}",
+            "csrw {tselect}, {select}",
+            "csrw {tcontrol}, {control}",
+            "csrw {tdata1}, {data1}",
+            "csrw {tdata2}, {data2}",
+            tselect = const trigger::TSELECT,
+            tcontrol = const trigger::TCONTROL,
+            tdata1 = const trigger::TDATA1,
+            tdata2 = const trigger::TDATA2,
             select = in(reg) IRQ_STACK_GUARD_TRIGGER,
-            control = in(reg) TCONTROL_MTE,
+            control = in(reg) trigger::TCONTROL_MTE,
             data1 = in(reg) TDATA1_M_STORE_NAPOT,
             data2 = in(reg) data2,
             options(nostack),
@@ -276,7 +286,7 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     // SAFETY: clearing MIE only masks this hart's interrupts; the prior state
     // is restored below.
     unsafe {
-        asm!("csrrci {previous}, mstatus, 8", previous = out(reg) previous, options(nostack))
+        asm!("csrrci {previous}, mstatus, {mie}", previous = out(reg) previous, mie = const status::MIE, options(nostack))
     };
     // SAFETY: own painted stack, thread mode, local interrupts masked. No other
     // hart uses this allocation; the scanner has a finite capacity and cannot panic.
@@ -284,7 +294,7 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     if previous & 8 != 0 {
         // SAFETY: restores the MIE state observed on entry; handlers were
         // already enabled then, so no new dispatch becomes possible.
-        unsafe { asm!("csrsi mstatus, 8", options(nostack)) };
+        unsafe { asm!("csrsi mstatus, {mie}", mie = const status::MIE, options(nostack)) };
     }
     free
 }
@@ -380,7 +390,7 @@ _runtime_stack_bootstrap:
     // keep the interrupted FS state for the matching return.
     csrr t1, mstatus
     sw t1, 68(sp)
-    li t1, 0x6000
+    li t1, {fs}
     csrc mstatus, t1
     csrw mscratch, t0
     .endm
@@ -486,7 +496,7 @@ _runtime_psram_interrupt_continue:
 _runtime_psram_trap_restore:
     // Give the interrupted context back its FPU state (FS bits only).
     lw t0, 68(sp)
-    li t1, 0x6000
+    li t1, {fs}
     and t0, t0, t1
     csrs mstatus, t0
     lw t0, 64(sp)
@@ -564,7 +574,8 @@ _runtime_psram_mtvt_source:
     .size _runtime_psram_mtvt_source, . - _runtime_psram_mtvt_source
 
     .option pop
-"#
+"#,
+    fs = const status::FS_MASK,
 );
 
 #[cfg(test)]

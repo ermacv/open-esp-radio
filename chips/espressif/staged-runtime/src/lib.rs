@@ -130,7 +130,9 @@ impl Adopted {
         oer_espressif_esp_hal_irq::verify_current_hart();
         // SAFETY: as above, no source is routed but by its bound owner;
         // setting MIE touches no memory and leaves the stack unchanged.
-        unsafe { core::arch::asm!("csrsi mstatus, 8", options(nomem, nostack)) };
+        unsafe {
+            core::arch::asm!("csrsi mstatus, {mie}", mie = const oer_riscv::machine::status::MIE, options(nomem, nostack))
+        };
     }
 }
 
