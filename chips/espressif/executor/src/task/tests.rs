@@ -89,22 +89,23 @@ impl Drop for Probe {
 }
 
 /// A set of three probe tasks, its slots leaked for the test that declares
-/// it: `$set::slot(index)`.
+/// it: `$set::slot(index)`. Each start is a boxed closure, `Send` when the
+/// set names `Send`.
 macro_rules! probe_set {
     ($set:ident, $mode:ty) => {
         probe_set!($set, $mode, Probe);
     };
-    ($set:ident, $mode:ty, $future:ty) => {
+    ($set:ident, $mode:ty, $future:ty $(, $send:ident)?) => {
         struct $set;
         std::thread_local! {
-            static SLOTS: [&'static Task<$future, $set>; 3] = [
+            static SLOTS: [&'static Task<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>; 3] = [
                 Box::leak(Box::new(Task::new(0))),
                 Box::leak(Box::new(Task::new(1))),
                 Box::leak(Box::new(Task::new(2))),
             ];
         }
         impl $set {
-            fn slot(index: u8) -> &'static Task<$future, $set> {
+            fn slot(index: u8) -> &'static Task<Box<dyn FnOnce() -> $future $(+ $send)?>, $set> {
                 SLOTS.with(|slots| slots[usize::from(index)])
             }
         }
@@ -127,6 +128,16 @@ fn probe(seen: &Rc<Seen>, argument: u32, current: &'static Current) -> Probe {
     }
 }
 
+/// A probe task's start: its future is made at its first poll.
+fn start_probe(
+    seen: &Rc<Seen>,
+    argument: u32,
+    current: &'static Current,
+) -> Box<dyn FnOnce() -> Probe> {
+    let seen = seen.clone();
+    Box::new(move || probe(&seen, argument, current))
+}
+
 fn current() -> &'static Current {
     Box::leak(Box::new(Current::new()))
 }
@@ -139,10 +150,10 @@ fn a_round_polls_each_ready_task_once_and_a_wake_during_it_waits_for_the_next() 
     let seen: [Rc<Seen>; 3] = Default::default();
     seen[0].wake_self.set(true);
     spawner
-        .start(Set::slot(0), || probe(&seen[0], 10, current))
+        .start(Set::slot(0), start_probe(&seen[0], 10, current))
         .expect("first start");
     spawner
-        .start(Set::slot(2), || probe(&seen[2], 12, current))
+        .start(Set::slot(2), start_probe(&seen[2], 12, current))
         .expect("first start");
     assert_eq!(pends(EXECUTOR), 2, "each start pends the executor");
 
@@ -167,7 +178,7 @@ fn the_polled_task_is_current_and_its_waker_names_it() {
     let current = current();
     let seen: [Rc<Seen>; 3] = Default::default();
     Spawner::<Set>::new()
-        .start(Set::slot(1), || probe(&seen[1], 0, current))
+        .start(Set::slot(1), start_probe(&seen[1], 0, current))
         .expect("first start");
     round::<Set>(current);
     assert_eq!(
@@ -202,7 +213,7 @@ fn a_waker_marks_its_task_ready_and_pends_its_executor() {
     let current = current();
     let seen: [Rc<Seen>; 3] = Default::default();
     Spawner::<Set>::new()
-        .start(Set::slot(2), || probe(&seen[2], 0, current))
+        .start(Set::slot(2), start_probe(&seen[2], 0, current))
         .expect("first start");
     round::<Set>(current);
     let waker = TaskId {
@@ -229,16 +240,17 @@ fn a_second_start_is_refused_and_keeps_the_first_arguments() {
     let second = Rc::new(Seen::default());
     first.finish_at.set(Some(2));
     spawner
-        .start(Set::slot(0), || probe(&first, 1, current))
+        .start(Set::slot(0), start_probe(&first, 1, current))
         .expect("first start");
-    let made = Cell::new(false);
-    assert_eq!(
-        spawner.start(Set::slot(0), || {
+    let made = Rc::new(Cell::new(false));
+    let refused = {
+        let (made, second) = (made.clone(), second.clone());
+        Box::new(move || {
             made.set(true);
             probe(&second, 2, current)
-        }),
-        Err(AlreadyStarted)
-    );
+        })
+    };
+    assert_eq!(spawner.start(Set::slot(0), refused), Err(AlreadyStarted));
     assert!(!made.get(), "a refused start makes no future");
     round::<Set>(current);
     assert_eq!(first.argument.get(), Some(1));
@@ -249,7 +261,7 @@ fn a_second_start_is_refused_and_keeps_the_first_arguments() {
     assert_eq!(first.polls.get(), 2);
     assert!(first.dropped.get());
     assert_eq!(
-        spawner.start(Set::slot(0), || probe(&second, 3, current)),
+        spawner.start(Set::slot(0), start_probe(&second, 3, current)),
         Err(AlreadyStarted)
     );
     ready(EXECUTOR).expect("a test executor").mark(0);
@@ -282,7 +294,7 @@ impl Future for Recorder {
 fn a_start_preempted_by_its_executor_is_polled_only_once_published() {
     // The radio executor (P2) preempts a start from the application (P1)
     // between its claim and its publication.
-    probe_set!(Set, Interrupt, Recorder);
+    probe_set!(Set, Interrupt, Recorder, Send);
     fn send<S: Send>(_: &S) {}
     let spawner = Spawner::<Set>::new();
     send(&spawner);
@@ -296,12 +308,15 @@ fn a_start_preempted_by_its_executor_is_polled_only_once_published() {
     ready(EXECUTOR).expect("a test executor").mark(1);
     assert!(!round::<Set>(current));
     assert_eq!(
-        spawner.start(Set::slot(1), || Recorder { argument: 8, seen }),
+        spawner.start(
+            Set::slot(1),
+            Box::new(move || Recorder { argument: 8, seen })
+        ),
         Err(AlreadyStarted)
     );
 
     // P1 resumes: it publishes the future with its arguments, then marks it.
-    claim.publish(|| Recorder { argument: 7, seen });
+    claim.publish(Box::new(move || Recorder { argument: 7, seen }));
     assert_eq!(seen.1.load(Ordering::Relaxed), 0);
     wake(TaskId {
         executor: EXECUTOR,
@@ -318,20 +333,114 @@ fn a_task_is_not_polled_again_from_inside_its_own_poll() {
     let current = current();
     let seen = Rc::new(Seen::default());
     Spawner::<Set>::new()
-        .start(Set::slot(0), || probe(&seen, 0, current))
+        .start(Set::slot(0), start_probe(&seen, 0, current))
         .expect("first start");
-    // The slot is taken for the poll: a nested poll of it does nothing.
+    // The slot is taken for the poll, before its future is made and after:
+    // a nested poll of it does nothing.
     let slot = Set::slot(0);
-    assert!(
-        slot.state
-            .compare_exchange(LIVE, POLLING, Ordering::Acquire, Ordering::Relaxed)
-            .is_ok()
-    );
-    slot.poll(&PollToken::new(), &mut Context::from_waker(Waker::noop()));
-    assert_eq!(seen.polls.get(), 0);
-    slot.state.store(LIVE, Ordering::Release);
-    slot.poll(&PollToken::new(), &mut Context::from_waker(Waker::noop()));
-    assert_eq!(seen.polls.get(), 1);
+    let poll = || slot.poll(&PollToken::new(), &mut Context::from_waker(Waker::noop()));
+    for (state, polls) in [(STARTED, 0), (LIVE, 1)] {
+        assert!(
+            slot.state
+                .compare_exchange(state, POLLING, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+        );
+        poll();
+        assert_eq!(seen.polls.get(), polls);
+        slot.state.store(state, Ordering::Release);
+        poll();
+        assert_eq!(seen.polls.get(), polls + 1);
+    }
+}
+
+#[test]
+fn a_task_makes_its_future_at_its_first_poll() {
+    probe_set!(Set, Thread);
+    let current = current();
+    let seen = Rc::new(Seen::default());
+    let made = Rc::new(Cell::new(false));
+    let start = {
+        let (seen, made) = (seen.clone(), made.clone());
+        Box::new(move || {
+            made.set(true);
+            probe(&seen, 4, current)
+        })
+    };
+    Spawner::<Set>::new()
+        .start(Set::slot(1), start)
+        .expect("first start");
+    assert!(!made.get(), "the start makes no future");
+    assert!(!round::<Set>(current));
+    assert!(made.get());
+    assert_eq!((seen.polls.get(), seen.argument.get()), (1, Some(4)));
+}
+
+/// What [`Local`] saw when its executor polled it: whether it was made in
+/// the polling thread, and the thread-local value it cloned.
+static LOCAL_SEEN: std::sync::Mutex<Option<(bool, u32)>> = std::sync::Mutex::new(None);
+
+std::thread_local! {
+    /// A value of the thread that holds it: the starter's is 1, the
+    /// executor's 2.
+    static LOCAL: Rc<Cell<u32>> = Rc::new(Cell::new(0));
+}
+
+/// The reproduction of the review: a future that clones a thread-local
+/// `Rc` when it is made, so it must be made, and stay, in the context that
+/// polls it.
+struct Local {
+    local: Rc<Cell<u32>>,
+    made_in: std::thread::ThreadId,
+}
+
+impl Future for Local {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<()> {
+        *LOCAL_SEEN.lock().expect("one poller") = Some((
+            self.made_in == std::thread::current().id(),
+            self.local.get(),
+        ));
+        Poll::Ready(())
+    }
+}
+
+struct LocalSet;
+static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0);
+impl Tasks for LocalSet {
+    type Mode = Interrupt;
+    const EXECUTOR: u8 = EXECUTOR;
+    const COUNT: u8 = 1;
+    fn poll(_: u8, token: &PollToken<Self>, cx: &mut Context<'_>) {
+        LOCAL_TASK.poll(token, cx);
+    }
+}
+
+#[test]
+fn an_interrupt_mode_start_makes_its_future_in_its_executors_context() {
+    // The start captures nothing, so it is `Send`; the future it makes is
+    // not. It is made by the executor, on its own thread, never moved.
+    fn make() -> Local {
+        Local {
+            local: LOCAL.with(Rc::clone),
+            made_in: std::thread::current().id(),
+        }
+    }
+    LOCAL.with(|local| local.set(1));
+    Spawner::<LocalSet>::new()
+        .start(&LOCAL_TASK, make as fn() -> Local)
+        .expect("first start");
+    std::thread::spawn(|| {
+        LOCAL.with(|local| local.set(2));
+        <LocalSet as Tasks>::poll(
+            0,
+            &PollToken::new(),
+            &mut Context::from_waker(Waker::noop()),
+        );
+    })
+    .join()
+    .expect("the executor's thread polls the task");
+    assert_eq!(*LOCAL_SEEN.lock().expect("one poller"), Some((true, 2)));
+    assert_eq!(LOCAL_TASK.state.load(Ordering::Acquire), DONE);
 }
 
 mod declared {
@@ -388,32 +497,51 @@ fn declared_tasks_start_once_with_their_arguments_and_poll_by_index() {
 }
 
 /// A thread-mode executor's signal side on the test thread, made of the same
-/// parts as the chip's `Executor<SWI>`: the task the round polls now names
-/// the polling task, and a wake marks it ready for the next round.
+/// parts as the chip's `Executor<SWI>`: the core's running context
+/// ([`crate::context::Running`]) at the level the test thread runs at, the
+/// task the round polls now naming the polling task, and a wake marking it
+/// ready for the next round.
 mod thread_signals {
     use super::*;
+    use crate::context::Running;
     use oer_interrupt_table::signal::{
         ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList,
     };
 
     pub(super) struct TestThread;
 
+    /// The level of the executor's run loop: thread mode.
+    const THREAD: u8 = 0;
+
     std::thread_local! {
-        static RUNNING: Cell<bool> = const { Cell::new(false) };
+        static RUNNING: &'static Running = Box::leak(Box::new(Running::new()));
+        /// The interrupt level the test thread runs at now.
+        static LEVEL: Cell<u8> = const { Cell::new(THREAD) };
         static LIST: &'static SignalList<TaskId> = Box::leak(Box::new(SignalList::new()));
         pub(super) static CURRENT: &'static Current = Box::leak(Box::new(Current::new()));
     }
 
+    /// Run `handler` as a hardware interrupt at `level` that preempts the
+    /// code running now, on the same core.
+    pub(super) fn interrupt<R>(level: u8, handler: impl FnOnce() -> R) -> R {
+        let preempted = LEVEL.with(|now| now.replace(level));
+        let result = handler();
+        LEVEL.with(|now| now.set(preempted));
+        result
+    }
+
     #[allow(unsafe_code, reason = "a test executor's signal context contract")]
     // SAFETY: the test thread is the executor's one context; `running` is
-    // true only inside `run_round`, which services the list before polling.
+    // true only inside `run_round`, at the level it entered at, which
+    // services the list before polling; a preempting `interrupt` runs at
+    // another level.
     unsafe impl SignalExecutor for TestThread {
         type Task = TaskId;
         fn pend(_: &'static IrqSignal<Self>) {
             pend(EXECUTOR);
         }
         fn running() -> bool {
-            RUNNING.with(Cell::get)
+            RUNNING.with(|running| running.at(LEVEL.with(Cell::get))) == EXECUTOR
         }
         fn list() -> &'static SignalList<TaskId> {
             LIST.with(|list| *list)
@@ -427,13 +555,17 @@ mod thread_signals {
     }
 
     pub(super) static SIGNAL: IrqSignal<TestThread> = IrqSignal::new();
+    /// [`Preempted`]'s signal: each test owns its signal.
+    pub(super) static PREEMPTED_SIGNAL: IrqSignal<TestThread> = IrqSignal::new();
 
     /// One run of the executor's loop: its signals, then a poll round.
     pub(super) fn run_round<T: Tasks>() -> bool {
-        RUNNING.with(|running| running.set(true));
-        oer_interrupt_table::signal::service::<TestThread>();
-        let more = CURRENT.with(|current| round::<T>(current));
-        RUNNING.with(|running| running.set(false));
+        let running = RUNNING.with(|running| *running);
+        let mut more = false;
+        running.enter(EXECUTOR, LEVEL.with(Cell::get), || {
+            oer_interrupt_table::signal::service::<TestThread>();
+            more = CURRENT.with(|current| round::<T>(current));
+        });
         more
     }
 
@@ -448,6 +580,40 @@ mod thread_signals {
             Poll::Pending
         }
     }
+
+    /// What [`Preempted`]'s last poll got from the signal: its own take,
+    /// and the context-only calls of the hardware interrupt that preempted
+    /// it.
+    #[derive(Default)]
+    pub(super) struct Seized {
+        pub(super) own: Option<Poll<Result<u32, ForeignContext>>>,
+        pub(super) take: Option<Result<u32, ForeignContext>>,
+        pub(super) poll_take: Option<Poll<Result<u32, ForeignContext>>>,
+    }
+
+    /// A task whose poll a hardware interrupt at `level` preempts, which
+    /// tries the signal's calls only its executor's context may make, with
+    /// the task's own waker as well.
+    pub(super) struct Preempted {
+        pub(super) level: u8,
+        pub(super) seized: &'static core::cell::RefCell<Seized>,
+    }
+    impl Future for Preempted {
+        type Output = ();
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+            let own = PREEMPTED_SIGNAL.poll_take(cx);
+            let (take, poll_take) = interrupt(self.level, || {
+                (PREEMPTED_SIGNAL.take(), PREEMPTED_SIGNAL.poll_take(cx))
+            });
+            *self.seized.borrow_mut() = Seized {
+                own: Some(own),
+                take: Some(take),
+                poll_take: Some(poll_take),
+            };
+            Poll::Pending
+        }
+    }
+    use oer_interrupt_table::signal::ForeignContext;
 }
 
 #[test]
@@ -456,7 +622,7 @@ fn a_signal_raised_for_a_thread_executor_task_wakes_it() {
     probe_set!(Set, Thread, Waits);
     let taken: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
     Spawner::<Set>::new()
-        .start(Set::slot(0), || Waits(taken))
+        .start(Set::slot(0), Box::new(move || Waits(taken)))
         .expect("first start");
     // The first poll registers the task with the signal.
     assert!(!run_round::<Set>());
@@ -472,4 +638,35 @@ fn a_signal_raised_for_a_thread_executor_task_wakes_it() {
     // Without a new fact the task stays asleep.
     assert!(!run_round::<Set>());
     assert!(!ready(EXECUTOR).expect("a test executor").any());
+}
+
+#[test]
+fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_signals() {
+    use oer_interrupt_table::signal::ForeignContext;
+    use thread_signals::{PREEMPTED_SIGNAL, Preempted, Seized, run_round};
+    probe_set!(Set, Thread, Preempted);
+    let seized: &'static core::cell::RefCell<Seized> = Box::leak(Box::default());
+    Spawner::<Set>::new()
+        .start(
+            Set::slot(0),
+            Box::new(move || Preempted { level: 3, seized }),
+        )
+        .expect("first start");
+    // The task registers with the signal; the interrupt that preempts its
+    // poll runs while the executor's context stays entered beneath it, and
+    // gets no context: the task's half of the signal is never aliased.
+    assert!(!run_round::<Set>());
+    {
+        let seized = seized.borrow();
+        assert_eq!(seized.own, Some(Poll::Pending));
+        assert_eq!(seized.take, Some(Err(ForeignContext)));
+        assert_eq!(seized.poll_take, Some(Poll::Ready(Err(ForeignContext))));
+    }
+    // A fact raised now reaches the task in its own context, untouched by
+    // the interrupt that preempts it again.
+    assert!(PREEMPTED_SIGNAL.raise(0b1));
+    assert!(!run_round::<Set>());
+    let seized = seized.borrow();
+    assert_eq!(seized.own, Some(Poll::Ready(Ok(0b1))));
+    assert_eq!(seized.take, Some(Err(ForeignContext)));
 }

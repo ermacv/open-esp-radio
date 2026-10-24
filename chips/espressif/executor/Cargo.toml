@@ -31,6 +31,7 @@ chip = [
     "dep:riscv",
     "dep:oer-espressif-esp-hal-irq",
     "dep:oer-interrupt-table",
+    "dep:oer-riscv",
 ]
 
 [dependencies]
@@ -45,6 +46,7 @@ esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
 oer-espressif-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
+oer-riscv = { path = "../../../portable/riscv", optional = true }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.15", optional = true }

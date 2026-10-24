@@ -2972,6 +2972,7 @@ dependencies = [
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
+ "oer-riscv",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",

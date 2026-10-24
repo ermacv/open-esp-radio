@@ -8,14 +8,15 @@ use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::chip::{
     Acknowledger, Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, Sender, SoftwareInterrupt,
-    acknowledge_interrupt, current_core, install_line, raise_interrupt, software_interrupt_source,
+    acknowledge_interrupt, current_core, install_line, interrupt_level, raise_interrupt,
+    software_interrupt_source,
 };
+pub(crate) use crate::context::NO_EXECUTOR;
+use crate::context::Running;
 use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
 
 const CORE_COUNT: usize = 2;
 const UNASSIGNED_CORE: usize = usize::MAX;
-/// No executor's context runs on the core.
-pub(crate) const NO_EXECUTOR: u8 = u8::MAX;
 
 /// Each thread-mode executor's wake flag: work other than a ready task (an
 /// expired timer, a published deadline) for its next loop.
@@ -55,15 +56,17 @@ static READY: [Ready; SOFTWARE_INTERRUPT_COUNT] =
     [const { Ready::new() }; SOFTWARE_INTERRUPT_COUNT];
 
 /// Which executor's context runs on each core now: the software interrupt of
-/// the executor that is polling, or [`NO_EXECUTOR`]. An interrupt-mode
-/// executor sets it for its poll and restores the context it preempted.
+/// the executor that is polling and the interrupt level it polls at. Each
+/// executor sets it for its run and restores the context it preempted; a
+/// hardware interrupt that preempts it runs at a higher level, which is no
+/// executor's context ([`crate::context`]).
 #[used]
 #[allow(
     unsafe_code,
     reason = "board linker owns this exported executor core-state section"
 )]
 #[unsafe(link_section = ".critical.data.executor")]
-static RUNNING: [AtomicU8; CORE_COUNT] = [const { AtomicU8::new(NO_EXECUTOR) }; CORE_COUNT];
+static RUNNING: [Running; CORE_COUNT] = [const { Running::new() }; CORE_COUNT];
 
 /// The task each executor polls now; only that executor's context reads it,
 /// to name a polling task for its signals.
@@ -74,9 +77,10 @@ static CURRENT: [Current; SOFTWARE_INTERRUPT_COUNT] =
 static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
     [const { AtomicBool::new(false) }; SOFTWARE_INTERRUPT_COUNT];
 
-/// The executor whose context runs on the current core now.
+/// The executor whose context the caller runs in: [`NO_EXECUTOR`] outside
+/// every executor and in a hardware interrupt that preempts one.
 pub(crate) fn running() -> u8 {
-    RUNNING[current_core()].load(Ordering::Relaxed)
+    RUNNING[current_core()].at(interrupt_level())
 }
 
 /// Executor `executor`'s ready mask.
@@ -144,12 +148,10 @@ fn signal_pending(swi: usize) -> bool {
     }
 }
 
-/// Run `poll` as executor `swi`'s context and restore the preempted one.
+/// Run `poll` as executor `swi`'s context, at the caller's interrupt level,
+/// and restore the preempted one.
 fn as_running(swi: u8, poll: impl FnOnce()) {
-    let running = &RUNNING[current_core()];
-    let preempted = running.swap(swi, Ordering::Relaxed);
-    poll();
-    running.store(preempted, Ordering::Relaxed);
+    RUNNING[current_core()].enter(swi, interrupt_level(), poll);
 }
 
 /// One poll round of executor `T::EXECUTOR`, in its context: whether a task
@@ -378,7 +380,7 @@ fn pend_signal<const SWI: u8>(_: &'static IrqSignal<InterruptExecutor<SWI>>) {
 }
 
 /// Whether the caller runs in the interrupt-mode executor `SWI`'s context:
-/// its handler's poll on this core.
+/// its handler's poll on this core, not a hardware interrupt preempting it.
 fn signal_context<const SWI: u8>() -> bool {
     running() == SWI
         && INTERRUPT_MODE
@@ -391,14 +393,16 @@ fn signal_context<const SWI: u8>() -> bool {
 ///
 /// Its handler preempts lower levels; a higher level preempts it. Its tasks
 /// may start from another context than the one that polls them, so their
-/// futures are `Send`.
+/// starts are `Send`; it makes each task's future in its own context.
 pub struct InterruptExecutor<const SWI: u8> {
     _line: (),
 }
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
 // SAFETY: `signal_context::<SWI>` is true only while this executor's
-// handler polls (`as_running`), which never reenters itself on its core;
+// handler polls (`as_running`), at the level it entered at: a hardware
+// interrupt that preempts it runs at a higher level and is refused
+// (`running`), and the handler never reenters itself on its core;
 // `pend_signal::<SWI>` raises that handler's interrupt, which services
 // `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`). `current`
 // names a task only for the waker of the task this executor polls now
@@ -425,7 +429,7 @@ unsafe impl<const SWI: u8> SignalExecutor for InterruptExecutor<SWI> {
 }
 
 /// Whether the caller runs in the thread-mode executor `SWI`'s context: its
-/// run loop on its core, not preempted by another executor.
+/// run loop on its core, at thread level, not an interrupt preempting it.
 fn thread_context<const SWI: u8>() -> bool {
     running() == SWI
         && INTERRUPT_MODE
@@ -435,9 +439,9 @@ fn thread_context<const SWI: u8>() -> bool {
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
 // SAFETY: `thread_context::<SWI>` is true only while this executor's run
-// loop runs as its context (`as_running`): one context on one core, which
-// an interrupt preempts but never reenters; a preempting executor sets its
-// own context first. `pend` marks the executor's work and wakes its core,
+// loop runs as its context (`as_running`), at the level it entered at: one
+// context on one core. An interrupt that preempts it runs at a higher level
+// and is refused (`running`); a preempting executor enters its own context. `pend` marks the executor's work and wakes its core,
 // and the loop services `SIGNAL_LISTS[SWI]` before each poll round. A
 // software interrupt serves one executor, so this list is no interrupt
 // executor's. `current` names a task only for the waker of the task this

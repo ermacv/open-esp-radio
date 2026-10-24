@@ -67,20 +67,20 @@ pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
-pub use tasks::{is_task_poll, task_poll_resolutions};
+pub use tasks::{TASK_POLL_RECORD, task_poll_resolutions};
 pub use trap::{TrapEntry, trap_entry, vector_table};
 pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
 pub use wakers::{waker_resolutions, waker_vtable};
 
 /// The common image-derived resolutions. Reuses the already captured ELF,
 /// analysis and typed DWARF; callers add platform interrupt routing facts.
-#[allow(clippy::too_many_arguments)]
-pub fn image_resolutions<'a>(
+/// The executor's waker vtable, when the image has one, requires the
+/// executor's task poll records ([`task_poll_resolutions`]).
+pub fn image_resolutions(
     image: &ImageFacts<'_>,
     analysis: &Analysis,
     dwarf: &Dwarf,
     types: &TypeFacts,
-    names: impl IntoIterator<Item = (u32, &'a str)>,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
@@ -88,7 +88,13 @@ pub fn image_resolutions<'a>(
     let mut resolutions = waker_resolutions(analysis, dwarf, vtable.as_ref(), keep, control)?;
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;
-    resolutions.extend(task_poll_resolutions(analysis, names, keep, control)?);
+    resolutions.extend(task_poll_resolutions(
+        image,
+        analysis,
+        vtable.is_some(),
+        keep,
+        control,
+    )?);
     resolutions.extend(pointers);
     Ok(resolutions)
 }

@@ -60,19 +60,28 @@ second runtime owner hidden in a task or network handle.
 
 Each executor's tasks are declared once in the image, by `tasks!`, as a set
 bound to that executor by type (`InterruptExecutor<N>` or `Executor<N>`).
-Each task's future lives in a static slot of its own type; a start writes it
-in place, once: a second start is refused (`AlreadyStarted`). The executor
-keeps one ready bit per task (at most `MAX_TASKS`), polls each task ready
-when a round starts once, by a direct call per task, and drops a finished
-task's future in place. A task woken during a round waits for the next one,
-after the executor's timers and signals. An interrupt-mode executor's tasks
-may start from a lower context: the start claims the slot, writes the future
-and only then sets its bit, and its arguments are `Send`. Every waker has one
-vtable, whose data is the executor and the task's index, never a pointer; the
-timer queue keeps one deadline per task by that index. Both executors
+Each task lives in a static slot of its own type; a start writes the task's
+start (its arguments and how to make its future) in place, once: a second
+start is refused (`AlreadyStarted`). The executor makes the future in place
+at the task's first poll, in its own context, and the future never moves.
+The executor keeps one ready bit per task (at most `MAX_TASKS`), polls each
+task ready when a round starts once, by a direct call per task, and drops a
+finished task's future in place. A task woken during a round waits for the
+next one, after the executor's timers and signals. An interrupt-mode
+executor's tasks may start from a lower context: the start claims the slot,
+writes the start and only then sets its bit; only the start crosses
+contexts, so it is `Send`, and the future need not be. Every waker has one vtable, whose data is the executor and the task's
+index, never a pointer; the timer queue keeps one deadline per task by that
+index. Each task's poll is one direct call of its never-inlined instance of
+`task::poll_task`, which the declaration exports as a `#[used]` record,
+`__OER_TASK_POLL.<module path>`, for the image checks. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
-`TaskId`. The executor's calls into the chip (software interrupts, the wait
-for an interrupt, the core, the system timer's counter) sit in `chip.rs`.
+`TaskId`. An executor's context is the executor that runs on the core and
+the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt
+that preempts it runs at a higher level and is never its context, so it gets
+no signal context and no timer slot. The executor's calls into the chip
+(software interrupts, the wait for an interrupt, the interrupt level, the
+core, the system timer's counter) sit in `chip.rs`.
 
 ## Radio interrupt levels
 

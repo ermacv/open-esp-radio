@@ -30,8 +30,11 @@ use core::{
 ///
 /// # Safety
 /// `running()` is true exactly in one context that never runs concurrently
-/// with itself: the handler of an interrupt-mode executor, which services
-/// `list()` before it polls, or a single-threaded host test. `pend` makes
+/// with itself: an executor's own polling context (an interrupt-mode
+/// executor's handler or a thread-mode executor's run loop), which services
+/// `list()` before it polls, or a single-threaded host test. It is false in
+/// every context that preempts that one, such as a hardware interrupt
+/// handler, though the executor's context stays entered beneath it. `pend` makes
 /// that context run and runs no task itself outside it. `list()` returns
 /// the same list on every call; only that context touches it. `current`
 /// returns the handle of the task whose poll runs now and refuses any other

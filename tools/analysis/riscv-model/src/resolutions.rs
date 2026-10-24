@@ -109,6 +109,8 @@ pub struct Resolutions {
     /// The direct calls by which an executor polls one of its tasks: each
     /// enters the task's code.
     task_polls: BTreeSet<u32>,
+    /// The functions those calls enter: each task's root.
+    task_roots: BTreeSet<u32>,
 }
 
 impl Resolutions {
@@ -148,10 +150,22 @@ impl Resolutions {
         &self.task_polls
     }
 
-    /// Add every resolution, exit and task poll of `other`.
+    /// Declare the function at `address` a task's root: the function an
+    /// executor's task poll calls.
+    pub fn add_task_root(&mut self, address: u32) {
+        self.task_roots.insert(address);
+    }
+
+    /// The roots of the tasks the executor polls.
+    pub fn task_roots(&self) -> &BTreeSet<u32> {
+        &self.task_roots
+    }
+
+    /// Add every resolution, exit, task poll and task root of `other`.
     pub fn extend(&mut self, other: Resolutions) {
         self.exits.extend(other.exits);
         self.task_polls.extend(other.task_polls);
+        self.task_roots.extend(other.task_roots);
         for (site, resolution) in other.sites {
             let into = self.sites.entry(site).or_default();
             into.facts.extend(resolution.facts);

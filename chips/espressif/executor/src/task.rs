@@ -17,8 +17,17 @@
 //!
 //! A start may run in a lower context than the executor that polls the task
 //! (the radio executor's tasks start from the application). The starter
-//! claims the slot, writes the future and only then publishes it and sets
-//! the task's bit, so a poll that preempts the start finds no task to poll.
+//! claims the slot, writes the task's start (its arguments and how to make
+//! its future, [`MakeFuture`]) and only then publishes it and sets the
+//! task's bit, so a poll that preempts the start finds no task to poll. The
+//! executor makes the future in place at the task's first poll, in its own
+//! context: only the start crosses contexts, so an interrupt-mode
+//! executor's starts are `Send` ([`Admits`]) and its futures need not be.
+//!
+//! Each declared task exports its poll boundary ([`PollBoundary`]) as
+//! `__OER_TASK_POLL.<module path>` for the image checks, which find every
+//! task poll as a direct call of a recorded boundary and fail on an image
+//! whose executor polls without one.
 #![allow(
     unsafe_code,
     reason = "task slots hold their futures in static storage polled in place, and the \
@@ -29,7 +38,7 @@ use core::{
     cell::UnsafeCell,
     future::Future,
     marker::PhantomData,
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     pin::Pin,
     sync::atomic::{AtomicU8, AtomicU32, Ordering},
     task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
@@ -48,14 +57,39 @@ pub struct Thread(PhantomData<*mut ()>);
 
 /// The mode of an executor polling in its software interrupt's handler
 /// ([`crate::InterruptExecutor`]): its tasks may start from another context,
-/// so their futures are `Send`.
+/// so their starts are `Send`.
 pub struct Interrupt(());
 
-/// Whether an executor of this mode takes a start `M`, which holds a task's
-/// arguments.
+/// Whether an executor of this mode takes a task's start `M` from its
+/// starter. A thread-mode executor's starts run in its own context; an
+/// interrupt-mode executor's run in any, so the start moves to the polling
+/// context and is `Send`. The future is made there and never moves.
 pub trait Admits<M> {}
 impl<M> Admits<M> for Thread {}
 impl<M: Send> Admits<M> for Interrupt {}
+
+/// A task's start: its arguments, and how its executor makes the task's
+/// future from them, in place, at the task's first poll. Every
+/// `FnOnce() -> F` is one.
+pub trait MakeFuture {
+    /// The task's future.
+    type Future: Future<Output = ()>;
+    /// Make the task's future, in its executor's context.
+    fn make(self) -> Self::Future;
+}
+
+impl<M: FnOnce() -> F, F: Future<Output = ()>> MakeFuture for M {
+    type Future = F;
+    fn make(self) -> F {
+        self()
+    }
+}
+
+/// `start` as a task's start: a closure checked as `FnOnce`, so it may move
+/// what it captures (a `&'static mut` argument) into the future it makes.
+pub const fn once<M: FnOnce() -> F, F: Future<Output = ()>>(start: M) -> M {
+    start
+}
 
 /// The tasks of one executor, declared by [`tasks!`](crate::tasks), which
 /// implements this trait.
@@ -101,20 +135,20 @@ impl<T: Tasks> Spawner<T> {
         }
     }
 
-    /// Start `task` with the future `make` returns, written in place.
-    /// `make` holds the task's arguments: an interrupt-mode executor's start
-    /// may run in another context than its polls, so its arguments are
-    /// `Send`, as the future holds only them until its first poll.
+    /// Start `task` with `start`, written in place: the executor calls it at
+    /// the task's first poll, in its own context, and polls the future it
+    /// returns in place. An interrupt-mode executor's start may run in
+    /// another context than its polls, so `start`, which crosses to them, is
+    /// `Send` ([`Admits`]); the future never leaves the executor's context.
     ///
     /// # Errors
     /// The task has started already.
-    pub fn start<F, M>(&self, task: &'static Task<F, T>, make: M) -> Result<(), AlreadyStarted>
+    pub fn start<M>(&self, task: &'static Task<M, T>, start: M) -> Result<(), AlreadyStarted>
     where
-        F: Future<Output = ()>,
-        M: FnOnce() -> F,
+        M: MakeFuture,
         T::Mode: Admits<M>,
     {
-        task.claim()?.publish(make);
+        task.claim()?.publish(start);
         crate::task::wake(TaskId {
             executor: T::EXECUTOR,
             index: task.index,
@@ -129,95 +163,153 @@ pub struct AlreadyStarted;
 
 const EMPTY: u8 = 0;
 const CLAIMED: u8 = 1;
-const LIVE: u8 = 2;
-const POLLING: u8 = 3;
-const DONE: u8 = 4;
+/// The start is published; the future is not made yet.
+const STARTED: u8 = 2;
+const LIVE: u8 = 3;
+const POLLING: u8 = 4;
+const DONE: u8 = 5;
 
-/// One task's static slot: its future, written once by its start and polled
-/// in place by its executor.
-pub struct Task<F, T> {
+/// What a task's slot holds: its start until its first poll, its future
+/// from then on, in the same place.
+union Stage<M: MakeFuture> {
+    start: ManuallyDrop<M>,
+    future: ManuallyDrop<M::Future>,
+}
+
+/// One task's static slot: its start, written once by the starter, then its
+/// future, made in place at the first poll and polled in place by its
+/// executor.
+pub struct Task<M: MakeFuture, T> {
     state: AtomicU8,
     index: u8,
-    future: UnsafeCell<MaybeUninit<F>>,
+    stage: UnsafeCell<MaybeUninit<Stage<M>>>,
     _tasks: PhantomData<fn() -> T>,
 }
 
-// SAFETY: the future is reached only by the one start that claims the slot
-// (`EMPTY` to `CLAIMED`), until it publishes it (`LIVE`, release), and then
-// only by the poll that takes it (`LIVE` to `POLLING`, acquire) until it
-// returns it. A poll needs `T`'s token, which only `T`'s executor holds, in
-// its one context. A future starts from another context than that only
+// SAFETY: the slot is reached only by the one start that claims it (`EMPTY`
+// to `CLAIMED`), until it publishes the start (`STARTED`, release), and then
+// only by the poll that takes it (`STARTED` or `LIVE` to `POLLING`,
+// acquire) until it returns it. A poll needs `T`'s token, which only `T`'s
+// executor holds, in its one context, which makes the future from the start
+// and polls it there. A start comes from another context than that only
 // through a `Send` spawner, of an interrupt-mode executor, which takes only a
-// `Send` start (`Admits`): the arguments the future holds alone until its
-// first poll, in its executor's context.
-unsafe impl<F, T> Sync for Task<F, T> {}
+// `Send` start (`Admits`); the future never leaves the executor's context.
+unsafe impl<M: MakeFuture, T> Sync for Task<M, T> {}
 
-impl<F: Future<Output = ()>, T: Tasks> Task<F, T> {
+impl<M: MakeFuture, T: Tasks> Task<M, T> {
     /// The empty slot of the task at `index` of `T`.
     pub const fn new(index: u8) -> Self {
         assert!(index < T::COUNT, "the task's index lies in its set");
         Self {
             state: AtomicU8::new(EMPTY),
             index,
-            future: UnsafeCell::new(MaybeUninit::uninit()),
+            stage: UnsafeCell::new(MaybeUninit::uninit()),
             _tasks: PhantomData,
         }
     }
 
+    /// The task's poll boundary, which its declaration exports for the
+    /// image checks.
+    pub const BOUNDARY: PollBoundary = PollBoundary(poll_task::<M>);
+
     /// Take the empty slot for one start.
-    fn claim(&'static self) -> Result<Claim<F, T>, AlreadyStarted> {
+    fn claim(&'static self) -> Result<Claim<M, T>, AlreadyStarted> {
         self.state
             .compare_exchange(EMPTY, CLAIMED, Ordering::Acquire, Ordering::Relaxed)
             .map(|_| Claim { task: self })
             .map_err(|_| AlreadyStarted)
     }
 
-    /// Poll the task once, when it has started and is not polled already;
-    /// drop its future in place when it finishes.
+    /// Poll the task once, when it has started and is not polled already:
+    /// make its future in place at its first poll, and drop it in place
+    /// when it finishes.
     pub fn poll(&self, _: &PollToken<T>, cx: &mut Context<'_>) {
-        if self
-            .state
-            .compare_exchange(LIVE, POLLING, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
-        {
-            return;
-        }
-        // SAFETY: `POLLING` gives this call the only access to the future,
-        // which the start initialized before it published `LIVE`; the slot is
+        let first =
+            match self
+                .state
+                .compare_exchange(LIVE, POLLING, Ordering::Acquire, Ordering::Relaxed)
+            {
+                Ok(_) => false,
+                Err(STARTED) => {
+                    if self
+                        .state
+                        .compare_exchange(STARTED, POLLING, Ordering::Acquire, Ordering::Relaxed)
+                        .is_err()
+                    {
+                        return;
+                    }
+                    true
+                }
+                Err(_) => return,
+            };
+        // SAFETY: `POLLING` gives this call the only access to the slot,
+        // which holds the start the starter published (`STARTED`) on the
+        // first poll and the future made from it (`LIVE`) after; the slot is
         // static, so the future never moves.
-        let finished = unsafe { poll_task(self.future.get().cast::<F>(), cx) };
+        let finished = unsafe { poll_task::<M>(self.stage.get().cast(), first, cx) };
         self.state
             .store(if finished { DONE } else { LIVE }, Ordering::Release);
     }
 }
 
-/// A claimed slot, before its future is published.
-struct Claim<F: 'static, T: 'static> {
-    task: &'static Task<F, T>,
+/// A claimed slot, before its start is published.
+struct Claim<M: MakeFuture + 'static, T: 'static> {
+    task: &'static Task<M, T>,
 }
 
-impl<F, T> Claim<F, T> {
-    /// Write the future in place and publish it.
-    fn publish(self, make: impl FnOnce() -> F) {
+impl<M: MakeFuture, T> Claim<M, T> {
+    /// Write the start in place and publish it.
+    fn publish(self, start: M) {
         // SAFETY: the claim is the only access to the uninitialized slot;
-        // no reference to its future is formed before it is written.
-        unsafe { (*self.task.future.get()).as_mut_ptr().write(make()) };
-        self.task.state.store(LIVE, Ordering::Release);
+        // no reference to its contents is formed before it is written.
+        unsafe {
+            (*self.task.stage.get()).as_mut_ptr().write(Stage {
+                start: ManuallyDrop::new(start),
+            });
+        }
+        self.task.state.store(STARTED, Ordering::Release);
     }
 }
 
+/// A task's poll boundary: the instance of the executor's one poll of a
+/// task's future, [`poll_task`], for that task's future type.
+///
+/// Each task declared by [`tasks!`](crate::tasks) exports its boundary,
+/// `#[used]`, as `__OER_TASK_POLL.<module path of the task's slot>`. The
+/// image checks read these records, not a function name: every direct call
+/// of a recorded boundary is a task poll and the boundary is the task's
+/// root; a recorded boundary without a direct call (inlined or never
+/// polled), or an image with the executor's waker and no record, fails the
+/// analysis.
+#[derive(Clone, Copy)]
+pub struct PollBoundary(
+    #[allow(dead_code, reason = "the image checks read the record from the image")]
+    unsafe fn(*mut (), bool, &mut Context<'_>) -> bool,
+);
+
 /// The boundary between an executor and its tasks: one poll of a task's
-/// future and, when it finishes, its drop. Everything this function reaches
-/// is the task's code; the image checks find a task's root by this
-/// function's name (`oer_espressif_executor::task::poll_task`).
+/// future, made from its start at the `first` poll, and, when it finishes,
+/// its drop. Everything this function reaches, the making of the future
+/// included, is the task's code. It is never inlined, so each executor's
+/// poll of a task is one direct call of the task's instance, which the
+/// task's [`PollBoundary`] record names.
 ///
 /// # Safety
-/// `future` is initialized, pinned at its address, and the caller has the
-/// only access to it until this returns. After `true` it is dropped.
+/// `stage` is a `Stage<M>` at a fixed address that holds the start when
+/// `first` and the future made from it otherwise, and the caller has the
+/// only access to it until this returns. After `true` the future is
+/// dropped.
 #[inline(never)]
-unsafe fn poll_task<F: Future<Output = ()>>(future: *mut F, cx: &mut Context<'_>) -> bool {
-    // SAFETY: the caller's contract: the future is initialized, never moves
-    // and is accessed by this call alone.
+unsafe fn poll_task<M: MakeFuture>(stage: *mut (), first: bool, cx: &mut Context<'_>) -> bool {
+    let stage = stage.cast::<Stage<M>>();
+    if first {
+        // SAFETY: the caller's contract: the stage holds the start.
+        unsafe { make_in_place(stage) };
+    }
+    let future = stage.cast::<M::Future>();
+    // SAFETY: the caller's contract: the stage holds the future, which never
+    // moves and is accessed by this call alone (`ManuallyDrop` is
+    // transparent).
     let pinned = unsafe { Pin::new_unchecked(&mut *future) };
     match pinned.poll(cx) {
         Poll::Ready(()) => {
@@ -226,6 +318,22 @@ unsafe fn poll_task<F: Future<Output = ()>>(future: *mut F, cx: &mut Context<'_>
             true
         }
         Poll::Pending => false,
+    }
+}
+
+/// Replace the start `stage` holds by the future it makes, in place. Its
+/// own frame holds any copy the making needs, apart from the poll that
+/// follows.
+///
+/// # Safety
+/// `stage` holds the start, and the caller has the only access to it.
+#[inline(never)]
+unsafe fn make_in_place<M: MakeFuture>(stage: *mut Stage<M>) {
+    // SAFETY: the caller's contract: the start is read once here and
+    // replaced by the future it makes.
+    unsafe {
+        let start = ManuallyDrop::take(&mut (*stage).start);
+        (&raw mut (*stage).future).write(ManuallyDrop::new(start.make()));
     }
 }
 
@@ -407,9 +515,10 @@ use tests::{pend, ready};
 /// Each task names its arguments and the `async fn` (or any function
 /// returning a future with output `()`) that makes its future from them. The
 /// macro declares a type for the set, implementing [`Tasks`], with one start
-/// function per task: `Set::task(&spawner, arguments…)`. Each task's future
-/// lives in a static slot in a module named after the task, so the crate
-/// enables `type_alias_impl_trait`.
+/// function per task: `Set::task(&spawner, arguments…)`. Each task's start
+/// (its arguments), then its future, which its executor makes from them at
+/// its first poll, lives in a static slot in a module named after the task,
+/// so the crate enables `type_alias_impl_trait`.
 ///
 /// ```ignore
 /// oer_espressif_executor::tasks! {
@@ -484,14 +593,19 @@ macro_rules! tasks {
         impl $set {
             $(
                 $(#[$attr])*
-                #[define_opaque($name::Future)]
                 $vis fn $name(
                     spawner: &$crate::task::Spawner<Self>,
                     $($argument: $type),*
                 ) -> ::core::result::Result<(), $crate::task::AlreadyStarted> {
-                    spawner.start(&$name::TASK, move || -> $name::Future {
-                        $body($($argument),*)
-                    })
+                    // The start's one defining use: it holds the arguments
+                    // and calls the body in the executor's context. The
+                    // start below is no defining use, so it sees whether
+                    // the start is `Send`.
+                    #[define_opaque($name::Start)]
+                    fn start($($argument: $type),*) -> $name::Start {
+                        $crate::task::once(move || $body($($argument),*))
+                    }
+                    spawner.start(&$name::TASK, start($($argument),*))
                 }
             )*
         }
@@ -502,10 +616,16 @@ macro_rules! tasks {
     (@slots $set:ident [$index:expr] $(#[$attr:meta])* $name:ident; $($rest:tt)*) => {
         $(#[$attr])*
         mod $name {
-            pub(super) type Future = impl ::core::future::Future<Output = ()>;
+            pub(super) type Start = impl $crate::task::MakeFuture;
             pub(super) const TASK_INDEX: u8 = $index;
-            pub(super) static TASK: $crate::task::Task<Future, super::$set> =
+            pub(super) static TASK: $crate::task::Task<Start, super::$set> =
                 $crate::task::Task::new(TASK_INDEX);
+            /// The task's poll boundary, for the image checks. `#[used]`
+            /// keeps the record and the exported name lets the tools find it.
+            #[used]
+            #[unsafe(export_name = concat!("__OER_TASK_POLL.", module_path!()))]
+            static POLL_BOUNDARY: $crate::task::PollBoundary =
+                $crate::task::Task::<Start, super::$set>::BOUNDARY;
         }
         $crate::tasks!(@slots $set [$index + 1] $($rest)*);
     };

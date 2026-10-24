@@ -37,6 +37,8 @@
 
 #[cfg(feature = "chip")]
 mod chip;
+#[cfg(any(feature = "chip", test))]
+mod context;
 #[cfg(feature = "chip")]
 mod cooperative;
 #[cfg(any(feature = "chip", test))]

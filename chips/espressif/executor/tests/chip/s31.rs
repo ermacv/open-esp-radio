@@ -102,27 +102,32 @@ pub mod tasks {
             APP_TASK.poll(token, cx);
         }
     }
-    static RADIO_TASK: Task<Idle, Radio> = Task::new(0);
-    static APP_TASK: Task<Idle, App> = Task::new(0);
+    /// A start that names its future's maker: it holds nothing.
+    type Make = fn() -> Idle;
+    /// A start holding a value that stays in its context: a reference to a
+    /// maker that is not `Sync`.
+    type Held = &'static dyn Fn() -> Idle;
+    static RADIO_TASK: Task<Make, Radio> = Task::new(0);
+    static APP_TASK: Task<Make, App> = Task::new(0);
+    static RADIO_HELD: Task<Held, Radio> = Task::new(0);
+    static APP_HELD: Task<Held, App> = Task::new(0);
     fn send<S: Send>(_: &S) {}
 
     pub fn own(radio: &Spawner<Radio>, app: &Spawner<App>) -> Result<(), AlreadyStarted> {
         send(radio);
-        let local: *const u8 = core::ptr::null();
-        app.start(&APP_TASK, move || {
-            let _held = local;
-            Idle
-        })?;
+        app.start(&APP_TASK, || Idle)?;
         radio.start(&RADIO_TASK, || Idle)
     }
     pub fn another_executors_task(radio: &Spawner<Radio>) {
         #[cfg(ui_reject)]
         let _ = radio.start(&APP_TASK, || Idle); // ui-error: E0308
     }
-    pub fn radio_arguments_are_send(radio: &Spawner<Radio>) {
-        let local: *const u8 = core::ptr::null();
+    /// The executor makes the future from the start in its own context, so
+    /// only the start crosses to an interrupt-mode executor: it is `Send`.
+    pub fn radio_starts_are_send(radio: &Spawner<Radio>, app: &Spawner<App>, held: Held) {
+        let _ = app.start(&APP_HELD, held);
         #[cfg(ui_reject)]
-        let _ = radio.start(&RADIO_TASK, move || { let _held = local; Idle }); // ui-error: E0277
+        let _ = radio.start(&RADIO_HELD, held); // ui-error: E0277
     }
     pub fn the_application_spawner_stays_in_its_context(app: &Spawner<App>) {
         #[cfg(ui_reject)]

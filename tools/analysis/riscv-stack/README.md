@@ -242,12 +242,16 @@ set of found facts (the waker vtable, field types) is a hole,
   relocation that takes the function's address other than a transfer.
 
 `task_poll_resolutions` finds the executor's task polls: the executor
-(`oer-espressif-executor`) polls each declared task by a direct call of
-`oer_espressif_executor::task::poll_task::<F>`, its boundary with the task's
-code, so every direct call of an instance is a task poll site
-(`Resolutions::task_polls`) and the instance is the task's root. The calls
-are direct: a task poll assumes nothing, and an executor's bound reaches only
-its own tasks.
+(`oer-espressif-executor`) polls each declared task by a direct call of its
+never-inlined poll boundary, whose address each task exports in a `#[used]`
+record (`TASK_POLL_RECORD`, `__OER_TASK_POLL.<module path>`, one relocated
+read-only word). Every direct call of a recorded boundary is a task poll site
+(`Resolutions::task_polls`) and the boundary is the task's root
+(`Resolutions::task_roots`); no function name is read. A record whose
+boundary no direct call reaches (an inlined poll, or a task never polled),
+or an image with the executor's waker vtable and no record, fails the
+analysis. The calls are direct: a task poll assumes nothing, and an
+executor's bound reaches only its own tasks.
 
 A direct recursive function can be unfolded once when path-sensitive
 instruction facts prove that every self-call passes a payload for which

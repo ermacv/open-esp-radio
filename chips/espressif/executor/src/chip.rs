@@ -1,7 +1,8 @@
 //! What the executor takes from the chip through esp-hal, in one place: the
 //! software interrupts that pend and wake executors, the wait for an
 //! interrupt, the current core and the system timer's counter. The SYSTIMER
-//! comparators are ours ([`crate::systimer`]).
+//! comparators are ours ([`crate::systimer`]), and so is the read of the
+//! current interrupt level ([`interrupt_level`]).
 
 pub(crate) use esp_hal::{
     interrupt::{
@@ -22,6 +23,28 @@ pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::task::EXECUTORS as usi
 #[inline(always)]
 pub(crate) fn current_core() -> usize {
     Cpu::current() as usize
+}
+
+/// The interrupt level the caller runs at: the CLIC's `mintstatus.mil`,
+/// which the hart raises on a trap's entry to the taken interrupt's level
+/// and restores on its return; 0 in thread mode. Both chips' cores take
+/// interrupts through a CLIC.
+#[inline(always)]
+pub(crate) fn interrupt_level() -> u8 {
+    let status: usize;
+    #[allow(unsafe_code, reason = "a CSR read is an instruction")]
+    // SAFETY: `csrr` of `mintstatus`, a read-only CSR, writes only the output
+    // register; it touches no memory and no other state.
+    unsafe {
+        core::arch::asm!(
+            "csrr {status}, {mintstatus}",
+            status = out(reg) status,
+            mintstatus = const oer_riscv::clic::MINTSTATUS,
+            options(nomem, nostack, preserves_flags),
+        );
+    }
+    // `mil` is the top byte: the truncation keeps exactly the field.
+    (status >> oer_riscv::clic::MINTSTATUS_MIL_SHIFT) as u8
 }
 
 /// The system timer's counter, in microseconds.

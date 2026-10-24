@@ -36,12 +36,7 @@ pub fn probe(
                 body.push_str(&report.root(&format!("entry:{symbol}"), &bound));
             }
         }
-        for (index, (&address, _)) in image
-            .names
-            .iter()
-            .filter(|(_, name)| oer_analysis_riscv_stack::is_task_poll(name))
-            .enumerate()
-        {
+        for (index, &address) in image.resolutions.task_roots().iter().enumerate() {
             let bound = image
                 .analysis
                 .bound_with(address, &image.resolutions, keep, control)?;
