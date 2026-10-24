@@ -7,11 +7,15 @@ mod link;
 #[cfg(feature = "wifi")]
 mod observation;
 #[cfg(feature = "wifi")]
+mod service;
+#[cfg(feature = "wifi")]
 pub use credentials::*;
 #[cfg(feature = "wifi")]
 pub use link::*;
 #[cfg(feature = "wifi")]
 pub use observation::*;
+#[cfg(feature = "wifi")]
+pub use service::*;
 
 crate::messages! {
     property Station = "wifi/station";
@@ -39,6 +43,8 @@ crate::messages! {
     endpoint StopStation = "wifi/station/stop" => crate::base::Accepted;
     #[cfg(feature = "wifi")]
     topic StationStopped = "wifi/station/stopped";
+    #[cfg(feature = "wifi")]
+    topic StationServiceEnded = "wifi/station/service-ended";
 }
 
 #[cfg(feature = "wifi")]

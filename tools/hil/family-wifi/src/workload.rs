@@ -43,13 +43,100 @@ fn now() -> u64 {
 const SHORT: Duration = Duration::from_secs(10);
 
 /// A failed workload still owns a running station until StopStation completes.
-pub(super) fn stop_on_error<T>(work: Result<T>, stop: impl FnOnce() -> Result<()>) -> Result<T> {
+/// A station whose service already ended needs no stop; its end joins the error.
+pub(super) fn stop_on_error<T>(
+    work: Result<T>,
+    stop: impl FnOnce() -> Result<Option<StationServiceEnded>>,
+) -> Result<T> {
     match work {
-        Err(error) => {
-            stop().map_err(|_| format!("{error}; W4 StopStation cleanup failed"))?;
-            Err(error)
-        }
+        Err(error) => match stop() {
+            Err(_) => Err(format!("{error}; W4 StopStation cleanup failed").into()),
+            Ok(Some(end)) => Err(format!("{error}; {}", ended(&end)).into()),
+            Ok(None) => Err(error),
+        },
         ok => ok,
+    }
+}
+
+pub(super) fn ended(end: &StationServiceEnded) -> String {
+    format!(
+        "station service ended in epoch {}: {:?}",
+        end.epoch, end.end
+    )
+}
+
+/// How a stop ended.
+#[derive(Debug, PartialEq)]
+pub(super) enum StopEnd {
+    Stopped(StationCounters),
+    /// The service had ended without the stop; nothing will stop it.
+    Ended(StationServiceEnded),
+}
+
+/// The station's side of a stop, apart from the serial capture.
+pub(super) trait StationStop {
+    type Pending;
+    /// The service end the station published since its start, if any.
+    fn ended(&self) -> Result<Option<StationServiceEnded>>;
+    /// Send StopStation; a refusal is an error.
+    fn stop(&self) -> Result<Self::Pending>;
+    /// `StationStopped` of the stop or the service end, whichever comes
+    /// first, within a bound.
+    fn stopped(&self, pending: Self::Pending) -> Result<StopEnd>;
+}
+
+/// Stop the station unless its service already ended. A service that ends
+/// before the stop is admitted makes the station refuse it; either way the
+/// end returns at once instead of waiting out the stop's bound.
+pub(super) fn stop_station(station: &impl StationStop) -> Result<StopEnd> {
+    if let Some(end) = station.ended()? {
+        return Ok(StopEnd::Ended(end));
+    }
+    match station.stop() {
+        Ok(pending) => station.stopped(pending),
+        Err(error) => match station.ended()? {
+            Some(end) => Ok(StopEnd::Ended(end)),
+            None => Err(error),
+        },
+    }
+}
+
+/// The station started by `start` on `capture`.
+pub(super) struct Station<'a> {
+    pub capture: &'a SerialCapture,
+    pub start: CommandHandle,
+}
+impl StationStop for Station<'_> {
+    type Pending = (usize, CommandHandle);
+    fn ended(&self) -> Result<Option<StationServiceEnded>> {
+        self.capture
+            .messages_since(self.start.first_event(), |messages| {
+                messages
+                    .iter()
+                    .filter(|message| self.start.correlates(message))
+                    .find_map(|message| message.decode::<StationServiceEnded>())
+            })
+    }
+    fn stop(&self) -> Result<(usize, CommandHandle)> {
+        let cursor = self.capture.event_cursor();
+        Ok((cursor, self.capture.command(StopStation, SHORT)?))
+    }
+    fn stopped(&self, (cursor, stop): (usize, CommandHandle)) -> Result<StopEnd> {
+        let message = self
+            .capture
+            .wait_for_message_after(cursor, SHORT, |message| {
+                (stop.correlates(message) && message.is::<StationStopped>())
+                    || (self.start.correlates(message) && message.is::<StationServiceEnded>())
+            })?
+            .ok_or("device did not complete wifi/station/stop with wifi/station/stopped")?;
+        if let Some(StationStopped(counters)) = message.decode() {
+            return Ok(StopEnd::Stopped(counters));
+        }
+        Ok(StopEnd::Ended(
+            message
+                .decode::<StationServiceEnded>()
+                .ok_or("the accepted stop message does not decode")?,
+        ))
     }
 }
 
@@ -287,10 +374,16 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             evidence.resumed = Some(resumed);
             let departure = Departure::start(&ssh, target)?;
             stop_at = now();
-            let stop = capture.command(StopStation, SHORT)?;
-            let stopped: StationStopped = capture.wait_command(stop, SHORT)?;
+            let stopped = match stop_station(&Station { capture, start })? {
+                StopEnd::Stopped(counters) => counters,
+                StopEnd::Ended(end) => {
+                    station_stopped = true;
+                    context.results.observe("w4-service-ended", &end);
+                    return Err(ended(&end).into());
+                }
+            };
             station_stopped = true;
-            context.results.observe("w4-final-counters", &stopped.0);
+            context.results.observe("w4-final-counters", &stopped);
             let deadline = Instant::now() + SHORT;
             let after = loop {
                 let after = w3::station(&mut ssh, &config.wireless_interface, target)?;
@@ -306,21 +399,27 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 .baseline
                 .as_mut()
                 .expect("initial observations retained");
-            b.tx_timeouts = stopped.0.tx_timeouts;
-            b.queue_collisions = stopped.0.queue_collisions;
-            b.deauth_transmissions = stopped.0.deauth_transmissions;
+            b.tx_timeouts = stopped.tx_timeouts;
+            b.queue_collisions = stopped.queue_collisions;
+            b.deauth_transmissions = stopped.deauth_transmissions;
             b.after = after;
             Ok(())
         })();
         let work = stop_on_error(work, || {
             if station_stopped {
-                return Ok(());
+                return Ok(None);
             }
             stop_at = now();
-            let stop = capture.command(StopStation, SHORT)?;
-            let stopped: StationStopped = capture.wait_command(stop, SHORT)?;
-            context.results.observe("w4-failure-stopped", &stopped.0);
-            Ok(())
+            match stop_station(&Station { capture, start })? {
+                StopEnd::Stopped(counters) => {
+                    context.results.observe("w4-failure-stopped", &counters);
+                    Ok(None)
+                }
+                StopEnd::Ended(end) => {
+                    context.results.observe("w4-service-ended", &end);
+                    Ok(Some(end))
+                }
+            }
         });
         let events = capture.messages_since(start.first_event(), |messages| {
             messages

@@ -3,11 +3,15 @@ pub(crate) mod irq;
 mod network;
 mod observation;
 mod radio;
+mod report;
 mod station;
 use crate::transport::CONSOLE;
 use oer_hil_protocol::{
     RequestIdentity,
-    wifi::{StationLink, StationLinkState, StationStart},
+    wifi::{
+        StationLink, StationLinkState, StationRole, StationServiceEnd, StationServiceEnded,
+        StationStart, StopStation,
+    },
 };
 use oer_ieee80211_rsn::{PmkDerivation, nonce::SNonceSource, sae::SaePassword};
 use oer_time::Clock;
@@ -216,6 +220,32 @@ impl Attempt {
     }
 }
 
+/// Set once the station service ended without a stop command; no task
+/// answers a role command after it.
+static ENDED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+fn end(attempt: Attempt, end: StationServiceEnd) {
+    use core::sync::atomic::Ordering;
+    ENDED.store(true, Ordering::Release);
+    emit(
+        attempt.request,
+        &StationServiceEnded {
+            epoch: EPOCH.load(Ordering::Relaxed),
+            end,
+        },
+    );
+}
+fn role(configured: bool, stopping: bool) -> StationRole {
+    if !configured {
+        StationRole::Idle
+    } else if ENDED.load(core::sync::atomic::Ordering::Acquire) {
+        StationRole::Ended
+    } else if stopping {
+        StationRole::Stopping
+    } else {
+        StationRole::Running
+    }
+}
+
 type Starts = embassy_sync::channel::Channel<
     embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
     (RequestIdentity, StationStart),
@@ -281,10 +311,8 @@ async fn console_work(usb: crate::transport::Usb, boot: u64) {
                 }
             }
             Requests::Probe(probe) => {
-                if !configured || stopping {
-                    Some(RejectReason::InvalidState)
-                } else if !probe.valid() {
-                    Some(RejectReason::InvalidConfiguration)
+                if let Some(reason) = probe.refusal(role(configured, stopping)) {
+                    Some(reason)
                 } else if PROBES.try_send((request, probe)).is_err() {
                     Some(RejectReason::Busy)
                 } else {
@@ -292,8 +320,8 @@ async fn console_work(usb: crate::transport::Usb, boot: u64) {
                 }
             }
             Requests::Stop(_) => {
-                if !configured || stopping {
-                    Some(RejectReason::InvalidState)
+                if let Some(reason) = StopStation::refusal(role(configured, stopping)) {
+                    Some(reason)
                 } else if STOPS.try_send(request).is_err() {
                     Some(RejectReason::Busy)
                 } else {
