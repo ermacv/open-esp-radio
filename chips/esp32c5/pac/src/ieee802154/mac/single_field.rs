@@ -11,6 +11,7 @@ use super::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode, Ieee802154SecurityPayloadOffset,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
     Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
+    multipan_register_index,
 };
 use crate::ieee802154::ownership::{RawDebugCounter, RawEvent};
 
@@ -188,7 +189,7 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_get_freq`.
     pub fn frequency_code(&self) -> Ieee802154FrequencyCode {
-        Ieee802154FrequencyCode(self.registers.frequency_code())
+        Ieee802154FrequencyCode::from_field(self.registers.frequency_code())
     }
 
     /// `ieee802154_ll_get_ack_timeout`.
@@ -198,23 +199,26 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_set_multipan_panid`.
     pub fn set_multipan_pan_id(&mut self, index: Ieee802154MultipanIndex, pan_id: u16) {
-        self.registers.set_multipan_pan_id(index.as_usize(), pan_id);
+        self.registers
+            .set_multipan_pan_id(multipan_register_index(index), pan_id);
     }
 
     /// `ieee802154_ll_get_multipan_panid`.
     pub fn multipan_pan_id(&self, index: Ieee802154MultipanIndex) -> u16 {
-        self.registers.multipan_pan_id(index.as_usize())
+        self.registers
+            .multipan_pan_id(multipan_register_index(index))
     }
 
     /// `ieee802154_ll_set_multipan_short_addr`.
     pub fn set_multipan_short_address(&mut self, index: Ieee802154MultipanIndex, address: u16) {
         self.registers
-            .set_multipan_short_address(index.as_usize(), address);
+            .set_multipan_short_address(multipan_register_index(index), address);
     }
 
     /// `ieee802154_ll_get_multipan_short_addr`.
     pub fn multipan_short_address(&self, index: Ieee802154MultipanIndex) -> u16 {
-        self.registers.multipan_short_address(index.as_usize())
+        self.registers
+            .multipan_short_address(multipan_register_index(index))
     }
 
     /// `ieee802154_ll_set_multipan_ext_addr`.
@@ -224,12 +228,13 @@ impl Ieee802154RegisterLease<'_> {
         address: [u8; 8],
     ) {
         self.registers
-            .set_multipan_extended_address(index.as_usize(), address);
+            .set_multipan_extended_address(multipan_register_index(index), address);
     }
 
     /// `ieee802154_ll_get_multipan_ext_addr`.
     pub fn multipan_extended_address(&self, index: Ieee802154MultipanIndex) -> [u8; 8] {
-        self.registers.multipan_extended_address(index.as_usize())
+        self.registers
+            .multipan_extended_address(multipan_register_index(index))
     }
 
     /// `ieee802154_ll_set_ed_sample_mode`.

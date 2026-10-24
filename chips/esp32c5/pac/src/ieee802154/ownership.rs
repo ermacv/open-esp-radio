@@ -15,35 +15,35 @@ use crate::generated::ieee802154_mac::{
     self as mac, Ieee802154Mac, Ieee802154MacInterrupt, Ieee802154MacTask,
 };
 
-/// A multipan context's register index.
-fn multipan_index(index: usize) -> oer_mmio::Index<4> {
-    oer_mmio::Index::new(index).expect("multipan index exceeds four contexts")
-}
+/// The register index of one of the four multipan contexts.
+pub type MultipanIndex = oer_mmio::Index<4>;
+
+/// The register index of one of the four transmit-security key words.
+type KeyWordIndex = oer_mmio::Index<4>;
 
 trait TransmitSecurityProgrammingPort {
     fn write_address_low(&mut self, word: u32);
     fn write_address_high(&mut self, word: u32);
-    fn write_key_word(&mut self, index: usize, word: u32);
+    fn write_key_word(&mut self, index: KeyWordIndex, word: u32);
     fn write_payload_offset(&mut self, offset: u8);
     fn set_enabled(&mut self, enabled: bool);
 }
 
 trait MultipanIdentityProgrammingPort {
-    fn enable_context(&mut self, index: usize);
-    fn write_pan_id(&mut self, index: usize, pan_id: u16);
-    fn write_short_address(&mut self, index: usize, short_address: u16);
-    fn write_extended_address_low(&mut self, index: usize, word: u32);
-    fn write_extended_address_high(&mut self, index: usize, word: u32);
+    fn enable_context(&mut self, index: MultipanIndex);
+    fn write_pan_id(&mut self, index: MultipanIndex, pan_id: u16);
+    fn write_short_address(&mut self, index: MultipanIndex, short_address: u16);
+    fn write_extended_address_low(&mut self, index: MultipanIndex, word: u32);
+    fn write_extended_address_high(&mut self, index: MultipanIndex, word: u32);
 }
 
 fn execute_multipan_identity_configuration<Port: MultipanIdentityProgrammingPort>(
     port: &mut Port,
-    index: usize,
+    index: MultipanIndex,
     pan_id: u16,
     short_address: u16,
     extended_address: [u8; 8],
 ) {
-    assert!(index < 4, "multipan index exceeds four contexts");
     port.enable_context(index);
     port.write_pan_id(index, pan_id);
     port.enable_context(index);
@@ -85,16 +85,23 @@ fn execute_transmit_security_configuration<Port: TransmitSecurityProgrammingPort
     port.write_address_high(u32::from_le_bytes([
         address[4], address[5], address[6], address[7],
     ]));
-    for index in 0..4 {
-        let start = index * 4;
+    for (index, word) in KEY_WORDS.into_iter().zip(key.chunks_exact(4)) {
         port.write_key_word(
             index,
-            u32::from_le_bytes([key[start], key[start + 1], key[start + 2], key[start + 3]]),
+            u32::from_le_bytes([word[0], word[1], word[2], word[3]]),
         );
     }
     port.write_payload_offset(payload_offset);
     port.set_enabled(true);
 }
+
+/// The four transmit-security key words in write order.
+const KEY_WORDS: [KeyWordIndex; 4] = [
+    KeyWordIndex::constant::<0>(),
+    KeyWordIndex::constant::<1>(),
+    KeyWordIndex::constant::<2>(),
+    KeyWordIndex::constant::<3>(),
+];
 
 fn execute_transmit_security_disable<Port: TransmitSecurityProgrammingPort>(port: &mut Port) {
     port.set_enabled(false);
@@ -133,8 +140,7 @@ impl TransmitSecurityProgrammingPort for Ieee802154MacTask {
         self.publish_ieee802154_security_address_high(word);
     }
 
-    fn write_key_word(&mut self, index: usize, word: u32) {
-        let index = oer_mmio::Index::new(index).expect("security key index exceeds four words");
+    fn write_key_word(&mut self, index: KeyWordIndex, word: u32) {
         self.publish_ieee802154_security_key_word(index, word);
     }
 
@@ -154,8 +160,7 @@ impl TransmitSecurityProgrammingPort for Ieee802154MacTask {
 }
 
 impl MultipanIdentityProgrammingPort for Ieee802154MacTask {
-    fn enable_context(&mut self, index: usize) {
-        let index = multipan_index(index);
+    fn enable_context(&mut self, index: MultipanIndex) {
         self.modify_control(|writer| {
             match index.get() {
                 0 => writer.set_multipan0_enabled(true),
@@ -166,26 +171,26 @@ impl MultipanIdentityProgrammingPort for Ieee802154MacTask {
         });
     }
 
-    fn write_pan_id(&mut self, index: usize, pan_id: u16) {
-        self.modify_multipan_pan_id(multipan_index(index), |writer| {
+    fn write_pan_id(&mut self, index: MultipanIndex, pan_id: u16) {
+        self.modify_multipan_pan_id(index, |writer| {
             writer.set_pan_id(pan_id);
         });
     }
 
-    fn write_short_address(&mut self, index: usize, short_address: u16) {
-        self.modify_multipan_short_address(multipan_index(index), |writer| {
+    fn write_short_address(&mut self, index: MultipanIndex, short_address: u16) {
+        self.modify_multipan_short_address(index, |writer| {
             writer.set_address(short_address);
         });
     }
 
-    fn write_extended_address_low(&mut self, index: usize, word: u32) {
-        self.modify_multipan_extended_address_low(multipan_index(index), |writer| {
+    fn write_extended_address_low(&mut self, index: MultipanIndex, word: u32) {
+        self.modify_multipan_extended_address_low(index, |writer| {
             writer.set_address_word(word);
         });
     }
 
-    fn write_extended_address_high(&mut self, index: usize, word: u32) {
-        self.modify_multipan_extended_address_high(multipan_index(index), |writer| {
+    fn write_extended_address_high(&mut self, index: MultipanIndex, word: u32) {
+        self.modify_multipan_extended_address_high(index, |writer| {
             writer.set_address_word(word);
         });
     }
@@ -937,8 +942,7 @@ impl TaskRegisters {
 
     /// Replace only the seven-bit channel/frequency field.
     #[doc(hidden)]
-    pub fn set_frequency_code(&mut self, code: u8) {
-        let code = oer_mmio::Bits::new(u32::from(code)).expect("frequency code exceeds seven bits");
+    pub fn set_frequency_code(&mut self, code: oer_mmio::Bits<7>) {
         self.registers.modify_channel(|writer| {
             writer.set_frequency_code(code);
         });
@@ -1034,7 +1038,7 @@ impl TaskRegisters {
     #[doc(hidden)]
     pub fn set_multipan_identity(
         &mut self,
-        index: usize,
+        index: MultipanIndex,
         pan_id: u16,
         short_address: u16,
         extended_address: [u8; 8],
@@ -1049,8 +1053,7 @@ impl TaskRegisters {
     }
 
     #[doc(hidden)]
-    pub fn multipan_identity(&self, index: usize) -> MultipanIdentityReadback {
-        let index = multipan_index(index);
+    pub fn multipan_identity(&self, index: MultipanIndex) -> MultipanIdentityReadback {
         let pan_id = self.registers.read_multipan_pan_id(index);
         let short_address = self.registers.read_multipan_short_address(index);
         let extended_low = self.registers.read_multipan_extended_address_low(index);
@@ -1127,8 +1130,7 @@ impl TaskRegisters {
 
     /// Replace only the generated four-bit TX/RX coexistence PTI field.
     #[doc(hidden)]
-    pub fn set_txrx_pti(&mut self, pti: u8) {
-        let pti = oer_mmio::Bits::new(u32::from(pti)).expect("TX/RX PTI exceeds four bits");
+    pub fn set_txrx_pti(&mut self, pti: oer_mmio::Bits<4>) {
         self.registers.modify_coex_pti(|writer| {
             writer.set_txrx_pti(pti);
         });
@@ -1136,8 +1138,7 @@ impl TaskRegisters {
 
     /// Replace only the generated four-bit ACK coexistence PTI field.
     #[doc(hidden)]
-    pub fn set_ack_pti(&mut self, pti: u8) {
-        let pti = oer_mmio::Bits::new(u32::from(pti)).expect("ACK PTI exceeds four bits");
+    pub fn set_ack_pti(&mut self, pti: oer_mmio::Bits<4>) {
         self.registers.modify_coex_pti(|writer| {
             writer.set_ack_pti(pti);
         });
@@ -1198,7 +1199,7 @@ impl TaskRegisters {
                 control.multipan2_enabled(),
                 control.multipan3_enabled(),
             ],
-            identity: self.multipan_identity(0),
+            identity: self.multipan_identity(MultipanIndex::constant::<0>()),
         }
     }
 
@@ -1232,10 +1233,10 @@ impl TaskRegisters {
                 control.multipan3_enabled(),
             ],
             identities: [
-                self.multipan_identity(0),
-                self.multipan_identity(1),
-                self.multipan_identity(2),
-                self.multipan_identity(3),
+                self.multipan_identity(MultipanIndex::constant::<0>()),
+                self.multipan_identity(MultipanIndex::constant::<1>()),
+                self.multipan_identity(MultipanIndex::constant::<2>()),
+                self.multipan_identity(MultipanIndex::constant::<3>()),
             ],
             frame_pending: pending_config.frame_pending(),
         }

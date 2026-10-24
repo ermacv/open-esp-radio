@@ -7,8 +7,8 @@
 //! vendor write order.
 
 use super::{
-    MultipanIdentityProgrammingPort, TaskRegisters, TransmitSecurityProgrammingPort, mac,
-    multipan_index,
+    KEY_WORDS, MultipanIdentityProgrammingPort, MultipanIndex, TaskRegisters,
+    TransmitSecurityProgrammingPort, mac,
 };
 
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).
@@ -154,38 +154,34 @@ impl TaskRegisters {
 
     /// `ieee802154_ll_set_multipan_panid`: enable the context, then write.
     #[doc(hidden)]
-    pub fn set_multipan_pan_id(&mut self, index: usize, pan_id: u16) {
+    pub fn set_multipan_pan_id(&mut self, index: MultipanIndex, pan_id: u16) {
         self.registers.enable_context(index);
         self.registers.write_pan_id(index, pan_id);
     }
 
     /// `ieee802154_ll_get_multipan_panid`.
     #[doc(hidden)]
-    pub fn multipan_pan_id(&self, index: usize) -> u16 {
-        self.registers
-            .read_multipan_pan_id(multipan_index(index))
-            .pan_id()
+    pub fn multipan_pan_id(&self, index: MultipanIndex) -> u16 {
+        self.registers.read_multipan_pan_id(index).pan_id()
     }
 
     /// `ieee802154_ll_set_multipan_short_addr`: enable the context, then write.
     #[doc(hidden)]
-    pub fn set_multipan_short_address(&mut self, index: usize, short_address: u16) {
+    pub fn set_multipan_short_address(&mut self, index: MultipanIndex, short_address: u16) {
         self.registers.enable_context(index);
         self.registers.write_short_address(index, short_address);
     }
 
     /// `ieee802154_ll_get_multipan_short_addr`.
     #[doc(hidden)]
-    pub fn multipan_short_address(&self, index: usize) -> u16 {
-        self.registers
-            .read_multipan_short_address(multipan_index(index))
-            .address()
+    pub fn multipan_short_address(&self, index: MultipanIndex) -> u16 {
+        self.registers.read_multipan_short_address(index).address()
     }
 
     /// `ieee802154_ll_set_multipan_ext_addr`: enable the context, then write
     /// the low and high little-endian words.
     #[doc(hidden)]
-    pub fn set_multipan_extended_address(&mut self, index: usize, address: [u8; 8]) {
+    pub fn set_multipan_extended_address(&mut self, index: MultipanIndex, address: [u8; 8]) {
         self.registers.enable_context(index);
         let [a0, a1, a2, a3, a4, a5, a6, a7] = address;
         self.registers
@@ -196,7 +192,7 @@ impl TaskRegisters {
 
     /// `ieee802154_ll_get_multipan_ext_addr`.
     #[doc(hidden)]
-    pub fn multipan_extended_address(&self, index: usize) -> [u8; 8] {
+    pub fn multipan_extended_address(&self, index: MultipanIndex) -> [u8; 8] {
         self.multipan_identity(index).extended_address
     }
 
@@ -359,7 +355,7 @@ impl TaskRegisters {
     /// `ieee802154_ll_set_security_key`: four little-endian words in order.
     #[doc(hidden)]
     pub fn set_security_key(&mut self, key: &[u8; 16]) {
-        for (index, word) in key.chunks_exact(4).enumerate() {
+        for (index, word) in KEY_WORDS.into_iter().zip(key.chunks_exact(4)) {
             self.registers.write_key_word(
                 index,
                 u32::from_le_bytes([word[0], word[1], word[2], word[3]]),
