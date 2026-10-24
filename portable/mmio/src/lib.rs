@@ -209,6 +209,16 @@ pub trait Registers {
 /// ```
 pub trait SharedRegisters: Registers {}
 
+/// The interrupt-matrix source of a register owner's interrupt: the owner
+/// a handler holds (the interrupt side of a divided block, or the whole
+/// block) names the source an interrupt table binds its handler to. The
+/// generator implements it from the model's source number; it grants no
+/// register access.
+pub trait InterruptSource {
+    /// The source number of the chip's interrupt matrix.
+    const SOURCE: u16;
+}
+
 /// Blocks of device registers one promise of [`assume_owned`] makes: a
 /// [`Block`] at a [`Fixed`] address, or a tuple of up to eight claims.
 pub trait Claim: sealed::Claimed {}
