@@ -179,11 +179,16 @@ pub async fn serve(channel: FrontendChannel, body: super::station::Body) {
             let mut running = core::pin::pin!(radio::run_port(front, body));
             let _ = super::future::Boundary(running.as_mut()).await;
         }
-        Err(_) => body
-            .attempt
-            .publish(oer_hil_protocol::wifi::StationLinkState::Disconnected {
-                reason: oer_hil_protocol::wifi::StationDisconnectReason::RadioFailure,
-            }),
+        Err(_) => {
+            body.attempt
+                .publish(oer_hil_protocol::wifi::StationLinkState::Disconnected {
+                    reason: oer_hil_protocol::wifi::StationDisconnectReason::RadioFailure,
+                });
+            super::end(
+                body.attempt,
+                oer_hil_protocol::wifi::StationServiceEnd::Unavailable,
+            );
+        }
     }
 }
 async fn install(boot: Boot, config: RadioConfig) -> Result<PortParts<Device, TX>, &'static str> {

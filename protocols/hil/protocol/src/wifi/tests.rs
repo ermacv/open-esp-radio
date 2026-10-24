@@ -315,6 +315,10 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
             });
         }
     }
+    event_round_trip(StationServiceEnded {
+        epoch: u32::MAX,
+        end: StationServiceEnd::Unavailable,
+    });
     // Enabling and submitting faults with the same cause stay distinct.
     let cause = StationBackendFault::Deadline;
     assert_ne!(
