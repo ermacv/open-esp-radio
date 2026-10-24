@@ -436,7 +436,7 @@ fn traffic(
                     |script| ssh.output(script, COMMAND_TIMEOUT),
                     w3::network::BRIDGE,
                     address,
-                    |state| context.results.observe("w4-neighbor-state", &state),
+                    |state| context.results.observe("w4-neighbor-state", state),
                 )?;
                 context.results.observe("w4-neighbor-refresh", &neighbor);
                 let deadline = Instant::now() + Duration::from_secs(5);
