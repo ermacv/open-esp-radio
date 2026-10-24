@@ -109,13 +109,18 @@ A device manifest may also place layouts of a register library through
 review file and a base address per peripheral). A library layout has no
 `baseAddress` and no reviews; the loader rejects either, and a placement must
 name exactly the layout's peripherals. A publication manifest that names a
-`library` instead of a `model` publishes that library: svd2rust renders its
-layouts at placeholder bases, the tool keeps only the register modules, makes
-each peripheral alias the bare `RegisterBlock` and appends the library API's
-transactions. It writes the raw crate and API bridges, but no SVD or binding
-index, since a library has no addresses. A chip that places a library layout
-re-exports the library's module from its raw PAC and may not define
-transactions on that peripheral. See [`chips/espressif/registers/ieee80211`](../../../chips/espressif/registers/ieee80211/README.md).
+`library` instead of a `model` publishes that library: the typed renderer
+renders every layout as a typed register block without an address (its owner
+is generic over its placement, its constructor takes a `Block` at any fixed
+base) with the library API's transactions as its methods, into the library
+crate's `generated.rs`. A library API lists no typed or unexposed
+peripherals, ownership partitions, register sides or interrupt sources; the
+tool writes no SVD or binding index, since a library has no addresses. A
+chip that places a library layout lists it in its `typed-peripherals`; its
+`generated.rs` re-exports the library's module with the chip's `BASE`,
+`Claim` and an owner alias at that base, and the chip's policy may not define
+transactions, register sides, write-trigger fields or FIFO ports on that
+peripheral. See [`chips/espressif/registers/ieee80211`](../../../chips/espressif/registers/ieee80211/README.md).
 
 ## Typed register blocks
 

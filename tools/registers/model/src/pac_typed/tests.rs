@@ -645,3 +645,142 @@ fn trigger_and_fifo_declarations_need_a_typed_peripheral() {
     let legacy = pack.without_typed();
     assert!(legacy.write_trigger_fields.is_empty() && legacy.fifo_ports.is_empty());
 }
+
+/// A register library's API: one fixed image on `RADIO.CONTROL`.
+fn library_pack() -> PacApiPack {
+    let mut pack = empty_pack();
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        name: "enable_level_two".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "CONTROL".to_owned(),
+        value: 0x21,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack
+}
+
+/// `RADIO` placed from the library whose module is `crate::library`.
+fn placed_radio() -> std::collections::BTreeMap<String, crate::SharedPeripheral> {
+    std::collections::BTreeMap::from([(
+        "RADIO".to_owned(),
+        crate::SharedPeripheral {
+            library: "fixture".to_owned(),
+            crate_name: "crate::library".to_owned(),
+        },
+    )])
+}
+
+#[test]
+fn a_library_block_has_no_address_and_a_chip_places_it() {
+    let library = library_pack()
+        .render_library_typed_rust(&svd(&block()))
+        .expect("the library renders");
+    for item in [
+        "pub mod radio {",
+        "pub mod other {",
+        "pub struct Radio<P: oer_mmio::Placement>(",
+        "impl<const BASE: usize> Radio<oer_mmio::Fixed<BASE>> {",
+        "pub fn enable_level_two(",
+    ] {
+        assert!(library.contains(item), "{item}\n{library}");
+    }
+    for chip_only in ["pub const BASE", "pub type Claim", "0x60000000", "Claims"] {
+        assert!(!library.contains(chip_only), "{chip_only}\n{library}");
+    }
+    let chip = partitioned_pack()
+        .render_typed_rust(&svd(&block()), &placed_radio())
+        .expect("the chip places the library block");
+    for item in [
+        "pub use crate::library::radio::*;",
+        "pub const BASE: usize = 0x60000000;",
+        "pub type Radio<P = oer_mmio::Fixed<0x60000000>> = crate::library::radio::Radio<P>;",
+        "pub type Claims = (super::radio::Claim, super::other::Claim,);",
+    ] {
+        assert!(chip.contains(item), "{item}\n{chip}");
+    }
+    assert!(!chip.contains("pub fn modify_control("), "{chip}");
+}
+
+#[test]
+fn a_placed_library_block_runs_through_the_chip_names() {
+    let library = library_pack()
+        .render_library_typed_rust(&svd(&block()))
+        .expect("the library renders");
+    let chip = partitioned_pack()
+        .render_typed_rust(&svd(&block()), &placed_radio())
+        .expect("the chip places the library block");
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let output = run_rendered(
+        directory.path(),
+        &format!("mod library {{\n{library}\n}}\n{chip}"),
+        r#"
+/// The chip's owner of its claimed block is the library's at the chip's base.
+fn owner(claim: radio::Claim) -> radio::Radio {
+    radio::Radio::new(claim)
+}
+
+fn main() {
+    let mut memory = [0_u32; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.enable_level_two();
+    let control = block.read_control();
+    println!("enable={} level={}", control.enable(), control.level().get());
+    drop(block);
+    println!("control={:#x}", memory[1]);
+}
+"#,
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["enable=true level=2", "control=0x21"]
+    );
+}
+
+#[test]
+fn a_chip_types_every_library_block_and_changes_none() {
+    let error = typed_pack()
+        .render_typed_rust(
+            &svd(&block()),
+            &std::collections::BTreeMap::from([(
+                "OTHER".to_owned(),
+                placed_radio()["RADIO"].clone(),
+            )]),
+        )
+        .expect_err("an untyped library block is refused");
+    assert!(
+        error.to_string().contains("list it in typed-peripherals"),
+        "{error}"
+    );
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("STATUS"));
+    let error = pack
+        .render_typed_rust(&svd(&block()), &placed_radio())
+        .expect_err("a chip FIFO port on a library block is refused");
+    assert!(
+        error
+            .to_string()
+            .contains("declare it in the library's API"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_library_declares_nothing_a_chip_owns() {
+    let mut pack = library_pack();
+    pack.interrupt_sources.push(crate::InterruptSource {
+        peripheral: "RADIO".to_owned(),
+        source: 12,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let error = pack
+        .render_library_typed_rust(&svd(&block()))
+        .expect_err("a library interrupt source is refused");
+    assert!(error.to_string().contains("belong to a chip"), "{error}");
+    let mut pack = library_pack();
+    pack.options.typed_peripherals = vec!["RADIO".to_owned()];
+    let error = pack
+        .render_library_typed_rust(&svd(&block()))
+        .expect_err("a library typed list is refused");
+    assert!(error.to_string().contains("types every layout"), "{error}");
+}
