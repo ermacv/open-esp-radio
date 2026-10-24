@@ -3560,16 +3560,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-boot-state"
-version = "0.1.0"
-dependencies = [
- "esp-backtrace",
- "esp-bootloader-esp-idf",
- "esp-hal",
- "esp-println",
-]
-
-[[package]]
 name = "oer-firmware-probes-esp32s31-radio"
 version = "0.1.0"
 dependencies = [
@@ -4418,6 +4408,7 @@ dependencies = [
 name = "oer-test-layers"
 version = "0.1.0"
 dependencies = [
+ "tempfile",
  "toml",
 ]
 

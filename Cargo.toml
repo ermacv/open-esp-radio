@@ -16,7 +16,6 @@ members = [
     "tools/vendor/scenarios-esp32s31",
     "firmware/probes/esp32c5-radio",
     "firmware/probes/esp32c5-register",
-    "firmware/probes/esp32s31-boot-state",
     "tools/vendor/phy",
     "chips/esp32c5/pac",
     "chips/esp32c5/pac-raw",
