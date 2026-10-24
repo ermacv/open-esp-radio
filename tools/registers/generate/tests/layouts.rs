@@ -276,8 +276,7 @@ fn rendered_layouts_are_rust_items() {
         names,
         [
             "DMA_WINDOW",
-            "DmaWindowAddress",
-            "DmaRef",
+            "DmaWindow",
             "Node",
             "_",
             "NodeControlCell",

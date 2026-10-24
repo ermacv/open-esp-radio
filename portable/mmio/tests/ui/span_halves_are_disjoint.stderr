@@ -7,7 +7,7 @@ error[E0080]: evaluation panicked: a span splits at a word-aligned address insid
  ::: src/lib.rs
   |
   | /             assert!(
-  | |                 START <= MID && MID <= END && MID % 4 == 0,
+  | |                 START <= MID && MID <= END && MID.is_multiple_of(4),
   | |                 "a span splits at a word-aligned address inside it"
   | |             );
   | |_____________- in this macro invocation
@@ -17,7 +17,7 @@ note: erroneous constant encountered
   |
   | /         const {
   | |             assert!(
-  | |                 START <= MID && MID <= END && MID % 4 == 0,
+  | |                 START <= MID && MID <= END && MID.is_multiple_of(4),
   | |                 "a span splits at a word-aligned address inside it"
   | |             );
   | |         };

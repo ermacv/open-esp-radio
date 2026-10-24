@@ -7,7 +7,7 @@ error[E0080]: evaluation panicked: a block lies inside its span
  ::: src/lib.rs
   |
   | /             assert!(
-  | |                 SIZE % 4 == 0 && START + SIZE <= END,
+  | |                 SIZE.is_multiple_of(4) && START + SIZE <= END,
   | |                 "a block lies inside its span"
   | |             );
   | |_____________- in this macro invocation
@@ -17,7 +17,7 @@ note: erroneous constant encountered
   |
   | /         const {
   | |             assert!(
-  | |                 SIZE % 4 == 0 && START + SIZE <= END,
+  | |                 SIZE.is_multiple_of(4) && START + SIZE <= END,
   | |                 "a block lies inside its span"
   | |             );
   | |         };

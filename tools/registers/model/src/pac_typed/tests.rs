@@ -1,6 +1,5 @@
 use crate::{
-    FixedRegisterImage, OwnershipPartition, PacApiPack, RegisterSplit,
-    pac_api::tests::empty_pack,
+    FixedRegisterImage, OwnershipPartition, PacApiPack, RegisterSplit, pac_api::tests::empty_pack,
 };
 
 /// One 32-bit register of `RADIO`, as SVD XML.
@@ -60,7 +59,13 @@ fn block() -> String {
 #[test]
 fn a_typed_block_renders_without_unsafe_or_raw_writes() {
     let rust = typed_pack().render_typed_rust(&svd(&block())).unwrap();
-    for unsafe_item in ["unsafe {", "unsafe fn", "unsafe impl", "unsafe trait", "allow(unsafe"] {
+    for unsafe_item in [
+        "unsafe {",
+        "unsafe fn",
+        "unsafe impl",
+        "unsafe trait",
+        "allow(unsafe",
+    ] {
         assert!(!rust.contains(unsafe_item), "{unsafe_item}\n{rust}");
     }
     for item in [
@@ -92,20 +97,29 @@ fn a_register_mixing_write_one_to_clear_and_ordinary_fields_is_refused() {
         ) + &field("ENABLE", 1, 1, "")),
     );
     let error = typed_pack().render_typed_rust(&svd(&mixed)).unwrap_err();
-    assert!(error.to_string().contains("mixes write-one-to-clear"), "{error}");
+    assert!(
+        error.to_string().contains("mixes write-one-to-clear"),
+        "{error}"
+    );
 }
 
 #[test]
 fn a_transaction_the_typed_backend_does_not_render_is_refused() {
     let mut pack = typed_pack();
-    pack.w1c_register_snapshots.push(crate::W1cRegisterSnapshot {
-        name: "status".to_owned(),
-        peripheral: "RADIO".to_owned(),
-        register: "STATUS".to_owned(),
-        sources: vec!["SOURCE".to_owned()],
-    });
+    pack.w1c_register_snapshots
+        .push(crate::W1cRegisterSnapshot {
+            name: "status".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "STATUS".to_owned(),
+            sources: vec!["SOURCE".to_owned()],
+        });
     let error = pack.render_typed_rust(&svd(&block())).unwrap_err();
-    assert!(error.to_string().contains("samples and acknowledges itself"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("samples and acknowledges itself"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -120,7 +134,10 @@ fn a_fixed_image_becomes_a_method_with_its_mask_asserted() {
     });
     let rust = pack.render_typed_rust(&svd(&block())).unwrap();
     assert!(rust.contains("pub fn issue_start(&mut self"), "{rust}");
-    assert!(rust.contains("oer_mmio::check::within(0x00000041, command::FIELDS)"), "{rust}");
+    assert!(
+        rust.contains("oer_mmio::check::within(0x00000041, command::FIELDS)"),
+        "{rust}"
+    );
 }
 
 #[test]
@@ -143,7 +160,10 @@ fn a_split_observing_a_register_its_read_changes_is_refused() {
         sources: vec!["SOURCE".to_owned()],
     });
     let error = pack.render_typed_rust(&svd(&clearing)).unwrap_err();
-    assert!(error.to_string().contains("no side-effect-free read"), "{error}");
+    assert!(
+        error.to_string().contains("no side-effect-free read"),
+        "{error}"
+    );
 }
 
 #[test]
