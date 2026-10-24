@@ -42,6 +42,17 @@ fn now() -> u64 {
 }
 const SHORT: Duration = Duration::from_secs(10);
 
+/// A failed workload still owns a running station until StopStation completes.
+fn stop_on_error<T>(work: Result<T>, stop: impl FnOnce() -> Result<()>) -> Result<T> {
+    match work {
+        Err(error) => {
+            stop().map_err(|_| format!("{error}; W4 StopStation cleanup failed"))?;
+            Err(error)
+        }
+        ok => ok,
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 struct Link {
     at_us: u64,
@@ -157,6 +168,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             }),
             SHORT,
         )?;
+        let mut station_stopped = false;
         let work: Result<_> = (|| {
             connected.push(authorized(capture, start, 0)?);
             let info = network(capture, start, &connected[0])?;
@@ -243,6 +255,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             stop_at = now();
             let stop = capture.command(StopStation, SHORT)?;
             let stopped: StationStopped = capture.wait_command(stop, SHORT)?;
+            station_stopped = true;
             context.results.observe("w4-final-counters", &stopped.0);
             let deadline = Instant::now() + SHORT;
             let after = loop {
@@ -265,6 +278,16 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             b.after = after;
             Ok(())
         })();
+        let work = stop_on_error(work, || {
+            if station_stopped {
+                return Ok(());
+            }
+            stop_at = now();
+            let stop = capture.command(StopStation, SHORT)?;
+            let stopped: StationStopped = capture.wait_command(stop, SHORT)?;
+            context.results.observe("w4-failure-stopped", &stopped.0);
+            Ok(())
+        });
         let events = capture.messages_since(start.first_event(), |messages| {
             messages
                 .iter()

@@ -1,5 +1,32 @@
 use super::*;
 
+#[test]
+fn failed_work_stops_the_station_before_returning_and_cleanup_failure_is_visible() {
+    let active = std::cell::Cell::new(true);
+    let result: Result<()> = stop_on_error(Err("DHCP missing".into()), || {
+        active.set(false);
+        Ok(())
+    });
+    assert!(!active.get());
+    assert_eq!(
+        result.expect_err("original failure").to_string(),
+        "DHCP missing"
+    );
+    let result = stop_on_error(Ok(42), || {
+        active.set(true);
+        Ok(())
+    });
+    assert_eq!(result.expect("already stopped successful workload"), 42);
+    assert!(!active.get());
+    let result: Result<()> = stop_on_error(Err("DHCP missing".into()), || {
+        Err("private remote error".into())
+    });
+    assert_eq!(
+        result.expect_err("cleanup failed").to_string(),
+        "DHCP missing; W4 StopStation cleanup failed"
+    );
+}
+
 fn frame(at: u64, direction: Direction, subtype: u8) -> StationFrame {
     StationFrame {
         at_us: at,
