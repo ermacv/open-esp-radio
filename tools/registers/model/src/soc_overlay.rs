@@ -1056,13 +1056,16 @@ pub fn import_overlay(
     // The peripherals in the order the overlay already states them, then
     // the others in the SVD's.
     let mut order: Vec<&String> = Vec::new();
-    for name in existing
-        .registers
-        .iter()
-        .map(|r| &r.peripheral)
-        .chain(existing.fields.iter().map(|f| &f.peripheral))
-    {
-        if !order.contains(&name) && svd.peripherals.contains_key(name) {
+    for line in existing_text.lines() {
+        let Some(name) = line
+            .strip_prefix("peripheral = \"")
+            .and_then(|rest| rest.strip_suffix('"'))
+        else {
+            continue;
+        };
+        if let Some((name, _)) = svd.peripherals.get_key_value(name)
+            && !order.contains(&name)
+        {
             order.push(name);
         }
     }
@@ -1097,21 +1100,48 @@ pub fn import_overlay(
             let file_paths = best_files(registers, &files, &directory, &cited, &mut headers)?;
             let (reg_rules, field_rules) =
                 derive_peripheral(name, registers, &file_paths, &mut headers)?;
-            render_peripheral(&mut out, name, registers, existing, reg_rules, field_rules);
+            let mut block = String::new();
+            render_peripheral(
+                &mut block,
+                name,
+                registers,
+                existing,
+                reg_rules,
+                field_rules,
+            );
+            push_peripheral(&mut out, name, &block);
         } else {
+            let mut block = String::new();
             for rule in existing.registers.iter().filter(|r| &r.peripheral == name) {
-                render_register(&mut out, rule);
+                render_register(&mut block, rule);
                 for field in existing
                     .fields
                     .iter()
                     .filter(|f| f.peripheral == rule.peripheral && f.register == rule.register)
                 {
-                    render_field(&mut out, field);
+                    render_field(&mut block, field);
                 }
             }
+            push_peripheral(&mut out, name, &block);
         }
     }
     Ok(out)
+}
+
+/// Append the entries of one peripheral, headed by the files they cite.
+fn push_peripheral(out: &mut String, peripheral: &str, block: &str) {
+    let Some(first) = block
+        .split("sources = [\"esp-idf:")
+        .nth(1)
+        .and_then(|rest| rest.split(['"', ':']).next())
+    else {
+        out.push_str(block);
+        return;
+    };
+    let name = first.rsplit('/').next().unwrap_or(first);
+    let struct_name = name.replace("_reg.h", "_struct.h");
+    out.push_str(&format!("\n# {peripheral}: {first} and {struct_name}.\n\n"));
+    out.push_str(block);
 }
 
 fn derive_interrupts(

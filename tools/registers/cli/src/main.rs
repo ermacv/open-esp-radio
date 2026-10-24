@@ -62,6 +62,34 @@ enum Command {
     /// The register checks.
     #[command(subcommand)]
     Check(Check),
+    /// A chip's strictness overlay against the pinned ESP-IDF headers.
+    #[command(subcommand)]
+    Overlay(Overlay),
+}
+
+#[derive(Subcommand)]
+enum Overlay {
+    /// Rebuild the overlay entries of PERIPHERAL (all the overlay states,
+    /// by default) from the pinned ESP-IDF register headers and write them
+    /// to `chips/<chip>/registers/model/strictness.toml`.
+    Import {
+        #[arg(long)]
+        chip: String,
+        /// The ESP-IDF checkout at the overlay's pin.
+        #[arg(long)]
+        idf: PathBuf,
+        #[arg(long)]
+        peripheral: Vec<String>,
+    },
+    /// Verify every overlay entry against the file and line it cites in the
+    /// pinned ESP-IDF headers and against the vendor SVD.
+    Check {
+        #[arg(long)]
+        chip: String,
+        /// The ESP-IDF checkout at the overlay's pin.
+        #[arg(long)]
+        idf: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -182,6 +210,14 @@ fn run() -> oer_registers_generate::Result<()> {
                 &pac_src,
             )?;
             println!("shared MMIO words of {chip}: {shared} reviewed");
+        }
+        Command::Overlay(Overlay::Import {
+            chip,
+            idf,
+            peripheral,
+        }) => oer_registers_generate::overlay::import(&ctx.root, &chip, &idf, &peripheral)?,
+        Command::Overlay(Overlay::Check { chip, idf }) => {
+            oer_registers_generate::overlay::check(&ctx.root, &chip, &idf)?;
         }
         Command::Check(Check::Inventory { chip, output }) => {
             oer_registers_generate::checks::inventory::run(&ctx, &chip, output)?;
