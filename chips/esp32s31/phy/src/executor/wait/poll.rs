@@ -15,7 +15,8 @@ const OBSERVATION_SETTLE_LIMIT: SettleLimit =
     };
 
 /// Observe until `attempt` yields a value or [`OBSERVATION_SETTLE_LIMIT`] has
-/// passed on `clock`; the first observation always runs.
+/// passed on `clock`; the first observation always runs, and so does one
+/// after the limit was seen.
 #[inline]
 pub(crate) fn settled<T, C: Clock + ?Sized>(
     clock: &C,
@@ -75,8 +76,9 @@ mod tests {
             None
         });
         assert_eq!(result, Err(Unsettled));
-        // 6 µs per read: the fourth read passes the 20 µs limit.
-        assert_eq!(reads, 4);
+        // 6 µs per read: the fourth read passes the 20 µs limit, and the
+        // fifth, which follows the passed limit, is the last.
+        assert_eq!(reads, 5);
     }
 
     #[test]
@@ -91,7 +93,7 @@ mod tests {
             }),
             Ok(false)
         );
-        assert_eq!(reads, 4);
+        assert_eq!(reads, 5);
         assert_eq!(bounded::<(), _>(&clock, || Ok(true)), Ok(true));
         assert_eq!(bounded(&clock, || Err("hardware")), Err("hardware"));
     }

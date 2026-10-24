@@ -55,7 +55,7 @@ fn final_read_or_write_edge_succeeds_at_the_settle_boundary() {
 }
 
 #[test]
-fn a_masked_read_at_the_boundary_does_not_claim_the_write_completed() {
+fn a_masked_read_at_the_boundary_gets_one_final_write_attempt_and_claims_no_busy_write() {
     let clock: VirtualClock = VirtualClock::default();
     let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
         fields::TXRF_RC_CALIBRATION_ENABLE,
@@ -66,16 +66,27 @@ fn a_masked_read_at_the_boundary_does_not_claim_the_write_completed() {
         &clock,
         &mut state,
         PhyColdI2cTransaction::action,
-        |state, _| {
-            state.observe_read_result(Ok(0))?;
-            clock.advance(Duration::from_micros(20)).unwrap();
+        |state, action| {
+            match action {
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. } => {
+                    state.observe_read_result(Ok(0))?;
+                    clock.advance(Duration::from_micros(20)).unwrap();
+                }
+                // The attempt after the passed limit publishes the write and
+                // samples it once; the bus is still busy.
+                PhyColdI2cAction::StartWrite { .. } => state.write_started()?,
+                PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                    state.observe_write_result(Err(PhyI2cError::Busy))?;
+                }
+                _ => panic!("only the masked write is admitted"),
+            }
             Ok::<_, crate::calibration::cold::PhyColdI2cError>(())
         },
     );
     assert_eq!(completed, Ok(false));
     assert!(matches!(
         state.action(),
-        PhyColdI2cAction::StartWrite { .. }
+        PhyColdI2cAction::AwaitWriteCompletionEdge { .. }
     ));
 }
 
@@ -162,7 +173,8 @@ fn publication_crossing_the_deadline_still_gets_its_first_ready_or_busy_observat
             },
         );
         assert_eq!(result, Ok(!busy));
-        assert_eq!(samples, 1);
+        // A busy write gets one more sample after the passed limit.
+        assert_eq!(samples, if busy { 2 } else { 1 });
         assert_eq!(
             clock.now().saturating_duration_since(started).as_micros(),
             21,
