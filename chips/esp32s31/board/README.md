@@ -98,8 +98,9 @@ its single no-execute data region would span stage two's PSRAM code.
 
 Every image uses one placement: PSRAM for code, ordinary data and a 192-KiB
 CPU0 task stack; SRAM for interrupt entries, hot code, critical state, DMA
-storage and two 32-KiB interrupt stacks. No image runs a task on CPU1, and
-the runtime has no CPU1 PSRAM task stack. These board sizes are not universal
+storage and core 0's interrupt stack (at most 32 KiB). Core 1 runs nothing:
+its task stack and its interrupt stack are an explicit 0 bytes in every image,
+which the image gate proves (see [Stacks](../../../docs/memory.md#stacks)). These board sizes are not universal
 chip capabilities.
 
 Because code runs from PSRAM, the adopted mapping keeps the PSRAM function
