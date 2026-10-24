@@ -2077,7 +2077,7 @@ fn a_second_waker_vtable_fails_the_image() {
     let error = census_of(&second_vtable_program(), "keep_other").unwrap_err();
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
     assert!(
-        error.message.contains("second waker vtable"),
+        error.message.contains("two waker vtables"),
         "{}",
         error.message
     );
@@ -2124,7 +2124,7 @@ fn a_waker_vtable_in_writable_data_is_counted() {
         )
         .replace("&OTHER", "unsafe { &*&raw const OTHER }");
     let error = census_of(&second, "keep_other").unwrap_err();
-    assert!(error.message.contains("second waker vtable"), "{error:?}");
+    assert!(error.message.contains("two waker vtables"), "{error:?}");
 }
 
 #[test]
@@ -2178,6 +2178,105 @@ pub extern "C" fn keep_slot() -> *mut core::mem::MaybeUninit<RawWakerVTable> {
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
     assert!(
         error.message.contains("static `RawWakerVTable`"),
+        "{}",
+        error.message
+    );
+}
+
+/// A library built with line tables only, as the precompiled `core` is: its
+/// DWARF states no function's return. Its waker's clone function takes
+/// `CLONE_BODY` as its body.
+const UNTYPED_WAKER_LIBRARY: &str = r#"
+#![no_std]
+use core::task::{RawWaker, RawWakerVTable, Waker};
+
+pub static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, nothing, nothing, nothing);
+
+unsafe fn clone(data: *const ()) -> RawWaker {
+    CLONE_BODY
+}
+unsafe fn nothing(_: *const ()) {
+    unsafe { core::ptr::write_volatile(0x1000 as *mut u32, 7) }
+}
+
+#[inline(never)]
+pub fn waker() -> Waker {
+    unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
+}
+"#;
+
+/// A program keeping the untyped library's waker.
+const UNTYPED_WAKER_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start(waker: &core::task::Waker) {
+    waker.wake_by_ref();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep() {
+    core::mem::forget(shared::waker());
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    loop {}
+}
+"#;
+
+/// The census of `program` linked with the untyped library whose clone
+/// function's body is `clone`, and whether the DWARF leaves the counted
+/// vtable's clone function untyped.
+fn untyped_census(clone: &str, program: &str) -> (Result<Option<[u32; 4]>>, bool) {
+    let library = UNTYPED_WAKER_LIBRARY.replace("CLONE_BODY", clone);
+    let elf = compiled_with_library(&library, "line-tables-only", program);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    let census = census(&elf, &dwarf, &types, &analysis);
+    let untyped =
+        matches!(&census, Ok(Some(vtable)) if dwarf.returned(vtable[0]) == Returned::Unknown);
+    (census, untyped)
+}
+
+#[test]
+fn an_untyped_waker_clone_heading_its_vtable_is_counted_by_layout() {
+    // The clone function the DWARF gives no return type takes its vtable's
+    // address, as `core`'s `Waker::noop` clone does.
+    let (census, untyped) = untyped_census("RawWaker::new(data, &VTABLE)", UNTYPED_WAKER_PROGRAM);
+    assert!(
+        census.unwrap().is_some(),
+        "the census counts the untyped vtable"
+    );
+    assert!(untyped, "the DWARF leaves its clone function untyped");
+}
+
+#[test]
+fn an_untyped_row_of_function_pointers_its_head_does_not_name_fails_the_census() {
+    let (census, _) = untyped_census("let _ = data;\n    loop {}", UNTYPED_WAKER_PROGRAM);
+    let error = census.unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(
+        error.message.contains("does not state") && error.message.contains("cannot classify"),
+        "{}",
+        error.message
+    );
+}
+
+#[test]
+fn a_typed_and_an_untyped_waker_vtable_are_two() {
+    let keep = "pub extern \"C\" fn keep() -> *const RawWakerVTable {\n    &VTABLE\n}";
+    assert!(WAKER_PROGRAM.contains(keep));
+    let program = WAKER_PROGRAM.replace(
+        keep,
+        "pub extern \"C\" fn keep() -> *const RawWakerVTable {\n    core::mem::forget(shared::waker());\n    &VTABLE\n}",
+    );
+    let (census, _) = untyped_census("RawWaker::new(data, &VTABLE)", &program);
+    let error = census.unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(
+        error.message.contains("two waker vtables"),
         "{}",
         error.message
     );

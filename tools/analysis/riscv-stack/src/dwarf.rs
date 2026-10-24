@@ -1,5 +1,5 @@
 //! Facts an image's DWARF states: the chain of functions inlined at an
-//! address, the type a function returns, by its qualified name, where every
+//! address, what a function returns ([`Returned`]), where every
 //! copy of a function lies, inlined or not, and the types, globals and
 //! signatures of [`TypeFacts`].
 //!
@@ -38,8 +38,9 @@ pub(crate) type Entry<'d> = gimli::DebuggingInformationEntry<Reader<'d>>;
 /// The debug information of one ELF.
 pub struct Dwarf {
     symbolizer: Symbolizer,
-    /// A function's entry address and the qualified name of its return type.
-    returns: BTreeMap<u32, String>,
+    /// What the function entered at each address returns, where the DWARF
+    /// states it.
+    returns: BTreeMap<u32, Return>,
     /// Every concrete subprogram entry at this address explicitly agrees
     /// on DW_AT_noreturn=true. Missing or conflicting facts answer false.
     noreturn: BTreeMap<u32, bool>,
@@ -47,6 +48,29 @@ pub struct Dwarf {
     paths: BTreeMap<usize, String>,
     /// Each copy's start and the offset of the subprogram it copies.
     copies: Vec<(u32, usize)>,
+}
+
+/// What the DWARF states a function returns.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Returned<'a> {
+    /// A type, by its qualified name, such as `core::task::wake::RawWaker`;
+    /// empty for an unnamed one, such as a pointer.
+    Type(&'a str),
+    /// Nothing: the subprogram, or the one it names by origin, lies in a
+    /// unit that describes types and names no return type.
+    Nothing,
+    /// The DWARF does not say: no subprogram enters there, its unit
+    /// describes no types (a library built with line tables only, such as
+    /// the precompiled `core`), its origin chain is broken, or two
+    /// descriptions of the entry disagree.
+    Unknown,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Return {
+    Type(String),
+    Nothing,
+    Unknown,
 }
 
 pub(crate) fn invalid(message: impl Into<String>) -> Error {
@@ -153,7 +177,7 @@ pub fn read(
     let mut units = dwarf.units();
     while let Some(header) = units.next().map_err(dwarf_error)? {
         let unit = dwarf.unit(header).map_err(dwarf_error)?;
-        returns.scope.clear();
+        returns.begin_unit(&mut scratch, control)?;
         types.begin_unit();
         let mut location_walk = locations
             .as_mut()
@@ -204,7 +228,26 @@ pub fn read(
     Ok((out, types))
 }
 
-/// Every subprogram's entry and the qualified name of its return type.
+/// Where a subprogram entry's description continues.
+#[derive(Clone, Copy)]
+enum Link {
+    None,
+    To(usize),
+    /// An origin attribute that names no entry.
+    Invalid,
+}
+
+/// A subprogram entry, abstract or concrete: its return type's offset, its
+/// origin and its unit.
+struct Subprogram {
+    returns: Option<usize>,
+    origin: Link,
+    unit: usize,
+}
+
+/// Every concrete subprogram's entry and what it returns, its own return
+/// type or, through `DW_AT_abstract_origin` and `DW_AT_specification`, its
+/// origin's.
 #[derive(Default)]
 struct Returns<'d> {
     /// The named namespaces and types the current entry lies in: depth and
@@ -214,12 +257,21 @@ struct Returns<'d> {
     nodes: BTreeMap<usize, (Option<usize>, &'d [u8])>,
     /// The named types among them.
     types: Vec<usize>,
-    /// Each subprogram's entry and its return type's offset.
-    returned: Vec<(u32, usize)>,
+    /// Every subprogram entry, by its offset in `.debug_info`.
+    subprograms: BTreeMap<usize, Subprogram>,
+    /// Each concrete subprogram's entry address and offset.
+    concrete: Vec<(u32, usize)>,
+    /// Whether each unit read so far describes any type.
+    typed_units: Vec<bool>,
     noreturn: BTreeMap<u32, bool>,
 }
 
 impl<'d> Returns<'d> {
+    fn begin_unit(&mut self, scratch: &mut Ledger<'_>, control: &mut dyn RunControl) -> Result<()> {
+        self.scope.clear();
+        scratch.push(&mut self.typed_units, false, control)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn entry(
         &mut self,
@@ -233,6 +285,21 @@ impl<'d> Returns<'d> {
     ) -> Result<()> {
         self.scope.retain(|(at, _)| *at < depth);
         let tag = entry.tag();
+        let unit_index = self.typed_units.len().saturating_sub(1);
+        if matches!(
+            tag,
+            gimli::DW_TAG_base_type
+                | gimli::DW_TAG_structure_type
+                | gimli::DW_TAG_union_type
+                | gimli::DW_TAG_enumeration_type
+                | gimli::DW_TAG_pointer_type
+                | gimli::DW_TAG_array_type
+                | gimli::DW_TAG_subroutine_type
+                | gimli::DW_TAG_typedef
+        ) && let Some(typed) = self.typed_units.last_mut()
+        {
+            *typed = true;
+        }
         let named = matches!(
             tag,
             gimli::DW_TAG_namespace
@@ -256,6 +323,24 @@ impl<'d> Returns<'d> {
                 scratch.push(&mut self.scope, (depth, offset), control)?;
             }
         } else if tag == gimli::DW_TAG_subprogram {
+            let returns = entry
+                .attr_value(gimli::DW_AT_type)
+                .and_then(|returns| reference(unit, returns));
+            // As `origin_reference`: a present abstract origin wins, and one
+            // that names no entry does not fall through.
+            let origin = match entry
+                .attr_value(gimli::DW_AT_abstract_origin)
+                .or_else(|| entry.attr_value(gimli::DW_AT_specification))
+            {
+                None => Link::None,
+                Some(value) => reference(unit, value).map_or(Link::Invalid, Link::To),
+            };
+            let subprogram = Subprogram {
+                returns,
+                origin,
+                unit: unit_index,
+            };
+            scratch.insert(&mut self.subprograms, offset, subprogram, control)?;
             let Some(gimli::AttributeValue::Addr(low)) = entry.attr_value(gimli::DW_AT_low_pc)
             else {
                 return Ok(());
@@ -267,12 +352,7 @@ impl<'d> Returns<'d> {
                 entry.attr_value(gimli::DW_AT_noreturn) == Some(gimli::AttributeValue::Flag(true));
             let proof = scratch.entry(&mut self.noreturn, low, || noreturn, control)?;
             *proof &= noreturn;
-            if let Some(target) = entry
-                .attr_value(gimli::DW_AT_type)
-                .and_then(|returns| reference(unit, returns))
-            {
-                scratch.push(&mut self.returned, (low, target), control)?;
-            }
+            scratch.push(&mut self.concrete, (low, offset), control)?;
         }
         Ok(())
     }
@@ -290,6 +370,45 @@ impl<'d> Returns<'d> {
         parts.join("::")
     }
 
+    /// What the subprogram entry at `offset` returns: the first return type
+    /// along its origin chain, or nothing where the chain ends in a typed
+    /// unit without one.
+    fn resolve(
+        &self,
+        offset: usize,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<Return> {
+        let mut at = offset;
+        // Stop at a reference to no subprogram, a broken link or a cycle.
+        for _ in 0..=self.subprograms.len() {
+            control.checkpoint(1)?;
+            let Some(subprogram) = self.subprograms.get(&at) else {
+                return Ok(Return::Unknown);
+            };
+            if let Some(returns) = subprogram.returns {
+                let name = if self.types.binary_search(&returns).is_ok() {
+                    keep.string(&self.qualified(returns), control)?
+                } else {
+                    String::new()
+                };
+                return Ok(Return::Type(name));
+            }
+            match subprogram.origin {
+                Link::To(next) => at = next,
+                Link::Invalid => return Ok(Return::Unknown),
+                Link::None => {
+                    return Ok(if self.typed_units.get(subprogram.unit) == Some(&true) {
+                        Return::Nothing
+                    } else {
+                        Return::Unknown
+                    });
+                }
+            }
+        }
+        Ok(Return::Unknown)
+    }
+
     fn finish(
         self,
         out: &mut Dwarf,
@@ -299,12 +418,14 @@ impl<'d> Returns<'d> {
         for (&low, &proof) in &self.noreturn {
             keep.insert(&mut out.noreturn, low, proof, control)?;
         }
-        for &(low, target) in &self.returned {
-            control.checkpoint(1)?;
-            if self.types.binary_search(&target).is_ok() {
-                let name = keep.string(&self.qualified(target), control)?;
-                keep.insert(&mut out.returns, low, name, control)?;
-            }
+        for &(low, offset) in &self.concrete {
+            let returned = self.resolve(offset, keep, control)?;
+            // Descriptions of one entry that disagree say nothing.
+            let returned = match out.returns.get(&low) {
+                Some(earlier) if *earlier != returned => Return::Unknown,
+                _ => returned,
+            };
+            keep.insert(&mut out.returns, low, returned, control)?;
         }
         Ok(())
     }
@@ -404,10 +525,13 @@ impl Dwarf {
             .collect())
     }
 
-    /// The qualified name of the type the function entered at `function`
-    /// returns, such as `core::task::wake::RawWaker`.
-    pub fn return_type(&self, function: u32) -> Option<&str> {
-        self.returns.get(&function).map(String::as_str)
+    /// What the function entered at `function` returns.
+    pub fn returned(&self, function: u32) -> Returned<'_> {
+        match self.returns.get(&function) {
+            Some(Return::Type(name)) => Returned::Type(name),
+            Some(Return::Nothing) => Returned::Nothing,
+            Some(Return::Unknown) | None => Returned::Unknown,
+        }
     }
 
     /// Where every copy of each function named in `functions` (by its
