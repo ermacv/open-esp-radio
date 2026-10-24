@@ -24,7 +24,7 @@
 //! # let mut router = fake_router(0);
 //! # let tokens = Interrupts::take().unwrap();
 //! // A part moves into its one binding.
-//! let part = TimerIrq;
+//! let part = TimerIrq::default();
 //! let _ = router.bind(tokens.timer, part);
 //! let _ = router.bind(tokens.timer, part);
 //! ```
@@ -50,7 +50,7 @@
 //! # oer_interrupt_table::__fake_table!();
 //! # let mut router = fake_router(0);
 //! let tokens = Interrupts::take().unwrap();
-//! let bound = router.bind(tokens.timer, TimerIrq).unwrap();
+//! let bound = router.bind(tokens.timer, TimerIrq::default()).unwrap();
 //! fn enable_timer_interrupt(_bound: &oer_interrupt_table::Bound<TimerIrq>) {}
 //! enable_timer_interrupt(&bound);
 //! ```
@@ -634,8 +634,12 @@ pub mod __private {
 #[macro_export]
 macro_rules! __fake_parts {
     () => {
-        /// The timer's interrupt part, source 3.
-        pub struct TimerIrq;
+        /// The timer's interrupt part, source 3; it counts the calls of
+        /// its handler.
+        #[derive(Default)]
+        pub struct TimerIrq {
+            pub handled: u32,
+        }
         impl $crate::InterruptSource for TimerIrq {
             const SOURCE: u16 = 3;
         }
@@ -724,8 +728,10 @@ macro_rules! __fake_table {
             }
         }
 
-        /// The handler of the timer's entry.
-        pub fn on_timer(_: &mut TimerIrq) {}
+        /// The handler of the timer's entry: one more call on its part.
+        pub fn on_timer(part: &mut TimerIrq) {
+            part.handled += 1;
+        }
         /// The handler of the radio's entry.
         pub fn on_radio(_: &mut RadioIrq) {}
 

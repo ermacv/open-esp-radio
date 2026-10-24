@@ -118,7 +118,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     // borrows the timer's cell.
     unsafe { __oer_interrupt_h0_l16() };
 
-    let _bound: crate::Bound<TimerIrq> = zero.bind(tokens.timer, TimerIrq).unwrap();
+    let _bound: crate::Bound<TimerIrq> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
     assert_eq!(crate::Bound::<TimerIrq>::SOURCE, 3);
     assert_eq!(
         zero.controller.writes[before..],
@@ -134,9 +134,21 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
         ]
     );
     zero.verify().unwrap();
-    assert!(<TimerToken as Entry>::cell().with(|_| ()).is_some());
+    assert_eq!(
+        <TimerToken as Entry>::cell().with(|part| part.handled),
+        Some(0)
+    );
     // SAFETY: as above; the cell now lends the part to `on_timer`.
-    unsafe { __oer_interrupt_h0_l16() };
+    unsafe {
+        __oer_interrupt_h0_l16();
+        __oer_interrupt_h0_l16();
+    }
+    // Each call of the line's symbol ran the entry's handler on the bound
+    // part once.
+    assert_eq!(
+        <TimerToken as Entry>::cell().with(|part| part.handled),
+        Some(2)
+    );
 
     let mut one = fake_router(1);
     let _bound = one.bind(refused.token, refused.part).unwrap();
