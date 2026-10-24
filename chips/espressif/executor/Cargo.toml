@@ -17,11 +17,13 @@ esp32s31 = [
     "chip",
     "esp-hal/esp32s31",
     "oer-espressif-esp-hal-irq/esp32s31",
+    "dep:oer-esp32s31-hal",
 ]
 esp32c5 = [
     "chip",
     "esp-hal/esp32c5",
     "oer-espressif-esp-hal-irq/esp32c5",
+    "dep:oer-esp32c5-hal",
 ]
 # The executor and time driver, which a chip feature selects.
 chip = [
@@ -32,6 +34,7 @@ chip = [
     "dep:oer-espressif-esp-hal-irq",
     "dep:oer-interrupt-table",
     "dep:oer-riscv",
+    "dep:oer-mmio",
 ]
 
 [dependencies]
@@ -47,14 +50,15 @@ portable-atomic = { version = "1.11", default-features = false, optional = true 
 oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
 oer-espressif-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
 oer-riscv = { path = "../../../portable/riscv", optional = true }
+oer-mmio = { path = "../../../portable/mmio", optional = true }
+oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
+oer-esp32c5-hal = { path = "../../esp32c5/hal", optional = true }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.15", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
-esp32s31-pac = { package = "esp32s31", git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", default-features = false }
-esp32c5-pac = { package = "esp32c5", git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", default-features = false }
 
 [dev-dependencies]
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }

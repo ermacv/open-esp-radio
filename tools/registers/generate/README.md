@@ -203,6 +203,17 @@ enable or control writes back the pending bit read. That is sound only
 while every vectored line is level-triggered, and a CLIC block's model
 description records that invariant.
 
+`[[shared-blocks]]` (`peripheral`, `description`, `sources`) declares a
+typed block whose one owner every execution context reaches at once: a
+counter latch and its value, a software interrupt line. Its registers are
+side-effect-free reads, registers whose writable fields are all write
+triggers, and registers of one field stored whole; any other register, a
+split or a policy transaction on it is refused. Every method takes `&self`:
+`read_<register>`, `trigger_<register>_<field>` (the trigger alone, zero in
+every other bit, nothing read back) and `store_<register>` (the one field
+from zero). Its `BlockWords` implement `oer_mmio::SharedRegisters`, so the
+owner at its fixed address is `Sync` and lives in a `static`.
+
 The policy's `[[ownership-partitions]]` of typed peripherals become
 `peripheral_ownership`: a struct per partition holding its owners,
 `PeripheralPartitions`, `Claims` (every typed block, as nested tuples the
@@ -528,6 +539,11 @@ own copy:
   (`SYSTEM <= PCR`). `cargo registers check shared-words --chip <chip>
   --esp-hal-src <dir> --esp-metadata-generated-src <dir> --pac-src <dir>`
   runs it on the given esp-hal, esp-metadata-generated and PAC sources.
+  esp-hal stores through `P::regs()` and through `let p = unsafe {
+  P::steal() };` bindings count; an array accessor spans its `[(); N]`
+  elements at its `.add(S * n)` stride, and a byte register counts as the
+  word that holds it. An entry with `words = N` reviews a run of `N` words
+  four bytes apart from its `address`.
 
 `ChipSources` resolves the files a chip's publication manifest names
 without validating them. The binding index format is

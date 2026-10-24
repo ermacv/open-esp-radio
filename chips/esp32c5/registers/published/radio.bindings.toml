@@ -4,6 +4,2598 @@
 schema = 2
 
 [[registers]]
+address = 545263616
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL0"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263620
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL1"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263624
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL2"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263628
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL3"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 3
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263632
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL4"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 4
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263636
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL5"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 5
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263640
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL6"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 6
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263644
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL7"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 7
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263648
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL8"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 8
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263652
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL9"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 9
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263656
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL10"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 10
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263660
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL11"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 11
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263664
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL12"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 12
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263668
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL13"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 13
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263672
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL14"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 14
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263676
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL15"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 15
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263680
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL16"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 16
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263684
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL17"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 17
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263688
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL18"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 18
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263692
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL19"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 19
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263696
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL20"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 20
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263700
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL21"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 21
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263704
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL22"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 22
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263708
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL23"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 23
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263712
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL24"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 24
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263716
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL25"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 25
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263720
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL26"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 26
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263724
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL27"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 27
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263728
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL28"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 28
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263732
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL29"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 29
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263736
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL30"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 30
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263740
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL31"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 31
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263744
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL32"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 32
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263748
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL33"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 33
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263752
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL34"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 34
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263756
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL35"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 35
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263760
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL36"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 36
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263764
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL37"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 37
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263768
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL38"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 38
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263772
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL39"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 39
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263776
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL40"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 40
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263780
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL41"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 41
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263784
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL42"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 42
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263788
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL43"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 43
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263792
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL44"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 44
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263796
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL45"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 45
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263800
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL46"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 46
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 545263804
+width = 32
+access = "read-only"
+identity = "CLIC.CTRL47"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+register-index = 47
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
 address = 1610645576
 width = 32
 access = "read-write"
@@ -338,6 +2930,496 @@ bit-width = 32
 access = "read-write"
 
 [[registers]]
+address = 1610653696
+width = 32
+access = "read-write"
+identity = "SYSTIMER.CONF"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "conf"
+
+[[registers.fields]]
+svd-name = "SYSTIMER_CLK_FO"
+method = "systimer_clk_fo"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ETM_EN"
+method = "etm_en"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET2_WORK_EN"
+method = "target2_work_en"
+bit-offset = 22
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET1_WORK_EN"
+method = "target1_work_en"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET0_WORK_EN"
+method = "target0_work_en"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT1_CORE1_STALL_EN"
+method = "timer_unit1_core1_stall_en"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT1_CORE0_STALL_EN"
+method = "timer_unit1_core0_stall_en"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT0_CORE1_STALL_EN"
+method = "timer_unit0_core1_stall_en"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT0_CORE0_STALL_EN"
+method = "timer_unit0_core0_stall_en"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT1_WORK_EN"
+method = "timer_unit1_work_en"
+bit-offset = 29
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT0_WORK_EN"
+method = "timer_unit0_work_en"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_EN"
+method = "clk_en"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1610653700
+width = 32
+access = "read-write"
+identity = "SYSTIMER_COUNTER.UNIT0_OP"
+peripheral = "SYSTIMER_COUNTER"
+peripheral-type = "SystimerCounter"
+peripheral-module = "systimer_counter"
+scope = []
+register-method = "unit0_op"
+
+[[registers.fields]]
+svd-name = "VALUE_VALID"
+method = "value_valid"
+bit-offset = 29
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "UPDATE"
+method = "update"
+bit-offset = 30
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 1610653724
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET0_HI"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_hi"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "HI"
+method = "hi"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1610653728
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET0_LO"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_lo"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "LO"
+method = "lo"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1610653732
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET1_HI"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_hi"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "HI"
+method = "hi"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1610653736
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET1_LO"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_lo"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "LO"
+method = "lo"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1610653740
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET2_HI"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_hi"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "HI"
+method = "hi"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 1610653744
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET2_LO"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_lo"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "LO"
+method = "lo"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 1610653748
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET0_CONF"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_conf"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "PERIOD"
+method = "period"
+bit-offset = 0
+bit-width = 26
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PERIOD_MODE"
+method = "period_mode"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT_SEL"
+method = "timer_unit_sel"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1610653752
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET1_CONF"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_conf"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "PERIOD"
+method = "period"
+bit-offset = 0
+bit-width = 26
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PERIOD_MODE"
+method = "period_mode"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT_SEL"
+method = "timer_unit_sel"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1610653756
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET2_CONF"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_conf"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "PERIOD"
+method = "period"
+bit-offset = 0
+bit-width = 26
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PERIOD_MODE"
+method = "period_mode"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT_SEL"
+method = "timer_unit_sel"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1610653760
+width = 32
+access = "read-only"
+identity = "SYSTIMER_COUNTER.UNIT0_VALUE_HI"
+peripheral = "SYSTIMER_COUNTER"
+peripheral-type = "SystimerCounter"
+peripheral-module = "systimer_counter"
+scope = []
+register-method = "unit0_value_hi"
+
+[[registers.fields]]
+svd-name = "VALUE_HI"
+method = "value_hi"
+bit-offset = 0
+bit-width = 20
+access = "read-only"
+
+[[registers]]
+address = 1610653764
+width = 32
+access = "read-only"
+identity = "SYSTIMER_COUNTER.UNIT0_VALUE_LO"
+peripheral = "SYSTIMER_COUNTER"
+peripheral-type = "SystimerCounter"
+peripheral-module = "systimer_counter"
+scope = []
+register-method = "unit0_value_lo"
+
+[[registers.fields]]
+svd-name = "VALUE_LO"
+method = "value_lo"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1610653776
+width = 32
+access = "write-only"
+identity = "SYSTIMER.COMP0_LOAD"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "comp_load"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "LOAD"
+method = "load"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 1610653780
+width = 32
+access = "write-only"
+identity = "SYSTIMER.COMP1_LOAD"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "comp_load"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "LOAD"
+method = "load"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 1610653784
+width = 32
+access = "write-only"
+identity = "SYSTIMER.COMP2_LOAD"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "comp_load"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "LOAD"
+method = "load"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 1610653796
+width = 32
+access = "read-write"
+identity = "SYSTIMER.INT_ENA"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "int_ena"
+
+[[registers.fields]]
+svd-name = "TARGET0_INT_ENA"
+method = "target0_int_ena"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET1_INT_ENA"
+method = "target1_int_ena"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET2_INT_ENA"
+method = "target2_int_ena"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1610653804
+width = 32
+access = "write-only"
+identity = "SYSTIMER_ACKNOWLEDGE.INT_CLR"
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+peripheral-type = "SystimerAcknowledge"
+peripheral-module = "systimer_acknowledge"
+scope = []
+register-method = "int_clr"
+
+[[registers.fields]]
+svd-name = "TARGET0_INT_CLR"
+method = "target0_int_clr"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "TARGET1_INT_CLR"
+method = "target1_int_clr"
+bit-offset = 1
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "TARGET2_INT_CLR"
+method = "target2_int_clr"
+bit-offset = 2
+bit-width = 1
+access = "write-only"
+
+[[registers]]
 address = 1610670080
 width = 32
 access = "read-write"
@@ -406,6 +3488,318 @@ bit-width = 1
 access = "read-write"
 
 [[registers]]
+address = 1610678272
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW0"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678276
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW1"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678280
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW2"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678284
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW3"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 3
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678288
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW4"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 4
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678292
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW5"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 5
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678296
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW6"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 6
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678300
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW7"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 7
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678304
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW8"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 8
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678308
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW9"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 9
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678312
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW10"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 10
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678316
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_LOW11"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+register-index = 11
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
 address = 1610678320
 width = 32
 access = "read-write"
@@ -429,6 +3823,1906 @@ method = "pass_in_sec"
 bit-offset = 8
 bit-width = 1
 access = "read-write"
+
+[[registers]]
+address = 1610678324
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH0"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 0
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678328
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH1"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 1
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678332
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH2"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 2
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678336
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH3"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 3
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678340
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH4"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 4
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678344
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH5"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 5
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678348
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH6"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 6
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678352
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH7"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 7
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678356
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH8"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 8
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678360
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH9"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 9
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678364
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH10"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 10
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678368
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH11"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 11
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678372
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH12"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 12
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678376
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH13"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 13
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678380
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH14"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 14
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678384
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH15"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 15
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678388
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH16"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 16
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678392
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH17"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 17
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678396
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH18"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 18
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678400
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH19"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 19
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678404
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH20"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 20
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678408
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH21"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 21
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678412
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH22"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 22
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678416
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH23"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 23
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678420
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH24"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 24
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678424
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH25"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 25
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678428
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH26"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 26
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678432
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH27"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 27
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678436
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH28"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 28
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678440
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH29"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 29
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678444
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH30"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 30
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678448
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH31"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 31
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678452
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH32"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 32
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678456
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH33"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 33
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678460
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH34"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 34
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678464
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH35"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 35
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678468
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH36"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 36
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678472
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH37"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 37
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678476
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH38"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 38
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678480
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH39"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 39
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678484
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH40"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 40
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678488
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH41"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 41
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678492
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH42"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 42
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678496
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH43"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 43
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678500
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH44"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 44
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678504
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH45"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 45
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678508
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH46"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 46
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678512
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH47"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 47
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678516
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH48"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 48
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678520
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH49"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 49
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678524
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH50"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 50
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678528
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH51"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 51
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678532
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH52"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 52
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678536
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH53"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 53
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678540
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH54"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 54
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678544
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH55"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 55
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678548
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH56"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 56
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678552
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH57"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 57
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678556
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH58"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 58
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678560
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH59"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 59
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678564
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH60"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 60
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678568
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH61"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 61
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678572
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH62"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 62
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678576
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH63"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 63
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678580
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH64"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 64
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678584
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH65"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 65
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678588
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH66"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 66
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678592
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH67"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 67
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678596
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH68"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 68
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678600
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH69"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 69
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678604
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0.MAP_HIGH70"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+register-index = 70
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PASS_IN_SEC"
+method = "pass_in_sec"
+bit-offset = 8
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 1610678608
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_0"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_0"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1610678612
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_1"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_1"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 1610678616
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_2"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_2"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 20
+access = "read-only"
 
 [[registers]]
 address = 1611227232
@@ -12955,3 +18249,75 @@ method = "rnd_sync_data"
 bit-offset = 0
 bit-width = 32
 access = "read-only"
+
+[[registers]]
+address = 1611419792
+width = 32
+access = "read-write"
+identity = "FROM_CPU_0.LINE"
+peripheral = "FROM_CPU_0"
+peripheral-type = "FromCpu0"
+peripheral-module = "from_cpu_0"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611419796
+width = 32
+access = "read-write"
+identity = "FROM_CPU_1.LINE"
+peripheral = "FROM_CPU_1"
+peripheral-type = "FromCpu1"
+peripheral-module = "from_cpu_1"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611419800
+width = 32
+access = "read-write"
+identity = "FROM_CPU_2.LINE"
+peripheral = "FROM_CPU_2"
+peripheral-type = "FromCpu2"
+peripheral-module = "from_cpu_2"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611419804
+width = 32
+access = "read-write"
+identity = "FROM_CPU_3.LINE"
+peripheral = "FROM_CPU_3"
+peripheral-type = "FromCpu3"
+peripheral-module = "from_cpu_3"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"

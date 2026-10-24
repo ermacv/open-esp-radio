@@ -70,7 +70,9 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   PAC's root makes the promise, once for each domain's typed blocks, from
   that domain's platform handoff: the radio root for the radio blocks, and
   one handoff per platform domain (such as the eFuse, entropy,
-  reset-cause and watchdog blocks) that an esp-hal adapter makes after
+  reset-cause and watchdog blocks, the system timer, each software
+  interrupt line and the interrupt matrix with the CLIC) that the domain's
+  owner makes after
   consuming the domain's esp-hal singletons (clippy `disallowed-methods` refuses it
   elsewhere); a probe image may claim a block again after dropping the
   block's owner.
@@ -96,6 +98,11 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
 - `oer_mmio::Reader`, the `Copy` read-only authority a block or part
   becomes when it gives up its writes: no owner writes the words it took
   over, and every copy only reads.
+- The `Sync` implementation of a shared block at a fixed address
+  (`oer_mmio::SharedRegisters`, a policy's `[[shared-blocks]]`) and its
+  `write_shared`: a device word is not Rust memory, and the block's writes
+  are whole-word stores that read nothing back, so every execution context
+  reaches its one owner through `&self`.
 - `oer_mmio::fence`, the device-access ordering instruction.
 - `VolatileCell`, the volatile word of the generated memory layouts, and
   its `Zeroable` implementation, from which the layouts derive theirs; and

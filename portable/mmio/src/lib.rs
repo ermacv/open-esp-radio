@@ -28,6 +28,11 @@
 //!   [`Part::write_trigger`]); joined parts own every word of the block.
 //! - **Who may only read.** [`Block::into_reader`] and [`Part::into_reader`]
 //!   give up every write for a `Copy` [`Reader`] of the listed words.
+//! - **Who may share a block.** A block whose words list [`SharedRegisters`]
+//!   (the generator's shared blocks: side-effect-free reads, write-trigger
+//!   strobes and one-field registers stored whole) is written through
+//!   `&self` with [`Block::write_shared`]; at a [`Fixed`] address it is
+//!   `Sync`, so one owner in a `static` serves every execution context.
 //!
 //! Memory the hardware reads by DMA is typed here too: [`DmaWindowAddress`]
 //! and [`DmaRef`] are made only by their `unsafe` constructors (a chip HAL's
@@ -185,6 +190,24 @@ pub trait Registers {
     /// The block's words.
     const WORDS: &'static [usize];
 }
+
+/// The words of a block that every execution context may reach at once:
+/// each write it makes is a whole-word store that reads nothing back (a
+/// write-trigger strobe, or a one-field register stored whole), and each
+/// read has no side effect. The register generator implements it only for
+/// a policy's shared block, whose registers it checks are of these kinds.
+///
+/// Only such a block is `Sync`; an ordinary block at a fixed address is not:
+///
+/// ```compile_fail,E0277
+/// struct Words;
+/// impl oer_mmio::Registers for Words {
+///     const WORDS: &'static [usize] = &[0];
+/// }
+/// fn sync<T: Sync>() {}
+/// sync::<oer_mmio::Block<oer_mmio::Fixed<0x1000>, Words>>();
+/// ```
+pub trait SharedRegisters: Registers {}
 
 /// Blocks of device registers one promise of [`assume_owned`] makes: a
 /// [`Block`] at a [`Fixed`] address, or a tuple of up to eight claims.
@@ -627,6 +650,35 @@ const fn owners_cover(block: &[usize], first: &[usize], second: &[usize]) -> boo
         words = rest;
     }
     true
+}
+
+#[allow(
+    unsafe_code,
+    reason = "a shared block at a fixed address is reached from every context"
+)]
+// SAFETY: a `Block<Fixed<..>, _>` holds no memory: its only state is the
+// const address. Its accesses are volatile loads and stores of device
+// registers, which are not Rust memory, so accesses from several contexts
+// are no data race; `R: SharedRegisters` limits the `&self` writes to
+// whole-word stores that read nothing back. Host blocks stay `!Sync`, since
+// their words are ordinary memory.
+unsafe impl<const BASE: usize, R: SharedRegisters> Sync for Block<Fixed<BASE>, R> {}
+
+#[allow(
+    unsafe_code,
+    reason = "the volatile whole-word store of a shared block"
+)]
+impl<P: Placement, R: SharedRegisters> Block<P, R> {
+    /// One volatile store of the whole word at byte `OFFSET`, through a
+    /// shared borrow: the write of a shared block, which reads nothing back.
+    #[inline(always)]
+    pub fn write_shared<const OFFSET: usize>(&self, value: u32) {
+        const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
+        // SAFETY: as in `read`. A device word is not Rust memory; a host
+        // block is `!Sync` and borrows its memory mutably, so this store
+        // through the raw word pointer is the only access while it runs.
+        unsafe { self.place.word(OFFSET).write_volatile(value) }
+    }
 }
 
 impl<const BASE: usize, R: Registers> Block<Fixed<BASE>, R> {

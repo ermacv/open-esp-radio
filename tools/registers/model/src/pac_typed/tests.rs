@@ -1196,3 +1196,107 @@ fn an_acknowledged_clear_register_takes_no_write_trigger() {
         "writes a register only its snapshot's acknowledgement writes",
     );
 }
+
+fn shared() -> crate::SharedBlock {
+    crate::SharedBlock {
+        peripheral: "RADIO".to_owned(),
+        description: "A counter every context reads.".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    }
+}
+
+/// A counter: `OP` (a read-only `VALID` and a write-only trigger `UPDATE`),
+/// a read-only `VALUE` and a one-field `RAISE`.
+fn counter() -> String {
+    register(
+        "OP",
+        0,
+        "read-write",
+        "",
+        &(field("VALID", 29, 1, "<access>read-only</access>")
+            + &field("UPDATE", 30, 1, "<access>write-only</access>")),
+    ) + &register("VALUE", 4, "read-only", "", &field("LOW", 0, 32, ""))
+        + &register("RAISE", 8, "read-write", "", &field("LEVEL", 0, 1, ""))
+}
+
+#[test]
+fn a_shared_block_strobes_stores_and_reads_through_a_shared_borrow() {
+    let mut pack = typed_pack();
+    pack.write_trigger_fields.push(trigger("OP", "UPDATE"));
+    pack.shared_blocks.push(shared());
+    let rust = pack
+        .render_typed_rust(&svd(&counter()), &Default::default())
+        .unwrap();
+    for item in [
+        "impl oer_mmio::SharedRegisters for BlockWords {}",
+        "pub fn trigger_op_update(&self) {\nself.0.write_shared::<0x0>(0x40000000);",
+        "pub fn store_raise(&self, value: bool) {\nself.0.write_shared::<0x8>(u32::from(value));",
+        "pub fn read_op(&self",
+        "pub fn read_value(&self",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    for absent in [
+        "&mut self",
+        "pub fn modify_",
+        "pub fn write_",
+        "pub struct W(",
+    ] {
+        assert!(!rust.contains(absent), "{absent}\n{rust}");
+    }
+}
+
+#[test]
+fn a_shared_block_refuses_every_other_kind_of_register() {
+    let refused = [
+        // An ordinary field a store would have to read back.
+        register(
+            "CONTROL",
+            0,
+            "read-write",
+            "",
+            &(field("ENABLE", 0, 1, "") + &field("LEVEL", 4, 3, "")),
+        ),
+        // A write-one-to-clear status.
+        register(
+            "STATUS",
+            0,
+            "read-write",
+            "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+            &field("DONE", 0, 1, ""),
+        ),
+        // A read that changes the register.
+        register(
+            "DATA",
+            0,
+            "read-only",
+            "<readAction>clear</readAction>",
+            &field("BYTE", 0, 8, ""),
+        ),
+    ];
+    for register in refused {
+        let mut pack = typed_pack();
+        pack.shared_blocks.push(shared());
+        let error = pack
+            .render_typed_rust(&svd(&register), &Default::default())
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("shared block register"),
+            "{error}"
+        );
+    }
+    let mut pack = typed_pack();
+    pack.shared_blocks.push(shared());
+    pack.register_sides.push(RegisterSides {
+        peripheral: "RADIO".to_owned(),
+        irq: vec![],
+        irq_observes: vec!["VALUE".to_owned()],
+        description: "test".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack.write_trigger_fields.push(trigger("OP", "UPDATE"));
+    let error = pack
+        .render_typed_rust(&svd(&counter()), &Default::default())
+        .unwrap_err();
+    assert!(error.to_string().contains("no register sides"), "{error}");
+}

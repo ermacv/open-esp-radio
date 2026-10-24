@@ -80,8 +80,9 @@ implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt
 that preempts it runs at a higher level and is never its context, so it gets
 no signal context and no timer slot. The executor's calls into the chip
-(software interrupts, the wait for an interrupt, the interrupt level, the
-core, the system timer's counter) sit in `chip.rs`.
+(software interrupt lines, the wait for an interrupt, the interrupt level,
+the core, the system timer's counter, the pending sources) sit in
+`chip.rs`; the wait for an interrupt and the core are still esp-hal's.
 
 ## Radio interrupt levels
 
@@ -95,8 +96,8 @@ P3 handlers never preempt each other.
 
 The radio executor never writes the registers a P3 handler owns. It records
 a request in memory both sides see and rings the `Doorbell`, a software
-interrupt (`FROM_CPU` line 3) at the P3 level: `ring` fences, raises the
-interrupt and reads its register back. The doorbell's handler first resets
+interrupt (`FROM_CPU` line 3) at the P3 level: `ring` fences and raises the
+line. The doorbell's handler first lowers
 the interrupt through its owned `DoorbellAcknowledger`, then takes the requests, so a ring after the
 take is not lost. Making the doorbell consumes its software interrupt, so no
 executor can use the line, and takes a `SameLevel` of the radio interrupt's
@@ -109,10 +110,16 @@ architecture audit follows transitive normal/build dependencies to enforce
 that boundary; portable packages cannot depend on these concrete ESP32-S31
 runtimes.
 
-Software-interrupt construction transfers its singleton into separate raise
-and reset owners. Wakers borrow the published sender; only the line's handler
-borrows its acknowledger. The time driver consumes esp-hal's SYSTIMER into
-our comparator writer and three independent W1C alarm acknowledgers. The
-writer programs typed comparator indices through `SYSTIMER::regs()`; esp-hal
-keeps the independent UNIT0 counter latch and tick rate. Alarm interrupts
-never borrow the comparator writer or a task's timer queue.
+Constructing an executor or the doorbell consumes esp-hal's software
+interrupt of its line and claims the line's typed block (`FROM_CPU_<N>`, a
+shared block: every context raises it through `&self`). Wakers raise the
+published line; only the line's handler lowers it, and it lowers it before it
+takes the work, so a raise during the work runs another round. On the
+ESP32-S31 a raise reads the line back; on the ESP32-C5 it is one store, with
+no critical section and no wait. The time driver consumes esp-hal's SYSTIMER
+and claims the system timer's typed blocks: our comparator writer, three
+alarm acknowledgers that each strobe their own bit of the shared
+acknowledgement block, and the shared counter latch, which every context
+reads for the time (`counter.rs`: strobe, a bounded settle until valid, then
+LO/HI/LO until the two LO reads agree; 16 ticks per microsecond). Alarm
+interrupts never borrow the comparator writer or a task's timer queue.

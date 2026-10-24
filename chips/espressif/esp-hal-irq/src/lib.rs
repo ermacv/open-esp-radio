@@ -16,6 +16,14 @@
 //! routes: [`adopt`] takes esp-hal's one routing capability, and a driver that
 //! needs its interrupt (`into_async`) only requires the image's route, which
 //! [`verify_current_hart`] checks is routed before interrupts are enabled.
+//!
+//! The table reads the matrix and the CLIC through our typed blocks, which
+//! [`adopt`] claims from the interrupt matrix handoff; esp-hal still writes
+//! the routes and, in its vectoring, the lines. [`verify_current_hart`]
+//! checks every bound level's line and every bound route ([`lines`]) before
+//! interrupts are enabled, and [`is_pending`] reads a core's pending sources.
+
+pub mod lines;
 
 #[cfg(any(feature = "esp32s31", feature = "esp32c5"))]
 mod table;

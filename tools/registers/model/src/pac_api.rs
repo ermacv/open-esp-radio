@@ -89,6 +89,9 @@ pub struct PacApiPack {
     /// write-trigger words bit by bit and arrays element by element.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub register_divisions: Vec<RegisterDivision>,
+    /// Typed blocks every execution context reaches through `&self`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_blocks: Vec<SharedBlock>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -221,6 +224,20 @@ pub struct DivisionElements {
 pub struct DivisionTrigger {
     pub register: String,
     pub fields: Vec<String>,
+}
+
+/// A typed block whose one owner every execution context reaches at once:
+/// its registers are side-effect-free reads, write-trigger strobes and
+/// one-field registers stored whole, so each method takes `&self` and the
+/// owner at its fixed address is `Sync`. A strobe writes its trigger alone
+/// and a store its one field from zero; no method reads, modifies and
+/// writes back.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct SharedBlock {
+    pub peripheral: String,
+    pub description: String,
+    pub sources: Vec<String>,
 }
 
 /// One target-declared, exhaustive ownership partition of raw SVD peripherals.
@@ -831,6 +848,18 @@ impl PacApiPack {
                 return Err(Error::message(format!(
                     "PAC API register division of {} needs a description, sources and two to four parts with distinct camel-case names, once per peripheral",
                     division.peripheral
+                )));
+            }
+        }
+        let mut shared = BTreeSet::new();
+        for block in &self.shared_blocks {
+            if block.sources.is_empty()
+                || block.description.trim().is_empty()
+                || !shared.insert(&block.peripheral)
+            {
+                return Err(Error::message(format!(
+                    "PAC API shared block {} needs a description and sources and is named once",
+                    block.peripheral
                 )));
             }
         }
@@ -1545,6 +1574,11 @@ impl PacApiPack {
                             .iter()
                             .map(|division| division.sources.as_slice()),
                     )
+                    .chain(
+                        self.shared_blocks
+                            .iter()
+                            .map(|block| block.sources.as_slice()),
+                    )
                     .flatten()
                     .map(String::as_str),
             )
@@ -2084,6 +2118,7 @@ pub(crate) mod tests {
             fifo_ports: Vec::new(),
             read_capabilities: Vec::new(),
             register_divisions: Vec::new(),
+            shared_blocks: Vec::new(),
         }
     }
 

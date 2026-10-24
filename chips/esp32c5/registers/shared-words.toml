@@ -64,6 +64,13 @@ esp_hal = "MODEM_SYSCON.clk_conf_power_st in modem_clock_domain_power_state_icg_
 coordination = "disjoint-lifecycle"
 reason = "Written only by rtc::init inside esp_hal::init (esp-hal 1f646c5 rtc_cntl/rtc/esp32c5.rs), before any radio owner exists; the C5 sleep driver does not touch it. The radio PAC never writes it."
 
+
+[[word]]
+address = 0x600a9c14
+radio = "MODEM_SYSCON_RADIO.CLK_CONF1"
+esp_hal = "MODEM_SYSCON.clk_conf1 in force_sar_power (analog/adc/dig_ctrl.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Only SarPowerGuard stores it (force_sar_power sets clk_fe_apb_en around its power-detector write and restores it), and only the one-shot ADC driver makes that guard: Adc::<ADC1>::new and AdcConfig::adc_calibrate (esp-hal 1f646c5 analog/adc/dig_ctrl.rs). No C5 image constructs an Adc or calls adc_calibrate, and the C5 does not self-calibrate at init (SUPPORTS_SELF_CALIBRATION is false for esp32c5). adc_calibrate needs no singleton, so only the missing caller keeps it away."
 [[word]]
 address = 0x600af018
 radio = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF"
@@ -92,6 +99,13 @@ esp_hal = "I2C_ANA_MST.i2c_ctrl(1) in regi2c_read and regi2c_write (soc/esp32c5/
 coordination = "disjoint-lifecycle"
 reason = "As I2C0_CTRL: esp-hal's analog-I2C transactions run inside esp_hal::init in our images, and its later regi2c callers (ADC, sleep, clock::ll) have no caller in any C5 image (esp-hal 1f646c5)."
 
+
+[[word]]
+address = 0x600af818
+radio = "I2C_ANA_MST.ANA_CONF0"
+esp_hal = "I2C_ANA_MST.ana_conf0 in enable_pll_clk_impl (soc/esp32c5/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal stores it only in the BBPLL calibration of enable_pll_clk_impl, when the PLL reference count crosses zero: clock::init takes the reference inside esp_hal::init and never releases it, so later requests (PSRAM, ADC) do not cross zero (esp-hal 1f646c5 soc/esp32c5/clocks.rs, clock/mod.rs), before any radio owner exists. The sleep path's reconfigure_pll has no caller in any C5 image."
 [[word]]
 address = 0x600af81c
 radio = "I2C_ANA_MST.ANA_CONF1"
@@ -126,3 +140,192 @@ radio = "LP_WDT_SWD.SWD_WPROTECT (typed block)"
 esp_hal = "LP_WDT.swd_wprotect in Swd::set_write_protection (rtc_cntl/mod.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 stores the super watchdog's key only through Rtc's Swd, which only esp_hal::init builds (rtc.swd.disable()); the watchdog handoff consumes LP_WDT after esp_hal::init and no image builds an Rtc. The super watchdog owner alone writes the key afterwards."
+
+[[word]]
+address = 0x20801000
+words = 48
+radio = "CLIC.CTRL%s (typed block)"
+esp_hal = "CLIC.int_ie, int_ip, int_attr and int_ctl in init, init_vectoring and the CpuInterrupt methods (interrupt/riscv.rs, interrupt/riscv/clic.rs)"
+coordination = "radio-reads-only"
+reason = "The CLIC view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound line. esp-hal is the only writer: init_vectoring, from esp_hal::init and from reinitialize_vectoring_after_handoff in the staged runtime's Handoff::adopt, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
+
+[[word]]
+address = 0x60010000
+words = 12
+radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block)"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
+coordination = "radio-reads-only"
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
+
+[[word]]
+address = 0x60010034
+words = 71
+radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block)"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
+coordination = "radio-reads-only"
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
+
+[[word]]
+address = 0x6000a000
+radio = "SYSTIMER.CONF"
+esp_hal = "SYSTIMER.conf in Unit::configure, Alarm and the ETM enable (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Every esp-hal writer of CONF is a method of SystemTimer, its Unit or Alarm, which only SystemTimer::new(SYSTIMER) makes (esp-hal 1f646c5); the time driver's handoff consumes the SYSTIMER singleton, so none is reachable. The comparator owner is the only runtime writer."
+
+[[word]]
+address = 0x6000a004
+radio = "SYSTIMER_COUNTER.UNIT0_OP"
+esp_hal = "SYSTIMER.unit_op in Unit::read_count (timer/systimer.rs)"
+coordination = "whole-word-stores"
+reason = "esp-hal's Instant::now (its delays and drivers) strobes UPDATE with a whole-word write (esp-hal 1f646c5); the shared counter block strobes UPDATE alone, also a whole-word write. Neither reads back, and each reader repeats LO, HI, LO until the two LO reads agree, so a strobe between them only relatches the newer count."
+
+
+[[word]]
+address = 0x6000a01c
+words = 6
+radio = "SYSTIMER.TARGET%s_HI and TARGET%s_LO"
+esp_hal = "SYSTIMER.trgt(n).hi and .lo in Alarm::set_target (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "set_target, the only esp-hal writer of the comparator target words, is a method of Alarm, which exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
+[[word]]
+address = 0x6000a034
+words = 3
+radio = "SYSTIMER.TARGET%s_CONF"
+esp_hal = "SYSTIMER.target_conf in Alarm (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
+
+
+[[word]]
+address = 0x6000a050
+words = 3
+radio = "SYSTIMER.COMP%s_LOAD"
+esp_hal = "SYSTIMER.comp_load in Alarm::set_target and set_period (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "set_target and set_period, the only esp-hal writers of the comparator load strobes, are methods of Alarm, which exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
+[[word]]
+address = 0x6000a064
+radio = "SYSTIMER.INT_ENA"
+esp_hal = "SYSTIMER.int_ena in Alarm (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
+
+[[word]]
+address = 0x6000a06c
+radio = "SYSTIMER_ACKNOWLEDGE.INT_CLR"
+esp_hal = "SYSTIMER.int_clr in Alarm (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton. Each alarm handler strobes its own bit alone."
+
+[[word]]
+address = 0x600c5090
+words = 4
+radio = "FROM_CPU_0.LINE to FROM_CPU_3.LINE"
+esp_hal = "INTPRI.cpu_intr_from_cpu in raise and reset (interrupt/software.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal raises and resets a line only through SoftwareInterrupt<N> and the sender and acknowledger split from it (esp-hal 1f646c5 interrupt/software.rs), which SoftwareInterrupt::new makes from the FROM_CPU_INTRn singleton; the executor's and doorbell's line handoff consumes that owner for good before it claims the line's block. The RTOS context-switch path (interrupt/__rtos_implementation.rs: trigger steals FROM_CPU_INTR0, install takes the clear register's address) runs only from set_context_switch_handler and request_context_switch, which no image calls."
+
+[[word]]
+address = 0x60008048
+radio = "TIMG0_WDT.WDTCONFIG0 (typed block)"
+esp_hal = "TIMG0.wdtconfig0 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x6000804c
+radio = "TIMG0_WDT.WDTCONFIG1 (typed block)"
+esp_hal = "TIMG0.wdtconfig1 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60008050
+radio = "TIMG0_WDT.WDTCONFIG2 (typed block)"
+esp_hal = "TIMG0.wdtconfig2 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60008060
+radio = "TIMG0_WDT.WDTFEED (typed block)"
+esp_hal = "TIMG0.wdtfeed (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60008064
+radio = "TIMG0_WDT.WDTWPROTECT (typed block)"
+esp_hal = "TIMG0.wdtwprotect (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009048
+radio = "TIMG1_WDT.WDTCONFIG0 (typed block)"
+esp_hal = "TIMG1.wdtconfig0 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x6000904c
+radio = "TIMG1_WDT.WDTCONFIG1 (typed block)"
+esp_hal = "TIMG1.wdtconfig1 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009050
+radio = "TIMG1_WDT.WDTCONFIG2 (typed block)"
+esp_hal = "TIMG1.wdtconfig2 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009060
+radio = "TIMG1_WDT.WDTFEED (typed block)"
+esp_hal = "TIMG1.wdtfeed (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009064
+radio = "TIMG1_WDT.WDTWPROTECT (typed block)"
+esp_hal = "TIMG1.wdtwprotect (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60096060
+radio = "PCR_TIMG1.TIMERGROUP1_CONF (typed block)"
+esp_hal = "SYSTEM.timergroup.conf (esp-metadata-generated/_generated_esp32c5.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60096068
+radio = "PCR_TIMG1.TIMERGROUP1_WDT_CLK_CONF (typed block)"
+esp_hal = "PCR.timergroup.wdt_clk_conf (soc/esp32c5/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x600b1c00
+radio = "LP_WDT.CONFIG0 (typed block)"
+esp_hal = "LP_WDT.wdtconfig0 (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x600b1c18
+radio = "LP_WDT.WPROTECT (typed block)"
+esp_hal = "LP_WDT.wdtwprotect (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x600b1c1c
+radio = "LP_WDT_SWD.SWD_CONFIG (typed block)"
+esp_hal = "LP_WDT.swd_conf (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."

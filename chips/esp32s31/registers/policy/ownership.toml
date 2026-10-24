@@ -37,4 +37,13 @@ owned-ranges = [
     "timg1-wdt",
     "hp-sys-clkrst-timg1",
     "lp-wdt",
+    "systimer",
+    "clic-lines",
+    "interrupt-core0-routes-low",
+    "interrupt-core0-routes-high",
+    "interrupt-core0-status",
+    "interrupt-core1-routes-low",
+    "interrupt-core1-routes-high",
+    "interrupt-core1-status",
+    "from-cpu-interrupts",
 ]

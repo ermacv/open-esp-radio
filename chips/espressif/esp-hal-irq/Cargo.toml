@@ -10,14 +10,17 @@ description = "The image's interrupt table on an Espressif chip's interrupt matr
 [features]
 default = []
 # The chip of esp-hal; an image selects exactly one.
-esp32s31 = ["dep:esp-hal", "esp-hal/esp32s31"]
-esp32c5 = ["dep:esp-hal", "esp-hal/esp32c5"]
+esp32s31 = ["dep:esp-hal", "esp-hal/esp32s31", "dep:oer-esp32s31-hal"]
+esp32c5 = ["dep:esp-hal", "esp-hal/esp32c5", "dep:oer-esp32c5-hal"]
 
 [dependencies]
 oer-memory = { path = "../../../portable/memory" }
 static_cell = "2.1.1"
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false, features = ["static-interrupts", "unstable"], optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
+oer-mmio = { path = "../../../portable/mmio" }
+oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }
+oer-esp32c5-hal = { path = "../../esp32c5/hal", optional = true }
 
 [lints]
 workspace = true

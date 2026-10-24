@@ -29,6 +29,10 @@ fragments = [
     "peripherals/timg-wdt.toml",
     "peripherals/lp-wdt.toml",
     "peripherals/pcr-timg1.toml",
+    "peripherals/systimer.toml",
+    "peripherals/software-interrupts.toml",
+    "peripherals/clic.toml",
+    "peripherals/interrupt-matrix.toml",
 ]
 
 layouts = ["layouts/phy-i2c-command.toml"]

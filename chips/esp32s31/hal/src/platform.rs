@@ -6,6 +6,19 @@
 //! adapter makes from its handoff. Nothing here writes a register.
 
 pub use oer_esp32s31_knowledge::reset_cause::ResetCause;
+/// The step-4 platform blocks (system timer, software interrupt lines,
+/// interrupt matrix and CLIC) and the handoffs that claim them, for the
+/// executor and the interrupt table.
+pub use oer_esp32s31_pac::platform::{
+    Clic, FromCpu0, FromCpu1, FromCpu2, FromCpu3, InterruptCore0, InterruptCore0Status,
+    InterruptCore1, InterruptCore1Status, InterruptMatrixHandoff, InterruptMatrixPeripherals,
+    SoftwareInterrupt0Handoff, SoftwareInterrupt0Peripherals, SoftwareInterrupt1Handoff,
+    SoftwareInterrupt1Peripherals, SoftwareInterrupt2Handoff, SoftwareInterrupt2Peripherals,
+    SoftwareInterrupt3Handoff, SoftwareInterrupt3Peripherals, SystemTimerHandoff,
+    SystemTimerPeripherals, Systimer, SystimerAcknowledge, SystimerCounter, clic, from_cpu_0,
+    from_cpu_1, from_cpu_2, from_cpu_3, interrupt_core0, interrupt_core0_status, interrupt_core1,
+    interrupt_core1_status, systimer, systimer_acknowledge, systimer_counter,
+};
 pub use oer_esp32s31_pac::platform::{
     EfuseHandoff, EfuseRegisters, EntropyHandoff, EntropyRegisters, EntropyStatus, HpCore,
     ResetCauseHandoff, ResetCauseRegisters, RngClockPlacement, TrngPlacement,

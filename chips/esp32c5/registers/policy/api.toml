@@ -35,6 +35,16 @@ typed-peripherals = [
     "PCR_TIMG1",
     "LP_WDT",
     "LP_WDT_SWD",
+    "SYSTIMER",
+    "SYSTIMER_COUNTER",
+    "SYSTIMER_ACKNOWLEDGE",
+    "FROM_CPU_0",
+    "FROM_CPU_1",
+    "FROM_CPU_2",
+    "FROM_CPU_3",
+    "CLIC",
+    "INTERRUPT_CORE0",
+    "INTERRUPT_CORE0_STATUS",
 ]
 # Source-qualified MMIO views retained for bit-use coverage; no owner reaches
 # them (their words lie in the typed blocks above or are not used).
@@ -60,6 +70,48 @@ member = "watchdog"
 description = "The main watchdogs of both timer groups, timer group 1's clock and reset, and the RTC and super watchdogs, owned by the watchdog owners."
 peripherals = ["TIMG0_WDT", "TIMG1_WDT", "PCR_TIMG1", "LP_WDT", "LP_WDT_SWD"]
 handoff = true
+
+[[ownership-partitions]]
+name = "SystemTimerPeripherals"
+member = "system_timer"
+handoff = true
+description = "The system timer: the comparators the time driver programs and the shared counter latch every context reads. Claimed by the time driver's platform handoff."
+peripherals = ["SYSTIMER", "SYSTIMER_COUNTER", "SYSTIMER_ACKNOWLEDGE"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt0Peripherals"
+member = "software_interrupt_0"
+handoff = true
+description = "Software interrupt line 0. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_0"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt1Peripherals"
+member = "software_interrupt_1"
+handoff = true
+description = "Software interrupt line 1. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_1"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt2Peripherals"
+member = "software_interrupt_2"
+handoff = true
+description = "Software interrupt line 2. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_2"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt3Peripherals"
+member = "software_interrupt_3"
+handoff = true
+description = "Software interrupt line 3. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_3"]
+
+[[ownership-partitions]]
+name = "InterruptMatrixPeripherals"
+member = "interrupt_matrix"
+handoff = true
+description = "The interrupt matrix route and pending words and the CLIC line words, which the interrupt table checks. Claimed by the interrupt table's platform handoff; esp-hal still writes the routes and the lines until the table writes them."
+peripherals = ["CLIC", "INTERRUPT_CORE0", "INTERRUPT_CORE0_STATUS"]
 
 [[ownership-partitions]]
 name = "Ieee802154Peripherals"
@@ -1630,3 +1682,62 @@ peripheral = "LP_WDT_SWD"
 register = "SWD_CONFIG"
 field = "SWD_FEED"
 sources = ["ESP_IDF_4D59230D_C5_LP_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_COUNTER"
+register = "UNIT0_OP"
+field = "UPDATE"
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+
+[[shared-blocks]]
+peripheral = "SYSTIMER_COUNTER"
+description = "The counter latch of system timer unit zero, which every context reads for the current time."
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_0"
+description = "Software interrupt line 0: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_C5_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_1"
+description = "Software interrupt line 1: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_C5_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_2"
+description = "Software interrupt line 2: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_C5_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_3"
+description = "Software interrupt line 3: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_C5_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "INTERRUPT_CORE0_STATUS"
+description = "The pending sources at INTERRUPT_CORE0, which every context polls."
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+register = "INT_CLR"
+field = "TARGET0_INT_CLR"
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+register = "INT_CLR"
+field = "TARGET1_INT_CLR"
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+register = "INT_CLR"
+field = "TARGET2_INT_CLR"
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+
+[[shared-blocks]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+description = "The comparators' acknowledgements: each alarm handler strobes its own bit from its own context."
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]

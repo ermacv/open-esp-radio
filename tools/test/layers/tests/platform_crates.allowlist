@@ -20,9 +20,8 @@ chips/espressif/esp-hal/soc/Cargo.toml 1
 chips/espressif/esp-hal/soc/src/cache/performance.rs 1
 chips/espressif/esp-hal/soc/src/handoff.rs 1
 chips/espressif/esp-hal/soc/src/flash/mmu.rs 1
-chips/espressif/executor/Cargo.toml 3
+chips/espressif/executor/Cargo.toml 1
 chips/espressif/executor/src/chip.rs 1
-chips/espressif/executor/src/systimer_ack.rs 2
 chips/espressif/executor/tests/chip/c5.rs 1
 chips/espressif/executor/tests/chip/s31.rs 3
 chips/espressif/staged-bootstrap/Cargo.toml 1
@@ -38,7 +37,6 @@ chips/espressif/usb-fifo/src/lib.rs 3
 firmware/apps/b0/Cargo.toml 1
 firmware/apps/b0/src/entry.rs 1
 firmware/apps/b0/src/host.rs 2
-firmware/apps/b0/src/irq.rs 1
 firmware/apps/b0/src/radio.rs 3
 firmware/apps/boot-smoke/Cargo.toml 1
 firmware/apps/boot-smoke/src/main.rs 3

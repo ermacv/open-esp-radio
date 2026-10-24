@@ -14,7 +14,9 @@
 //! to have a reviewed entry in `chips/<chip>/registers/shared-words.toml` saying how
 //! the two writers are coordinated. A reviewed word that is no longer shared
 //! is rejected too, so the list stays exact. There is no pending list: a new
-//! shared word is fixed or reviewed in the change that introduces it.
+//! shared word is fixed or reviewed in the change that introduces it. An
+//! entry with `words = N` reviews the run of `N` words from its address, four
+//! bytes apart (a source-indexed route array).
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -60,10 +62,47 @@ struct Review {
 #[serde(deny_unknown_fields)]
 struct ReviewedWord {
     address: u32,
+    /// The words of the run from `address`, four bytes apart; one by default.
+    #[serde(default = "one_word")]
+    words: u32,
     radio: String,
     esp_hal: String,
     coordination: Coordination,
     reason: String,
+}
+
+fn one_word() -> u32 {
+    1
+}
+
+/// Every reviewed word address, each with its entry; a run expands to all
+/// of its words.
+fn reviewed_words(review: &[ReviewedWord]) -> Result<BTreeMap<u32, &ReviewedWord>> {
+    let mut words = BTreeMap::new();
+    for entry in review {
+        if entry.words == 0 {
+            return Err(format!(
+                "{:#010x}: a reviewed run needs at least one word",
+                entry.address
+            )
+            .into());
+        }
+        for index in 0..entry.words {
+            let address = index
+                .checked_mul(4)
+                .and_then(|offset| entry.address.checked_add(offset))
+                .ok_or_else(|| {
+                    format!(
+                        "{:#010x}: the reviewed run leaves the address space",
+                        entry.address
+                    )
+                })?;
+            if words.insert(address, entry).is_some() {
+                return Err(format!("{address:#010x}: reviewed twice").into());
+            }
+        }
+    }
+    Ok(words)
 }
 
 /// The trimmed text of `node`'s child element `name`.
@@ -289,12 +328,44 @@ pub fn pac_peripherals(lib: &str) -> BTreeMap<String, (String, u32)> {
 
 /// Register accessors of one generated register block with their byte
 /// ranges: `#[doc = "0x04 - NAME"]` or `#[doc = "0x10..0x20 - NAME"]`
-/// followed by `pub const fn accessor(`.
+/// followed by `pub const fn accessor(`. An array accessor whose body checks
+/// `[(); N][n]` and steps `.add(S * n)` spans `N` elements `S` bytes apart
+/// from its first offset, whatever its doc range says (svd2rust documents a
+/// byte register array by its element size, not its stride).
 pub fn pac_registers(module: &str) -> BTreeMap<String, (u32, u32)> {
     let mut registers = BTreeMap::new();
     let mut range = None;
+    let mut array: Option<(String, Option<u32>, Option<u32>)> = None;
     for line in module.lines() {
         let line = line.trim();
+        if let Some((name, count, stride)) = &mut array {
+            if let Some(found) = line
+                .strip_prefix("[(); ")
+                .and_then(|rest| rest.split_once(']'))
+                .and_then(|(number, _)| number.parse().ok())
+            {
+                *count = Some(found);
+            }
+            if let Some(found) = line
+                .strip_prefix(".add(")
+                .and_then(|rest| rest.strip_suffix(" * n)"))
+                .and_then(|number| number.parse().ok())
+            {
+                *stride = Some(found);
+            }
+            if let (Some(count), Some(stride)) = (*count, *stride) {
+                if let Some(entry) = registers.get_mut(name.as_str()) {
+                    let (start, _): (u32, u32) = *entry;
+                    *entry = (start, start + count * stride);
+                }
+                array = None;
+            }
+            if line.starts_with("#[doc") || line.starts_with("pub ") {
+                array = None;
+            } else {
+                continue;
+            }
+        }
         if let Some(doc) = line.strip_prefix("#[doc = \"0x") {
             let offsets = doc.split(" - ").next().unwrap_or_default();
             let parse = |hex: &str| u32::from_str_radix(hex.trim_start_matches("0x"), 16).ok();
@@ -305,6 +376,9 @@ pub fn pac_registers(module: &str) -> BTreeMap<String, (u32, u32)> {
         } else if let Some(rest) = line.strip_prefix("pub const fn ") {
             if let (Some(range), Some(name)) = (range.take(), rest.split('(').next()) {
                 registers.insert(name.to_owned(), range);
+                if rest.contains("n: usize") {
+                    array = Some((name.to_owned(), None, None));
+                }
             }
         } else if !line.starts_with("#[") {
             range = None;
@@ -313,70 +387,395 @@ pub fn pac_registers(module: &str) -> BTreeMap<String, (u32, u32)> {
     registers
 }
 
-/// `(peripheral, register accessor)` pairs that esp-hal source stores to:
-/// `PERIPHERAL::regs().register(..).write/modify/reset`, also through a
-/// `let name = PERIPHERAL::regs();` binding, across line breaks.
-pub fn esp_hal_stores(source: &str) -> BTreeSet<(String, String)> {
-    let compact: String = source.split_whitespace().collect();
-    let mut bindings = BTreeMap::new();
-    for (index, _) in compact.match_indices("::regs();") {
-        let before = &compact[..index];
-        let peripheral = trailing_constant(before);
-        if let Some(assignment) = before[..before.len() - peripheral.len()]
-            .rsplit_once("let")
-            .and_then(|(_, binding)| binding.split('=').next())
-            .map(|binding| {
-                binding
-                    .trim_start_matches("mut")
-                    .split(':')
-                    .next()
-                    .unwrap_or_default()
-            })
-            && !peripheral.is_empty()
-            && assignment
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+/// The register stores of esp-hal: `write`, `modify`, `write_with_zero`
+/// and `reset`.
+const STORES: [&str; 4] = ["write(", "modify(", "write_with_zero(", "reset()"];
+
+/// The calls that name a peripheral's register block.
+const BLOCKS: [&str; 3] = ["::regs()", "::steal()", "::register_block()"];
+
+fn ident_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// `source` without whitespace, except one space between two identifier
+/// characters, so `let mut name` and `X as Y` keep their words apart.
+fn compact(source: &str) -> String {
+    let mut compact = String::with_capacity(source.len());
+    let mut space = false;
+    for c in source.chars() {
+        if c.is_whitespace() {
+            space = true;
+            continue;
+        }
+        if space && ident_char(c) && compact.ends_with(ident_char) {
+            compact.push(' ');
+        }
+        space = false;
+        compact.push(c);
+    }
+    compact
+}
+
+/// The identifier ending `text`.
+fn trailing_ident(text: &str) -> &str {
+    trailing(text, ident_char)
+}
+
+/// The run of characters `keep` accepts that ends `text`.
+fn trailing(text: &str, keep: impl Fn(char) -> bool) -> &str {
+    let start = text
+        .char_indices()
+        .rev()
+        .find(|&(_, c)| !keep(c))
+        .map_or(0, |(index, c)| index + c.len_utf8());
+    &text[start..]
+}
+
+/// The identifier starting `text`.
+fn leading_ident(text: &str) -> &str {
+    let end = text.find(|c: char| !ident_char(c)).unwrap_or(text.len());
+    &text[..end]
+}
+
+/// Whether `text` ends an expression: nothing, or a separator.
+fn ends_value(text: &str) -> bool {
+    text.is_empty() || text.starts_with([',', ';', '}', ')'])
+}
+
+/// Whether `text`, the text after a register, starts with `.store(`.
+fn stores_after(text: &str) -> bool {
+    text.strip_prefix('.')
+        .is_some_and(|next| STORES.iter().any(|store| next.starts_with(store)))
+}
+
+/// `text` with every `<..>` generic list removed.
+fn without_generics(text: &str) -> String {
+    let mut depth = 0usize;
+    text.chars()
+        .filter(|&c| match c {
+            '<' => {
+                depth += 1;
+                false
+            }
+            '>' if depth > 0 => {
+                depth -= 1;
+                false
+            }
+            _ => depth == 0,
+        })
+        .collect()
+}
+
+/// The end of the expression starting `text`: its `;`, or the bracket that
+/// closes the block around it.
+fn expression_end(text: &str) -> usize {
+    let mut depth = 0usize;
+    for (index, c) in text.char_indices() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' if depth == 0 => return index,
+            ')' | ']' | '}' => depth -= 1,
+            ';' if depth == 0 => return index,
+            _ => {}
+        }
+    }
+    text.len()
+}
+
+/// The text inside the block whose `{` starts `text`.
+fn block(text: &str) -> &str {
+    let mut depth = 0usize;
+    for (index, c) in text.char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return &text[1..index];
+                }
+            }
+            _ => {}
+        }
+    }
+    text.get(1..).unwrap_or_default()
+}
+
+/// What the names of one esp-hal file stand for.
+#[derive(Default)]
+struct Scope {
+    /// Peripheral names behind another name: `use X as Y` and a generic
+    /// parameter bound to a trait that peripherals implement through their
+    /// `Self::regs()`.
+    aliases: BTreeMap<String, BTreeSet<String>>,
+    /// Bindings of a peripheral's register block.
+    peripherals: BTreeMap<String, BTreeSet<String>>,
+    /// Bindings of a register (or cluster) reference: `(peripheral,
+    /// register)` pairs.
+    registers: BTreeMap<String, BTreeSet<(String, String)>>,
+}
+
+impl Scope {
+    /// The peripheral names `name` may stand for.
+    fn names(&self, name: &str) -> BTreeSet<String> {
+        let mut names = self.aliases.get(name).cloned().unwrap_or_default();
+        names.insert(name.to_owned());
+        names
+    }
+
+    /// The peripherals of a block call ending `head`: `X::regs()`,
+    /// `X::steal()` or `X::register_block()`, also closed by an `unsafe`
+    /// block's `}`.
+    fn block_call(&self, head: &str) -> Option<BTreeSet<String>> {
+        let head = head.strip_suffix('}').unwrap_or(head);
+        BLOCKS.iter().find_map(|call| {
+            let name = trailing_constant(head.strip_suffix(call)?);
+            (!name.is_empty()).then(|| self.names(name))
+        })
+    }
+
+    /// The peripherals whose register block the expression ending `head`
+    /// is: a block call or a binding of one.
+    fn receiver(&self, head: &str) -> BTreeSet<String> {
+        self.block_call(head)
+            .or_else(|| self.peripherals.get(trailing_ident(head)).cloned())
+            .unwrap_or_default()
+    }
+
+    /// The register references the value `expression` may be: a register
+    /// or cluster call on a register block, ending a value.
+    fn register_values(&self, expression: &str) -> BTreeSet<(String, String)> {
+        let mut values = BTreeSet::new();
+        for (dot, _) in expression.match_indices('.') {
+            let peripherals = self.receiver(&expression[..dot]);
+            if peripherals.is_empty() {
+                continue;
+            }
+            let Some((register, after)) = call(&expression[dot + 1..]) else {
+                continue;
+            };
+            let register = if ends_value(after) {
+                register.to_owned()
+            } else if let Some((member, after)) = after.strip_prefix('.').and_then(call)
+                && ends_value(after)
+            {
+                format!("{register}.{member}")
+            } else {
+                continue;
+            };
+            values.extend(
+                peripherals
+                    .into_iter()
+                    .map(|peripheral| (peripheral, register.clone())),
+            );
+        }
+        values
+    }
+
+    /// The register blocks the value `expression` may be: block calls
+    /// ending a value, or another binding.
+    fn block_values(&self, expression: &str) -> BTreeSet<String> {
+        let mut values = BTreeSet::new();
+        for call in BLOCKS {
+            for (index, _) in expression.match_indices(call) {
+                let after = &expression[index + call.len()..];
+                if ends_value(after.strip_prefix('}').unwrap_or(after)) {
+                    let name = trailing_constant(&expression[..index]);
+                    if !name.is_empty() {
+                        values.extend(self.names(name));
+                    }
+                }
+            }
+        }
+        if let Some(peripherals) = self.peripherals.get(expression) {
+            values.extend(peripherals.iter().cloned());
+        }
+        values
+    }
+}
+
+/// `use X as Y` aliases of upper-case names in `text`.
+fn use_aliases(text: &str, aliases: &mut BTreeMap<String, BTreeSet<String>>) {
+    for (index, _) in text.match_indices(" as ") {
+        let name = trailing_constant(&text[..index]);
+        let alias = leading_ident(&text[index + " as ".len()..]);
+        if !name.is_empty()
+            && name == trailing_ident(&text[..index])
+            && alias == trailing_constant(alias)
+            && !alias.is_empty()
         {
-            bindings.insert(assignment.to_owned(), peripheral.to_owned());
+            aliases
+                .entry(alias.to_owned())
+                .or_default()
+                .insert(name.to_owned());
+        }
+    }
+}
+
+/// Generic parameters bound to a trait whose implementations in `text`
+/// return a peripheral's block (`impl Trait for X { .. Self::regs() .. }`):
+/// each stands for every such peripheral.
+fn generic_aliases(text: &str, aliases: &mut BTreeMap<String, BTreeSet<String>>) {
+    let mut implementors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (index, _) in text.match_indices("impl") {
+        if text[..index].ends_with(ident_char) {
+            continue;
+        }
+        let rest = &text[index + "impl".len()..];
+        let Some(open) = rest.find('{') else {
+            continue;
+        };
+        let Some((implemented, target)) = rest[..open].split_once(" for ") else {
+            continue;
+        };
+        let target = without_generics(target);
+        let target = target.split(" where").next().unwrap_or_default();
+        let peripheral = trailing_constant(target);
+        let implemented = without_generics(implemented);
+        let implemented = trailing_ident(&implemented);
+        if !peripheral.is_empty()
+            && !implemented.is_empty()
+            && block(&rest[open..]).contains("Self::regs()")
+        {
+            implementors
+                .entry(implemented.to_owned())
+                .or_default()
+                .insert(peripheral.to_owned());
+        }
+    }
+    for (index, _) in text.match_indices(':') {
+        let (before, after) = (&text[..index], &text[index + 1..]);
+        if before.ends_with(':') || after.starts_with(':') {
+            continue;
+        }
+        let parameter = trailing_constant(before);
+        if parameter.is_empty() || parameter != trailing_ident(before) {
+            continue;
+        }
+        if let Some(peripherals) = implementors.get(leading_ident(after)) {
+            aliases
+                .entry(parameter.to_owned())
+                .or_default()
+                .extend(peripherals.iter().cloned());
+        }
+    }
+}
+
+/// Every `let name = value;` and every later `name = value;` of a
+/// `let name;`, as `(name, value)`.
+fn bindings(text: &str) -> Vec<(&str, &str)> {
+    let mut bindings = Vec::new();
+    let mut declared = BTreeSet::new();
+    for (index, _) in text.match_indices("let ") {
+        if text[..index].ends_with(ident_char) {
+            continue;
+        }
+        let rest = &text[index + "let ".len()..];
+        let rest = rest.strip_prefix("mut ").unwrap_or(rest);
+        let name = leading_ident(rest);
+        if name.is_empty() {
+            continue;
+        }
+        let after = &rest[name.len()..];
+        if after.starts_with(';') {
+            declared.insert(name);
+            continue;
+        }
+        let value = if after.starts_with(':') {
+            after.find('=').map(|equals| &after[equals..])
+        } else {
+            Some(after)
+        };
+        if let Some(value) = value
+            .and_then(|value| value.strip_prefix('='))
+            .filter(|value| !value.starts_with(['=', '>']))
+        {
+            bindings.push((name, &value[..expression_end(value)]));
+        }
+    }
+    for name in declared {
+        for (index, _) in text.match_indices(name) {
+            let assignment = &text[index + name.len()..];
+            if text[..index].ends_with([';', '{', '}'])
+                && let Some(value) = assignment
+                    .strip_prefix('=')
+                    .filter(|value| !value.starts_with(['=', '>']))
+            {
+                bindings.push((name, &value[..expression_end(value)]));
+            }
+        }
+    }
+    bindings
+}
+
+/// `(peripheral, register accessor)` pairs that esp-hal source stores to,
+/// across line breaks: `PERIPHERAL::regs().register(..).write/modify/reset`
+/// and the same through
+/// - a `PERIPHERAL::steal()` (also as `unsafe { PERIPHERAL::steal() }`) or
+///   a generic `TG::register_block()`, `T::regs()`, where `TG` is bound to
+///   a trait whose implementations return `Self::regs()`;
+/// - a `use PERIPHERAL as ALIAS`;
+/// - a binding of the block (`let regs = ..`), or of the register
+///   (`let reg = regs.register(..)`, also deferred, as `let reg; reg =
+///   match .. { .. => regs.register(..), .. }`), each value of a
+///   `cfg_select!` or `match` counting;
+/// - a cluster: `regs.cluster(..).register(..).write`, named
+///   `cluster.register`.
+pub fn esp_hal_stores(source: &str) -> BTreeSet<(String, String)> {
+    let text = compact(source);
+    let mut scope = Scope::default();
+    use_aliases(&text, &mut scope.aliases);
+    generic_aliases(&text, &mut scope.aliases);
+    let bindings = bindings(&text);
+    // Bindings of bindings resolve in later rounds; the sets only grow.
+    loop {
+        let mut changed = false;
+        for &(name, value) in &bindings {
+            for peripheral in scope.block_values(value) {
+                changed |= scope
+                    .peripherals
+                    .entry(name.to_owned())
+                    .or_default()
+                    .insert(peripheral);
+            }
+            for register in scope.register_values(value) {
+                changed |= scope
+                    .registers
+                    .entry(name.to_owned())
+                    .or_default()
+                    .insert(register);
+            }
+        }
+        if !changed {
+            break;
         }
     }
     let mut stores = BTreeSet::new();
-    let mut rest = compact.as_str();
-    while let Some(dot) = rest.find('.') {
-        let receiver_end = dot;
-        let head = &rest[..receiver_end];
-        rest = &rest[dot + 1..];
-        let peripheral = if let Some(stripped) = head.strip_suffix("::regs()") {
-            trailing_constant(stripped).to_owned()
-        } else {
-            let name: String = head
-                .chars()
-                .rev()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
-            match bindings.get(&name) {
-                Some(peripheral) => peripheral.clone(),
-                None => continue,
+    for (dot, _) in text.match_indices('.') {
+        let (head, rest) = (&text[..dot], &text[dot + 1..]);
+        for peripheral in scope.receiver(head) {
+            let Some((register, after)) = call(rest) else {
+                continue;
+            };
+            if stores_after(after) {
+                stores.insert((peripheral, register.to_owned()));
+            } else if let Some((member, after)) = after.strip_prefix('.').and_then(call)
+                && stores_after(after)
+            {
+                stores.insert((peripheral, format!("{register}.{member}")));
             }
-        };
-        if peripheral.is_empty() {
-            continue;
         }
-        let Some((register, after)) = call(rest) else {
+        let Some(registers) = scope.registers.get(trailing_ident(head)) else {
             continue;
         };
-        if ["write(", "modify(", "write_with_zero(", "reset()"]
-            .iter()
-            .any(|store| {
-                after
-                    .strip_prefix('.')
-                    .is_some_and(|next| next.starts_with(store))
-            })
+        if STORES.iter().any(|store| rest.starts_with(store)) {
+            stores.extend(registers.iter().cloned());
+        } else if let Some((member, after)) = call(rest)
+            && stores_after(after)
         {
-            stores.insert((peripheral, register.to_owned()));
+            stores.extend(registers.iter().map(|(peripheral, register)| {
+                (peripheral.clone(), format!("{register}.{member}"))
+            }));
         }
     }
     stores
@@ -384,10 +783,9 @@ pub fn esp_hal_stores(source: &str) -> BTreeSet<(String, String)> {
 
 /// The upper-case path segment ending `text`, such as `MODEM_LPCON`.
 fn trailing_constant(text: &str) -> &str {
-    let start = text
-        .rfind(|c: char| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
-        .map_or(0, |index| index + 1);
-    &text[start..]
+    trailing(text, |c| {
+        c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'
+    })
 }
 
 /// A method call `name(args)` at the start of `text`: the name and the text
@@ -477,6 +875,103 @@ pub struct EspHalSources<'a> {
     pub metadata_generated: &'a Path,
 }
 
+/// The platform PAC's register-block modules read so far, by path below
+/// its `src`: each module's text and its register ranges.
+type Modules = BTreeMap<PathBuf, (String, BTreeMap<String, (u32, u32)>)>;
+
+/// The module at `path` below `pac_src`, read once; empty when absent.
+fn module<'m>(
+    modules: &'m mut Modules,
+    pac_src: &Path,
+    path: PathBuf,
+) -> &'m (String, BTreeMap<String, (u32, u32)>) {
+    modules.entry(path).or_insert_with_key(|path| {
+        let text = fs::read_to_string(pac_src.join(path)).unwrap_or_default();
+        let registers = pac_registers(&text);
+        (text, registers)
+    })
+}
+
+/// The byte ranges, relative to the block, that a store to `register` of
+/// module `name` reaches: the register's range, or for `cluster.member` the
+/// member in every element of the cluster (the whole cluster when the
+/// member does not resolve).
+fn register_ranges(
+    modules: &mut Modules,
+    pac_src: &Path,
+    name: &str,
+    register: &str,
+) -> Vec<(u32, u32)> {
+    let (cluster, member) = match register.split_once('.') {
+        Some((cluster, member)) => (cluster, Some(member)),
+        None => (register, None),
+    };
+    let (text, registers) = module(modules, pac_src, PathBuf::from(format!("{name}.rs")));
+    let Some(&range) = registers.get(cluster) else {
+        return Vec::new();
+    };
+    let Some(member) = member else {
+        return vec![range];
+    };
+    let elements = cluster_elements(text, cluster, range);
+    let (_, members) = module(
+        modules,
+        pac_src,
+        Path::new(name).join(format!("{cluster}.rs")),
+    );
+    match members.get(member) {
+        Some(&(start, end)) => elements
+            .into_iter()
+            .map(|element| (element + start, element + end))
+            .collect(),
+        None => vec![range],
+    }
+}
+
+/// The start offsets of the elements of cluster accessor `name` spanning
+/// `range` in a register block's module: `name: [TYPE; N]` in the block's
+/// struct, or an accessor stepping `.add(S * n)` over `[(); N]`; a single
+/// element otherwise.
+pub fn cluster_elements(module: &str, name: &str, (start, end): (u32, u32)) -> Vec<u32> {
+    let field = format!("{name}: [");
+    let counted = module.lines().find_map(|line| {
+        let (_, count) = line.trim().strip_prefix(&field)?.split_once("; ")?;
+        count.strip_suffix("],")?.parse::<u32>().ok()
+    });
+    let accessor = format!("pub const fn {name}(");
+    let stepped = module.find(&accessor).and_then(|at| {
+        let mut count = None;
+        let mut stride = None;
+        for line in module[at..].lines().skip(1).map(str::trim) {
+            if line.starts_with("pub ") || line.starts_with("#[doc") {
+                break;
+            }
+            count = count.or_else(|| {
+                line.strip_prefix("[(); ")?
+                    .split_once(']')?
+                    .0
+                    .parse::<u32>()
+                    .ok()
+            });
+            stride = stride.or_else(|| {
+                line.strip_prefix(".add(")?
+                    .strip_suffix(" * n)")?
+                    .parse::<u32>()
+                    .ok()
+            });
+        }
+        count.zip(stride)
+    });
+    match (counted, stepped) {
+        (_, Some((count, stride))) => (0..count).map(|index| start + index * stride).collect(),
+        (Some(count), None) if count > 0 => {
+            let stride = (end - start) / count;
+            (0..count).map(|index| start + index * stride).collect()
+        }
+        _ => vec![start],
+    }
+}
+
 /// Every esp-hal store resolved to absolute word addresses.
 fn esp_hal_words(
     sources: &EspHalSources<'_>,
@@ -490,7 +985,7 @@ fn esp_hal_words(
     let generated = fs::read_to_string(&generated_path)
         .map_err(|error| format!("{}: {error}", generated_path.display()))?;
     let aliases = singleton_aliases(&generated);
-    let mut modules = BTreeMap::new();
+    let mut modules = Modules::new();
     let mut files = Vec::new();
     rust_files(sources.esp_hal, &mut files)?;
     let mut texts = Vec::new();
@@ -511,21 +1006,14 @@ fn esp_hal_words(
             let Some((module, base)) = peripherals.get(pac_name) else {
                 continue;
             };
-            if !modules.contains_key(module) {
-                let path = pac_src.join(format!("{module}.rs"));
-                let registers = fs::read_to_string(path)
-                    .map(|text| pac_registers(&text))
-                    .unwrap_or_default();
-                modules.insert(module.clone(), registers);
-            }
-            let Some(&(start, end)) = modules[module].get(&register) else {
-                continue;
-            };
-            for address in (base + start..base + end).step_by(4) {
-                words
-                    .entry(address)
-                    .or_default()
-                    .insert(format!("{peripheral}.{register} ({relative})"));
+            for (start, end) in register_ranges(&mut modules, pac_src, module, &register) {
+                // A byte register stores into the word that holds it.
+                for address in ((base + start) & !3..base + end).step_by(4) {
+                    words
+                        .entry(address)
+                        .or_default()
+                        .insert(format!("{peripheral}.{register} ({relative})"));
+                }
             }
         }
     }
@@ -581,11 +1069,7 @@ pub fn check(
         .into());
     }
     let mut problems = Vec::new();
-    let reviewed: BTreeMap<u32, &ReviewedWord> = review
-        .word
-        .iter()
-        .map(|word| (word.address, word))
-        .collect();
+    let reviewed = reviewed_words(&review.word)?;
     for address in &shared {
         match reviewed.get(address) {
             None => problems.push(format!(
@@ -606,7 +1090,7 @@ pub fn check(
         return Err(format!("shared MMIO words of {chip}:\n{}", problems.join("\n")).into());
     }
     let mut by_coordination: BTreeMap<String, usize> = BTreeMap::new();
-    for word in &review.word {
+    for word in reviewed.values() {
         *by_coordination
             .entry(format!("{:?}", word.coordination))
             .or_default() += 1;
@@ -701,6 +1185,7 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
     fn a_radio_reads_only_review_of_a_writable_word_fails() {
         let word = |coordination| ReviewedWord {
             address: 0x1000,
+            words: 1,
             radio: "ROUTE.CORE0".into(),
             esp_hal: "INTERRUPT_CORE0.core_0_intr_map".into(),
             coordination,
@@ -770,6 +1255,353 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
         .map(|(p, r)| (p.to_owned(), r.to_owned()))
         .collect();
         assert_eq!(stores, expected);
+    }
+
+    #[test]
+    fn stores_through_a_stolen_peripheral_are_found() {
+        let source = r#"
+            let clic = unsafe { CLIC::steal() };
+            clic.int_ie(cpu_interrupt as usize)
+                .write(|w| w.int_ie().set_bit());
+            unsafe { CLIC::steal() }.int_config().modify(|_, w| w);
+            clic.int_ip(n).read().int_ip().bit_is_set();
+        "#;
+        let expected: BTreeSet<_> = [("CLIC", "int_ie"), ("CLIC", "int_config")]
+            .into_iter()
+            .map(|(p, r)| (p.to_owned(), r.to_owned()))
+            .collect();
+        assert_eq!(esp_hal_stores(source), expected);
+        // A store straight on an `unsafe` block's stolen peripheral.
+        assert_eq!(
+            esp_hal_stores("unsafe { CLIC::steal() }.int_ie(16).write(|w| w.int_ie().set_bit());"),
+            pairs(&[("CLIC", "int_ie")])
+        );
+    }
+
+    fn pairs(pairs: &[(&str, &str)]) -> BTreeSet<(String, String)> {
+        pairs
+            .iter()
+            .map(|(p, r)| ((*p).to_owned(), (*r).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn stores_through_a_register_binding_of_a_cfg_select_block_are_found() {
+        // esp-hal 1f646c5 interrupt/software.rs `raise`.
+        let source = r#"
+            let regs = cfg_select! {
+                soc_has_intpri => crate::peripherals::INTPRI::regs(),
+                _ => crate::peripherals::SYSTEM::regs(),
+            };
+            let reg = regs.cpu_intr_from_cpu(NUM as usize);
+            reg.write(|w| w.cpu_intr().set_bit());
+            _ = reg.read();
+        "#;
+        assert_eq!(
+            esp_hal_stores(source),
+            pairs(&[
+                ("INTPRI", "cpu_intr_from_cpu"),
+                ("SYSTEM", "cpu_intr_from_cpu")
+            ])
+        );
+    }
+
+    #[test]
+    fn stores_through_a_deferred_register_binding_are_found() {
+        // esp-hal 1f646c5 interrupt/software.rs `reset`.
+        let source = r#"
+            cfg_select! {
+                soc_has_intpri => { let regs = crate::peripherals::INTPRI::regs(); }
+                _ => { let regs = crate::peripherals::SYSTEM::regs(); }
+            }
+            let reg;
+            reg = match NUM {
+                0 => regs.cpu_intr_from_cpu(0),
+                1 => regs.cpu_intr_from_cpu(1),
+                _ => unreachable!(),
+            };
+            reg.write(|w| w.cpu_intr().clear_bit());
+        "#;
+        assert_eq!(
+            esp_hal_stores(source),
+            pairs(&[
+                ("INTPRI", "cpu_intr_from_cpu"),
+                ("SYSTEM", "cpu_intr_from_cpu")
+            ])
+        );
+    }
+
+    #[test]
+    fn stores_through_register_and_cluster_bindings_are_found() {
+        // esp-hal 1f646c5 timer/systimer.rs `set_period` and `set_target`.
+        let source = r#"
+            let systimer = SYSTIMER::regs();
+            let tconf = systimer.target_conf(self.channel() as usize);
+            unsafe { tconf.modify(|_, w| w.period().bits(value)) };
+            let comp_load = systimer.comp_load(self.channel() as usize);
+            comp_load.write(|w| w.load().set_bit());
+            let target = systimer.trgt(self.channel() as usize);
+            target.hi().write(|w| w.hi().set((value >> 32) as u32));
+            let mode = systimer.target_conf(0).read().period_mode().bit();
+        "#;
+        assert_eq!(
+            esp_hal_stores(source),
+            pairs(&[
+                ("SYSTIMER", "target_conf"),
+                ("SYSTIMER", "comp_load"),
+                ("SYSTIMER", "trgt.hi"),
+            ])
+        );
+    }
+
+    #[test]
+    fn stores_through_a_generic_register_block_are_found() {
+        // esp-hal 1f646c5 timer/timg.rs: `Wdt<TG>` through
+        // `TG::register_block()`, which each TIMG implements as `Self::regs()`.
+        let source = r#"
+            pub trait TimerGroupInstance {
+                fn register_block() -> *const RegisterBlock;
+            }
+            impl TimerGroupInstance for TIMG0<'_> {
+                #[inline(always)]
+                fn register_block() -> *const RegisterBlock { Self::regs() }
+            }
+            impl TimerGroupInstance for crate::peripherals::TIMG1<'_> {
+                fn register_block() -> *const RegisterBlock { Self::regs() }
+            }
+            impl<TG> Wdt<TG>
+            where
+                TG: TimerGroupInstance,
+            {
+                pub fn feed(&mut self) {
+                    let reg_block = unsafe { &*TG::register_block() };
+                    reg_block.wdtfeed().write(|w| unsafe { w.bits(1) });
+                }
+                fn set_write_protection(&mut self, enable: bool) {
+                    let reg_block = unsafe { &*TG::register_block() };
+                    reg_block
+                        .wdtwprotect()
+                        .write(|w| unsafe { w.wdt_wkey().bits(wkey) });
+                }
+            }
+        "#;
+        let stores = esp_hal_stores(source);
+        for peripheral in ["TIMG0", "TIMG1"] {
+            for register in ["wdtfeed", "wdtwprotect"] {
+                assert!(
+                    stores.contains(&(peripheral.to_owned(), register.to_owned())),
+                    "{peripheral}.{register}: {stores:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn stores_through_cfg_select_register_values_and_use_aliases_are_found() {
+        // esp-hal 1f646c5 rtc_cntl/mod.rs: the RWDT's key and configuration.
+        let source = r#"
+            cfg_select! {
+                esp32 => { use crate::peripherals::{LPWR, LPWR as LP_WDT}; }
+                _ => { use crate::peripherals::LP_WDT; }
+            }
+            fn set_write_protection(&mut self, enable: bool) {
+                let reg = cfg_select! {
+                    esp32p4 => LP_WDT::regs().wprotect(),
+                    _ => LP_WDT::regs().wdtwprotect(),
+                };
+                reg.write(|w| unsafe { w.bits(wkey) });
+            }
+            fn set_enabled(&mut self, enable: bool) {
+                let regs = LP_WDT::regs();
+                let config0 = cfg_select! {
+                    esp32p4 => regs.config0(),
+                    _ => regs.wdtconfig0(),
+                };
+                config0.modify(|_, w| w.wdt_en().bit(enable));
+            }
+        "#;
+        let mut expected = BTreeSet::new();
+        for peripheral in ["LP_WDT", "LPWR"] {
+            for register in ["wprotect", "wdtwprotect", "config0", "wdtconfig0"] {
+                expected.insert((peripheral.to_owned(), register.to_owned()));
+            }
+        }
+        assert_eq!(esp_hal_stores(source), expected);
+    }
+
+    #[test]
+    fn stores_to_a_clustered_register_are_found() {
+        // esp-hal 1f646c5 soc/esp32c5/clocks.rs and the C5's
+        // esp-metadata-generated: PCR's TIMERGROUP clusters.
+        let source = r#"
+            PCR::regs()
+                .timergroup(n)
+                .wdt_clk_conf()
+                .modify(|_, w| w.wdt_clk_en().bit(en));
+            crate::peripherals::SYSTEM::regs()
+                .timergroup(1)
+                .conf()
+                .modify(|_, w| w.tg_clk_en().bit(enable));
+            PCR::regs().timergroup(0).conf().read().tg_rst_en().bit();
+        "#;
+        assert_eq!(
+            esp_hal_stores(source),
+            pairs(&[
+                ("PCR", "timergroup.wdt_clk_conf"),
+                ("SYSTEM", "timergroup.conf")
+            ])
+        );
+    }
+
+    #[test]
+    fn a_comment_does_not_join_the_next_receiver() {
+        // esp-hal 1f646c5 soc/esp32c5/clocks.rs: a comment ending in capitals
+        // right before the receiver, and text that is not ASCII.
+        let source = "w.x().set_bit() });\n// BBPLL CALIBRATION START – go\nI2C_ANA_MST::regs().ana_conf0().modify(|_, w| w);";
+        assert_eq!(
+            esp_hal_stores(source),
+            pairs(&[("I2C_ANA_MST", "ana_conf0")])
+        );
+    }
+
+    #[test]
+    fn a_cluster_store_reaches_its_member_in_every_element() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let block = r#"
+pub struct RegisterBlock {
+    _reserved0: [u8; 0x54],
+    timergroup: [TIMERGROUP; 2],
+}
+impl RegisterBlock {
+    #[doc = "0x54..0x6c - Cluster TIMERGROUP%s"]
+    #[inline(always)]
+    pub const fn timergroup(&self, n: usize) -> &TIMERGROUP {
+        &self.timergroup[n]
+    }
+}"#;
+        let cluster = r#"
+    #[doc = "0x00 - TIMERGROUP0 configuration register"]
+    #[inline(always)]
+    pub const fn conf(&self) -> &CONF {
+        &self.conf
+    }
+    #[doc = "0x08 - TIMERGROUP0_WDT_CLK configuration register"]
+    #[inline(always)]
+    pub const fn wdt_clk_conf(&self) -> &WDT_CLK_CONF {
+        &self.wdt_clk_conf
+    }"#;
+        fs::create_dir(directory.path().join("pcr")).expect("the cluster directory");
+        fs::write(directory.path().join("pcr.rs"), block).expect("the block module");
+        fs::write(directory.path().join("pcr/timergroup.rs"), cluster).expect("the cluster module");
+        let mut modules = Modules::new();
+        let ranges =
+            |register| register_ranges(&mut Modules::new(), directory.path(), "pcr", register);
+        assert_eq!(
+            ranges("timergroup.wdt_clk_conf"),
+            [(0x5c, 0x60), (0x68, 0x6c)]
+        );
+        assert_eq!(ranges("timergroup.conf"), [(0x54, 0x58), (0x60, 0x64)]);
+        // An unknown member reaches the whole cluster.
+        assert_eq!(ranges("timergroup.other"), [(0x54, 0x6c)]);
+        assert_eq!(
+            register_ranges(&mut modules, directory.path(), "pcr", "timergroup"),
+            [(0x54, 0x6c)]
+        );
+    }
+
+    #[test]
+    fn a_stepped_cluster_array_has_its_count_and_stride() {
+        let module = r#"
+    #[doc = "0x1c..0x34 - Cluster TRGT%s"]
+    #[inline(always)]
+    pub const fn trgt(&self, n: usize) -> &TRGT {
+        #[allow(clippy::no_effect)]
+        [(); 3][n];
+        unsafe {
+            &*core::ptr::from_ref(self)
+                .cast::<u8>()
+                .add(28)
+                .add(8 * n)
+                .cast()
+        }
+    }"#;
+        assert_eq!(
+            cluster_elements(module, "trgt", (0x1c, 0x34)),
+            [0x1c, 0x24, 0x2c]
+        );
+        assert_eq!(cluster_elements(module, "other", (0x40, 0x48)), [0x40]);
+    }
+
+    #[test]
+    fn an_array_spans_its_element_count_at_its_stride() {
+        // svd2rust documents a byte array by element size: 48 one-byte
+        // elements four bytes apart from 0x1001 end at 0x10c1, not 0x1031.
+        let module = r#"
+    #[doc = "0x1001..0x1031 - Interrupt enable register."]
+    #[inline(always)]
+    pub const fn int_ie(&self, n: usize) -> &INT_IE {
+        #[allow(clippy::no_effect)]
+        [(); 48][n];
+        unsafe {
+            &*core::ptr::from_ref(self)
+                .cast::<u8>()
+                .add(4096)
+                .add(4 * n)
+                .cast()
+        }
+    }
+    #[doc = "0x00 - INT_CONFIG"]
+    #[inline(always)]
+    pub const fn int_config(&self) -> &INT_CONFIG {"#;
+        let registers = pac_registers(module);
+        assert_eq!(registers["int_ie"], (0x1001, 0x10c1));
+        assert_eq!(registers["int_config"], (0x0, 0x4));
+    }
+
+    #[test]
+    fn a_reviewed_run_covers_its_words_four_bytes_apart() {
+        let review: Review = toml_edit::de::from_str(
+            r#"schema = 1
+[[word]]
+address = 0x1000
+words = 3
+radio = "R.MAP"
+esp_hal = "P.map"
+coordination = "shared-lock"
+reason = "test"
+[[word]]
+address = 0x2000
+radio = "R.ONE"
+esp_hal = "P.one"
+coordination = "whole-word-stores"
+reason = "test"
+"#,
+        )
+        .expect("a review");
+        let words = reviewed_words(&review.word).expect("disjoint runs");
+        assert_eq!(
+            words.keys().copied().collect::<Vec<_>>(),
+            [0x1000, 0x1004, 0x1008, 0x2000]
+        );
+        let overlapping: Review = toml_edit::de::from_str(
+            r#"schema = 1
+[[word]]
+address = 0x1000
+words = 2
+radio = "R"
+esp_hal = "P"
+coordination = "shared-lock"
+reason = "test"
+[[word]]
+address = 0x1004
+radio = "R"
+esp_hal = "P"
+coordination = "shared-lock"
+reason = "test"
+"#,
+        )
+        .expect("a review");
+        assert!(reviewed_words(&overlapping.word).is_err());
     }
 
     #[test]

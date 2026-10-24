@@ -16,65 +16,90 @@ use core::sync::atomic::{Ordering, fence};
 
 use oer_interrupt_table::Entry;
 
-use crate::chip::{
-    Cpu, Interrupt, Priority, SoftwareInterrupt, SoftwareInterruptAcknowledger,
-    SoftwareInterruptSender, software_interrupt_source,
-};
+use crate::chip::{Cpu, Interrupt, Line, Priority, SoftwareInterrupt, software_interrupt_source};
 use crate::executor::SameLevel;
+use crate::software_line::SoftwareLine;
 
 /// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`).
 pub struct Doorbell<const SWI: u8> {
-    interrupt: SoftwareInterruptSender<'static, SWI>,
+    line: Line,
 }
 
-impl<const SWI: u8> Doorbell<SWI> {
-    /// The doorbell on `interrupt`, whose source `bell` is the token of;
-    /// `level` proves that it shares the radio interrupt's level and core.
-    /// Resets a stale raise and returns both halves. Install the acknowledger
-    /// in its handler's storage before calling its `enable` method.
-    pub fn new<Radio, Bell>(
-        interrupt: SoftwareInterrupt<'static, SWI>,
-        bell: Bell,
-        level: SameLevel<Radio, Bell>,
-    ) -> (Self, DoorbellAcknowledger<SWI>)
-    where
-        Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-        Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
-    {
-        const {
-            assert!(
-                Bell::SOURCE as u16 == software_interrupt_source(SWI) as u16,
-                "the token is not the doorbell's software interrupt"
-            )
-        };
-        let _ = level;
-        interrupt.reset();
-        let (interrupt, ack) = interrupt.split();
-        // Return both owners before the image enables the route: the handler
-        // must own its acknowledger before any ring can reach it.
-        let doorbell = Self { interrupt };
-        (
-            doorbell,
-            DoorbellAcknowledger {
-                interrupt: ack,
-                bell: oer_espressif_esp_hal_irq::Route::new(bell),
-            },
-        )
-    }
+/// Check that `Bell` is the token of software interrupt `SWI`.
+const fn bell_source<const SWI: u8, Bell: Entry<Source = Interrupt>>() {
+    assert!(
+        Bell::SOURCE as u16 == software_interrupt_source(SWI) as u16,
+        "the token is not the doorbell's software interrupt"
+    );
+}
 
+macro_rules! impl_doorbell {
+    ($number:literal, $take:ident) => {
+        impl Doorbell<$number> {
+            /// The doorbell on `interrupt`, whose source `bell` is the token of;
+            /// `level` proves that it shares the radio interrupt's level and core.
+            /// Consumes esp-hal's line, claims the line's typed block, lowers a
+            /// stale raise and returns both halves. Install the acknowledger in
+            /// its handler's storage before calling its `enable` method.
+            pub fn new<Radio, Bell>(
+                interrupt: SoftwareInterrupt<'static, $number>,
+                bell: Bell,
+                level: SameLevel<Radio, Bell>,
+            ) -> (Self, DoorbellAcknowledger<$number>)
+            where
+                Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+                Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+            {
+                const { bell_source::<$number, Bell>() };
+                let _ = level;
+                let line = crate::chip::$take(interrupt);
+                line.lower();
+                // Return both owners before the image enables the route: the
+                // handler must own its acknowledger before any ring can reach it.
+                (
+                    Self { line },
+                    DoorbellAcknowledger {
+                        line: LineAcknowledger { line },
+                        bell: oer_espressif_esp_hal_irq::Route::new(bell),
+                    },
+                )
+            }
+        }
+    };
+}
+
+impl_doorbell!(0, take_line_0);
+impl_doorbell!(1, take_line_1);
+impl_doorbell!(2, take_line_2);
+impl_doorbell!(3, take_line_3);
+
+impl<const SWI: u8> Doorbell<SWI> {
     /// Raise the doorbell. The fence orders the caller's request writes
-    /// before the raise; esp-hal's raise on ESP32-S31 reads the register back,
-    /// so the raise has reached the interrupt matrix when this returns.
-    /// Never waits.
+    /// before the raise; on ESP32-S31 the raise reads the line back, so it
+    /// has reached the interrupt matrix when this returns. Never waits.
     pub fn ring(&self) {
         fence(Ordering::SeqCst);
-        self.interrupt.raise();
+        self.line.raise();
+    }
+}
+
+/// The one lowering half of software interrupt line `SWI`, for its handler.
+pub struct LineAcknowledger<const SWI: u8> {
+    line: Line,
+}
+
+impl<const SWI: u8> LineAcknowledger<SWI> {
+    /// Lower the line before taking the requests its raises announced: a
+    /// ring after this raises the line again and is not lost.
+    #[inline(always)]
+    pub fn acknowledge(&mut self) {
+        self.line.lower();
     }
 }
 
 /// The acknowledgement and route authority moved into the doorbell's ISR.
 pub struct DoorbellAcknowledger<const SWI: u8> {
-    interrupt: SoftwareInterruptAcknowledger<'static, SWI>,
+    line: LineAcknowledger<SWI>,
     bell: oer_espressif_esp_hal_irq::Route,
 }
 
@@ -82,13 +107,8 @@ impl<const SWI: u8> DoorbellAcknowledger<SWI> {
     /// Separate handler acknowledgement from task-owned route authority.
     /// The image must install the returned acknowledger before enabling the
     /// route, and mask the route before a task transfers handler storage.
-    pub fn into_parts(
-        self,
-    ) -> (
-        SoftwareInterruptAcknowledger<'static, SWI>,
-        oer_espressif_esp_hal_irq::Route,
-    ) {
-        (self.interrupt, self.bell)
+    pub fn into_parts(self) -> (LineAcknowledger<SWI>, oer_espressif_esp_hal_irq::Route) {
+        (self.line, self.bell)
     }
 
     /// Enable the route after this owner has reached the ISR's storage.
@@ -96,9 +116,9 @@ impl<const SWI: u8> DoorbellAcknowledger<SWI> {
         oer_espressif_esp_hal_irq::enable_route(&self.bell)
     }
 
-    /// Reset the line before taking requests. Only the handler owns this half.
+    /// Lower the line before taking requests. Only the handler owns this half.
     #[inline(always)]
     pub fn acknowledge(&mut self) {
-        self.interrupt.reset();
+        self.line.acknowledge();
     }
 }

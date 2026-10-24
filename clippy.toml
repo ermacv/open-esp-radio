@@ -1,7 +1,7 @@
 disallowed-methods = [
     { path = "esp_hal::rng::Rng::new", reason = "random reads require the unique RNG owner" },
     { path = "esp_hal::rng::Trng::try_new", reason = "TRNG reads borrow the entropy source owner (S31 only)", allow-invalid = true },
-    { path = "esp_hal::peripherals::SYSTIMER::regs", reason = "comparator registers belong to the executor's SYSTIMER owner" },
+    { path = "esp_hal::peripherals::SYSTIMER::regs", reason = "the system timer belongs to the executor's typed SYSTIMER blocks" },
     { path = "esp_hal::peripherals::USB_DEVICE::regs", reason = "USB register access belongs to the endpoint and pad owners" },
     { path = "esp_hal::peripherals::PMU::regs", reason = "PMU supply snapshots borrow the PSRAM owner" },
     { path = "esp_hal::peripherals::RNG::regs", reason = "entropy status borrows the source owner" },

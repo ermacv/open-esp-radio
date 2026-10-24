@@ -1,0 +1,379 @@
+schema = 2
+
+[[peripherals]]
+name = "SYSTIMER"
+description = """
+The system timer's comparators: their enables in CONF, targets, modes, load
+strobes and interrupt enables; their acknowledgements are SYSTIMER_ACKNOWLEDGE. The counter latch of unit
+zero is the separate shared block SYSTIMER_COUNTER; unit one, the unit loads
+and the read-back registers are not described."""
+baseAddress = 0x6000a000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONF"
+description = "Clock, unit and comparator enables."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+resetValue = 0x46000000
+
+[[peripherals.registers.register.fields]]
+name = "SYSTIMER_CLK_FO"
+description = "Forces the system timer clock on."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ETM_EN"
+description = "Enables the generation of ETM events."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET2_WORK_EN"
+description = "Enables comparator 2."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET1_WORK_EN"
+description = "Enables comparator 1."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET0_WORK_EN"
+description = "Enables comparator 0."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT1_CORE1_STALL_EN"
+description = "Stalls unit 1 while core 1 is stalled."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT1_CORE0_STALL_EN"
+description = "Stalls unit 1 while core 0 is stalled."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT0_CORE1_STALL_EN"
+description = "Stalls unit 0 while core 1 is stalled."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT0_CORE0_STALL_EN"
+description = "Stalls unit 0 while core 0 is stalled."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT1_WORK_EN"
+description = "Enables unit 1."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT0_WORK_EN"
+description = "Enables unit 0."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_EN"
+description = "Keeps the register clock enabled for every access."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x8
+dimIndex = "0-2"
+name = "TARGET%s_HI"
+description = "High 20 bits of comparator %s's alarm target."
+addressOffset = 0x1c
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "HI"
+description = "Target bits 51:32."
+bitOffset = 0
+bitWidth = 20
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x8
+dimIndex = "0-2"
+name = "TARGET%s_LO"
+description = "Low 32 bits of comparator %s's alarm target."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "LO"
+description = "Target bits 31:0."
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x4
+dimIndex = "0-2"
+name = "TARGET%s_CONF"
+description = "Alarm mode of comparator %s."
+addressOffset = 0x34
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "PERIOD"
+description = "Alarm period in period mode."
+bitOffset = 0
+bitWidth = 26
+
+[[peripherals.registers.register.fields]]
+name = "PERIOD_MODE"
+description = "Selects period mode instead of one-shot target mode."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMER_UNIT_SEL"
+description = "Selects unit 1 instead of unit 0 as the compared counter."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x4
+dimIndex = "0-2"
+name = "COMP%s_LOAD"
+description = "Load strobe of comparator %s: writing one loads its target and mode."
+addressOffset = 0x50
+size = 32
+access = "write-only"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "LOAD"
+description = "Loads the comparator's target and mode."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INT_ENA"
+description = "Comparator interrupt enables."
+addressOffset = 0x64
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "TARGET0_INT_ENA"
+description = "Enables comparator 0's interrupt."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET1_INT_ENA"
+description = "Enables comparator 1's interrupt."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET2_INT_ENA"
+description = "Enables comparator 2's interrupt."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals]]
+name = "SYSTIMER_COUNTER"
+description = """
+The counter latch of system timer unit zero: the UPDATE strobe copies the
+counter into VALUE_HI and VALUE_LO and VALUE_VALID reports the copy done.
+Every context reads the counter, so this is a shared block: a strobe
+writes UPDATE alone and the values are read without a side effect."""
+baseAddress = 0x6000a004
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "UNIT0_OP"
+description = "Unit zero's latch strobe and its done flag."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "VALUE_VALID"
+description = "Set when the latched value is synchronized and valid (R/SS/WTC: a written one clears it, so the strobe writes zero here)."
+bitOffset = 29
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "UPDATE"
+description = "Writing one latches unit zero's count into VALUE_HI and VALUE_LO."
+bitOffset = 30
+bitWidth = 1
+access = "write-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "UNIT0_VALUE_HI"
+description = "High 20 bits of unit zero's latched count."
+addressOffset = 0x3c
+size = 32
+access = "read-only"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "VALUE_HI"
+description = "Count bits 51:32."
+bitOffset = 0
+bitWidth = 20
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "UNIT0_VALUE_LO"
+description = "Low 32 bits of unit zero's latched count."
+addressOffset = 0x40
+size = 32
+access = "read-only"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "VALUE_LO"
+description = "Count bits 31:0."
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals]]
+name = "SYSTIMER_ACKNOWLEDGE"
+description = """
+The comparators' interrupt acknowledgements. Each comparator's alarm handler
+strobes its own bit alone, from its own context, so this is a shared block
+of write-trigger strobes."""
+baseAddress = 0x6000a06c
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INT_CLR"
+description = "Comparator interrupt acknowledgements: a written one clears the raw bit."
+addressOffset = 0x0
+size = 32
+access = "write-only"
+modifiedWriteValues = "oneToClear"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "TARGET0_INT_CLR"
+description = "Clears comparator 0's interrupt."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET1_INT_CLR"
+description = "Clears comparator 1's interrupt."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET2_INT_CLR"
+description = "Clears comparator 2's interrupt."
+bitOffset = 2
+bitWidth = 1
+
+[[peripheral-review]]
+entity = "SYSTIMER"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "SYSTIMER_COUNTER"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "SYSTIMER_ACKNOWLEDGE"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

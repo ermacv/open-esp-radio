@@ -7,9 +7,8 @@ use oer_interrupt_table::{
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::chip::{
-    Acknowledger, Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, Sender, SoftwareInterrupt,
-    acknowledge_interrupt, current_core, install_line, interrupt_level, raise_interrupt,
-    software_interrupt_source,
+    Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, SoftwareInterrupt, current_core,
+    install_line, interrupt_level, raise_interrupt, serve_interrupt, software_interrupt_source,
 };
 pub(crate) use crate::context::NO_EXECUTOR;
 use crate::context::Running;
@@ -504,15 +503,12 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
 }
 
 macro_rules! impl_executor_constructors {
-    ($number:literal, $variant:ident) => {
+    ($number:literal, $take:ident) => {
         impl Executor<$number> {
+            /// The executor on software interrupt line `SWI`: it consumes
+            /// esp-hal's line and claims the line's typed block.
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
-                let (sender, ack) = interrupt.split();
-                install_line(
-                    $number,
-                    Sender::$variant(sender),
-                    Acknowledger::$variant(ack),
-                );
+                install_line($number, crate::chip::$take(interrupt));
                 Self {
                     not_send: PhantomData,
                 }
@@ -520,28 +516,26 @@ macro_rules! impl_executor_constructors {
         }
 
         impl InterruptExecutor<$number> {
+            /// The executor on software interrupt line `SWI`: it consumes
+            /// esp-hal's line and claims the line's typed block.
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
-                let (sender, ack) = interrupt.split();
-                install_line(
-                    $number,
-                    Sender::$variant(sender),
-                    Acknowledger::$variant(ack),
-                );
+                install_line($number, crate::chip::$take(interrupt));
                 Self { _line: () }
             }
         }
     };
 }
 
-impl_executor_constructors!(0, Zero);
-impl_executor_constructors!(1, One);
-impl_executor_constructors!(2, Two);
-impl_executor_constructors!(3, Three);
+impl_executor_constructors!(0, take_line_0);
+impl_executor_constructors!(1, take_line_1);
+impl_executor_constructors!(2, take_line_2);
+impl_executor_constructors!(3, take_line_3);
 
 /// The interrupt-table handler of a thread-mode executor's software interrupt
-/// (`FROM_CPU_INTR<SWI>`): it wakes the executor.
+/// (`FROM_CPU_INTR<SWI>`): it lowers the line, which wakes the executor's
+/// core from its wait.
 pub fn wake_handler<const SWI: u8>() {
-    acknowledge_interrupt(SWI);
+    serve_interrupt(SWI, || ());
 }
 
 /// The interrupt-table handler of the interrupt-mode executor of the tasks
@@ -549,7 +543,13 @@ pub fn wake_handler<const SWI: u8>() {
 /// executor's timers and signals and polls one round of its ready tasks.
 pub fn interrupt_handler<T: Tasks<Mode = InterruptMode>>() {
     let swi = T::EXECUTOR;
-    acknowledge_interrupt(swi);
+    // The line is lowered before the round takes its work: a pend during the
+    // round raises it again and runs another round.
+    serve_interrupt(swi, || round::<T>(swi));
+}
+
+/// One round of the interrupt-mode executor `swi`.
+fn round<T: Tasks<Mode = InterruptMode>>(swi: u8) {
     if !INTERRUPT_MODE[usize::from(swi)].load(Ordering::Acquire) {
         return;
     }
