@@ -5,6 +5,7 @@
 //! - no function that releases a core from reset or stall
 //!   (`[core-start]` of the chip profile) is linked unless a core other than
 //!   core 0 runs a task of its own, with the root the policy names;
+//! - no function of the cross-core call (IPC) is linked, whichever cores run;
 //! - an unused stack has no storage: its linked range is empty, or absent;
 //! - an interrupt-table entry routes to a core with an interrupt stack only
 //!   (checked where the table is read, [`crate::interrupts`]).
@@ -18,18 +19,12 @@ use super::{Image, Result, reachability::matches};
 /// The cores report of the runtime image.
 pub const REPORT: &str = "cores.txt";
 
-/// The linked functions that match a starter pattern of the chip.
-fn linked_starters(image: &Image, profile: &Profile) -> Vec<String> {
-    let Some(core_start) = &profile.core_start else {
-        return Vec::new();
-    };
+/// The linked functions that match one of `patterns`.
+fn linked(image: &Image, patterns: &[String]) -> Vec<String> {
     let mut linked = Vec::new();
     for function in &image.functions {
         if let Some(name) = image.names.get(&function.address)
-            && core_start
-                .starters
-                .iter()
-                .any(|pattern| matches(pattern, name))
+            && patterns.iter().any(|pattern| matches(pattern, name))
         {
             linked.push(name.clone());
         }
@@ -37,6 +32,32 @@ fn linked_starters(image: &Image, profile: &Profile) -> Vec<String> {
     linked.sort();
     linked.dedup();
     linked
+}
+
+/// The linked functions that start a core.
+fn linked_starters(image: &Image, profile: &Profile) -> Vec<String> {
+    profile
+        .core_start
+        .as_ref()
+        .map_or_else(Vec::new, |core_start| linked(image, &core_start.starters))
+}
+
+/// The linked functions of the cross-core call. No image links one until the
+/// call is typed: the interrupt level it takes would be reachable from every
+/// level's analysis.
+fn linked_ipc(image: &Image, profile: &Profile) -> Result<()> {
+    let ipc = profile
+        .core_start
+        .as_ref()
+        .map_or_else(Vec::new, |core_start| linked(image, &core_start.ipc));
+    if ipc.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "the image links the cross-core call, which no image links until it is typed:\n  {}",
+        ipc.join("\n  ")
+    )
+    .into())
 }
 
 /// The linked size of the range `bottom..top`, `None` when the image links
@@ -52,6 +73,7 @@ pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> 
     policy.check_cores(profile.properties.cores)?;
     let unused_tasks = policy.unused_task_cores();
     let unused_interrupts = policy.unused_interrupt_cores();
+    linked_ipc(image, profile)?;
     let starters = linked_starters(image, profile);
     let mut report = String::from("core\ttask stack\tinterrupt stack\n");
     let started: Vec<_> = unused_tasks.iter().filter(|core| **core != 0).collect();
@@ -117,6 +139,7 @@ pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> 
 
 /// The bootstrap runs on core 0 alone: it links no starter.
 pub fn audit_bootstrap(image: &Image, profile: &Profile) -> Result<()> {
+    linked_ipc(image, profile)?;
     let starters = linked_starters(image, profile);
     if starters.is_empty() {
         return Ok(());

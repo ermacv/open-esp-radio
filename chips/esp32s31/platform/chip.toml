@@ -69,28 +69,17 @@ vector-table-symbol = "_runtime_psram_mtvt_source"
 exception-entry-symbol = "_start_trap"
 source-table-symbol = "__EXTERNAL_INTERRUPTS"
 harts = [0, 1]
-# esp-hal's IPC line.
-always-levels = [1]
+# No level is taken without a table route: the image links no IPC (`[core-start]`).
+always-levels = []
 # Maximum allocation of each hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
 irq-stack-margin-percent = 10
 
-# The only writer of the IPC callback, whose `handler` argument (`a1`) is
-# every function the IPC dispatch runs, and the functions that call it.
-[interrupts.ipc]
-post = "<esp_hal::interrupt::ipc::Ipc>::call_function"
-post-handler-argument = 1
-dispatch = [
-    "esp_hal::interrupt::ipc::implem::dispatch",
-    "esp_hal::interrupt::ipc::implem::callback_handler",
-]
-
 [[interrupts.level-writers]]
 writer = "esp_hal::interrupt::arch::cpu_int::set_priority_raw"
 contexts = [
     "esp_hal::interrupt::arch::init_vectoring",
-    "esp_hal::interrupt::ipc::implem::install_core",
 ]
 
 [[interrupts.level-writers]]
@@ -104,8 +93,14 @@ contexts = [
 # What releases core 1 from the reset the esp-hal fork holds it in
 # (chips/esp32s31/notes/core1-boot.md). An image links none of these unless its
 # stack policy declares core 1 used and proves its roots; the image gate
-# looks the patterns up among the linked functions.
+# looks the patterns up among the linked functions. `ipc` is the cross-core
+# call, which the fork's `ipc` feature (off in every image) links; no image
+# links any of it until the call is typed.
 [core-start]
+ipc = [
+    "esp_hal::interrupt::ipc::*",
+    "<esp_hal::interrupt::ipc::*",
+]
 starters = [
     "*CpuControl*::start_app_core*",
     "*CpuControl*::unpark_core*",

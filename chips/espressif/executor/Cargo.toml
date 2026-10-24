@@ -48,7 +48,7 @@ oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
 embassy-executor = { version = "0.10.0", default-features = false, optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 embassy-time-queue-utils = { version = "0.3", optional = true }
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "bdc9b49032d97a5884df4e4f8dfbfe00a31af9ba", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
 oer-espressif-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
