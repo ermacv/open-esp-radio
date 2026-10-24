@@ -54,13 +54,17 @@ Each function cites its header and line, with the header's SHA-256. The
 companion file records the configuration hash and binary corpus hashes.
 
 
-2. ESP32-S31 SVD (esp-pacs)
----------------------------
+2. ESP32-S31 and ESP32-C5 SVDs (esp-pacs)
+-----------------------------------------
 
-Source:    https://github.com/esp-rs/esp-pacs, esp32s31/svd/esp32s31.base.svd
+Source:    https://github.com/esp-rs/esp-pacs at a1f6cf68e,
+           esp32s31/svd/esp32s31.base.svd and esp32c5/svd/esp32c5.base.svd
 Copyright: Espressif Systems (Shanghai) PTE LTD
 License:   Apache-2.0
 
+- chips/esp32s31/registers/upstream/esp32s31.svd and
+  chips/esp32c5/registers/upstream/esp32c5.svd: the vendor SVDs, unmodified;
+  the PAC's generated `soc` module is rendered from them.
 - chips/esp32s31/registers/upstream/platform-radio-deps.svd: a subset with review
   annotations, modified by Vladislav Ermachenkov; its licenseText carries the
   original notice.

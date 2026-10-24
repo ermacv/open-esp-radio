@@ -1,0 +1,11 @@
+# The strictness overlay over the vendor SVD (`../upstream/esp32c5.svd`): what
+# the SVD does not state about access, read side effects, write-one-to-clear,
+# write triggers, FIFO ports, enumerated values and reserved bits, and the
+# interrupt sources it does not list. Every entry cites its source:
+# `esp-idf:<path>:<line>` at the pin below, `esp-hal:<path>:<line>` at the
+# esp-hal pin, or `trm:<section>`. What no entry states keeps the
+# conservative default of `cargo registers generate`; the generated
+# `../published/soc.report.toml` lists every register it narrowed.
+schema = 1
+esp-idf = "4d59230ddff16327812782151ef0afef202dc6d7"
+esp-hal = "1f646c5af4f4ca2774f493783581237fea2379dc"

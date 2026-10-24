@@ -16,6 +16,9 @@ mod test_memory;
 #[cfg(test)]
 mod typed_register_tests;
 
+#[cfg(test)]
+mod soc_tests;
+
 // The generated capability catalog is intentionally broader than this crate's
 // restricted ownership facade. Reviewed leaves stay unreachable until an owner
 // transition exposes them.
@@ -24,6 +27,11 @@ mod typed_register_tests;
     reason = "generated capability catalog is wider than the restricted ownership facade"
 )]
 mod generated;
+
+/// Every peripheral of the vendor SVD the curated model does not describe,
+/// as typed register blocks with the chip's interrupt sources
+/// (`soc::Interrupt`); the PAC root claims them at once.
+pub use generated::soc;
 
 pub(crate) mod ieee802154;
 pub(crate) mod modem;

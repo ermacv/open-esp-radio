@@ -41,3 +41,8 @@ edition = "2024"
 [outputs.linker]
 path = "../../layout/linker/dma-window.x"
 address-low-field = "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.ADDRESS_LOW"
+
+[soc]
+svd = "../upstream/esp32s31.svd"
+overlay = "../model/strictness.toml"
+report = "../published/soc.report.toml"

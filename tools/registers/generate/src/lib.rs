@@ -32,6 +32,19 @@ struct Manifest {
     evidence: Vec<PathBuf>,
     applicability: Context,
     outputs: Outputs,
+    /// The whole vendor SVD, rendered into the PAC API's `soc` module.
+    #[serde(default)]
+    soc: Option<SocManifest>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+struct SocManifest {
+    /// The vendor SVD, kept unmodified.
+    svd: PathBuf,
+    /// The chip's strictness overlay.
+    overlay: PathBuf,
+    /// The generated report of every register the conservative pass narrowed.
+    report: PathBuf,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -167,6 +180,25 @@ fn svd_without(svd: &str, names: &BTreeSet<&str>) -> Result<String> {
     Ok(output)
 }
 
+/// `path` from the repository root (the directory holding `chips/`), as
+/// the generated `SOURCE:` lines name it; the whole path when it has none.
+fn repository_path(path: &Path) -> String {
+    let parts = path.components().collect::<Vec<_>>();
+    parts
+        .iter()
+        .position(|part| part.as_os_str() == "chips")
+        .map_or_else(
+            || path.display().to_string(),
+            |start| {
+                parts[start..]
+                    .iter()
+                    .map(|part| part.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            },
+        )
+}
+
 /// One validated publication: a chip's register project, or a register
 /// library of layouts shared between chips.
 pub enum Publication {
@@ -216,6 +248,15 @@ pub struct ChipPublication {
     /// The memory map, which supplies the RAM regions layouts name.
     memory: oer_registers_model::memory::Memory,
     outputs: Outputs,
+    soc: Option<Soc>,
+}
+/// The loaded inputs of the `soc` module and its report's destination.
+struct Soc {
+    vendor_svd: String,
+    /// The vendor SVD's path from the repository root, which `SOURCE:` names.
+    vendor_path: String,
+    overlay: oer_registers_model::StrictnessOverlay,
+    report: PathBuf,
 }
 impl ChipPublication {
     /// Load explicitly selected source documents. Artifact-specific assertions cannot
@@ -341,6 +382,24 @@ impl ChipPublication {
             input_paths.insert(base.join(p).canonicalize()?);
         }
         input_paths.insert(path.clone());
+        let mut soc = match &m.soc {
+            None => None,
+            Some(soc) => {
+                if outputs.pac.is_none() {
+                    return Err("the vendor SVD renders into a PAC".into());
+                }
+                let svd = base.join(&soc.svd).canonicalize()?;
+                let overlay = base.join(&soc.overlay).canonicalize()?;
+                input_paths.insert(svd.clone());
+                input_paths.insert(overlay.clone());
+                Some(Soc {
+                    vendor_svd: fs::read_to_string(&svd)?,
+                    vendor_path: repository_path(&svd),
+                    overlay: oer_registers_model::StrictnessOverlay::load(&overlay)?,
+                    report: base.join(&soc.report),
+                })
+            }
+        };
         let mut destinations = BTreeSet::new();
         let pac = outputs
             .pac
@@ -350,11 +409,13 @@ impl ChipPublication {
             .flatten();
         let linker = outputs.linker.as_mut().map(|linker| &mut linker.path);
         let analog = outputs.analog.as_mut();
+        let report = soc.as_mut().map(|soc| &mut soc.report);
         for p in [&mut outputs.svd, &mut outputs.bindings]
             .into_iter()
             .chain(pac)
             .chain(linker)
             .chain(analog)
+            .chain(report)
         {
             *p = host::destination(&base.join(&*p))?;
             if input_paths.contains(p) || !destinations.insert(p.clone()) {
@@ -366,6 +427,7 @@ impl ChipPublication {
             api,
             memory,
             outputs,
+            soc,
         })
     }
 
@@ -387,7 +449,23 @@ impl ChipPublication {
             ));
         }
         if let (Some(pac), Some(policy)) = (pac, &self.api) {
-            let (raw, api) = self.render_pac(&svd, pac, policy)?;
+            let soc = match &self.soc {
+                None => None,
+                Some(soc) => {
+                    let curated_typed = policy.typed_peripherals();
+                    let rendered =
+                        oer_registers_model::render_soc(&oer_registers_model::SocInputs {
+                            vendor_svd: &soc.vendor_svd,
+                            vendor_path: &soc.vendor_path,
+                            overlay: &soc.overlay,
+                            curated_svd: &svd,
+                            curated_typed: &curated_typed,
+                        })?;
+                    outputs.push((&soc.report, rendered.report));
+                    Some(rendered.rust)
+                }
+            };
+            let (raw, api) = self.render_pac(&svd, pac, policy, soc.as_deref())?;
             if let (Some(destination), Some(raw)) = (&pac.raw, raw) {
                 outputs.push((destination, raw));
             }
@@ -411,6 +489,7 @@ impl ChipPublication {
         svd: &str,
         pac: &PacOutputs,
         policy: &PacApiPack,
+        soc: Option<&str>,
     ) -> Result<(Option<String>, String)> {
         let raw = match &pac.raw {
             Some(_) => Some(self.render_raw_pac(svd, pac, policy)?),
@@ -452,6 +531,9 @@ impl ChipPublication {
         api.push_str(&policy.without_typed_operations().render_facade_rust()?);
         api.push_str(&self.model.render_layouts_rust(&self.memory)?);
         api.push_str(&policy.render_typed_rust(svd, self.model.shared_peripherals())?);
+        if let Some(soc) = soc {
+            api.push_str(soc);
+        }
         let api = host::format(&api, &pac.edition)?;
         Ok((raw, api))
     }

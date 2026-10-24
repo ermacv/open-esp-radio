@@ -48,6 +48,11 @@ pub use reserved::ReservedBits;
 mod review_defaults;
 pub use review_defaults::ReviewMetadata;
 mod shared;
+mod soc;
+pub use soc::{
+    FieldKind, FieldRule, InterruptRule, OverlayAccess, RegisterApi, RegisterRule, RegisterVerdict,
+    SocInputs, SocRender, StrictnessOverlay, ValueRule, render_soc,
+};
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,

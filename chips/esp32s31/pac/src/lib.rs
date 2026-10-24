@@ -5,6 +5,9 @@
 extern crate std;
 
 #[cfg(test)]
+mod soc_tests;
+
+#[cfg(test)]
 mod test_memory;
 
 // Outside the production PHY module, which forbids all unsafe code.
@@ -28,6 +31,11 @@ pub(crate) use phy::frequency;
     reason = "generated capability catalog is wider than the restricted ownership facade"
 )]
 mod generated;
+
+/// Every peripheral of the vendor SVD the curated model does not describe,
+/// as typed register blocks with the chip's interrupt sources
+/// (`soc::Interrupt`); the PAC root claims them at once.
+pub use generated::soc;
 
 pub use phy::pbus;
 pub mod phy;

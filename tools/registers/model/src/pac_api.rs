@@ -2076,12 +2076,10 @@ fn is_rust_keyword(value: &str) -> bool {
     )
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-
-    pub(crate) fn empty_pack() -> PacApiPack {
-        PacApiPack {
+impl PacApiPack {
+    /// A schema-5 policy that declares nothing.
+    pub(crate) fn empty() -> Self {
+        Self {
             schema: 5,
             options: PacApiOptions::default(),
             ownership_partitions: Vec::new(),
@@ -2120,6 +2118,15 @@ pub(crate) mod tests {
             register_divisions: Vec::new(),
             shared_blocks: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    pub(crate) fn empty_pack() -> PacApiPack {
+        PacApiPack::empty()
     }
 
     #[test]
