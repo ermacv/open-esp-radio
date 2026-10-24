@@ -3,7 +3,7 @@
 
 use core::cell::Cell;
 
-use super::{CounterLatch, LATCH_SETTLE_POLLS, LatchStuck, read};
+use super::{CounterLatch, LATCH_SETTLE_POLLS, LatchStuck, check, read};
 
 struct Fake {
     /// The free-running count; it advances by `step` on every access.
@@ -65,7 +65,7 @@ impl Fake {
         }
         if self.preempt_at.get() == Some(accesses) {
             self.preempt_at.set(None);
-            let value = read(self).expect("the preempting read completes");
+            let value = read(self);
             self.preempted.set(Some(value));
         }
     }
@@ -94,7 +94,8 @@ impl CounterLatch for Fake {
 #[test]
 fn a_read_returns_the_latched_count_after_a_late_valid() {
     let latch = Fake::new(0x1234_0000_0000, 1, 5);
-    let value = read(&latch).expect("the latch settles");
+    let value = read(&latch);
+    assert!(latch.held(value), "{value:#x}");
     assert!(value > 0x1234_0000_0000);
     assert_eq!(latch.strobes.get(), 1);
 }
@@ -102,7 +103,9 @@ fn a_read_returns_the_latched_count_after_a_late_valid() {
 #[test]
 fn a_latch_that_never_settles_is_a_fault() {
     let latch = Fake::new(0, 1, LATCH_SETTLE_POLLS + 10);
-    assert_eq!(read(&latch), Err(LatchStuck));
+    assert_eq!(check(&latch), Err(LatchStuck));
+    let latch = Fake::new(0, 1, 5);
+    assert_eq!(check(&latch), Ok(()));
 }
 
 #[test]
@@ -113,7 +116,7 @@ fn a_low_word_that_wraps_between_reads_is_read_again() {
     for preempt in 1..=12 {
         let latch = Fake::new(0xffff_fff0, 3, 1);
         latch.preempt_at.set(Some(preempt));
-        let value = read(&latch).expect("the read completes");
+        let value = read(&latch);
         // Each returned count is one the latch held: its HI and LO belong
         // to one latch.
         assert!(latch.held(value), "{preempt}: {value:#x}");
@@ -130,12 +133,12 @@ fn interleaved_reads_from_two_contexts_are_monotonic() {
     // that starts after another returned never returns less.
     for preempt in 1..=14 {
         let latch = Fake::new(0x7_ffff_ff00, 7, 2);
-        let before = read(&latch).expect("the first read completes");
+        let before = read(&latch);
         let start = latch.accesses.get();
         latch.preempt_at.set(Some(start + preempt));
-        let during = read(&latch).expect("the preempted read completes");
+        let during = read(&latch);
         let inner = latch.preempted.get();
-        let after = read(&latch).expect("the last read completes");
+        let after = read(&latch);
         assert!(latch.held(during), "{preempt}: {during:#x}");
         assert!(before <= during, "{preempt}: {before:#x} > {during:#x}");
         assert!(during <= after, "{preempt}: {during:#x} > {after:#x}");

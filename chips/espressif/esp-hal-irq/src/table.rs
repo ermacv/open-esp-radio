@@ -357,28 +357,20 @@ pub fn table() -> &'static Table<EspHalMatrix> {
 }
 
 /// Whether `source` is pending at the current core's interrupt matrix.
-///
-/// # Panics
-///
-/// Before [`adopt`].
+/// Before [`adopt`] no source is routed, so none is reported pending. Never
+/// panics.
 #[inline(always)]
 pub fn is_pending(source: Interrupt) -> bool {
     let source = source as usize;
     let (word, bit) = (source / 32, source % 32);
     let sources = match Cpu::current() {
-        Cpu::ProCpu => {
-            let status = PENDING0
-                .get()
-                .unwrap_or_else(|| panic!("the interrupt matrix is adopted before polling"));
-            pending_word!(status, word)
-        }
+        Cpu::ProCpu => PENDING0
+            .get()
+            .map_or(0, |status| pending_word!(status, word)),
         #[cfg(feature = "esp32s31")]
-        Cpu::AppCpu => {
-            let status = PENDING1
-                .get()
-                .unwrap_or_else(|| panic!("the interrupt matrix is adopted before polling"));
-            pending_word!(status, word)
-        }
+        Cpu::AppCpu => PENDING1
+            .get()
+            .map_or(0, |status| pending_word!(status, word)),
     };
     sources
         .checked_shr(bit as u32)

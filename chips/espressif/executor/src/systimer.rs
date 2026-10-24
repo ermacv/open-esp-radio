@@ -23,10 +23,26 @@ impl Comparator {
     }
 
     /// The comparator's element of the SYSTIMER arrays.
-    fn index(self) -> oer_mmio::Index<3> {
-        match oer_mmio::Index::new(self as usize) {
-            Ok(index) => index,
-            Err(_) => unreachable!("every comparator indexes the three-element arrays"),
+    const fn index(self) -> oer_mmio::Index<3> {
+        const INDICES: [oer_mmio::Index<3>; 3] = {
+            let mut indices = [match oer_mmio::Index::new(0) {
+                Ok(index) => index,
+                Err(_) => panic!("the arrays have a first element"),
+            }; 3];
+            let mut element = 1;
+            while element < 3 {
+                indices[element] = match oer_mmio::Index::new(element) {
+                    Ok(index) => index,
+                    Err(_) => panic!("every comparator indexes the three-element arrays"),
+                };
+                element += 1;
+            }
+            indices
+        };
+        match self {
+            Self::Zero => INDICES[0],
+            Self::One => INDICES[1],
+            Self::Two => INDICES[2],
         }
     }
 }

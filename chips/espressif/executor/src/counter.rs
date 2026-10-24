@@ -39,38 +39,49 @@ pub(crate) const READ_ROUNDS: u32 = 16;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct LatchStuck;
 
-/// Wait the latch's settle: `Ok` once its value is valid.
-fn settle(latch: &impl CounterLatch) -> Result<(), LatchStuck> {
-    for _ in 0..LATCH_SETTLE_POLLS {
-        if latch.valid() {
-            return Ok(());
-        }
-    }
-    Err(LatchStuck)
+/// Wait the latch's settle: whether its value turned valid within the bound.
+fn settle(latch: &impl CounterLatch) -> bool {
+    (0..LATCH_SETTLE_POLLS).any(|_| latch.valid())
 }
 
-/// The counter's current value, in ticks.
+/// Strobe the latch once and check that it settles within its bound: the
+/// check the time driver makes when it takes the system timer, before any
+/// context reads the time.
 ///
 /// # Errors
 ///
-/// [`LatchStuck`] when the latch never turns valid or preempting strobes
-/// keep the reads from agreeing for [`READ_ROUNDS`] rounds.
-pub(crate) fn read(latch: &impl CounterLatch) -> Result<u64, LatchStuck> {
+/// [`LatchStuck`] when the latch never turns valid.
+pub(crate) fn check(latch: &impl CounterLatch) -> Result<(), LatchStuck> {
     latch.update();
-    settle(latch)?;
+    if settle(latch) {
+        Ok(())
+    } else {
+        Err(LatchStuck)
+    }
+}
+
+/// The counter's current value, in ticks. It never fails and never waits
+/// longer than its bounds: the latch settles within [`LATCH_SETTLE_POLLS`]
+/// ([`check`] proved it when the system timer was taken), and a read that
+/// preempting strobes keep from agreeing for [`READ_ROUNDS`] rounds returns
+/// the last round's HI with the LO read after it.
+pub(crate) fn read(latch: &impl CounterLatch) -> u64 {
+    latch.update();
+    let _ = settle(latch);
     let mut low = latch.low();
+    let mut high = latch.high();
     for _ in 0..READ_ROUNDS {
-        let high = latch.high();
         let again = latch.low();
         if again == low && latch.valid() {
-            return Ok(u64::from(high) << 32 | u64::from(low));
+            break;
         }
         // A preempting context relatched the counter meanwhile: wait for
         // its copy and read the newer count.
-        settle(latch)?;
+        let _ = settle(latch);
         low = latch.low();
+        high = latch.high();
     }
-    Err(LatchStuck)
+    u64::from(high) << 32 | u64::from(low)
 }
 
 #[cfg(test)]

@@ -85,29 +85,30 @@ impl CounterLatch for platform::SystimerCounter {
 /// driver's handoff.
 static COUNTER: ZeroedOnce<platform::SystimerCounter> = ZeroedOnce::new();
 
-/// Publish the counter latch, from the system timer's handoff.
+/// Publish the counter latch, from the system timer's handoff, once its
+/// latch has settled within its bound ([`crate::counter::check`]).
 ///
 /// # Panics
-/// When it is published already.
+/// When it is published already or its latch never settles (a fault of the
+/// system timer): the boundary at which the clock's reads become infallible.
 pub(crate) fn install_counter(counter: platform::SystimerCounter) {
     assert!(COUNTER.get().is_none(), "the counter is published once");
+    assert!(
+        crate::counter::check(&counter).is_ok(),
+        "the system timer's counter latch settles"
+    );
     let _ = COUNTER.get_or_init(|| counter);
 }
 
 /// The system timer's counter, in microseconds.
-///
-/// # Panics
-/// Before the time driver's [`init`](crate::init), or when the latch never
-/// settles (a fault of the system timer).
+/// Before the time driver's [`init`](crate::init) publishes the counter
+/// the clock reads 0, which every later read exceeds. The read never panics.
 // Share the same clock read with cooperative admission and poll stamping.
 #[inline(never)]
 pub(crate) fn now() -> u64 {
-    let counter = COUNTER
-        .get()
-        .unwrap_or_else(|| panic!("the time driver publishes the counter before time is read"));
-    let ticks = crate::counter::read(counter)
-        .unwrap_or_else(|_| panic!("the system timer's counter latch settles"));
-    ticks / TICKS_PER_MICROSECOND
+    COUNTER.get().map_or(0, |counter| {
+        crate::counter::read(counter) / TICKS_PER_MICROSECOND
+    })
 }
 
 /// Whether `source` is pending at the current core's interrupt matrix.
@@ -258,22 +259,29 @@ pub(crate) fn install_line(swi: usize, line: Line) {
     let _ = slot.get_or_init(|| line);
 }
 
-fn line(swi: u8) -> &'static Line {
-    LINES
-        .get(usize::from(swi))
-        .and_then(ZeroedOnce::get)
-        .unwrap_or_else(|| panic!("software interrupt line is installed before use"))
+/// Software interrupt `swi`'s installed line: none before its executor or
+/// doorbell took it, when there is nothing it could wake.
+fn line(swi: u8) -> Option<&'static Line> {
+    LINES.get(usize::from(swi)).and_then(ZeroedOnce::get)
 }
 
-/// Raise software interrupt `swi`.
+/// Raise software interrupt `swi`; a line no executor took yet has no
+/// handler to run, so nothing is raised. Never panics.
 #[inline(always)]
 pub(crate) fn raise_interrupt(swi: u8) {
-    line(swi).raise();
+    if let Some(line) = line(swi) {
+        line.raise();
+    }
 }
 
 /// One handler round of software interrupt `swi`: lower its line, then take
-/// the work (`drain`), so a raise during the work runs another round.
+/// the work (`drain`), so a raise during the work runs another round. Only
+/// an installed line's handler runs, since only an installed line is raised
+/// and routed. Never panics.
 #[inline(always)]
 pub(crate) fn serve_interrupt<R>(swi: u8, drain: impl FnOnce() -> R) -> R {
-    serve(line(swi), drain)
+    match line(swi) {
+        Some(line) => serve(line, drain),
+        None => drain(),
+    }
 }
