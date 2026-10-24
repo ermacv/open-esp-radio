@@ -269,9 +269,11 @@ zeroized when dropped. Configuration reads admit the security/rekey options
 above and continue to exclude every key option; the key is never read back.
 
 `w4::deauthenticate` takes the selected AP interface and a typed `Mac` for
-the station. It sends `hostapd_cli -i <interface> deauthenticate <station>`
-through the stdin script and requires an exact `OK` reply on the router.
-Its stderr and completion status use the same redacted command log. Callers hold
+the station. It calls the router's own hostapd ubus object
+(`ubus call hostapd.<interface> del_client` with the station address, reason 2,
+`deauth` and `ban_time` 0) through the stdin script; OpenWrt ships no
+`hostapd_cli`. A nonzero exit is an error with its status and stderr, and both
+also use the same redacted command log. Callers hold
 router and exclusive air ownership for the complete run.
 
 `w4::refresh_neighbor` checks native `ip` availability, then reads only the
