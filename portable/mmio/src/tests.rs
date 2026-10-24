@@ -1,6 +1,6 @@
 use super::{
-    Bits, Block, Host, Index, IndexError, NotOneSplit, Reader, Registers, ValueError, VolatileCell,
-    Words,
+    Bits, Block, Fixed, Host, Index, IndexError, NotOneSplit, Reader, Registers, SharedRegisters,
+    ValueError, VolatileCell, Words,
 };
 
 /// A block of four consecutive words.
@@ -309,4 +309,29 @@ fn the_division_checks_accept_only_disjoint_owners_and_trigger_bits() {
     );
     assert!(owners_cover(BLOCK, &[0, 4], &[8, 12]));
     assert!(!owners_cover(BLOCK, &[0], &[4, 12]));
+}
+
+/// A shared block of two words.
+struct Shared;
+impl Registers for Shared {
+    const WORDS: &'static [usize] = &[0, 4];
+}
+impl SharedRegisters for Shared {}
+
+#[test]
+fn a_shared_store_through_a_shared_borrow_writes_only_its_word() {
+    let mut memory = [0x1111_1111, 0x2222_2222];
+    let block = Block::<Host<'_>, Shared>::host(&mut memory).expect("two words");
+    let (first, second) = (&block, &block);
+    first.write_shared::<4>(0x4000_0000);
+    second.write_shared::<0>(1);
+    assert_eq!(first.read::<4>(), 0x4000_0000);
+    drop(block);
+    assert_eq!(memory, [1, 0x4000_0000]);
+}
+
+#[test]
+fn a_shared_block_at_a_fixed_address_is_sync() {
+    fn sync<T: Sync>() {}
+    sync::<Block<Fixed<0x1000>, Shared>>();
 }
