@@ -100,14 +100,17 @@ pub(crate) fn install_counter(counter: platform::SystimerCounter) {
     let _ = COUNTER.get_or_init(|| counter);
 }
 
-/// The system timer's counter, in microseconds.
+/// The system timer's counter, in microseconds: a verified read, or the
+/// floor of a read that preempting strobes kept from verifying, which is no
+/// smaller than any earlier reading and no larger than any later one.
 /// Before the time driver's [`init`](crate::init) publishes the counter
 /// the clock reads 0, which every later read exceeds. The read never panics.
 // Share the same clock read with cooperative admission and poll stamping.
 #[inline(never)]
 pub(crate) fn now() -> u64 {
     COUNTER.get().map_or(0, |counter| {
-        crate::counter::read(counter) / TICKS_PER_MICROSECOND
+        crate::counter::read(counter).unwrap_or_else(|unverified| unverified.floor)
+            / TICKS_PER_MICROSECOND
     })
 }
 
