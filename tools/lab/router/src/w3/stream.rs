@@ -1,7 +1,12 @@
 //! Bounded, memory-only SSH observers, including a readiness barrier for
 //! tcpdump. Dropping an observer stops its owned SSH process group.
 
-use std::{io::Read, sync::mpsc, thread::JoinHandle, time::Duration};
+use std::{
+    io::{BufRead, BufReader, Read},
+    sync::mpsc,
+    thread::JoinHandle,
+    time::Duration,
+};
 
 use oer_os_process::owned::Child;
 
@@ -171,7 +176,9 @@ fn completed_observation(
 }
 
 /// AP-STA-DISCONNECTED events after subscription only. Historical log records
-/// are excluded, including a previous run of the same target MAC.
+/// are excluded, including a previous run of the same target MAC: the one
+/// history line `logread -l 1` replays arrives once the follow subscription
+/// exists, and the observer turns it into its readiness marker.
 pub struct Departure {
     child: Child,
     output: Option<JoinHandle<Result<String>>>,
@@ -179,10 +186,87 @@ pub struct Departure {
     command: Option<CommandObservation>,
 }
 
+/// What a departure observer saw between its readiness and its finish.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DepartureOutcome {
+    /// Exactly one departure of the target.
+    Unique,
+    /// No departure of the target.
+    Absent,
+    /// More than one departure of the target.
+    Duplicate,
+    /// The observer exited before it was finished; its count is not final.
+    Ended,
+}
+
+impl std::fmt::Display for DepartureOutcome {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Unique => "one departure event",
+            Self::Absent => "no departure event",
+            Self::Duplicate => "more than one departure event",
+            Self::Ended => "departure observer exited before it was finished",
+        })
+    }
+}
+
+const READY: &str = "ready";
+const DEPARTED: &str = "departure";
+/// The observer output kept in a failed observation's record.
+const RECORDED_OUTPUT: usize = 512;
+
+/// The outcome of an observer whose standard output is `text` and which had
+/// (`ended`) or had not exited by itself when it was finished. The output is
+/// the readiness marker, then one line per departure.
+pub fn departure_outcome(text: &str, ended: bool) -> Result<DepartureOutcome> {
+    let mut lines = text.lines();
+    if lines.next() != Some(READY) {
+        return Err("departure observer output has no readiness marker".to_owned());
+    }
+    let mut departures = 0_usize;
+    for line in lines {
+        if line != DEPARTED {
+            return Err("invalid departure observation".to_owned());
+        }
+        departures += 1;
+    }
+    Ok(match (ended, departures) {
+        (true, _) => DepartureOutcome::Ended,
+        (false, 0) => DepartureOutcome::Absent,
+        (false, 1) => DepartureOutcome::Unique,
+        (false, _) => DepartureOutcome::Duplicate,
+    })
+}
+
+/// Read the observer's output within the memory bound, signalling `ready`
+/// when its first line is the readiness marker.
+fn departure_output(reader: impl Read, ready: mpsc::SyncSender<()>) -> Result<String> {
+    let mut reader = BufReader::new(reader.take(128 * 1024 + 1));
+    let mut bytes = Vec::new();
+    loop {
+        let start = bytes.len();
+        let read = reader
+            .read_until(b'\n', &mut bytes)
+            .map_err(|_| "cannot read router observation")?;
+        if read == 0 {
+            break;
+        }
+        if start == 0 && bytes.trim_ascii_end() == READY.as_bytes() {
+            let _ = ready.try_send(());
+        }
+    }
+    if bytes.len() > 128 * 1024 {
+        return Err("router observation exceeded memory bound".to_owned());
+    }
+    String::from_utf8(bytes).map_err(|_| "router observation is not UTF-8".to_owned())
+}
+
 impl Departure {
+    /// Subscribe to the router log and return once the subscription is
+    /// ready (at most 10 s), so an event the caller causes next is seen.
     pub fn start(ssh: &Ssh, target: Mac) -> Result<Self> {
         let pipeline = format!(
-            "logread -f -l 1 | awk -v target={} 'NR>1 && /AP-STA-DISCONNECTED/ && index(tolower($0),target) {{print \"departure\"; fflush()}}'",
+            "logread -f -l 1 | awk -v target={} 'NR==1 {{print \"{READY}\"; fflush(); next}} /AP-STA-DISCONNECTED/ && index(tolower($0),target) {{print \"{DEPARTED}\"; fflush()}}'",
             quote(&super::mac_text(target))?
         );
         let script = format!("exec timeout 240 sh -c {}", quote(&pipeline)?);
@@ -193,79 +277,90 @@ impl Departure {
         let stderr = child
             .take_stderr()
             .ok_or("departure observer has no stderr")?;
+        let (ready, readiness) = mpsc::sync_channel(1);
         let diagnostics = std::thread::spawn(move || read_stderr(stderr, |_| {}));
-        let output = std::thread::spawn(move || bounded(stdout));
-        Ok(Self {
+        let output = std::thread::spawn(move || departure_output(stdout, ready));
+        let mut departure = Self {
             child,
             output: Some(output),
             diagnostics: Some(diagnostics),
             command: Some(ssh.observe(&script)),
-        })
+        };
+        if readiness.recv_timeout(Duration::from_secs(10)).is_err() {
+            let reason = "departure observer did not become ready";
+            return Err(match departure.close(Some(reason)) {
+                Err(error) => error,
+                Ok(_) => reason.to_owned(),
+            });
+        }
+        Ok(departure)
     }
 
-    pub fn finish(mut self) -> Result<bool> {
+    /// Stop the observer and classify what it saw. Anything but
+    /// [`DepartureOutcome::Unique`] is recorded with the observer output.
+    pub fn finish(mut self) -> Result<DepartureOutcome> {
+        self.close(None)
+    }
+
+    /// Stop the observer, record it with its output unless it saw one
+    /// departure, and return its outcome. `stopped` names why the observer
+    /// stops before its caller finished it.
+    fn close(&mut self, stopped: Option<&str>) -> Result<DepartureOutcome> {
         let ended = self
             .child
             .try_wait()
-            .map_err(|_| "cannot read departure observer status")?
-            .is_some();
-        self.child
-            .kill()
-            .map_err(|_| "cannot stop departure observer")?;
+            .map(|status| status.is_some())
+            .map_err(|_| "cannot read departure observer status".to_owned());
+        let _ = self.child.kill();
         let status = self.child.try_wait().ok().flatten();
         let diagnostics = self
             .diagnostics
             .take()
-            .ok_or("missing departure stderr reader")?
-            .join()
-            .map_err(|_| "departure stderr reader panicked")?;
-        let failed = diagnostics.error.is_some();
-        if let Some(command) = self.command.take() {
-            command.finish(status, &diagnostics.text, diagnostics.error.as_deref());
-        }
-        if failed {
-            return Err("departure observer stderr failed; see command evidence".into());
-        }
+            .and_then(|reader| reader.join().ok())
+            .unwrap_or_else(|| Stderr {
+                text: String::new(),
+                error: Some("departure stderr reader unavailable".to_owned()),
+            });
         let text = self
             .output
             .take()
-            .ok_or("missing departure reader")?
-            .join()
-            .map_err(|_| "departure reader panicked")??;
-        if text.lines().any(|line| line != "departure") {
-            return Err("invalid departure observation".to_owned());
+            .ok_or_else(|| "departure reader unavailable".to_owned())
+            .and_then(|reader| {
+                reader
+                    .join()
+                    .map_err(|_| "departure reader panicked".to_owned())
+            })
+            .and_then(|text| text);
+        let outcome = match (stopped, &diagnostics.error, &text) {
+            (Some(stopped), _, _) => Err(stopped.to_owned()),
+            (None, Some(error), _) => Err(format!("departure observer stderr failed: {error}")),
+            (None, None, Err(error)) => Err(error.clone()),
+            (None, None, Ok(text)) => ended.and_then(|ended| departure_outcome(text, ended)),
+        };
+        if let Some(command) = self.command.take() {
+            let error = match &outcome {
+                Ok(DepartureOutcome::Unique) => None,
+                Ok(outcome) => Some(outcome.to_string()),
+                Err(error) => Some(error.clone()),
+            }
+            .map(|error| {
+                let output = text.as_deref().unwrap_or_default();
+                let kept = output
+                    .char_indices()
+                    .nth(RECORDED_OUTPUT)
+                    .map_or(output, |(end, _)| &output[..end]);
+                format!("{error}; observer output {kept:?}")
+            });
+            command.finish(status, &diagnostics.text, error.as_deref());
         }
-        Ok(!ended && text.lines().count() == 1)
+        outcome
     }
 }
 
 impl Drop for Departure {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        if let Some(command) = self.command.take() {
-            let diagnostics = self
-                .diagnostics
-                .take()
-                .and_then(|reader| reader.join().ok());
-            let (stderr, error) = diagnostics.map_or_else(
-                || {
-                    (
-                        String::new(),
-                        Some("departure stderr reader unavailable".to_owned()),
-                    )
-                },
-                |diagnostics| (diagnostics.text, diagnostics.error),
-            );
-            command.finish(
-                self.child.try_wait().ok().flatten(),
-                &stderr,
-                error
-                    .as_deref()
-                    .or(Some("departure observer stopped before completion")),
-            );
-        }
-        if let Some(output) = self.output.take() {
-            let _ = output.join();
+        if self.command.is_some() {
+            let _ = self.close(Some("departure observer stopped before completion"));
         }
     }
 }
@@ -273,6 +368,52 @@ impl Drop for Departure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn departure_outcome_counts_only_events_after_readiness() {
+        assert_eq!(
+            departure_outcome("ready\ndeparture\n", false),
+            Ok(DepartureOutcome::Unique)
+        );
+        assert_eq!(
+            departure_outcome("ready\n", false),
+            Ok(DepartureOutcome::Absent)
+        );
+        assert_eq!(
+            departure_outcome("ready\ndeparture\ndeparture\n", false),
+            Ok(DepartureOutcome::Duplicate)
+        );
+        assert_eq!(
+            departure_outcome("ready\ndeparture\n", true),
+            Ok(DepartureOutcome::Ended)
+        );
+        assert_eq!(
+            departure_outcome("ready\n", true),
+            Ok(DepartureOutcome::Ended)
+        );
+    }
+
+    #[test]
+    fn departure_without_readiness_or_with_foreign_lines_is_an_error() {
+        assert!(departure_outcome("", false).is_err());
+        assert!(departure_outcome("departure\n", false).is_err());
+        assert!(departure_outcome("ready\ndeparture\nother\n", false).is_err());
+        assert!(departure_outcome("ready\ndeparture\nother\n", true).is_err());
+    }
+
+    #[test]
+    fn departure_readiness_is_signalled_by_the_first_line_only() {
+        let (ready, readiness) = mpsc::sync_channel(1);
+        let text = departure_output(&b"ready\ndeparture\n"[..], ready).unwrap();
+        assert_eq!(text, "ready\ndeparture\n");
+        assert!(readiness.try_recv().is_ok());
+        let (ready, readiness) = mpsc::sync_channel(1);
+        departure_output(&b"departure\nready\n"[..], ready).unwrap();
+        assert!(readiness.try_recv().is_err());
+        let (ready, _) = mpsc::sync_channel(1);
+        let oversized = vec![b'x'; 128 * 1024 + 1];
+        assert!(departure_output(&oversized[..], ready).is_err());
+    }
     #[test]
     fn natural_completion_retains_the_last_echo_pair_and_requires_all_400_rows() {
         let text = (1..=100).flat_map(|sequence| {
