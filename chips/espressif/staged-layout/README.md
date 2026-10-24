@@ -10,7 +10,6 @@ runtime, the chip layouts and the build scripts of every staged image.
 | Module | Owns |
 | --- | --- |
 | `memory` | `Region` and `Layout`: SRAM, Flash XIP, PSRAM and retained regions, the second-stage loader bound, the bootstrap PSRAM probe page, the stage-two PSRAM window, stack sizes, hart count and the chip's ROM script |
-| `interrupts` | The chip-neutral interrupt contract: table and vector symbols, entry layout, interrupt-stack guard |
 | `stage_two` | The little-endian image `Header`, its magic, ABI version and size, and the payload CRC-32 with the checksum field read as zero |
 | `zeroed` | The input sections the runtime linker script places in regions the boot zeroes |
 | `build` (feature `build`) | `configure_runtime` and `configure_bootstrap`, which link a binary with the shared scripts under [`linker`](linker) and the chip's ROM script, define every layout value as a `--defsym` symbol and keep the link's relocations (`--emit-relocs`) for the stack analysis |

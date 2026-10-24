@@ -456,7 +456,7 @@ fn policy_with(policy: &str, reviews: &str) -> (tempfile::TempDir, StackPolicy) 
 }
 
 #[test]
-fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply() {
+fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply_and_its_coverage_reviews() {
     use crate::{Check, CheckInput, Gates};
 
     const ROM: u32 = 0x3000;
@@ -492,18 +492,25 @@ fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply() {
     assert!(runtime.analysis.summaries.is_empty());
 
     let bootstrap = executable(
-        &[Code {
-            name: "runtime_main",
-            words: vec![
-                SP_DOWN_16,
-                SAVE_RA,
-                call(TEXT + 8, ROM),
-                LOAD_RA,
-                SP_UP_16,
-                RET,
-            ],
-            frame: Some(16),
-        }],
+        &[
+            Code {
+                name: "runtime_main",
+                words: vec![
+                    SP_DOWN_16,
+                    SAVE_RA,
+                    call(TEXT + 8, ROM),
+                    LOAD_RA,
+                    SP_UP_16,
+                    RET,
+                ],
+                frame: Some(16),
+            },
+            Code {
+                name: "asm_entry",
+                words: vec![RET],
+                frame: None,
+            },
+        ],
         &[("stack_bottom", 0, 0), ("stack_top", 0x100, 0)],
     );
     let profile: oer_chip_profile::Profile = toml::from_str(
@@ -527,7 +534,7 @@ task-stacks = "sram"
 "#,
     )
     .expect("the synthetic chip profile is valid");
-    let (directory, policy) = policy_with(BASE, "");
+    let (directory, policy) = policy_with(BASE, ASM_REVIEW);
     let input = CheckInput {
         root: directory.path(),
         profile: &profile,
@@ -546,6 +553,11 @@ task-stacks = "sram"
             .expect("the bootstrap checks run");
         assert!(outcome.results.iter().all(|(_, result)| result.passes()));
         assert_eq!(outcome.rom_summaries, ["rom_dispatch".to_owned()].into());
+        // Only the stack check applies the coverage review.
+        assert_eq!(
+            outcome.coverage_reviews.is_empty(),
+            !checks.contains(&Check::Stack)
+        );
     }
 }
 
@@ -1014,11 +1026,21 @@ fn every_function_without_a_frame_record_needs_one_review() {
         .unwrap_err()
         .to_string();
     assert!(error.contains("asm_entry at"), "{error}");
-    // A recorded function needs no review.
+    // A recorded function needs no review, and its review applies to nothing.
+    assert_eq!(
+        audit_reviewed.coverage.applied,
+        ["asm_entry".to_owned()].into()
+    );
     let (_directory, unreviewed) = policy_with(BASE, "");
     audit_of(&unreviewed, &image_with_records())
         .check()
         .unwrap();
+    assert!(
+        audit_of(&reviewed, &image_with_records())
+            .coverage
+            .applied
+            .is_empty()
+    );
     // Two reviews of one symbol are refused.
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("coverage.toml");
@@ -1295,4 +1317,67 @@ minimum_free_bytes = 16
             }
         }
     }
+}
+
+#[test]
+fn a_root_that_reaches_forbidden_rom_fails() {
+    const ROM: u32 = 0x3000;
+    let rom = executable_at(
+        ROM,
+        &[
+            Code {
+                name: "rom_allowed",
+                words: vec![RET],
+                frame: Some(0),
+            },
+            Code {
+                name: "rom_radio",
+                words: vec![RET],
+                frame: Some(0),
+            },
+        ],
+        &[],
+    );
+    let calling = |target: u32| {
+        Image::new(
+            executable(
+                &[Code {
+                    name: "runtime_main",
+                    words: vec![
+                        SP_DOWN_16,
+                        SAVE_RA,
+                        call(TEXT + 8, target),
+                        LOAD_RA,
+                        SP_UP_16,
+                        RET,
+                    ],
+                    frame: Some(16),
+                }],
+                &[("cpu0_stack", 0, 1024)],
+            ),
+            &[&rom],
+            &[],
+            None,
+        )
+        .expect("the synthetic image is valid")
+    };
+    let forbidden = [oer_chip_profile::RomRange {
+        name: "radio".into(),
+        start: ROM + 4,
+        end: ROM + 8,
+    }];
+    let (_directory, policy) = policy_with(BASE, "");
+    let allowed = calling(ROM);
+    let audit = audit_of(&policy, &allowed);
+    rom::audit_forbidden(&allowed, &forbidden, audit.roots(&policy)).unwrap();
+    let radio = calling(ROM + 4);
+    let audit = audit_of(&policy, &radio);
+    let error = rom::audit_forbidden(&radio, &forbidden, audit.roots(&policy))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("CPU0 reaches forbidden ROM `radio`")
+            && error.contains("runtime_main -> rom_radio"),
+        "{error}"
+    );
 }

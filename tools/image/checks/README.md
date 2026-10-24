@@ -15,8 +15,15 @@ The runtime shares its analysis with the task and interrupt checks; bootstrap
 shares its analysis between the frame and bootstrap-stack checks.
 
 Both runtime and bootstrap outcomes export the ROM summaries their analyses
-applied. The image bundle records their union so the catalog's stale-summary
-audit includes summaries used only during bootstrap.
+applied and the frame coverage reviews (`stack-coverage.toml` symbols) their
+stack checks applied. The image bundle records each union, so the catalog's
+stale-summary audit includes summaries used only during bootstrap, and
+`cargo hil images check --all` without `--chip` fails on a coverage review
+no image of the chips sharing its file applied.
+
+The stack and interrupt checks also fail when a root's walk, which follows
+calls into the ROM, reaches a function overlapping a `[rom].forbidden` range
+of `chip.toml`, naming the path that reached it.
 
 The stack check also proves each core of the chip: `cores.txt` lists every
 core's task stack and interrupt stack, used with its linked bytes or `unused`

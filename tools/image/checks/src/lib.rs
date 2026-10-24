@@ -113,8 +113,16 @@ pub struct CheckOutcome {
     pub reports: Vec<String>,
     /// The reviewed ROM summaries an analysis applied.
     pub rom_summaries: BTreeSet<String>,
+    /// The frame coverage reviews (`stack-coverage.toml` symbols) a stack
+    /// check applied.
+    pub coverage_reviews: BTreeSet<String>,
     /// Partial or conditional results they passed with.
     pub warnings: Vec<String>,
+}
+
+/// The ROM ranges of `profile`'s chip no image may call into.
+fn forbidden_rom(profile: &oer_chip_profile::Profile) -> &[oer_chip_profile::RomRange] {
+    profile.rom.as_ref().map_or(&[], |rom| &rom.forbidden)
 }
 
 /// The placement report in an image bundle.
@@ -375,6 +383,24 @@ impl Gates {
                                     &hart.exception.bound,
                                 );
                             }
+                            crate::stack::rom::audit_forbidden(
+                                &image,
+                                forbidden_rom(profile),
+                                stacks.harts.iter().flat_map(|hart| {
+                                    hart.levels
+                                        .iter()
+                                        .map(|level| {
+                                            (
+                                                format!("hart{}-P{}", hart.core, level.level),
+                                                &level.bound,
+                                            )
+                                        })
+                                        .chain([(
+                                            format!("hart{}-exception", hart.core),
+                                            &hart.exception.bound,
+                                        )])
+                                }),
+                            )?;
                             std::fs::write(
                                 input
                                     .output
@@ -429,6 +455,14 @@ impl Gates {
                                     &image,
                                     input.policy,
                                     &input.policy.runtime_task_stacks(),
+                                )?;
+                                outcome
+                                    .coverage_reviews
+                                    .extend(audit.coverage.applied.iter().cloned());
+                                crate::stack::rom::audit_forbidden(
+                                    &image,
+                                    forbidden_rom(input.profile),
+                                    audit.roots(input.policy),
                                 )?;
                                 audit.declared_proven = input.task_stack_proven;
                                 audit.size_source = Some(linker::task_stack::SizeSource::of(
@@ -607,6 +641,14 @@ impl Gates {
                     &image,
                     input.policy,
                     &[("bootstrap stack", stack)],
+                )?;
+                outcome
+                    .coverage_reviews
+                    .extend(audit.coverage.applied.iter().cloned());
+                crate::stack::rom::audit_forbidden(
+                    &image,
+                    forbidden_rom(input.profile),
+                    audit.roots(input.policy),
                 )?;
                 audit.handoff = handoff;
                 if let Some(sizes) = &mut outcome.sizes {

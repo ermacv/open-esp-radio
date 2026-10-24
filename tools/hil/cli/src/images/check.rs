@@ -30,6 +30,8 @@ pub struct Outcome {
     pub failure: Option<String>,
     /// The ROM summaries the class's image applied.
     pub summaries: BTreeSet<String>,
+    /// The frame coverage reviews the class's image applied.
+    pub coverage_reviews: BTreeSet<String>,
 }
 
 /// Every class with the runtime features its image builds with, and how to
@@ -161,8 +163,8 @@ struct Queue {
     outcomes: Vec<(usize, Outcome)>,
 }
 
-/// Builds or type-checks every selected class, up to `jobs` at once, and
-/// reports the outcomes in catalog order. Every class compiles in the
+/// Builds or type-checks every selected class, up to `jobs` at once,
+/// reports the outcomes in catalog order and returns them. Every class compiles in the
 /// image pipeline's one shared compile cache, so a dependency is compiled
 /// once for all of them; the cache serializes their Cargo runs.
 pub fn run(
@@ -171,7 +173,7 @@ pub fn run(
     selected: &[ImageClass],
     depth: Depth,
     jobs: usize,
-) -> Result<()> {
+) -> Result<Vec<Outcome>> {
     let classes: Vec<(usize, ImageClass)> = served(&ctx.root, chip, selected)?
         .into_iter()
         .enumerate()
@@ -213,30 +215,86 @@ pub fn run(
         let reviewed = oer_image_checks::interrupts::rom_summaries(&ctx.root, &profile)?;
         stale_summaries(&reviewed, &outcomes)?;
     }
-    Ok(())
+    Ok(outcomes)
 }
 
 /// Fails naming every reviewed ROM summary no class's image applied: a
 /// summary of a ROM function no image reaches is stale.
 fn stale_summaries(reviewed: &[String], outcomes: &[Outcome]) -> Result<()> {
-    let applied: BTreeSet<&String> = outcomes
-        .iter()
-        .flat_map(|outcome| &outcome.summaries)
-        .collect();
-    let stale: Vec<&str> = reviewed
-        .iter()
-        .filter(|name| !applied.contains(name))
-        .map(String::as_str)
-        .collect();
-    if stale.is_empty() {
-        Ok(())
-    } else {
-        Err(format!(
+    let applied = outcomes.iter().flat_map(|outcome| &outcome.summaries);
+    match unapplied(reviewed, applied).as_slice() {
+        [] => Ok(()),
+        stale => Err(format!(
             "no image class reaches the ROM functions of these summaries; remove them: {}",
             stale.join(", ")
         )
-        .into())
+        .into()),
     }
+}
+
+/// Fails naming every symbol of a frame coverage review that no class of
+/// the chips sharing its review file applied: the whole catalog of every
+/// chip, `built`, built. A review of a symbol no image links without a
+/// compiler frame record reviews nothing and is stale.
+pub fn stale_coverage(root: &std::path::Path, built: &[(String, Vec<Outcome>)]) -> Result<()> {
+    let mut files = std::collections::BTreeMap::<std::path::PathBuf, BTreeSet<&String>>::new();
+    for (chip, outcomes) in built {
+        let profile = oer_chip_profile::Profile::load(root, chip)?;
+        let policy =
+            oer_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
+        let Some(path) = policy.coverage_policy else {
+            continue;
+        };
+        files
+            .entry(std::fs::canonicalize(&path)?)
+            .or_default()
+            .extend(
+                outcomes
+                    .iter()
+                    .flat_map(|outcome| &outcome.coverage_reviews),
+            );
+    }
+    for (path, applied) in files {
+        let reviewed: Vec<String> = oer_image_checks::stack::CoveragePolicy::load(&path)?
+            .reviewed
+            .into_iter()
+            .flat_map(|review| review.symbols)
+            .collect();
+        stale_reviews(&path, &reviewed, applied)?;
+    }
+    Ok(())
+}
+
+/// Fails naming every symbol of `reviewed`, the review file `path`, not in
+/// `applied`.
+fn stale_reviews<'a>(
+    path: &std::path::Path,
+    reviewed: &[String],
+    applied: impl IntoIterator<Item = &'a String>,
+) -> Result<()> {
+    match unapplied(reviewed, applied).as_slice() {
+        [] => Ok(()),
+        stale => Err(format!(
+            "{}: no image class links these reviewed symbols without a frame record; remove \
+             them: {}",
+            path.display(),
+            stale.join(", ")
+        )
+        .into()),
+    }
+}
+
+/// The names of `reviewed` not in `applied`, in order.
+fn unapplied<'a, 'b>(
+    reviewed: &'a [String],
+    applied: impl IntoIterator<Item = &'b String>,
+) -> Vec<&'a str> {
+    let applied: BTreeSet<&String> = applied.into_iter().collect();
+    reviewed
+        .iter()
+        .filter(|name| !applied.contains(name))
+        .map(String::as_str)
+        .collect()
 }
 
 /// Builds or type-checks `class`, the `index`th of `total`.
@@ -261,22 +319,28 @@ fn build_one(
     let started = Instant::now();
     let result = match depth {
         Depth::Build => {
-            oer_hil_run::image::build(&ctx.root, chip, class, None, &Default::default())
-                .map(|artifacts| artifacts.bundle.rom_summaries.clone())
+            oer_hil_run::image::build(&ctx.root, chip, class, None, &Default::default()).map(
+                |artifacts| {
+                    (
+                        artifacts.bundle.rom_summaries.clone(),
+                        artifacts.bundle.coverage_reviews.clone(),
+                    )
+                },
+            )
         }
-        Depth::Check(check) => {
-            oer_hil_run::image::check(&ctx.root, chip, class, check).map(|()| BTreeSet::new())
-        }
+        Depth::Check(check) => oer_hil_run::image::check(&ctx.root, chip, class, check)
+            .map(|()| (BTreeSet::new(), BTreeSet::new())),
     };
-    let (summaries, failure) = match result {
-        Ok(summaries) => (summaries, None),
-        Err(error) => (BTreeSet::new(), Some(error.to_string())),
+    let ((summaries, coverage_reviews), failure) = match result {
+        Ok(applied) => (applied, None),
+        Err(error) => (Default::default(), Some(error.to_string())),
     };
     let outcome = Outcome {
         class,
         elapsed: started.elapsed(),
         failure,
         summaries,
+        coverage_reviews,
     };
     println!(
         "check firmware: {} {} ({}s)",
@@ -352,12 +416,33 @@ mod tests {
         assert!(stale_summaries(&reviewed, &[both]).is_ok());
     }
 
+    #[test]
+    fn a_coverage_review_no_class_applied_is_stale() {
+        let path = std::path::Path::new("stack-coverage.toml");
+        let reviewed = ["Trap1".to_owned(), "_start_trap".to_owned()];
+        let mut first = outcome(ImageClass::SystemWatchdog, None);
+        first.coverage_reviews.insert("Trap1".to_owned());
+        let second = outcome(ImageClass::SystemPanicReset, None);
+        let applied = [&first, &second]
+            .into_iter()
+            .flat_map(|outcome| &outcome.coverage_reviews);
+        let error = stale_reviews(path, &reviewed, applied)
+            .unwrap_err()
+            .to_string();
+        assert!(error.ends_with("remove them: _start_trap"), "{error}");
+        let mut both = outcome(ImageClass::SystemPanicReset, None);
+        both.coverage_reviews
+            .extend(["Trap1".to_owned(), "_start_trap".to_owned()]);
+        assert!(stale_reviews(path, &reviewed, &both.coverage_reviews).is_ok());
+    }
+
     fn outcome(class: ImageClass, failure: Option<&str>) -> Outcome {
         Outcome {
             class,
             elapsed: Duration::from_secs(3),
             failure: failure.map(str::to_owned),
             summaries: BTreeSet::new(),
+            coverage_reviews: BTreeSet::new(),
         }
     }
 

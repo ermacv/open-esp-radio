@@ -78,6 +78,7 @@ pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode>
     match cli {
         ImagesCli::Check { list: true, .. } => print!("{}", check::list()),
         ImagesCli::Check {
+            all,
             classes,
             reaching,
             vendor_dependencies_absent,
@@ -91,6 +92,17 @@ pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode>
             if vendor_dependencies_absent {
                 oer_hil_run::image::ensure_vendor_dependencies_absent(&ctx.root)?;
             }
+            let depth = if type_check {
+                check::Depth::Check(oer_image_build::RuntimeCheck::Types)
+            } else if clippy {
+                check::Depth::Check(oer_image_build::RuntimeCheck::Clippy)
+            } else {
+                check::Depth::Build
+            };
+            // Only every chip's whole catalog, built, shows which coverage
+            // reviews, shared between chips, no image applies.
+            let catalog = all && chip.is_none() && depth == check::Depth::Build;
+            let mut built = Vec::new();
             for chip in check::chips(&ctx.root, chip.as_deref(), &classes)? {
                 let classes = if instrumented {
                     let classes = check::instrumented(&ctx.root, &chip)?;
@@ -103,19 +115,17 @@ pub fn command(ctx: &Checkout, cli: ImagesCli) -> Result<std::process::ExitCode>
                 } else {
                     check::reached(&ctx.root, &chip, &reaching)?
                 };
-                check::run(
+                let outcomes = check::run(
                     ctx,
                     &chip,
                     &classes,
-                    if type_check {
-                        check::Depth::Check(oer_image_build::RuntimeCheck::Types)
-                    } else if clippy {
-                        check::Depth::Check(oer_image_build::RuntimeCheck::Clippy)
-                    } else {
-                        check::Depth::Build
-                    },
+                    depth,
                     jobs.unwrap_or_else(check::default_jobs),
                 )?;
+                built.push((chip, outcomes));
+            }
+            if catalog {
+                check::stale_coverage(&ctx.root, &built)?;
             }
         }
         ImagesCli::Compare {

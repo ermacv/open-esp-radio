@@ -21,8 +21,3 @@ workspace = true
 
 [package.metadata.docs.rs]
 features = ["build"]
-
-[package.metadata.open-radio]
-layer = "platform"
-platform = "chip"
-chip = "esp32s31"

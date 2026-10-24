@@ -12,7 +12,3 @@ atomic-waker = "=1.1.2"
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "contract"
-platform = "portable"

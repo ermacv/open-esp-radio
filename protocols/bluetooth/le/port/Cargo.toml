@@ -25,6 +25,4 @@ oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 workspace = true
 
 [package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"
 test-feature-sets = ["test-support"]

@@ -20,7 +20,3 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive"]
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "contract"
-platform = "portable"

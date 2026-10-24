@@ -29,9 +29,6 @@ features = ["esp32s31"]
 targets = []
 
 [package.metadata.open-radio]
-layer = "adapter"
-platform = "family"
-family = "espressif"
 # An image selects exactly one chip of esp-hal; each profile builds for its
 # chip's target only.
 supported-feature-profiles = ["esp32s31", "esp32c5"]

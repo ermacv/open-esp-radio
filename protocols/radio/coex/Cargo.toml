@@ -10,7 +10,3 @@ readme = "README.md"
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "contract"
-platform = "portable"

@@ -10,10 +10,6 @@ description = "Each image's static table of peripheral interrupt sources: handle
 [lints]
 workspace = true
 
-[package.metadata.open-radio]
-layer = "runtime"
-platform = "portable"
-
 [features]
 # The host executor of `signal::host`, for the tests of a signal's users.
 host-signal = []

@@ -31,8 +31,3 @@ disallowed_methods = "deny"
 # Chip APIs exist only for the chip target; document them there alone.
 default-target = "riscv32imafc-unknown-none-elf"
 targets = []
-
-[package.metadata.open-radio]
-layer = "hardware"
-platform = "chip"
-chip = "esp32s31"

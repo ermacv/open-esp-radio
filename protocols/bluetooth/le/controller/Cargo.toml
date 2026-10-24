@@ -23,7 +23,3 @@ oer-time = { path = "../../../../portable/time" }
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"

@@ -13,7 +13,3 @@ test-support = []
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "hardware"
-platform = "portable"

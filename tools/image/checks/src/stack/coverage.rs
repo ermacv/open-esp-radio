@@ -53,6 +53,9 @@ pub struct Coverage {
     pub reviewed: Vec<(u32, String, CoverageCategory)>,
     /// Each unmeasured alias without exactly one review.
     pub unreviewed: Vec<String>,
+    /// The reviewed symbols, as the review names them, that explained an
+    /// unmeasured function of the image.
+    pub applied: BTreeSet<String>,
 }
 
 impl CoveragePolicy {
@@ -119,9 +122,18 @@ impl CoveragePolicy {
                     })
                     .collect();
                 match reviews.as_slice() {
-                    [review] => coverage
-                        .reviewed
-                        .push((function.address, name, review.category)),
+                    [review] => {
+                        coverage.applied.extend(
+                            review
+                                .symbols
+                                .iter()
+                                .filter(|symbol| without_crate_disambiguators(symbol) == stable)
+                                .cloned(),
+                        );
+                        coverage
+                            .reviewed
+                            .push((function.address, name, review.category));
+                    }
                     _ => coverage.unreviewed.push(format!(
                         "{name} at {:#010x}: {} coverage reviews (expected one)",
                         function.address,

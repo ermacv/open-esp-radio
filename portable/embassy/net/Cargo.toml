@@ -29,7 +29,3 @@ owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "adapter"
-platform = "portable"

@@ -10,7 +10,3 @@ description = "Chip-neutral non-blocking analog register bus contract and field 
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "hardware"
-platform = "portable"

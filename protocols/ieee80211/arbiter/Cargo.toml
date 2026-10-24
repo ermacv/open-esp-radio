@@ -21,7 +21,3 @@ oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"

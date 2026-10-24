@@ -15,8 +15,3 @@ oer-radio-coex = { path = "../../../protocols/radio/coex" }
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "hardware"
-platform = "family"
-family = "espressif"

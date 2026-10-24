@@ -16,15 +16,9 @@ use esp_hal::{
     psram::{Psram, PsramConfig, PsramSize, PsramTimingParams},
 };
 
-pub const BOARD_NAME: &str = "ESP32-S31-Function-CoreBoard-1";
 pub const PSRAM_BASE_ADDRESS: usize = LAYOUT.psram.origin as usize;
 pub const PSRAM_SIZE_BYTES: usize = LAYOUT.psram.length as usize;
-pub const PSRAM_CLOCK_MHZ: u32 = 250;
-pub const PSRAM_DATA_LINES: u8 = 8;
-pub const FLASH_CLOCK_MHZ: u32 = 120;
-pub const FLASH_SIZE_BYTES: usize = 16 * 1024 * 1024;
 pub const FLASH_MMU_PAGE_SIZE_BYTES: u32 = 64 * 1024;
-pub const FLASH_DATA_LINES: u8 = 4;
 
 /// Antenna gain used by this board profile, in mBm.
 ///
@@ -109,8 +103,4 @@ unsafe impl oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping for Boo
         );
         psram
     }
-}
-
-pub fn has_expected_psram_capacity(psram: &Psram) -> bool {
-    psram.raw_parts().1 == PSRAM_SIZE_BYTES
 }

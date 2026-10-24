@@ -9,7 +9,3 @@ description = "Chip-neutral shared modem clock reference-count planner ported fr
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "hardware"
-platform = "portable"

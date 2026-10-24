@@ -14,8 +14,3 @@ esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "unst
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "platform"
-platform = "chip"
-chip = "esp32s31"

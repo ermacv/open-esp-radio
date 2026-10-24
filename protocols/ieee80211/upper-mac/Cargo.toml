@@ -16,10 +16,6 @@ oer-time = { path = "../../../portable/time" }
 [lints]
 workspace = true
 
-[package.metadata.open-radio]
-layer = "protocol"
-platform = "portable"
-
 [dev-dependencies]
 oer-ieee80211-wire = { path = "../wire", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
