@@ -74,27 +74,44 @@ pub fn group_rekey_seconds(remote: &mut dyn Remote, radio: &str, interface: &str
         .map_err(|_| "missing or invalid running GTK interval".into())
 }
 
+/// One recorded read of the station neighbor entry. `state` is the kernel NUD
+/// state (`REACHABLE`, `STALE`, `INCOMPLETE`, `FAILED`, ...) or `None` when the
+/// entry is absent or the read failed.
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+pub struct NeighborState {
+    pub after_flush: bool,
+    pub read_succeeded: bool,
+    pub state: Option<String>,
+}
+
 #[derive(Debug, serde::Serialize)]
 pub struct NeighborRefresh {
-    pub before_present: bool,
-    pub delete_attempted: bool,
-    pub after_present: bool,
+    pub before: NeighborState,
+    pub after: NeighborState,
 }
 
-#[derive(Debug, serde::Serialize)]
-pub struct NeighborState {
-    pub after_deletion: bool,
-    pub present: bool,
+fn neighbor_state(after_flush: bool, output: &std::process::Output) -> NeighborState {
+    let text = String::from_utf8_lossy(&output.stdout);
+    NeighborState {
+        after_flush,
+        read_succeeded: output.status.success(),
+        state: text
+            .lines()
+            .find_map(|line| line.split_whitespace().last())
+            .map(str::to_owned),
+    }
 }
 
-/// Establish an absent station neighbor (BusyBox `ip` has `flush`, no `del`), accepting an already absent entry
-/// and a racing deletion only after a successful confirming read. The next
-/// measured router ping triggers ARP; only air/target evidence passes gate c.
+/// Flush the station neighbor (BusyBox `ip` has `flush`, no `del`). Both reads
+/// around the flush are only recorded: router traffic recreates the entry at
+/// once, so its presence proves nothing. Only a missing `ip` or a failing
+/// `flush` (with its stderr) is an error. Gate c carries the proof from air and
+/// target evidence.
 pub fn refresh_neighbor(
     mut execute: impl FnMut(&str) -> Result<std::process::Output>,
     interface: &str,
     address: std::net::Ipv4Addr,
-    mut observe: impl FnMut(NeighborState),
+    mut observe: impl FnMut(&NeighborState),
 ) -> Result<NeighborRefresh> {
     if !token(interface) || !crate::w3::usable_address(address) {
         return Err("invalid W4 ARP selection".to_owned());
@@ -104,46 +121,22 @@ pub fn refresh_neighbor(
         return Err("W4 native ip command is unavailable; see router command evidence".into());
     }
     let show = format!("ip -4 neigh show {address} dev {}", quote(interface)?);
-    let before = execute(&show)?;
-    if !before.status.success() {
-        return Err("W4 neighbor read failed; see router command evidence".into());
-    }
-    let present =
-        |output: &std::process::Output| !output.stdout.iter().all(u8::is_ascii_whitespace);
-    observe(NeighborState {
-        after_deletion: false,
-        present: present(&before),
-    });
-    if !present(&before) {
-        return Ok(NeighborRefresh {
-            before_present: false,
-            delete_attempted: false,
-            after_present: false,
-        });
-    }
-    let delete = execute(&format!(
+    let before = neighbor_state(false, &execute(&show)?);
+    observe(&before);
+    let flush = execute(&format!(
         "ip -4 neigh flush to {address} dev {}",
         quote(interface)?
     ))?;
-    if matches!(delete.status.code(), Some(126 | 127)) {
-        return Err("W4 native ip command became unavailable; see router command evidence".into());
+    if !flush.status.success() {
+        return Err(format!(
+            "W4 neighbor flush failed ({}): {}",
+            flush.status,
+            String::from_utf8_lossy(&flush.stderr).trim()
+        ));
     }
-    let after = execute(&show)?;
-    if !after.status.success() {
-        return Err("W4 neighbor confirmation failed; see router command evidence".into());
-    }
-    observe(NeighborState {
-        after_deletion: true,
-        present: present(&after),
-    });
-    if present(&after) {
-        return Err("W4 neighbor remains after deletion; see router command evidence".into());
-    }
-    Ok(NeighborRefresh {
-        before_present: true,
-        delete_attempted: true,
-        after_present: false,
-    })
+    let after = neighbor_state(true, &execute(&show)?);
+    observe(&after);
+    Ok(NeighborRefresh { before, after })
 }
 
 /// Ask the selected AP to deauthenticate one station for the reconnect gate.
@@ -248,53 +241,89 @@ mod tests {
     }
 
     #[test]
-    fn neighbor_state_is_observed_before_and_after_even_when_delete_fails() {
+    fn neighbor_flush_records_both_reads_and_fails_only_on_flush_or_missing_command() {
         use std::{
             collections::VecDeque,
             os::unix::process::ExitStatusExt,
             process::{ExitStatus, Output},
         };
         let ip = "10.231.0.100".parse().expect("IP");
-        // Present/deleted, absent, deletion racing with another remover,
-        // deletion failure retaining the entry, and missing native command.
-        for (answers, success, deleted) in [
+        let entry =
+            |state: &str| format!("10.231.0.100 dev br-oer-w3 lladdr 02:00:00:00:00:01 {state}\n");
+        // (answers as (exit, stdout, stderr), success, flush attempted,
+        // recorded states)
+        let cases: Vec<(Vec<(i32, String, &str)>, bool, bool, Vec<Option<&str>>)> = vec![
+            // Entry recreated by traffic right after the flush.
             (
-                vec![(0, "ip"), (0, "neighbor"), (0, ""), (0, "")],
+                vec![
+                    (0, "ip".into(), ""),
+                    (0, entry("STALE"), ""),
+                    (0, String::new(), ""),
+                    (0, entry("INCOMPLETE"), ""),
+                ],
                 true,
                 true,
+                vec![Some("STALE"), Some("INCOMPLETE")],
             ),
-            (vec![(0, "ip"), (0, "")], true, false),
             (
-                vec![(0, "ip"), (0, "neighbor"), (2, ""), (0, "")],
+                vec![
+                    (0, "ip".into(), ""),
+                    (0, entry("REACHABLE"), ""),
+                    (0, String::new(), ""),
+                    (0, entry("REACHABLE"), ""),
+                ],
                 true,
                 true,
+                vec![Some("REACHABLE"), Some("REACHABLE")],
             ),
+            // Absent before and after; a failed read does not fail the step.
             (
-                vec![(0, "ip"), (0, "neighbor"), (2, ""), (0, "neighbor")],
+                vec![
+                    (0, "ip".into(), ""),
+                    (0, String::new(), ""),
+                    (0, String::new(), ""),
+                    (1, String::new(), "read"),
+                ],
+                true,
+                true,
+                vec![None, None],
+            ),
+            // Flush failure carries stderr.
+            (
+                vec![
+                    (0, "ip".into(), ""),
+                    (0, entry("STALE"), ""),
+                    (2, String::new(), "RTNETLINK diagnostic"),
+                ],
                 false,
                 true,
+                vec![Some("STALE")],
             ),
-            (vec![(127, "")], false, false),
-            (vec![(1, "")], false, false),
-            (vec![(0, "ip"), (127, "")], false, false),
-            (vec![(0, "ip"), (0, "neighbor"), (127, "")], false, true),
-        ] {
+            // Missing command.
+            (
+                vec![(127, String::new(), "not found")],
+                false,
+                false,
+                vec![],
+            ),
+        ];
+        for (answers, success, flushed, expected) in cases {
             let mut answers = VecDeque::from(answers);
             let mut scripts = Vec::new();
             let mut states = Vec::new();
             let result = refresh_neighbor(
                 |script| {
                     scripts.push(script.to_owned());
-                    let (code, stdout) = answers.pop_front().expect("scripted command");
+                    let (code, stdout, stderr) = answers.pop_front().expect("scripted command");
                     Ok(Output {
                         status: ExitStatus::from_raw(code << 8),
-                        stdout: stdout.as_bytes().to_vec(),
-                        stderr: b"RTNETLINK diagnostic\n".to_vec(),
+                        stdout: stdout.into_bytes(),
+                        stderr: stderr.as_bytes().to_vec(),
                     })
                 },
                 "br-oer-w3",
                 ip,
-                |state| states.push(state),
+                |state| states.push(state.state.clone()),
             );
             assert_eq!(result.is_ok(), success);
             assert!(answers.is_empty());
@@ -302,16 +331,16 @@ mod tests {
                 scripts
                     .iter()
                     .any(|script| script.contains(" neigh flush to 10.231.0.100 dev br-oer-w3")),
-                deleted
+                flushed
             );
             assert!(scripts.iter().all(|script| !script.contains("/dev/null")));
-            if let Ok(observation) = result {
-                assert_eq!(observation.before_present, deleted);
-                assert_eq!(observation.delete_attempted, deleted);
-                assert!(!observation.after_present);
-                assert!(!states.last().expect("observed state").present);
-            } else if states.len() == 2 {
-                assert!(states[1].after_deletion && states[1].present);
+            let expected: Vec<Option<String>> =
+                expected.into_iter().map(|s| s.map(str::to_owned)).collect();
+            assert_eq!(states, expected);
+            if let Err(error) = &result
+                && flushed
+            {
+                assert!(error.contains("RTNETLINK diagnostic"));
             }
         }
         for interface in ["", "br-oer-w3;opkg", "-i"] {
