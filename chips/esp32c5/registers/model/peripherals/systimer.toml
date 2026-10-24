@@ -4,7 +4,7 @@ schema = 2
 name = "SYSTIMER"
 description = """
 The system timer's comparators: their enables in CONF, targets, modes, load
-strobes and interrupt enables and acknowledgements. The counter latch of unit
+strobes and interrupt enables; their acknowledgements are SYSTIMER_ACKNOWLEDGE. The counter latch of unit
 zero is the separate shared block SYSTIMER_COUNTER; unit one, the unit loads
 and the read-back registers are not described."""
 baseAddress = 0x6000a000
@@ -96,6 +96,7 @@ bitWidth = 1
 [peripherals.registers.register]
 dim = 3
 dimIncrement = 0x8
+dimIndex = "0-2"
 name = "TARGET%s_HI"
 description = "High 20 bits of comparator %s's alarm target."
 addressOffset = 0x1c
@@ -114,6 +115,7 @@ bitWidth = 20
 [peripherals.registers.register]
 dim = 3
 dimIncrement = 0x8
+dimIndex = "0-2"
 name = "TARGET%s_LO"
 description = "Low 32 bits of comparator %s's alarm target."
 addressOffset = 0x20
@@ -132,6 +134,7 @@ bitWidth = 32
 [peripherals.registers.register]
 dim = 3
 dimIncrement = 0x4
+dimIndex = "0-2"
 name = "TARGET%s_CONF"
 description = "Alarm mode of comparator %s."
 addressOffset = 0x34
@@ -162,6 +165,7 @@ bitWidth = 1
 [peripherals.registers.register]
 dim = 3
 dimIncrement = 0x4
+dimIndex = "0-2"
 name = "COMP%s_LOAD"
 description = "Load strobe of comparator %s: writing one loads its target and mode."
 addressOffset = 0x50
@@ -200,35 +204,6 @@ bitWidth = 1
 [[peripherals.registers.register.fields]]
 name = "TARGET2_INT_ENA"
 description = "Enables comparator 2's interrupt."
-bitOffset = 2
-bitWidth = 1
-
-[[peripherals.registers]]
-
-[peripherals.registers.register]
-name = "INT_CLR"
-description = "Comparator interrupt acknowledgements: writing one clears the raw bit."
-addressOffset = 0x6c
-size = 32
-access = "write-only"
-modifiedWriteValues = "oneToClear"
-resetValue = 0x0
-
-[[peripherals.registers.register.fields]]
-name = "TARGET0_INT_CLR"
-description = "Clears comparator 0's interrupt."
-bitOffset = 0
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "TARGET1_INT_CLR"
-description = "Clears comparator 1's interrupt."
-bitOffset = 1
-bitWidth = 1
-
-[[peripherals.registers.register.fields]]
-name = "TARGET2_INT_CLR"
-description = "Clears comparator 2's interrupt."
 bitOffset = 2
 bitWidth = 1
 
@@ -297,6 +272,43 @@ description = "Count bits 31:0."
 bitOffset = 0
 bitWidth = 32
 
+[[peripherals]]
+name = "SYSTIMER_ACKNOWLEDGE"
+description = """
+The comparators' interrupt acknowledgements. Each comparator's alarm handler
+strobes its own bit alone, from its own context, so this is a shared block
+of write-trigger strobes."""
+baseAddress = 0x6000a06c
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INT_CLR"
+description = "Comparator interrupt acknowledgements: a written one clears the raw bit."
+addressOffset = 0x0
+size = 32
+access = "write-only"
+modifiedWriteValues = "oneToClear"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "TARGET0_INT_CLR"
+description = "Clears comparator 0's interrupt."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET1_INT_CLR"
+description = "Clears comparator 1's interrupt."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TARGET2_INT_CLR"
+description = "Clears comparator 2's interrupt."
+bitOffset = 2
+bitWidth = 1
+
 [[peripheral-review]]
 entity = "SYSTIMER"
 
@@ -322,6 +334,29 @@ completeness = "complete"
 
 [[peripheral-review]]
 entity = "SYSTIMER_COUNTER"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "SYSTIMER_ACKNOWLEDGE"
 
 [peripheral-review.peripheral]
 sources = ["ESP_IDF_4D59230D_C5_SYSTIMER"]

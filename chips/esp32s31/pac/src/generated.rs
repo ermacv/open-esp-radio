@@ -22780,14 +22780,20 @@ pub mod clic {
     pub const BASE: usize = 0x10800000;
     /// The bytes from [`BASE`] to the end of the block's last word: the
     /// host memory a test block needs.
-    pub const SIZE: usize = 0x1004;
+    pub const SIZE: usize = 0x10c0;
 
     /// The block's declared words, as byte offsets from [`BASE`]: its
     /// whole register authority.
     pub struct BlockWords;
 
     impl oer_mmio::Registers for BlockWords {
-        const WORDS: &'static [usize] = &[0x1000];
+        const WORDS: &'static [usize] = &[
+            0x1000, 0x1004, 0x1008, 0x100c, 0x1010, 0x1014, 0x1018, 0x101c, 0x1020, 0x1024, 0x1028,
+            0x102c, 0x1030, 0x1034, 0x1038, 0x103c, 0x1040, 0x1044, 0x1048, 0x104c, 0x1050, 0x1054,
+            0x1058, 0x105c, 0x1060, 0x1064, 0x1068, 0x106c, 0x1070, 0x1074, 0x1078, 0x107c, 0x1080,
+            0x1084, 0x1088, 0x108c, 0x1090, 0x1094, 0x1098, 0x109c, 0x10a0, 0x10a4, 0x10a8, 0x10ac,
+            0x10b0, 0x10b4, 0x10b8, 0x10bc,
+        ];
     }
 
     /// The block's device registers, as the PAC root claims them.
@@ -22816,17 +22822,21 @@ pub mod clic {
     impl<P: oer_mmio::Placement> Clic<P> {
         /// Read `CTRL%s`.
         #[inline]
-        pub fn read_ctrl(&self) -> ctrl::R {
-            ctrl::R(self.0.read::<0x1000>())
+        pub fn read_ctrl(&self, index: oer_mmio::Index<48>) -> ctrl::R {
+            ctrl::R(self.0.read_indexed::<0x1000, 0x4, 48>(index))
         }
 
         /// Read `CTRL%s`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_ctrl(&mut self, change: impl FnOnce(&mut ctrl::W)) {
-            let mut value = ctrl::W(self.0.read::<0x1000>());
+        pub fn modify_ctrl(
+            &mut self,
+            index: oer_mmio::Index<48>,
+            change: impl FnOnce(&mut ctrl::W),
+        ) {
+            let mut value = ctrl::W(self.0.read_indexed::<0x1000, 0x4, 48>(index));
             change(&mut value);
-            self.0.write::<0x1000>(value.0);
+            self.0.write_indexed::<0x1000, 0x4, 48>(index, value.0);
         }
     }
 
@@ -22838,6 +22848,11 @@ pub mod clic {
         pub const FIELDS: u32 = 0xffc70101;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x1000;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 48;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30367,14 +30382,29 @@ pub mod interrupt_core0 {
     pub const BASE: usize = 0x20585000;
     /// The bytes from [`BASE`] to the end of the block's last word: the
     /// host memory a test block needs.
-    pub const SIZE: usize = 0x218;
+    pub const SIZE: usize = 0x2a4;
 
     /// The block's declared words, as byte offsets from [`BASE`]: its
     /// whole register authority.
     pub struct BlockWords;
 
     impl oer_mmio::Registers for BlockWords {
-        const WORDS: &'static [usize] = &[0x0, 0x214];
+        const WORDS: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+            0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70,
+            0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8,
+            0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0,
+            0xe4, 0xe8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114,
+            0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144,
+            0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174,
+            0x178, 0x17c, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4,
+            0x1a8, 0x1ac, 0x1b0, 0x1b4, 0x1b8, 0x1bc, 0x1c0, 0x1c4, 0x1c8, 0x1cc, 0x1d0, 0x1d4,
+            0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8, 0x1ec, 0x1f0, 0x1f4, 0x1f8, 0x1fc, 0x200, 0x204,
+            0x208, 0x20c, 0x214, 0x218, 0x21c, 0x220, 0x224, 0x228, 0x22c, 0x230, 0x234, 0x238,
+            0x23c, 0x240, 0x244, 0x248, 0x24c, 0x250, 0x254, 0x258, 0x25c, 0x260, 0x264, 0x268,
+            0x26c, 0x270, 0x274, 0x278, 0x27c, 0x280, 0x284, 0x288, 0x28c, 0x290, 0x294, 0x298,
+            0x29c, 0x2a0,
+        ];
     }
 
     /// The block's device registers, as the PAC root claims them.
@@ -30403,32 +30433,40 @@ pub mod interrupt_core0 {
     impl<P: oer_mmio::Placement> InterruptCore0<P> {
         /// Read `MAP_LOW%s`.
         #[inline]
-        pub fn read_map_low(&self) -> map_low::R {
-            map_low::R(self.0.read::<0x0>())
+        pub fn read_map_low(&self, index: oer_mmio::Index<132>) -> map_low::R {
+            map_low::R(self.0.read_indexed::<0x0, 0x4, 132>(index))
         }
 
         /// Read `MAP_LOW%s`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_map_low(&mut self, change: impl FnOnce(&mut map_low::W)) {
-            let mut value = map_low::W(self.0.read::<0x0>());
+        pub fn modify_map_low(
+            &mut self,
+            index: oer_mmio::Index<132>,
+            change: impl FnOnce(&mut map_low::W),
+        ) {
+            let mut value = map_low::W(self.0.read_indexed::<0x0, 0x4, 132>(index));
             change(&mut value);
-            self.0.write::<0x0>(value.0);
+            self.0.write_indexed::<0x0, 0x4, 132>(index, value.0);
         }
 
         /// Read `MAP_HIGH%s`.
         #[inline]
-        pub fn read_map_high(&self) -> map_high::R {
-            map_high::R(self.0.read::<0x214>())
+        pub fn read_map_high(&self, index: oer_mmio::Index<36>) -> map_high::R {
+            map_high::R(self.0.read_indexed::<0x214, 0x4, 36>(index))
         }
 
         /// Read `MAP_HIGH%s`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_map_high(&mut self, change: impl FnOnce(&mut map_high::W)) {
-            let mut value = map_high::W(self.0.read::<0x214>());
+        pub fn modify_map_high(
+            &mut self,
+            index: oer_mmio::Index<36>,
+            change: impl FnOnce(&mut map_high::W),
+        ) {
+            let mut value = map_high::W(self.0.read_indexed::<0x214, 0x4, 36>(index));
             change(&mut value);
-            self.0.write::<0x214>(value.0);
+            self.0.write_indexed::<0x214, 0x4, 36>(index, value.0);
         }
     }
 
@@ -30440,6 +30478,11 @@ pub mod interrupt_core0 {
         pub const FIELDS: u32 = 0x0000033f;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x0;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 132;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30499,6 +30542,11 @@ pub mod interrupt_core0 {
         pub const FIELDS: u32 = 0x0000033f;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x214;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 36;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30783,14 +30831,29 @@ pub mod interrupt_core1 {
     pub const BASE: usize = 0x20585800;
     /// The bytes from [`BASE`] to the end of the block's last word: the
     /// host memory a test block needs.
-    pub const SIZE: usize = 0x218;
+    pub const SIZE: usize = 0x2a4;
 
     /// The block's declared words, as byte offsets from [`BASE`]: its
     /// whole register authority.
     pub struct BlockWords;
 
     impl oer_mmio::Registers for BlockWords {
-        const WORDS: &'static [usize] = &[0x0, 0x214];
+        const WORDS: &'static [usize] = &[
+            0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
+            0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70,
+            0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8,
+            0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0,
+            0xe4, 0xe8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114,
+            0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144,
+            0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174,
+            0x178, 0x17c, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4,
+            0x1a8, 0x1ac, 0x1b0, 0x1b4, 0x1b8, 0x1bc, 0x1c0, 0x1c4, 0x1c8, 0x1cc, 0x1d0, 0x1d4,
+            0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8, 0x1ec, 0x1f0, 0x1f4, 0x1f8, 0x1fc, 0x200, 0x204,
+            0x208, 0x20c, 0x214, 0x218, 0x21c, 0x220, 0x224, 0x228, 0x22c, 0x230, 0x234, 0x238,
+            0x23c, 0x240, 0x244, 0x248, 0x24c, 0x250, 0x254, 0x258, 0x25c, 0x260, 0x264, 0x268,
+            0x26c, 0x270, 0x274, 0x278, 0x27c, 0x280, 0x284, 0x288, 0x28c, 0x290, 0x294, 0x298,
+            0x29c, 0x2a0,
+        ];
     }
 
     /// The block's device registers, as the PAC root claims them.
@@ -30819,32 +30882,40 @@ pub mod interrupt_core1 {
     impl<P: oer_mmio::Placement> InterruptCore1<P> {
         /// Read `MAP_LOW%s`.
         #[inline]
-        pub fn read_map_low(&self) -> map_low::R {
-            map_low::R(self.0.read::<0x0>())
+        pub fn read_map_low(&self, index: oer_mmio::Index<132>) -> map_low::R {
+            map_low::R(self.0.read_indexed::<0x0, 0x4, 132>(index))
         }
 
         /// Read `MAP_LOW%s`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_map_low(&mut self, change: impl FnOnce(&mut map_low::W)) {
-            let mut value = map_low::W(self.0.read::<0x0>());
+        pub fn modify_map_low(
+            &mut self,
+            index: oer_mmio::Index<132>,
+            change: impl FnOnce(&mut map_low::W),
+        ) {
+            let mut value = map_low::W(self.0.read_indexed::<0x0, 0x4, 132>(index));
             change(&mut value);
-            self.0.write::<0x0>(value.0);
+            self.0.write_indexed::<0x0, 0x4, 132>(index, value.0);
         }
 
         /// Read `MAP_HIGH%s`.
         #[inline]
-        pub fn read_map_high(&self) -> map_high::R {
-            map_high::R(self.0.read::<0x214>())
+        pub fn read_map_high(&self, index: oer_mmio::Index<36>) -> map_high::R {
+            map_high::R(self.0.read_indexed::<0x214, 0x4, 36>(index))
         }
 
         /// Read `MAP_HIGH%s`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_map_high(&mut self, change: impl FnOnce(&mut map_high::W)) {
-            let mut value = map_high::W(self.0.read::<0x214>());
+        pub fn modify_map_high(
+            &mut self,
+            index: oer_mmio::Index<36>,
+            change: impl FnOnce(&mut map_high::W),
+        ) {
+            let mut value = map_high::W(self.0.read_indexed::<0x214, 0x4, 36>(index));
             change(&mut value);
-            self.0.write::<0x214>(value.0);
+            self.0.write_indexed::<0x214, 0x4, 36>(index, value.0);
         }
     }
 
@@ -30856,6 +30927,11 @@ pub mod interrupt_core1 {
         pub const FIELDS: u32 = 0x0000033f;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x0;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 132;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30915,6 +30991,11 @@ pub mod interrupt_core1 {
         pub const FIELDS: u32 = 0x0000033f;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x214;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 36;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31989,7 +32070,7 @@ pub mod lp_wdt_swd {
 /// The `SYSTIMER` register block.
 ///
 /// The system timer's comparators: their enables in CONF, targets, modes, load
-/// strobes and interrupt enables and acknowledgements. The counter latch of unit
+/// strobes and interrupt enables; their acknowledgements are SYSTIMER_ACKNOWLEDGE. The counter latch of unit
 /// zero is the separate shared block SYSTIMER_COUNTER; unit one, the unit loads
 /// and the read-back registers are not described.
 pub mod systimer {
@@ -31997,14 +32078,16 @@ pub mod systimer {
     pub const BASE: usize = 0x20399000;
     /// The bytes from [`BASE`] to the end of the block's last word: the
     /// host memory a test block needs.
-    pub const SIZE: usize = 0x70;
+    pub const SIZE: usize = 0x68;
 
     /// The block's declared words, as byte offsets from [`BASE`]: its
     /// whole register authority.
     pub struct BlockWords;
 
     impl oer_mmio::Registers for BlockWords {
-        const WORDS: &'static [usize] = &[0x0, 0x1c, 0x20, 0x34, 0x50, 0x64, 0x6c];
+        const WORDS: &'static [usize] = &[
+            0x0, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x50, 0x54, 0x58, 0x64,
+        ];
     }
 
     /// The block's device registers, as the PAC root claims them.
@@ -32048,55 +32131,71 @@ pub mod systimer {
 
         /// Read `TARGET%s_HI`.
         #[inline]
-        pub fn read_target_hi(&self) -> target_hi::R {
-            target_hi::R(self.0.read::<0x1c>())
+        pub fn read_target_hi(&self, index: oer_mmio::Index<3>) -> target_hi::R {
+            target_hi::R(self.0.read_indexed::<0x1c, 0x8, 3>(index))
         }
 
         /// Read `TARGET%s_HI`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_target_hi(&mut self, change: impl FnOnce(&mut target_hi::W)) {
-            let mut value = target_hi::W(self.0.read::<0x1c>());
+        pub fn modify_target_hi(
+            &mut self,
+            index: oer_mmio::Index<3>,
+            change: impl FnOnce(&mut target_hi::W),
+        ) {
+            let mut value = target_hi::W(self.0.read_indexed::<0x1c, 0x8, 3>(index));
             change(&mut value);
-            self.0.write::<0x1c>(value.0);
+            self.0.write_indexed::<0x1c, 0x8, 3>(index, value.0);
         }
 
         /// Read `TARGET%s_LO`.
         #[inline]
-        pub fn read_target_lo(&self) -> target_lo::R {
-            target_lo::R(self.0.read::<0x20>())
+        pub fn read_target_lo(&self, index: oer_mmio::Index<3>) -> target_lo::R {
+            target_lo::R(self.0.read_indexed::<0x20, 0x8, 3>(index))
         }
 
         /// Read `TARGET%s_LO`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_target_lo(&mut self, change: impl FnOnce(&mut target_lo::W)) {
-            let mut value = target_lo::W(self.0.read::<0x20>());
+        pub fn modify_target_lo(
+            &mut self,
+            index: oer_mmio::Index<3>,
+            change: impl FnOnce(&mut target_lo::W),
+        ) {
+            let mut value = target_lo::W(self.0.read_indexed::<0x20, 0x8, 3>(index));
             change(&mut value);
-            self.0.write::<0x20>(value.0);
+            self.0.write_indexed::<0x20, 0x8, 3>(index, value.0);
         }
 
         /// Read `TARGET%s_CONF`.
         #[inline]
-        pub fn read_target_conf(&self) -> target_conf::R {
-            target_conf::R(self.0.read::<0x34>())
+        pub fn read_target_conf(&self, index: oer_mmio::Index<3>) -> target_conf::R {
+            target_conf::R(self.0.read_indexed::<0x34, 0x4, 3>(index))
         }
 
         /// Read `TARGET%s_CONF`, change fields and write it back; every other bit keeps
         /// the value read.
         #[inline]
-        pub fn modify_target_conf(&mut self, change: impl FnOnce(&mut target_conf::W)) {
-            let mut value = target_conf::W(self.0.read::<0x34>());
+        pub fn modify_target_conf(
+            &mut self,
+            index: oer_mmio::Index<3>,
+            change: impl FnOnce(&mut target_conf::W),
+        ) {
+            let mut value = target_conf::W(self.0.read_indexed::<0x34, 0x4, 3>(index));
             change(&mut value);
-            self.0.write::<0x34>(value.0);
+            self.0.write_indexed::<0x34, 0x4, 3>(index, value.0);
         }
 
         /// Write `COMP%s_LOAD` from zero: the fields set, zero in every other bit.
         #[inline]
-        pub fn write_comp_load(&mut self, change: impl FnOnce(&mut comp_load::W)) {
+        pub fn write_comp_load(
+            &mut self,
+            index: oer_mmio::Index<3>,
+            change: impl FnOnce(&mut comp_load::W),
+        ) {
             let mut value = comp_load::W(0);
             change(&mut value);
-            self.0.write::<0x50>(value.0);
+            self.0.write_indexed::<0x50, 0x4, 3>(index, value.0);
         }
 
         /// Read `INT_ENA`.
@@ -32112,14 +32211,6 @@ pub mod systimer {
             let mut value = int_ena::W(self.0.read::<0x64>());
             change(&mut value);
             self.0.write::<0x64>(value.0);
-        }
-
-        /// Write `INT_CLR` from zero: the fields set, zero in every other bit.
-        #[inline]
-        pub fn write_int_clr(&mut self, change: impl FnOnce(&mut int_clr::W)) {
-            let mut value = int_clr::W(0);
-            change(&mut value);
-            self.0.write::<0x6c>(value.0);
         }
     }
 
@@ -32362,6 +32453,11 @@ pub mod systimer {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x1c;
 
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 3;
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -32402,6 +32498,11 @@ pub mod systimer {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x20;
 
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x8;
+        /// The array's element count.
+        pub const COUNT: usize = 3;
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -32441,6 +32542,11 @@ pub mod systimer {
         pub const FIELDS: u32 = 0xc3ffffff;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x34;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 3;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -32519,6 +32625,11 @@ pub mod systimer {
         pub const FIELDS: u32 = 0x00000001;
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x50;
+
+        /// The byte distance between two elements of the array.
+        pub const STRIDE: usize = 0x4;
+        /// The array's element count.
+        pub const COUNT: usize = 3;
 
         /// The value written to the register.
         pub struct W(pub(super) u32);
@@ -32610,41 +32721,94 @@ pub mod systimer {
             }
         }
     }
+}
+
+/// The `SYSTIMER_ACKNOWLEDGE` register block.
+///
+/// The comparators' interrupt acknowledgements. Each comparator's alarm handler
+/// strobes its own bit alone, from its own context, so this is a shared block
+/// of write-trigger strobes.
+pub mod systimer_acknowledge {
+    /// The block's base address.
+    pub const BASE: usize = 0x2039906c;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x4;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0];
+    }
+
+    /// A shared block: The comparators' acknowledgements: each alarm handler strobes its own bit from its own context.
+    ///
+    /// Every method takes `&self`; at its fixed address the owner is
+    /// `Sync`, so every execution context reaches the one owner.
+    ///
+    /// SOURCE: ESP_IDF_4D59230D_S31_SYSTIMER.
+    impl oer_mmio::SharedRegisters for BlockWords {}
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x2039906c>, BlockWords>;
+
+    /// The exclusive owner of the `SYSTIMER_ACKNOWLEDGE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct SystimerAcknowledge<P: oer_mmio::Placement = oer_mmio::Fixed<0x2039906c>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl SystimerAcknowledge {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> SystimerAcknowledge<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> SystimerAcknowledge<P> {
+        /// Strobe the write-trigger field `TARGET0_INT_CLR` of `INT_CLR` alone: one there,
+        /// zero in every other bit, nothing read back.
+        #[inline]
+        pub fn trigger_int_clr_target0_int_clr(&self) {
+            self.0.write_shared::<0x0>(0x00000001);
+        }
+
+        /// Strobe the write-trigger field `TARGET1_INT_CLR` of `INT_CLR` alone: one there,
+        /// zero in every other bit, nothing read back.
+        #[inline]
+        pub fn trigger_int_clr_target1_int_clr(&self) {
+            self.0.write_shared::<0x0>(0x00000002);
+        }
+
+        /// Strobe the write-trigger field `TARGET2_INT_CLR` of `INT_CLR` alone: one there,
+        /// zero in every other bit, nothing read back.
+        #[inline]
+        pub fn trigger_int_clr_target2_int_clr(&self) {
+            self.0.write_shared::<0x0>(0x00000004);
+        }
+    }
 
     /// The `INT_CLR` register.
     ///
-    /// Project-assigned name. Comparator interrupt acknowledgements: writing one clears the raw bit.
+    /// Project-assigned name. Comparator interrupt acknowledgements: a written one clears the raw bit.
     pub mod int_clr {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00000007;
         /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x6c;
+        pub const OFFSET: usize = 0x0;
 
-        /// The value written to the register.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Set `TARGET0_INT_CLR`.
-            #[inline]
-            pub fn set_target0_int_clr(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000001) | u32::from(value);
-                self
-            }
-
-            /// Set `TARGET1_INT_CLR`.
-            #[inline]
-            pub fn set_target1_int_clr(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
-                self
-            }
-
-            /// Set `TARGET2_INT_CLR`.
-            #[inline]
-            pub fn set_target2_int_clr(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
-                self
-            }
-        }
+        /// The bits of the write-trigger fields: zero in every
+        /// read-modify-write, one only in a field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000007;
     }
 }
 
@@ -34364,53 +34528,112 @@ pub mod peripheral_ownership {
     pub struct SystemTimerPeripherals {
         pub systimer: super::systimer::Systimer,
         pub systimer_counter: super::systimer_counter::SystimerCounter,
+        pub systimer_acknowledge: super::systimer_acknowledge::SystimerAcknowledge,
     }
 
     /// The device registers of [`SystemTimerPeripherals`]'s blocks, which its platform
     /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
     /// does not claim them.
-    pub type SystemTimerPeripheralsClaims =
-        (super::systimer::Claim, super::systimer_counter::Claim);
+    pub type SystemTimerPeripheralsClaims = (
+        super::systimer::Claim,
+        super::systimer_counter::Claim,
+        super::systimer_acknowledge::Claim,
+    );
 
     impl SystemTimerPeripherals {
         /// Give each claimed block to its owner.
         #[inline]
         pub fn from_claims(claims: SystemTimerPeripheralsClaims) -> Self {
-            let (systimer, systimer_counter) = claims;
+            let (systimer, systimer_counter, systimer_acknowledge) = claims;
             Self {
                 systimer: super::systimer::Systimer::new(systimer),
                 systimer_counter: super::systimer_counter::SystimerCounter::new(systimer_counter),
+                systimer_acknowledge: super::systimer_acknowledge::SystimerAcknowledge::new(
+                    systimer_acknowledge,
+                ),
             }
         }
     }
 
-    /// The four software interrupt lines: each executor and the radio doorbell owns one. Claimed by the executor's platform handoff.
-    pub struct SoftwareInterruptPeripherals {
+    /// Software interrupt line 0. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line.
+    pub struct SoftwareInterrupt0Peripherals {
         pub from_cpu_0: super::from_cpu_0::FromCpu0,
+    }
+
+    /// The device registers of [`SoftwareInterrupt0Peripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type SoftwareInterrupt0PeripheralsClaims = super::from_cpu_0::Claim;
+
+    impl SoftwareInterrupt0Peripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: SoftwareInterrupt0PeripheralsClaims) -> Self {
+            let from_cpu_0 = claims;
+            Self {
+                from_cpu_0: super::from_cpu_0::FromCpu0::new(from_cpu_0),
+            }
+        }
+    }
+
+    /// Software interrupt line 1. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line.
+    pub struct SoftwareInterrupt1Peripherals {
         pub from_cpu_1: super::from_cpu_1::FromCpu1,
+    }
+
+    /// The device registers of [`SoftwareInterrupt1Peripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type SoftwareInterrupt1PeripheralsClaims = super::from_cpu_1::Claim;
+
+    impl SoftwareInterrupt1Peripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: SoftwareInterrupt1PeripheralsClaims) -> Self {
+            let from_cpu_1 = claims;
+            Self {
+                from_cpu_1: super::from_cpu_1::FromCpu1::new(from_cpu_1),
+            }
+        }
+    }
+
+    /// Software interrupt line 2. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line.
+    pub struct SoftwareInterrupt2Peripherals {
         pub from_cpu_2: super::from_cpu_2::FromCpu2,
+    }
+
+    /// The device registers of [`SoftwareInterrupt2Peripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type SoftwareInterrupt2PeripheralsClaims = super::from_cpu_2::Claim;
+
+    impl SoftwareInterrupt2Peripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: SoftwareInterrupt2PeripheralsClaims) -> Self {
+            let from_cpu_2 = claims;
+            Self {
+                from_cpu_2: super::from_cpu_2::FromCpu2::new(from_cpu_2),
+            }
+        }
+    }
+
+    /// Software interrupt line 3. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line.
+    pub struct SoftwareInterrupt3Peripherals {
         pub from_cpu_3: super::from_cpu_3::FromCpu3,
     }
 
-    /// The device registers of [`SoftwareInterruptPeripherals`]'s blocks, which its platform
+    /// The device registers of [`SoftwareInterrupt3Peripherals`]'s blocks, which its platform
     /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
     /// does not claim them.
-    pub type SoftwareInterruptPeripheralsClaims = (
-        super::from_cpu_0::Claim,
-        super::from_cpu_1::Claim,
-        super::from_cpu_2::Claim,
-        super::from_cpu_3::Claim,
-    );
+    pub type SoftwareInterrupt3PeripheralsClaims = super::from_cpu_3::Claim;
 
-    impl SoftwareInterruptPeripherals {
+    impl SoftwareInterrupt3Peripherals {
         /// Give each claimed block to its owner.
         #[inline]
-        pub fn from_claims(claims: SoftwareInterruptPeripheralsClaims) -> Self {
-            let (from_cpu_0, from_cpu_1, from_cpu_2, from_cpu_3) = claims;
+        pub fn from_claims(claims: SoftwareInterrupt3PeripheralsClaims) -> Self {
+            let from_cpu_3 = claims;
             Self {
-                from_cpu_0: super::from_cpu_0::FromCpu0::new(from_cpu_0),
-                from_cpu_1: super::from_cpu_1::FromCpu1::new(from_cpu_1),
-                from_cpu_2: super::from_cpu_2::FromCpu2::new(from_cpu_2),
                 from_cpu_3: super::from_cpu_3::FromCpu3::new(from_cpu_3),
             }
         }
@@ -34580,6 +34803,10 @@ const _: () = assert!(
         (
             systimer::BASE,
             <systimer::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            systimer_acknowledge::BASE,
+            <systimer_acknowledge::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             systimer_counter::BASE,

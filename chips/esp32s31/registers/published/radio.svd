@@ -34080,7 +34080,7 @@ claimed.</description>
     <peripheral>
       <name>SYSTIMER</name>
       <description>The system timer's comparators: their enables in CONF, targets, modes, load
-strobes and interrupt enables and acknowledgements. The counter latch of unit
+strobes and interrupt enables; their acknowledgements are SYSTIMER_ACKNOWLEDGE. The counter latch of unit
 zero is the separate shared block SYSTIMER_COUNTER; unit one, the unit loads
 and the read-back registers are not described.</description>
       <baseAddress>0x20399000</baseAddress>
@@ -34162,6 +34162,9 @@ and the read-back registers are not described.</description>
           </fields>
         </register>
         <register>
+          <dim>3</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-2</dimIndex>
           <name>TARGET%s_HI</name>
           <description>Project-assigned name. High 20 bits of comparator %s's alarm target.</description>
           <addressOffset>0x1C</addressOffset>
@@ -34178,6 +34181,9 @@ and the read-back registers are not described.</description>
           </fields>
         </register>
         <register>
+          <dim>3</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-2</dimIndex>
           <name>TARGET%s_LO</name>
           <description>Project-assigned name. Low 32 bits of comparator %s's alarm target.</description>
           <addressOffset>0x20</addressOffset>
@@ -34194,6 +34200,9 @@ and the read-back registers are not described.</description>
           </fields>
         </register>
         <register>
+          <dim>3</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-2</dimIndex>
           <name>TARGET%s_CONF</name>
           <description>Project-assigned name. Alarm mode of comparator %s.</description>
           <addressOffset>0x34</addressOffset>
@@ -34222,6 +34231,9 @@ and the read-back registers are not described.</description>
           </fields>
         </register>
         <register>
+          <dim>3</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-2</dimIndex>
           <name>COMP%s_LOAD</name>
           <description>Project-assigned name. Load strobe of comparator %s: writing one loads its target and mode.</description>
           <addressOffset>0x50</addressOffset>
@@ -34260,35 +34272,6 @@ and the read-back registers are not described.</description>
             <field>
               <name>TARGET2_INT_ENA</name>
               <description>Project-assigned name. Enables comparator 2's interrupt.</description>
-              <bitOffset>2</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-          </fields>
-        </register>
-        <register>
-          <name>INT_CLR</name>
-          <description>Project-assigned name. Comparator interrupt acknowledgements: writing one clears the raw bit.</description>
-          <addressOffset>0x6C</addressOffset>
-          <size>0x20</size>
-          <access>write-only</access>
-          <resetValue>0x00000000</resetValue>
-          <modifiedWriteValues>oneToClear</modifiedWriteValues>
-          <fields>
-            <field>
-              <name>TARGET0_INT_CLR</name>
-              <description>Project-assigned name. Clears comparator 0's interrupt.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>TARGET1_INT_CLR</name>
-              <description>Project-assigned name. Clears comparator 1's interrupt.</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>TARGET2_INT_CLR</name>
-              <description>Project-assigned name. Clears comparator 2's interrupt.</description>
               <bitOffset>2</bitOffset>
               <bitWidth>1</bitWidth>
             </field>
@@ -34357,6 +34340,44 @@ writes UPDATE alone and the values are read without a side effect.</description>
               <description>Project-assigned name. Count bits 31:0.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>SYSTIMER_ACKNOWLEDGE</name>
+      <description>The comparators' interrupt acknowledgements. Each comparator's alarm handler
+strobes its own bit alone, from its own context, so this is a shared block
+of write-trigger strobes.</description>
+      <baseAddress>0x2039906C</baseAddress>
+      <registers>
+        <register>
+          <name>INT_CLR</name>
+          <description>Project-assigned name. Comparator interrupt acknowledgements: a written one clears the raw bit.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>TARGET0_INT_CLR</name>
+              <description>Project-assigned name. Clears comparator 0's interrupt.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET1_INT_CLR</name>
+              <description>Project-assigned name. Clears comparator 1's interrupt.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET2_INT_CLR</name>
+              <description>Project-assigned name. Clears comparator 2's interrupt.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
             </field>
           </fields>
         </register>
@@ -34476,6 +34497,9 @@ without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LIN
       <baseAddress>0x10800000</baseAddress>
       <registers>
         <register>
+          <dim>48</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-47</dimIndex>
           <name>CTRL%s</name>
           <description>Project-assigned name. Line %s: pending, enable, attribute and level control.</description>
           <addressOffset>0x1000</addressOffset>
@@ -34532,6 +34556,9 @@ around it.</description>
       <baseAddress>0x20585000</baseAddress>
       <registers>
         <register>
+          <dim>132</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-131</dimIndex>
           <name>MAP_LOW%s</name>
           <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
           <addressOffset>0x0</addressOffset>
@@ -34554,6 +34581,9 @@ around it.</description>
           </fields>
         </register>
         <register>
+          <dim>36</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-35</dimIndex>
           <name>MAP_HIGH%s</name>
           <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
           <addressOffset>0x214</addressOffset>
@@ -34690,6 +34720,9 @@ around it.</description>
       <baseAddress>0x20585800</baseAddress>
       <registers>
         <register>
+          <dim>132</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-131</dimIndex>
           <name>MAP_LOW%s</name>
           <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
           <addressOffset>0x0</addressOffset>
@@ -34712,6 +34745,9 @@ around it.</description>
           </fields>
         </register>
         <register>
+          <dim>36</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-35</dimIndex>
           <name>MAP_HIGH%s</name>
           <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
           <addressOffset>0x214</addressOffset>

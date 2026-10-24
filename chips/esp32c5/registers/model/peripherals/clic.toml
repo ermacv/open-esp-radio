@@ -15,6 +15,7 @@ baseAddress = 0x20800000
 [peripherals.registers.register]
 dim = 48
 dimIncrement = 0x4
+dimIndex = "0-47"
 name = "CTRL%s"
 description = "Line %s: pending, enable, attribute and level control."
 addressOffset = 0x1000

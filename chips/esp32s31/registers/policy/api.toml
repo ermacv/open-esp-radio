@@ -23,6 +23,7 @@ typed-peripherals = [
     "LP_WDT_SWD",
     "SYSTIMER",
     "SYSTIMER_COUNTER",
+    "SYSTIMER_ACKNOWLEDGE",
     "FROM_CPU_0",
     "FROM_CPU_1",
     "FROM_CPU_2",
@@ -68,14 +69,35 @@ name = "SystemTimerPeripherals"
 member = "system_timer"
 handoff = true
 description = "The system timer: the comparators the time driver programs and the shared counter latch every context reads. Claimed by the time driver's platform handoff."
-peripherals = ["SYSTIMER", "SYSTIMER_COUNTER"]
+peripherals = ["SYSTIMER", "SYSTIMER_COUNTER", "SYSTIMER_ACKNOWLEDGE"]
 
 [[ownership-partitions]]
-name = "SoftwareInterruptPeripherals"
-member = "software_interrupts"
+name = "SoftwareInterrupt0Peripherals"
+member = "software_interrupt_0"
 handoff = true
-description = "The four software interrupt lines: each executor and the radio doorbell owns one. Claimed by the executor's platform handoff."
-peripherals = ["FROM_CPU_0", "FROM_CPU_1", "FROM_CPU_2", "FROM_CPU_3"]
+description = "Software interrupt line 0. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_0"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt1Peripherals"
+member = "software_interrupt_1"
+handoff = true
+description = "Software interrupt line 1. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_1"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt2Peripherals"
+member = "software_interrupt_2"
+handoff = true
+description = "Software interrupt line 2. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_2"]
+
+[[ownership-partitions]]
+name = "SoftwareInterrupt3Peripherals"
+member = "software_interrupt_3"
+handoff = true
+description = "Software interrupt line 3. Claimed by the platform handoff of the line's owner (an executor or the radio doorbell), which consumes esp-hal's singleton of the line."
+peripherals = ["FROM_CPU_3"]
 
 [[ownership-partitions]]
 name = "InterruptMatrixPeripherals"
@@ -11115,3 +11137,26 @@ sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
 peripheral = "INTERRUPT_CORE1_STATUS"
 description = "The pending sources at INTERRUPT_CORE1, which every context polls."
 sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+register = "INT_CLR"
+field = "TARGET0_INT_CLR"
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+register = "INT_CLR"
+field = "TARGET1_INT_CLR"
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+register = "INT_CLR"
+field = "TARGET2_INT_CLR"
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[shared-blocks]]
+peripheral = "SYSTIMER_ACKNOWLEDGE"
+description = "The comparators' acknowledgements: each alarm handler strobes its own bit from its own context."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]

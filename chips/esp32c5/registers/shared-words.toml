@@ -126,3 +126,63 @@ radio = "LP_WDT_SWD.SWD_WPROTECT (typed block)"
 esp_hal = "LP_WDT.swd_wprotect in Swd::set_write_protection (rtc_cntl/mod.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 stores the super watchdog's key only through Rtc's Swd, which only esp_hal::init builds (rtc.swd.disable()); the watchdog handoff consumes LP_WDT after esp_hal::init and no image builds an Rtc. The super watchdog owner alone writes the key afterwards."
+
+[[word]]
+address = 0x20801000
+words = 48
+radio = "CLIC.CTRL%s (typed block, read only)"
+esp_hal = "CLIC.int_ie, int_ip, int_attr and int_ctl in init, init_vectoring and the CpuInterrupt methods (interrupt/riscv.rs, interrupt/riscv/clic.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal stores the line words in init_vectoring, from esp_hal::init and from reinitialize_vectoring_after_handoff, which Handoff::adopt calls before oer-espressif-esp-hal-irq installs the hart and claims the block (esp-hal 1f646c5). The CpuInterrupt and enable_direct writers have no caller in our images: chip.toml [interrupts] level-writers pins the level writers. Until step 5 the typed owner only reads the words to check each bound line; it never writes them."
+
+[[word]]
+address = 0x60010000
+words = 12
+radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block, read only)"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
+coordination = "shared-lock"
+reason = "esp-hal stores the route words in map_raw: zeroing them in esp_hal::init and reinitialize_vectoring_after_handoff, before the table claims the block, and through CoreInterruptRoutes::enable and disable (esp-hal 1f646c5). The table keeps each core's CoreInterruptRoutes inside that core's matrix owner, beside the typed block, behind one HandlerCell: every route store runs inside that borrow. Until step 5 the typed owner only reads the words to check each bound route; it never writes them."
+
+[[word]]
+address = 0x60010034
+words = 71
+radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block, read only)"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
+coordination = "shared-lock"
+reason = "esp-hal stores the route words in map_raw: zeroing them in esp_hal::init and reinitialize_vectoring_after_handoff, before the table claims the block, and through CoreInterruptRoutes::enable and disable (esp-hal 1f646c5). The table keeps each core's CoreInterruptRoutes inside that core's matrix owner, beside the typed block, behind one HandlerCell: every route store runs inside that borrow. Until step 5 the typed owner only reads the words to check each bound route; it never writes them."
+
+[[word]]
+address = 0x6000a000
+radio = "SYSTIMER.CONF"
+esp_hal = "SYSTIMER.conf in Unit::configure, Alarm and the ETM enable (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Every esp-hal writer of CONF is a method of SystemTimer, its Unit or Alarm, which only SystemTimer::new(SYSTIMER) makes (esp-hal 1f646c5); the time driver's handoff consumes the SYSTIMER singleton, so none is reachable. The comparator owner is the only runtime writer."
+
+[[word]]
+address = 0x6000a004
+radio = "SYSTIMER_COUNTER.UNIT0_OP"
+esp_hal = "SYSTIMER.unit_op in Unit::read_count (timer/systimer.rs)"
+coordination = "whole-word-stores"
+reason = "esp-hal's Instant::now (its delays and drivers) strobes UPDATE with a whole-word write (esp-hal 1f646c5); the shared counter block strobes UPDATE alone, also a whole-word write. Neither reads back, and each reader repeats LO, HI, LO until the two LO reads agree, so a strobe between them only relatches the newer count."
+
+[[word]]
+address = 0x6000a034
+words = 3
+radio = "SYSTIMER.TARGET%s_CONF"
+esp_hal = "SYSTIMER.target_conf in Alarm (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
+
+[[word]]
+address = 0x6000a064
+radio = "SYSTIMER.INT_ENA"
+esp_hal = "SYSTIMER.int_ena in Alarm (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
+
+[[word]]
+address = 0x6000a06c
+radio = "SYSTIMER_ACKNOWLEDGE.INT_CLR"
+esp_hal = "SYSTIMER.int_clr in Alarm (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton. Each alarm handler strobes its own bit alone."
