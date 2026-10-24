@@ -4,9 +4,13 @@
 use std::{
     io::{Read, Write},
     process::Stdio,
-    sync::mpsc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use oer_os_process::owned::Child;
@@ -40,7 +44,109 @@ pub struct AirCapture {
     reader: Option<JoinHandle<Result<Vec<u8>>>>,
     stats: Option<JoinHandle<Result<u32>>>,
     monitor: bool,
+    /// The newest complete record's capture time in microseconds; 0 before one.
+    latest: Arc<AtomicU64>,
     _lease: Option<FixtureLock>,
+}
+
+/// How long [`AirCapture::await_after`] waits for the capture to pass a
+/// moment: beacons arrive every ~100 ms, so a live capture passes it well
+/// within this bound.
+pub const TAIL_BOUND: Duration = Duration::from_secs(2);
+
+/// The byte order and time resolution of a classic pcap stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PcapFormat {
+    big_endian: bool,
+    nanoseconds: bool,
+}
+
+impl PcapFormat {
+    /// The format named by a pcap global header's magic number.
+    fn of(header: &[u8; 24]) -> Option<Self> {
+        let magic = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+        let (big_endian, nanoseconds) = match magic {
+            0xa1b2c3d4 => (false, false),
+            0xd4c3b2a1 => (true, false),
+            0xa1b23c4d => (false, true),
+            0x4d3cb2a1 => (true, true),
+            _ => return None,
+        };
+        Some(Self {
+            big_endian,
+            nanoseconds,
+        })
+    }
+
+    fn word(self, bytes: &[u8]) -> u32 {
+        let bytes = [bytes[0], bytes[1], bytes[2], bytes[3]];
+        if self.big_endian {
+            u32::from_be_bytes(bytes)
+        } else {
+            u32::from_le_bytes(bytes)
+        }
+    }
+
+    /// Walk the complete records of `pcap` from the record starting at
+    /// `offset`: the offset of the first incomplete record and the capture
+    /// time (µs) of the last complete one, if any.
+    fn scan(self, pcap: &[u8], mut offset: usize) -> (usize, Option<u64>) {
+        let mut last = None;
+        while let Some(header) = pcap.get(offset..offset.saturating_add(16)) {
+            let included = usize::try_from(self.word(&header[8..12])).unwrap_or(usize::MAX);
+            let Some(end) = (offset + 16).checked_add(included) else {
+                break;
+            };
+            if end > pcap.len() {
+                break;
+            }
+            let fraction = u64::from(self.word(&header[4..8]));
+            last = Some(
+                u64::from(self.word(&header[..4])) * 1_000_000
+                    + if self.nanoseconds {
+                        fraction / 1000
+                    } else {
+                        fraction
+                    },
+            );
+            offset = end;
+        }
+        (offset, last)
+    }
+}
+
+/// One step of the wait for a capture to pass `after_us`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TailStep {
+    /// The capture holds a record later than the moment.
+    Covered,
+    /// Not yet; look again.
+    Wait,
+    /// The bound expired first.
+    TimedOut,
+}
+
+/// Whether a capture whose newest record is at `latest_us` (0 before any
+/// record) covers `after_us`, at `now` within a wait that ends at `deadline`.
+pub fn tail_step<T: PartialOrd>(latest_us: u64, after_us: u64, now: T, deadline: T) -> TailStep {
+    if latest_us > after_us {
+        TailStep::Covered
+    } else if now >= deadline {
+        TailStep::TimedOut
+    } else {
+        TailStep::Wait
+    }
+}
+
+/// The result of waiting for the capture to pass a moment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Tail {
+    /// The moment the capture had to pass (host epoch µs).
+    pub after_us: u64,
+    /// The newest captured record when the wait ended; 0 before any.
+    pub latest_us: u64,
+    /// The capture held a record later than `after_us` within the bound.
+    pub covered: bool,
 }
 
 fn helper(mode: &str, input: &[u8]) -> Result<()> {
@@ -95,6 +201,7 @@ impl AirCapture {
             reader: None,
             stats: None,
             monitor: true,
+            latest: Arc::new(AtomicU64::new(0)),
             _lease: lease,
         };
         helper(
@@ -120,19 +227,28 @@ impl AirCapture {
         let mut stream = child.take_stdout().ok_or("dumpcap has no stdout")?;
         let (ready, started) = mpsc::sync_channel(1);
         capture.child = Some(child);
+        let latest = capture.latest.clone();
         capture.reader = Some(std::thread::spawn(move || {
             let mut header = [0; 24];
             stream.read_exact(&mut header)?;
-            if ![0xa1b2c3d4, 0xd4c3b2a1, 0xa1b23c4d, 0x4d3cb2a1]
-                .contains(&u32::from_le_bytes(header[..4].try_into()?))
-            {
-                return Err("dumpcap did not produce pcap".into());
-            }
+            let format = PcapFormat::of(&header).ok_or("dumpcap did not produce pcap")?;
             let _ = ready.send(());
             let mut bytes = header.to_vec();
-            stream
-                .take((MAX_PCAP - 24 + 1) as u64)
-                .read_to_end(&mut bytes)?;
+            let mut stream = stream.take((MAX_PCAP - 24 + 1) as u64);
+            let mut chunk = vec![0; 64 * 1024];
+            let mut next = bytes.len();
+            loop {
+                let read = stream.read(&mut chunk)?;
+                if read == 0 {
+                    break;
+                }
+                bytes.extend_from_slice(&chunk[..read]);
+                let (end, last) = format.scan(&bytes, next);
+                next = end;
+                if let Some(last) = last {
+                    latest.store(last, Ordering::Release);
+                }
+            }
             if bytes.len() > MAX_PCAP {
                 return Err("air capture exceeded memory bound".into());
             }
@@ -142,6 +258,26 @@ impl AirCapture {
             .recv_timeout(Duration::from_secs(10))
             .map_err(|_| "dumpcap did not become ready")?;
         Ok(capture)
+    }
+
+    /// Wait at most `bound` until the capture holds a record later than
+    /// `after_us` (host epoch µs), so stopping it cannot cut off what the air
+    /// carried before that moment. The result says whether it did.
+    pub fn await_after(&self, after_us: u64, bound: Duration) -> Result<Tail> {
+        let deadline = Instant::now() + bound;
+        loop {
+            let latest_us = self.latest.load(Ordering::Acquire);
+            match tail_step(latest_us, after_us, Instant::now(), deadline) {
+                TailStep::Wait => oer_os_process::sleep(Duration::from_millis(20))?,
+                step => {
+                    return Ok(Tail {
+                        after_us,
+                        latest_us,
+                        covered: step == TailStep::Covered,
+                    });
+                }
+            }
+        }
     }
 
     /// Stop capture, decode in memory and restore the managed laptop radio.

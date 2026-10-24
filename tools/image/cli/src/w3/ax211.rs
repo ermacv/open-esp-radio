@@ -19,7 +19,7 @@ use oer_lab_router::{
     ssh::{Remote, Ssh},
     w3::{
         self, Evidence, Ping, Station,
-        stream::{Capture, Departure},
+        stream::{Capture, Departure, DepartureOutcome},
     },
 };
 use oer_os_process::{self as process, owned::Child};
@@ -511,7 +511,7 @@ fn workload(
         }
         process::sleep(Duration::from_millis(250))?;
     }
-    e.disconnect_event = departure.finish()?;
+    e.disconnect_event = departure.finish()? == DepartureOutcome::Unique;
     report.checks = checks(e, lease, station_ping);
     report.phase = "complete";
     Ok(())

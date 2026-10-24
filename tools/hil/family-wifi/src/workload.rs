@@ -1,7 +1,7 @@
 use crate::{evidence::*, keys};
 use oer_hil_lab::{
     air::{
-        AirCapture,
+        AirCapture, TAIL_BOUND,
         station::{Direction, StationFrame},
     },
     config::StationFixtureConfig,
@@ -22,7 +22,7 @@ use oer_lab_router::{
     ssh::{COMMAND_TIMEOUT, CommandLog, Ssh},
     w3::{
         self,
-        stream::{Capture, Departure},
+        stream::{Capture, Departure, DepartureOutcome},
     },
     w4,
 };
@@ -272,6 +272,8 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     let mut links = Vec::new();
     let mut connected = Vec::new();
     let mut stop_at = 0;
+    // When the host had StationStopped; the air capture must pass it.
+    let mut stopped_us = None;
     let result = context.with_capture(output, |capture| {
         require_keys::<StartStation>(capture)?;
         require_keys::<ProbeStation>(capture)?;
@@ -338,6 +340,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 &config.wireless_interface,
                 target,
             )?;
+            evidence.forced_deauth_us = Some(forced);
             capture
                 .wait_for_after::<StationLink>(cursor, SHORT, |message, link| {
                     start.correlates(message)
@@ -352,14 +355,19 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 .ok_or("station did not observe the router deauthentication")?;
             connected.push(authorized(capture, start, connected[0].epoch)?);
             let _ = network(capture, start, &connected[1])?;
-            if !departure.finish()? {
-                return Err("router has no unique fresh forced-departure event".into());
+            match departure.finish()? {
+                DepartureOutcome::Unique => {}
+                outcome => {
+                    return Err(format!(
+                        "router has no unique fresh forced-departure event: {outcome}"
+                    )
+                    .into());
+                }
             }
             if !w3::station(&mut ssh, &config.wireless_interface, target)?.joined() {
                 return Err("router did not authorize the reconnected station".into());
             }
             connected[1].router_authorized = true;
-            evidence.forced_deauth_us = Some(forced);
             let (resumed, _) = traffic(
                 capture,
                 context,
@@ -375,7 +383,10 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             let departure = Departure::start(&ssh, target)?;
             stop_at = now();
             let stopped = match stop_station(&Station { capture, start })? {
-                StopEnd::Stopped(counters) => counters,
+                StopEnd::Stopped(counters) => {
+                    stopped_us = Some(now());
+                    counters
+                }
                 StopEnd::Ended(end) => {
                     station_stopped = true;
                     context.results.observe("w4-service-ended", &end);
@@ -392,8 +403,14 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
                 }
                 oer_os_process::sleep(Duration::from_millis(100))?;
             };
-            if !departure.finish()? {
-                return Err("router has no unique fresh final-departure event".into());
+            match departure.finish()? {
+                DepartureOutcome::Unique => {}
+                outcome => {
+                    return Err(format!(
+                        "router has no unique fresh final-departure event: {outcome}"
+                    )
+                    .into());
+                }
             }
             let b = evidence
                 .baseline
@@ -412,6 +429,7 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             stop_at = now();
             match stop_station(&Station { capture, start })? {
                 StopEnd::Stopped(counters) => {
+                    stopped_us = Some(now());
                     context.results.observe("w4-failure-stopped", &counters);
                     Ok(None)
                 }
@@ -442,6 +460,16 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         }
         work
     });
+    if let Some(stopped_us) = stopped_us {
+        let tail = air.await_after(stopped_us, TAIL_BOUND)?;
+        context.results.observe("w4-air-tail", &tail);
+        if !tail.covered {
+            eprintln!(
+                "w4 air capture has no frame after StationStopped within {} s",
+                TAIL_BOUND.as_secs()
+            );
+        }
+    }
     let projected = air
         .finish_station(target.octets(), applied.bssid.octets())
         .and_then(|(frames, drops, stats)| {

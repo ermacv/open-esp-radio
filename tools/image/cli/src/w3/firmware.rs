@@ -12,7 +12,7 @@ use oer_lab_router::{
     ssh::{Remote, Ssh},
     w3::{
         self, Evidence, Ping, Station,
-        stream::{Capture, Departure},
+        stream::{Capture, Departure, DepartureOutcome},
     },
 };
 use oer_os_process as process;
@@ -260,7 +260,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             }
             process::sleep(Duration::from_millis(100))?;
         }
-        evidence.disconnect_event = departure.finish()?;
+        evidence.disconnect_event = departure.finish()? == DepartureOutcome::Unique;
         fs::write(
             directory.join("observations.json"),
             serde_json::to_vec_pretty(evidence)?,
