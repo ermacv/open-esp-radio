@@ -6,7 +6,10 @@ description = """
 The two CPU interrupt-matrix words for ESP32-S31 modem source 132
 (MODEM_ZB_MAC). This source-specific view is retained with the IEEE 802.15.4
 owner and publishes only the generated field readers needed to prove that a
-polled or validation transaction starts with both CPU routes detached."""
+polled or validation transaction starts with both CPU routes detached. Its
+read-only access states the radio's access: the hardware words are
+read-write, and esp-hal's interrupt table (InterruptRoutes) is their only
+writer."""
 baseAddress = 0x20585210
 
 [[peripherals.registers]]
@@ -17,7 +20,7 @@ description = "Core-zero destination and privilege routing for MODEM_ZB_MAC."
 addressOffset = 0x000
 size = 32
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"] }
-access = "read-write"
+access = "read-only"
 resetValue = 0
 
 [[peripherals.registers.register.fields]]
@@ -42,7 +45,7 @@ description = "Core-one destination and privilege routing for MODEM_ZB_MAC."
 addressOffset = 0x800
 size = 32
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"] }
-access = "read-write"
+access = "read-only"
 resetValue = 0
 
 [[peripherals.registers.register.fields]]

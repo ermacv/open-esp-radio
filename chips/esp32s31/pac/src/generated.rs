@@ -22943,7 +22943,10 @@ pub mod efuse {
 /// The two CPU interrupt-matrix words for ESP32-S31 modem source 132
 /// (MODEM_ZB_MAC). This source-specific view is retained with the IEEE 802.15.4
 /// owner and publishes only the generated field readers needed to prove that a
-/// polled or validation transaction starts with both CPU routes detached.
+/// polled or validation transaction starts with both CPU routes detached. Its
+/// read-only access states the radio's access: the hardware words are
+/// read-write, and esp-hal's interrupt table (InterruptRoutes) is their only
+/// writer.
 pub mod ieee802154_interrupt_route {
     /// The block's base address.
     pub const BASE: usize = 0x20585210;
@@ -22989,28 +22992,10 @@ pub mod ieee802154_interrupt_route {
             core0_route::R(self.0.read::<0x0>())
         }
 
-        /// Read `CORE0_ROUTE`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_core0_route(&mut self, change: impl FnOnce(&mut core0_route::W)) {
-            let mut value = core0_route::W(self.0.read::<0x0>());
-            change(&mut value);
-            self.0.write::<0x0>(value.0);
-        }
-
         /// Read `CORE1_ROUTE`.
         #[inline]
         pub fn read_core1_route(&self) -> core1_route::R {
             core1_route::R(self.0.read::<0x800>())
-        }
-
-        /// Read `CORE1_ROUTE`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_core1_route(&mut self, change: impl FnOnce(&mut core1_route::W)) {
-            let mut value = core1_route::W(self.0.read::<0x800>());
-            change(&mut value);
-            self.0.write::<0x800>(value.0);
         }
     }
 
@@ -23040,37 +23025,6 @@ pub mod ieee802154_interrupt_route {
                 oer_mmio::Bits::truncate(self.0 >> 8)
             }
         }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. CPU-interrupt destination selected for the peripheral source.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Privilege pass/remap level selected for the peripheral source.
-            #[inline]
-            pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_LEVEL`.
-            #[inline]
-            pub fn set_pass_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00000300) | (value.get() << 8);
-                self
-            }
-        }
     }
 
     /// The `CORE1_ROUTE` register.
@@ -23097,37 +23051,6 @@ pub mod ieee802154_interrupt_route {
             #[inline]
             pub const fn pass_level(self) -> oer_mmio::Bits<2> {
                 oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name. CPU-interrupt destination selected for the peripheral source.
-            #[inline]
-            pub const fn map(&self) -> oer_mmio::Bits<6> {
-                oer_mmio::Bits::truncate(self.0)
-            }
-
-            /// Project-assigned name. Privilege pass/remap level selected for the peripheral source.
-            #[inline]
-            pub const fn pass_level(&self) -> oer_mmio::Bits<2> {
-                oer_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// Set `MAP`.
-            #[inline]
-            pub fn set_map(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
-                self.0 = (self.0 & !0x0000003f) | value.get();
-                self
-            }
-
-            /// Set `PASS_LEVEL`.
-            #[inline]
-            pub fn set_pass_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & !0x00000300) | (value.get() << 8);
-                self
             }
         }
     }
