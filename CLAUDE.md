@@ -84,14 +84,15 @@ system these rules serve.
   `<XDG data>/open-esp-radio/evidence/<task>/` with one SHA-256 line in the
   notes; nothing else is hashed or inventoried. `target/` holds only output
   that can be rebuilt.
-- **Checks for what you changed:** `cargo test -p <pkg>`, `cargo clippy -p
-  <pkg> --all-targets`, `cargo fmt`; chip code also builds for
-  `riscv32imafc-unknown-none-elf`. Judge a check only by its own exit code,
+- **Checks on the host:** `cargo test -p <pkg>`, `cargo clippy -p <pkg>
+  --all-targets` and `cargo fmt --check` for what you changed, plus `cargo
+  test -p oer-test-layers`. Nothing else: images, chip targets, image checks
+  and sizes are built by CI. One image build is allowed only to settle a
+  concrete doubt, named in the PR. Judge a check only by its own exit code,
   never through a pipe (redirect to a file and print `exit=$?`).
-- **Sizes.** `cargo fw sizes` for the images the change reaches. Growth of
-  any memory (code, `.rodata`, SRAM and PSRAM sections, a type, future or
-  frame, an allocated task or interrupt stack) is reported in the pull
-  request, not a stop. A limit the owner sets for an image is its own gate.
+- **Sizes.** CI reports memory growth (code, `.rodata`, SRAM and PSRAM
+  sections, a type, future or frame, an allocated task or interrupt stack);
+  growth is not a stop. A limit the owner sets for an image is its own gate.
 - **Stand.** Runs only when they answer a real question. Hardware runs hold
   the board's lock; never kill another holder, wait. The owner's limits on
   secrets, eFuse writes, protected boards and hub ports apply. A claim about
@@ -106,9 +107,9 @@ system these rules serve.
   never block the conversation.
 - **Pull requests.** Conventional Commit subjects (`fix(esp32s31): …`). Open
   the PR as a draft at the start, mark it ready when done (`gh pr ready`).
-  The owner merges; an agent never merges. PRs run no CI and nobody waits
-  for CI: a PR is ready when the checks its task names pass. CI runs on main
-  after each merge, and a red main is fixed by whoever broke it. Rebase only
+  The owner merges; an agent never merges. CI builds everything; nobody waits
+  for it: a PR is ready when its host checks pass. A red CI is fixed by
+  whoever broke it. Rebase only
   on a conflict or when main changed the same files. Cite commit hashes as
   `git` prints them. Pass lists of paths as arrays, not one string.
 - **GitHub.** Act only in the owner's repositories; upstream projects are
