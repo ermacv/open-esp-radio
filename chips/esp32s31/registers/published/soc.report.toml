@@ -8,9 +8,9 @@ schema = 1
 peripherals = 103
 skipped-peripherals = 0
 registers = 4724
-full = 866
-read = 3411
-none = 447
+full = 1300
+read = 3030
+none = 394
 
 [[register]]
 peripheral = "ADC"
@@ -3062,123 +3062,45 @@ reasons = ["undeclared bits 0xf0000000"]
 
 [[register]]
 peripheral = "CACHE"
-register = "L1_ICACHE_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffff00f0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffff00e0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_BYPASS_CACHE_CONF"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ATOMIC_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "CACHE"
 register = "L1_ACACHE_CACHESIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffe000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ACACHE_BLOCKSIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE_CACHESIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffe000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE_BLOCKSIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_DCACHE_CACHESIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffe000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_DCACHE_BLOCKSIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_WRAP_AROUND_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_MISS_ACCESS_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_FREEZE_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfff88888"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_DATA_MEM_ACS_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffccccc"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_TAG_MEM_ACS_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffccccc"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE0_PRELOCK_CONF"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE0_PRELOCK_SCT_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xc000c000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE1_PRELOCK_CONF"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE1_PRELOCK_SCT_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xc000c000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE2_PRELOCK_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3196,13 +3118,13 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE2_PRELOCK_SCT_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xc000c000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOCK_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3220,85 +3142,37 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOCK_SCT_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xc000c000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_PRELOCK_CONF"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_PRELOCK_SCT_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xc000c000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "LOCK_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff80"]
-
-[[register]]
-peripheral = "CACHE"
-register = "LOCK_MAP"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "LOCK_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "SYNC_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "SYNC_MAP"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "SYNC_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE0_PRELOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE0_PRELOAD_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE1_PRELOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE1_PRELOAD_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE2_PRELOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3310,13 +3184,13 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE2_PRELOAD_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xffffc000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3328,61 +3202,19 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE3_PRELOAD_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xffffc000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_DCACHE_PRELOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_PRELOAD_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE0_AUTOLOAD_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffc0e0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE0_AUTOLOAD_SCT0_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE0_AUTOLOAD_SCT1_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE1_AUTOLOAD_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffc0e0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE1_AUTOLOAD_SCT0_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_ICACHE1_AUTOLOAD_SCT1_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE2_AUTOLOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffc0e0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3394,7 +3226,7 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE2_AUTOLOAD_SCT0_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3406,13 +3238,13 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE2_AUTOLOAD_SCT1_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_ICACHE3_AUTOLOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffc0e0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3424,7 +3256,7 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE3_AUTOLOAD_SCT0_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3436,97 +3268,19 @@ reasons = []
 peripheral = "CACHE"
 register = "L1_ICACHE3_AUTOLOAD_SCT1_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_AUTOLOAD_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffff00e0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_AUTOLOAD_SCT0_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_AUTOLOAD_SCT1_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_AUTOLOAD_SCT2_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_DCACHE_AUTOLOAD_SCT3_SIZE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_CNT_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_CNT_INT_CLR"
-api = "none"
-reasons = ["write-only field L1_IBUS0_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_IBUS1_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_IBUS2_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_IBUS3_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_DBUS0_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_DBUS1_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_DBUS2_OVF_INT_CLR: a write-trigger candidate", "write-only field L1_DBUS3_OVF_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_CNT_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffffff00", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_CACHE_ACS_CNT_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_FAIL_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_FAIL_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_FAIL_INT_CLR"
-api = "none"
-reasons = ["write-only field L1_ICACHE0_FAIL_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE1_FAIL_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE2_FAIL_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE3_FAIL_INT_CLR: a write-trigger candidate", "write-only field L1_DCACHE_FAIL_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_FAIL_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_CACHE_ACS_FAIL_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_ACS_CNT_CTRL"
-api = "read"
-reasons = ["write-only field L1_IBUS0_CNT_CLR: a write-trigger candidate", "write-only field L1_IBUS1_CNT_CLR: a write-trigger candidate", "write-only field L1_IBUS2_CNT_CLR: a write-trigger candidate", "write-only field L1_IBUS3_CNT_CLR: a write-trigger candidate", "write-only field L1_DBUS0_CNT_CLR: a write-trigger candidate", "write-only field L1_DBUS1_CNT_CLR: a write-trigger candidate", "write-only field L1_DBUS2_CNT_CLR: a write-trigger candidate", "write-only field L1_DBUS3_CNT_CLR: a write-trigger candidate", "undeclared bits 0xffffff00"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3806,69 +3560,15 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
-register = "L1_CACHE_SYNC_PRELOAD_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xffffd020"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_SYNC_PRELOAD_INT_CLR"
-api = "none"
-reasons = ["write-only field L1_ICACHE0_PLD_DONE_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE1_PLD_DONE_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE2_PLD_DONE_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE3_PLD_DONE_INT_CLR: a write-trigger candidate", "write-only field L1_DCACHE_PLD_DONE_INT_CLR: a write-trigger candidate", "write-only field SYNC_DONE_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE0_PLD_ERR_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE1_PLD_ERR_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE2_PLD_ERR_INT_CLR: a write-trigger candidate", "write-only field L1_ICACHE3_PLD_ERR_INT_CLR: a write-trigger candidate", "write-only field L1_DCACHE_PLD_ERR_INT_CLR: a write-trigger candidate", "write-only field SYNC_ERR_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_SYNC_PRELOAD_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffffd020", "a raw interrupt status: what a write does is not stated"]
-
-[[register]]
-peripheral = "CACHE"
 register = "L1_CACHE_SYNC_PRELOAD_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffd020"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L1_CACHE_SYNC_PRELOAD_EXCEPTION"
 api = "read"
-reasons = ["undeclared bits 0xffffcc00"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_SYNC_RST_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_PRELOAD_RST_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_AUTOLOAD_BUF_CLR_CTRL"
-api = "read"
-reasons = ["field L1_ICACHE0_ALD_BUF_CLR: a write-trigger candidate", "field L1_ICACHE1_ALD_BUF_CLR: a write-trigger candidate", "field L1_ICACHE2_ALD_BUF_CLR: a write-trigger candidate", "field L1_ICACHE3_ALD_BUF_CLR: a write-trigger candidate", "field L1_DCACHE_ALD_BUF_CLR: a write-trigger candidate", "undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_UNALLOCATE_BUFFER_CLEAR"
-api = "read"
-reasons = ["field L1_ICACHE0_UNALLOC_CLR: a write-trigger candidate", "field L1_ICACHE1_UNALLOC_CLR: a write-trigger candidate", "field L1_ICACHE2_UNALLOC_CLR: a write-trigger candidate", "field L1_ICACHE3_UNALLOC_CLR: a write-trigger candidate", "field L1_DCACHE_UNALLOC_CLR: a write-trigger candidate", "undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_OBJECT_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffff820"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L1_CACHE_WAY_OBJECT"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3880,61 +3580,61 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffff00ef"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_BYPASS_CACHE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_CACHESIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffe000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_BLOCKSIZE_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_WRAP_AROUND_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_MISS_ACCESS_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_FREEZE_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xff8fffff"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_DATA_MEM_ACS_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffcfffff"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_TAG_MEM_ACS_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffcfffff"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_PRELOCK_CONF"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3958,7 +3658,7 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_PRELOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3970,13 +3670,13 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_PRELOAD_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_AUTOLOAD_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffff00e0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -3988,7 +3688,7 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_AUTOLOAD_SCT0_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -4000,7 +3700,7 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_AUTOLOAD_SCT1_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -4012,7 +3712,7 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_AUTOLOAD_SCT2_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -4024,67 +3724,37 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_AUTOLOAD_SCT3_SIZE"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_CNT_INT_ENA"
 api = "read"
-reasons = ["undeclared bits 0xffff00ff"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_ACS_CNT_INT_CLR"
-api = "read"
-reasons = ["write-only field L2_IBUS0_OVF_INT_CLR: a write-trigger candidate", "write-only field L2_IBUS1_OVF_INT_CLR: a write-trigger candidate", "write-only field L2_DBUS0_OVF_INT_CLR: a write-trigger candidate", "write-only field L2_DBUS1_OVF_INT_CLR: a write-trigger candidate", "undeclared bits 0xffff33ff"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_ACS_CNT_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffff00ff", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_CNT_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff00ff"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_FAIL_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_FAIL_INT_ENA"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_ACS_FAIL_INT_CLR"
-api = "none"
-reasons = ["write-only field L2_CACHE_FAIL_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_ACS_FAIL_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffffffdf", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACS_FAIL_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_ACS_CNT_CTRL"
-api = "read"
-reasons = ["write-only field L2_IBUS0_CNT_CLR: a write-trigger candidate", "write-only field L2_IBUS1_CNT_CLR: a write-trigger candidate", "write-only field L2_DBUS0_CNT_CLR: a write-trigger candidate", "write-only field L2_DBUS1_CNT_CLR: a write-trigger candidate", "undeclared bits 0x33ff00ff"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -4318,73 +3988,61 @@ reasons = []
 peripheral = "CACHE"
 register = "L2_CACHE_SYNC_PRELOAD_INT_ENA"
 api = "read"
-reasons = ["undeclared bits 0xffffefdf"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_SYNC_PRELOAD_INT_CLR"
-api = "none"
-reasons = ["write-only field L2_CACHE_PLD_DONE_INT_CLR: a write-trigger candidate", "write-only field L2_CACHE_PLD_ERR_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "CACHE"
-register = "L2_CACHE_SYNC_PRELOAD_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffffefdf", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_SYNC_PRELOAD_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffefdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_SYNC_PRELOAD_EXCEPTION"
 api = "read"
-reasons = ["undeclared bits 0xfffff3ff"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_SYNC_RST_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_PRELOAD_RST_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_AUTOLOAD_BUF_CLR_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_UNALLOCATE_BUFFER_CLEAR"
 api = "read"
-reasons = ["undeclared bits 0xffffffdf"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_ACCESS_ATTR_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_OBJECT_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xfffff7df"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
 register = "L2_CACHE_WAY_OBJECT"
 api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
+reasons = []
 
 [[register]]
 peripheral = "CACHE"
@@ -4400,27 +4058,9 @@ reasons = []
 
 [[register]]
 peripheral = "CACHE"
-register = "CLOCK_GATE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "CACHE"
-register = "TRACE_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "CACHE"
 register = "REDUNDANCY_SIG4"
 api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "CACHE"
-register = "DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "CNNT_IO_MUX"
@@ -5626,49 +5266,49 @@ reasons = []
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR0"
 api = "read"
-reasons = ["undeclared bits 0xf0200380"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR1"
 api = "read"
-reasons = ["undeclared bits 0xf8000002"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR2"
 api = "read"
-reasons = ["undeclared bits 0xc0000000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR3"
 api = "read"
-reasons = ["undeclared bits 0xfe000dd0"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR4"
 api = "read"
-reasons = ["undeclared bits 0xfffc0000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR5"
 api = "read"
-reasons = ["undeclared bits 0x000007e3"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR6"
 api = "read"
-reasons = ["undeclared bits 0xffc00000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "RD_REPEAT_DATA_ERR7"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
@@ -5680,73 +5320,31 @@ reasons = []
 peripheral = "EFUSE"
 register = "RD_RS_DATA_ERR1"
 api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "CLK"
-api = "read"
-reasons = ["undeclared bits 0xfffefff8"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "CONF"
-api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "STATUS"
 api = "read"
-reasons = ["undeclared bits 0xfff00000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "CMD"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "INT_RAW"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "INT_CLR"
-api = "none"
-reasons = ["write-only field READ_DONE_INT_CLR: a write-trigger candidate", "write-only field PGM_DONE_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "DAC_CONF"
-api = "read"
-reasons = ["field OE_CLR: a write-trigger candidate", "undeclared bits 0xfffc0000"]
-
-[[register]]
-peripheral = "EFUSE"
-register = "WR_TIM_CONF0_RS_BYPASS"
-api = "read"
-reasons = ["write-only field UPDATE: a write-trigger candidate", "undeclared bits 0xffe01000"]
+reasons = []
 
 [[register]]
 peripheral = "EFUSE"
@@ -6932,90 +6530,6 @@ reasons = ["undeclared bits 0xc0000000"]
 
 [[register]]
 peripheral = "HP_ALIVE_SYS"
-register = "HP_CLK_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x0001ffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_PARLIO_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_I2S0_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_I2S1_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_UART0_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_UART1_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_UART2_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_PAD_UART3_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "MODEM_CLK_AON"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "USB_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "HP_TCM_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "FLASH_MMU_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "PSRAM_MMU_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "INTR_HP2LP_CONF_4"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
 register = "INTR_HP2LP_STATUS_0"
 api = "read"
 reasons = []
@@ -7042,25 +6556,13 @@ reasons = []
 peripheral = "HP_ALIVE_SYS"
 register = "INTR_HP2LP_STATUS_4"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "BUS_CLOCK_GATE_BYPASS"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
+reasons = []
 
 [[register]]
 peripheral = "HP_ALIVE_SYS"
 register = "RST_EVENT_BYPASS"
 api = "read"
 reasons = ["undeclared bits 0xffffff80"]
-
-[[register]]
-peripheral = "HP_ALIVE_SYS"
-register = "USB_OTGHS_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
 
 [[register]]
 peripheral = "HP_APM"
@@ -8072,12 +7574,6 @@ reasons = ["undeclared bits 0xfffffffe"]
 
 [[register]]
 peripheral = "HP_SYS"
-register = "RDN_ECO_CS"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
 register = "HP_TCM_RDN_ECO_CS"
 api = "read"
 reasons = ["undeclared bits 0xfffffffc"]
@@ -8093,12 +7589,6 @@ peripheral = "HP_SYS"
 register = "HP_CPU_WAITI_CONF"
 api = "read"
 reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "CORE_DEBUG_RUNSTALL_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
 
 [[register]]
 peripheral = "HP_SYS"
@@ -8123,18 +7613,6 @@ peripheral = "HP_SYS"
 register = "HP_BITSCRAMBLER_PERI_SEL"
 api = "read"
 reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GDMA_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "VPU_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
 
 [[register]]
 peripheral = "HP_SYS"
@@ -8218,115 +7696,13 @@ reasons = ["undeclared bits 0xfffffff0"]
 peripheral = "HP_SYS"
 register = "PRDYN_ST"
 api = "read"
-reasons = ["undeclared bits 0xfff02825"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "ICM_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "UART3_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "RMT_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "LEDC0_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "KM_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "DMA2D_MEM_LP_CTRL"
 api = "none"
-reasons = ["field _2DDMA_MEM_LP_MODE has no snake-case method name that is not a keyword", "field _2DDMA_MEM_LP_EN has no snake-case method name that is not a keyword", "field _2DDMA_MEM_FORCE_CTRL has no snake-case method name that is not a keyword", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "AXI_PDMA_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "ECC_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "RSA_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "BITSCRAM_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "CAN0_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "MSPI_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "HPCORE_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "ROM_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "L1_CACHE_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "KYBER_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "LCDCAM_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "CPU_PERI0_TIMEOUT_CONF"
-api = "read"
-reasons = ["write-only field CPU_PERI0_TIMEOUT_INT_CLR: a write-trigger candidate", "undeclared bits 0xfffd0000"]
+reasons = ["field _2DDMA_MEM_LP_MODE has no snake-case method name that is not a keyword", "field _2DDMA_MEM_LP_EN has no snake-case method name that is not a keyword", "field _2DDMA_MEM_FORCE_CTRL has no snake-case method name that is not a keyword", "undeclared bits 0x0000000f", "no readable field remains"]
 
 [[register]]
 peripheral = "HP_SYS"
@@ -8338,7 +7714,7 @@ reasons = []
 peripheral = "HP_SYS"
 register = "CPU_PERI0_TIMEOUT_UID"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
@@ -8378,54 +7754,6 @@ reasons = ["undeclared bits 0xffffff00"]
 
 [[register]]
 peripheral = "HP_SYS"
-register = "UART0_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "UART1_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "UART2_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "LEDC1_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "PPA_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "JPEG_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "CAN1_MEM_LP_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "CPU_PERI1_TIMEOUT_CONF"
-api = "read"
-reasons = ["write-only field CPU_PERI1_TIMEOUT_INT_CLR: a write-trigger candidate", "undeclared bits 0xfffd0000"]
-
-[[register]]
-peripheral = "HP_SYS"
 register = "CPU_PERI1_TIMEOUT_ADDR"
 api = "read"
 reasons = []
@@ -8434,127 +7762,43 @@ reasons = []
 peripheral = "HP_SYS"
 register = "CPU_PERI1_TIMEOUT_UID"
 api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "CPU_ACS_CACHE_MEM_CONF"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "TCM_PERFORMACE_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "SDIO_PAD_BIST_CFG"
-api = "none"
-reasons = ["write-only field SDIO_PAD_BIST_START: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "SDIO_PAD_BIST_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "SDIO_PAD_BIST_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "SDIO_PAD_BIST_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "SDIO_PAD_BIST_INT_CLR"
-api = "none"
-reasons = ["write-only field SDIO_PAD_BIST_OK_INT_CLR: a write-trigger candidate", "write-only field SDIO_PAD_BIST_FAIL_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "SDIO_PAD_BIST_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC0_PAD_BIST_CFG"
-api = "none"
-reasons = ["write-only field GMAC0_PAD_BIST_START: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC0_PAD_BIST_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "GMAC0_PAD_BIST_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC0_PAD_BIST_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC0_PAD_BIST_INT_CLR"
-api = "none"
-reasons = ["write-only field GMAC0_PAD_BIST_OK_INT_CLR: a write-trigger candidate", "write-only field GMAC0_PAD_BIST_FAIL_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "GMAC0_PAD_BIST_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC1_PAD_BIST_CFG"
-api = "none"
-reasons = ["write-only field GMAC1_PAD_BIST_START: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC1_PAD_BIST_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "GMAC1_PAD_BIST_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC1_PAD_BIST_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS"
-register = "GMAC1_PAD_BIST_INT_CLR"
-api = "none"
-reasons = ["write-only field GMAC1_PAD_BIST_OK_INT_CLR: a write-trigger candidate", "write-only field GMAC1_PAD_BIST_FAIL_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
 register = "GMAC1_PAD_BIST_ST"
 api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS"
@@ -8578,103 +7822,13 @@ reasons = ["undeclared bits 0xffffffc0"]
 peripheral = "HP_SYS"
 register = "CPU_PWAIT_MODE"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "SOC_CLK_SEL"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CPU_FREQ_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "MEM_FREQ_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "SYS_FREQ_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "APB_FREQ_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
 register = "ROOT_CLK_CTRL0"
 api = "read"
-reasons = ["field REG_SOC_CLK_UPDATE: a write-trigger candidate", "undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CPU_WFI_DELAY_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HPCORE0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HPCORE1_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TRACE_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TCM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TCMMON_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PSRAMMON_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "ROM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CACHE_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffc0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "ICM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
@@ -8684,405 +7838,15 @@ reasons = ["the curated model's HP_SYS_CLKRST_RADIO describes its word"]
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
-register = "MISC_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "BUSMON_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REMOVE_TMP0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PVT0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PVT0_PERI_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CRYPTO_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xff0c0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "KEY_MANAGER_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DPA_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "FLASH_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PSRAM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "GPSPI2_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xff000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "GPSPI3_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xff000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "GDMA_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "AXI_PDMA_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "AHB_PDMA_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REGDMA_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "UHCI_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PARLIO_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PARLIO_RX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PARLIO_TX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
 register = "BITSRAMBLER_CTRL0"
 api = "read"
 reasons = ["undeclared bits 0xfffffe00"]
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
-register = "ETM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffff81"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "USB_OTGHS_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DMA2D_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PPA_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "JPEG_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "RMT_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xc0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "SDIO_HOST_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "SDIO_HOST_FUNC_CTRL0"
-api = "read"
-reasons = ["write-only field REG_SDIO_LS_CLK_EDGE_CFG_UPDATE: a write-trigger candidate", "undeclared bits 0xfe000001"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "EMAC_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DSI_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DSI_PHY_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DSI_DPI_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "MSPI_PAD_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2C0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2C1_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S0_RX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S0_RX_DIV_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S0_TX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S0_TX_DIV_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S1_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S1_RX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S1_RX_DIV_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S1_TX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "I2S1_TX_DIV_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TWAI0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TWAI1_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TIMERGRP0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TIMERGRP0_TGRT_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffe00000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
 register = "TIMERGRP1_CTRL0"
 api = "none"
 reasons = ["the curated model's HP_SYS_CLKRST_TIMG1 describes its word"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "SYSTIMER_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "MCPWM0_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "MCPWM1_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "MCPWM2_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "MCPWM3_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffc000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "INTRMTX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "PCNT_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "USB_DEVICE_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "LEDC_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "LCDCAM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "LCDCAM_LCD_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf8000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "LCDCAM_LCDCAM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf8000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "LCDCAM_CAM_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xf8000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "IOMUX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffffe000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HPWDT_CORE0_RST_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HPWDT_CORE1_RST_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
@@ -9094,163 +7858,7 @@ reasons = []
 peripheral = "HP_SYS_CLKRST"
 register = "CPU_CLK_STATUS0"
 api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HPCORE_WDT_RESET_SOURCE0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "ANA_PLL_CTRL0"
-api = "read"
-reasons = ["field REG_PLLA_CAL_STOP: a write-trigger candidate", "field REG_CPU_PLL_CAL_STOP: a write-trigger candidate", "field REG_SDIO_PLL_CAL_STOP: a write-trigger candidate", "field REG_BBPLL_CAL_STOP: a write-trigger candidate", "field REG_MSPI_CAL_STOP: a write-trigger candidate", "undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_500M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_240M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_160M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_120M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_80M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_60M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_20M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_50M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "REF_25M_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "TM_CLK_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DBG0_CLK_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DBG1_CLK_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DBG2_CLK_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "LP_CLK_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "AHB_ASRC_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CORDIC_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "ZERO_DET_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xffff8000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CORDIC_CTRL1"
-api = "read"
-reasons = ["undeclared bits 0xff000000"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CLK_PWR_DECREASE"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CNNT_IOMUX_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HP_I2CMST_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "AXI_PERF_MON_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CNNT_SYSREG_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "HP_ALIVE_SYSREG_CTRL0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
+reasons = []
 
 [[register]]
 peripheral = "HP_SYS_CLKRST"
@@ -9287,18 +7895,6 @@ peripheral = "HP_SYS_CLKRST"
 register = "PAD_BIST_GMAC1"
 api = "read"
 reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "CLK_EN0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "HP_SYS_CLKRST"
-register = "DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
 
 [[register]]
 peripheral = "LP_HUK"
@@ -10403,12 +8999,6 @@ peripheral = "I2S1"
 register = "DATE"
 api = "read"
 reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "IOMUX_MSPI_PIN"
-register = "CLK_EN0"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
 
 [[register]]
 peripheral = "IOMUX_MSPI_PIN"
@@ -11626,19 +10216,19 @@ reasons = ["the curated model's LP_AON_RESET_CAUSE describes its word"]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_LPCORE_RESET_CAUSE"
 api = "read"
-reasons = ["write-only field CLR: a write-trigger candidate", "write-only field LP_AONCLKRST_LPCORE_RESET_FLAG_CLR: a write-trigger candidate", "undeclared bits 0xdfffff80"]
+reasons = ["undeclared bits 0x1fffff80"]
 
 [[register]]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
 api = "read"
-reasons = ["write-only field LP_AONCLKRST_HPCORE0_SW_RESET: a write-trigger candidate", "undeclared bits 0x1ff00000"]
+reasons = ["undeclared bits 0x1fe00000"]
 
 [[register]]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
 api = "read"
-reasons = ["write-only field LP_AONCLKRST_HPCORE1_SW_RESET: a write-trigger candidate", "undeclared bits 0x1ff00000"]
+reasons = ["undeclared bits 0x1fe00000"]
 
 [[register]]
 peripheral = "LP_AON_CLKRST"
@@ -11972,87 +10562,9 @@ reasons = ["undeclared bits 0xe0000000"]
 
 [[register]]
 peripheral = "LP_PERICLKRST"
-register = "CPU_CTRL"
-api = "read"
-reasons = ["write-only field LP_CORE_RST_EN: a write-trigger candidate", "undeclared bits 0xbfffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "ROM_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "RAM_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "UART_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x000fffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "I2C_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x000fffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "I2CMST_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "SPI_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "ADC_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x0fffff00"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "EFUSE_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "INTR_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "TOUCH_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
 register = "TSENS_CTRL"
 api = "none"
 reasons = ["the curated model's LP_PERICLKRST describes its word"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "IOMUX_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "MAILBOX"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
 
 [[register]]
 peripheral = "LP_PERICLKRST"
@@ -12065,30 +10577,6 @@ peripheral = "LP_PERICLKRST"
 register = "UART_MISC_CTRL"
 api = "read"
 reasons = ["write-only field LP_UART_WAKEUP_FLAG_CLR: a write-trigger candidate", "undeclared bits 0x1ffffffd"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "CPU"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "AHB_DMA_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "DAC_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x0fffff00"]
-
-[[register]]
-peripheral = "LP_PERICLKRST"
-register = "DM_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
 
 [[register]]
 peripheral = "LP_PERI_PMS"
@@ -12314,237 +10802,57 @@ reasons = ["undeclared bits 0xf0000000"]
 
 [[register]]
 peripheral = "LP_PWR"
-register = "LPCPU_CFG"
-api = "read"
-reasons = ["undeclared bits 0xffffe000"]
-
-[[register]]
-peripheral = "LP_PWR"
 register = "LPCPU_STS"
 api = "read"
-reasons = ["undeclared bits 0xffffff80"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "LPCPU_CTRL"
-api = "read"
-reasons = ["write-only field LPCPU_SW_SLEEP_REQ: a write-trigger candidate", "write-only field LPCPU_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffe3"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "LPCPU_WAKEUP_SRC"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "LPCPU_WAKEUP_CAUSE"
 api = "read"
-reasons = ["undeclared bits 0x80000000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "LPCPU_REJECT_CAUSE"
 api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "LPCPU_CAUSE_CLR"
-api = "none"
-reasons = ["write-only field LPCPU_REJECT_CAUSE_CLR: a write-trigger candidate", "write-only field LPCPU_WAKEUP_CAUSE_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "APPWR_PWR_CFG"
-api = "read"
-reasons = ["undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "APPWR_CLK_CFG"
-api = "read"
-reasons = ["undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "APPWR_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfff00000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "APPWR_STS"
 api = "read"
-reasons = ["undeclared bits 0xffffffe0"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "APPWR_CTRL"
-api = "read"
-reasons = ["write-only field APPWR_SW_SLEEP_REQ: a write-trigger candidate", "write-only field APPWR_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xfffffffb"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "APPWR_WAKEUP_SRC"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "APPWR_WAKEUP_CAUSE"
 api = "read"
-reasons = ["undeclared bits 0x80000000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "APPWR_REJECT_CAUSE"
 api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "APPWR_CAUSE_CLR"
-api = "none"
-reasons = ["write-only field APPWR_REJECT_CAUSE_CLR: a write-trigger candidate", "write-only field APPWR_WAKEUP_CAUSE_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "WIFI_CTRL"
-api = "none"
-reasons = ["write-only field WIFI_SW_SLEEP_REQ: a write-trigger candidate", "write-only field WIFI_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "WIFI_WAKEUP_SRC"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "BLE_CTRL"
-api = "none"
-reasons = ["write-only field BLE_SW_SLEEP_REQ: a write-trigger candidate", "write-only field BLE_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "BLE_WAKEUP_SRC"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "ZB_CTRL"
-api = "none"
-reasons = ["write-only field ZB_SW_SLEEP_REQ: a write-trigger candidate", "write-only field ZB_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "ZB_WAKEUP_SRC"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "MODEMPWR_CTRL"
-api = "none"
-reasons = ["write-only field MODEMPWR_SW_SLEEP_REQ: a write-trigger candidate", "write-only field MODEMPWR_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "MODEMPWR_WAKEUP_SRC"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "PERI_PAD_WAKE_SLP_EN"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "TOUCH_CTRL"
-api = "none"
-reasons = ["write-only field TOUCH_SW_SLEEP_REQ: a write-trigger candidate", "write-only field TOUCH_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "TOUCH_CFG"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "TOUCH_STS"
 api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "CALI_CTRL"
-api = "none"
-reasons = ["write-only field CALI_SW_SLEEP_REQ: a write-trigger candidate", "write-only field CALI_SW_WAKEUP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "CALI_STS"
 api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "LPPERI_PWR_CLK_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "LPPERI_CTRL"
-api = "read"
-reasons = ["write-only field LPPERI_SW_REQ: a write-trigger candidate", "undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "LP_PAD_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "CNNT_PAD_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "HP_PAD_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0x00ffffff", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "LP_PWR"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0x00ffffff"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0x00ffffff"]
-
-[[register]]
-peripheral = "LP_PWR"
-register = "INT_CLR"
-api = "none"
-reasons = ["write-only field ZB_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field MODEMPWR_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field BLE_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field WIFI_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field XTAL_CALI_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field TOUCH_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field LPCPU_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "write-only field APPWR_WAKE_PROCESS_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "LP_TEE"
@@ -14176,7 +12484,7 @@ reasons = ["undeclared bits 0x03ffffff"]
 peripheral = "PMU"
 register = "HP_ACTIVE_HP_REGULATOR0"
 api = "read"
-reasons = ["write-only field DIG_DBIAS_INIT: a write-trigger candidate", "undeclared bits 0x0000000f"]
+reasons = ["undeclared bits 0x00000007"]
 
 [[register]]
 peripheral = "PMU"
@@ -14402,51 +12710,9 @@ reasons = ["the curated model's PMU_RADIO describes its word"]
 
 [[register]]
 peripheral = "PMU"
-register = "IMM_HP_FUNC_ICG"
-api = "none"
-reasons = ["write-only field UPDATE_DIG_ICG_FUNC_EN: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "IMM_HP_APB_ICG"
-api = "none"
-reasons = ["write-only field UPDATE_DIG_ICG_APB_EN: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
 register = "IMM_MODEM_ICG"
 api = "none"
 reasons = ["the curated model's PMU_RADIO describes its word"]
-
-[[register]]
-peripheral = "PMU"
-register = "IMM_LP_ICG"
-api = "none"
-reasons = ["write-only field TIE_LOW_LP_ROOTCLK_SEL: a write-trigger candidate", "write-only field TIE_HIGH_LP_ROOTCLK_SEL: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "IMM_PAD_HOLD_ALL"
-api = "none"
-reasons = ["write-only field TIE_HIGH_LP_PAD_HOLD_ALL: a write-trigger candidate", "write-only field TIE_LOW_LP_PAD_HOLD_ALL: a write-trigger candidate", "write-only field TIE_HIGH_HP_PAD_HOLD_ALL: a write-trigger candidate", "write-only field TIE_LOW_HP_PAD_HOLD_ALL: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "IMM_I2C_ISO"
-api = "none"
-reasons = ["write-only field TIE_HIGH_I2C_ISO_EN: a write-trigger candidate", "write-only field TIE_LOW_I2C_ISO_EN: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "POWER_WAIT_TIMER0"
-api = "read"
-reasons = ["undeclared bits 0x0000001f"]
-
-[[register]]
-peripheral = "PMU"
-register = "POWER_WAIT_TIMER1"
-api = "read"
-reasons = ["undeclared bits 0x000001ff"]
 
 [[register]]
 peripheral = "PMU"
@@ -14504,54 +12770,6 @@ reasons = ["undeclared bits 0x00018000"]
 
 [[register]]
 peripheral = "PMU"
-register = "POWER_HP_PAD"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "PMU"
-register = "POWER_VDD_SPI_CNTL"
-api = "read"
-reasons = ["undeclared bits 0x0003ffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL0"
-api = "read"
-reasons = ["write-only field SLEEP_REQ: a write-trigger candidate", "undeclared bits 0xbfffffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL3"
-api = "read"
-reasons = ["undeclared bits 0xfffc0000"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL4"
-api = "none"
-reasons = ["write-only field SLP_REJECT_CAUSE_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL5"
-api = "read"
-reasons = ["undeclared bits 0x00f00000"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL6"
-api = "read"
-reasons = ["undeclared bits 0x3ff00000"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL7"
-api = "read"
-reasons = ["undeclared bits 0x0000ffff"]
-
-[[register]]
-peripheral = "PMU"
 register = "SLP_WAKEUP_STATUS0"
 api = "read"
 reasons = []
@@ -14578,19 +12796,13 @@ reasons = ["undeclared bits 0xffff0000"]
 peripheral = "PMU"
 register = "POR_STATUS"
 api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
 register = "RF_PWC"
 api = "none"
 reasons = ["the curated model's PMU_RADIO describes its word"]
-
-[[register]]
-peripheral = "PMU"
-register = "BACKUP_CFG"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
 
 [[register]]
 peripheral = "PMU"
@@ -14613,8 +12825,8 @@ reasons = ["undeclared bits 0x07ffffff"]
 [[register]]
 peripheral = "PMU"
 register = "HP_INT_CLR"
-api = "none"
-reasons = ["write-only field LP_CPU_EXC_INT_CLR: a write-trigger candidate", "write-only field SDIO_IDLE_INT_CLR: a write-trigger candidate", "write-only field SW_INT_CLR: a write-trigger candidate", "write-only field SOC_SLEEP_REJECT_INT_CLR: a write-trigger candidate", "write-only field SOC_WAKEUP_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+api = "read"
+reasons = ["undeclared bits 0x07ffffff"]
 
 [[register]]
 peripheral = "PMU"
@@ -14637,50 +12849,26 @@ reasons = ["undeclared bits 0x000fffff"]
 [[register]]
 peripheral = "PMU"
 register = "LP_INT_CLR"
-api = "none"
-reasons = ["write-only field LP_CPU_WAKEUP_INT_CLR: a write-trigger candidate", "write-only field MODEM_SWITCH_ACTIVE_END_INT_CLR: a write-trigger candidate", "write-only field SLEEP_SWITCH_ACTIVE_END_INT_CLR: a write-trigger candidate", "write-only field SLEEP_SWITCH_MODEM_END_INT_CLR: a write-trigger candidate", "write-only field MODEM_SWITCH_SLEEP_END_INT_CLR: a write-trigger candidate", "write-only field ACTIVE_SWITCH_SLEEP_END_INT_CLR: a write-trigger candidate", "write-only field MODEM_SWITCH_ACTIVE_START_INT_CLR: a write-trigger candidate", "write-only field SLEEP_SWITCH_ACTIVE_START_INT_CLR: a write-trigger candidate", "write-only field SLEEP_SWITCH_MODEM_START_INT_CLR: a write-trigger candidate", "write-only field MODEM_SWITCH_SLEEP_START_INT_CLR: a write-trigger candidate", "write-only field ACTIVE_SWITCH_SLEEP_START_INT_CLR: a write-trigger candidate", "write-only field HP_SW_TRIGGER_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "LP_CPU_PWR0"
 api = "read"
-reasons = ["undeclared bits 0x0003fffc"]
-
-[[register]]
-peripheral = "PMU"
-register = "LP_CPU_PWR1"
-api = "none"
-reasons = ["write-only field LP_CPU_SLEEP_REQ: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "HP_LP_CPU_COMM"
-api = "none"
-reasons = ["write-only field LP_TRIGGER_HP: a write-trigger candidate", "write-only field HP_TRIGGER_LP: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "PMU"
-register = "HP_REGULATOR_CFG"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
+reasons = ["undeclared bits 0x000fffff"]
 
 [[register]]
 peripheral = "PMU"
 register = "MAIN_STATE"
 api = "read"
-reasons = ["undeclared bits 0x000007ff"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
 register = "PWR_STATE"
 api = "read"
-reasons = ["undeclared bits 0x00001fff"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
 register = "CLK_STATE0"
 api = "read"
-reasons = ["undeclared bits 0x62007ffd"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
@@ -14698,73 +12886,19 @@ reasons = []
 peripheral = "PMU"
 register = "CLK_STATE3"
 api = "read"
-reasons = ["undeclared bits 0x0000ffff"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
 register = "VDD_SPI_STATUS"
 api = "read"
-reasons = ["undeclared bits 0x1fffffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "VDD_SPI_DISCHARGE_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "PMU"
-register = "VDD_SDIO_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "PMU"
-register = "PSRAM_CFG"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "CPU_STALL_SW"
-api = "read"
-reasons = ["undeclared bits 0x0000ffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "EXT_WAKEUP_LV"
-api = "read"
-reasons = ["undeclared bits 0xffe00000"]
-
-[[register]]
-peripheral = "PMU"
-register = "EXT_WAKEUP_SEL"
-api = "read"
-reasons = ["undeclared bits 0xffe00000"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
 register = "EXT_WAKEUP_ST"
 api = "read"
-reasons = ["undeclared bits 0xffe00000"]
-
-[[register]]
-peripheral = "PMU"
-register = "EXT_WAKEUP_CNTL"
-api = "read"
-reasons = ["field EXT_WAKEUP_STATUS_CLR: a write-trigger candidate", "undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "SDIO_WAKEUP_CNTL"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "PMU"
-register = "TOUCH_PWR_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x001f0000"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
@@ -14774,45 +12908,15 @@ reasons = ["the curated model's PMU_RADIO describes its word"]
 
 [[register]]
 peripheral = "PMU"
-register = "RDN_ECO"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "PMU"
-register = "PUF_MEM_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
-
-[[register]]
-peripheral = "PMU"
-register = "SLP_WAKEUP_CNTL8"
-api = "read"
-reasons = ["undeclared bits 0xfffc0000"]
-
-[[register]]
-peripheral = "PMU"
-register = "EXT_LDO_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "PMU"
 register = "DEBUG_RO"
 api = "read"
-reasons = ["undeclared bits 0xffffff80"]
+reasons = []
 
 [[register]]
 peripheral = "PMU"
 register = "LPCPU_WAKEUP_CAUSE"
 api = "read"
 reasons = []
-
-[[register]]
-peripheral = "PMU"
-register = "BACKUP_WAIT_TARGET"
-api = "read"
-reasons = ["undeclared bits 0xfffffff0"]
 
 [[register]]
 peripheral = "PPA"
@@ -16057,12 +14161,6 @@ api = "read"
 reasons = []
 
 [[register]]
-peripheral = "LP_CLKCALI"
-register = "CFG2"
-api = "read"
-reasons = ["undeclared bits 0x00007e00"]
-
-[[register]]
 peripheral = "RTCLOCKCALI1"
 register = "CFG1"
 api = "read"
@@ -16078,19 +14176,13 @@ reasons = ["undeclared bits 0x00007e00"]
 peripheral = "LP_TIMER"
 register = "TAR0_HIGH"
 api = "read"
-reasons = ["write-only field MAIN_TIMER_TAR_EN0: a write-trigger candidate", "undeclared bits 0xffff0000"]
+reasons = ["undeclared bits 0x7fff0000"]
 
 [[register]]
 peripheral = "LP_TIMER"
 register = "TAR1_HIGH"
 api = "read"
-reasons = ["write-only field MAIN_TIMER_TAR_EN1: a write-trigger candidate", "undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "UPDATE"
-api = "read"
-reasons = ["write-only field MAIN_TIMER_UPDATE: a write-trigger candidate", "undeclared bits 0x0bffffff"]
+reasons = ["undeclared bits 0x7fff0000"]
 
 [[register]]
 peripheral = "LP_TIMER"
@@ -16118,69 +14210,21 @@ reasons = ["undeclared bits 0xffff0000"]
 
 [[register]]
 peripheral = "LP_TIMER"
-register = "MAIN_OVERFLOW"
-api = "none"
-reasons = ["write-only field MAIN_TIMER_ALARM_LOAD: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0x0fffffff", "a raw interrupt status: what a write does is not stated"]
-
-[[register]]
-peripheral = "LP_TIMER"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0x0fffffff"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0x0fffffff"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "INT_CLR"
-api = "none"
-reasons = ["write-only field TICK_INT_CLR: a write-trigger candidate", "write-only field UPDTAE_DONE_INT_CLR: a write-trigger candidate", "write-only field OVERFLOW_CLR: a write-trigger candidate", "write-only field SOC_WAKEUP_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "LP_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0x0fffffff", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "LP_TIMER"
 register = "LP_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0x0fffffff"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "LP_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0x0fffffff"]
-
-[[register]]
-peripheral = "LP_TIMER"
-register = "LP_INT_CLR"
-api = "none"
-reasons = ["write-only field TICK_LP_INT_CLR: a write-trigger candidate", "write-only field UPDTAE_DONE_LP_INT_CLR: a write-trigger candidate", "write-only field MAIN_TIMER_OVERFLOW_LP_INT_CLR: a write-trigger candidate", "write-only field MAIN_TIMER_LP_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "LP_WDT"
 register = "CONFIG0"
 api = "none"
 reasons = ["the curated model's LP_WDT describes its word"]
-
-[[register]]
-peripheral = "LP_WDT"
-register = "FEED"
-api = "none"
-reasons = ["write-only field FEED: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
 
 [[register]]
 peripheral = "LP_WDT"
@@ -16202,33 +14246,9 @@ reasons = ["the curated model's LP_WDT_SWD describes its word"]
 
 [[register]]
 peripheral = "LP_WDT"
-register = "INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff", "a raw interrupt status: what a write does is not stated"]
-
-[[register]]
-peripheral = "LP_WDT"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_WDT"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0x3fffffff"]
-
-[[register]]
-peripheral = "LP_WDT"
-register = "INT_CLR"
-api = "none"
-reasons = ["write-only field SUPER_WDT_INT_CLR: a write-trigger candidate", "write-only field LP_WDT_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "LP_WDT"
-register = "PAUSE_EN"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
+reasons = []
 
 [[register]]
 peripheral = "SDHOST"
@@ -16786,7 +14806,7 @@ reasons = ["undeclared bits 0xf0000000"]
 peripheral = "SPI0"
 register = "SPI_MEM_CMD"
 api = "read"
-reasons = ["undeclared bits 0xfffbff00"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -16796,63 +14816,9 @@ reasons = ["undeclared bits 0x3e439c80"]
 
 [[register]]
 peripheral = "SPI0"
-register = "SPI_MEM_CTRL1"
-api = "read"
-reasons = ["write-only field SPI_MEM_RXFIFO_RST: a write-trigger candidate", "write-only field SPI_MEM_TXFIFO_RST: a write-trigger candidate", "undeclared bits 0xc03ffffc"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_CTRL2"
-api = "read"
-reasons = ["write-only field SPI_MEM_SYNC_RESET: a write-trigger candidate", "undeclared bits 0x80ff8000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_CLOCK"
-api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_USER"
-api = "read"
-reasons = ["undeclared bits 0xdbfffd3f"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_USER1"
-api = "read"
-reasons = ["undeclared bits 0x03fff000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_USER2"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_RD_STATUS"
-api = "read"
-reasons = ["undeclared bits 0xf000ffff"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_MISC"
-api = "read"
-reasons = ["undeclared bits 0xfffff80f"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_CACHE_FCTRL"
-api = "read"
-reasons = ["undeclared bits 0x3ff00000"]
-
-[[register]]
-peripheral = "SPI0"
 register = "SPI_MEM_CACHE_SCTRL"
 api = "read"
-reasons = ["undeclared bits 0xf0003000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -16864,25 +14830,19 @@ reasons = ["undeclared bits 0x30002000"]
 peripheral = "SPI0"
 register = "SPI_MEM_SRAM_DRD_CMD"
 api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
 register = "SPI_MEM_SRAM_DWR_CMD"
 api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
 register = "SPI_MEM_SRAM_CLK"
 api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_FSM"
-api = "read"
-reasons = ["undeclared bits 0xffe0007f"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -16910,12 +14870,6 @@ reasons = ["undeclared bits 0x03ffdc07"]
 
 [[register]]
 peripheral = "SPI0"
-register = "SPI_MEM_DDR"
-api = "read"
-reasons = ["undeclared bits 0x82c00000"]
-
-[[register]]
-peripheral = "SPI0"
 register = "SPI_SMEM_DDR"
 api = "read"
 reasons = ["undeclared bits 0x82c00000"]
@@ -16924,7 +14878,7 @@ reasons = ["undeclared bits 0x82c00000"]
 peripheral = "SPI0"
 register = "SPI_MEM_DLL_DLY_DB"
 api = "read"
-reasons = ["field SPI_MEM_DLL_DB_CNT_CLR: a write-trigger candidate", "undeclared bits 0xffffc000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -16984,7 +14938,7 @@ reasons = ["undeclared bits 0x07ffffff"]
 peripheral = "SPI0"
 register = "SPI_MEM_PMS_REJECT_ADDR"
 api = "read"
-reasons = ["undeclared bits 0xe0000000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -16996,13 +14950,13 @@ reasons = ["undeclared bits 0x0090001f"]
 peripheral = "SPI0"
 register = "SPI_MEM_ECC_ERR_ADDR"
 api = "read"
-reasons = ["undeclared bits 0xe0000000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
 register = "SPI_MEM_AXI_ERR_ADDR"
 api = "read"
-reasons = ["undeclared bits 0xe0000000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -17015,36 +14969,6 @@ peripheral = "SPI0"
 register = "SPI_SMEM_AXI_ADDR_CTRL"
 api = "none"
 reasons = ["FIFO or data port candidate: a read may change it"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_AXI_ERR_RESP_EN"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_TIMING_CALI"
-api = "read"
-reasons = ["write-only field UPDATE: a write-trigger candidate", "undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_DIN_MODE"
-api = "read"
-reasons = ["undeclared bits 0xf8000000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_DIN_NUM"
-api = "read"
-reasons = ["undeclared bits 0xfffc0000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_DOUT_MODE"
-api = "read"
-reasons = ["undeclared bits 0xfffffe00"]
 
 [[register]]
 peripheral = "SPI0"
@@ -17096,105 +15020,15 @@ reasons = ["undeclared bits 0xfffffe00"]
 
 [[register]]
 peripheral = "SPI0"
-register = "SPI_MEM_CLOCK_GATE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_EN"
-api = "read"
-reasons = ["undeclared bits 0xfff80000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_SR_ADDR0"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "SPI0"
 register = "SPI_MEM_NAND_FLASH_SR_DIN0"
 api = "read"
 reasons = []
 
 [[register]]
 peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_CFG_DATA0"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_CFG_DATA1"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_CFG_DATA2"
-api = "read"
-reasons = []
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_CMD_LUT0"
-api = "read"
-reasons = ["undeclared bits 0x80000000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_NAND_FLASH_SPI_SEQ0"
-api = "read"
-reasons = ["undeclared bits 0xffff8000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_LINESIZE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_DESTINATION"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_PHYSICAL_ADDRESS"
-api = "read"
-reasons = ["undeclared bits 0xc0000000"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_TRIGGER"
-api = "none"
-reasons = ["write-only field SPI_XTS_TRIGGER: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_RELEASE"
-api = "none"
-reasons = ["write-only field SPI_XTS_RELEASE: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_DESTROY"
-api = "none"
-reasons = ["write-only field SPI_XTS_DESTROY: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "SPI0"
 register = "SPI_MEM_XTS_STATE"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_DATE"
-api = "read"
-reasons = ["undeclared bits 0xc0000000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI0"
@@ -17203,34 +15037,10 @@ api = "read"
 reasons = ["overlapping fields SPIRAM_SENSITIVE, VALID", "undeclared bits 0xffffd000"]
 
 [[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_MMU_POWER_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x0000ffe6"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_DPA_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_XTS_PSEUDO_ROUND_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "SPI0"
-register = "SPI_MEM_DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
 peripheral = "SPI1"
 register = "SPI_MEM_CMD"
 api = "read"
-reasons = ["undeclared bits 0x0001ff00"]
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
@@ -17240,63 +15050,9 @@ reasons = ["undeclared bits 0xfe031083"]
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_CTRL1"
-api = "read"
-reasons = ["undeclared bits 0xffc00000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CTRL2"
-api = "none"
-reasons = ["write-only field SPI_MEM_SYNC_RESET: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CLOCK"
-api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_USER"
-api = "read"
-reasons = ["undeclared bits 0x00ff0dff"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_USER1"
-api = "read"
-reasons = ["undeclared bits 0x03ffffc0"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_USER2"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_MOSI_DLEN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_MISO_DLEN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "SPI1"
 register = "SPI_MEM_RD_STATUS"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_MISC"
-api = "read"
-reasons = ["undeclared bits 0xfffff9fc"]
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
@@ -17306,81 +15062,129 @@ reasons = []
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_CACHE_FCTRL"
+register = "SPI_MEM_W0"
 api = "read"
-reasons = ["undeclared bits 0xfffffe05"]
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_FLASH_WAITI_CTRL"
+register = "SPI_MEM_W1"
 api = "read"
-reasons = ["undeclared bits 0x000001e0"]
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W2"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W3"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W4"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W5"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W6"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W7"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W8"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W9"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W10"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W11"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W12"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W13"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W14"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_W15"
+api = "read"
+reasons = []
+
+[[register]]
+peripheral = "SPI1"
+register = "SPI_MEM_FLASH_SUS_CTRL"
+api = "read"
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
 register = "SPI_MEM_SUS_STATUS"
 api = "read"
-reasons = ["undeclared bits 0x00007f00"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_FLASH_WAITI_CTRL1"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_INT_CLR"
-api = "none"
-reasons = ["write-only field SPI_MEM_PER_END_INT_CLR: a write-trigger candidate", "write-only field SPI_MEM_PES_END_INT_CLR: a write-trigger candidate", "write-only field SPI_MEM_WPE_END_INT_CLR: a write-trigger candidate", "write-only field SPI_MEM_SLV_ST_END_INT_CLR: a write-trigger candidate", "write-only field SPI_MEM_MST_ST_END_INT_CLR: a write-trigger candidate", "write-only field SPI_MEM_BROWN_OUT_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xfffffbe0", "a raw interrupt status: what a write does is not stated"]
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
 register = "SPI_MEM_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
+reasons = []
 
 [[register]]
 peripheral = "SPI1"
 register = "SPI_MEM_DDR"
 api = "read"
-reasons = ["undeclared bits 0x82c03000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_TIMING_CALI"
-api = "read"
-reasons = ["undeclared bits 0xffffffe1"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CLOCK_GATE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
 register = "CMD"
 api = "read"
-reasons = ["undeclared bits 0xfffbff00"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -17390,93 +15194,9 @@ reasons = ["undeclared bits 0x3e439c80"]
 
 [[register]]
 peripheral = "MEMSPI2"
-register = "CTRL1"
-api = "read"
-reasons = ["write-only field RXFIFO_RST: a write-trigger candidate", "write-only field TXFIFO_RST: a write-trigger candidate", "undeclared bits 0xc03ffffc"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "CTRL2"
-api = "read"
-reasons = ["write-only field SYNC_RESET: a write-trigger candidate", "undeclared bits 0x80ff8000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "CLOCK"
-api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "USER"
-api = "read"
-reasons = ["undeclared bits 0xdbfffd3f"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "USER1"
-api = "read"
-reasons = ["undeclared bits 0x03fff000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "USER2"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "RD_STATUS"
-api = "read"
-reasons = ["undeclared bits 0xf000ffff"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "MISC"
-api = "read"
-reasons = ["undeclared bits 0xfffff80f"]
-
-[[register]]
-peripheral = "MEMSPI2"
 register = "CACHE_FCTRL"
 api = "none"
 reasons = ["a field array"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "CACHE_SCTRL"
-api = "read"
-reasons = ["undeclared bits 0xf0003000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_CMD"
-api = "read"
-reasons = ["undeclared bits 0x30002000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_DRD_CMD"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_DWR_CMD"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "SRAM_CLK"
-api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "FSM"
-api = "read"
-reasons = ["undeclared bits 0xffe0007f"]
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -17504,21 +15224,9 @@ reasons = ["a field array"]
 
 [[register]]
 peripheral = "MEMSPI2"
-register = "DDR"
-api = "read"
-reasons = ["undeclared bits 0x82c00000"]
-
-[[register]]
-peripheral = "MEMSPI2"
 register = "SMEM_DDR"
 api = "read"
 reasons = ["undeclared bits 0x82c00000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "DLL_DLY_DB"
-api = "read"
-reasons = ["field DLL_DB_CNT_CLR: a write-trigger candidate", "undeclared bits 0xffffc000"]
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -17576,27 +15284,9 @@ reasons = ["undeclared bits 0x07ffffff"]
 
 [[register]]
 peripheral = "MEMSPI2"
-register = "PMS_REJECT_ADDR"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
-
-[[register]]
-peripheral = "MEMSPI2"
 register = "ECC_CTRL"
 api = "read"
 reasons = ["undeclared bits 0x0090001f"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "ECC_ERR_ADDR"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "AXI_ERR_ADDR"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -17609,18 +15299,6 @@ peripheral = "MEMSPI2"
 register = "SMEM_AXI_ADDR_CTRL"
 api = "none"
 reasons = ["FIFO or data port candidate: a read may change it"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "AXI_ERR_RESP_EN"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "TIMING_CALI"
-api = "read"
-reasons = ["write-only field UPDATE: a write-trigger candidate", "undeclared bits 0xffffffc0"]
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -17690,15 +15368,9 @@ reasons = ["a field array"]
 
 [[register]]
 peripheral = "MEMSPI2"
-register = "CLOCK_GATE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "MEMSPI2"
 register = "NAND_FLASH_EN"
 api = "read"
-reasons = ["undeclared bits 0xfff80000"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
@@ -17734,91 +15406,25 @@ reasons = ["a field array"]
 peripheral = "MEMSPI2"
 register = "NAND_FLASH_CMD_LUT0"
 api = "read"
-reasons = ["undeclared bits 0x80000000"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
 register = "NAND_FLASH_SPI_SEQ0"
 api = "read"
-reasons = ["undeclared bits 0xffff8000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_LINESIZE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_DESTINATION"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_PHYSICAL_ADDRESS"
-api = "read"
-reasons = ["undeclared bits 0xc0000000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_TRIGGER"
-api = "none"
-reasons = ["write-only field XTS_TRIGGER: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_RELEASE"
-api = "none"
-reasons = ["write-only field XTS_RELEASE: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_DESTROY"
-api = "none"
-reasons = ["write-only field XTS_DESTROY: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI2"
 register = "XTS_STATE"
 api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_DATE"
-api = "read"
-reasons = ["undeclared bits 0xc0000000"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "MMU_POWER_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x0000ffe6"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "DPA_CTRL"
-api = "read"
-reasons = ["undeclared bits 0xffffffc0"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "XTS_PSEUDO_ROUND_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "MEMSPI2"
-register = "DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
 register = "CMD"
 api = "read"
-reasons = ["undeclared bits 0x0001ff00"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
@@ -17828,57 +15434,9 @@ reasons = ["undeclared bits 0xfe031083"]
 
 [[register]]
 peripheral = "MEMSPI3"
-register = "CTRL1"
-api = "read"
-reasons = ["undeclared bits 0xffc00000"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "CTRL2"
-api = "none"
-reasons = ["write-only field SYNC_RESET: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "CLOCK"
-api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "USER"
-api = "read"
-reasons = ["undeclared bits 0x00ff0dff"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "USER1"
-api = "read"
-reasons = ["undeclared bits 0x03ffffc0"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "USER2"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "MOSI_DLEN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "MISO_DLEN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "MEMSPI3"
 register = "RD_STATUS"
 api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
@@ -17894,75 +15452,33 @@ reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
-register = "CACHE_FCTRL"
+register = "W%s"
 api = "read"
-reasons = ["undeclared bits 0xfffffe05"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
-register = "FLASH_WAITI_CTRL"
+register = "FLASH_SUS_CTRL"
 api = "read"
-reasons = ["undeclared bits 0x000001e0"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
 register = "SUS_STATUS"
 api = "read"
-reasons = ["undeclared bits 0x00007f00"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "FLASH_WAITI_CTRL1"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
+reasons = []
 
 [[register]]
 peripheral = "MEMSPI3"
 register = "INT_CLR"
-api = "none"
-reasons = ["field PER_END has vendor modified-write values the overlay does not confirm", "write-only field PER_END: a write-trigger candidate", "field PES_END has vendor modified-write values the overlay does not confirm", "write-only field PES_END: a write-trigger candidate", "field WPE_END has vendor modified-write values the overlay does not confirm", "write-only field WPE_END: a write-trigger candidate", "field SLV_ST_END has vendor modified-write values the overlay does not confirm", "write-only field SLV_ST_END: a write-trigger candidate", "field MST_ST_END has vendor modified-write values the overlay does not confirm", "write-only field MST_ST_END: a write-trigger candidate", "field BROWN_OUT has vendor modified-write values the overlay does not confirm", "write-only field BROWN_OUT: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "INT_RAW"
 api = "read"
-reasons = ["undeclared bits 0xfffffbe0", "a raw interrupt status: what a write does is not stated"]
+reasons = ["field PER_END has vendor modified-write values the overlay does not confirm", "field PES_END has vendor modified-write values the overlay does not confirm", "field WPE_END has vendor modified-write values the overlay does not confirm", "field SLV_ST_END has vendor modified-write values the overlay does not confirm", "field MST_ST_END has vendor modified-write values the overlay does not confirm", "field BROWN_OUT has vendor modified-write values the overlay does not confirm"]
 
 [[register]]
 peripheral = "MEMSPI3"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "DDR"
-api = "read"
-reasons = ["undeclared bits 0x82c03000"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "TIMING_CALI"
-api = "read"
-reasons = ["undeclared bits 0xffffffe1"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "CLOCK_GATE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "MEMSPI3"
-register = "DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI2"
@@ -18333,26 +15849,20 @@ reasons = ["the curated model's SYSTIMER describes its word"]
 [[register]]
 peripheral = "SYSTIMER"
 register = "UNIT0_LOAD"
-api = "none"
-reasons = ["write-only field TIMER_UNIT0_LOAD: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+api = "read"
+reasons = ["undeclared bits 0xfffffffe"]
 
 [[register]]
 peripheral = "SYSTIMER"
 register = "UNIT1_LOAD"
-api = "none"
-reasons = ["write-only field TIMER_UNIT1_LOAD: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+api = "read"
+reasons = ["undeclared bits 0xfffffffe"]
 
 [[register]]
 peripheral = "SYSTIMER"
 register = "INT_ENA"
 api = "none"
 reasons = ["the curated model's SYSTIMER describes its word"]
-
-[[register]]
-peripheral = "SYSTIMER"
-register = "INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8", "a raw interrupt status: what a write does is not stated"]
 
 [[register]]
 peripheral = "SYSTIMER"
@@ -18364,7 +15874,7 @@ reasons = ["the curated model's SYSTIMER_ACKNOWLEDGE describes its word"]
 peripheral = "SYSTIMER"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
+reasons = []
 
 [[register]]
 peripheral = "SYSTIMER"
@@ -18466,7 +15976,7 @@ reasons = ["undeclared bits 0xffc00000"]
 peripheral = "TIMG0"
 register = "T0UPDATE"
 api = "read"
-reasons = ["field T_UPDATE: a write-trigger candidate", "undeclared bits 0x7fffffff"]
+reasons = []
 
 [[register]]
 peripheral = "TIMG0"
@@ -18508,7 +16018,7 @@ reasons = ["undeclared bits 0xffc00000"]
 peripheral = "TIMG0"
 register = "T1UPDATE"
 api = "read"
-reasons = ["field T_UPDATE: a write-trigger candidate", "undeclared bits 0x7fffffff"]
+reasons = []
 
 [[register]]
 peripheral = "TIMG0"
@@ -18568,7 +16078,7 @@ reasons = ["field RTC_CALI_START: a write-trigger candidate", "undeclared bits 0
 peripheral = "TIMG0"
 register = "RTCCALICFG1"
 api = "read"
-reasons = ["undeclared bits 0x0000007e"]
+reasons = []
 
 [[register]]
 peripheral = "TIMG0"
@@ -18591,20 +16101,8 @@ reasons = ["undeclared bits 0xfffffff8"]
 [[register]]
 peripheral = "TIMG0"
 register = "INT_CLR_TIMERS"
-api = "none"
-reasons = ["write-only field T0_INT_CLR: a write-trigger candidate", "write-only field T1_INT_CLR: a write-trigger candidate", "write-only field WDT_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "TIMG0"
-register = "RTCCALICFG2"
 api = "read"
-reasons = ["undeclared bits 0x00000006"]
-
-[[register]]
-peripheral = "TIMG0"
-register = "NTIMERS_DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = ["undeclared bits 0xfffffff8"]
 
 [[register]]
 peripheral = "TIMG0"
@@ -18634,7 +16132,7 @@ reasons = ["undeclared bits 0xffc00000"]
 peripheral = "TIMG1"
 register = "T0UPDATE"
 api = "read"
-reasons = ["field T_UPDATE: a write-trigger candidate", "undeclared bits 0x7fffffff"]
+reasons = []
 
 [[register]]
 peripheral = "TIMG1"
@@ -18676,7 +16174,7 @@ reasons = ["undeclared bits 0xffc00000"]
 peripheral = "TIMG1"
 register = "T1UPDATE"
 api = "read"
-reasons = ["field T_UPDATE: a write-trigger candidate", "undeclared bits 0x7fffffff"]
+reasons = []
 
 [[register]]
 peripheral = "TIMG1"
@@ -18736,7 +16234,7 @@ reasons = ["field RTC_CALI_START: a write-trigger candidate", "undeclared bits 0
 peripheral = "TIMG1"
 register = "RTCCALICFG1"
 api = "read"
-reasons = ["undeclared bits 0x0000007e"]
+reasons = []
 
 [[register]]
 peripheral = "TIMG1"
@@ -18759,20 +16257,8 @@ reasons = ["undeclared bits 0xfffffff8"]
 [[register]]
 peripheral = "TIMG1"
 register = "INT_CLR_TIMERS"
-api = "none"
-reasons = ["write-only field T0_INT_CLR: a write-trigger candidate", "write-only field T1_INT_CLR: a write-trigger candidate", "write-only field WDT_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "TIMG1"
-register = "RTCCALICFG2"
 api = "read"
-reasons = ["undeclared bits 0x00000006"]
-
-[[register]]
-peripheral = "TIMG1"
-register = "NTIMERS_DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = ["undeclared bits 0xfffffff8"]
 
 [[register]]
 peripheral = "TIMG1"
@@ -19484,45 +16970,21 @@ reasons = ["the curated model's TRNG describes its word"]
 
 [[register]]
 peripheral = "TRNG"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "TRNG"
 register = "INT_RAW"
 api = "none"
 reasons = ["the curated model's TRNG describes its word"]
 
 [[register]]
 peripheral = "TRNG"
-register = "INT_CLR"
-api = "none"
-reasons = ["write-only field ERROR_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
-
-[[register]]
-peripheral = "TRNG"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "TRNG"
-register = "ARBIT_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffe0000"]
+reasons = []
 
 [[register]]
 peripheral = "TRNG"
 register = "SW_READ"
 api = "read"
 reasons = []
-
-[[register]]
-peripheral = "TRNG"
-register = "SW_READ_ST"
-api = "read"
-reasons = ["write-only field SW_RANDOM_REQ: a write-trigger candidate", "undeclared bits 0xfffffffe"]
 
 [[register]]
 peripheral = "TRNG"
@@ -19535,12 +16997,6 @@ peripheral = "TRNG"
 register = "CRC_SYNC_DATA"
 api = "none"
 reasons = ["the curated model's TRNG describes its word"]
-
-[[register]]
-peripheral = "TRNG"
-register = "DATE"
-api = "read"
-reasons = ["undeclared bits 0xe0000000"]
 
 [[register]]
 peripheral = "LP_TSENS"
@@ -22904,51 +20360,21 @@ reasons = ["undeclared bits 0x00104000"]
 
 [[register]]
 peripheral = "USB_DEVICE"
-register = "EP1"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "USB_DEVICE"
 register = "EP1_CONF"
 api = "read"
 reasons = ["write-only field WR_DONE: a write-trigger candidate", "undeclared bits 0xfffffff9"]
 
 [[register]]
 peripheral = "USB_DEVICE"
-register = "INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xffff0000", "a raw interrupt status: what a write does is not stated"]
-
-[[register]]
-peripheral = "USB_DEVICE"
 register = "INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "INT_CLR"
-api = "none"
-reasons = ["write-only field JTAG_IN_FLUSH_INT_CLR: a write-trigger candidate", "write-only field SOF_INT_CLR: a write-trigger candidate", "write-only field SERIAL_OUT_RECV_PKT_INT_CLR: a write-trigger candidate", "write-only field SERIAL_IN_EMPTY_INT_CLR: a write-trigger candidate", "write-only field PID_ERR_INT_CLR: a write-trigger candidate", "write-only field CRC5_ERR_INT_CLR: a write-trigger candidate", "write-only field CRC16_ERR_INT_CLR: a write-trigger candidate", "write-only field STUFF_ERR_INT_CLR: a write-trigger candidate", "write-only field IN_TOKEN_REC_IN_EP1_INT_CLR: a write-trigger candidate", "write-only field USB_BUS_RESET_INT_CLR: a write-trigger candidate", "write-only field OUT_EP1_ZERO_PAYLOAD_INT_CLR: a write-trigger candidate", "write-only field OUT_EP2_ZERO_PAYLOAD_INT_CLR: a write-trigger candidate", "write-only field RTS_CHG_INT_CLR: a write-trigger candidate", "write-only field DTR_CHG_INT_CLR: a write-trigger candidate", "write-only field GET_LINE_CODE_INT_CLR: a write-trigger candidate", "write-only field SET_LINE_CODE_INT_CLR: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "CONF0"
 api = "read"
 reasons = ["undeclared bits 0xfffe0000"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "TEST"
-api = "read"
-reasons = ["undeclared bits 0xffffff80"]
 
 [[register]]
 peripheral = "USB_DEVICE"
@@ -22960,67 +20386,49 @@ reasons = ["undeclared bits 0xfffffc00"]
 peripheral = "USB_DEVICE"
 register = "FRAM_NUM"
 api = "read"
-reasons = ["undeclared bits 0xfffff800"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "IN_EP0_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "IN_EP1_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "IN_EP2_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "IN_EP3_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "OUT_EP0_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "OUT_EP1_ST"
 api = "read"
-reasons = ["undeclared bits 0xff800000"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
 register = "OUT_EP2_ST"
 api = "read"
-reasons = ["undeclared bits 0xffff0000"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "MISC_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "MEM_CONF"
-api = "read"
-reasons = ["undeclared bits 0xfffffffc"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "CHIP_RST"
-api = "read"
-reasons = ["undeclared bits 0xfffffff8"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
@@ -23032,19 +20440,7 @@ reasons = []
 peripheral = "USB_DEVICE"
 register = "SET_LINE_CODE_W1"
 api = "read"
-reasons = ["undeclared bits 0xff000000"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "GET_LINE_CODE_W1"
-api = "read"
-reasons = ["undeclared bits 0xff000000"]
-
-[[register]]
-peripheral = "USB_DEVICE"
-register = "CONFIG_UPDATE"
-api = "none"
-reasons = ["write-only field CONFIG_UPDATE: a write-trigger candidate", "undeclared bits 0xffffffff", "no readable field remains"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"
@@ -23056,7 +20452,7 @@ reasons = ["undeclared bits 0xffffffc0"]
 peripheral = "USB_DEVICE"
 register = "BUS_RESET_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
+reasons = []
 
 [[register]]
 peripheral = "USB_DEVICE"

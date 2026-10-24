@@ -22956,6 +22956,8 @@ pub mod soc {
         LP_I2C = 17,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         LP_WDT = 18,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:37.
+        LP_PERI_TIMEOUT = 19,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         LP_APM_M0 = 20,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
@@ -22970,6 +22972,8 @@ pub mod soc {
         FROM_CPU_INTR2 = 25,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         FROM_CPU_INTR3 = 26,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:45.
+        ASSIST_DEBUG = 27,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         TRACE = 28,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
@@ -22982,6 +22986,10 @@ pub mod soc {
         GPIO_EXT = 32,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         PAU = 33,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:52.
+        HP_PERI_TIMEOUT = 34,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:53.
+        MODEM_PERI_TIMEOUT = 35,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         HP_APM_M0 = 36,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
@@ -23048,6 +23056,22 @@ pub mod soc {
         PARL_IO_TX = 67,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         PARL_IO_RX = 68,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:88.
+        SLC0 = 69,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:89.
+        SLC1 = 70,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:90.
+        DMA_IN_CH0 = 71,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:91.
+        DMA_IN_CH1 = 72,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:92.
+        DMA_IN_CH2 = 73,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:93.
+        DMA_OUT_CH0 = 74,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:94.
+        DMA_OUT_CH1 = 75,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:95.
+        DMA_OUT_CH2 = 76,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         GPSPI2 = 77,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
@@ -23060,6 +23084,10 @@ pub mod soc {
         ECC = 81,
         /// SOURCE: the vendor SVD (chips/esp32c5/registers/upstream/esp32c5.svd).
         ECDSA = 82,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:102.
+        KM = 83,
+        /// SOURCE: esp-idf:components/soc/esp32c5/include/soc/interrupts.h:103.
+        MAX = 84,
     }
 
     impl Interrupt {
@@ -23091,6 +23119,7 @@ pub mod soc {
                 16 => Some(Self::LP_UART),
                 17 => Some(Self::LP_I2C),
                 18 => Some(Self::LP_WDT),
+                19 => Some(Self::LP_PERI_TIMEOUT),
                 20 => Some(Self::LP_APM_M0),
                 21 => Some(Self::LP_APM_M1),
                 22 => Some(Self::HUK),
@@ -23098,12 +23127,15 @@ pub mod soc {
                 24 => Some(Self::FROM_CPU_INTR1),
                 25 => Some(Self::FROM_CPU_INTR2),
                 26 => Some(Self::FROM_CPU_INTR3),
+                27 => Some(Self::ASSIST_DEBUG),
                 28 => Some(Self::TRACE),
                 29 => Some(Self::CACHE),
                 30 => Some(Self::CPU_PERI_TIMEOUT),
                 31 => Some(Self::GPIO),
                 32 => Some(Self::GPIO_EXT),
                 33 => Some(Self::PAU),
+                34 => Some(Self::HP_PERI_TIMEOUT),
+                35 => Some(Self::MODEM_PERI_TIMEOUT),
                 36 => Some(Self::HP_APM_M0),
                 37 => Some(Self::HP_APM_M1),
                 38 => Some(Self::HP_APM_M2),
@@ -23137,12 +23169,22 @@ pub mod soc {
                 66 => Some(Self::PCNT),
                 67 => Some(Self::PARL_IO_TX),
                 68 => Some(Self::PARL_IO_RX),
+                69 => Some(Self::SLC0),
+                70 => Some(Self::SLC1),
+                71 => Some(Self::DMA_IN_CH0),
+                72 => Some(Self::DMA_IN_CH1),
+                73 => Some(Self::DMA_IN_CH2),
+                74 => Some(Self::DMA_OUT_CH0),
+                75 => Some(Self::DMA_OUT_CH1),
+                76 => Some(Self::DMA_OUT_CH2),
                 77 => Some(Self::GPSPI2),
                 78 => Some(Self::AES),
                 79 => Some(Self::SHA),
                 80 => Some(Self::RSA),
                 81 => Some(Self::ECC),
                 82 => Some(Self::ECDSA),
+                83 => Some(Self::KM),
+                84 => Some(Self::MAX),
                 _ => None,
             }
         }
@@ -30935,18 +30977,18 @@ pub mod soc {
                 0x114, 0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140,
                 0x144, 0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170,
                 0x174, 0x178, 0x17c, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x1c8, 0x1cc,
-                0x1d0, 0x1d4, 0x1d8, 0x1dc, 0x1e0, 0x1e8, 0x1ec, 0x1f0, 0x1f4, 0x1f8, 0x500, 0x504,
-                0x508, 0x50c, 0x510, 0x514, 0x518, 0x51c, 0x520, 0x524, 0x528, 0x52c, 0x530, 0x534,
-                0x538, 0x53c, 0x540, 0x544, 0x548, 0x54c, 0x550, 0x554, 0x558, 0x55c, 0x560, 0x564,
-                0x568, 0x56c, 0x570, 0x574, 0x578, 0x57c, 0x580, 0x584, 0x588, 0x58c, 0x590, 0x594,
-                0x598, 0x59c, 0x5a0, 0x5a4, 0x5a8, 0x5ac, 0x5b0, 0x5b4, 0x5b8, 0x5bc, 0x5c0, 0x5c4,
-                0x5c8, 0x5cc, 0x5d0, 0x5d4, 0x5d8, 0x5dc, 0x5e0, 0x5e4, 0x5e8, 0x5ec, 0x5f0, 0x5f4,
-                0x5f8, 0x5fc, 0x600, 0x604, 0x608, 0x60c, 0x610, 0x614, 0x618, 0x61c, 0x620, 0x624,
-                0x628, 0x62c, 0x630, 0x634, 0x638, 0x63c, 0x640, 0x644, 0x648, 0x64c, 0x650, 0x654,
-                0x658, 0x65c, 0x660, 0x664, 0x668, 0x66c, 0x670, 0x674, 0x678, 0x67c, 0x680, 0x684,
-                0x688, 0x68c, 0x690, 0x694, 0x698, 0x69c, 0x6a0, 0x6a4, 0x6a8, 0x6ac, 0x6b0, 0x6b4,
-                0x6b8, 0x6bc, 0x6c0, 0x6c4, 0x6c8, 0x6cc, 0x6d0, 0x6d4, 0x6d8, 0x6dc, 0x6e0, 0x6e4,
-                0x6e8, 0x6ec, 0x6f0, 0x6f4, 0x6f8, 0x6fc, 0x700, 0x708,
+                0x1d0, 0x1d4, 0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8, 0x1ec, 0x1f0, 0x1f4, 0x1f8, 0x500,
+                0x504, 0x508, 0x50c, 0x510, 0x514, 0x518, 0x51c, 0x520, 0x524, 0x528, 0x52c, 0x530,
+                0x534, 0x538, 0x53c, 0x540, 0x544, 0x548, 0x54c, 0x550, 0x554, 0x558, 0x55c, 0x560,
+                0x564, 0x568, 0x56c, 0x570, 0x574, 0x578, 0x57c, 0x580, 0x584, 0x588, 0x58c, 0x590,
+                0x594, 0x598, 0x59c, 0x5a0, 0x5a4, 0x5a8, 0x5ac, 0x5b0, 0x5b4, 0x5b8, 0x5bc, 0x5c0,
+                0x5c4, 0x5c8, 0x5cc, 0x5d0, 0x5d4, 0x5d8, 0x5dc, 0x5e0, 0x5e4, 0x5e8, 0x5ec, 0x5f0,
+                0x5f4, 0x5f8, 0x5fc, 0x600, 0x604, 0x608, 0x60c, 0x610, 0x614, 0x618, 0x61c, 0x620,
+                0x624, 0x628, 0x62c, 0x630, 0x634, 0x638, 0x63c, 0x640, 0x644, 0x648, 0x64c, 0x650,
+                0x654, 0x658, 0x65c, 0x660, 0x664, 0x668, 0x66c, 0x670, 0x674, 0x678, 0x67c, 0x680,
+                0x684, 0x688, 0x68c, 0x690, 0x694, 0x698, 0x69c, 0x6a0, 0x6a4, 0x6a8, 0x6ac, 0x6b0,
+                0x6b4, 0x6b8, 0x6bc, 0x6c0, 0x6c4, 0x6c8, 0x6cc, 0x6d0, 0x6d4, 0x6d8, 0x6dc, 0x6e0,
+                0x6e4, 0x6e8, 0x6ec, 0x6f0, 0x6f4, 0x6f8, 0x6fc, 0x700, 0x708,
             ];
         }
 
@@ -31192,10 +31234,28 @@ pub mod soc {
                 date::R(self.0.read::<0x198>())
             }
 
+            /// Read `DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+                let mut value = date::W(self.0.read::<0x198>());
+                change(&mut value);
+                self.0.write::<0x198>(value.0);
+            }
+
             /// Read `CLK`.
             #[inline]
             pub fn read_clk(&self) -> clk::R {
                 clk::R(self.0.read::<0x1c8>())
+            }
+
+            /// Read `CLK`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_clk(&mut self, change: impl FnOnce(&mut clk::W)) {
+                let mut value = clk::W(self.0.read::<0x1c8>());
+                change(&mut value);
+                self.0.write::<0x1c8>(value.0);
             }
 
             /// Read `CONF`.
@@ -31222,6 +31282,19 @@ pub mod soc {
                 int_raw::R(self.0.read::<0x1d8>())
             }
 
+            /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+                int_raw::Snapshot(self.0.read::<0x1d8>() & int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+                self.0.write::<0x1d8>(snapshot.0);
+            }
+
             /// Read `INT_ST`.
             #[inline]
             pub fn read_int_st(&self) -> int_st::R {
@@ -31234,10 +31307,50 @@ pub mod soc {
                 int_ena::R(self.0.read::<0x1e0>())
             }
 
+            /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+                let mut value = int_ena::W(self.0.read::<0x1e0>());
+                change(&mut value);
+                self.0.write::<0x1e0>(value.0);
+            }
+
+            /// Read `INT_CLR`.
+            #[inline]
+            pub fn read_int_clr(&self) -> int_clr::R {
+                int_clr::R(self.0.read::<0x1e4>())
+            }
+
+            /// Write one to the write-trigger field `READ_DONE_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_read_done_int_clr(&mut self) {
+                self.0
+                    .write::<0x1e4>((self.0.read::<0x1e4>() & !int_clr::TRIGGERS) | 0x00000001);
+            }
+
+            /// Write one to the write-trigger field `PGM_DONE_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_pgm_done_int_clr(&mut self) {
+                self.0
+                    .write::<0x1e4>((self.0.read::<0x1e4>() & !int_clr::TRIGGERS) | 0x00000002);
+            }
+
             /// Read `DAC_CONF`.
             #[inline]
             pub fn read_dac_conf(&self) -> dac_conf::R {
                 dac_conf::R(self.0.read::<0x1e8>())
+            }
+
+            /// Read `DAC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_dac_conf(&mut self, change: impl FnOnce(&mut dac_conf::W)) {
+                let mut value = dac_conf::W(self.0.read::<0x1e8>());
+                change(&mut value);
+                self.0.write::<0x1e8>(value.0);
             }
 
             /// Read `RD_TIM_CONF`.
@@ -31289,6 +31402,29 @@ pub mod soc {
             #[inline]
             pub fn read_wr_tim_conf0_rs_bypass(&self) -> wr_tim_conf0_rs_bypass::R {
                 wr_tim_conf0_rs_bypass::R(self.0.read::<0x1f8>())
+            }
+
+            /// Write one to the write-trigger field `UPDATE` of `WR_TIM_CONF0_RS_BYPASS`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_wr_tim_conf0_rs_bypass_update(&mut self) {
+                self.0.write::<0x1f8>(
+                    (self.0.read::<0x1f8>() & !wr_tim_conf0_rs_bypass::TRIGGERS) | 0x00001000,
+                );
+            }
+
+            /// Read `WR_TIM_CONF0_RS_BYPASS`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_wr_tim_conf0_rs_bypass(
+                &mut self,
+                change: impl FnOnce(&mut wr_tim_conf0_rs_bypass::W),
+            ) {
+                let mut value = wr_tim_conf0_rs_bypass::W(
+                    self.0.read::<0x1f8>() & !wr_tim_conf0_rs_bypass::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0x1f8>(value.0);
             }
 
             /// Read `APB2OTP_WR_DIS`.
@@ -32069,6 +32205,15 @@ pub mod soc {
             #[inline]
             pub fn read_apb2otp_en(&self) -> apb2otp_en::R {
                 apb2otp_en::R(self.0.read::<0x708>())
+            }
+
+            /// Read `APB2OTP_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_apb2otp_en(&mut self, change: impl FnOnce(&mut apb2otp_en::W)) {
+                let mut value = apb2otp_en::W(self.0.read::<0x708>());
+                change(&mut value);
+                self.0.write::<0x708>(value.0);
             }
         }
 
@@ -33561,6 +33706,24 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Stores eFuse version.
+                #[inline]
+                pub const fn date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `DATE`.
+                #[inline]
+                pub fn set_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
+                }
+            }
         }
 
         /// The `CLK` register.
@@ -33599,6 +33762,63 @@ pub mod soc {
                 #[inline]
                 pub const fn en(self) -> bool {
                     (self.0 & 0x00010000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force eFuse SRAM into power-saving mode.
+                #[inline]
+                pub const fn mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set this bit and force to activate clock signal of eFuse SRAM.
+                #[inline]
+                pub const fn mem_clk_force_on(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force eFuse SRAM into working mode.
+                #[inline]
+                pub const fn mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set this bit to force enable eFuse register configuration clock signal.
+                #[inline]
+                pub const fn en(&self) -> bool {
+                    (self.0 & 0x00010000) != 0
+                }
+
+                /// Set `MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `MEM_CLK_FORCE_ON`.
+                #[inline]
+                pub fn set_mem_clk_force_on(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `EN`.
+                #[inline]
+                pub fn set_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
+                    self
                 }
             }
         }
@@ -33761,6 +33981,48 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// The raw bit signal for read_done interrupt.
+                #[inline]
+                pub const fn read_done_int_raw(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The snapshot without `READ_DONE_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_read_done_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000001)
+                    }
+                }
+
+                /// The raw bit signal for pgm_done interrupt.
+                #[inline]
+                pub const fn pgm_done_int_raw(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The snapshot without `PGM_DONE_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_pgm_done_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000002)
+                    }
+                }
+            }
         }
 
         /// The `INT_ST` register.
@@ -33817,6 +34079,57 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The enable signal for read_done interrupt.
+                #[inline]
+                pub const fn read_done_int_ena(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The enable signal for pgm_done interrupt.
+                #[inline]
+                pub const fn pgm_done_int_ena(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `READ_DONE_INT_ENA`.
+                #[inline]
+                pub fn set_read_done_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PGM_DONE_INT_ENA`.
+                #[inline]
+                pub fn set_pgm_done_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
+        }
+
+        /// The `INT_CLR` register.
+        ///
+        /// eFuse interrupt clear register.
+        pub mod int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000003;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x1e4;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00000003;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `DAC_CONF` register.
@@ -33855,6 +34168,63 @@ pub mod soc {
                 #[inline]
                 pub const fn oe_clr(self) -> bool {
                     (self.0 & 0x00020000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Controls the division factor of the rising clock of the programming voltage.
+                #[inline]
+                pub const fn dac_clk_div(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Don't care.
+                #[inline]
+                pub const fn dac_clk_pad_sel(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// Controls the rising period of the programming voltage.
+                #[inline]
+                pub const fn dac_num(&self) -> u8 {
+                    (self.0 >> 9) as u8
+                }
+
+                /// Reduces the power supply of the programming voltage.
+                #[inline]
+                pub const fn oe_clr(&self) -> bool {
+                    (self.0 & 0x00020000) != 0
+                }
+
+                /// Set `DAC_CLK_DIV`.
+                #[inline]
+                pub fn set_dac_clk_div(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `DAC_CLK_PAD_SEL`.
+                #[inline]
+                pub fn set_dac_clk_pad_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `DAC_NUM`.
+                #[inline]
+                pub fn set_dac_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0001fe00) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `OE_CLR`.
+                #[inline]
+                pub fn set_oe_clr(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
+                    self
                 }
             }
         }
@@ -34098,9 +34468,13 @@ pub mod soc {
         /// Configurarion register0 of eFuse programming time parameters and rs bypass operation.
         pub mod wr_tim_conf0_rs_bypass {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x001fefff;
+            pub const FIELDS: u32 = 0x001fffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x1f8;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00001000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34123,6 +34497,50 @@ pub mod soc {
                 #[inline]
                 pub const fn tpgm_inactive(self) -> u8 {
                     (self.0 >> 13) as u8
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to bypass reed solomon correction step.
+                #[inline]
+                pub const fn bypass_rs_correction(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Configures block number of programming twice operation.
+                #[inline]
+                pub const fn bypass_rs_blk_num(&self) -> oer_mmio::Bits<11> {
+                    oer_mmio::Bits::truncate(self.0 >> 1)
+                }
+
+                /// Configures the inactive programming time.
+                #[inline]
+                pub const fn tpgm_inactive(&self) -> u8 {
+                    (self.0 >> 13) as u8
+                }
+
+                /// Set `BYPASS_RS_CORRECTION`.
+                #[inline]
+                pub fn set_bypass_rs_correction(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `BYPASS_RS_BLK_NUM`.
+                #[inline]
+                pub fn set_bypass_rs_blk_num(&mut self, value: oer_mmio::Bits<11>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000ffe) | (value.get() << 1);
+                    self
+                }
+
+                /// Set `TPGM_INACTIVE`.
+                #[inline]
+                pub fn set_tpgm_inactive(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x001fe000) | (u32::from(value) << 13);
+                    self
                 }
             }
         }
@@ -36983,6 +37401,24 @@ pub mod soc {
                 #[inline]
                 pub const fn apb2otp_apb2otp_en(self) -> bool {
                     (self.0 & 0x00000001) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Apb2otp mode enable signal.
+                #[inline]
+                pub const fn apb2otp_apb2otp_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `APB2OTP_APB2OTP_EN`.
+                #[inline]
+                pub fn set_apb2otp_apb2otp_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
                 }
             }
         }
@@ -40258,10 +40694,31 @@ pub mod soc {
                 external_device_encrypt_decrypt_control::R(self.0.read::<0x0>())
             }
 
+            /// Read `EXTERNAL_DEVICE_ENCRYPT_DECRYPT_CONTROL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_external_device_encrypt_decrypt_control(
+                &mut self,
+                change: impl FnOnce(&mut external_device_encrypt_decrypt_control::W),
+            ) {
+                let mut value = external_device_encrypt_decrypt_control::W(self.0.read::<0x0>());
+                change(&mut value);
+                self.0.write::<0x0>(value.0);
+            }
+
             /// Read `SRAM_USAGE_CONF`.
             #[inline]
             pub fn read_sram_usage_conf(&self) -> sram_usage_conf::R {
                 sram_usage_conf::R(self.0.read::<0x4>())
+            }
+
+            /// Read `SRAM_USAGE_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sram_usage_conf(&mut self, change: impl FnOnce(&mut sram_usage_conf::W)) {
+                let mut value = sram_usage_conf::W(self.0.read::<0x4>());
+                change(&mut value);
+                self.0.write::<0x4>(value.0);
             }
 
             /// Read `SEC_DPA_CONF`.
@@ -40270,10 +40727,42 @@ pub mod soc {
                 sec_dpa_conf::R(self.0.read::<0x8>())
             }
 
+            /// Read `SEC_DPA_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sec_dpa_conf(&mut self, change: impl FnOnce(&mut sec_dpa_conf::W)) {
+                let mut value = sec_dpa_conf::W(self.0.read::<0x8>());
+                change(&mut value);
+                self.0.write::<0x8>(value.0);
+            }
+
             /// Read `CPU_PERI_TIMEOUT_CONF`.
             #[inline]
             pub fn read_cpu_peri_timeout_conf(&self) -> cpu_peri_timeout_conf::R {
                 cpu_peri_timeout_conf::R(self.0.read::<0xc>())
+            }
+
+            /// Write one to the write-trigger field `CPU_PERI_TIMEOUT_INT_CLEAR` of `CPU_PERI_TIMEOUT_CONF`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_cpu_peri_timeout_conf_cpu_peri_timeout_int_clear(&mut self) {
+                self.0.write::<0xc>(
+                    (self.0.read::<0xc>() & !cpu_peri_timeout_conf::TRIGGERS) | 0x00010000,
+                );
+            }
+
+            /// Read `CPU_PERI_TIMEOUT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_cpu_peri_timeout_conf(
+                &mut self,
+                change: impl FnOnce(&mut cpu_peri_timeout_conf::W),
+            ) {
+                let mut value = cpu_peri_timeout_conf::W(
+                    self.0.read::<0xc>() & !cpu_peri_timeout_conf::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0xc>(value.0);
             }
 
             /// Read `CPU_PERI_TIMEOUT_ADDR`.
@@ -40294,6 +40783,29 @@ pub mod soc {
                 hp_peri_timeout_conf::R(self.0.read::<0x18>())
             }
 
+            /// Write one to the write-trigger field `HP_PERI_TIMEOUT_INT_CLEAR` of `HP_PERI_TIMEOUT_CONF`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_hp_peri_timeout_conf_hp_peri_timeout_int_clear(&mut self) {
+                self.0.write::<0x18>(
+                    (self.0.read::<0x18>() & !hp_peri_timeout_conf::TRIGGERS) | 0x00010000,
+                );
+            }
+
+            /// Read `HP_PERI_TIMEOUT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_hp_peri_timeout_conf(
+                &mut self,
+                change: impl FnOnce(&mut hp_peri_timeout_conf::W),
+            ) {
+                let mut value = hp_peri_timeout_conf::W(
+                    self.0.read::<0x18>() & !hp_peri_timeout_conf::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0x18>(value.0);
+            }
+
             /// Read `HP_PERI_TIMEOUT_ADDR`.
             #[inline]
             pub fn read_hp_peri_timeout_addr(&self) -> hp_peri_timeout_addr::R {
@@ -40310,6 +40822,29 @@ pub mod soc {
             #[inline]
             pub fn read_modem_peri_timeout_conf(&self) -> modem_peri_timeout_conf::R {
                 modem_peri_timeout_conf::R(self.0.read::<0x24>())
+            }
+
+            /// Write one to the write-trigger field `MODEM_PERI_TIMEOUT_INT_CLEAR` of `MODEM_PERI_TIMEOUT_CONF`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_modem_peri_timeout_conf_modem_peri_timeout_int_clear(&mut self) {
+                self.0.write::<0x24>(
+                    (self.0.read::<0x24>() & !modem_peri_timeout_conf::TRIGGERS) | 0x00010000,
+                );
+            }
+
+            /// Read `MODEM_PERI_TIMEOUT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_modem_peri_timeout_conf(
+                &mut self,
+                change: impl FnOnce(&mut modem_peri_timeout_conf::W),
+            ) {
+                let mut value = modem_peri_timeout_conf::W(
+                    self.0.read::<0x24>() & !modem_peri_timeout_conf::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0x24>(value.0);
             }
 
             /// Read `MODEM_PERI_TIMEOUT_ADDR`.
@@ -40330,10 +40865,28 @@ pub mod soc {
                 sdio_ctrl::R(self.0.read::<0x30>())
             }
 
+            /// Read `SDIO_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sdio_ctrl(&mut self, change: impl FnOnce(&mut sdio_ctrl::W)) {
+                let mut value = sdio_ctrl::W(self.0.read::<0x30>());
+                change(&mut value);
+                self.0.write::<0x30>(value.0);
+            }
+
             /// Read `ROM_TABLE_LOCK`.
             #[inline]
             pub fn read_rom_table_lock(&self) -> rom_table_lock::R {
                 rom_table_lock::R(self.0.read::<0x38>())
+            }
+
+            /// Read `ROM_TABLE_LOCK`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rom_table_lock(&mut self, change: impl FnOnce(&mut rom_table_lock::W)) {
+                let mut value = rom_table_lock::W(self.0.read::<0x38>());
+                change(&mut value);
+                self.0.write::<0x38>(value.0);
             }
 
             /// Read `ROM_TABLE`.
@@ -40357,10 +40910,31 @@ pub mod soc {
                 core_debug_runstall_conf::R(self.0.read::<0x40>())
             }
 
+            /// Read `CORE_DEBUG_RUNSTALL_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_core_debug_runstall_conf(
+                &mut self,
+                change: impl FnOnce(&mut core_debug_runstall_conf::W),
+            ) {
+                let mut value = core_debug_runstall_conf::W(self.0.read::<0x40>());
+                change(&mut value);
+                self.0.write::<0x40>(value.0);
+            }
+
             /// Read `MEM_TEST_CONF`.
             #[inline]
             pub fn read_mem_test_conf(&self) -> mem_test_conf::R {
                 mem_test_conf::R(self.0.read::<0x44>())
+            }
+
+            /// Read `MEM_TEST_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_mem_test_conf(&mut self, change: impl FnOnce(&mut mem_test_conf::W)) {
+                let mut value = mem_test_conf::W(self.0.read::<0x44>());
+                change(&mut value);
+                self.0.write::<0x44>(value.0);
             }
 
             /// Read `SPROM_CTRL`.
@@ -40429,10 +41003,31 @@ pub mod soc {
                 bitscrambler_peri_sel::R(self.0.read::<0x80>())
             }
 
+            /// Read `BITSCRAMBLER_PERI_SEL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_bitscrambler_peri_sel(
+                &mut self,
+                change: impl FnOnce(&mut bitscrambler_peri_sel::W),
+            ) {
+                let mut value = bitscrambler_peri_sel::W(self.0.read::<0x80>());
+                change(&mut value);
+                self.0.write::<0x80>(value.0);
+            }
+
             /// Read `RND_ECO`.
             #[inline]
             pub fn read_rnd_eco(&self) -> rnd_eco::R {
                 rnd_eco::R(self.0.read::<0x3e0>())
+            }
+
+            /// Read `RND_ECO`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rnd_eco(&mut self, change: impl FnOnce(&mut rnd_eco::W)) {
+                let mut value = rnd_eco::W(self.0.read::<0x3e0>());
+                change(&mut value);
+                self.0.write::<0x3e0>(value.0);
             }
 
             /// Read `RND_ECO_LOW`.
@@ -40471,16 +41066,43 @@ pub mod soc {
                 debug::R(self.0.read::<0x3f4>())
             }
 
+            /// Read `DEBUG`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_debug(&mut self, change: impl FnOnce(&mut debug::W)) {
+                let mut value = debug::W(self.0.read::<0x3f4>());
+                change(&mut value);
+                self.0.write::<0x3f4>(value.0);
+            }
+
             /// Read `CLOCK_GATE`.
             #[inline]
             pub fn read_clock_gate(&self) -> clock_gate::R {
                 clock_gate::R(self.0.read::<0x3f8>())
             }
 
+            /// Read `CLOCK_GATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_clock_gate(&mut self, change: impl FnOnce(&mut clock_gate::W)) {
+                let mut value = clock_gate::W(self.0.read::<0x3f8>());
+                change(&mut value);
+                self.0.write::<0x3f8>(value.0);
+            }
+
             /// Read `DATE`.
             #[inline]
             pub fn read_date(&self) -> date::R {
                 date::R(self.0.read::<0x3fc>())
+            }
+
+            /// Read `DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+                let mut value = date::W(self.0.read::<0x3fc>());
+                change(&mut value);
+                self.0.write::<0x3fc>(value.0);
             }
         }
 
@@ -40522,6 +41144,63 @@ pub mod soc {
                     (self.0 & 0x00000008) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures whether or not to enable MSPI XTS manual encryption in SPI boot mode.\\ 0: Disable\\ 1: Enable\\
+                #[inline]
+                pub const fn enable_spi_manual_encrypt(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// reserved
+                #[inline]
+                pub const fn enable_download_db_encrypt(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Configures whether or not to enable MSPI XTS auto decryption in download boot mode.\\ 0: Disable\\ 1: Enable\\
+                #[inline]
+                pub const fn enable_download_g0cb_decrypt(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Configures whether or not to enable MSPI XTS manual encryption in download boot mode. \\ 0: Disable\\ 1: Enable\\
+                #[inline]
+                pub const fn enable_download_manual_encrypt(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set `ENABLE_SPI_MANUAL_ENCRYPT`.
+                #[inline]
+                pub fn set_enable_spi_manual_encrypt(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ENABLE_DOWNLOAD_DB_ENCRYPT`.
+                #[inline]
+                pub fn set_enable_download_db_encrypt(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `ENABLE_DOWNLOAD_G0CB_DECRYPT`.
+                #[inline]
+                pub fn set_enable_download_g0cb_decrypt(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `ENABLE_DOWNLOAD_MANUAL_ENCRYPT`.
+                #[inline]
+                pub fn set_enable_download_manual_encrypt(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+            }
         }
 
         /// The `SRAM_USAGE_CONF` register.
@@ -40556,6 +41235,43 @@ pub mod soc {
                     (self.0 & 0x00010000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// reserved
+                #[inline]
+                pub const fn cache_usage(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// 0: cpu use hp-memory. 1:mac-dump accessing hp-memory.
+                #[inline]
+                pub const fn sram_usage(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 8)
+                }
+
+                /// Set this bit as 1 to add an offset (64KB) when mac-dump accessing hp-memory.
+                #[inline]
+                pub const fn mac_dump_alloc(&self) -> bool {
+                    (self.0 & 0x00010000) != 0
+                }
+
+                /// Set `SRAM_USAGE`.
+                #[inline]
+                pub fn set_sram_usage(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000f00) | (value.get() << 8);
+                    self
+                }
+
+                /// Set `MAC_DUMP_ALLOC`.
+                #[inline]
+                pub fn set_mac_dump_alloc(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
+                    self
+                }
+            }
         }
 
         /// The `SEC_DPA_CONF` register.
@@ -40584,6 +41300,37 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures whether or not to enable anti-DPA attack. Valid only when HP_SYSTEM_SEC_DPA_CFG_SEL is 0. \\ 0: Disable\\ 1-3: Enable. The larger the number, the higher the security level, which represents the ability to resist DPA attacks, with increased computational overhead of the hardware crypto-accelerators at the same time. \\
+                #[inline]
+                pub const fn sec_dpa_level(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Configures whether to select HP_SYSTEM_SEC_DPA_LEVEL or EFUSE_SEC_DPA_LEVEL (from eFuse) to control DPA level. \\ 0: Select EFUSE_SEC_DPA_LEVEL\\ 1: Select HP_SYSTEM_SEC_DPA_LEVEL\\
+                #[inline]
+                pub const fn sec_dpa_cfg_sel(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `SEC_DPA_LEVEL`.
+                #[inline]
+                pub fn set_sec_dpa_level(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000003) | value.get();
+                    self
+                }
+
+                /// Set `SEC_DPA_CFG_SEL`.
+                #[inline]
+                pub fn set_sec_dpa_cfg_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+            }
         }
 
         /// The `CPU_PERI_TIMEOUT_CONF` register.
@@ -40591,9 +41338,13 @@ pub mod soc {
         /// CPU_PERI_TIMEOUT configuration register
         pub mod cpu_peri_timeout_conf {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0002ffff;
+            pub const FIELDS: u32 = 0x0003ffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0xc;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00010000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40610,6 +41361,37 @@ pub mod soc {
                 #[inline]
                 pub const fn cpu_peri_timeout_protect_en(self) -> bool {
                     (self.0 & 0x00020000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
+                #[inline]
+                pub const fn cpu_peri_timeout_thres(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\ 0: Disable\\ 1: Enable\\
+                #[inline]
+                pub const fn cpu_peri_timeout_protect_en(&self) -> bool {
+                    (self.0 & 0x00020000) != 0
+                }
+
+                /// Set `CPU_PERI_TIMEOUT_THRES`.
+                #[inline]
+                pub fn set_cpu_peri_timeout_thres(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `CPU_PERI_TIMEOUT_PROTECT_EN`.
+                #[inline]
+                pub fn set_cpu_peri_timeout_protect_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
+                    self
                 }
             }
         }
@@ -40663,9 +41445,13 @@ pub mod soc {
         /// HP_PERI_TIMEOUT configuration register
         pub mod hp_peri_timeout_conf {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0002ffff;
+            pub const FIELDS: u32 = 0x0003ffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x18;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00010000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40682,6 +41468,37 @@ pub mod soc {
                 #[inline]
                 pub const fn hp_peri_timeout_protect_en(self) -> bool {
                     (self.0 & 0x00020000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the timeout threshold for bus access for accessing HP peripheral register, corresponding to the number of clock cycles of the clock domain.
+                #[inline]
+                pub const fn hp_peri_timeout_thres(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// Configures whether or not to enable timeout protection for accessing HP peripheral registers.\\ 0: Disable\\ 1: Enable\\
+                #[inline]
+                pub const fn hp_peri_timeout_protect_en(&self) -> bool {
+                    (self.0 & 0x00020000) != 0
+                }
+
+                /// Set `HP_PERI_TIMEOUT_THRES`.
+                #[inline]
+                pub fn set_hp_peri_timeout_thres(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `HP_PERI_TIMEOUT_PROTECT_EN`.
+                #[inline]
+                pub fn set_hp_peri_timeout_protect_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
+                    self
                 }
             }
         }
@@ -40735,9 +41552,13 @@ pub mod soc {
         /// MODEM_PERI_TIMEOUT configuration register
         pub mod modem_peri_timeout_conf {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0002ffff;
+            pub const FIELDS: u32 = 0x0003ffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x24;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00010000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40754,6 +41575,37 @@ pub mod soc {
                 #[inline]
                 pub const fn modem_peri_timeout_protect_en(self) -> bool {
                     (self.0 & 0x00020000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set the timeout threshold for bus access, corresponding to the number of clock cycles of the clock domain.
+                #[inline]
+                pub const fn modem_peri_timeout_thres(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// Set this bit as 1 to enable timeout protection for accessing modem registers
+                #[inline]
+                pub const fn modem_peri_timeout_protect_en(&self) -> bool {
+                    (self.0 & 0x00020000) != 0
+                }
+
+                /// Set `MODEM_PERI_TIMEOUT_THRES`.
+                #[inline]
+                pub fn set_modem_peri_timeout_thres(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `MODEM_PERI_TIMEOUT_PROTECT_EN`.
+                #[inline]
+                pub fn set_modem_peri_timeout_protect_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00020000) | (u32::from(value) << 17);
+                    self
                 }
             }
         }
@@ -40828,6 +41680,37 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit as 1 to disable SDIO_PROB function. disable by default.
+                #[inline]
+                pub const fn dis_sdio_prob(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Enable sdio slave to access other peripherals on the chip
+                #[inline]
+                pub const fn sdio_win_access_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `DIS_SDIO_PROB`.
+                #[inline]
+                pub fn set_dis_sdio_prob(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SDIO_WIN_ACCESS_EN`.
+                #[inline]
+                pub fn set_sdio_win_access_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `ROM_TABLE_LOCK` register.
@@ -40848,6 +41731,24 @@ pub mod soc {
                 #[inline]
                 pub const fn rom_table_lock(self) -> bool {
                     (self.0 & 0x00000001) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures whether or not to lock the value contained in HP_SYSTEM_ROM_TABLE. \\ 0: Unlock \\ 1: Lock \\
+                #[inline]
+                pub const fn rom_table_lock(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `ROM_TABLE_LOCK`.
+                #[inline]
+                pub fn set_rom_table_lock(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
                 }
             }
         }
@@ -40918,6 +41819,30 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures whether or not to enable debug RunStall functionality between HP CPU and LP CPU.\\ 0: Disable\\ 1: Enable\\
+                #[inline]
+                pub const fn core_debug_runstall_enable(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Software can read this field to get the runstall status of hp-core. 1: stalled, 0: not stalled.
+                #[inline]
+                pub const fn core_runstalled(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `CORE_DEBUG_RUNSTALL_ENABLE`.
+                #[inline]
+                pub fn set_core_debug_runstall_enable(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `MEM_TEST_CONF` register.
@@ -40950,6 +41875,50 @@ pub mod soc {
                 #[inline]
                 pub const fn hp_mem_ra(self) -> oer_mmio::Bits<2> {
                     oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// This field controls hp system memory WPULSE parameter.
+                #[inline]
+                pub const fn hp_mem_wpulse(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// This field controls hp system memory WA parameter.
+                #[inline]
+                pub const fn hp_mem_wa(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// This field controls hp system memory RA parameter.
+                #[inline]
+                pub const fn hp_mem_ra(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// Set `HP_MEM_WPULSE`.
+                #[inline]
+                pub fn set_hp_mem_wpulse(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000007) | value.get();
+                    self
+                }
+
+                /// Set `HP_MEM_WA`.
+                #[inline]
+                pub fn set_hp_mem_wa(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000038) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `HP_MEM_RA`.
+                #[inline]
+                pub fn set_hp_mem_ra(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x000000c0) | (value.get() << 6);
+                    self
                 }
             }
         }
@@ -41140,6 +42109,37 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 4)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// select peri that will be connected to bitscrambler,dir : receive data from bs
+                #[inline]
+                pub const fn bitscrambler_rx_sel(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// select peri that will be connected to bitscrambler,dir : transfer data to peri
+                #[inline]
+                pub const fn bitscrambler_tx_sel(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 4)
+                }
+
+                /// Set `BITSCRAMBLER_RX_SEL`.
+                #[inline]
+                pub fn set_bitscrambler_rx_sel(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000000f) | value.get();
+                    self
+                }
+
+                /// Set `BITSCRAMBLER_TX_SEL`.
+                #[inline]
+                pub fn set_bitscrambler_tx_sel(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x000000f0) | (value.get() << 4);
+                    self
+                }
+            }
         }
 
         /// The `RND_ECO` register.
@@ -41166,6 +42166,30 @@ pub mod soc {
                 #[inline]
                 pub const fn redcy_result(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Only reserved for ECO.
+                #[inline]
+                pub const fn redcy_ena(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Only reserved for ECO.
+                #[inline]
+                pub const fn redcy_result(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `REDCY_ENA`.
+                #[inline]
+                pub fn set_redcy_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
                 }
             }
         }
@@ -41270,6 +42294,24 @@ pub mod soc {
                     (self.0 & 0x00000001) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Reserved
+                #[inline]
+                pub const fn fpga_debug(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `FPGA_DEBUG`.
+                #[inline]
+                pub fn set_fpga_debug(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `CLOCK_GATE` register.
@@ -41292,6 +42334,24 @@ pub mod soc {
                     (self.0 & 0x00000001) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit as 1 to force on clock gating.
+                #[inline]
+                pub const fn clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `CLK_EN`.
+                #[inline]
+                pub fn set_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `DATE` register.
@@ -41312,6 +42372,24 @@ pub mod soc {
                 #[inline]
                 pub const fn date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register.
+                #[inline]
+                pub const fn date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `DATE`.
+                #[inline]
+                pub fn set_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -45023,6 +46101,15 @@ pub mod soc {
             pub fn read_interrupt_date(&self) -> interrupt_date::R {
                 interrupt_date::R(self.0.read::<0x7fc>())
             }
+
+            /// Read `INTERRUPT_DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_interrupt_date(&mut self, change: impl FnOnce(&mut interrupt_date::W)) {
+                let mut value = interrupt_date::W(self.0.read::<0x7fc>());
+                change(&mut value);
+                self.0.write::<0x7fc>(value.0);
+            }
         }
 
         /// The `INTERRUPT_DATE` register.
@@ -45043,6 +46130,24 @@ pub mod soc {
                 #[inline]
                 pub const fn interrupt_date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register
+                #[inline]
+                pub const fn interrupt_date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `INTERRUPT_DATE`.
+                #[inline]
+                pub fn set_interrupt_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -45096,16 +46201,43 @@ pub mod soc {
                 date::R(self.0.read::<0xa0>())
             }
 
+            /// Read `DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+                let mut value = date::W(self.0.read::<0xa0>());
+                change(&mut value);
+                self.0.write::<0xa0>(value.0);
+            }
+
             /// Read `CLOCK_GATE`.
             #[inline]
             pub fn read_clock_gate(&self) -> clock_gate::R {
                 clock_gate::R(self.0.read::<0xa4>())
             }
 
+            /// Read `CLOCK_GATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_clock_gate(&mut self, change: impl FnOnce(&mut clock_gate::W)) {
+                let mut value = clock_gate::W(self.0.read::<0xa4>());
+                change(&mut value);
+                self.0.write::<0xa4>(value.0);
+            }
+
             /// Read `RND_ECO`.
             #[inline]
             pub fn read_rnd_eco(&self) -> rnd_eco::R {
                 rnd_eco::R(self.0.read::<0xac>())
+            }
+
+            /// Read `RND_ECO`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rnd_eco(&mut self, change: impl FnOnce(&mut rnd_eco::W)) {
+                let mut value = rnd_eco::W(self.0.read::<0xac>());
+                change(&mut value);
+                self.0.write::<0xac>(value.0);
             }
 
             /// Read `RND_ECO_LOW`.
@@ -45159,6 +46291,24 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register.
+                #[inline]
+                pub const fn date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `DATE`.
+                #[inline]
+                pub fn set_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
+                }
+            }
         }
 
         /// The `CLOCK_GATE` register.
@@ -45179,6 +46329,24 @@ pub mod soc {
                 #[inline]
                 pub const fn clk_en(self) -> bool {
                     (self.0 & 0x00000001) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Need add description
+                #[inline]
+                pub const fn clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `CLK_EN`.
+                #[inline]
+                pub fn set_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
                 }
             }
         }
@@ -45207,6 +46375,30 @@ pub mod soc {
                 #[inline]
                 pub const fn redcy_result(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Only reserved for ECO.
+                #[inline]
+                pub const fn redcy_ena(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Only reserved for ECO.
+                #[inline]
+                pub const fn redcy_result(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `REDCY_ENA`.
+                #[inline]
+                pub fn set_redcy_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
                 }
             }
         }
@@ -45349,6 +46541,15 @@ pub mod soc {
             pub fn read_date(&self) -> date::R {
                 date::R(self.0.read::<0x1fc>())
             }
+
+            /// Read `DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+                let mut value = date::W(self.0.read::<0x1fc>());
+                change(&mut value);
+                self.0.write::<0x1fc>(value.0);
+            }
         }
 
         /// The `GPIO%s` register.
@@ -45474,6 +46675,24 @@ pub mod soc {
                 #[inline]
                 pub const fn reg_date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register
+                #[inline]
+                pub const fn reg_date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `REG_DATE`.
+                #[inline]
+                pub fn set_reg_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -47358,6 +48577,31 @@ pub mod soc {
                 reset_en::R(self.0.read::<0x4>())
             }
 
+            /// Write one to the write-trigger field `BUS_RESET_EN` of `RESET_EN`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_reset_en_bus_reset_en(&mut self) {
+                self.0
+                    .write::<0x4>((self.0.read::<0x4>() & !reset_en::TRIGGERS) | 0x00800000);
+            }
+
+            /// Write one to the write-trigger field `LP_CPU_RESET_EN` of `RESET_EN`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_reset_en_lp_cpu_reset_en(&mut self) {
+                self.0
+                    .write::<0x4>((self.0.read::<0x4>() & !reset_en::TRIGGERS) | 0x80000000);
+            }
+
+            /// Read `RESET_EN`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_reset_en(&mut self, change: impl FnOnce(&mut reset_en::W)) {
+                let mut value = reset_en::W(self.0.read::<0x4>() & !reset_en::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x4>(value.0);
+            }
+
             /// Read `RNG_DATA`.
             #[inline]
             pub fn read_rng_data(&self) -> rng_data::R {
@@ -47370,10 +48614,36 @@ pub mod soc {
                 cpu::R(self.0.read::<0xc>())
             }
 
+            /// Read `CPU`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_cpu(&mut self, change: impl FnOnce(&mut cpu::W)) {
+                let mut value = cpu::W(self.0.read::<0xc>());
+                change(&mut value);
+                self.0.write::<0xc>(value.0);
+            }
+
             /// Read `BUS_TIMEOUT`.
             #[inline]
             pub fn read_bus_timeout(&self) -> bus_timeout::R {
                 bus_timeout::R(self.0.read::<0x10>())
+            }
+
+            /// Write one to the write-trigger field `LP_PERI_TIMEOUT_INT_CLEAR` of `BUS_TIMEOUT`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_bus_timeout_lp_peri_timeout_int_clear(&mut self) {
+                self.0
+                    .write::<0x10>((self.0.read::<0x10>() & !bus_timeout::TRIGGERS) | 0x40000000);
+            }
+
+            /// Read `BUS_TIMEOUT`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_bus_timeout(&mut self, change: impl FnOnce(&mut bus_timeout::W)) {
+                let mut value = bus_timeout::W(self.0.read::<0x10>() & !bus_timeout::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x10>(value.0);
             }
 
             /// Read `BUS_TIMEOUT_ADDR`.
@@ -47421,9 +48691,13 @@ pub mod soc {
         /// configure peri in lp system reset enable
         pub mod reset_en {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x7f000000;
+            pub const FIELDS: u32 = 0xff800000;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x4;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80800000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47472,6 +48746,102 @@ pub mod soc {
                     (self.0 & 0x40000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// lp rng reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn lp_rng_reset_en(&self) -> bool {
+                    (self.0 & 0x01000000) != 0
+                }
+
+                /// lp optdebug reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn otp_dbg_reset_en(&self) -> bool {
+                    (self.0 & 0x02000000) != 0
+                }
+
+                /// lp uart reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn lp_uart_reset_en(&self) -> bool {
+                    (self.0 & 0x04000000) != 0
+                }
+
+                /// lp io reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn lp_io_reset_en(&self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// lp ext i2c reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn lp_ext_i2c_reset_en(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// lp analog peri reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn lp_ana_i2c_reset_en(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// efuse core reset enable 1: enable reset 0: disable reset
+                #[inline]
+                pub const fn efuse_reset_en(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Set `LP_RNG_RESET_EN`.
+                #[inline]
+                pub fn set_lp_rng_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                    self
+                }
+
+                /// Set `OTP_DBG_RESET_EN`.
+                #[inline]
+                pub fn set_otp_dbg_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                    self
+                }
+
+                /// Set `LP_UART_RESET_EN`.
+                #[inline]
+                pub fn set_lp_uart_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                    self
+                }
+
+                /// Set `LP_IO_RESET_EN`.
+                #[inline]
+                pub fn set_lp_io_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                    self
+                }
+
+                /// Set `LP_EXT_I2C_RESET_EN`.
+                #[inline]
+                pub fn set_lp_ext_i2c_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `LP_ANA_I2C_RESET_EN`.
+                #[inline]
+                pub fn set_lp_ana_i2c_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `EFUSE_RESET_EN`.
+                #[inline]
+                pub fn set_efuse_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+            }
         }
 
         /// The `RNG_DATA` register.
@@ -47516,6 +48886,24 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// disable lp cpu dbg bus 1: disable 0: enable
+                #[inline]
+                pub const fn lpcore_dbgm_unavaliable(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LPCORE_DBGM_UNAVALIABLE`.
+                #[inline]
+                pub fn set_lpcore_dbgm_unavaliable(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `BUS_TIMEOUT` register.
@@ -47523,9 +48911,13 @@ pub mod soc {
         /// configure lp bus timeout
         pub mod bus_timeout {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xbfffc000;
+            pub const FIELDS: u32 = 0xffffc000;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x10;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x40000000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47542,6 +48934,37 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_peri_timeout_protect_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// the timeout thres which bus access time, the timeout clk is lp_aon_fast
+                #[inline]
+                pub const fn lp_peri_timeout_thres(&self) -> u16 {
+                    (self.0 >> 14) as u16
+                }
+
+                /// enable lp bus timeout or not,when bus timeout, the ready will been force high by fsm 1: enable 0: disable
+                #[inline]
+                pub const fn lp_peri_timeout_protect_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_PERI_TIMEOUT_THRES`.
+                #[inline]
+                pub fn set_lp_peri_timeout_thres(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x3fffc000) | (u32::from(value) << 14);
+                    self
+                }
+
+                /// Set `LP_PERI_TIMEOUT_PROTECT_EN`.
+                #[inline]
+                pub fn set_lp_peri_timeout_protect_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -48389,6 +49812,15 @@ pub mod soc {
                 gpio_mux::R(self.0.read::<0x28>())
             }
 
+            /// Read `GPIO_MUX`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_gpio_mux(&mut self, change: impl FnOnce(&mut gpio_mux::W)) {
+                let mut value = gpio_mux::W(self.0.read::<0x28>());
+                change(&mut value);
+                self.0.write::<0x28>(value.0);
+            }
+
             /// Read `GPIO_HOLD0`.
             #[inline]
             pub fn read_gpio_hold0(&self) -> gpio_hold0::R {
@@ -48431,10 +49863,36 @@ pub mod soc {
                 cpucore0_cfg::R(self.0.read::<0x38>())
             }
 
+            /// Write one to the write-trigger field `CPU_CORE0_SW_RESET` of `CPUCORE0_CFG`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_cpucore0_cfg_cpu_core0_sw_reset(&mut self) {
+                self.0
+                    .write::<0x38>((self.0.read::<0x38>() & !cpucore0_cfg::TRIGGERS) | 0x10000000);
+            }
+
+            /// Read `CPUCORE0_CFG`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_cpucore0_cfg(&mut self, change: impl FnOnce(&mut cpucore0_cfg::W)) {
+                let mut value = cpucore0_cfg::W(self.0.read::<0x38>() & !cpucore0_cfg::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x38>(value.0);
+            }
+
             /// Read `IO_MUX`.
             #[inline]
             pub fn read_io_mux(&self) -> io_mux::R {
                 io_mux::R(self.0.read::<0x3c>())
+            }
+
+            /// Read `IO_MUX`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_io_mux(&mut self, change: impl FnOnce(&mut io_mux::W)) {
+                let mut value = io_mux::W(self.0.read::<0x3c>());
+                change(&mut value);
+                self.0.write::<0x3c>(value.0);
             }
 
             /// Read `EXT_WAKEUP_CNTL`.
@@ -48443,10 +49901,38 @@ pub mod soc {
                 ext_wakeup_cntl::R(self.0.read::<0x40>())
             }
 
+            /// Write one to the write-trigger field `EXT_WAKEUP_STATUS_CLR` of `EXT_WAKEUP_CNTL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_ext_wakeup_cntl_ext_wakeup_status_clr(&mut self) {
+                self.0.write::<0x40>(
+                    (self.0.read::<0x40>() & !ext_wakeup_cntl::TRIGGERS) | 0x00004000,
+                );
+            }
+
+            /// Read `EXT_WAKEUP_CNTL`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_ext_wakeup_cntl(&mut self, change: impl FnOnce(&mut ext_wakeup_cntl::W)) {
+                let mut value =
+                    ext_wakeup_cntl::W(self.0.read::<0x40>() & !ext_wakeup_cntl::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x40>(value.0);
+            }
+
             /// Read `USB`.
             #[inline]
             pub fn read_usb(&self) -> usb::R {
                 usb::R(self.0.read::<0x44>())
+            }
+
+            /// Read `USB`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_usb(&mut self, change: impl FnOnce(&mut usb::W)) {
+                let mut value = usb::W(self.0.read::<0x44>());
+                change(&mut value);
+                self.0.write::<0x44>(value.0);
             }
 
             /// Read `LPBUS`.
@@ -48455,10 +49941,36 @@ pub mod soc {
                 lpbus::R(self.0.read::<0x48>())
             }
 
+            /// Write one to the write-trigger field `FAST_MEM_MUX_SEL_UPDATE` of `LPBUS`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lpbus_fast_mem_mux_sel_update(&mut self) {
+                self.0
+                    .write::<0x48>((self.0.read::<0x48>() & !lpbus::TRIGGERS) | 0x40000000);
+            }
+
+            /// Read `LPBUS`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_lpbus(&mut self, change: impl FnOnce(&mut lpbus::W)) {
+                let mut value = lpbus::W(self.0.read::<0x48>() & !lpbus::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x48>(value.0);
+            }
+
             /// Read `SDIO_ACTIVE`.
             #[inline]
             pub fn read_sdio_active(&self) -> sdio_active::R {
                 sdio_active::R(self.0.read::<0x4c>())
+            }
+
+            /// Read `SDIO_ACTIVE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sdio_active(&mut self, change: impl FnOnce(&mut sdio_active::W)) {
+                let mut value = sdio_active::W(self.0.read::<0x4c>());
+                change(&mut value);
+                self.0.write::<0x4c>(value.0);
             }
 
             /// Read `LPCORE`.
@@ -48471,6 +49983,15 @@ pub mod soc {
             #[inline]
             pub fn read_modem_bus(&self) -> modem_bus::R {
                 modem_bus::R(self.0.read::<0x58>())
+            }
+
+            /// Read `MODEM_BUS`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_modem_bus(&mut self, change: impl FnOnce(&mut modem_bus::W)) {
+                let mut value = modem_bus::W(self.0.read::<0x58>());
+                change(&mut value);
+                self.0.write::<0x58>(value.0);
             }
 
             /// Read `SPRAM_CTRL`.
@@ -48509,10 +50030,28 @@ pub mod soc {
                 debug_sel0::R(self.0.read::<0x68>())
             }
 
+            /// Read `DEBUG_SEL0`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_debug_sel0(&mut self, change: impl FnOnce(&mut debug_sel0::W)) {
+                let mut value = debug_sel0::W(self.0.read::<0x68>());
+                change(&mut value);
+                self.0.write::<0x68>(value.0);
+            }
+
             /// Read `DEBUG_SEL1`.
             #[inline]
             pub fn read_debug_sel1(&self) -> debug_sel1::R {
                 debug_sel1::R(self.0.read::<0x6c>())
+            }
+
+            /// Read `DEBUG_SEL1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_debug_sel1(&mut self, change: impl FnOnce(&mut debug_sel1::W)) {
+                let mut value = debug_sel1::W(self.0.read::<0x6c>());
+                change(&mut value);
+                self.0.write::<0x6c>(value.0);
             }
 
             /// Read `BACKUP_DMA_CFG0`.
@@ -48521,10 +50060,28 @@ pub mod soc {
                 backup_dma_cfg0::R(self.0.read::<0x70>())
             }
 
+            /// Read `BACKUP_DMA_CFG0`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_backup_dma_cfg0(&mut self, change: impl FnOnce(&mut backup_dma_cfg0::W)) {
+                let mut value = backup_dma_cfg0::W(self.0.read::<0x70>());
+                change(&mut value);
+                self.0.write::<0x70>(value.0);
+            }
+
             /// Read `BACKUP_DMA_CFG1`.
             #[inline]
             pub fn read_backup_dma_cfg1(&self) -> backup_dma_cfg1::R {
                 backup_dma_cfg1::R(self.0.read::<0x74>())
+            }
+
+            /// Read `BACKUP_DMA_CFG1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_backup_dma_cfg1(&mut self, change: impl FnOnce(&mut backup_dma_cfg1::W)) {
+                let mut value = backup_dma_cfg1::W(self.0.read::<0x74>());
+                change(&mut value);
+                self.0.write::<0x74>(value.0);
             }
 
             /// Read `BACKUP_DMA_CFG2`.
@@ -48546,6 +50103,15 @@ pub mod soc {
             #[inline]
             pub fn read_mem_ctrl(&self) -> mem_ctrl::R {
                 mem_ctrl::R(self.0.read::<0x7c>())
+            }
+
+            /// Read `MEM_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_mem_ctrl(&mut self, change: impl FnOnce(&mut mem_ctrl::W)) {
+                let mut value = mem_ctrl::W(self.0.read::<0x7c>());
+                change(&mut value);
+                self.0.write::<0x7c>(value.0);
             }
 
             /// Read `DATE`.
@@ -48984,6 +50550,24 @@ pub mod soc {
                     (self.0) as u8
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// select the lp io 0~7 controlled by hp iomux or lp iomux 1: controlled by lp iomux 0: controlled by hp iomux
+                #[inline]
+                pub const fn sel(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Set `SEL`.
+                #[inline]
+                pub fn set_sel(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `GPIO_HOLD0` register.
@@ -49099,9 +50683,13 @@ pub mod soc {
         /// configure core reset register
         pub mod cpucore0_cfg {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xe00000ff;
+            pub const FIELDS: u32 = 0xf00000ff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x38;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x10000000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49132,6 +50720,63 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// enable cpu entry stall status 0x86: entry stall status Others : no operation
+                #[inline]
+                pub const fn cpu_core0_sw_stall(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// reserved
+                #[inline]
+                pub const fn cpu_core0_ocd_halt_on_reset(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// configure core boot address 1: ROM 0: lp memory
+                #[inline]
+                pub const fn cpu_core0_stat_vector_sel(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// disable bypass core dreset 1: enable bypass 0: disable bypass
+                #[inline]
+                pub const fn cpu_core0_dreset_mask(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `CPU_CORE0_SW_STALL`.
+                #[inline]
+                pub fn set_cpu_core0_sw_stall(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `CPU_CORE0_OCD_HALT_ON_RESET`.
+                #[inline]
+                pub fn set_cpu_core0_ocd_halt_on_reset(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `CPU_CORE0_STAT_VECTOR_SEL`.
+                #[inline]
+                pub fn set_cpu_core0_stat_vector_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `CPU_CORE0_DRESET_MASK`.
+                #[inline]
+                pub fn set_cpu_core0_dreset_mask(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `IO_MUX` register.
@@ -49154,6 +50799,24 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// bypass hp iomux reset from hp system reset event 1: bypass 0: no operation
+                #[inline]
+                pub const fn reset_disable(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `RESET_DISABLE`.
+                #[inline]
+                pub fn set_reset_disable(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `EXT_WAKEUP_CNTL` register.
@@ -49161,9 +50824,13 @@ pub mod soc {
         /// configure alwayson external io wakeup
         pub mod ext_wakeup_cntl {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xffff80ff;
+            pub const FIELDS: u32 = 0xffffc0ff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x40;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00004000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49194,6 +50861,56 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// get external wakeup status bitmap
+                #[inline]
+                pub const fn ext_wakeup_status(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// enable io0~7 bit map use to external wakeup 1: enable 0: disable
+                #[inline]
+                pub const fn ext_wakeup_sel(&self) -> u8 {
+                    (self.0 >> 15) as u8
+                }
+
+                /// select external wakeup io level 1: io high level wakeup 0: io low level wakeup
+                #[inline]
+                pub const fn ext_wakeup_lv(&self) -> u8 {
+                    (self.0 >> 23) as u8
+                }
+
+                /// enable external filter or not 1: enable 0: disable
+                #[inline]
+                pub const fn ext_wakeup_filter(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `EXT_WAKEUP_SEL`.
+                #[inline]
+                pub fn set_ext_wakeup_sel(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x007f8000) | (u32::from(value) << 15);
+                    self
+                }
+
+                /// Set `EXT_WAKEUP_LV`.
+                #[inline]
+                pub fn set_ext_wakeup_lv(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x7f800000) | (u32::from(value) << 23);
+                    self
+                }
+
+                /// Set `EXT_WAKEUP_FILTER`.
+                #[inline]
+                pub fn set_ext_wakeup_filter(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `USB` register.
@@ -49216,6 +50933,24 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// bypass usb reset from hp system reset event 1: bypass 0: no operation
+                #[inline]
+                pub const fn reset_disable(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `RESET_DISABLE`.
+                #[inline]
+                pub fn set_reset_disable(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LPBUS` register.
@@ -49223,9 +50958,13 @@ pub mod soc {
         /// Select lp memory bus
         pub mod lpbus {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xb0000000;
+            pub const FIELDS: u32 = 0xf0000000;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x48;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x40000000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49250,6 +50989,36 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// get current lp memory bus fsm status
+                #[inline]
+                pub const fn fast_mem_mux_fsm_idle(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// get current lp memory bus mode
+                #[inline]
+                pub const fn fast_mem_mux_sel_status(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// select lp memory bus is high speed mode or low speed mode 1: high speed from hp system ahb 0: low speed from lp system
+                #[inline]
+                pub const fn fast_mem_mux_sel(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `FAST_MEM_MUX_SEL`.
+                #[inline]
+                pub fn set_fast_mem_mux_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `SDIO_ACTIVE` register.
@@ -49270,6 +51039,24 @@ pub mod soc {
                 #[inline]
                 pub const fn sdio_act_dnum(self) -> oer_mmio::Bits<10> {
                     oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// reserved
+                #[inline]
+                pub const fn sdio_act_dnum(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Set `SDIO_ACT_DNUM`.
+                #[inline]
+                pub fn set_sdio_act_dnum(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                    self.0 = (self.0 & !0xffc00000) | (value.get() << 22);
+                    self
                 }
             }
         }
@@ -49320,6 +51107,24 @@ pub mod soc {
                 #[inline]
                 pub const fn modem_sync_bridge_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// enable modem sync bridge or not 1: enable 0: disable
+                #[inline]
+                pub const fn modem_sync_bridge_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `MODEM_SYNC_BRIDGE_EN`.
+                #[inline]
+                pub fn set_modem_sync_bridge_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -49442,6 +51247,63 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 21)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need des
+                #[inline]
+                pub const fn lp_debug_sel0(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// need des
+                #[inline]
+                pub const fn lp_debug_sel1(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 7)
+                }
+
+                /// need des
+                #[inline]
+                pub const fn lp_debug_sel2(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 14)
+                }
+
+                /// need des
+                #[inline]
+                pub const fn lp_debug_sel3(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 21)
+                }
+
+                /// Set `LP_DEBUG_SEL0`.
+                #[inline]
+                pub fn set_lp_debug_sel0(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000007f) | value.get();
+                    self
+                }
+
+                /// Set `LP_DEBUG_SEL1`.
+                #[inline]
+                pub fn set_lp_debug_sel1(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x00003f80) | (value.get() << 7);
+                    self
+                }
+
+                /// Set `LP_DEBUG_SEL2`.
+                #[inline]
+                pub fn set_lp_debug_sel2(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x001fc000) | (value.get() << 14);
+                    self
+                }
+
+                /// Set `LP_DEBUG_SEL3`.
+                #[inline]
+                pub fn set_lp_debug_sel3(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fe00000) | (value.get() << 21);
+                    self
+                }
+            }
         }
 
         /// The `DEBUG_SEL1` register.
@@ -49462,6 +51324,24 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_debug_sel4(self) -> oer_mmio::Bits<7> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need des
+                #[inline]
+                pub const fn lp_debug_sel4(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `LP_DEBUG_SEL4`.
+                #[inline]
+                pub fn set_lp_debug_sel4(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000007f) | value.get();
+                    self
                 }
             }
         }
@@ -49496,6 +51376,53 @@ pub mod soc {
                 #[inline]
                 pub const fn branch_link_length_aon(self) -> oer_mmio::Bits<4> {
                     oer_mmio::Bits::truncate(self.0 >> 12)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this field to configure max value of burst in signle transfer.
+                #[inline]
+                pub const fn burst_limit_aon(&self) -> oer_mmio::Bits<5> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set this field to configure read registers' interval time in reading mode.
+                #[inline]
+                pub const fn read_interval_aon(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 5)
+                }
+
+                /// Set this field to configure link address.
+                #[inline]
+                pub const fn branch_link_length_aon(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 12)
+                }
+
+                /// Set `BURST_LIMIT_AON`.
+                #[inline]
+                pub fn set_burst_limit_aon(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000001f) | value.get();
+                    self
+                }
+
+                /// Set `READ_INTERVAL_AON`.
+                #[inline]
+                pub fn set_read_interval_aon(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fe0) | (value.get() << 5);
+                    self
+                }
+
+                /// Set `BRANCH_LINK_LENGTH_AON`.
+                #[inline]
+                pub fn set_branch_link_length_aon(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0000f000) | (value.get() << 12);
+                    self
                 }
             }
         }
@@ -49536,6 +51463,72 @@ pub mod soc {
                 #[inline]
                 pub const fn aon_bypass(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this field to configure the number of consecutive links of link list.
+                #[inline]
+                pub const fn link_wait_tout_thres_aon(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set this field to configure maximum waiting time in waiting mode.
+                #[inline]
+                pub const fn link_work_tout_thres_aon(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 10)
+                }
+
+                /// Set this field to configure maximum waiting time in backup mode.
+                #[inline]
+                pub const fn link_backup_tout_thres_aon(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// reserved
+                #[inline]
+                pub const fn aon_bypass(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LINK_WAIT_TOUT_THRES_AON`.
+                #[inline]
+                pub fn set_link_wait_tout_thres_aon(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000003ff) | value.get();
+                    self
+                }
+
+                /// Set `LINK_WORK_TOUT_THRES_AON`.
+                #[inline]
+                pub fn set_link_work_tout_thres_aon(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000ffc00) | (value.get() << 10);
+                    self
+                }
+
+                /// Set `LINK_BACKUP_TOUT_THRES_AON`.
+                #[inline]
+                pub fn set_link_backup_tout_thres_aon(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x3ff00000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `AON_BYPASS`.
+                #[inline]
+                pub fn set_aon_bypass(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -49616,6 +51609,63 @@ pub mod soc {
                 #[inline]
                 pub const fn huk_mem_force_pu(self) -> bool {
                     (self.0 & 0x00000008) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// force off lp memory
+                #[inline]
+                pub const fn lp_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// force on lp memory
+                #[inline]
+                pub const fn lp_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// force off huk memory
+                #[inline]
+                pub const fn huk_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// force on huk memory
+                #[inline]
+                pub const fn huk_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set `LP_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_lp_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `LP_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_lp_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `HUK_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_huk_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `HUK_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_huk_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
                 }
             }
         }
@@ -50308,10 +52358,28 @@ pub mod soc {
                 lp_clk_conf::R(self.0.read::<0x0>())
             }
 
+            /// Read `LP_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_clk_conf(&mut self, change: impl FnOnce(&mut lp_clk_conf::W)) {
+                let mut value = lp_clk_conf::W(self.0.read::<0x0>());
+                change(&mut value);
+                self.0.write::<0x0>(value.0);
+            }
+
             /// Read `LP_CLK_PO_EN`.
             #[inline]
             pub fn read_lp_clk_po_en(&self) -> lp_clk_po_en::R {
                 lp_clk_po_en::R(self.0.read::<0x4>())
+            }
+
+            /// Read `LP_CLK_PO_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_clk_po_en(&mut self, change: impl FnOnce(&mut lp_clk_po_en::W)) {
+                let mut value = lp_clk_po_en::W(self.0.read::<0x4>());
+                change(&mut value);
+                self.0.write::<0x4>(value.0);
             }
 
             /// Read `LP_CLK_EN`.
@@ -50320,10 +52388,28 @@ pub mod soc {
                 lp_clk_en::R(self.0.read::<0x8>())
             }
 
+            /// Read `LP_CLK_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_clk_en(&mut self, change: impl FnOnce(&mut lp_clk_en::W)) {
+                let mut value = lp_clk_en::W(self.0.read::<0x8>());
+                change(&mut value);
+                self.0.write::<0x8>(value.0);
+            }
+
             /// Read `LP_RST_EN`.
             #[inline]
             pub fn read_lp_rst_en(&self) -> lp_rst_en::R {
                 lp_rst_en::R(self.0.read::<0xc>())
+            }
+
+            /// Read `LP_RST_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_rst_en(&mut self, change: impl FnOnce(&mut lp_rst_en::W)) {
+                let mut value = lp_rst_en::W(self.0.read::<0xc>());
+                change(&mut value);
+                self.0.write::<0xc>(value.0);
             }
 
             /// Read `CPU_RESET`.
@@ -50332,10 +52418,28 @@ pub mod soc {
                 cpu_reset::R(self.0.read::<0x14>())
             }
 
+            /// Read `CPU_RESET`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_cpu_reset(&mut self, change: impl FnOnce(&mut cpu_reset::W)) {
+                let mut value = cpu_reset::W(self.0.read::<0x14>());
+                change(&mut value);
+                self.0.write::<0x14>(value.0);
+            }
+
             /// Read `FOSC_CNTL`.
             #[inline]
             pub fn read_fosc_cntl(&self) -> fosc_cntl::R {
                 fosc_cntl::R(self.0.read::<0x18>())
+            }
+
+            /// Read `FOSC_CNTL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_fosc_cntl(&mut self, change: impl FnOnce(&mut fosc_cntl::W)) {
+                let mut value = fosc_cntl::W(self.0.read::<0x18>());
+                change(&mut value);
+                self.0.write::<0x18>(value.0);
             }
 
             /// Read `RC32K_CNTL`.
@@ -50344,10 +52448,28 @@ pub mod soc {
                 rc32k_cntl::R(self.0.read::<0x1c>())
             }
 
+            /// Read `RC32K_CNTL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rc32k_cntl(&mut self, change: impl FnOnce(&mut rc32k_cntl::W)) {
+                let mut value = rc32k_cntl::W(self.0.read::<0x1c>());
+                change(&mut value);
+                self.0.write::<0x1c>(value.0);
+            }
+
             /// Read `CLK_TO_HP`.
             #[inline]
             pub fn read_clk_to_hp(&self) -> clk_to_hp::R {
                 clk_to_hp::R(self.0.read::<0x20>())
+            }
+
+            /// Read `CLK_TO_HP`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_clk_to_hp(&mut self, change: impl FnOnce(&mut clk_to_hp::W)) {
+                let mut value = clk_to_hp::W(self.0.read::<0x20>());
+                change(&mut value);
+                self.0.write::<0x20>(value.0);
             }
 
             /// Read `LPMEM_FORCE`.
@@ -50356,16 +52478,43 @@ pub mod soc {
                 lpmem_force::R(self.0.read::<0x24>())
             }
 
+            /// Read `LPMEM_FORCE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lpmem_force(&mut self, change: impl FnOnce(&mut lpmem_force::W)) {
+                let mut value = lpmem_force::W(self.0.read::<0x24>());
+                change(&mut value);
+                self.0.write::<0x24>(value.0);
+            }
+
             /// Read `LPPERI`.
             #[inline]
             pub fn read_lpperi(&self) -> lpperi::R {
                 lpperi::R(self.0.read::<0x28>())
             }
 
+            /// Read `LPPERI`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lpperi(&mut self, change: impl FnOnce(&mut lpperi::W)) {
+                let mut value = lpperi::W(self.0.read::<0x28>());
+                change(&mut value);
+                self.0.write::<0x28>(value.0);
+            }
+
             /// Read `XTAL32K`.
             #[inline]
             pub fn read_xtal32k(&self) -> xtal32k::R {
                 xtal32k::R(self.0.read::<0x2c>())
+            }
+
+            /// Read `XTAL32K`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_xtal32k(&mut self, change: impl FnOnce(&mut xtal32k::W)) {
+                let mut value = xtal32k::W(self.0.read::<0x2c>());
+                change(&mut value);
+                self.0.write::<0x2c>(value.0);
             }
 
             /// Read `DATE`.
@@ -50414,6 +52563,50 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_peri_div_num(self) -> u8 {
                     (self.0 >> 4) as u8
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the source of LP_SLOW_CLK. 0: RC_SLOW_CLK 1: XTAL32K_CLK 2: RC32K_CLK 3:OSC_SLOW_CLK
+                #[inline]
+                pub const fn slow_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// configures the source of LP_FAST_CLK. 0: RC_FAST_CLK 1: XTAL_D2_CLK 2: XTAL_CLK
+                #[inline]
+                pub const fn fast_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 2)
+                }
+
+                /// reserved
+                #[inline]
+                pub const fn lp_peri_div_num(&self) -> u8 {
+                    (self.0 >> 4) as u8
+                }
+
+                /// Set `SLOW_CLK_SEL`.
+                #[inline]
+                pub fn set_slow_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000003) | value.get();
+                    self
+                }
+
+                /// Set `FAST_CLK_SEL`.
+                #[inline]
+                pub fn set_fast_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000000c) | (value.get() << 2);
+                    self
+                }
+
+                /// Set `LP_PERI_DIV_NUM`.
+                #[inline]
+                pub fn set_lp_peri_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x00000ff0) | (u32::from(value) << 4);
+                    self
                 }
             }
         }
@@ -50498,6 +52691,154 @@ pub mod soc {
                     (self.0 & 0x00000400) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock gate to pad of the LP_DYN_SLOW_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn aon_slow_oen(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Configures the clock gate to pad of the LP_DYN_FAST_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn aon_fast_oen(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Configures the clock gate to pad of the OSC_SLOW_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn sosc_oen(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Configures the clock gate to pad of the RC_FAST_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn fosc_oen(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Configures the clock gate to pad of the RC32K_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn osc32k_oen(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// Configures the clock gate to pad of the XTAL32K_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn xtal32k_oen(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// Configures the clock gate to pad of the EFUSE_CTRL clock. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn core_efuse_oen(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// Configures the clock gate to pad of the LP_SLOW_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn slow_oen(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// Configures the clock gate to pad of the LP_FAST_CLK. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn fast_oen(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// Configures the clock gate to pad of the RNG clk. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn rng_oen(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// Configures the clock gate to pad of the LP bus clk. 0: Disable the clk pass clock gate 1: Enable the clk pass clock gate
+                #[inline]
+                pub const fn lpbus_oen(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set `AON_SLOW_OEN`.
+                #[inline]
+                pub fn set_aon_slow_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `AON_FAST_OEN`.
+                #[inline]
+                pub fn set_aon_fast_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SOSC_OEN`.
+                #[inline]
+                pub fn set_sosc_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `FOSC_OEN`.
+                #[inline]
+                pub fn set_fosc_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `OSC32K_OEN`.
+                #[inline]
+                pub fn set_osc32k_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `XTAL32K_OEN`.
+                #[inline]
+                pub fn set_xtal32k_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `CORE_EFUSE_OEN`.
+                #[inline]
+                pub fn set_core_efuse_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                    self
+                }
+
+                /// Set `SLOW_OEN`.
+                #[inline]
+                pub fn set_slow_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                    self
+                }
+
+                /// Set `FAST_OEN`.
+                #[inline]
+                pub fn set_fast_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `RNG_OEN`.
+                #[inline]
+                pub fn set_rng_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `LPBUS_OEN`.
+                #[inline]
+                pub fn set_lpbus_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+            }
         }
 
         /// The `LP_CLK_EN` register.
@@ -50518,6 +52859,24 @@ pub mod soc {
                 #[inline]
                 pub const fn fast_ori_gate(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock gate to LP_FAST_CLK 0: Invalid. The clock gate controlled by hardware fsm 1: Force the clk pass clock gate
+                #[inline]
+                pub const fn fast_ori_gate(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `FAST_ORI_GATE`.
+                #[inline]
+                pub fn set_fast_ori_gate(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -50566,6 +52925,76 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures whether or not to reset HUK 0: Invalid.No effect 1: Reset
+                #[inline]
+                pub const fn huk_reset_en(&self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// Configures whether or not to reset EFUSE_CTRL always-on part 0: Invalid.No effect 1: Reset
+                #[inline]
+                pub const fn aon_efuse_core_reset_en(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// Configures whether or not to reset LP_TIMER 0: Invalid.No effect 1: Reset
+                #[inline]
+                pub const fn lp_timer_reset_en(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// Configures whether or not to reset LP_WDT and super watch dog 0: Invalid.No effect 1: Reset
+                #[inline]
+                pub const fn wdt_reset_en(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Configures whether or not to reset analog peri, include brownout controller 0: Invalid.No effect 1: Reset
+                #[inline]
+                pub const fn ana_peri_reset_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `HUK_RESET_EN`.
+                #[inline]
+                pub fn set_huk_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                    self
+                }
+
+                /// Set `AON_EFUSE_CORE_RESET_EN`.
+                #[inline]
+                pub fn set_aon_efuse_core_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `LP_TIMER_RESET_EN`.
+                #[inline]
+                pub fn set_lp_timer_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `WDT_RESET_EN`.
+                #[inline]
+                pub fn set_wdt_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `ANA_PERI_RESET_EN`.
+                #[inline]
+                pub fn set_ana_peri_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `CPU_RESET` register.
@@ -50612,6 +53041,79 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// configure the hpcore0 luckup reset enable 0: disable 1:enable
+                #[inline]
+                pub const fn hpcore0_lockup_reset_en(&self) -> bool {
+                    (self.0 & 0x00200000) != 0
+                }
+
+                /// configures the reset length of LP_WDT reset CPU Measurement unit: LP_DYN_FAST_CLK
+                #[inline]
+                pub const fn rtc_wdt_cpu_reset_length(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Configures whether or not LP_WDT can reset CPU 0: LP_WDT could not reset CPU when LP_WDT timeout 1: LP_WDT could reset CPU when LP_WDT timeout
+                #[inline]
+                pub const fn rtc_wdt_cpu_reset_en(&self) -> bool {
+                    (self.0 & 0x02000000) != 0
+                }
+
+                /// configure the time between CPU stall and reset Measurement unit: LP_DYN_FAST_CLK
+                #[inline]
+                pub const fn cpu_stall_wait(&self) -> oer_mmio::Bits<5> {
+                    oer_mmio::Bits::truncate(self.0 >> 26)
+                }
+
+                /// Configures whether or not CPU entry stall state before LP_WDT and software reset CPU 0: CPU will not entry stall state before LP_WDT and software reset CPU 1: CPU will entry stall state before LP_WDT and software reset CPU
+                #[inline]
+                pub const fn cpu_stall_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `HPCORE0_LOCKUP_RESET_EN`.
+                #[inline]
+                pub fn set_hpcore0_lockup_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                    self
+                }
+
+                /// Set `RTC_WDT_CPU_RESET_LENGTH`.
+                #[inline]
+                pub fn set_rtc_wdt_cpu_reset_length(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x01c00000) | (value.get() << 22);
+                    self
+                }
+
+                /// Set `RTC_WDT_CPU_RESET_EN`.
+                #[inline]
+                pub fn set_rtc_wdt_cpu_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                    self
+                }
+
+                /// Set `CPU_STALL_WAIT`.
+                #[inline]
+                pub fn set_cpu_stall_wait(&mut self, value: oer_mmio::Bits<5>) -> &mut Self {
+                    self.0 = (self.0 & !0x7c000000) | (value.get() << 26);
+                    self
+                }
+
+                /// Set `CPU_STALL_EN`.
+                #[inline]
+                pub fn set_cpu_stall_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `FOSC_CNTL` register.
@@ -50634,6 +53136,24 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 22)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the RC_FAST_CLK frequency,the clock frequency will increase with this field
+                #[inline]
+                pub const fn fosc_dfreq(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Set `FOSC_DFREQ`.
+                #[inline]
+                pub fn set_fosc_dfreq(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                    self.0 = (self.0 & !0xffc00000) | (value.get() << 22);
+                    self
+                }
+            }
         }
 
         /// The `RC32K_CNTL` register.
@@ -50654,6 +53174,24 @@ pub mod soc {
                 #[inline]
                 pub const fn rc32k_dfreq(self) -> oer_mmio::Bits<10> {
                     oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the RC32K_CLK frequency, the clock frequency will increase with this field
+                #[inline]
+                pub const fn rc32k_dfreq(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Set `RC32K_DFREQ`.
+                #[inline]
+                pub fn set_rc32k_dfreq(&mut self, value: oer_mmio::Bits<10>) -> &mut Self {
+                    self.0 = (self.0 & !0xffc00000) | (value.get() << 22);
+                    self
                 }
             }
         }
@@ -50696,6 +53234,63 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clk gate of XTAL32K_CLK to HP system 0: The clk could not pass to HP system 1: The clk could pass to HP system
+                #[inline]
+                pub const fn icg_hp_xtal32k(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// Configures the clk gate of RC_SLOW_CLK to HP system 0: The clk could not pass to HP system 1: The clk could pass to HP system
+                #[inline]
+                pub const fn icg_hp_sosc(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// Configures the clk gate of RC32K_CLK to HP system 0: The clk could not pass to HP system 1: The clk could pass to HP system
+                #[inline]
+                pub const fn icg_hp_osc32k(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Configures the clk gate of RC_FAST_CLK to HP system 0: The clk could not pass to HP system 1: The clk could pass to HP system
+                #[inline]
+                pub const fn icg_hp_fosc(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `ICG_HP_XTAL32K`.
+                #[inline]
+                pub fn set_icg_hp_xtal32k(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `ICG_HP_SOSC`.
+                #[inline]
+                pub fn set_icg_hp_sosc(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `ICG_HP_OSC32K`.
+                #[inline]
+                pub fn set_icg_hp_osc32k(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `ICG_HP_FOSC`.
+                #[inline]
+                pub fn set_icg_hp_fosc(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LPMEM_FORCE` register.
@@ -50716,6 +53311,24 @@ pub mod soc {
                 #[inline]
                 pub const fn lpmem_clk_force_on(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures whether ot not force open the clock gate of LP MEM 0: Invalid. The clock gate controlled by hardware FSM 1: Force open clock gate of LP MEM
+                #[inline]
+                pub const fn lpmem_clk_force_on(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LPMEM_CLK_FORCE_ON`.
+                #[inline]
+                pub fn set_lpmem_clk_force_on(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -50750,6 +53363,50 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_uart_clk_sel(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the source clk of HUK 0: 0: RC_FAST_CLK 1: XTAL_D2_CLK
+                #[inline]
+                pub const fn huk_clk_sel(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// Configures the source clk of LP I2C. 0: LP_FAST_CLK 1: XTAL_D2_CLK
+                #[inline]
+                pub const fn lp_i2c_clk_sel(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Configures the source clk of LP UART. 0: LP_FAST_CLK 1: XTAL_D2_CLK
+                #[inline]
+                pub const fn lp_uart_clk_sel(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `HUK_CLK_SEL`.
+                #[inline]
+                pub fn set_huk_clk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `LP_I2C_CLK_SEL`.
+                #[inline]
+                pub fn set_lp_i2c_clk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `LP_UART_CLK_SEL`.
+                #[inline]
+                pub fn set_lp_uart_clk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -50790,6 +53447,63 @@ pub mod soc {
                 #[inline]
                 pub const fn dac_xtal32k(self) -> oer_mmio::Bits<3> {
                     oer_mmio::Bits::truncate(self.0 >> 29)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures DRES
+                #[inline]
+                pub const fn dres_xtal32k(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Configures DGM
+                #[inline]
+                pub const fn dgm_xtal32k(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 25)
+                }
+
+                /// Configures DBUF
+                #[inline]
+                pub const fn dbuf_xtal32k(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// Configures DAC
+                #[inline]
+                pub const fn dac_xtal32k(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 29)
+                }
+
+                /// Set `DRES_XTAL32K`.
+                #[inline]
+                pub fn set_dres_xtal32k(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x01c00000) | (value.get() << 22);
+                    self
+                }
+
+                /// Set `DGM_XTAL32K`.
+                #[inline]
+                pub fn set_dgm_xtal32k(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x0e000000) | (value.get() << 25);
+                    self
+                }
+
+                /// Set `DBUF_XTAL32K`.
+                #[inline]
+                pub fn set_dbuf_xtal32k(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `DAC_XTAL32K`.
+                #[inline]
+                pub fn set_dac_xtal32k(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
+                    self
                 }
             }
         }
@@ -53363,6 +56077,15 @@ pub mod soc {
             pub fn read_date(&self) -> date::R {
                 date::R(self.0.read::<0x1fc>())
             }
+
+            /// Read `DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+                let mut value = date::W(self.0.read::<0x1fc>());
+                change(&mut value);
+                self.0.write::<0x1fc>(value.0);
+            }
         }
 
         /// The `GPIO%s` register.
@@ -53488,6 +56211,24 @@ pub mod soc {
                 #[inline]
                 pub const fn reg_date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register. \\
+                #[inline]
+                pub const fn reg_date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `REG_DATE`.
+                #[inline]
+                pub fn set_reg_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -53676,8 +56417,8 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x28, 0x2c, 0x30, 0x38, 0x3c,
-                0x40, 0x3fc,
+                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34,
+                0x38, 0x3c, 0x40, 0x44, 0x3fc,
             ];
         }
 
@@ -53753,6 +56494,23 @@ pub mod soc {
                 update::R(self.0.read::<0x10>())
             }
 
+            /// Write one to the write-trigger field `MAIN_TIMER_UPDATE` of `UPDATE`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_update_main_timer_update(&mut self) {
+                self.0
+                    .write::<0x10>((self.0.read::<0x10>() & !update::TRIGGERS) | 0x08000000);
+            }
+
+            /// Read `UPDATE`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_update(&mut self, change: impl FnOnce(&mut update::W)) {
+                let mut value = update::W(self.0.read::<0x10>() & !update::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x10>(value.0);
+            }
+
             /// Read `MAIN_BUF0_LOW`.
             #[inline]
             pub fn read_main_buf0_low(&self) -> main_buf0_low::R {
@@ -53777,10 +56535,37 @@ pub mod soc {
                 main_buf1_high::R(self.0.read::<0x20>())
             }
 
+            /// Read `MAIN_OVERFLOW`.
+            #[inline]
+            pub fn read_main_overflow(&self) -> main_overflow::R {
+                main_overflow::R(self.0.read::<0x24>())
+            }
+
+            /// Write one to the write-trigger field `MAIN_TIMER_ALARM_LOAD` of `MAIN_OVERFLOW`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_main_overflow_main_timer_alarm_load(&mut self) {
+                self.0
+                    .write::<0x24>((self.0.read::<0x24>() & !main_overflow::TRIGGERS) | 0x80000000);
+            }
+
             /// Read `INT_RAW`.
             #[inline]
             pub fn read_int_raw(&self) -> int_raw::R {
                 int_raw::R(self.0.read::<0x28>())
+            }
+
+            /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+                int_raw::Snapshot(self.0.read::<0x28>() & int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+                self.0.write::<0x28>(snapshot.0);
             }
 
             /// Read `INT_ST`.
@@ -53795,10 +56580,54 @@ pub mod soc {
                 int_ena::R(self.0.read::<0x30>())
             }
 
+            /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+                let mut value = int_ena::W(self.0.read::<0x30>());
+                change(&mut value);
+                self.0.write::<0x30>(value.0);
+            }
+
+            /// Read `INT_CLR`.
+            #[inline]
+            pub fn read_int_clr(&self) -> int_clr::R {
+                int_clr::R(self.0.read::<0x34>())
+            }
+
+            /// Write one to the write-trigger field `OVERFLOW_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_overflow_clr(&mut self) {
+                self.0
+                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x40000000);
+            }
+
+            /// Write one to the write-trigger field `SOC_WAKEUP_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_soc_wakeup_int_clr(&mut self) {
+                self.0
+                    .write::<0x34>((self.0.read::<0x34>() & !int_clr::TRIGGERS) | 0x80000000);
+            }
+
             /// Read `LP_INT_RAW`.
             #[inline]
             pub fn read_lp_int_raw(&self) -> lp_int_raw::R {
                 lp_int_raw::R(self.0.read::<0x38>())
+            }
+
+            /// Sample `LP_INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_lp_int_raw(&self) -> lp_int_raw::Snapshot {
+                lp_int_raw::Snapshot(self.0.read::<0x38>() & lp_int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_lp_int_raw(&mut self, snapshot: lp_int_raw::Snapshot) {
+                self.0.write::<0x38>(snapshot.0);
             }
 
             /// Read `LP_INT_ST`.
@@ -53811,6 +56640,37 @@ pub mod soc {
             #[inline]
             pub fn read_lp_int_ena(&self) -> lp_int_ena::R {
                 lp_int_ena::R(self.0.read::<0x40>())
+            }
+
+            /// Read `LP_INT_ENA`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_int_ena(&mut self, change: impl FnOnce(&mut lp_int_ena::W)) {
+                let mut value = lp_int_ena::W(self.0.read::<0x40>());
+                change(&mut value);
+                self.0.write::<0x40>(value.0);
+            }
+
+            /// Read `LP_INT_CLR`.
+            #[inline]
+            pub fn read_lp_int_clr(&self) -> lp_int_clr::R {
+                lp_int_clr::R(self.0.read::<0x44>())
+            }
+
+            /// Write one to the write-trigger field `MAIN_TIMER_OVERFLOW_LP_INT_CLR` of `LP_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_int_clr_main_timer_overflow_lp_int_clr(&mut self) {
+                self.0
+                    .write::<0x44>((self.0.read::<0x44>() & !lp_int_clr::TRIGGERS) | 0x40000000);
+            }
+
+            /// Write one to the write-trigger field `MAIN_TIMER_LP_INT_CLR` of `LP_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_int_clr_main_timer_lp_int_clr(&mut self) {
+                self.0
+                    .write::<0x44>((self.0.read::<0x44>() & !lp_int_clr::TRIGGERS) | 0x80000000);
             }
 
             /// Read `DATE`.
@@ -53878,7 +56738,7 @@ pub mod soc {
         /// RTC timer enable register0
         pub mod tar0_high {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0000ffff;
+            pub const FIELDS: u32 = 0x8000ffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x4;
 
@@ -53891,6 +56751,12 @@ pub mod soc {
                 #[inline]
                 pub const fn main_timer_tar_high0(self) -> u16 {
                     (self.0) as u16
+                }
+
+                /// Configure this bit to enable the timer compare0 alarm.\\0: Disable \\1: Enable
+                #[inline]
+                pub const fn main_timer_tar_en0(self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
             }
         }
@@ -53940,7 +56806,7 @@ pub mod soc {
         /// RTC timer threshold high bits register0
         pub mod tar1_high {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0000ffff;
+            pub const FIELDS: u32 = 0x8000ffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0xc;
 
@@ -53954,6 +56820,12 @@ pub mod soc {
                 pub const fn main_timer_tar_high1(self) -> u16 {
                     (self.0) as u16
                 }
+
+                /// Configure this bit to enable the timer compare1 alarm.\\0: Disable \\1: Enable
+                #[inline]
+                pub const fn main_timer_tar_en1(self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
             }
         }
 
@@ -53962,9 +56834,13 @@ pub mod soc {
         /// RTC timer update control register
         pub mod update {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xf0000000;
+            pub const FIELDS: u32 = 0xf8000000;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x10;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x08000000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53993,6 +56869,63 @@ pub mod soc {
                 #[inline]
                 pub const fn main_timer_sys_rst(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Selects the triggering condition for the RTC timer,triggered when regdma working
+                #[inline]
+                pub const fn main_timer_regdma_work(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// Selects the triggering condition for the RTC timer,triggered when XTAL\_CLK powers up
+                #[inline]
+                pub const fn main_timer_xtal_off(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// Selects the triggering condition for the RTC timer,triggered when CPU enters or exits the stall state.
+                #[inline]
+                pub const fn main_timer_sys_stall(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Selects the triggering condition for the RTC timer,triggered when resetting digital core completes
+                #[inline]
+                pub const fn main_timer_sys_rst(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `MAIN_TIMER_REGDMA_WORK`.
+                #[inline]
+                pub fn set_main_timer_regdma_work(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `MAIN_TIMER_XTAL_OFF`.
+                #[inline]
+                pub fn set_main_timer_xtal_off(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `MAIN_TIMER_SYS_STALL`.
+                #[inline]
+                pub fn set_main_timer_sys_stall(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `MAIN_TIMER_SYS_RST`.
+                #[inline]
+                pub fn set_main_timer_sys_rst(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -54085,6 +57018,24 @@ pub mod soc {
             }
         }
 
+        /// The `MAIN_OVERFLOW` register.
+        pub mod main_overflow {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x24;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
         /// The `INT_RAW` register.
         ///
         /// RTC timer interrupt raw register
@@ -54109,6 +57060,48 @@ pub mod soc {
                 #[inline]
                 pub const fn soc_wakeup_int_raw(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// Triggered when counter register of RTC main timer overflow.
+                #[inline]
+                pub const fn overflow_raw(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// The snapshot without `OVERFLOW_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_overflow_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x40000000)
+                    }
+                }
+
+                /// Triggered when RTC main timer reach the target value.
+                #[inline]
+                pub const fn soc_wakeup_int_raw(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// The snapshot without `SOC_WAKEUP_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_soc_wakeup_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x80000000)
+                    }
                 }
             }
         }
@@ -54167,6 +57160,57 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Enable the RTC main timer overflow interrupt..\\0 : Disable \\1: Enable
+                #[inline]
+                pub const fn overflow_ena(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Enable the RTC main timer interrupt..\\0 : Disable \\1: Enable
+                #[inline]
+                pub const fn soc_wakeup_int_ena(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `OVERFLOW_ENA`.
+                #[inline]
+                pub fn set_overflow_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `SOC_WAKEUP_INT_ENA`.
+                #[inline]
+                pub fn set_soc_wakeup_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
+        }
+
+        /// The `INT_CLR` register.
+        ///
+        /// RTC timer interrupt clear register
+        pub mod int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x34;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xc0000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `LP_INT_RAW` register.
@@ -54193,6 +57237,48 @@ pub mod soc {
                 #[inline]
                 pub const fn main_timer_lp_int_raw(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// Triggered when counter register of RTC main timer overflow
+                #[inline]
+                pub const fn main_timer_overflow_lp_int_raw(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// The snapshot without `MAIN_TIMER_OVERFLOW_LP_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_main_timer_overflow_lp_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x40000000)
+                    }
+                }
+
+                /// Triggered when RTC main timer reach the target value
+                #[inline]
+                pub const fn main_timer_lp_int_raw(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// The snapshot without `MAIN_TIMER_LP_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_main_timer_lp_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x80000000)
+                    }
                 }
             }
         }
@@ -54251,6 +57337,57 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Enable the RTC main timer overflow interrupt..\\0 : Disable \\1: Enable
+                #[inline]
+                pub const fn main_timer_overflow_lp_int_ena(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Enable the RTC main timer interrupt..\\0 : Disable \\1: Enable
+                #[inline]
+                pub const fn main_timer_lp_int_ena(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `MAIN_TIMER_OVERFLOW_LP_INT_ENA`.
+                #[inline]
+                pub fn set_main_timer_overflow_lp_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `MAIN_TIMER_LP_INT_ENA`.
+                #[inline]
+                pub fn set_main_timer_lp_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
+        }
+
+        /// The `LP_INT_CLR` register.
+        ///
+        /// RTC timer interrupt clear register(For ULP)
+        pub mod lp_int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x44;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xc0000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `DATE` register.
@@ -56038,7 +59175,8 @@ pub mod soc {
         pub struct BlockWords;
 
         impl oer_mmio::Registers for BlockWords {
-            const WORDS: &'static [usize] = &[0x4, 0x8, 0xc, 0x10, 0x24, 0x28, 0x2c, 0x3fc];
+            const WORDS: &'static [usize] =
+                &[0x4, 0x8, 0xc, 0x10, 0x14, 0x24, 0x28, 0x2c, 0x30, 0x3fc];
         }
 
         /// The block's device registers, as the PAC root claims them.
@@ -56125,10 +59263,37 @@ pub mod soc {
                 self.0.write::<0x10>(value.0);
             }
 
+            /// Read `FEED`.
+            #[inline]
+            pub fn read_feed(&self) -> feed::R {
+                feed::R(self.0.read::<0x14>())
+            }
+
+            /// Write one to the write-trigger field `RTC_WDT_FEED` of `FEED`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_feed_rtc_wdt_feed(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !feed::TRIGGERS) | 0x80000000);
+            }
+
             /// Read `INT_RAW`.
             #[inline]
             pub fn read_int_raw(&self) -> int_raw::R {
                 int_raw::R(self.0.read::<0x24>())
+            }
+
+            /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+                int_raw::Snapshot(self.0.read::<0x24>() & int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+                self.0.write::<0x24>(snapshot.0);
             }
 
             /// Read `INT_ST`.
@@ -56141,6 +59306,37 @@ pub mod soc {
             #[inline]
             pub fn read_int_ena(&self) -> int_ena::R {
                 int_ena::R(self.0.read::<0x2c>())
+            }
+
+            /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+                let mut value = int_ena::W(self.0.read::<0x2c>());
+                change(&mut value);
+                self.0.write::<0x2c>(value.0);
+            }
+
+            /// Read `INT_CLR`.
+            #[inline]
+            pub fn read_int_clr(&self) -> int_clr::R {
+                int_clr::R(self.0.read::<0x30>())
+            }
+
+            /// Write one to the write-trigger field `SUPER_WDT_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_super_wdt_int_clr(&mut self) {
+                self.0
+                    .write::<0x30>((self.0.read::<0x30>() & !int_clr::TRIGGERS) | 0x40000000);
+            }
+
+            /// Write one to the write-trigger field `LP_WDT_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_lp_wdt_int_clr(&mut self) {
+                self.0
+                    .write::<0x30>((self.0.read::<0x30>() & !int_clr::TRIGGERS) | 0x80000000);
             }
 
             /// Read `DATE`.
@@ -56323,6 +59519,26 @@ pub mod soc {
             }
         }
 
+        /// The `FEED` register.
+        ///
+        /// Configure the feed function of RWDT
+        pub mod feed {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x14;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
         /// The `INT_RAW` register.
         ///
         /// Configure whether to generate timeout interrupt
@@ -56347,6 +59563,48 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_wdt_int_raw(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// Represents the SWD whether or not generates timeout interrupt.\\ 0:No \\1: Yes
+                #[inline]
+                pub const fn super_wdt_int_raw(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// The snapshot without `SUPER_WDT_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_super_wdt_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x40000000)
+                    }
+                }
+
+                /// Represents the RWDT whether or not generates timeout interrupt.\\ 0:No \\1: Yes
+                #[inline]
+                pub const fn lp_wdt_int_raw(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// The snapshot without `LP_WDT_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_lp_wdt_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x80000000)
+                    }
                 }
             }
         }
@@ -56405,6 +59663,57 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configure whether or not to enable the SWD to send timeout interrupt.\\0:Disable \\1:Enable
+                #[inline]
+                pub const fn super_wdt_int_ena(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Configure whether or not to enable the RWDT to send timeout interrupt.\\0:Disable \\1:Enable
+                #[inline]
+                pub const fn lp_wdt_int_ena(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `SUPER_WDT_INT_ENA`.
+                #[inline]
+                pub fn set_super_wdt_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `LP_WDT_INT_ENA`.
+                #[inline]
+                pub fn set_lp_wdt_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
+        }
+
+        /// The `INT_CLR` register.
+        ///
+        /// The interrupt clear register of WDT
+        pub mod int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x30;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xc0000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `DATE` register.
@@ -61954,10 +65263,28 @@ pub mod soc {
                 uart0_conf::R(self.0.read::<0x0>())
             }
 
+            /// Read `UART0_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uart0_conf(&mut self, change: impl FnOnce(&mut uart0_conf::W)) {
+                let mut value = uart0_conf::W(self.0.read::<0x0>());
+                change(&mut value);
+                self.0.write::<0x0>(value.0);
+            }
+
             /// Read `UART0_SCLK_CONF`.
             #[inline]
             pub fn read_uart0_sclk_conf(&self) -> uart0_sclk_conf::R {
                 uart0_sclk_conf::R(self.0.read::<0x4>())
+            }
+
+            /// Read `UART0_SCLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uart0_sclk_conf(&mut self, change: impl FnOnce(&mut uart0_sclk_conf::W)) {
+                let mut value = uart0_sclk_conf::W(self.0.read::<0x4>());
+                change(&mut value);
+                self.0.write::<0x4>(value.0);
             }
 
             /// Read `UART0_PD_CTRL`.
@@ -61966,10 +65293,28 @@ pub mod soc {
                 uart0_pd_ctrl::R(self.0.read::<0x8>())
             }
 
+            /// Read `UART0_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uart0_pd_ctrl(&mut self, change: impl FnOnce(&mut uart0_pd_ctrl::W)) {
+                let mut value = uart0_pd_ctrl::W(self.0.read::<0x8>());
+                change(&mut value);
+                self.0.write::<0x8>(value.0);
+            }
+
             /// Read `UART1_CONF`.
             #[inline]
             pub fn read_uart1_conf(&self) -> uart1_conf::R {
                 uart1_conf::R(self.0.read::<0xc>())
+            }
+
+            /// Read `UART1_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uart1_conf(&mut self, change: impl FnOnce(&mut uart1_conf::W)) {
+                let mut value = uart1_conf::W(self.0.read::<0xc>());
+                change(&mut value);
+                self.0.write::<0xc>(value.0);
             }
 
             /// Read `UART1_SCLK_CONF`.
@@ -61978,10 +65323,28 @@ pub mod soc {
                 uart1_sclk_conf::R(self.0.read::<0x10>())
             }
 
+            /// Read `UART1_SCLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uart1_sclk_conf(&mut self, change: impl FnOnce(&mut uart1_sclk_conf::W)) {
+                let mut value = uart1_sclk_conf::W(self.0.read::<0x10>());
+                change(&mut value);
+                self.0.write::<0x10>(value.0);
+            }
+
             /// Read `UART1_PD_CTRL`.
             #[inline]
             pub fn read_uart1_pd_ctrl(&self) -> uart1_pd_ctrl::R {
                 uart1_pd_ctrl::R(self.0.read::<0x14>())
+            }
+
+            /// Read `UART1_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uart1_pd_ctrl(&mut self, change: impl FnOnce(&mut uart1_pd_ctrl::W)) {
+                let mut value = uart1_pd_ctrl::W(self.0.read::<0x14>());
+                change(&mut value);
+                self.0.write::<0x14>(value.0);
             }
 
             /// Read `MSPI_CONF`.
@@ -61990,10 +65353,28 @@ pub mod soc {
                 mspi_conf::R(self.0.read::<0x18>())
             }
 
+            /// Read `MSPI_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_mspi_conf(&mut self, change: impl FnOnce(&mut mspi_conf::W)) {
+                let mut value = mspi_conf::W(self.0.read::<0x18>());
+                change(&mut value);
+                self.0.write::<0x18>(value.0);
+            }
+
             /// Read `MSPI_CLK_CONF`.
             #[inline]
             pub fn read_mspi_clk_conf(&self) -> mspi_clk_conf::R {
                 mspi_clk_conf::R(self.0.read::<0x1c>())
+            }
+
+            /// Read `MSPI_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_mspi_clk_conf(&mut self, change: impl FnOnce(&mut mspi_clk_conf::W)) {
+                let mut value = mspi_clk_conf::W(self.0.read::<0x1c>());
+                change(&mut value);
+                self.0.write::<0x1c>(value.0);
             }
 
             /// Read `I2C_CONF`.
@@ -62002,10 +65383,28 @@ pub mod soc {
                 i2c_conf::R(self.0.read::<0x20>())
             }
 
+            /// Read `I2C_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2c_conf(&mut self, change: impl FnOnce(&mut i2c_conf::W)) {
+                let mut value = i2c_conf::W(self.0.read::<0x20>());
+                change(&mut value);
+                self.0.write::<0x20>(value.0);
+            }
+
             /// Read `I2C_SCLK_CONF`.
             #[inline]
             pub fn read_i2c_sclk_conf(&self) -> i2c_sclk_conf::R {
                 i2c_sclk_conf::R(self.0.read::<0x24>())
+            }
+
+            /// Read `I2C_SCLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2c_sclk_conf(&mut self, change: impl FnOnce(&mut i2c_sclk_conf::W)) {
+                let mut value = i2c_sclk_conf::W(self.0.read::<0x24>());
+                change(&mut value);
+                self.0.write::<0x24>(value.0);
             }
 
             /// Read `TWAI0_CONF`.
@@ -62038,10 +65437,28 @@ pub mod soc {
                 uhci_conf::R(self.0.read::<0x38>())
             }
 
+            /// Read `UHCI_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_uhci_conf(&mut self, change: impl FnOnce(&mut uhci_conf::W)) {
+                let mut value = uhci_conf::W(self.0.read::<0x38>());
+                change(&mut value);
+                self.0.write::<0x38>(value.0);
+            }
+
             /// Read `RMT_CONF`.
             #[inline]
             pub fn read_rmt_conf(&self) -> rmt_conf::R {
                 rmt_conf::R(self.0.read::<0x3c>())
+            }
+
+            /// Read `RMT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rmt_conf(&mut self, change: impl FnOnce(&mut rmt_conf::W)) {
+                let mut value = rmt_conf::W(self.0.read::<0x3c>());
+                change(&mut value);
+                self.0.write::<0x3c>(value.0);
             }
 
             /// Read `RMT_SCLK_CONF`.
@@ -62050,10 +65467,28 @@ pub mod soc {
                 rmt_sclk_conf::R(self.0.read::<0x40>())
             }
 
+            /// Read `RMT_SCLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rmt_sclk_conf(&mut self, change: impl FnOnce(&mut rmt_sclk_conf::W)) {
+                let mut value = rmt_sclk_conf::W(self.0.read::<0x40>());
+                change(&mut value);
+                self.0.write::<0x40>(value.0);
+            }
+
             /// Read `RMT_PD_CTRL`.
             #[inline]
             pub fn read_rmt_pd_ctrl(&self) -> rmt_pd_ctrl::R {
                 rmt_pd_ctrl::R(self.0.read::<0x44>())
+            }
+
+            /// Read `RMT_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rmt_pd_ctrl(&mut self, change: impl FnOnce(&mut rmt_pd_ctrl::W)) {
+                let mut value = rmt_pd_ctrl::W(self.0.read::<0x44>());
+                change(&mut value);
+                self.0.write::<0x44>(value.0);
             }
 
             /// Read `LEDC_CONF`.
@@ -62062,10 +65497,28 @@ pub mod soc {
                 ledc_conf::R(self.0.read::<0x48>())
             }
 
+            /// Read `LEDC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ledc_conf(&mut self, change: impl FnOnce(&mut ledc_conf::W)) {
+                let mut value = ledc_conf::W(self.0.read::<0x48>());
+                change(&mut value);
+                self.0.write::<0x48>(value.0);
+            }
+
             /// Read `LEDC_SCLK_CONF`.
             #[inline]
             pub fn read_ledc_sclk_conf(&self) -> ledc_sclk_conf::R {
                 ledc_sclk_conf::R(self.0.read::<0x4c>())
+            }
+
+            /// Read `LEDC_SCLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ledc_sclk_conf(&mut self, change: impl FnOnce(&mut ledc_sclk_conf::W)) {
+                let mut value = ledc_sclk_conf::W(self.0.read::<0x4c>());
+                change(&mut value);
+                self.0.write::<0x4c>(value.0);
             }
 
             /// Read `LEDC_PD_CTRL`.
@@ -62074,10 +65527,31 @@ pub mod soc {
                 ledc_pd_ctrl::R(self.0.read::<0x50>())
             }
 
+            /// Read `LEDC_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ledc_pd_ctrl(&mut self, change: impl FnOnce(&mut ledc_pd_ctrl::W)) {
+                let mut value = ledc_pd_ctrl::W(self.0.read::<0x50>());
+                change(&mut value);
+                self.0.write::<0x50>(value.0);
+            }
+
             /// Read `TIMERGROUP0_CONF`.
             #[inline]
             pub fn read_timergroup0_conf(&self) -> timergroup0_conf::R {
                 timergroup0_conf::R(self.0.read::<0x54>())
+            }
+
+            /// Read `TIMERGROUP0_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timergroup0_conf(
+                &mut self,
+                change: impl FnOnce(&mut timergroup0_conf::W),
+            ) {
+                let mut value = timergroup0_conf::W(self.0.read::<0x54>());
+                change(&mut value);
+                self.0.write::<0x54>(value.0);
             }
 
             /// Read `TIMERGROUP0_TIMER_CLK_CONF`.
@@ -62086,10 +65560,34 @@ pub mod soc {
                 timergroup0_timer_clk_conf::R(self.0.read::<0x58>())
             }
 
+            /// Read `TIMERGROUP0_TIMER_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timergroup0_timer_clk_conf(
+                &mut self,
+                change: impl FnOnce(&mut timergroup0_timer_clk_conf::W),
+            ) {
+                let mut value = timergroup0_timer_clk_conf::W(self.0.read::<0x58>());
+                change(&mut value);
+                self.0.write::<0x58>(value.0);
+            }
+
             /// Read `TIMERGROUP0_WDT_CLK_CONF`.
             #[inline]
             pub fn read_timergroup0_wdt_clk_conf(&self) -> timergroup0_wdt_clk_conf::R {
                 timergroup0_wdt_clk_conf::R(self.0.read::<0x5c>())
+            }
+
+            /// Read `TIMERGROUP0_WDT_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timergroup0_wdt_clk_conf(
+                &mut self,
+                change: impl FnOnce(&mut timergroup0_wdt_clk_conf::W),
+            ) {
+                let mut value = timergroup0_wdt_clk_conf::W(self.0.read::<0x5c>());
+                change(&mut value);
+                self.0.write::<0x5c>(value.0);
             }
 
             /// Read `TIMERGROUP1_TIMER_CLK_CONF`.
@@ -62098,10 +65596,31 @@ pub mod soc {
                 timergroup1_timer_clk_conf::R(self.0.read::<0x64>())
             }
 
+            /// Read `TIMERGROUP1_TIMER_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timergroup1_timer_clk_conf(
+                &mut self,
+                change: impl FnOnce(&mut timergroup1_timer_clk_conf::W),
+            ) {
+                let mut value = timergroup1_timer_clk_conf::W(self.0.read::<0x64>());
+                change(&mut value);
+                self.0.write::<0x64>(value.0);
+            }
+
             /// Read `SYSTIMER_CONF`.
             #[inline]
             pub fn read_systimer_conf(&self) -> systimer_conf::R {
                 systimer_conf::R(self.0.read::<0x6c>())
+            }
+
+            /// Read `SYSTIMER_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_systimer_conf(&mut self, change: impl FnOnce(&mut systimer_conf::W)) {
+                let mut value = systimer_conf::W(self.0.read::<0x6c>());
+                change(&mut value);
+                self.0.write::<0x6c>(value.0);
             }
 
             /// Read `SYSTIMER_FUNC_CLK_CONF`.
@@ -62110,10 +65629,31 @@ pub mod soc {
                 systimer_func_clk_conf::R(self.0.read::<0x70>())
             }
 
+            /// Read `SYSTIMER_FUNC_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_systimer_func_clk_conf(
+                &mut self,
+                change: impl FnOnce(&mut systimer_func_clk_conf::W),
+            ) {
+                let mut value = systimer_func_clk_conf::W(self.0.read::<0x70>());
+                change(&mut value);
+                self.0.write::<0x70>(value.0);
+            }
+
             /// Read `I2S_CONF`.
             #[inline]
             pub fn read_i2s_conf(&self) -> i2s_conf::R {
                 i2s_conf::R(self.0.read::<0x74>())
+            }
+
+            /// Read `I2S_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2s_conf(&mut self, change: impl FnOnce(&mut i2s_conf::W)) {
+                let mut value = i2s_conf::W(self.0.read::<0x74>());
+                change(&mut value);
+                self.0.write::<0x74>(value.0);
             }
 
             /// Read `I2S_TX_CLKM_CONF`.
@@ -62122,10 +65662,34 @@ pub mod soc {
                 i2s_tx_clkm_conf::R(self.0.read::<0x78>())
             }
 
+            /// Read `I2S_TX_CLKM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2s_tx_clkm_conf(
+                &mut self,
+                change: impl FnOnce(&mut i2s_tx_clkm_conf::W),
+            ) {
+                let mut value = i2s_tx_clkm_conf::W(self.0.read::<0x78>());
+                change(&mut value);
+                self.0.write::<0x78>(value.0);
+            }
+
             /// Read `I2S_TX_CLKM_DIV_CONF`.
             #[inline]
             pub fn read_i2s_tx_clkm_div_conf(&self) -> i2s_tx_clkm_div_conf::R {
                 i2s_tx_clkm_div_conf::R(self.0.read::<0x7c>())
+            }
+
+            /// Read `I2S_TX_CLKM_DIV_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2s_tx_clkm_div_conf(
+                &mut self,
+                change: impl FnOnce(&mut i2s_tx_clkm_div_conf::W),
+            ) {
+                let mut value = i2s_tx_clkm_div_conf::W(self.0.read::<0x7c>());
+                change(&mut value);
+                self.0.write::<0x7c>(value.0);
             }
 
             /// Read `I2S_RX_CLKM_CONF`.
@@ -62134,10 +65698,34 @@ pub mod soc {
                 i2s_rx_clkm_conf::R(self.0.read::<0x80>())
             }
 
+            /// Read `I2S_RX_CLKM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2s_rx_clkm_conf(
+                &mut self,
+                change: impl FnOnce(&mut i2s_rx_clkm_conf::W),
+            ) {
+                let mut value = i2s_rx_clkm_conf::W(self.0.read::<0x80>());
+                change(&mut value);
+                self.0.write::<0x80>(value.0);
+            }
+
             /// Read `I2S_RX_CLKM_DIV_CONF`.
             #[inline]
             pub fn read_i2s_rx_clkm_div_conf(&self) -> i2s_rx_clkm_div_conf::R {
                 i2s_rx_clkm_div_conf::R(self.0.read::<0x84>())
+            }
+
+            /// Read `I2S_RX_CLKM_DIV_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_i2s_rx_clkm_div_conf(
+                &mut self,
+                change: impl FnOnce(&mut i2s_rx_clkm_div_conf::W),
+            ) {
+                let mut value = i2s_rx_clkm_div_conf::W(self.0.read::<0x84>());
+                change(&mut value);
+                self.0.write::<0x84>(value.0);
             }
 
             /// Read `SARADC_CLKM_CONF`.
@@ -62146,10 +65734,31 @@ pub mod soc {
                 saradc_clkm_conf::R(self.0.read::<0x8c>())
             }
 
+            /// Read `SARADC_CLKM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_saradc_clkm_conf(
+                &mut self,
+                change: impl FnOnce(&mut saradc_clkm_conf::W),
+            ) {
+                let mut value = saradc_clkm_conf::W(self.0.read::<0x8c>());
+                change(&mut value);
+                self.0.write::<0x8c>(value.0);
+            }
+
             /// Read `USB_DEVICE_CONF`.
             #[inline]
             pub fn read_usb_device_conf(&self) -> usb_device_conf::R {
                 usb_device_conf::R(self.0.read::<0x94>())
+            }
+
+            /// Read `USB_DEVICE_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_usb_device_conf(&mut self, change: impl FnOnce(&mut usb_device_conf::W)) {
+                let mut value = usb_device_conf::W(self.0.read::<0x94>());
+                change(&mut value);
+                self.0.write::<0x94>(value.0);
             }
 
             /// Read `INTMTX_CONF`.
@@ -62158,10 +65767,28 @@ pub mod soc {
                 intmtx_conf::R(self.0.read::<0x98>())
             }
 
+            /// Read `INTMTX_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_intmtx_conf(&mut self, change: impl FnOnce(&mut intmtx_conf::W)) {
+                let mut value = intmtx_conf::W(self.0.read::<0x98>());
+                change(&mut value);
+                self.0.write::<0x98>(value.0);
+            }
+
             /// Read `PCNT_CONF`.
             #[inline]
             pub fn read_pcnt_conf(&self) -> pcnt_conf::R {
                 pcnt_conf::R(self.0.read::<0x9c>())
+            }
+
+            /// Read `PCNT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_pcnt_conf(&mut self, change: impl FnOnce(&mut pcnt_conf::W)) {
+                let mut value = pcnt_conf::W(self.0.read::<0x9c>());
+                change(&mut value);
+                self.0.write::<0x9c>(value.0);
             }
 
             /// Read `ETM_CONF`.
@@ -62170,10 +65797,28 @@ pub mod soc {
                 etm_conf::R(self.0.read::<0xa0>())
             }
 
+            /// Read `ETM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_etm_conf(&mut self, change: impl FnOnce(&mut etm_conf::W)) {
+                let mut value = etm_conf::W(self.0.read::<0xa0>());
+                change(&mut value);
+                self.0.write::<0xa0>(value.0);
+            }
+
             /// Read `PWM_CONF`.
             #[inline]
             pub fn read_pwm_conf(&self) -> pwm_conf::R {
                 pwm_conf::R(self.0.read::<0xa4>())
+            }
+
+            /// Read `PWM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_pwm_conf(&mut self, change: impl FnOnce(&mut pwm_conf::W)) {
+                let mut value = pwm_conf::W(self.0.read::<0xa4>());
+                change(&mut value);
+                self.0.write::<0xa4>(value.0);
             }
 
             /// Read `PWM_CLK_CONF`.
@@ -62182,10 +65827,28 @@ pub mod soc {
                 pwm_clk_conf::R(self.0.read::<0xa8>())
             }
 
+            /// Read `PWM_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_pwm_clk_conf(&mut self, change: impl FnOnce(&mut pwm_clk_conf::W)) {
+                let mut value = pwm_clk_conf::W(self.0.read::<0xa8>());
+                change(&mut value);
+                self.0.write::<0xa8>(value.0);
+            }
+
             /// Read `PARL_IO_CONF`.
             #[inline]
             pub fn read_parl_io_conf(&self) -> parl_io_conf::R {
                 parl_io_conf::R(self.0.read::<0xac>())
+            }
+
+            /// Read `PARL_IO_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_parl_io_conf(&mut self, change: impl FnOnce(&mut parl_io_conf::W)) {
+                let mut value = parl_io_conf::W(self.0.read::<0xac>());
+                change(&mut value);
+                self.0.write::<0xac>(value.0);
             }
 
             /// Read `PARL_CLK_RX_CONF`.
@@ -62194,10 +65857,34 @@ pub mod soc {
                 parl_clk_rx_conf::R(self.0.read::<0xb0>())
             }
 
+            /// Read `PARL_CLK_RX_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_parl_clk_rx_conf(
+                &mut self,
+                change: impl FnOnce(&mut parl_clk_rx_conf::W),
+            ) {
+                let mut value = parl_clk_rx_conf::W(self.0.read::<0xb0>());
+                change(&mut value);
+                self.0.write::<0xb0>(value.0);
+            }
+
             /// Read `PARL_CLK_TX_CONF`.
             #[inline]
             pub fn read_parl_clk_tx_conf(&self) -> parl_clk_tx_conf::R {
                 parl_clk_tx_conf::R(self.0.read::<0xb4>())
+            }
+
+            /// Read `PARL_CLK_TX_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_parl_clk_tx_conf(
+                &mut self,
+                change: impl FnOnce(&mut parl_clk_tx_conf::W),
+            ) {
+                let mut value = parl_clk_tx_conf::W(self.0.read::<0xb4>());
+                change(&mut value);
+                self.0.write::<0xb4>(value.0);
             }
 
             /// Read `PVT_MONITOR_CONF`.
@@ -62206,10 +65893,34 @@ pub mod soc {
                 pvt_monitor_conf::R(self.0.read::<0xb8>())
             }
 
+            /// Read `PVT_MONITOR_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_pvt_monitor_conf(
+                &mut self,
+                change: impl FnOnce(&mut pvt_monitor_conf::W),
+            ) {
+                let mut value = pvt_monitor_conf::W(self.0.read::<0xb8>());
+                change(&mut value);
+                self.0.write::<0xb8>(value.0);
+            }
+
             /// Read `PVT_MONITOR_FUNC_CLK_CONF`.
             #[inline]
             pub fn read_pvt_monitor_func_clk_conf(&self) -> pvt_monitor_func_clk_conf::R {
                 pvt_monitor_func_clk_conf::R(self.0.read::<0xbc>())
+            }
+
+            /// Read `PVT_MONITOR_FUNC_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_pvt_monitor_func_clk_conf(
+                &mut self,
+                change: impl FnOnce(&mut pvt_monitor_func_clk_conf::W),
+            ) {
+                let mut value = pvt_monitor_func_clk_conf::W(self.0.read::<0xbc>());
+                change(&mut value);
+                self.0.write::<0xbc>(value.0);
             }
 
             /// Read `GDMA_CONF`.
@@ -62218,10 +65929,28 @@ pub mod soc {
                 gdma_conf::R(self.0.read::<0xc0>())
             }
 
+            /// Read `GDMA_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_gdma_conf(&mut self, change: impl FnOnce(&mut gdma_conf::W)) {
+                let mut value = gdma_conf::W(self.0.read::<0xc0>());
+                change(&mut value);
+                self.0.write::<0xc0>(value.0);
+            }
+
             /// Read `SPI2_CONF`.
             #[inline]
             pub fn read_spi2_conf(&self) -> spi2_conf::R {
                 spi2_conf::R(self.0.read::<0xc4>())
+            }
+
+            /// Read `SPI2_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi2_conf(&mut self, change: impl FnOnce(&mut spi2_conf::W)) {
+                let mut value = spi2_conf::W(self.0.read::<0xc4>());
+                change(&mut value);
+                self.0.write::<0xc4>(value.0);
             }
 
             /// Read `SPI2_CLKM_CONF`.
@@ -62230,10 +65959,28 @@ pub mod soc {
                 spi2_clkm_conf::R(self.0.read::<0xc8>())
             }
 
+            /// Read `SPI2_CLKM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi2_clkm_conf(&mut self, change: impl FnOnce(&mut spi2_clkm_conf::W)) {
+                let mut value = spi2_clkm_conf::W(self.0.read::<0xc8>());
+                change(&mut value);
+                self.0.write::<0xc8>(value.0);
+            }
+
             /// Read `AES_CONF`.
             #[inline]
             pub fn read_aes_conf(&self) -> aes_conf::R {
                 aes_conf::R(self.0.read::<0xcc>())
+            }
+
+            /// Read `AES_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_aes_conf(&mut self, change: impl FnOnce(&mut aes_conf::W)) {
+                let mut value = aes_conf::W(self.0.read::<0xcc>());
+                change(&mut value);
+                self.0.write::<0xcc>(value.0);
             }
 
             /// Read `SHA_CONF`.
@@ -62242,10 +65989,28 @@ pub mod soc {
                 sha_conf::R(self.0.read::<0xd0>())
             }
 
+            /// Read `SHA_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sha_conf(&mut self, change: impl FnOnce(&mut sha_conf::W)) {
+                let mut value = sha_conf::W(self.0.read::<0xd0>());
+                change(&mut value);
+                self.0.write::<0xd0>(value.0);
+            }
+
             /// Read `RSA_CONF`.
             #[inline]
             pub fn read_rsa_conf(&self) -> rsa_conf::R {
                 rsa_conf::R(self.0.read::<0xd4>())
+            }
+
+            /// Read `RSA_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rsa_conf(&mut self, change: impl FnOnce(&mut rsa_conf::W)) {
+                let mut value = rsa_conf::W(self.0.read::<0xd4>());
+                change(&mut value);
+                self.0.write::<0xd4>(value.0);
             }
 
             /// Read `RSA_PD_CTRL`.
@@ -62254,10 +66019,28 @@ pub mod soc {
                 rsa_pd_ctrl::R(self.0.read::<0xd8>())
             }
 
+            /// Read `RSA_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rsa_pd_ctrl(&mut self, change: impl FnOnce(&mut rsa_pd_ctrl::W)) {
+                let mut value = rsa_pd_ctrl::W(self.0.read::<0xd8>());
+                change(&mut value);
+                self.0.write::<0xd8>(value.0);
+            }
+
             /// Read `ECC_CONF`.
             #[inline]
             pub fn read_ecc_conf(&self) -> ecc_conf::R {
                 ecc_conf::R(self.0.read::<0xdc>())
+            }
+
+            /// Read `ECC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ecc_conf(&mut self, change: impl FnOnce(&mut ecc_conf::W)) {
+                let mut value = ecc_conf::W(self.0.read::<0xdc>());
+                change(&mut value);
+                self.0.write::<0xdc>(value.0);
             }
 
             /// Read `ECC_PD_CTRL`.
@@ -62266,10 +66049,28 @@ pub mod soc {
                 ecc_pd_ctrl::R(self.0.read::<0xe0>())
             }
 
+            /// Read `ECC_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ecc_pd_ctrl(&mut self, change: impl FnOnce(&mut ecc_pd_ctrl::W)) {
+                let mut value = ecc_pd_ctrl::W(self.0.read::<0xe0>());
+                change(&mut value);
+                self.0.write::<0xe0>(value.0);
+            }
+
             /// Read `DS_CONF`.
             #[inline]
             pub fn read_ds_conf(&self) -> ds_conf::R {
                 ds_conf::R(self.0.read::<0xe4>())
+            }
+
+            /// Read `DS_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ds_conf(&mut self, change: impl FnOnce(&mut ds_conf::W)) {
+                let mut value = ds_conf::W(self.0.read::<0xe4>());
+                change(&mut value);
+                self.0.write::<0xe4>(value.0);
             }
 
             /// Read `HMAC_CONF`.
@@ -62278,10 +66079,28 @@ pub mod soc {
                 hmac_conf::R(self.0.read::<0xe8>())
             }
 
+            /// Read `HMAC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_hmac_conf(&mut self, change: impl FnOnce(&mut hmac_conf::W)) {
+                let mut value = hmac_conf::W(self.0.read::<0xe8>());
+                change(&mut value);
+                self.0.write::<0xe8>(value.0);
+            }
+
             /// Read `ECDSA_CONF`.
             #[inline]
             pub fn read_ecdsa_conf(&self) -> ecdsa_conf::R {
                 ecdsa_conf::R(self.0.read::<0xec>())
+            }
+
+            /// Read `ECDSA_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ecdsa_conf(&mut self, change: impl FnOnce(&mut ecdsa_conf::W)) {
+                let mut value = ecdsa_conf::W(self.0.read::<0xec>());
+                change(&mut value);
+                self.0.write::<0xec>(value.0);
             }
 
             /// Read `IOMUX_CONF`.
@@ -62290,10 +66109,28 @@ pub mod soc {
                 iomux_conf::R(self.0.read::<0xf0>())
             }
 
+            /// Read `IOMUX_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_iomux_conf(&mut self, change: impl FnOnce(&mut iomux_conf::W)) {
+                let mut value = iomux_conf::W(self.0.read::<0xf0>());
+                change(&mut value);
+                self.0.write::<0xf0>(value.0);
+            }
+
             /// Read `IOMUX_CLK_CONF`.
             #[inline]
             pub fn read_iomux_clk_conf(&self) -> iomux_clk_conf::R {
                 iomux_clk_conf::R(self.0.read::<0xf4>())
+            }
+
+            /// Read `IOMUX_CLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_iomux_clk_conf(&mut self, change: impl FnOnce(&mut iomux_clk_conf::W)) {
+                let mut value = iomux_clk_conf::W(self.0.read::<0xf4>());
+                change(&mut value);
+                self.0.write::<0xf4>(value.0);
             }
 
             /// Read `REGDMA_CONF`.
@@ -62302,10 +66139,28 @@ pub mod soc {
                 regdma_conf::R(self.0.read::<0xf8>())
             }
 
+            /// Read `REGDMA_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_regdma_conf(&mut self, change: impl FnOnce(&mut regdma_conf::W)) {
+                let mut value = regdma_conf::W(self.0.read::<0xf8>());
+                change(&mut value);
+                self.0.write::<0xf8>(value.0);
+            }
+
             /// Read `TRACE_CONF`.
             #[inline]
             pub fn read_trace_conf(&self) -> trace_conf::R {
                 trace_conf::R(self.0.read::<0xfc>())
+            }
+
+            /// Read `TRACE_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_trace_conf(&mut self, change: impl FnOnce(&mut trace_conf::W)) {
+                let mut value = trace_conf::W(self.0.read::<0xfc>());
+                change(&mut value);
+                self.0.write::<0xfc>(value.0);
             }
 
             /// Read `ASSIST_CONF`.
@@ -62314,10 +66169,28 @@ pub mod soc {
                 assist_conf::R(self.0.read::<0x100>())
             }
 
+            /// Read `ASSIST_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_assist_conf(&mut self, change: impl FnOnce(&mut assist_conf::W)) {
+                let mut value = assist_conf::W(self.0.read::<0x100>());
+                change(&mut value);
+                self.0.write::<0x100>(value.0);
+            }
+
             /// Read `CACHE_CONF`.
             #[inline]
             pub fn read_cache_conf(&self) -> cache_conf::R {
                 cache_conf::R(self.0.read::<0x104>())
+            }
+
+            /// Read `CACHE_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_cache_conf(&mut self, change: impl FnOnce(&mut cache_conf::W)) {
+                let mut value = cache_conf::W(self.0.read::<0x104>());
+                change(&mut value);
+                self.0.write::<0x104>(value.0);
             }
 
             /// Read `MODEM_CONF`.
@@ -62326,16 +66199,43 @@ pub mod soc {
                 modem_conf::R(self.0.read::<0x108>())
             }
 
+            /// Read `MODEM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_modem_conf(&mut self, change: impl FnOnce(&mut modem_conf::W)) {
+                let mut value = modem_conf::W(self.0.read::<0x108>());
+                change(&mut value);
+                self.0.write::<0x108>(value.0);
+            }
+
             /// Read `TIMEOUT_CONF`.
             #[inline]
             pub fn read_timeout_conf(&self) -> timeout_conf::R {
                 timeout_conf::R(self.0.read::<0x10c>())
             }
 
+            /// Read `TIMEOUT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timeout_conf(&mut self, change: impl FnOnce(&mut timeout_conf::W)) {
+                let mut value = timeout_conf::W(self.0.read::<0x10c>());
+                change(&mut value);
+                self.0.write::<0x10c>(value.0);
+            }
+
             /// Read `SYSCLK_CONF`.
             #[inline]
             pub fn read_sysclk_conf(&self) -> sysclk_conf::R {
                 sysclk_conf::R(self.0.read::<0x110>())
+            }
+
+            /// Read `SYSCLK_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sysclk_conf(&mut self, change: impl FnOnce(&mut sysclk_conf::W)) {
+                let mut value = sysclk_conf::W(self.0.read::<0x110>());
+                change(&mut value);
+                self.0.write::<0x110>(value.0);
             }
 
             /// Read `CPU_WAITI_CONF`.
@@ -62350,16 +66250,43 @@ pub mod soc {
                 cpu_freq_conf::R(self.0.read::<0x118>())
             }
 
+            /// Read `CPU_FREQ_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_cpu_freq_conf(&mut self, change: impl FnOnce(&mut cpu_freq_conf::W)) {
+                let mut value = cpu_freq_conf::W(self.0.read::<0x118>());
+                change(&mut value);
+                self.0.write::<0x118>(value.0);
+            }
+
             /// Read `AHB_FREQ_CONF`.
             #[inline]
             pub fn read_ahb_freq_conf(&self) -> ahb_freq_conf::R {
                 ahb_freq_conf::R(self.0.read::<0x11c>())
             }
 
+            /// Read `AHB_FREQ_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ahb_freq_conf(&mut self, change: impl FnOnce(&mut ahb_freq_conf::W)) {
+                let mut value = ahb_freq_conf::W(self.0.read::<0x11c>());
+                change(&mut value);
+                self.0.write::<0x11c>(value.0);
+            }
+
             /// Read `APB_FREQ_CONF`.
             #[inline]
             pub fn read_apb_freq_conf(&self) -> apb_freq_conf::R {
                 apb_freq_conf::R(self.0.read::<0x120>())
+            }
+
+            /// Read `APB_FREQ_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_apb_freq_conf(&mut self, change: impl FnOnce(&mut apb_freq_conf::W)) {
+                let mut value = apb_freq_conf::W(self.0.read::<0x120>());
+                change(&mut value);
+                self.0.write::<0x120>(value.0);
             }
 
             /// Read `SYSCLK_FREQ_QUERY_0`.
@@ -62374,10 +66301,28 @@ pub mod soc {
                 pll_div_clk_en::R(self.0.read::<0x128>())
             }
 
+            /// Read `PLL_DIV_CLK_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_pll_div_clk_en(&mut self, change: impl FnOnce(&mut pll_div_clk_en::W)) {
+                let mut value = pll_div_clk_en::W(self.0.read::<0x128>());
+                change(&mut value);
+                self.0.write::<0x128>(value.0);
+            }
+
             /// Read `CTRL_CLK_OUT_EN`.
             #[inline]
             pub fn read_ctrl_clk_out_en(&self) -> ctrl_clk_out_en::R {
                 ctrl_clk_out_en::R(self.0.read::<0x12c>())
+            }
+
+            /// Read `CTRL_CLK_OUT_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ctrl_clk_out_en(&mut self, change: impl FnOnce(&mut ctrl_clk_out_en::W)) {
+                let mut value = ctrl_clk_out_en::W(self.0.read::<0x12c>());
+                change(&mut value);
+                self.0.write::<0x12c>(value.0);
             }
 
             /// Read `CTRL_32K_CONF`.
@@ -62392,16 +66337,49 @@ pub mod soc {
                 sram_power_conf_0::R(self.0.read::<0x134>())
             }
 
+            /// Read `SRAM_POWER_CONF_0`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sram_power_conf_0(
+                &mut self,
+                change: impl FnOnce(&mut sram_power_conf_0::W),
+            ) {
+                let mut value = sram_power_conf_0::W(self.0.read::<0x134>());
+                change(&mut value);
+                self.0.write::<0x134>(value.0);
+            }
+
             /// Read `SRAM_POWER_CONF_1`.
             #[inline]
             pub fn read_sram_power_conf_1(&self) -> sram_power_conf_1::R {
                 sram_power_conf_1::R(self.0.read::<0x138>())
             }
 
+            /// Read `SRAM_POWER_CONF_1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sram_power_conf_1(
+                &mut self,
+                change: impl FnOnce(&mut sram_power_conf_1::W),
+            ) {
+                let mut value = sram_power_conf_1::W(self.0.read::<0x138>());
+                change(&mut value);
+                self.0.write::<0x138>(value.0);
+            }
+
             /// Read `SEC_CONF`.
             #[inline]
             pub fn read_sec_conf(&self) -> sec_conf::R {
                 sec_conf::R(self.0.read::<0x13c>())
+            }
+
+            /// Read `SEC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sec_conf(&mut self, change: impl FnOnce(&mut sec_conf::W)) {
+                let mut value = sec_conf::W(self.0.read::<0x13c>());
+                change(&mut value);
+                self.0.write::<0x13c>(value.0);
             }
 
             /// Read `ADC_DAC_INV_PHASE_CONF`.
@@ -62422,10 +66400,28 @@ pub mod soc {
                 sar_clk_div::R(self.0.read::<0x148>())
             }
 
+            /// Read `SAR_CLK_DIV`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_sar_clk_div(&mut self, change: impl FnOnce(&mut sar_clk_div::W)) {
+                let mut value = sar_clk_div::W(self.0.read::<0x148>());
+                change(&mut value);
+                self.0.write::<0x148>(value.0);
+            }
+
             /// Read `BS_CONF`.
             #[inline]
             pub fn read_bs_conf(&self) -> bs_conf::R {
                 bs_conf::R(self.0.read::<0x150>())
+            }
+
+            /// Read `BS_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_bs_conf(&mut self, change: impl FnOnce(&mut bs_conf::W)) {
+                let mut value = bs_conf::W(self.0.read::<0x150>());
+                change(&mut value);
+                self.0.write::<0x150>(value.0);
             }
 
             /// Read `BS_FUNC_CONF`.
@@ -62434,10 +66430,28 @@ pub mod soc {
                 bs_func_conf::R(self.0.read::<0x154>())
             }
 
+            /// Read `BS_FUNC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_bs_func_conf(&mut self, change: impl FnOnce(&mut bs_func_conf::W)) {
+                let mut value = bs_func_conf::W(self.0.read::<0x154>());
+                change(&mut value);
+                self.0.write::<0x154>(value.0);
+            }
+
             /// Read `BS_PD_CTRL`.
             #[inline]
             pub fn read_bs_pd_ctrl(&self) -> bs_pd_ctrl::R {
                 bs_pd_ctrl::R(self.0.read::<0x158>())
+            }
+
+            /// Read `BS_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_bs_pd_ctrl(&mut self, change: impl FnOnce(&mut bs_pd_ctrl::W)) {
+                let mut value = bs_pd_ctrl::W(self.0.read::<0x158>());
+                change(&mut value);
+                self.0.write::<0x158>(value.0);
             }
 
             /// Read `TIMERGROUP_WDT_CONF`.
@@ -62446,10 +66460,34 @@ pub mod soc {
                 timergroup_wdt_conf::R(self.0.read::<0x15c>())
             }
 
+            /// Read `TIMERGROUP_WDT_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timergroup_wdt_conf(
+                &mut self,
+                change: impl FnOnce(&mut timergroup_wdt_conf::W),
+            ) {
+                let mut value = timergroup_wdt_conf::W(self.0.read::<0x15c>());
+                change(&mut value);
+                self.0.write::<0x15c>(value.0);
+            }
+
             /// Read `TIMERGROUP_XTAL_CONF`.
             #[inline]
             pub fn read_timergroup_xtal_conf(&self) -> timergroup_xtal_conf::R {
                 timergroup_xtal_conf::R(self.0.read::<0x160>())
+            }
+
+            /// Read `TIMERGROUP_XTAL_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_timergroup_xtal_conf(
+                &mut self,
+                change: impl FnOnce(&mut timergroup_xtal_conf::W),
+            ) {
+                let mut value = timergroup_xtal_conf::W(self.0.read::<0x160>());
+                change(&mut value);
+                self.0.write::<0x160>(value.0);
             }
 
             /// Read `KM_CONF`.
@@ -62458,10 +66496,28 @@ pub mod soc {
                 km_conf::R(self.0.read::<0x164>())
             }
 
+            /// Read `KM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_km_conf(&mut self, change: impl FnOnce(&mut km_conf::W)) {
+                let mut value = km_conf::W(self.0.read::<0x164>());
+                change(&mut value);
+                self.0.write::<0x164>(value.0);
+            }
+
             /// Read `KM_PD_CTRL`.
             #[inline]
             pub fn read_km_pd_ctrl(&self) -> km_pd_ctrl::R {
                 km_pd_ctrl::R(self.0.read::<0x168>())
+            }
+
+            /// Read `KM_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_km_pd_ctrl(&mut self, change: impl FnOnce(&mut km_pd_ctrl::W)) {
+                let mut value = km_pd_ctrl::W(self.0.read::<0x168>());
+                change(&mut value);
+                self.0.write::<0x168>(value.0);
             }
 
             /// Read `TCM_MEM_MONITOR_CONF`.
@@ -62470,10 +66526,34 @@ pub mod soc {
                 tcm_mem_monitor_conf::R(self.0.read::<0x16c>())
             }
 
+            /// Read `TCM_MEM_MONITOR_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_tcm_mem_monitor_conf(
+                &mut self,
+                change: impl FnOnce(&mut tcm_mem_monitor_conf::W),
+            ) {
+                let mut value = tcm_mem_monitor_conf::W(self.0.read::<0x16c>());
+                change(&mut value);
+                self.0.write::<0x16c>(value.0);
+            }
+
             /// Read `PSRAM_MEM_MONITOR_CONF`.
             #[inline]
             pub fn read_psram_mem_monitor_conf(&self) -> psram_mem_monitor_conf::R {
                 psram_mem_monitor_conf::R(self.0.read::<0x170>())
+            }
+
+            /// Read `PSRAM_MEM_MONITOR_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_psram_mem_monitor_conf(
+                &mut self,
+                change: impl FnOnce(&mut psram_mem_monitor_conf::W),
+            ) {
+                let mut value = psram_mem_monitor_conf::W(self.0.read::<0x170>());
+                change(&mut value);
+                self.0.write::<0x170>(value.0);
             }
 
             /// Read `RESET_EVENT_BYPASS`.
@@ -62482,10 +66562,34 @@ pub mod soc {
                 reset_event_bypass::R(self.0.read::<0x174>())
             }
 
+            /// Read `RESET_EVENT_BYPASS`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_reset_event_bypass(
+                &mut self,
+                change: impl FnOnce(&mut reset_event_bypass::W),
+            ) {
+                let mut value = reset_event_bypass::W(self.0.read::<0x174>());
+                change(&mut value);
+                self.0.write::<0x174>(value.0);
+            }
+
             /// Read `HPCORE_0_PD_CTRL`.
             #[inline]
             pub fn read_hpcore_0_pd_ctrl(&self) -> hpcore_0_pd_ctrl::R {
                 hpcore_0_pd_ctrl::R(self.0.read::<0x178>())
+            }
+
+            /// Read `HPCORE_0_PD_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_hpcore_0_pd_ctrl(
+                &mut self,
+                change: impl FnOnce(&mut hpcore_0_pd_ctrl::W),
+            ) {
+                let mut value = hpcore_0_pd_ctrl::W(self.0.read::<0x178>());
+                change(&mut value);
+                self.0.write::<0x178>(value.0);
             }
 
             /// Read `FPGA_DEBUG`.
@@ -62509,10 +66613,28 @@ pub mod soc {
                 clock_gate::R(self.0.read::<0xff8>())
             }
 
+            /// Read `CLOCK_GATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_clock_gate(&mut self, change: impl FnOnce(&mut clock_gate::W)) {
+                let mut value = clock_gate::W(self.0.read::<0xff8>());
+                change(&mut value);
+                self.0.write::<0xff8>(value.0);
+            }
+
             /// Read `DATE`.
             #[inline]
             pub fn read_date(&self) -> date::R {
                 date::R(self.0.read::<0xffc>())
+            }
+
+            /// Read `DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_date(&mut self, change: impl FnOnce(&mut date::W)) {
+                let mut value = date::W(self.0.read::<0xffc>());
+                change(&mut value);
+                self.0.write::<0xffc>(value.0);
             }
         }
 
@@ -62546,6 +66668,43 @@ pub mod soc {
                 #[inline]
                 pub const fn uart0_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable uart0 apb clock
+                #[inline]
+                pub const fn uart0_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset uart0 module
+                #[inline]
+                pub const fn uart0_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset uart0 module
+                #[inline]
+                pub const fn uart0_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `UART0_CLK_EN`.
+                #[inline]
+                pub fn set_uart0_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `UART0_RST_EN`.
+                #[inline]
+                pub fn set_uart0_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -62594,6 +66753,76 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The denominator of the frequency divider factor of the uart0 function clock.
+                #[inline]
+                pub const fn uart0_sclk_div_a(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The numerator of the frequency divider factor of the uart0 function clock.
+                #[inline]
+                pub const fn uart0_sclk_div_b(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// The integral part of the frequency divider factor of the uart0 function clock.
+                #[inline]
+                pub const fn uart0_sclk_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of UART0.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn uart0_sclk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable uart0 function clock
+                #[inline]
+                pub const fn uart0_sclk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `UART0_SCLK_DIV_A`.
+                #[inline]
+                pub fn set_uart0_sclk_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000003f) | value.get();
+                    self
+                }
+
+                /// Set `UART0_SCLK_DIV_B`.
+                #[inline]
+                pub fn set_uart0_sclk_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `UART0_SCLK_DIV_NUM`.
+                #[inline]
+                pub fn set_uart0_sclk_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `UART0_SCLK_SEL`.
+                #[inline]
+                pub fn set_uart0_sclk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `UART0_SCLK_EN`.
+                #[inline]
+                pub fn set_uart0_sclk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `UART0_PD_CTRL` register.
@@ -62620,6 +66849,37 @@ pub mod soc {
                 #[inline]
                 pub const fn uart0_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up UART0 memory.
+                #[inline]
+                pub const fn uart0_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down UART0 memory.
+                #[inline]
+                pub const fn uart0_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `UART0_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_uart0_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `UART0_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_uart0_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -62654,6 +66914,43 @@ pub mod soc {
                 #[inline]
                 pub const fn uart1_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable uart1 apb clock
+                #[inline]
+                pub const fn uart1_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset uart1 module
+                #[inline]
+                pub const fn uart1_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset uart1 module
+                #[inline]
+                pub const fn uart1_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `UART1_CLK_EN`.
+                #[inline]
+                pub fn set_uart1_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `UART1_RST_EN`.
+                #[inline]
+                pub fn set_uart1_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -62702,6 +66999,76 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The denominator of the frequency divider factor of the uart1 function clock.
+                #[inline]
+                pub const fn uart1_sclk_div_a(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The numerator of the frequency divider factor of the uart1 function clock.
+                #[inline]
+                pub const fn uart1_sclk_div_b(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// The integral part of the frequency divider factor of the uart1 function clock.
+                #[inline]
+                pub const fn uart1_sclk_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of UART1.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn uart1_sclk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable uart0 function clock
+                #[inline]
+                pub const fn uart1_sclk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `UART1_SCLK_DIV_A`.
+                #[inline]
+                pub fn set_uart1_sclk_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000003f) | value.get();
+                    self
+                }
+
+                /// Set `UART1_SCLK_DIV_B`.
+                #[inline]
+                pub fn set_uart1_sclk_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `UART1_SCLK_DIV_NUM`.
+                #[inline]
+                pub fn set_uart1_sclk_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `UART1_SCLK_SEL`.
+                #[inline]
+                pub fn set_uart1_sclk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `UART1_SCLK_EN`.
+                #[inline]
+                pub fn set_uart1_sclk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `UART1_PD_CTRL` register.
@@ -62728,6 +67095,37 @@ pub mod soc {
                 #[inline]
                 pub const fn uart1_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up UART1 memory.
+                #[inline]
+                pub const fn uart1_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down UART1 memory.
+                #[inline]
+                pub const fn uart1_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `UART1_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_uart1_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `UART1_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_uart1_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -62770,6 +67168,56 @@ pub mod soc {
                     (self.0 & 0x00000008) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable mspi apb clock and mspi pll clock
+                #[inline]
+                pub const fn mspi_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset mspi module
+                #[inline]
+                pub const fn mspi_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set 1 to enable mspi pll clock
+                #[inline]
+                pub const fn mspi_pll_clk_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Query this field after reset mspi module
+                #[inline]
+                pub const fn mspi_ready(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set `MSPI_CLK_EN`.
+                #[inline]
+                pub fn set_mspi_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `MSPI_RST_EN`.
+                #[inline]
+                pub fn set_mspi_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `MSPI_PLL_CLK_EN`.
+                #[inline]
+                pub fn set_mspi_pll_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+            }
         }
 
         /// The `MSPI_CLK_CONF` register.
@@ -62810,6 +67258,63 @@ pub mod soc {
                     (self.0 & 0x00000800) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set as one within (0,1,2) to generate div1(default)/div2/div4 of low-speed clock-source to drive clk_mspi_fast. Only avaiable whe the clck-source is a low-speed clock-source such as XTAL/FOSC.
+                #[inline]
+                pub const fn mspi_fast_div_num(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Configures the clock source for MSPI.\\ 0(default): XTAL_CLK\\ 1 RC_FAST_CLK\\ 2: PLL_F480M_CLK\\
+                #[inline]
+                pub const fn mspi_func_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 8)
+                }
+
+                /// Set 1 to enable mspi func clock
+                #[inline]
+                pub const fn mspi_func_clk_en(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set 0 to reset axi_clock domain of mspi module
+                #[inline]
+                pub const fn mspi_axi_rst_en(&self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// Set `MSPI_FAST_DIV_NUM`.
+                #[inline]
+                pub fn set_mspi_fast_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `MSPI_FUNC_CLK_SEL`.
+                #[inline]
+                pub fn set_mspi_func_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000300) | (value.get() << 8);
+                    self
+                }
+
+                /// Set `MSPI_FUNC_CLK_EN`.
+                #[inline]
+                pub fn set_mspi_func_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+
+                /// Set `MSPI_AXI_RST_EN`.
+                #[inline]
+                pub fn set_mspi_axi_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                    self
+                }
+            }
         }
 
         /// The `I2C_CONF` register.
@@ -62836,6 +67341,37 @@ pub mod soc {
                 #[inline]
                 pub const fn i2c_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable i2c apb clock
+                #[inline]
+                pub const fn i2c_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset i2c module
+                #[inline]
+                pub const fn i2c_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `I2C_CLK_EN`.
+                #[inline]
+                pub fn set_i2c_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `I2C_RST_EN`.
+                #[inline]
+                pub fn set_i2c_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -62882,6 +67418,76 @@ pub mod soc {
                 #[inline]
                 pub const fn i2c_sclk_en(self) -> bool {
                     (self.0 & 0x00400000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The denominator of the frequency divider factor of the i2c function clock.
+                #[inline]
+                pub const fn i2c_sclk_div_a(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The numerator of the frequency divider factor of the i2c function clock.
+                #[inline]
+                pub const fn i2c_sclk_div_b(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// The integral part of the frequency divider factor of the i2c function clock.
+                #[inline]
+                pub const fn i2c_sclk_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of I2C.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\
+                #[inline]
+                pub const fn i2c_sclk_sel(&self) -> bool {
+                    (self.0 & 0x00100000) != 0
+                }
+
+                /// Set 1 to enable i2c function clock
+                #[inline]
+                pub const fn i2c_sclk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `I2C_SCLK_DIV_A`.
+                #[inline]
+                pub fn set_i2c_sclk_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000003f) | value.get();
+                    self
+                }
+
+                /// Set `I2C_SCLK_DIV_B`.
+                #[inline]
+                pub fn set_i2c_sclk_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `I2C_SCLK_DIV_NUM`.
+                #[inline]
+                pub fn set_i2c_sclk_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `I2C_SCLK_SEL`.
+                #[inline]
+                pub fn set_i2c_sclk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                    self
+                }
+
+                /// Set `I2C_SCLK_EN`.
+                #[inline]
+                pub fn set_i2c_sclk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
                 }
             }
         }
@@ -63042,6 +67648,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable uhci clock
+                #[inline]
+                pub const fn uhci_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset uhci module
+                #[inline]
+                pub const fn uhci_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset uhci module
+                #[inline]
+                pub const fn uhci_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `UHCI_CLK_EN`.
+                #[inline]
+                pub fn set_uhci_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `UHCI_RST_EN`.
+                #[inline]
+                pub fn set_uhci_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `RMT_CONF` register.
@@ -63068,6 +67711,37 @@ pub mod soc {
                 #[inline]
                 pub const fn rmt_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable rmt apb clock
+                #[inline]
+                pub const fn rmt_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset rmt module
+                #[inline]
+                pub const fn rmt_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `RMT_CLK_EN`.
+                #[inline]
+                pub fn set_rmt_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `RMT_RST_EN`.
+                #[inline]
+                pub fn set_rmt_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -63116,6 +67790,76 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The denominator of the frequency divider factor of the rmt function clock.
+                #[inline]
+                pub const fn rmt_sclk_div_a(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The numerator of the frequency divider factor of the rmt function clock.
+                #[inline]
+                pub const fn rmt_sclk_div_b(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// The integral part of the frequency divider factor of the rmt function clock.
+                #[inline]
+                pub const fn rmt_sclk_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of RMT.\\ 0: XTAL_CLK\\ 1 (default): RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn rmt_sclk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable rmt function clock
+                #[inline]
+                pub const fn rmt_sclk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `RMT_SCLK_DIV_A`.
+                #[inline]
+                pub fn set_rmt_sclk_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000003f) | value.get();
+                    self
+                }
+
+                /// Set `RMT_SCLK_DIV_B`.
+                #[inline]
+                pub fn set_rmt_sclk_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `RMT_SCLK_DIV_NUM`.
+                #[inline]
+                pub fn set_rmt_sclk_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `RMT_SCLK_SEL`.
+                #[inline]
+                pub fn set_rmt_sclk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `RMT_SCLK_EN`.
+                #[inline]
+                pub fn set_rmt_sclk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `RMT_PD_CTRL` register.
@@ -63142,6 +67886,37 @@ pub mod soc {
                 #[inline]
                 pub const fn rmt_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up RMT memory.
+                #[inline]
+                pub const fn rmt_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down RMT memory.
+                #[inline]
+                pub const fn rmt_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `RMT_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_rmt_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `RMT_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_rmt_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -63178,6 +67953,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable ledc apb clock
+                #[inline]
+                pub const fn ledc_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset ledc module
+                #[inline]
+                pub const fn ledc_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset ledc module
+                #[inline]
+                pub const fn ledc_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `LEDC_CLK_EN`.
+                #[inline]
+                pub fn set_ledc_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `LEDC_RST_EN`.
+                #[inline]
+                pub fn set_ledc_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `LEDC_SCLK_CONF` register.
@@ -63206,6 +68018,37 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source of LEDC.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn ledc_sclk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable ledc function clock
+                #[inline]
+                pub const fn ledc_sclk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `LEDC_SCLK_SEL`.
+                #[inline]
+                pub fn set_ledc_sclk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `LEDC_SCLK_EN`.
+                #[inline]
+                pub fn set_ledc_sclk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `LEDC_PD_CTRL` register.
@@ -63232,6 +68075,37 @@ pub mod soc {
                 #[inline]
                 pub const fn ledc_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up LEDC memory.
+                #[inline]
+                pub const fn ledc_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down LEDC memory.
+                #[inline]
+                pub const fn ledc_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `LEDC_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_ledc_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `LEDC_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_ledc_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -63280,6 +68154,55 @@ pub mod soc {
                     (self.0 & 0x00000010) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable timer_group0 apb clock
+                #[inline]
+                pub const fn tg0_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset timer_group0 module
+                #[inline]
+                pub const fn tg0_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset timer_group0 wdt module
+                #[inline]
+                pub const fn tg0_wdt_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Query this field after reset timer_group0 timer0 module
+                #[inline]
+                pub const fn tg0_timer0_ready(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Query this field after reset timer_group0 timer1 module
+                #[inline]
+                pub const fn tg0_timer1_ready(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// Set `TG0_CLK_EN`.
+                #[inline]
+                pub fn set_tg0_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `TG0_RST_EN`.
+                #[inline]
+                pub fn set_tg0_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `TIMERGROUP0_TIMER_CLK_CONF` register.
@@ -63306,6 +68229,37 @@ pub mod soc {
                 #[inline]
                 pub const fn tg0_timer_clk_en(self) -> bool {
                     (self.0 & 0x00400000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source of general-purpose timers in Timer Group 0.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn tg0_timer_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable timer_group0 timer clock
+                #[inline]
+                pub const fn tg0_timer_clk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `TG0_TIMER_CLK_SEL`.
+                #[inline]
+                pub fn set_tg0_timer_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `TG0_TIMER_CLK_EN`.
+                #[inline]
+                pub fn set_tg0_timer_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
                 }
             }
         }
@@ -63336,6 +68290,37 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source of WDT in Timer Group 0.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn tg0_wdt_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable timer_group0 wdt clock
+                #[inline]
+                pub const fn tg0_wdt_clk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `TG0_WDT_CLK_SEL`.
+                #[inline]
+                pub fn set_tg0_wdt_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `TG0_WDT_CLK_EN`.
+                #[inline]
+                pub fn set_tg0_wdt_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `TIMERGROUP1_TIMER_CLK_CONF` register.
@@ -63362,6 +68347,37 @@ pub mod soc {
                 #[inline]
                 pub const fn tg1_timer_clk_en(self) -> bool {
                     (self.0 & 0x00400000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source of general-purpose timers in Timer Group 1.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn tg1_timer_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable timer_group1 timer clock
+                #[inline]
+                pub const fn tg1_timer_clk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `TG1_TIMER_CLK_SEL`.
+                #[inline]
+                pub fn set_tg1_timer_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `TG1_TIMER_CLK_EN`.
+                #[inline]
+                pub fn set_tg1_timer_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
                 }
             }
         }
@@ -63398,6 +68414,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable systimer apb clock
+                #[inline]
+                pub const fn systimer_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset systimer module
+                #[inline]
+                pub const fn systimer_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset systimer module
+                #[inline]
+                pub const fn systimer_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `SYSTIMER_CLK_EN`.
+                #[inline]
+                pub fn set_systimer_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SYSTIMER_RST_EN`.
+                #[inline]
+                pub fn set_systimer_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `SYSTIMER_FUNC_CLK_CONF` register.
@@ -63424,6 +68477,37 @@ pub mod soc {
                 #[inline]
                 pub const fn systimer_func_clk_en(self) -> bool {
                     (self.0 & 0x00400000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source of System Timer.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\
+                #[inline]
+                pub const fn systimer_func_clk_sel(&self) -> bool {
+                    (self.0 & 0x00100000) != 0
+                }
+
+                /// Set 1 to enable systimer function clock
+                #[inline]
+                pub const fn systimer_func_clk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `SYSTIMER_FUNC_CLK_SEL`.
+                #[inline]
+                pub fn set_systimer_func_clk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                    self
+                }
+
+                /// Set `SYSTIMER_FUNC_CLK_EN`.
+                #[inline]
+                pub fn set_systimer_func_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
                 }
             }
         }
@@ -63466,6 +68550,49 @@ pub mod soc {
                     (self.0 & 0x00000008) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable i2s apb clock
+                #[inline]
+                pub const fn i2s_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset i2s module
+                #[inline]
+                pub const fn i2s_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field before using i2s rx function, after reset i2s module
+                #[inline]
+                pub const fn i2s_rx_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Query this field before using i2s tx function, after reset i2s module
+                #[inline]
+                pub const fn i2s_tx_ready(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set `I2S_CLK_EN`.
+                #[inline]
+                pub fn set_i2s_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `I2S_RST_EN`.
+                #[inline]
+                pub fn set_i2s_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `I2S_TX_CLKM_CONF` register.
@@ -63498,6 +68625,50 @@ pub mod soc {
                 #[inline]
                 pub const fn i2s_tx_clkm_en(self) -> bool {
                     (self.0 & 0x00400000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Integral I2S TX clock divider value. f_I2S_CLK = f_I2S_CLK_S/(N+b/a). There will be (a-b) * n-div and b * (n+1)-div. So the average combination will be: for b <= a/2, z * \[x * n-div + (n+1)-div\] + y * n-div. For b > a/2, z * \[n-div + x * (n+1)-div\] + y * (n+1)-div.
+                #[inline]
+                pub const fn i2s_tx_clkm_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of I2S TX.\\ 0 (default): XTAL_CLK\\ 1: PLL_F240M_CLK\\ 2: PLL_F160M_CLK\\ 3: I2S_MCLK_in\\
+                #[inline]
+                pub const fn i2s_tx_clkm_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable i2s_tx function clock
+                #[inline]
+                pub const fn i2s_tx_clkm_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `I2S_TX_CLKM_DIV_NUM`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `I2S_TX_CLKM_SEL`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `I2S_TX_CLKM_EN`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
                 }
             }
         }
@@ -63540,6 +68711,63 @@ pub mod soc {
                     (self.0 & 0x08000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// For b <= a/2, the value of I2S_TX_CLKM_DIV_Z is b. For b > a/2, the value of I2S_TX_CLKM_DIV_Z is (a-b).
+                #[inline]
+                pub const fn i2s_tx_clkm_div_z(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// For b <= a/2, the value of I2S_TX_CLKM_DIV_Y is (a%b) . For b > a/2, the value of I2S_TX_CLKM_DIV_Y is (a%(a-b)).
+                #[inline]
+                pub const fn i2s_tx_clkm_div_y(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 9)
+                }
+
+                /// For b <= a/2, the value of I2S_TX_CLKM_DIV_X is (a/b) - 1. For b > a/2, the value of I2S_TX_CLKM_DIV_X is (a/(a-b)) - 1.
+                #[inline]
+                pub const fn i2s_tx_clkm_div_x(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 18)
+                }
+
+                /// For b <= a/2, the value of I2S_TX_CLKM_DIV_YN1 is 0 . For b > a/2, the value of I2S_TX_CLKM_DIV_YN1 is 1.
+                #[inline]
+                pub const fn i2s_tx_clkm_div_yn1(&self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// Set `I2S_TX_CLKM_DIV_Z`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_div_z(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x000001ff) | value.get();
+                    self
+                }
+
+                /// Set `I2S_TX_CLKM_DIV_Y`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_div_y(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x0003fe00) | (value.get() << 9);
+                    self
+                }
+
+                /// Set `I2S_TX_CLKM_DIV_X`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_div_x(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x07fc0000) | (value.get() << 18);
+                    self
+                }
+
+                /// Set `I2S_TX_CLKM_DIV_YN1`.
+                #[inline]
+                pub fn set_i2s_tx_clkm_div_yn1(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                    self
+                }
+            }
         }
 
         /// The `I2S_RX_CLKM_CONF` register.
@@ -63580,6 +68808,63 @@ pub mod soc {
                     (self.0 & 0x00800000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Integral I2S clock divider value
+                #[inline]
+                pub const fn i2s_rx_clkm_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of I2S RX.\\ 0 (default): XTAL_CLK\\ 1: PLL_F240M_CLK\\ 2: PLL_F160M_CLK\\ 3: I2S_MCLK_in\\
+                #[inline]
+                pub const fn i2s_rx_clkm_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable i2s_rx function clock
+                #[inline]
+                pub const fn i2s_rx_clkm_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Configures to select master clock.\\ 0 (default): I2S_TX_CLK\\ 1: I2S_RX_CLK\\
+                #[inline]
+                pub const fn i2s_mclk_sel(&self) -> bool {
+                    (self.0 & 0x00800000) != 0
+                }
+
+                /// Set `I2S_RX_CLKM_DIV_NUM`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `I2S_RX_CLKM_SEL`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `I2S_RX_CLKM_EN`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+
+                /// Set `I2S_MCLK_SEL`.
+                #[inline]
+                pub fn set_i2s_mclk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                    self
+                }
+            }
         }
 
         /// The `I2S_RX_CLKM_DIV_CONF` register.
@@ -63618,6 +68903,63 @@ pub mod soc {
                 #[inline]
                 pub const fn i2s_rx_clkm_div_yn1(self) -> bool {
                     (self.0 & 0x08000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// For b <= a/2, the value of I2S_RX_CLKM_DIV_Z is b. For b > a/2, the value of I2S_RX_CLKM_DIV_Z is (a-b).
+                #[inline]
+                pub const fn i2s_rx_clkm_div_z(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// For b <= a/2, the value of I2S_RX_CLKM_DIV_Y is (a%b) . For b > a/2, the value of I2S_RX_CLKM_DIV_Y is (a%(a-b)).
+                #[inline]
+                pub const fn i2s_rx_clkm_div_y(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 9)
+                }
+
+                /// For b <= a/2, the value of I2S_RX_CLKM_DIV_X is (a/b) - 1. For b > a/2, the value of I2S_RX_CLKM_DIV_X is (a/(a-b)) - 1.
+                #[inline]
+                pub const fn i2s_rx_clkm_div_x(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 18)
+                }
+
+                /// For b <= a/2, the value of I2S_RX_CLKM_DIV_YN1 is 0 . For b > a/2, the value of I2S_RX_CLKM_DIV_YN1 is 1.
+                #[inline]
+                pub const fn i2s_rx_clkm_div_yn1(&self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// Set `I2S_RX_CLKM_DIV_Z`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_div_z(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x000001ff) | value.get();
+                    self
+                }
+
+                /// Set `I2S_RX_CLKM_DIV_Y`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_div_y(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x0003fe00) | (value.get() << 9);
+                    self
+                }
+
+                /// Set `I2S_RX_CLKM_DIV_X`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_div_x(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x07fc0000) | (value.get() << 18);
+                    self
+                }
+
+                /// Set `I2S_RX_CLKM_DIV_YN1`.
+                #[inline]
+                pub fn set_i2s_rx_clkm_div_yn1(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                    self
                 }
             }
         }
@@ -63666,6 +69008,76 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The denominator of the frequency divider factor of the saradc function clock.
+                #[inline]
+                pub const fn saradc_clkm_div_a(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The numerator of the frequency divider factor of the saradc function clock.
+                #[inline]
+                pub const fn saradc_clkm_div_b(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// The integral part of the frequency divider factor of the saradc function clock.
+                #[inline]
+                pub const fn saradc_clkm_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of SAR ADC.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn saradc_clkm_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable saradc function clock
+                #[inline]
+                pub const fn saradc_clkm_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `SARADC_CLKM_DIV_A`.
+                #[inline]
+                pub fn set_saradc_clkm_div_a(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000003f) | value.get();
+                    self
+                }
+
+                /// Set `SARADC_CLKM_DIV_B`.
+                #[inline]
+                pub fn set_saradc_clkm_div_b(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fc0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `SARADC_CLKM_DIV_NUM`.
+                #[inline]
+                pub fn set_saradc_clkm_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `SARADC_CLKM_SEL`.
+                #[inline]
+                pub fn set_saradc_clkm_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `SARADC_CLKM_EN`.
+                #[inline]
+                pub fn set_saradc_clkm_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `USB_DEVICE_CONF` register.
@@ -63698,6 +69110,43 @@ pub mod soc {
                 #[inline]
                 pub const fn usb_device_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable usb_device clock
+                #[inline]
+                pub const fn usb_device_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset usb_device module
+                #[inline]
+                pub const fn usb_device_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset usb_device module
+                #[inline]
+                pub const fn usb_device_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `USB_DEVICE_CLK_EN`.
+                #[inline]
+                pub fn set_usb_device_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `USB_DEVICE_RST_EN`.
+                #[inline]
+                pub fn set_usb_device_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -63734,6 +69183,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable intmtx clock
+                #[inline]
+                pub const fn intmtx_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset intmtx module
+                #[inline]
+                pub const fn intmtx_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset intmtx module
+                #[inline]
+                pub const fn intmtx_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `INTMTX_CLK_EN`.
+                #[inline]
+                pub fn set_intmtx_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `INTMTX_RST_EN`.
+                #[inline]
+                pub fn set_intmtx_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `PCNT_CONF` register.
@@ -63766,6 +69252,43 @@ pub mod soc {
                 #[inline]
                 pub const fn pcnt_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable pcnt clock
+                #[inline]
+                pub const fn pcnt_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset pcnt module
+                #[inline]
+                pub const fn pcnt_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset pcnt module
+                #[inline]
+                pub const fn pcnt_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `PCNT_CLK_EN`.
+                #[inline]
+                pub fn set_pcnt_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PCNT_RST_EN`.
+                #[inline]
+                pub fn set_pcnt_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -63802,6 +69325,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable etm clock
+                #[inline]
+                pub const fn etm_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset etm module
+                #[inline]
+                pub const fn etm_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset etm module
+                #[inline]
+                pub const fn etm_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `ETM_CLK_EN`.
+                #[inline]
+                pub fn set_etm_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ETM_RST_EN`.
+                #[inline]
+                pub fn set_etm_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `PWM_CONF` register.
@@ -63834,6 +69394,43 @@ pub mod soc {
                 #[inline]
                 pub const fn pwm_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable pwm clock
+                #[inline]
+                pub const fn pwm_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset pwm module
+                #[inline]
+                pub const fn pwm_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset pwm module
+                #[inline]
+                pub const fn pwm_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `PWM_CLK_EN`.
+                #[inline]
+                pub fn set_pwm_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PWM_RST_EN`.
+                #[inline]
+                pub fn set_pwm_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -63870,6 +69467,50 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The integral part of the frequency divider factor of the pwm function clock.
+                #[inline]
+                pub const fn pwm_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of MCPWM.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F160M_CLK\\
+                #[inline]
+                pub const fn pwm_clkm_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// set this field as 1 to activate pwm clkm.
+                #[inline]
+                pub const fn pwm_clkm_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `PWM_DIV_NUM`.
+                #[inline]
+                pub fn set_pwm_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `PWM_CLKM_SEL`.
+                #[inline]
+                pub fn set_pwm_clkm_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `PWM_CLKM_EN`.
+                #[inline]
+                pub fn set_pwm_clkm_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `PARL_IO_CONF` register.
@@ -63902,6 +69543,43 @@ pub mod soc {
                 #[inline]
                 pub const fn parl_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable parl apb clock
+                #[inline]
+                pub const fn parl_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset parl apb reg
+                #[inline]
+                pub const fn parl_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset parl module
+                #[inline]
+                pub const fn parl_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `PARL_CLK_EN`.
+                #[inline]
+                pub fn set_parl_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PARL_RST_EN`.
+                #[inline]
+                pub fn set_parl_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -63944,6 +69622,63 @@ pub mod soc {
                     (self.0 & 0x00080000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The integral part of the frequency divider factor of the parl rx clock.
+                #[inline]
+                pub const fn parl_clk_rx_div_num(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// Configures the clock source of Paraller IO RX\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F240M_CLK\\ 3: Use the clock from chip pin\\
+                #[inline]
+                pub const fn parl_clk_rx_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// Set 1 to enable parl rx clock
+                #[inline]
+                pub const fn parl_clk_rx_en(&self) -> bool {
+                    (self.0 & 0x00040000) != 0
+                }
+
+                /// Set 0 to reset parl rx module
+                #[inline]
+                pub const fn parl_rx_rst_en(&self) -> bool {
+                    (self.0 & 0x00080000) != 0
+                }
+
+                /// Set `PARL_CLK_RX_DIV_NUM`.
+                #[inline]
+                pub fn set_parl_clk_rx_div_num(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `PARL_CLK_RX_SEL`.
+                #[inline]
+                pub fn set_parl_clk_rx_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00030000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `PARL_CLK_RX_EN`.
+                #[inline]
+                pub fn set_parl_clk_rx_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00040000) | (u32::from(value) << 18);
+                    self
+                }
+
+                /// Set `PARL_RX_RST_EN`.
+                #[inline]
+                pub fn set_parl_rx_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                    self
+                }
+            }
         }
 
         /// The `PARL_CLK_TX_CONF` register.
@@ -63982,6 +69717,63 @@ pub mod soc {
                 #[inline]
                 pub const fn parl_tx_rst_en(self) -> bool {
                     (self.0 & 0x00080000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The integral part of the frequency divider factor of the parl tx clock.
+                #[inline]
+                pub const fn parl_clk_tx_div_num(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// Configures the clock source of Paraller IO RX\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F240M_CLK\\ 3: Use the clock from chip pin\\
+                #[inline]
+                pub const fn parl_clk_tx_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// Set 1 to enable parl tx clock
+                #[inline]
+                pub const fn parl_clk_tx_en(&self) -> bool {
+                    (self.0 & 0x00040000) != 0
+                }
+
+                /// Set 0 to reset parl tx module
+                #[inline]
+                pub const fn parl_tx_rst_en(&self) -> bool {
+                    (self.0 & 0x00080000) != 0
+                }
+
+                /// Set `PARL_CLK_TX_DIV_NUM`.
+                #[inline]
+                pub fn set_parl_clk_tx_div_num(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `PARL_CLK_TX_SEL`.
+                #[inline]
+                pub fn set_parl_clk_tx_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00030000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `PARL_CLK_TX_EN`.
+                #[inline]
+                pub fn set_parl_clk_tx_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00040000) | (u32::from(value) << 18);
+                    self
+                }
+
+                /// Set `PARL_TX_RST_EN`.
+                #[inline]
+                pub fn set_parl_tx_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                    self
                 }
             }
         }
@@ -64030,6 +69822,76 @@ pub mod soc {
                     (self.0 & 0x00000010) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable apb clock of pvt module
+                #[inline]
+                pub const fn pvt_monitor_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset all pvt monitor module
+                #[inline]
+                pub const fn pvt_monitor_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set 1 to enable function clock of modem pvt module
+                #[inline]
+                pub const fn pvt_monitor_site1_clk_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set 1 to enable function clock of cpu pvt module
+                #[inline]
+                pub const fn pvt_monitor_site2_clk_en(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set 1 to enable function clock of hp_peri pvt module
+                #[inline]
+                pub const fn pvt_monitor_site3_clk_en(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// Set `PVT_MONITOR_CLK_EN`.
+                #[inline]
+                pub fn set_pvt_monitor_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PVT_MONITOR_RST_EN`.
+                #[inline]
+                pub fn set_pvt_monitor_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `PVT_MONITOR_SITE1_CLK_EN`.
+                #[inline]
+                pub fn set_pvt_monitor_site1_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `PVT_MONITOR_SITE2_CLK_EN`.
+                #[inline]
+                pub fn set_pvt_monitor_site2_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `PVT_MONITOR_SITE3_CLK_EN`.
+                #[inline]
+                pub fn set_pvt_monitor_site3_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+            }
         }
 
         /// The `PVT_MONITOR_FUNC_CLK_CONF` register.
@@ -64064,6 +69926,53 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The integral part of the frequency divider factor of the pvt_monitor function clock.
+                #[inline]
+                pub const fn pvt_monitor_func_clk_div_num(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Configures the clock source of PVT MONITER.\\ 0 (default): XTAL_CLK\\ 1: PLL_F160M_CLK\\
+                #[inline]
+                pub const fn pvt_monitor_func_clk_sel(&self) -> bool {
+                    (self.0 & 0x00100000) != 0
+                }
+
+                /// Set 1 to enable source clock of pvt sitex
+                #[inline]
+                pub const fn pvt_monitor_func_clk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `PVT_MONITOR_FUNC_CLK_DIV_NUM`.
+                #[inline]
+                pub fn set_pvt_monitor_func_clk_div_num(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0000000f) | value.get();
+                    self
+                }
+
+                /// Set `PVT_MONITOR_FUNC_CLK_SEL`.
+                #[inline]
+                pub fn set_pvt_monitor_func_clk_sel(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                    self
+                }
+
+                /// Set `PVT_MONITOR_FUNC_CLK_EN`.
+                #[inline]
+                pub fn set_pvt_monitor_func_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `GDMA_CONF` register.
@@ -64090,6 +69999,37 @@ pub mod soc {
                 #[inline]
                 pub const fn gdma_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable gdma clock
+                #[inline]
+                pub const fn gdma_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset gdma module
+                #[inline]
+                pub const fn gdma_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `GDMA_CLK_EN`.
+                #[inline]
+                pub fn set_gdma_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `GDMA_RST_EN`.
+                #[inline]
+                pub fn set_gdma_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -64126,6 +70066,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable spi2 apb clock
+                #[inline]
+                pub const fn spi2_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset spi2 module
+                #[inline]
+                pub const fn spi2_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset spi2 module
+                #[inline]
+                pub const fn spi2_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `SPI2_CLK_EN`.
+                #[inline]
+                pub fn set_spi2_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI2_RST_EN`.
+                #[inline]
+                pub fn set_spi2_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `SPI2_CLKM_CONF` register.
@@ -64158,6 +70135,50 @@ pub mod soc {
                 #[inline]
                 pub const fn spi2_clkm_en(self) -> bool {
                     (self.0 & 0x00400000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The integral part of the frequency divider factor of the spi2_mst clock.
+                #[inline]
+                pub const fn spi2_clkm_div_num(&self) -> u8 {
+                    (self.0 >> 12) as u8
+                }
+
+                /// Configures the clock source of SPI2.\\ 0 (default): XTAL_CLK\\ 1: PLL_F160M_CLK\\ 2: RC_FAST_CLK\\ 3: PLL_F120M_CLK\\
+                #[inline]
+                pub const fn spi2_clkm_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable spi2 function clock
+                #[inline]
+                pub const fn spi2_clkm_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `SPI2_CLKM_DIV_NUM`.
+                #[inline]
+                pub fn set_spi2_clkm_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000ff000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `SPI2_CLKM_SEL`.
+                #[inline]
+                pub fn set_spi2_clkm_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `SPI2_CLKM_EN`.
+                #[inline]
+                pub fn set_spi2_clkm_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
                 }
             }
         }
@@ -64194,6 +70215,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable aes clock
+                #[inline]
+                pub const fn aes_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset aes module
+                #[inline]
+                pub const fn aes_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset aes module
+                #[inline]
+                pub const fn aes_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `AES_CLK_EN`.
+                #[inline]
+                pub fn set_aes_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `AES_RST_EN`.
+                #[inline]
+                pub fn set_aes_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `SHA_CONF` register.
@@ -64226,6 +70284,43 @@ pub mod soc {
                 #[inline]
                 pub const fn sha_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable sha clock
+                #[inline]
+                pub const fn sha_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset sha module
+                #[inline]
+                pub const fn sha_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset sha module
+                #[inline]
+                pub const fn sha_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `SHA_CLK_EN`.
+                #[inline]
+                pub fn set_sha_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SHA_RST_EN`.
+                #[inline]
+                pub fn set_sha_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -64262,6 +70357,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable rsa clock
+                #[inline]
+                pub const fn rsa_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset rsa module
+                #[inline]
+                pub const fn rsa_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset rsa module
+                #[inline]
+                pub const fn rsa_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `RSA_CLK_EN`.
+                #[inline]
+                pub fn set_rsa_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `RSA_RST_EN`.
+                #[inline]
+                pub fn set_rsa_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `RSA_PD_CTRL` register.
@@ -64294,6 +70426,50 @@ pub mod soc {
                 #[inline]
                 pub const fn rsa_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to power down rsa internal memory.
+                #[inline]
+                pub const fn rsa_mem_pd(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set this bit to force power up rsa internal memory
+                #[inline]
+                pub const fn rsa_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down rsa internal memory.
+                #[inline]
+                pub const fn rsa_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `RSA_MEM_PD`.
+                #[inline]
+                pub fn set_rsa_mem_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `RSA_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_rsa_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `RSA_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_rsa_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -64330,6 +70506,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable ecc clock
+                #[inline]
+                pub const fn ecc_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset ecc module
+                #[inline]
+                pub const fn ecc_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset ecc module
+                #[inline]
+                pub const fn ecc_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `ECC_CLK_EN`.
+                #[inline]
+                pub fn set_ecc_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ECC_RST_EN`.
+                #[inline]
+                pub fn set_ecc_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `ECC_PD_CTRL` register.
@@ -64362,6 +70575,50 @@ pub mod soc {
                 #[inline]
                 pub const fn ecc_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to power down ecc internal memory.
+                #[inline]
+                pub const fn ecc_mem_pd(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set this bit to force power up ecc internal memory
+                #[inline]
+                pub const fn ecc_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down ecc internal memory.
+                #[inline]
+                pub const fn ecc_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `ECC_MEM_PD`.
+                #[inline]
+                pub fn set_ecc_mem_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ECC_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_ecc_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `ECC_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_ecc_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -64398,6 +70655,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable ds clock
+                #[inline]
+                pub const fn ds_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset ds module
+                #[inline]
+                pub const fn ds_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset ds module
+                #[inline]
+                pub const fn ds_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `DS_CLK_EN`.
+                #[inline]
+                pub fn set_ds_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `DS_RST_EN`.
+                #[inline]
+                pub fn set_ds_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `HMAC_CONF` register.
@@ -64430,6 +70724,43 @@ pub mod soc {
                 #[inline]
                 pub const fn hmac_ready(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable hmac clock
+                #[inline]
+                pub const fn hmac_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset hmac module
+                #[inline]
+                pub const fn hmac_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset hmac module
+                #[inline]
+                pub const fn hmac_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `HMAC_CLK_EN`.
+                #[inline]
+                pub fn set_hmac_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `HMAC_RST_EN`.
+                #[inline]
+                pub fn set_hmac_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -64466,6 +70797,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable ecdsa clock
+                #[inline]
+                pub const fn ecdsa_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset ecdsa module
+                #[inline]
+                pub const fn ecdsa_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset ecdsa module
+                #[inline]
+                pub const fn ecdsa_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `ECDSA_CLK_EN`.
+                #[inline]
+                pub fn set_ecdsa_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ECDSA_RST_EN`.
+                #[inline]
+                pub fn set_ecdsa_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `IOMUX_CONF` register.
@@ -64492,6 +70860,37 @@ pub mod soc {
                 #[inline]
                 pub const fn iomux_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable iomux apb clock
+                #[inline]
+                pub const fn iomux_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset iomux module
+                #[inline]
+                pub const fn iomux_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `IOMUX_CLK_EN`.
+                #[inline]
+                pub fn set_iomux_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `IOMUX_RST_EN`.
+                #[inline]
+                pub fn set_iomux_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -64522,6 +70921,37 @@ pub mod soc {
                     (self.0 & 0x00400000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source of IO MUX.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F80M_CLK\\
+                #[inline]
+                pub const fn iomux_func_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set 1 to enable iomux function clock
+                #[inline]
+                pub const fn iomux_func_clk_en(&self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// Set `IOMUX_FUNC_CLK_SEL`.
+                #[inline]
+                pub fn set_iomux_func_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00300000) | (value.get() << 20);
+                    self
+                }
+
+                /// Set `IOMUX_FUNC_CLK_EN`.
+                #[inline]
+                pub fn set_iomux_func_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
+                    self
+                }
+            }
         }
 
         /// The `REGDMA_CONF` register.
@@ -64548,6 +70978,37 @@ pub mod soc {
                 #[inline]
                 pub const fn regdma_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable regdma clock
+                #[inline]
+                pub const fn regdma_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset regdma module
+                #[inline]
+                pub const fn regdma_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `REGDMA_CLK_EN`.
+                #[inline]
+                pub fn set_regdma_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `REGDMA_RST_EN`.
+                #[inline]
+                pub fn set_regdma_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -64578,6 +71039,37 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable trace clock
+                #[inline]
+                pub const fn trace_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset trace module
+                #[inline]
+                pub const fn trace_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `TRACE_CLK_EN`.
+                #[inline]
+                pub fn set_trace_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `TRACE_RST_EN`.
+                #[inline]
+                pub fn set_trace_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `ASSIST_CONF` register.
@@ -64604,6 +71096,37 @@ pub mod soc {
                 #[inline]
                 pub const fn assist_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable assist clock
+                #[inline]
+                pub const fn assist_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset assist module
+                #[inline]
+                pub const fn assist_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `ASSIST_CLK_EN`.
+                #[inline]
+                pub fn set_assist_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `ASSIST_RST_EN`.
+                #[inline]
+                pub fn set_assist_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -64646,6 +71169,63 @@ pub mod soc {
                     (self.0 & 0x00000008) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable cache clock
+                #[inline]
+                pub const fn cache_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset cache module
+                #[inline]
+                pub const fn cache_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set 0 to power up cache mem
+                #[inline]
+                pub const fn cache_pu_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set 0 to power down cache mem
+                #[inline]
+                pub const fn cache_pd_en(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set `CACHE_CLK_EN`.
+                #[inline]
+                pub fn set_cache_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `CACHE_RST_EN`.
+                #[inline]
+                pub fn set_cache_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `CACHE_PU_EN`.
+                #[inline]
+                pub fn set_cache_pu_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `CACHE_PD_EN`.
+                #[inline]
+                pub fn set_cache_pd_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+            }
         }
 
         /// The `MODEM_CONF` register.
@@ -64680,6 +71260,50 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// This field indicates if modem_apb clock is enable. 0: disable, 1: enable(default).
+                #[inline]
+                pub const fn modem_apb_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set this file as 1 to reset modem-subsystem.
+                #[inline]
+                pub const fn modem_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// This field indicates if modem source clock is enable. 0: disable, 1: enable(default).
+                #[inline]
+                pub const fn modem_clk_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `MODEM_APB_CLK_EN`.
+                #[inline]
+                pub fn set_modem_apb_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `MODEM_RST_EN`.
+                #[inline]
+                pub fn set_modem_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `MODEM_CLK_EN`.
+                #[inline]
+                pub fn set_modem_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+            }
         }
 
         /// The `TIMEOUT_CONF` register.
@@ -64706,6 +71330,37 @@ pub mod soc {
                 #[inline]
                 pub const fn hp_timeout_rst_en(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 0 to reset cpu_peri timeout module
+                #[inline]
+                pub const fn cpu_timeout_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set 0 to reset hp_peri timeout module and hp_modem timeout module
+                #[inline]
+                pub const fn hp_timeout_rst_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `CPU_TIMEOUT_RST_EN`.
+                #[inline]
+                pub fn set_cpu_timeout_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `HP_TIMEOUT_RST_EN`.
+                #[inline]
+                pub fn set_hp_timeout_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -64752,6 +71407,55 @@ pub mod soc {
                 #[inline]
                 pub const fn cpu_dbgmd_clk_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// clk_hproot is div1 of low-speed clock-source if clck-source is a low-speed clock-source such as XTAL/FOSC.
+                #[inline]
+                pub const fn ls_div_num(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// clk_hproot is div3 of SPLL if the clock-source is high-speed clock SPLL.
+                #[inline]
+                pub const fn hs_div_num(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// Configures to select the clock source of HP_ROOT_CLK.\\ 0 (default): XTAL_CLK\\ 1: RC_FAST_CLK\\ 2: PLL_F160M_CLK\\ 2: PLL_F240M_CLK\\
+                #[inline]
+                pub const fn soc_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// This field indicates the frequency(MHz) of XTAL.
+                #[inline]
+                pub const fn clk_xtal_freq(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 24)
+                }
+
+                /// This field indicates if cpu debug mode clock is enable. 0: disable, 1: enable(default).
+                #[inline]
+                pub const fn cpu_dbgmd_clk_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `SOC_CLK_SEL`.
+                #[inline]
+                pub fn set_soc_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00030000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `CPU_DBGMD_CLK_EN`.
+                #[inline]
+                pub fn set_cpu_dbgmd_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -64816,6 +71520,24 @@ pub mod soc {
                     (self.0) as u8
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this field to generate clk_cpu drived by clk_hproot. The clk_cpu is div1(default)/div2/div4 of clk_hproot. This field is only avaliable for low-speed clock-source such as XTAL/FOSC, and should be used together with PCR_AHB_DIV_NUM.
+                #[inline]
+                pub const fn cpu_div_num(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Set `CPU_DIV_NUM`.
+                #[inline]
+                pub fn set_cpu_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `AHB_FREQ_CONF` register.
@@ -64836,6 +71558,24 @@ pub mod soc {
                 #[inline]
                 pub const fn ahb_div_num(self) -> u8 {
                     (self.0) as u8
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this field to generate clk_ahb drived by clk_hproot. The clk_ahb is div1(default)/div2/div4/div8 of clk_hproot. This field is only avaliable for low-speed clock-source such as XTAL/FOSC, and should be used together with PCR_CPU_DIV_NUM.
+                #[inline]
+                pub const fn ahb_div_num(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Set `AHB_DIV_NUM`.
+                #[inline]
+                pub fn set_ahb_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
                 }
             }
         }
@@ -64864,6 +71604,37 @@ pub mod soc {
                 #[inline]
                 pub const fn apb_div_num(self) -> u8 {
                     (self.0 >> 8) as u8
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// If this field's value is grater than PCR_APB_DIV_NUM, the clk_apb will be automatically down to clk_apb_decrease only when no access is on apb-bus, and will recover to the previous frequency when a new access appears on apb-bus. Set as one within (0,1,3) to set clk_apb_decrease as div1/div2/div4(default) of clk_ahb. Note that enable this function will reduce performance. Users can set this field as zero to disable the auto-decrease-apb-freq function. By default, this function is disable.
+                #[inline]
+                pub const fn apb_decrease_div_num(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Set as one within (0,1,3) to generate clk_apb drived by clk_ahb. The clk_apb is div1(default)/div2/div4 of clk_ahb.
+                #[inline]
+                pub const fn apb_div_num(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// Set `APB_DECREASE_DIV_NUM`.
+                #[inline]
+                pub fn set_apb_decrease_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `APB_DIV_NUM`.
+                #[inline]
+                pub fn set_apb_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                    self
                 }
             }
         }
@@ -64964,6 +71735,128 @@ pub mod soc {
                     (self.0 & 0x00000100) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// This field is used to open 240 MHz clock (div2 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_240m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// This field is used to open 160 MHz clock (div3 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_160m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// This field is used to open 120 MHz clock (div4 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_120m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// This field is used to open 80 MHz clock (div6 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_80m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// This field is used to open 60 MHz clock (div8 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_60m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// This field is used to open 48 MHz clock (div10 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_48m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// This field is used to open 40 MHz clock (div12 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_40m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// This field is used to open 20 MHz clock (div24 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_20m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// This field is used to open 12 MHz clock (div40 of SPLL) drived from SPLL. 0: close, 1: open(default). Only avaliable when high-speed clock-source SPLL is active.
+                #[inline]
+                pub const fn pll_12m_clk_en(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// Set `PLL_240M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_240m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PLL_160M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_160m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `PLL_120M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_120m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `PLL_80M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_80m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `PLL_60M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_60m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `PLL_48M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_48m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `PLL_40M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_40m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                    self
+                }
+
+                /// Set `PLL_20M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_20m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                    self
+                }
+
+                /// Set `PLL_12M_CLK_EN`.
+                #[inline]
+                pub fn set_pll_12m_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+            }
         }
 
         /// The `CTRL_CLK_OUT_EN` register.
@@ -65046,6 +71939,154 @@ pub mod soc {
                     (self.0 & 0x00000400) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable 20m clock
+                #[inline]
+                pub const fn clk20_oen(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 1 to enable 22m clock
+                #[inline]
+                pub const fn clk22_oen(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set 1 to enable 44m clock
+                #[inline]
+                pub const fn clk44_oen(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set 1 to enable bb clock
+                #[inline]
+                pub const fn clk_bb_oen(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// Set 1 to enable 80m clock
+                #[inline]
+                pub const fn clk80_oen(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// Set 1 to enable 160m clock
+                #[inline]
+                pub const fn clk160_oen(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// Set 1 to enable 320m clock
+                #[inline]
+                pub const fn clk_320m_oen(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// Reserved
+                #[inline]
+                pub const fn clk_adc_inf_oen(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// Reserved
+                #[inline]
+                pub const fn clk_dac_cpu_oen(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// Reserved
+                #[inline]
+                pub const fn clk40x_bb_oen(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// Set 1 to enable xtal clock
+                #[inline]
+                pub const fn clk_xtal_oen(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set `CLK20_OEN`.
+                #[inline]
+                pub fn set_clk20_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `CLK22_OEN`.
+                #[inline]
+                pub fn set_clk22_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `CLK44_OEN`.
+                #[inline]
+                pub fn set_clk44_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `CLK_BB_OEN`.
+                #[inline]
+                pub fn set_clk_bb_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `CLK80_OEN`.
+                #[inline]
+                pub fn set_clk80_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `CLK160_OEN`.
+                #[inline]
+                pub fn set_clk160_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `CLK_320M_OEN`.
+                #[inline]
+                pub fn set_clk_320m_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                    self
+                }
+
+                /// Set `CLK_ADC_INF_OEN`.
+                #[inline]
+                pub fn set_clk_adc_inf_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                    self
+                }
+
+                /// Set `CLK_DAC_CPU_OEN`.
+                #[inline]
+                pub fn set_clk_dac_cpu_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `CLK40X_BB_OEN`.
+                #[inline]
+                pub fn set_clk40x_bb_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `CLK_XTAL_OEN`.
+                #[inline]
+                pub fn set_clk_xtal_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+            }
         }
 
         /// The `CTRL_32K_CONF` register.
@@ -65102,6 +72143,50 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 6)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up ROM
+                #[inline]
+                pub const fn rom_force_pu(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set this bit to force power down ROM.
+                #[inline]
+                pub const fn rom_force_pd(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// 1: Force to open the clock and bypass the gate-clock when accessing the ROM. 0: A gate-clock will be used when accessing the ROM.
+                #[inline]
+                pub const fn rom_clkgate_force_on(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// Set `ROM_FORCE_PU`.
+                #[inline]
+                pub fn set_rom_force_pu(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000007) | value.get();
+                    self
+                }
+
+                /// Set `ROM_FORCE_PD`.
+                #[inline]
+                pub fn set_rom_force_pd(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000038) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `ROM_CLKGATE_FORCE_ON`.
+                #[inline]
+                pub fn set_rom_clkgate_force_on(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x000001c0) | (value.get() << 6);
+                    self
+                }
+            }
         }
 
         /// The `SRAM_POWER_CONF_1` register.
@@ -65136,6 +72221,50 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 20)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up SRAM
+                #[inline]
+                pub const fn sram_force_pu(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set this bit to force power down SRAM.
+                #[inline]
+                pub const fn sram_force_pd(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 10)
+                }
+
+                /// 1: Force to open the clock and bypass the gate-clock when accessing the SRAM. 0: A gate-clock will be used when accessing the SRAM.
+                #[inline]
+                pub const fn sram_clkgate_force_on(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 20)
+                }
+
+                /// Set `SRAM_FORCE_PU`.
+                #[inline]
+                pub fn set_sram_force_pu(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000000f) | value.get();
+                    self
+                }
+
+                /// Set `SRAM_FORCE_PD`.
+                #[inline]
+                pub fn set_sram_force_pd(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x00003c00) | (value.get() << 10);
+                    self
+                }
+
+                /// Set `SRAM_CLKGATE_FORCE_ON`.
+                #[inline]
+                pub fn set_sram_clkgate_force_on(&mut self, value: oer_mmio::Bits<4>) -> &mut Self {
+                    self.0 = (self.0 & !0x00f00000) | (value.get() << 20);
+                    self
+                }
+            }
         }
 
         /// The `SEC_CONF` register.
@@ -65162,6 +72291,37 @@ pub mod soc {
                 #[inline]
                 pub const fn sec_rst_en(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the clock source for the External Memory Encryption and Decryption module.\\ 0(default): XTAL_CLK\\ 1 RC_FAST_CLK\\ 2: PLL_F480M_CLK\\
+                #[inline]
+                pub const fn sec_clk_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set 0 to reset sec module
+                #[inline]
+                pub const fn sec_rst_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `SEC_CLK_SEL`.
+                #[inline]
+                pub fn set_sec_clk_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000003) | value.get();
+                    self
+                }
+
+                /// Set `SEC_RST_EN`.
+                #[inline]
+                pub fn set_sec_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -65248,6 +72408,37 @@ pub mod soc {
                     (self.0 >> 8) as u8
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Configures the divisor for SAR ADC 2 clock to generate ADC analog control signals.\\
+                #[inline]
+                pub const fn sar2_clk_div_num(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// Configures the divisor for SAR ADC 1 clock to generate ADC analog control signals.\\
+                #[inline]
+                pub const fn sar1_clk_div_num(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// Set `SAR2_CLK_DIV_NUM`.
+                #[inline]
+                pub fn set_sar2_clk_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `SAR1_CLK_DIV_NUM`.
+                #[inline]
+                pub fn set_sar1_clk_div_num(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                    self
+                }
+            }
         }
 
         /// The `BS_CONF` register.
@@ -65274,6 +72465,37 @@ pub mod soc {
                 #[inline]
                 pub const fn bs_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable bs clock
+                #[inline]
+                pub const fn bs_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset bs module
+                #[inline]
+                pub const fn bs_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `BS_CLK_EN`.
+                #[inline]
+                pub fn set_bs_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `BS_RST_EN`.
+                #[inline]
+                pub fn set_bs_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -65304,6 +72526,37 @@ pub mod soc {
                     (self.0 & 0x01000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 0 to reset bs tx module
+                #[inline]
+                pub const fn bs_tx_rst_en(&self) -> bool {
+                    (self.0 & 0x00800000) != 0
+                }
+
+                /// Set 0 to reset bs rx module
+                #[inline]
+                pub const fn bs_rx_rst_en(&self) -> bool {
+                    (self.0 & 0x01000000) != 0
+                }
+
+                /// Set `BS_TX_RST_EN`.
+                #[inline]
+                pub fn set_bs_tx_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
+                    self
+                }
+
+                /// Set `BS_RX_RST_EN`.
+                #[inline]
+                pub fn set_bs_rx_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                    self
+                }
+            }
         }
 
         /// The `BS_PD_CTRL` register.
@@ -65332,6 +72585,37 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up bs memory.
+                #[inline]
+                pub const fn bs_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down bs memory.
+                #[inline]
+                pub const fn bs_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `BS_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_bs_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `BS_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_bs_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+            }
         }
 
         /// The `TIMERGROUP_WDT_CONF` register.
@@ -65358,6 +72642,37 @@ pub mod soc {
                 #[inline]
                 pub const fn tg1_wdt_rst_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 0 to reset timer_group0 wdt module
+                #[inline]
+                pub const fn tg0_wdt_rst_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset timer_group1 wdt module
+                #[inline]
+                pub const fn tg1_wdt_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `TG0_WDT_RST_EN`.
+                #[inline]
+                pub fn set_tg0_wdt_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `TG1_WDT_RST_EN`.
+                #[inline]
+                pub fn set_tg1_wdt_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -65394,6 +72709,50 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 0 to reset timer_group0 xtal clock domain
+                #[inline]
+                pub const fn tg0_xtal_rst_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset timer_group1 xtal clock domain
+                #[inline]
+                pub const fn tg1_xtal_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set 1 to enable tg0 xtal clock
+                #[inline]
+                pub const fn tg0_xtal_clk_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `TG0_XTAL_RST_EN`.
+                #[inline]
+                pub fn set_tg0_xtal_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `TG1_XTAL_RST_EN`.
+                #[inline]
+                pub fn set_tg1_xtal_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `TG0_XTAL_CLK_EN`.
+                #[inline]
+                pub fn set_tg0_xtal_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+            }
         }
 
         /// The `KM_CONF` register.
@@ -65428,6 +72787,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable km clock
+                #[inline]
+                pub const fn km_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset km module
+                #[inline]
+                pub const fn km_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset km module
+                #[inline]
+                pub const fn km_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `KM_CLK_EN`.
+                #[inline]
+                pub fn set_km_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `KM_RST_EN`.
+                #[inline]
+                pub fn set_km_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `KM_PD_CTRL` register.
@@ -65454,6 +72850,37 @@ pub mod soc {
                 #[inline]
                 pub const fn km_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up KM memory.
+                #[inline]
+                pub const fn km_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down KM memory.
+                #[inline]
+                pub const fn km_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `KM_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_km_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `KM_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_km_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -65490,6 +72917,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable tcm_mem_monitor clock
+                #[inline]
+                pub const fn tcm_mem_monitor_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset tcm_mem_monitor module
+                #[inline]
+                pub const fn tcm_mem_monitor_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset tcm_mem_monitor module
+                #[inline]
+                pub const fn tcm_mem_monitor_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `TCM_MEM_MONITOR_CLK_EN`.
+                #[inline]
+                pub fn set_tcm_mem_monitor_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `TCM_MEM_MONITOR_RST_EN`.
+                #[inline]
+                pub fn set_tcm_mem_monitor_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `PSRAM_MEM_MONITOR_CONF` register.
@@ -65524,6 +72988,43 @@ pub mod soc {
                     (self.0 & 0x00000004) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set 1 to enable psram_mem_monitor clock
+                #[inline]
+                pub const fn psram_mem_monitor_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set 0 to reset psram_mem_monitor module
+                #[inline]
+                pub const fn psram_mem_monitor_rst_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Query this field after reset psram_mem_monitor module
+                #[inline]
+                pub const fn psram_mem_monitor_ready(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `PSRAM_MEM_MONITOR_CLK_EN`.
+                #[inline]
+                pub fn set_psram_mem_monitor_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `PSRAM_MEM_MONITOR_RST_EN`.
+                #[inline]
+                pub fn set_psram_mem_monitor_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `RESET_EVENT_BYPASS` register.
@@ -65552,6 +73053,37 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// This field is used to control reset event relationship for tee_reg/apm_reg/hp_system_reg. 1: tee_reg/apm_reg/hp_system_reg will only be reset by power-reset. some reset event will be bypass. 0: tee_reg/apm_reg/hp_system_reg will not only be reset by power-reset, but also some reset event.
+                #[inline]
+                pub const fn apm(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// This field is used to control reset event relationship for system-bus. 1: system bus (including arbiter/router) will only be reset by power-reset. some reset event will be bypass. 0: system bus (including arbiter/router) will not only be reset by power-reset, but also some reset event.
+                #[inline]
+                pub const fn reset_event_bypass(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `APM`.
+                #[inline]
+                pub fn set_apm(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `RESET_EVENT_BYPASS`.
+                #[inline]
+                pub fn set_reset_event_bypass(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `HPCORE_0_PD_CTRL` register.
@@ -65578,6 +73110,37 @@ pub mod soc {
                 #[inline]
                 pub const fn hpcore_0_mem_force_pd(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit to force power up HP CORE0 memory.
+                #[inline]
+                pub const fn hpcore_0_mem_force_pu(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to force power down HP CORE0 memory.
+                #[inline]
+                pub const fn hpcore_0_mem_force_pd(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `HPCORE_0_MEM_FORCE_PU`.
+                #[inline]
+                pub fn set_hpcore_0_mem_force_pu(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `HPCORE_0_MEM_FORCE_PD`.
+                #[inline]
+                pub fn set_hpcore_0_mem_force_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -65642,6 +73205,24 @@ pub mod soc {
                     (self.0 & 0x00000001) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Set this bit as 1 to force on clock gating.
+                #[inline]
+                pub const fn clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `CLK_EN`.
+                #[inline]
+                pub fn set_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `DATE` register.
@@ -65662,6 +73243,24 @@ pub mod soc {
                 #[inline]
                 pub const fn date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// PCR version information.
+                #[inline]
+                pub const fn date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `DATE`.
+                #[inline]
+                pub fn set_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -65691,10 +73290,11 @@ pub mod soc {
                 0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34,
                 0x38, 0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c,
                 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa8,
-                0xac, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100,
-                0x104, 0x108, 0x10c, 0x110, 0x114, 0x118, 0x11c, 0x120, 0x128, 0x12c, 0x130, 0x138,
-                0x13c, 0x140, 0x144, 0x148, 0x14c, 0x150, 0x154, 0x15c, 0x160, 0x164, 0x168, 0x170,
-                0x174, 0x178, 0x180, 0x184, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8,
+                0xac, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4, 0xc8, 0xd0, 0xd4, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8,
+                0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114, 0x118,
+                0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144, 0x148,
+                0x14c, 0x150, 0x154, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174, 0x178, 0x17c,
+                0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8,
             ];
         }
 
@@ -66124,16 +73724,196 @@ pub mod soc {
                 lp_sleep_bias::R(self.0.read::<0xc8>())
             }
 
+            /// Read `IMM_SLEEP_SYSCLK`.
+            #[inline]
+            pub fn read_imm_sleep_sysclk(&self) -> imm_sleep_sysclk::R {
+                imm_sleep_sysclk::R(self.0.read::<0xd0>())
+            }
+
+            /// Write one to the write-trigger field `UPDATE_DIG_ICG_SWITCH` of `IMM_SLEEP_SYSCLK`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_sleep_sysclk_update_dig_icg_switch(&mut self) {
+                self.0.write::<0xd0>(
+                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x10000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `TIE_LOW_ICG_SLP_SEL` of `IMM_SLEEP_SYSCLK`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_sleep_sysclk_tie_low_icg_slp_sel(&mut self) {
+                self.0.write::<0xd0>(
+                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x20000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `TIE_HIGH_ICG_SLP_SEL` of `IMM_SLEEP_SYSCLK`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_sleep_sysclk_tie_high_icg_slp_sel(&mut self) {
+                self.0.write::<0xd0>(
+                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x40000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `UPDATE_DIG_SYS_CLK_SEL` of `IMM_SLEEP_SYSCLK`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_sleep_sysclk_update_dig_sys_clk_sel(&mut self) {
+                self.0.write::<0xd0>(
+                    (self.0.read::<0xd0>() & !imm_sleep_sysclk::TRIGGERS) | 0x80000000,
+                );
+            }
+
+            /// Read `IMM_HP_FUNC_ICG`.
+            #[inline]
+            pub fn read_imm_hp_func_icg(&self) -> imm_hp_func_icg::R {
+                imm_hp_func_icg::R(self.0.read::<0xd4>())
+            }
+
+            /// Write one to the write-trigger field `UPDATE_DIG_ICG_FUNC_EN` of `IMM_HP_FUNC_ICG`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_hp_func_icg_update_dig_icg_func_en(&mut self) {
+                self.0.write::<0xd4>(
+                    (self.0.read::<0xd4>() & !imm_hp_func_icg::TRIGGERS) | 0x80000000,
+                );
+            }
+
+            /// Read `IMM_HP_APB_ICG`.
+            #[inline]
+            pub fn read_imm_hp_apb_icg(&self) -> imm_hp_apb_icg::R {
+                imm_hp_apb_icg::R(self.0.read::<0xd8>())
+            }
+
+            /// Write one to the write-trigger field `UPDATE_DIG_ICG_APB_EN` of `IMM_HP_APB_ICG`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_hp_apb_icg_update_dig_icg_apb_en(&mut self) {
+                self.0.write::<0xd8>(
+                    (self.0.read::<0xd8>() & !imm_hp_apb_icg::TRIGGERS) | 0x80000000,
+                );
+            }
+
+            /// Read `IMM_MODEM_ICG`.
+            #[inline]
+            pub fn read_imm_modem_icg(&self) -> imm_modem_icg::R {
+                imm_modem_icg::R(self.0.read::<0xdc>())
+            }
+
+            /// Write one to the write-trigger field `UPDATE_DIG_ICG_MODEM_EN` of `IMM_MODEM_ICG`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_modem_icg_update_dig_icg_modem_en(&mut self) {
+                self.0
+                    .write::<0xdc>((self.0.read::<0xdc>() & !imm_modem_icg::TRIGGERS) | 0x80000000);
+            }
+
+            /// Read `IMM_LP_ICG`.
+            #[inline]
+            pub fn read_imm_lp_icg(&self) -> imm_lp_icg::R {
+                imm_lp_icg::R(self.0.read::<0xe0>())
+            }
+
+            /// Write one to the write-trigger field `TIE_LOW_LP_ROOTCLK_SEL` of `IMM_LP_ICG`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_lp_icg_tie_low_lp_rootclk_sel(&mut self) {
+                self.0
+                    .write::<0xe0>((self.0.read::<0xe0>() & !imm_lp_icg::TRIGGERS) | 0x40000000);
+            }
+
+            /// Write one to the write-trigger field `TIE_HIGH_LP_ROOTCLK_SEL` of `IMM_LP_ICG`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_lp_icg_tie_high_lp_rootclk_sel(&mut self) {
+                self.0
+                    .write::<0xe0>((self.0.read::<0xe0>() & !imm_lp_icg::TRIGGERS) | 0x80000000);
+            }
+
+            /// Read `IMM_PAD_HOLD_ALL`.
+            #[inline]
+            pub fn read_imm_pad_hold_all(&self) -> imm_pad_hold_all::R {
+                imm_pad_hold_all::R(self.0.read::<0xe4>())
+            }
+
+            /// Write one to the write-trigger field `TIE_HIGH_LP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_pad_hold_all_tie_high_lp_pad_hold_all(&mut self) {
+                self.0.write::<0xe4>(
+                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x10000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `TIE_LOW_LP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_pad_hold_all_tie_low_lp_pad_hold_all(&mut self) {
+                self.0.write::<0xe4>(
+                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x20000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `TIE_HIGH_HP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_pad_hold_all_tie_high_hp_pad_hold_all(&mut self) {
+                self.0.write::<0xe4>(
+                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x40000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `TIE_LOW_HP_PAD_HOLD_ALL` of `IMM_PAD_HOLD_ALL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_imm_pad_hold_all_tie_low_hp_pad_hold_all(&mut self) {
+                self.0.write::<0xe4>(
+                    (self.0.read::<0xe4>() & !imm_pad_hold_all::TRIGGERS) | 0x80000000,
+                );
+            }
+
+            /// Read `IMM_I2C_ISO`.
+            #[inline]
+            pub fn read_imm_i2c_iso(&self) -> imm_i2c_iso::R {
+                imm_i2c_iso::R(self.0.read::<0xe8>())
+            }
+
             /// Read `POWER_WAIT_TIMER0`.
             #[inline]
             pub fn read_power_wait_timer0(&self) -> power_wait_timer0::R {
                 power_wait_timer0::R(self.0.read::<0xec>())
             }
 
+            /// Read `POWER_WAIT_TIMER0`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_power_wait_timer0(
+                &mut self,
+                change: impl FnOnce(&mut power_wait_timer0::W),
+            ) {
+                let mut value = power_wait_timer0::W(self.0.read::<0xec>());
+                change(&mut value);
+                self.0.write::<0xec>(value.0);
+            }
+
             /// Read `POWER_WAIT_TIMER1`.
             #[inline]
             pub fn read_power_wait_timer1(&self) -> power_wait_timer1::R {
                 power_wait_timer1::R(self.0.read::<0xf0>())
+            }
+
+            /// Read `POWER_WAIT_TIMER1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_power_wait_timer1(
+                &mut self,
+                change: impl FnOnce(&mut power_wait_timer1::W),
+            ) {
+                let mut value = power_wait_timer1::W(self.0.read::<0xf0>());
+                change(&mut value);
+                self.0.write::<0xf0>(value.0);
             }
 
             /// Read `POWER_WAIT_TIMER2`.
@@ -66208,10 +73988,31 @@ pub mod soc {
                 power_hp_pad::R(self.0.read::<0x118>())
             }
 
+            /// Read `POWER_HP_PAD`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_power_hp_pad(&mut self, change: impl FnOnce(&mut power_hp_pad::W)) {
+                let mut value = power_hp_pad::W(self.0.read::<0x118>());
+                change(&mut value);
+                self.0.write::<0x118>(value.0);
+            }
+
             /// Read `POWER_VDD_SPI_CNTL`.
             #[inline]
             pub fn read_power_vdd_spi_cntl(&self) -> power_vdd_spi_cntl::R {
                 power_vdd_spi_cntl::R(self.0.read::<0x11c>())
+            }
+
+            /// Read `POWER_VDD_SPI_CNTL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_power_vdd_spi_cntl(
+                &mut self,
+                change: impl FnOnce(&mut power_vdd_spi_cntl::W),
+            ) {
+                let mut value = power_vdd_spi_cntl::W(self.0.read::<0x11c>());
+                change(&mut value);
+                self.0.write::<0x11c>(value.0);
             }
 
             /// Read `POWER_CK_WAIT_CNTL`.
@@ -66230,6 +74031,21 @@ pub mod soc {
                 let mut value = power_ck_wait_cntl::W(self.0.read::<0x120>());
                 change(&mut value);
                 self.0.write::<0x120>(value.0);
+            }
+
+            /// Read `SLP_WAKEUP_CNTL0`.
+            #[inline]
+            pub fn read_slp_wakeup_cntl0(&self) -> slp_wakeup_cntl0::R {
+                slp_wakeup_cntl0::R(self.0.read::<0x124>())
+            }
+
+            /// Write one to the write-trigger field `SLEEP_REQ` of `SLP_WAKEUP_CNTL0`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_slp_wakeup_cntl0_sleep_req(&mut self) {
+                self.0.write::<0x124>(
+                    (self.0.read::<0x124>() & !slp_wakeup_cntl0::TRIGGERS) | 0x80000000,
+                );
             }
 
             /// Read `SLP_WAKEUP_CNTL1`.
@@ -66274,10 +74090,49 @@ pub mod soc {
                 slp_wakeup_cntl3::R(self.0.read::<0x130>())
             }
 
+            /// Read `SLP_WAKEUP_CNTL3`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_slp_wakeup_cntl3(
+                &mut self,
+                change: impl FnOnce(&mut slp_wakeup_cntl3::W),
+            ) {
+                let mut value = slp_wakeup_cntl3::W(self.0.read::<0x130>());
+                change(&mut value);
+                self.0.write::<0x130>(value.0);
+            }
+
+            /// Read `SLP_WAKEUP_CNTL4`.
+            #[inline]
+            pub fn read_slp_wakeup_cntl4(&self) -> slp_wakeup_cntl4::R {
+                slp_wakeup_cntl4::R(self.0.read::<0x134>())
+            }
+
+            /// Write one to the write-trigger field `SLP_REJECT_CAUSE_CLR` of `SLP_WAKEUP_CNTL4`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_slp_wakeup_cntl4_slp_reject_cause_clr(&mut self) {
+                self.0.write::<0x134>(
+                    (self.0.read::<0x134>() & !slp_wakeup_cntl4::TRIGGERS) | 0x80000000,
+                );
+            }
+
             /// Read `SLP_WAKEUP_CNTL5`.
             #[inline]
             pub fn read_slp_wakeup_cntl5(&self) -> slp_wakeup_cntl5::R {
                 slp_wakeup_cntl5::R(self.0.read::<0x138>())
+            }
+
+            /// Read `SLP_WAKEUP_CNTL5`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_slp_wakeup_cntl5(
+                &mut self,
+                change: impl FnOnce(&mut slp_wakeup_cntl5::W),
+            ) {
+                let mut value = slp_wakeup_cntl5::W(self.0.read::<0x138>());
+                change(&mut value);
+                self.0.write::<0x138>(value.0);
             }
 
             /// Read `SLP_WAKEUP_CNTL6`.
@@ -66286,10 +74141,34 @@ pub mod soc {
                 slp_wakeup_cntl6::R(self.0.read::<0x13c>())
             }
 
+            /// Read `SLP_WAKEUP_CNTL6`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_slp_wakeup_cntl6(
+                &mut self,
+                change: impl FnOnce(&mut slp_wakeup_cntl6::W),
+            ) {
+                let mut value = slp_wakeup_cntl6::W(self.0.read::<0x13c>());
+                change(&mut value);
+                self.0.write::<0x13c>(value.0);
+            }
+
             /// Read `SLP_WAKEUP_CNTL7`.
             #[inline]
             pub fn read_slp_wakeup_cntl7(&self) -> slp_wakeup_cntl7::R {
                 slp_wakeup_cntl7::R(self.0.read::<0x140>())
+            }
+
+            /// Read `SLP_WAKEUP_CNTL7`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_slp_wakeup_cntl7(
+                &mut self,
+                change: impl FnOnce(&mut slp_wakeup_cntl7::W),
+            ) {
+                let mut value = slp_wakeup_cntl7::W(self.0.read::<0x140>());
+                change(&mut value);
+                self.0.write::<0x140>(value.0);
             }
 
             /// Read `SLP_WAKEUP_STATUS0`.
@@ -66328,6 +74207,15 @@ pub mod soc {
                 backup_cfg::R(self.0.read::<0x15c>())
             }
 
+            /// Read `BACKUP_CFG`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_backup_cfg(&mut self, change: impl FnOnce(&mut backup_cfg::W)) {
+                let mut value = backup_cfg::W(self.0.read::<0x15c>());
+                change(&mut value);
+                self.0.write::<0x15c>(value.0);
+            }
+
             /// Read `INT_RAW`.
             #[inline]
             pub fn read_int_raw(&self) -> int_raw::R {
@@ -66344,6 +74232,12 @@ pub mod soc {
             #[inline]
             pub fn read_hp_int_ena(&self) -> hp_int_ena::R {
                 hp_int_ena::R(self.0.read::<0x168>())
+            }
+
+            /// Read `HP_INT_CLR`.
+            #[inline]
+            pub fn read_hp_int_clr(&self) -> hp_int_clr::R {
+                hp_int_clr::R(self.0.read::<0x16c>())
             }
 
             /// Read `LP_INT_RAW`.
@@ -66364,16 +74258,54 @@ pub mod soc {
                 lp_int_ena::R(self.0.read::<0x178>())
             }
 
+            /// Read `LP_INT_CLR`.
+            #[inline]
+            pub fn read_lp_int_clr(&self) -> lp_int_clr::R {
+                lp_int_clr::R(self.0.read::<0x17c>())
+            }
+
             /// Read `LP_CPU_PWR0`.
             #[inline]
             pub fn read_lp_cpu_pwr0(&self) -> lp_cpu_pwr0::R {
                 lp_cpu_pwr0::R(self.0.read::<0x180>())
             }
 
+            /// Read `LP_CPU_PWR0`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_cpu_pwr0(&mut self, change: impl FnOnce(&mut lp_cpu_pwr0::W)) {
+                let mut value = lp_cpu_pwr0::W(self.0.read::<0x180>());
+                change(&mut value);
+                self.0.write::<0x180>(value.0);
+            }
+
             /// Read `LP_CPU_PWR1`.
             #[inline]
             pub fn read_lp_cpu_pwr1(&self) -> lp_cpu_pwr1::R {
                 lp_cpu_pwr1::R(self.0.read::<0x184>())
+            }
+
+            /// Write one to the write-trigger field `LP_CPU_SLEEP_REQ` of `LP_CPU_PWR1`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_cpu_pwr1_lp_cpu_sleep_req(&mut self) {
+                self.0
+                    .write::<0x184>((self.0.read::<0x184>() & !lp_cpu_pwr1::TRIGGERS) | 0x80000000);
+            }
+
+            /// Read `LP_CPU_PWR1`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_lp_cpu_pwr1(&mut self, change: impl FnOnce(&mut lp_cpu_pwr1::W)) {
+                let mut value = lp_cpu_pwr1::W(self.0.read::<0x184>() & !lp_cpu_pwr1::TRIGGERS);
+                change(&mut value);
+                self.0.write::<0x184>(value.0);
+            }
+
+            /// Read `HP_LP_CPU_COMM`.
+            #[inline]
+            pub fn read_hp_lp_cpu_comm(&self) -> hp_lp_cpu_comm::R {
+                hp_lp_cpu_comm::R(self.0.read::<0x188>())
             }
 
             /// Read `HP_REGULATOR_CFG`.
@@ -66915,7 +74847,7 @@ pub mod soc {
         /// need_des
         pub mod hp_active_hp_regulator0 {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0xfffffff0;
+            pub const FIELDS: u32 = 0xfffffff8;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x28;
 
@@ -66924,6 +74856,12 @@ pub mod soc {
             pub struct R(pub(super) u32);
 
             impl R {
+                /// need_des
+                #[inline]
+                pub const fn dig_dbias_init(self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
                 /// need_des
                 #[inline]
                 pub const fn lp_dbias_vol(self) -> oer_mmio::Bits<5> {
@@ -68470,6 +76408,154 @@ pub mod soc {
             }
         }
 
+        /// The `IMM_SLEEP_SYSCLK` register.
+        ///
+        /// need_des
+        pub mod imm_sleep_sysclk {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xf0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xd0;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xf0000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
+        /// The `IMM_HP_FUNC_ICG` register.
+        ///
+        /// need_des
+        pub mod imm_hp_func_icg {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xd4;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
+        /// The `IMM_HP_APB_ICG` register.
+        ///
+        /// need_des
+        pub mod imm_hp_apb_icg {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xd8;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
+        /// The `IMM_MODEM_ICG` register.
+        ///
+        /// need_des
+        pub mod imm_modem_icg {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xdc;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
+        /// The `IMM_LP_ICG` register.
+        ///
+        /// need_des
+        pub mod imm_lp_icg {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xe0;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xc0000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
+        /// The `IMM_PAD_HOLD_ALL` register.
+        ///
+        /// need_des
+        pub mod imm_pad_hold_all {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xf0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xe4;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xf0000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
+        }
+
+        /// The `IMM_I2C_ISO` register.
+        ///
+        /// need_des
+        pub mod imm_i2c_iso {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xe8;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// need_des
+                #[inline]
+                pub const fn tie_high_i2c_iso_en(self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn tie_low_i2c_iso_en(self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+            }
+        }
+
         /// The `POWER_WAIT_TIMER0` register.
         ///
         /// need_des
@@ -68500,6 +76586,50 @@ pub mod soc {
                 #[inline]
                 pub const fn dg_hp_pd_wait_timer(self) -> oer_mmio::Bits<9> {
                     oer_mmio::Bits::truncate(self.0 >> 23)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn dg_hp_powerdown_timer(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 5)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn dg_hp_powerup_timer(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 14)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn dg_hp_pd_wait_timer(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 23)
+                }
+
+                /// Set `DG_HP_POWERDOWN_TIMER`.
+                #[inline]
+                pub fn set_dg_hp_powerdown_timer(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x00003fe0) | (value.get() << 5);
+                    self
+                }
+
+                /// Set `DG_HP_POWERUP_TIMER`.
+                #[inline]
+                pub fn set_dg_hp_powerup_timer(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0x007fc000) | (value.get() << 14);
+                    self
+                }
+
+                /// Set `DG_HP_PD_WAIT_TIMER`.
+                #[inline]
+                pub fn set_dg_hp_pd_wait_timer(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0xff800000) | (value.get() << 23);
+                    self
                 }
             }
         }
@@ -68534,6 +76664,50 @@ pub mod soc {
                 #[inline]
                 pub const fn dg_lp_pd_wait_timer(self) -> oer_mmio::Bits<9> {
                     oer_mmio::Bits::truncate(self.0 >> 23)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn dg_lp_powerdown_timer(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 9)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn dg_lp_powerup_timer(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn dg_lp_pd_wait_timer(&self) -> oer_mmio::Bits<9> {
+                    oer_mmio::Bits::truncate(self.0 >> 23)
+                }
+
+                /// Set `DG_LP_POWERDOWN_TIMER`.
+                #[inline]
+                pub fn set_dg_lp_powerdown_timer(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x0000fe00) | (value.get() << 9);
+                    self
+                }
+
+                /// Set `DG_LP_POWERUP_TIMER`.
+                #[inline]
+                pub fn set_dg_lp_powerup_timer(&mut self, value: oer_mmio::Bits<7>) -> &mut Self {
+                    self.0 = (self.0 & !0x007f0000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `DG_LP_PD_WAIT_TIMER`.
+                #[inline]
+                pub fn set_dg_lp_pd_wait_timer(&mut self, value: oer_mmio::Bits<9>) -> &mut Self {
+                    self.0 = (self.0 & !0xff800000) | (value.get() << 23);
+                    self
                 }
             }
         }
@@ -69125,6 +77299,37 @@ pub mod soc {
                     (self.0 & 0x00000002) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn force_hp_pad_no_iso_all(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn force_hp_pad_iso_all(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `FORCE_HP_PAD_NO_ISO_ALL`.
+                #[inline]
+                pub fn set_force_hp_pad_no_iso_all(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `FORCE_HP_PAD_ISO_ALL`.
+                #[inline]
+                pub fn set_force_hp_pad_iso_all(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+            }
         }
 
         /// The `POWER_VDD_SPI_CNTL` register.
@@ -69157,6 +77362,50 @@ pub mod soc {
                 #[inline]
                 pub const fn vdd_spi_pwr_sel_sw(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn vdd_spi_pwr_wait(&self) -> oer_mmio::Bits<11> {
+                    oer_mmio::Bits::truncate(self.0 >> 18)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn vdd_spi_pwr_sw(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 29)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn vdd_spi_pwr_sel_sw(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `VDD_SPI_PWR_WAIT`.
+                #[inline]
+                pub fn set_vdd_spi_pwr_wait(&mut self, value: oer_mmio::Bits<11>) -> &mut Self {
+                    self.0 = (self.0 & !0x1ffc0000) | (value.get() << 18);
+                    self
+                }
+
+                /// Set `VDD_SPI_PWR_SW`.
+                #[inline]
+                pub fn set_vdd_spi_pwr_sw(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x60000000) | (value.get() << 29);
+                    self
+                }
+
+                /// Set `VDD_SPI_PWR_SEL_SW`.
+                #[inline]
+                pub fn set_vdd_spi_pwr_sel_sw(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -69218,6 +77467,26 @@ pub mod soc {
                     self
                 }
             }
+        }
+
+        /// The `SLP_WAKEUP_CNTL0` register.
+        ///
+        /// need_des
+        pub mod slp_wakeup_cntl0 {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x124;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `SLP_WAKEUP_CNTL1` register.
@@ -69351,6 +77620,70 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 16)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_min_slp_val(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn hp_min_slp_val(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sleep_prt_sel(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// Set `LP_MIN_SLP_VAL`.
+                #[inline]
+                pub fn set_lp_min_slp_val(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `HP_MIN_SLP_VAL`.
+                #[inline]
+                pub fn set_hp_min_slp_val(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `SLEEP_PRT_SEL`.
+                #[inline]
+                pub fn set_sleep_prt_sel(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0x00030000) | (value.get() << 16);
+                    self
+                }
+            }
+        }
+
+        /// The `SLP_WAKEUP_CNTL4` register.
+        ///
+        /// need_des
+        pub mod slp_wakeup_cntl4 {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x134;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `SLP_WAKEUP_CNTL5` register.
@@ -69377,6 +77710,37 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_ana_wait_target(self) -> u8 {
                     (self.0 >> 24) as u8
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn modem_wait_target(&self) -> oer_mmio::Bits<20> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_ana_wait_target(&self) -> u8 {
+                    (self.0 >> 24) as u8
+                }
+
+                /// Set `MODEM_WAIT_TARGET`.
+                #[inline]
+                pub fn set_modem_wait_target(&mut self, value: oer_mmio::Bits<20>) -> &mut Self {
+                    self.0 = (self.0 & !0x000fffff) | value.get();
+                    self
+                }
+
+                /// Set `LP_ANA_WAIT_TARGET`.
+                #[inline]
+                pub fn set_lp_ana_wait_target(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0xff000000) | (u32::from(value) << 24);
+                    self
                 }
             }
         }
@@ -69407,6 +77771,37 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 30)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn soc_wakeup_wait(&self) -> oer_mmio::Bits<20> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn soc_wakeup_wait_cfg(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 30)
+                }
+
+                /// Set `SOC_WAKEUP_WAIT`.
+                #[inline]
+                pub fn set_soc_wakeup_wait(&mut self, value: oer_mmio::Bits<20>) -> &mut Self {
+                    self.0 = (self.0 & !0x000fffff) | value.get();
+                    self
+                }
+
+                /// Set `SOC_WAKEUP_WAIT_CFG`.
+                #[inline]
+                pub fn set_soc_wakeup_wait_cfg(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                    self.0 = (self.0 & !0xc0000000) | (value.get() << 30);
+                    self
+                }
+            }
         }
 
         /// The `SLP_WAKEUP_CNTL7` register.
@@ -69427,6 +77822,24 @@ pub mod soc {
                 #[inline]
                 pub const fn ana_wait_target(self) -> u16 {
                     (self.0 >> 16) as u16
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn ana_wait_target(&self) -> u16 {
+                    (self.0 >> 16) as u16
+                }
+
+                /// Set `ANA_WAIT_TARGET`.
+                #[inline]
+                pub fn set_ana_wait_target(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                    self
                 }
             }
         }
@@ -69567,6 +77980,24 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn backup_sys_clk_no_div(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `BACKUP_SYS_CLK_NO_DIV`.
+                #[inline]
+                pub fn set_backup_sys_clk_no_div(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `INT_RAW` register.
@@ -69702,6 +78133,52 @@ pub mod soc {
                 /// need_des
                 #[inline]
                 pub const fn soc_wakeup_int_ena(self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+            }
+        }
+
+        /// The `HP_INT_CLR` register.
+        ///
+        /// need_des
+        pub mod hp_int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xf8000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x16c;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_exc_int_clr(self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sdio_idle_int_clr(self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sw_int_clr(self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn soc_sleep_reject_int_clr(self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn soc_wakeup_int_clr(self) -> bool {
                     (self.0 & 0x80000000) != 0
                 }
             }
@@ -69971,6 +78448,94 @@ pub mod soc {
             }
         }
 
+        /// The `LP_INT_CLR` register.
+        ///
+        /// need_des
+        pub mod lp_int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xfff00000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x17c;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_wakeup_int_clr(self) -> bool {
+                    (self.0 & 0x00100000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn modem_switch_active_end_int_clr(self) -> bool {
+                    (self.0 & 0x00200000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sleep_switch_active_end_int_clr(self) -> bool {
+                    (self.0 & 0x00400000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sleep_switch_modem_end_int_clr(self) -> bool {
+                    (self.0 & 0x00800000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn modem_switch_sleep_end_int_clr(self) -> bool {
+                    (self.0 & 0x01000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn active_switch_sleep_end_int_clr(self) -> bool {
+                    (self.0 & 0x02000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn modem_switch_active_start_int_clr(self) -> bool {
+                    (self.0 & 0x04000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sleep_switch_active_start_int_clr(self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn sleep_switch_modem_start_int_clr(self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn modem_switch_sleep_start_int_clr(self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn active_switch_sleep_start_int_clr(self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn hp_sw_trigger_int_clr(self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+            }
+        }
+
         /// The `LP_CPU_PWR0` register.
         ///
         /// need_des
@@ -70039,6 +78604,114 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_waiti_rdy(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_stall_rdy(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_force_stall(&self) -> bool {
+                    (self.0 & 0x00040000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_slp_waiti_flag_en(&self) -> bool {
+                    (self.0 & 0x00080000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_slp_stall_flag_en(&self) -> bool {
+                    (self.0 & 0x00100000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_slp_stall_wait(&self) -> u8 {
+                    (self.0 >> 21) as u8
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_slp_stall_en(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_slp_reset_en(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_slp_bypass_intr_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_CPU_FORCE_STALL`.
+                #[inline]
+                pub fn set_lp_cpu_force_stall(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00040000) | (u32::from(value) << 18);
+                    self
+                }
+
+                /// Set `LP_CPU_SLP_WAITI_FLAG_EN`.
+                #[inline]
+                pub fn set_lp_cpu_slp_waiti_flag_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                    self
+                }
+
+                /// Set `LP_CPU_SLP_STALL_FLAG_EN`.
+                #[inline]
+                pub fn set_lp_cpu_slp_stall_flag_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00100000) | (u32::from(value) << 20);
+                    self
+                }
+
+                /// Set `LP_CPU_SLP_STALL_WAIT`.
+                #[inline]
+                pub fn set_lp_cpu_slp_stall_wait(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x1fe00000) | (u32::from(value) << 21);
+                    self
+                }
+
+                /// Set `LP_CPU_SLP_STALL_EN`.
+                #[inline]
+                pub fn set_lp_cpu_slp_stall_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `LP_CPU_SLP_RESET_EN`.
+                #[inline]
+                pub fn set_lp_cpu_slp_reset_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `LP_CPU_SLP_BYPASS_INTR_EN`.
+                #[inline]
+                pub fn set_lp_cpu_slp_bypass_intr_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LP_CPU_PWR1` register.
@@ -70046,9 +78719,13 @@ pub mod soc {
         /// need_des
         pub mod lp_cpu_pwr1 {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0000ffff;
+            pub const FIELDS: u32 = 0x8000ffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x184;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -70059,6 +78736,52 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_cpu_wakeup_en(self) -> u16 {
                     (self.0) as u16
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_cpu_wakeup_en(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// Set `LP_CPU_WAKEUP_EN`.
+                #[inline]
+                pub fn set_lp_cpu_wakeup_en(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+            }
+        }
+
+        /// The `HP_LP_CPU_COMM` register.
+        ///
+        /// need_des
+        pub mod hp_lp_cpu_comm {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xc0000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x188;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// need_des
+                #[inline]
+                pub const fn lp_trigger_hp(self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn hp_trigger_lp(self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
             }
         }
@@ -84226,12 +92949,13 @@ pub mod soc {
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
                 0x0, 0x8, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x2c, 0x34, 0x3c, 0x40, 0x44, 0x48, 0x4c,
-                0x50, 0x54, 0xc0, 0xc8, 0xcc, 0xd4, 0xd8, 0x100, 0x104, 0x108, 0x10c, 0x110, 0x114,
-                0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140, 0x144,
-                0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170, 0x174,
-                0x17c, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8,
-                0x1ac, 0x200, 0x204, 0x208, 0x20c, 0x210, 0x214, 0x218, 0x240, 0x280, 0x300, 0x340,
-                0x344, 0x348, 0x358, 0x35c, 0x37c, 0x380, 0x384, 0x388, 0x38c, 0x3f0, 0x3f4, 0x3fc,
+                0x50, 0x54, 0xc0, 0xc4, 0xc8, 0xcc, 0xd4, 0xd8, 0x100, 0x104, 0x108, 0x10c, 0x110,
+                0x114, 0x118, 0x11c, 0x120, 0x124, 0x128, 0x12c, 0x130, 0x134, 0x138, 0x13c, 0x140,
+                0x144, 0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0x168, 0x16c, 0x170,
+                0x174, 0x17c, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1a4,
+                0x1a8, 0x1ac, 0x200, 0x204, 0x208, 0x20c, 0x210, 0x214, 0x218, 0x240, 0x280, 0x300,
+                0x340, 0x344, 0x348, 0x34c, 0x350, 0x354, 0x358, 0x35c, 0x37c, 0x380, 0x384, 0x388,
+                0x38c, 0x3f0, 0x3f4, 0x3fc,
             ];
         }
 
@@ -84359,6 +93083,12 @@ pub mod soc {
             #[inline]
             pub fn read_mem_int_ena(&self) -> mem_int_ena::R {
                 mem_int_ena::R(self.0.read::<0xc0>())
+            }
+
+            /// Read `MEM_INT_CLR`.
+            #[inline]
+            pub fn read_mem_int_clr(&self) -> mem_int_clr::R {
+                mem_int_clr::R(self.0.read::<0xc4>())
             }
 
             /// Read `MEM_INT_RAW`.
@@ -84661,6 +93391,24 @@ pub mod soc {
                 mem_xts_physical_address::R(self.0.read::<0x348>())
             }
 
+            /// Read `MEM_XTS_TRIGGER`.
+            #[inline]
+            pub fn read_mem_xts_trigger(&self) -> mem_xts_trigger::R {
+                mem_xts_trigger::R(self.0.read::<0x34c>())
+            }
+
+            /// Read `MEM_XTS_RELEASE`.
+            #[inline]
+            pub fn read_mem_xts_release(&self) -> mem_xts_release::R {
+                mem_xts_release::R(self.0.read::<0x350>())
+            }
+
+            /// Read `MEM_XTS_DESTROY`.
+            #[inline]
+            pub fn read_mem_xts_destroy(&self) -> mem_xts_destroy::R {
+                mem_xts_destroy::R(self.0.read::<0x354>())
+            }
+
             /// Read `MEM_XTS_STATE`.
             #[inline]
             pub fn read_mem_xts_state(&self) -> mem_xts_state::R {
@@ -84943,7 +93691,7 @@ pub mod soc {
         /// SPI0 control2 register.
         pub mod mem_ctrl2 {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x7f007fff;
+            pub const FIELDS: u32 = 0xff007fff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x10;
 
@@ -84992,6 +93740,12 @@ pub mod soc {
                 #[inline]
                 pub const fn mem_cs_hold_delay(self) -> oer_mmio::Bits<6> {
                     oer_mmio::Bits::truncate(self.0 >> 25)
+                }
+
+                /// The spi0_mst_st and spi0_slv_st will be reset.
+                #[inline]
+                pub const fn mem_sync_reset(self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
             }
         }
@@ -85725,6 +94479,88 @@ pub mod soc {
                 /// The enable bit for SPI_MEM_BUS_FIFO0_UDF_INT interrupt.
                 #[inline]
                 pub const fn mem_bus_fifo0_udf_int_ena(self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+            }
+        }
+
+        /// The `MEM_INT_CLR` register.
+        ///
+        /// SPI0 interrupt clear register
+        pub mod mem_int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0xf00003f8;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xc4;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// The clear bit for SPI_MEM_SLV_ST_END_INT interrupt.
+                #[inline]
+                pub const fn mem_slv_st_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The clear bit for SPI_MEM_MST_ST_END_INT interrupt.
+                #[inline]
+                pub const fn mem_mst_st_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The clear bit for SPI_MEM_ECC_ERR_INT interrupt.
+                #[inline]
+                pub const fn mem_ecc_err_int_clr(self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// The clear bit for SPI_MEM_PMS_REJECT_INT interrupt.
+                #[inline]
+                pub const fn mem_pms_reject_int_clr(self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// The clear bit for SPI_MEM_AXI_RADDR_ERR_INT interrupt.
+                #[inline]
+                pub const fn mem_axi_raddr_err_int_clr(self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// The clear bit for SPI_MEM_AXI_WR_FALSH_ERR_INT interrupt.
+                #[inline]
+                pub const fn mem_axi_wr_flash_err_int_clr(self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// The clear bit for SPI_MEM_AXI_WADDR_ERR_INT interrupt.
+                #[inline]
+                pub const fn mem_axi_waddr_err_int_clr(self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// The clear bit for SPI_MEM_DQS0_AFIFO_OVF_INT interrupt.
+                #[inline]
+                pub const fn mem_dqs0_afifo_ovf_int_clr(self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// The clear bit for SPI_MEM_DQS1_AFIFO_OVF_INT interrupt.
+                #[inline]
+                pub const fn mem_dqs1_afifo_ovf_int_clr(self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// The clear bit for SPI_MEM_BUS_FIFO1_UDF_INT interrupt.
+                #[inline]
+                pub const fn mem_bus_fifo1_udf_int_clr(self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// The clear bit for SPI_MEM_BUS_FIFO0_UDF_INT interrupt.
+                #[inline]
+                pub const fn mem_bus_fifo0_udf_int_clr(self) -> bool {
                     (self.0 & 0x80000000) != 0
                 }
             }
@@ -86801,7 +95637,7 @@ pub mod soc {
         /// SPI0 flash timing calibration register
         pub mod mem_timing_cali {
             /// The bits of the register's declared fields.
-            pub const FIELDS: u32 = 0x0000003f;
+            pub const FIELDS: u32 = 0x0000007f;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x180;
 
@@ -86832,6 +95668,12 @@ pub mod soc {
                 #[inline]
                 pub const fn mem_dll_timing_cali(self) -> bool {
                     (self.0 & 0x00000020) != 0
+                }
+
+                /// Set this bit to update delay mode, delay num and extra dummy in MSPI.
+                #[inline]
+                pub const fn update(self) -> bool {
+                    (self.0 & 0x00000040) != 0
                 }
             }
         }
@@ -88030,6 +96872,72 @@ pub mod soc {
             }
         }
 
+        /// The `MEM_XTS_TRIGGER` register.
+        ///
+        /// Manual Encryption physical address register
+        pub mod mem_xts_trigger {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000001;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x34c;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// Set this bit to trigger the process of manual encryption calculation. This action should only be asserted when manual encryption status is 0. After this action, manual encryption status becomes 1. After calculation is done, manual encryption status becomes 2.
+                #[inline]
+                pub const fn xts_trigger(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+            }
+        }
+
+        /// The `MEM_XTS_RELEASE` register.
+        ///
+        /// Manual Encryption physical address register
+        pub mod mem_xts_release {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000001;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x350;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// Set this bit to release encrypted result to mspi. This action should only be asserted when manual encryption status is 2. After this action, manual encryption status will become 3.
+                #[inline]
+                pub const fn xts_release(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+            }
+        }
+
+        /// The `MEM_XTS_DESTROY` register.
+        ///
+        /// Manual Encryption physical address register
+        pub mod mem_xts_destroy {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000001;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x354;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// Set this bit to destroy encrypted result. This action should be asserted only when manual encryption status is 3. After this action, manual encryption status will become 0.
+                #[inline]
+                pub const fn xts_destroy(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+            }
+        }
+
         /// The `MEM_XTS_STATE` register.
         ///
         /// Manual Encryption physical address register
@@ -88405,10 +97313,10 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x0, 0x4, 0x8, 0xc, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x34, 0x38, 0x3c,
-                0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88, 0x8c,
-                0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xac, 0xc0, 0xc8, 0xcc, 0xd4, 0x180, 0x200,
-                0x3fc,
+                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x34, 0x38,
+                0x3c, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84, 0x88,
+                0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xac, 0xc0, 0xc4, 0xc8, 0xcc, 0xd4,
+                0x180, 0x200, 0x3fc,
             ];
         }
 
@@ -88467,6 +97375,12 @@ pub mod soc {
             #[inline]
             pub fn read_spi_mem_ctrl1(&self) -> spi_mem_ctrl1::R {
                 spi_mem_ctrl1::R(self.0.read::<0xc>())
+            }
+
+            /// Read `SPI_MEM_CTRL2`.
+            #[inline]
+            pub fn read_spi_mem_ctrl2(&self) -> spi_mem_ctrl2::R {
+                spi_mem_ctrl2::R(self.0.read::<0x10>())
             }
 
             /// Read `SPI_MEM_CLOCK`.
@@ -88535,28 +97449,10 @@ pub mod soc {
                 spi_mem_w0::R(self.0.read::<0x58>())
             }
 
-            /// Read `SPI_MEM_W0`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w0(&mut self, change: impl FnOnce(&mut spi_mem_w0::W)) {
-                let mut value = spi_mem_w0::W(self.0.read::<0x58>());
-                change(&mut value);
-                self.0.write::<0x58>(value.0);
-            }
-
             /// Read `SPI_MEM_W1`.
             #[inline]
             pub fn read_spi_mem_w1(&self) -> spi_mem_w1::R {
                 spi_mem_w1::R(self.0.read::<0x5c>())
-            }
-
-            /// Read `SPI_MEM_W1`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w1(&mut self, change: impl FnOnce(&mut spi_mem_w1::W)) {
-                let mut value = spi_mem_w1::W(self.0.read::<0x5c>());
-                change(&mut value);
-                self.0.write::<0x5c>(value.0);
             }
 
             /// Read `SPI_MEM_W2`.
@@ -88565,28 +97461,10 @@ pub mod soc {
                 spi_mem_w2::R(self.0.read::<0x60>())
             }
 
-            /// Read `SPI_MEM_W2`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w2(&mut self, change: impl FnOnce(&mut spi_mem_w2::W)) {
-                let mut value = spi_mem_w2::W(self.0.read::<0x60>());
-                change(&mut value);
-                self.0.write::<0x60>(value.0);
-            }
-
             /// Read `SPI_MEM_W3`.
             #[inline]
             pub fn read_spi_mem_w3(&self) -> spi_mem_w3::R {
                 spi_mem_w3::R(self.0.read::<0x64>())
-            }
-
-            /// Read `SPI_MEM_W3`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w3(&mut self, change: impl FnOnce(&mut spi_mem_w3::W)) {
-                let mut value = spi_mem_w3::W(self.0.read::<0x64>());
-                change(&mut value);
-                self.0.write::<0x64>(value.0);
             }
 
             /// Read `SPI_MEM_W4`.
@@ -88595,28 +97473,10 @@ pub mod soc {
                 spi_mem_w4::R(self.0.read::<0x68>())
             }
 
-            /// Read `SPI_MEM_W4`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w4(&mut self, change: impl FnOnce(&mut spi_mem_w4::W)) {
-                let mut value = spi_mem_w4::W(self.0.read::<0x68>());
-                change(&mut value);
-                self.0.write::<0x68>(value.0);
-            }
-
             /// Read `SPI_MEM_W5`.
             #[inline]
             pub fn read_spi_mem_w5(&self) -> spi_mem_w5::R {
                 spi_mem_w5::R(self.0.read::<0x6c>())
-            }
-
-            /// Read `SPI_MEM_W5`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w5(&mut self, change: impl FnOnce(&mut spi_mem_w5::W)) {
-                let mut value = spi_mem_w5::W(self.0.read::<0x6c>());
-                change(&mut value);
-                self.0.write::<0x6c>(value.0);
             }
 
             /// Read `SPI_MEM_W6`.
@@ -88625,28 +97485,10 @@ pub mod soc {
                 spi_mem_w6::R(self.0.read::<0x70>())
             }
 
-            /// Read `SPI_MEM_W6`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w6(&mut self, change: impl FnOnce(&mut spi_mem_w6::W)) {
-                let mut value = spi_mem_w6::W(self.0.read::<0x70>());
-                change(&mut value);
-                self.0.write::<0x70>(value.0);
-            }
-
             /// Read `SPI_MEM_W7`.
             #[inline]
             pub fn read_spi_mem_w7(&self) -> spi_mem_w7::R {
                 spi_mem_w7::R(self.0.read::<0x74>())
-            }
-
-            /// Read `SPI_MEM_W7`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w7(&mut self, change: impl FnOnce(&mut spi_mem_w7::W)) {
-                let mut value = spi_mem_w7::W(self.0.read::<0x74>());
-                change(&mut value);
-                self.0.write::<0x74>(value.0);
             }
 
             /// Read `SPI_MEM_W8`.
@@ -88655,28 +97497,10 @@ pub mod soc {
                 spi_mem_w8::R(self.0.read::<0x78>())
             }
 
-            /// Read `SPI_MEM_W8`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w8(&mut self, change: impl FnOnce(&mut spi_mem_w8::W)) {
-                let mut value = spi_mem_w8::W(self.0.read::<0x78>());
-                change(&mut value);
-                self.0.write::<0x78>(value.0);
-            }
-
             /// Read `SPI_MEM_W9`.
             #[inline]
             pub fn read_spi_mem_w9(&self) -> spi_mem_w9::R {
                 spi_mem_w9::R(self.0.read::<0x7c>())
-            }
-
-            /// Read `SPI_MEM_W9`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w9(&mut self, change: impl FnOnce(&mut spi_mem_w9::W)) {
-                let mut value = spi_mem_w9::W(self.0.read::<0x7c>());
-                change(&mut value);
-                self.0.write::<0x7c>(value.0);
             }
 
             /// Read `SPI_MEM_W10`.
@@ -88685,28 +97509,10 @@ pub mod soc {
                 spi_mem_w10::R(self.0.read::<0x80>())
             }
 
-            /// Read `SPI_MEM_W10`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w10(&mut self, change: impl FnOnce(&mut spi_mem_w10::W)) {
-                let mut value = spi_mem_w10::W(self.0.read::<0x80>());
-                change(&mut value);
-                self.0.write::<0x80>(value.0);
-            }
-
             /// Read `SPI_MEM_W11`.
             #[inline]
             pub fn read_spi_mem_w11(&self) -> spi_mem_w11::R {
                 spi_mem_w11::R(self.0.read::<0x84>())
-            }
-
-            /// Read `SPI_MEM_W11`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w11(&mut self, change: impl FnOnce(&mut spi_mem_w11::W)) {
-                let mut value = spi_mem_w11::W(self.0.read::<0x84>());
-                change(&mut value);
-                self.0.write::<0x84>(value.0);
             }
 
             /// Read `SPI_MEM_W12`.
@@ -88715,28 +97521,10 @@ pub mod soc {
                 spi_mem_w12::R(self.0.read::<0x88>())
             }
 
-            /// Read `SPI_MEM_W12`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w12(&mut self, change: impl FnOnce(&mut spi_mem_w12::W)) {
-                let mut value = spi_mem_w12::W(self.0.read::<0x88>());
-                change(&mut value);
-                self.0.write::<0x88>(value.0);
-            }
-
             /// Read `SPI_MEM_W13`.
             #[inline]
             pub fn read_spi_mem_w13(&self) -> spi_mem_w13::R {
                 spi_mem_w13::R(self.0.read::<0x8c>())
-            }
-
-            /// Read `SPI_MEM_W13`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w13(&mut self, change: impl FnOnce(&mut spi_mem_w13::W)) {
-                let mut value = spi_mem_w13::W(self.0.read::<0x8c>());
-                change(&mut value);
-                self.0.write::<0x8c>(value.0);
             }
 
             /// Read `SPI_MEM_W14`.
@@ -88745,28 +97533,10 @@ pub mod soc {
                 spi_mem_w14::R(self.0.read::<0x90>())
             }
 
-            /// Read `SPI_MEM_W14`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w14(&mut self, change: impl FnOnce(&mut spi_mem_w14::W)) {
-                let mut value = spi_mem_w14::W(self.0.read::<0x90>());
-                change(&mut value);
-                self.0.write::<0x90>(value.0);
-            }
-
             /// Read `SPI_MEM_W15`.
             #[inline]
             pub fn read_spi_mem_w15(&self) -> spi_mem_w15::R {
                 spi_mem_w15::R(self.0.read::<0x94>())
-            }
-
-            /// Read `SPI_MEM_W15`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_w15(&mut self, change: impl FnOnce(&mut spi_mem_w15::W)) {
-                let mut value = spi_mem_w15::W(self.0.read::<0x94>());
-                change(&mut value);
-                self.0.write::<0x94>(value.0);
             }
 
             /// Read `SPI_MEM_FLASH_WAITI_CTRL`.
@@ -88779,18 +97549,6 @@ pub mod soc {
             #[inline]
             pub fn read_spi_mem_flash_sus_ctrl(&self) -> spi_mem_flash_sus_ctrl::R {
                 spi_mem_flash_sus_ctrl::R(self.0.read::<0x9c>())
-            }
-
-            /// Read `SPI_MEM_FLASH_SUS_CTRL`, change fields and write it back; every other bit keeps
-            /// the value read.
-            #[inline]
-            pub fn modify_spi_mem_flash_sus_ctrl(
-                &mut self,
-                change: impl FnOnce(&mut spi_mem_flash_sus_ctrl::W),
-            ) {
-                let mut value = spi_mem_flash_sus_ctrl::W(self.0.read::<0x9c>());
-                change(&mut value);
-                self.0.write::<0x9c>(value.0);
             }
 
             /// Read `SPI_MEM_FLASH_SUS_CMD`.
@@ -88827,6 +97585,12 @@ pub mod soc {
             #[inline]
             pub fn read_spi_mem_int_ena(&self) -> spi_mem_int_ena::R {
                 spi_mem_int_ena::R(self.0.read::<0xc0>())
+            }
+
+            /// Read `SPI_MEM_INT_CLR`.
+            #[inline]
+            pub fn read_spi_mem_int_clr(&self) -> spi_mem_int_clr::R {
+                spi_mem_int_clr::R(self.0.read::<0xc4>())
             }
 
             /// Read `SPI_MEM_INT_RAW`.
@@ -89178,6 +97942,28 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_cs_hold_dly_res(self) -> oer_mmio::Bits<10> {
                     oer_mmio::Bits::truncate(self.0 >> 2)
+                }
+            }
+        }
+
+        /// The `SPI_MEM_CTRL2` register.
+        ///
+        /// SPI1 control2 register.
+        pub mod spi_mem_ctrl2 {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x80000000;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x10;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// The FSM will be reset.
+                #[inline]
+                pub const fn spi_mem_sync_reset(self) -> bool {
+                    (self.0 & 0x80000000) != 0
                 }
             }
         }
@@ -89596,24 +98382,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf0(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF0`.
-                #[inline]
-                pub fn set_spi_mem_buf0(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W1` register.
@@ -89634,24 +98402,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf1(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf1(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF1`.
-                #[inline]
-                pub fn set_spi_mem_buf1(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -89676,24 +98426,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf2(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF2`.
-                #[inline]
-                pub fn set_spi_mem_buf2(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W3` register.
@@ -89714,24 +98446,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf3(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf3(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF3`.
-                #[inline]
-                pub fn set_spi_mem_buf3(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -89756,24 +98470,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf4(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF4`.
-                #[inline]
-                pub fn set_spi_mem_buf4(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W5` register.
@@ -89794,24 +98490,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf5(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf5(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF5`.
-                #[inline]
-                pub fn set_spi_mem_buf5(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -89836,24 +98514,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf6(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF6`.
-                #[inline]
-                pub fn set_spi_mem_buf6(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W7` register.
@@ -89874,24 +98534,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf7(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf7(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF7`.
-                #[inline]
-                pub fn set_spi_mem_buf7(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -89916,24 +98558,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf8(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF8`.
-                #[inline]
-                pub fn set_spi_mem_buf8(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W9` register.
@@ -89954,24 +98578,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf9(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf9(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF9`.
-                #[inline]
-                pub fn set_spi_mem_buf9(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -89996,24 +98602,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf10(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF10`.
-                #[inline]
-                pub fn set_spi_mem_buf10(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W11` register.
@@ -90034,24 +98622,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf11(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf11(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF11`.
-                #[inline]
-                pub fn set_spi_mem_buf11(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -90076,24 +98646,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf12(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF12`.
-                #[inline]
-                pub fn set_spi_mem_buf12(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W13` register.
@@ -90114,24 +98666,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf13(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf13(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF13`.
-                #[inline]
-                pub fn set_spi_mem_buf13(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -90156,24 +98690,6 @@ pub mod soc {
                     self.0
                 }
             }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf14(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF14`.
-                #[inline]
-                pub fn set_spi_mem_buf14(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
-                }
-            }
         }
 
         /// The `SPI_MEM_W15` register.
@@ -90194,24 +98710,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_buf15(self) -> u32 {
                     self.0
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// data buffer
-                #[inline]
-                pub const fn spi_mem_buf15(&self) -> u32 {
-                    self.0
-                }
-
-                /// Set `SPI_MEM_BUF15`.
-                #[inline]
-                pub fn set_spi_mem_buf15(&mut self, value: u32) -> &mut Self {
-                    self.0 = value;
-                    self
                 }
             }
         }
@@ -90352,157 +98850,6 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_sus_timeout_cnt(self) -> oer_mmio::Bits<7> {
                     oer_mmio::Bits::truncate(self.0 >> 25)
-                }
-            }
-
-            /// The register's value while it is changed.
-            pub struct W(pub(super) u32);
-
-            impl W {
-                /// program erase resume bit, program erase suspend operation will be triggered when the bit is set. The bit will be cleared once the operation done.1: enable 0: disable.
-                #[inline]
-                pub const fn spi_mem_flash_per(&self) -> bool {
-                    (self.0 & 0x00000001) != 0
-                }
-
-                /// program erase suspend bit, program erase suspend operation will be triggered when the bit is set. The bit will be cleared once the operation done.1: enable 0: disable.
-                #[inline]
-                pub const fn spi_mem_flash_pes(&self) -> bool {
-                    (self.0 & 0x00000002) != 0
-                }
-
-                /// 1: SPI1 waits (SPI_MEM_CS_HOLD_DELAY_RES\[9:0\] * 4 or *128) SPI_CLK cycles after program erase resume command is sent. 0: SPI1 does not wait after program erase resume command is sent.
-                #[inline]
-                pub const fn spi_mem_flash_per_wait_en(&self) -> bool {
-                    (self.0 & 0x00000004) != 0
-                }
-
-                /// 1: SPI1 waits (SPI_MEM_CS_HOLD_DELAY_RES\[9:0\] * 4 or *128) SPI_CLK cycles after program erase suspend command is sent. 0: SPI1 does not wait after program erase suspend command is sent.
-                #[inline]
-                pub const fn spi_mem_flash_pes_wait_en(&self) -> bool {
-                    (self.0 & 0x00000008) != 0
-                }
-
-                /// Set this bit to enable PES end triggers PER transfer option. If this bit is 0, application should send PER after PES is done.
-                #[inline]
-                pub const fn spi_mem_pes_per_en(&self) -> bool {
-                    (self.0 & 0x00000010) != 0
-                }
-
-                /// Set this bit to enable Auto-suspending function.
-                #[inline]
-                pub const fn spi_mem_flash_pes_en(&self) -> bool {
-                    (self.0 & 0x00000020) != 0
-                }
-
-                /// The mask value when check SUS/SUS1/SUS2 status bit. If the read status value is status_in\[15:0\](only status_in\[7:0\] is valid when only one byte of data is read out, status_in\[15:0\] is valid when two bytes of data are read out), SUS/SUS1/SUS2 = status_in\[15:0\]^ SPI_MEM_PESR_END_MSK\[15:0\].
-                #[inline]
-                pub const fn spi_mem_pesr_end_msk(&self) -> u16 {
-                    (self.0 >> 6) as u16
-                }
-
-                /// 1: Read two bytes when check flash SUS/SUS1/SUS2 status bit. 0: Read one byte when check flash SUS/SUS1/SUS2 status bit
-                #[inline]
-                pub const fn spi_mem_fmem_rd_sus_2b(&self) -> bool {
-                    (self.0 & 0x00400000) != 0
-                }
-
-                /// 1: Both WIP and SUS/SUS1/SUS2 bits should be checked to insure the resume status of flash. 0: Only need to check WIP is 0.
-                #[inline]
-                pub const fn spi_mem_per_end_en(&self) -> bool {
-                    (self.0 & 0x00800000) != 0
-                }
-
-                /// 1: Both WIP and SUS/SUS1/SUS2 bits should be checked to insure the suspend status of flash. 0: Only need to check WIP is 0.
-                #[inline]
-                pub const fn spi_mem_pes_end_en(&self) -> bool {
-                    (self.0 & 0x01000000) != 0
-                }
-
-                /// When SPI1 checks SUS/SUS1/SUS2 bits fail for SPI_MEM_SUS_TIMEOUT_CNT\[6:0\] times, it will be treated as check pass.
-                #[inline]
-                pub const fn spi_mem_sus_timeout_cnt(&self) -> oer_mmio::Bits<7> {
-                    oer_mmio::Bits::truncate(self.0 >> 25)
-                }
-
-                /// Set `SPI_MEM_FLASH_PER`.
-                #[inline]
-                pub fn set_spi_mem_flash_per(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000001) | u32::from(value);
-                    self
-                }
-
-                /// Set `SPI_MEM_FLASH_PES`.
-                #[inline]
-                pub fn set_spi_mem_flash_pes(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
-                    self
-                }
-
-                /// Set `SPI_MEM_FLASH_PER_WAIT_EN`.
-                #[inline]
-                pub fn set_spi_mem_flash_per_wait_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
-                    self
-                }
-
-                /// Set `SPI_MEM_FLASH_PES_WAIT_EN`.
-                #[inline]
-                pub fn set_spi_mem_flash_pes_wait_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
-                    self
-                }
-
-                /// Set `SPI_MEM_PES_PER_EN`.
-                #[inline]
-                pub fn set_spi_mem_pes_per_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
-                    self
-                }
-
-                /// Set `SPI_MEM_FLASH_PES_EN`.
-                #[inline]
-                pub fn set_spi_mem_flash_pes_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
-                    self
-                }
-
-                /// Set `SPI_MEM_PESR_END_MSK`.
-                #[inline]
-                pub fn set_spi_mem_pesr_end_msk(&mut self, value: u16) -> &mut Self {
-                    self.0 = (self.0 & !0x003fffc0) | (u32::from(value) << 6);
-                    self
-                }
-
-                /// Set `SPI_MEM_FMEM_RD_SUS_2B`.
-                #[inline]
-                pub fn set_spi_mem_fmem_rd_sus_2b(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00400000) | (u32::from(value) << 22);
-                    self
-                }
-
-                /// Set `SPI_MEM_PER_END_EN`.
-                #[inline]
-                pub fn set_spi_mem_per_end_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x00800000) | (u32::from(value) << 23);
-                    self
-                }
-
-                /// Set `SPI_MEM_PES_END_EN`.
-                #[inline]
-                pub fn set_spi_mem_pes_end_en(&mut self, value: bool) -> &mut Self {
-                    self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
-                    self
-                }
-
-                /// Set `SPI_MEM_SUS_TIMEOUT_CNT`.
-                #[inline]
-                pub fn set_spi_mem_sus_timeout_cnt(
-                    &mut self,
-                    value: oer_mmio::Bits<7>,
-                ) -> &mut Self {
-                    self.0 = (self.0 & !0xfe000000) | (value.get() << 25);
-                    self
                 }
             }
         }
@@ -90717,6 +99064,58 @@ pub mod soc {
                 /// The enable bit for SPI_MEM_BROWN_OUT_INT interrupt.
                 #[inline]
                 pub const fn spi_mem_brown_out_int_ena(self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+            }
+        }
+
+        /// The `SPI_MEM_INT_CLR` register.
+        ///
+        /// SPI1 interrupt clear register
+        pub mod spi_mem_int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x0000041f;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0xc4;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// The clear bit for SPI_MEM_PER_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_per_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The clear bit for SPI_MEM_PES_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_pes_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The clear bit for SPI_MEM_WPE_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_wpe_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The clear bit for SPI_MEM_SLV_ST_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_slv_st_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The clear bit for SPI_MEM_MST_ST_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_mst_st_end_int_clr(self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The status bit for SPI_MEM_BROWN_OUT_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_brown_out_int_clr(self) -> bool {
                     (self.0 & 0x00000400) != 0
                 }
             }
@@ -93594,8 +101993,8 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x8, 0xc, 0x10, 0x14, 0x18, 0x48, 0x4c, 0x68, 0x70, 0x74, 0x78, 0x7c, 0x80, 0x84,
-                0x88, 0xfc,
+                0x8, 0xc, 0x10, 0x14, 0x18, 0x48, 0x4c, 0x5c, 0x60, 0x68, 0x70, 0x74, 0x78, 0x7c,
+                0x80, 0x84, 0x88, 0xfc,
             ];
         }
 
@@ -93683,10 +102082,35 @@ pub mod soc {
                 unit1_value_lo::R(self.0.read::<0x4c>())
             }
 
+            /// Read `UNIT0_LOAD`.
+            #[inline]
+            pub fn read_unit0_load(&self) -> unit0_load::R {
+                unit0_load::R(self.0.read::<0x5c>())
+            }
+
+            /// Read `UNIT1_LOAD`.
+            #[inline]
+            pub fn read_unit1_load(&self) -> unit1_load::R {
+                unit1_load::R(self.0.read::<0x60>())
+            }
+
             /// Read `INT_RAW`.
             #[inline]
             pub fn read_int_raw(&self) -> int_raw::R {
                 int_raw::R(self.0.read::<0x68>())
+            }
+
+            /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+                int_raw::Snapshot(self.0.read::<0x68>() & int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+                self.0.write::<0x68>(snapshot.0);
             }
 
             /// Read `INT_ST`.
@@ -93937,6 +102361,50 @@ pub mod soc {
             }
         }
 
+        /// The `UNIT0_LOAD` register.
+        ///
+        /// system timer unit0 conf sync register
+        pub mod unit0_load {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000001;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x5c;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// timer unit0 sync enable signal
+                #[inline]
+                pub const fn timer_unit0_load(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+            }
+        }
+
+        /// The `UNIT1_LOAD` register.
+        ///
+        /// system timer unit1 conf sync register
+        pub mod unit1_load {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000001;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x60;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {
+                /// timer unit1 sync enable signal
+                #[inline]
+                pub const fn timer_unit1_load(self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+            }
+        }
+
         /// The `INT_RAW` register.
         ///
         /// systimer interrupt raw register
@@ -93967,6 +102435,63 @@ pub mod soc {
                 #[inline]
                 pub const fn target2_int_raw(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// interupt0 raw
+                #[inline]
+                pub const fn target0_int_raw(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The snapshot without `TARGET0_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_target0_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000001)
+                    }
+                }
+
+                /// interupt1 raw
+                #[inline]
+                pub const fn target1_int_raw(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The snapshot without `TARGET1_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_target1_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000002)
+                    }
+                }
+
+                /// interupt2 raw
+                #[inline]
+                pub const fn target2_int_raw(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The snapshot without `TARGET2_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_target2_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000004)
+                    }
                 }
             }
         }
@@ -94579,10 +103104,28 @@ pub mod soc {
                 rtccalicfg2::R(self.0.read::<0x80>())
             }
 
+            /// Read `RTCCALICFG2`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rtccalicfg2(&mut self, change: impl FnOnce(&mut rtccalicfg2::W)) {
+                let mut value = rtccalicfg2::W(self.0.read::<0x80>());
+                change(&mut value);
+                self.0.write::<0x80>(value.0);
+            }
+
             /// Read `NTIMERS_DATE`.
             #[inline]
             pub fn read_ntimers_date(&self) -> ntimers_date::R {
                 ntimers_date::R(self.0.read::<0xf8>())
+            }
+
+            /// Read `NTIMERS_DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ntimers_date(&mut self, change: impl FnOnce(&mut ntimers_date::W)) {
+                let mut value = ntimers_date::W(self.0.read::<0xf8>());
+                change(&mut value);
+                self.0.write::<0xf8>(value.0);
             }
 
             /// Read `REGCLK`.
@@ -95404,6 +103947,49 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 7)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Represents whether RTC frequency calculation is timeout. \\ 0: No timeout \\ 1: Timeout \\
+                #[inline]
+                pub const fn rtc_cali_timeout(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Configures the cycles that reset frequency calculation timeout. \\ Measurement unit: XTAL_CLK \\
+                #[inline]
+                pub const fn rtc_cali_timeout_rst_cnt(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// Configures the threshold value for the RTC frequency calculation timer. If the timer's value exceeds this threshold, a timeout is triggered.\\ Measurement unit: XTAL_CLK \\
+                #[inline]
+                pub const fn rtc_cali_timeout_thres(&self) -> oer_mmio::Bits<25> {
+                    oer_mmio::Bits::truncate(self.0 >> 7)
+                }
+
+                /// Set `RTC_CALI_TIMEOUT_RST_CNT`.
+                #[inline]
+                pub fn set_rtc_cali_timeout_rst_cnt(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000078) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `RTC_CALI_TIMEOUT_THRES`.
+                #[inline]
+                pub fn set_rtc_cali_timeout_thres(
+                    &mut self,
+                    value: oer_mmio::Bits<25>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xffffff80) | (value.get() << 7);
+                    self
+                }
+            }
         }
 
         /// The `NTIMERS_DATE` register.
@@ -95424,6 +104010,24 @@ pub mod soc {
                 #[inline]
                 pub const fn ntimgs_date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register
+                #[inline]
+                pub const fn ntimgs_date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `NTIMGS_DATE`.
+                #[inline]
+                pub fn set_ntimgs_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -95727,10 +104331,28 @@ pub mod soc {
                 rtccalicfg2::R(self.0.read::<0x80>())
             }
 
+            /// Read `RTCCALICFG2`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_rtccalicfg2(&mut self, change: impl FnOnce(&mut rtccalicfg2::W)) {
+                let mut value = rtccalicfg2::W(self.0.read::<0x80>());
+                change(&mut value);
+                self.0.write::<0x80>(value.0);
+            }
+
             /// Read `NTIMERS_DATE`.
             #[inline]
             pub fn read_ntimers_date(&self) -> ntimers_date::R {
                 ntimers_date::R(self.0.read::<0xf8>())
+            }
+
+            /// Read `NTIMERS_DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_ntimers_date(&mut self, change: impl FnOnce(&mut ntimers_date::W)) {
+                let mut value = ntimers_date::W(self.0.read::<0xf8>());
+                change(&mut value);
+                self.0.write::<0xf8>(value.0);
             }
 
             /// Read `REGCLK`.
@@ -96552,6 +105174,49 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 7)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Represents whether RTC frequency calculation is timeout. \\ 0: No timeout \\ 1: Timeout \\
+                #[inline]
+                pub const fn rtc_cali_timeout(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Configures the cycles that reset frequency calculation timeout. \\ Measurement unit: XTAL_CLK \\
+                #[inline]
+                pub const fn rtc_cali_timeout_rst_cnt(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// Configures the threshold value for the RTC frequency calculation timer. If the timer's value exceeds this threshold, a timeout is triggered.\\ Measurement unit: XTAL_CLK \\
+                #[inline]
+                pub const fn rtc_cali_timeout_thres(&self) -> oer_mmio::Bits<25> {
+                    oer_mmio::Bits::truncate(self.0 >> 7)
+                }
+
+                /// Set `RTC_CALI_TIMEOUT_RST_CNT`.
+                #[inline]
+                pub fn set_rtc_cali_timeout_rst_cnt(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000078) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `RTC_CALI_TIMEOUT_THRES`.
+                #[inline]
+                pub fn set_rtc_cali_timeout_thres(
+                    &mut self,
+                    value: oer_mmio::Bits<25>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xffffff80) | (value.get() << 7);
+                    self
+                }
+            }
         }
 
         /// The `NTIMERS_DATE` register.
@@ -96572,6 +105237,24 @@ pub mod soc {
                 #[inline]
                 pub const fn ntimgs_date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register
+                #[inline]
+                pub const fn ntimgs_date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `NTIMGS_DATE`.
+                #[inline]
+                pub fn set_ntimgs_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }
@@ -107886,8 +116569,9 @@ pub mod soc {
 
         impl oer_mmio::Registers for BlockWords {
             const WORDS: &'static [usize] = &[
-                0x0, 0x4, 0x8, 0xc, 0x10, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
-                0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x64, 0x68, 0x6c, 0x70, 0x80,
+                0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34,
+                0x38, 0x3c, 0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c,
+                0x70, 0x80,
             ];
         }
 
@@ -107915,10 +116599,17 @@ pub mod soc {
         }
 
         impl<P: oer_mmio::Placement> UsbDevice<P> {
-            /// Read `EP1`.
+            /// Take the next element out of the FIFO port `EP1`.
             #[inline]
-            pub fn read_ep1(&self) -> ep1::R {
-                ep1::R(self.0.read::<0x0>())
+            pub fn pop_ep1(&mut self) -> u8 {
+                let value = self.0.read::<0x0>();
+                (value) as u8
+            }
+
+            /// Put one element into the FIFO port `EP1`; every other bit is zero.
+            #[inline]
+            pub fn push_ep1(&mut self, value: u8) {
+                self.0.write::<0x0>(u32::from(value));
             }
 
             /// Read `EP1_CONF`.
@@ -107933,6 +116624,19 @@ pub mod soc {
                 int_raw::R(self.0.read::<0x8>())
             }
 
+            /// Sample `INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_int_raw(&self) -> int_raw::Snapshot {
+                int_raw::Snapshot(self.0.read::<0x8>() & int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_int_raw(&mut self, snapshot: int_raw::Snapshot) {
+                self.0.write::<0x8>(snapshot.0);
+            }
+
             /// Read `INT_ST`.
             #[inline]
             pub fn read_int_st(&self) -> int_st::R {
@@ -107945,6 +116649,149 @@ pub mod soc {
                 int_ena::R(self.0.read::<0x10>())
             }
 
+            /// Read `INT_ENA`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_int_ena(&mut self, change: impl FnOnce(&mut int_ena::W)) {
+                let mut value = int_ena::W(self.0.read::<0x10>());
+                change(&mut value);
+                self.0.write::<0x10>(value.0);
+            }
+
+            /// Read `INT_CLR`.
+            #[inline]
+            pub fn read_int_clr(&self) -> int_clr::R {
+                int_clr::R(self.0.read::<0x14>())
+            }
+
+            /// Write one to the write-trigger field `JTAG_IN_FLUSH_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_jtag_in_flush_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000001);
+            }
+
+            /// Write one to the write-trigger field `SOF_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_sof_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000002);
+            }
+
+            /// Write one to the write-trigger field `SERIAL_OUT_RECV_PKT_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_serial_out_recv_pkt_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000004);
+            }
+
+            /// Write one to the write-trigger field `SERIAL_IN_EMPTY_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_serial_in_empty_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000008);
+            }
+
+            /// Write one to the write-trigger field `PID_ERR_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_pid_err_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000010);
+            }
+
+            /// Write one to the write-trigger field `CRC5_ERR_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_crc5_err_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000020);
+            }
+
+            /// Write one to the write-trigger field `CRC16_ERR_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_crc16_err_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000040);
+            }
+
+            /// Write one to the write-trigger field `STUFF_ERR_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_stuff_err_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000080);
+            }
+
+            /// Write one to the write-trigger field `IN_TOKEN_REC_IN_EP1_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_in_token_rec_in_ep1_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000100);
+            }
+
+            /// Write one to the write-trigger field `USB_BUS_RESET_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_usb_bus_reset_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000200);
+            }
+
+            /// Write one to the write-trigger field `OUT_EP1_ZERO_PAYLOAD_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_out_ep1_zero_payload_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000400);
+            }
+
+            /// Write one to the write-trigger field `OUT_EP2_ZERO_PAYLOAD_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_out_ep2_zero_payload_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00000800);
+            }
+
+            /// Write one to the write-trigger field `RTS_CHG_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_rts_chg_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00001000);
+            }
+
+            /// Write one to the write-trigger field `DTR_CHG_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_dtr_chg_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00002000);
+            }
+
+            /// Write one to the write-trigger field `GET_LINE_CODE_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_get_line_code_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00004000);
+            }
+
+            /// Write one to the write-trigger field `SET_LINE_CODE_INT_CLR` of `INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_int_clr_set_line_code_int_clr(&mut self) {
+                self.0
+                    .write::<0x14>((self.0.read::<0x14>() & !int_clr::TRIGGERS) | 0x00008000);
+            }
+
             /// Read `CONF0`.
             #[inline]
             pub fn read_conf0(&self) -> conf0::R {
@@ -107955,6 +116802,15 @@ pub mod soc {
             #[inline]
             pub fn read_test(&self) -> test::R {
                 test::R(self.0.read::<0x1c>())
+            }
+
+            /// Read `TEST`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_test(&mut self, change: impl FnOnce(&mut test::W)) {
+                let mut value = test::W(self.0.read::<0x1c>());
+                change(&mut value);
+                self.0.write::<0x1c>(value.0);
             }
 
             /// Read `JFIFO_ST`.
@@ -108017,16 +116873,43 @@ pub mod soc {
                 misc_conf::R(self.0.read::<0x44>())
             }
 
+            /// Read `MISC_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_misc_conf(&mut self, change: impl FnOnce(&mut misc_conf::W)) {
+                let mut value = misc_conf::W(self.0.read::<0x44>());
+                change(&mut value);
+                self.0.write::<0x44>(value.0);
+            }
+
             /// Read `MEM_CONF`.
             #[inline]
             pub fn read_mem_conf(&self) -> mem_conf::R {
                 mem_conf::R(self.0.read::<0x48>())
             }
 
+            /// Read `MEM_CONF`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_mem_conf(&mut self, change: impl FnOnce(&mut mem_conf::W)) {
+                let mut value = mem_conf::W(self.0.read::<0x48>());
+                change(&mut value);
+                self.0.write::<0x48>(value.0);
+            }
+
             /// Read `CHIP_RST`.
             #[inline]
             pub fn read_chip_rst(&self) -> chip_rst::R {
                 chip_rst::R(self.0.read::<0x4c>())
+            }
+
+            /// Read `CHIP_RST`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_chip_rst(&mut self, change: impl FnOnce(&mut chip_rst::W)) {
+                let mut value = chip_rst::W(self.0.read::<0x4c>());
+                change(&mut value);
+                self.0.write::<0x4c>(value.0);
             }
 
             /// Read `SET_LINE_CODE_W0`.
@@ -108063,6 +116946,32 @@ pub mod soc {
             #[inline]
             pub fn read_get_line_code_w1(&self) -> get_line_code_w1::R {
                 get_line_code_w1::R(self.0.read::<0x5c>())
+            }
+
+            /// Read `GET_LINE_CODE_W1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_get_line_code_w1(
+                &mut self,
+                change: impl FnOnce(&mut get_line_code_w1::W),
+            ) {
+                let mut value = get_line_code_w1::W(self.0.read::<0x5c>());
+                change(&mut value);
+                self.0.write::<0x5c>(value.0);
+            }
+
+            /// Read `CONFIG_UPDATE`.
+            #[inline]
+            pub fn read_config_update(&self) -> config_update::R {
+                config_update::R(self.0.read::<0x60>())
+            }
+
+            /// Write one to the write-trigger field `CONFIG_UPDATE` of `CONFIG_UPDATE`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_config_update_config_update(&mut self) {
+                self.0
+                    .write::<0x60>((self.0.read::<0x60>() & !config_update::TRIGGERS) | 0x00000001);
             }
 
             /// Read `SER_AFIFO_CONFIG`.
@@ -108129,18 +117038,6 @@ pub mod soc {
             pub const FIELDS: u32 = 0x000000ff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x0;
-
-            /// One observation of the register.
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            pub struct R(pub(super) u32);
-
-            impl R {
-                /// Write and read byte data to/from UART Tx/Rx FIFO through this field. When USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT is set, then user can write data (up to 64 bytes) into UART Tx FIFO. When USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT is set, user can check USB_SERIAL_JTAG_OUT_EP1_WR_ADDR USB_SERIAL_JTAG_OUT_EP0_RD_ADDR to know how many data is received, then read data from UART Rx FIFO.
-                #[inline]
-                pub const fn rdwr_byte(self) -> u8 {
-                    (self.0) as u8
-                }
-            }
         }
 
         /// The `EP1_CONF` register.
@@ -108279,6 +117176,258 @@ pub mod soc {
                 #[inline]
                 pub const fn set_line_code_int_raw(self) -> bool {
                     (self.0 & 0x00008000) != 0
+                }
+            }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// The raw interrupt bit turns to high level when flush cmd is received for IN endpoint 2 of JTAG.
+                #[inline]
+                pub const fn jtag_in_flush_int_raw(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The snapshot without `JTAG_IN_FLUSH_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_jtag_in_flush_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000001)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when SOF frame is received.
+                #[inline]
+                pub const fn sof_int_raw(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The snapshot without `SOF_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_sof_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000002)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when Serial Port OUT Endpoint received one packet.
+                #[inline]
+                pub const fn serial_out_recv_pkt_int_raw(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The snapshot without `SERIAL_OUT_RECV_PKT_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_serial_out_recv_pkt_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000004)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when Serial Port IN Endpoint is empty.
+                #[inline]
+                pub const fn serial_in_empty_int_raw(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The snapshot without `SERIAL_IN_EMPTY_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_serial_in_empty_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000008)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when pid error is detected.
+                #[inline]
+                pub const fn pid_err_int_raw(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The snapshot without `PID_ERR_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_pid_err_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000010)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when CRC5 error is detected.
+                #[inline]
+                pub const fn crc5_err_int_raw(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// The snapshot without `CRC5_ERR_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_crc5_err_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000020)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when CRC16 error is detected.
+                #[inline]
+                pub const fn crc16_err_int_raw(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// The snapshot without `CRC16_ERR_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_crc16_err_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000040)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when stuff error is detected.
+                #[inline]
+                pub const fn stuff_err_int_raw(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// The snapshot without `STUFF_ERR_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_stuff_err_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000080)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when IN token for IN endpoint 1 is received.
+                #[inline]
+                pub const fn in_token_rec_in_ep1_int_raw(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// The snapshot without `IN_TOKEN_REC_IN_EP1_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_in_token_rec_in_ep1_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000100)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when usb bus reset is detected.
+                #[inline]
+                pub const fn usb_bus_reset_int_raw(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// The snapshot without `USB_BUS_RESET_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_usb_bus_reset_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000200)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when OUT endpoint 1 received packet with zero palyload.
+                #[inline]
+                pub const fn out_ep1_zero_payload_int_raw(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The snapshot without `OUT_EP1_ZERO_PAYLOAD_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_out_ep1_zero_payload_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000400)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when OUT endpoint 2 received packet with zero palyload.
+                #[inline]
+                pub const fn out_ep2_zero_payload_int_raw(&self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// The snapshot without `OUT_EP2_ZERO_PAYLOAD_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_out_ep2_zero_payload_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000800)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when level of RTS from usb serial channel is changed.
+                #[inline]
+                pub const fn rts_chg_int_raw(&self) -> bool {
+                    (self.0 & 0x00001000) != 0
+                }
+
+                /// The snapshot without `RTS_CHG_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_rts_chg_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00001000)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when level of DTR from usb serial channel is changed.
+                #[inline]
+                pub const fn dtr_chg_int_raw(&self) -> bool {
+                    (self.0 & 0x00002000) != 0
+                }
+
+                /// The snapshot without `DTR_CHG_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_dtr_chg_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00002000)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when level of GET LINE CODING request is received.
+                #[inline]
+                pub const fn get_line_code_int_raw(&self) -> bool {
+                    (self.0 & 0x00004000) != 0
+                }
+
+                /// The snapshot without `GET_LINE_CODE_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_get_line_code_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00004000)
+                    }
+                }
+
+                /// The raw interrupt bit turns to high level when level of SET LINE CODING request is received.
+                #[inline]
+                pub const fn set_line_code_int_raw(&self) -> bool {
+                    (self.0 & 0x00008000) != 0
+                }
+
+                /// The snapshot without `SET_LINE_CODE_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_set_line_code_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00008000)
+                    }
                 }
             }
         }
@@ -108505,6 +117654,239 @@ pub mod soc {
                     (self.0 & 0x00008000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_JTAG_IN_FLUSH_INT interrupt.
+                #[inline]
+                pub const fn jtag_in_flush_int_ena(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_SOF_INT interrupt.
+                #[inline]
+                pub const fn sof_int_ena(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_SERIAL_OUT_RECV_PKT_INT interrupt.
+                #[inline]
+                pub const fn serial_out_recv_pkt_int_ena(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT interrupt.
+                #[inline]
+                pub const fn serial_in_empty_int_ena(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_PID_ERR_INT interrupt.
+                #[inline]
+                pub const fn pid_err_int_ena(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_CRC5_ERR_INT interrupt.
+                #[inline]
+                pub const fn crc5_err_int_ena(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_CRC16_ERR_INT interrupt.
+                #[inline]
+                pub const fn crc16_err_int_ena(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_STUFF_ERR_INT interrupt.
+                #[inline]
+                pub const fn stuff_err_int_ena(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_IN_TOKEN_REC_IN_EP1_INT interrupt.
+                #[inline]
+                pub const fn in_token_rec_in_ep1_int_ena(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_USB_BUS_RESET_INT interrupt.
+                #[inline]
+                pub const fn usb_bus_reset_int_ena(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_OUT_EP1_ZERO_PAYLOAD_INT interrupt.
+                #[inline]
+                pub const fn out_ep1_zero_payload_int_ena(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_OUT_EP2_ZERO_PAYLOAD_INT interrupt.
+                #[inline]
+                pub const fn out_ep2_zero_payload_int_ena(&self) -> bool {
+                    (self.0 & 0x00000800) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_RTS_CHG_INT interrupt.
+                #[inline]
+                pub const fn rts_chg_int_ena(&self) -> bool {
+                    (self.0 & 0x00001000) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_DTR_CHG_INT interrupt.
+                #[inline]
+                pub const fn dtr_chg_int_ena(&self) -> bool {
+                    (self.0 & 0x00002000) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_GET_LINE_CODE_INT interrupt.
+                #[inline]
+                pub const fn get_line_code_int_ena(&self) -> bool {
+                    (self.0 & 0x00004000) != 0
+                }
+
+                /// The interrupt enable bit for the USB_SERIAL_JTAG_SET_LINE_CODE_INT interrupt.
+                #[inline]
+                pub const fn set_line_code_int_ena(&self) -> bool {
+                    (self.0 & 0x00008000) != 0
+                }
+
+                /// Set `JTAG_IN_FLUSH_INT_ENA`.
+                #[inline]
+                pub fn set_jtag_in_flush_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SOF_INT_ENA`.
+                #[inline]
+                pub fn set_sof_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SERIAL_OUT_RECV_PKT_INT_ENA`.
+                #[inline]
+                pub fn set_serial_out_recv_pkt_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `SERIAL_IN_EMPTY_INT_ENA`.
+                #[inline]
+                pub fn set_serial_in_empty_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `PID_ERR_INT_ENA`.
+                #[inline]
+                pub fn set_pid_err_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `CRC5_ERR_INT_ENA`.
+                #[inline]
+                pub fn set_crc5_err_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `CRC16_ERR_INT_ENA`.
+                #[inline]
+                pub fn set_crc16_err_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                    self
+                }
+
+                /// Set `STUFF_ERR_INT_ENA`.
+                #[inline]
+                pub fn set_stuff_err_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                    self
+                }
+
+                /// Set `IN_TOKEN_REC_IN_EP1_INT_ENA`.
+                #[inline]
+                pub fn set_in_token_rec_in_ep1_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `USB_BUS_RESET_INT_ENA`.
+                #[inline]
+                pub fn set_usb_bus_reset_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `OUT_EP1_ZERO_PAYLOAD_INT_ENA`.
+                #[inline]
+                pub fn set_out_ep1_zero_payload_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+
+                /// Set `OUT_EP2_ZERO_PAYLOAD_INT_ENA`.
+                #[inline]
+                pub fn set_out_ep2_zero_payload_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000800) | (u32::from(value) << 11);
+                    self
+                }
+
+                /// Set `RTS_CHG_INT_ENA`.
+                #[inline]
+                pub fn set_rts_chg_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `DTR_CHG_INT_ENA`.
+                #[inline]
+                pub fn set_dtr_chg_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                    self
+                }
+
+                /// Set `GET_LINE_CODE_INT_ENA`.
+                #[inline]
+                pub fn set_get_line_code_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                    self
+                }
+
+                /// Set `SET_LINE_CODE_INT_ENA`.
+                #[inline]
+                pub fn set_set_line_code_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                    self
+                }
+            }
+        }
+
+        /// The `INT_CLR` register.
+        ///
+        /// Interrupt clear status register.
+        pub mod int_clr {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x0000ffff;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x14;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x0000ffff;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `CONF0` register.
@@ -108661,6 +118043,81 @@ pub mod soc {
                 #[inline]
                 pub const fn rx_dm(self) -> bool {
                     (self.0 & 0x00000040) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Enable test of the USB pad
+                #[inline]
+                pub const fn enable(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// USB pad oen in test
+                #[inline]
+                pub const fn usb_oe(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// USB D+ tx value in test
+                #[inline]
+                pub const fn tx_dp(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// USB D- tx value in test
+                #[inline]
+                pub const fn tx_dm(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// USB RCV value in test
+                #[inline]
+                pub const fn rx_rcv(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// USB D+ rx value in test
+                #[inline]
+                pub const fn rx_dp(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// USB D- rx value in test
+                #[inline]
+                pub const fn rx_dm(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// Set `ENABLE`.
+                #[inline]
+                pub fn set_enable(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `USB_OE`.
+                #[inline]
+                pub fn set_usb_oe(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `TX_DP`.
+                #[inline]
+                pub fn set_tx_dp(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `TX_DM`.
+                #[inline]
+                pub fn set_tx_dm(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
                 }
             }
         }
@@ -109015,6 +118472,24 @@ pub mod soc {
                     (self.0 & 0x00000001) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// 1'h1: Force clock on for register. 1'h0: Support clock only when application writes registers.
+                #[inline]
+                pub const fn clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `CLK_EN`.
+                #[inline]
+                pub fn set_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `MEM_CONF` register.
@@ -109041,6 +118516,37 @@ pub mod soc {
                 #[inline]
                 pub const fn usb_mem_clk_en(self) -> bool {
                     (self.0 & 0x00000002) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// 1: power down usb memory.
+                #[inline]
+                pub const fn usb_mem_pd(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// 1: Force clock on for usb memory.
+                #[inline]
+                pub const fn usb_mem_clk_en(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set `USB_MEM_PD`.
+                #[inline]
+                pub fn set_usb_mem_pd(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `USB_MEM_CLK_EN`.
+                #[inline]
+                pub fn set_usb_mem_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
                 }
             }
         }
@@ -109075,6 +118581,36 @@ pub mod soc {
                 #[inline]
                 pub const fn usb_uart_chip_rst_dis(self) -> bool {
                     (self.0 & 0x00000004) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// 1: Chip reset is detected from usb serial channel. Software write 1 to clear it.
+                #[inline]
+                pub const fn rts(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// 1: Chip reset is detected from usb jtag channel. Software write 1 to clear it.
+                #[inline]
+                pub const fn dtr(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set this bit to disable chip reset from usb serial channel to reset chip.
+                #[inline]
+                pub const fn usb_uart_chip_rst_dis(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set `USB_UART_CHIP_RST_DIS`.
+                #[inline]
+                pub fn set_usb_uart_chip_rst_dis(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
                 }
             }
         }
@@ -109207,6 +118743,70 @@ pub mod soc {
                     (self.0 >> 16) as u8
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The value of bCharFormat set by software which is requested by GET_LINE_CODING command.
+                #[inline]
+                pub const fn get_bdata_bits(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// The value of bParityTpye set by software which is requested by GET_LINE_CODING command.
+                #[inline]
+                pub const fn get_bparity_type(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// The value of bDataBits set by software which is requested by GET_LINE_CODING command.
+                #[inline]
+                pub const fn get_bchar_format(&self) -> u8 {
+                    (self.0 >> 16) as u8
+                }
+
+                /// Set `GET_BDATA_BITS`.
+                #[inline]
+                pub fn set_get_bdata_bits(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `GET_BPARITY_TYPE`.
+                #[inline]
+                pub fn set_get_bparity_type(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `GET_BCHAR_FORMAT`.
+                #[inline]
+                pub fn set_get_bchar_format(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                    self
+                }
+            }
+        }
+
+        /// The `CONFIG_UPDATE` register.
+        ///
+        /// Configuration registers' value update
+        pub mod config_update {
+            /// The bits of the register's declared fields.
+            pub const FIELDS: u32 = 0x00000001;
+            /// The register's byte offset in its block.
+            pub const OFFSET: usize = 0x60;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00000001;
+
+            /// One observation of the register.
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            pub struct R(pub(super) u32);
+
+            impl R {}
         }
 
         /// The `SER_AFIFO_CONFIG` register.

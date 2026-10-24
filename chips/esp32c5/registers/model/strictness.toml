@@ -9,3 +9,2715 @@
 schema = 1
 esp-idf = "4d59230ddff16327812782151ef0afef202dc6d7"
 esp-hal = "1f646c5af4f4ca2774f493783581237fea2379dc"
+
+# Interrupt sources the vendor SVD does not list, numbered as ESP-IDF's
+# interrupts.h enumerates them; the name drops ETS_ and _INTR_SOURCE
+# (FROM_CPU_INTR<n> follows the vendor SVD's spelling).
+
+[[interrupts]]
+name = "LP_PERI_TIMEOUT"
+source = 19
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:37"]
+
+[[interrupts]]
+name = "ASSIST_DEBUG"
+source = 27
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:45"]
+
+[[interrupts]]
+name = "HP_PERI_TIMEOUT"
+source = 34
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:52"]
+
+[[interrupts]]
+name = "MODEM_PERI_TIMEOUT"
+source = 35
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:53"]
+
+[[interrupts]]
+name = "SLC0"
+source = 69
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:88"]
+
+[[interrupts]]
+name = "SLC1"
+source = 70
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:89"]
+
+[[interrupts]]
+name = "DMA_IN_CH0"
+source = 71
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:90"]
+
+[[interrupts]]
+name = "DMA_IN_CH1"
+source = 72
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:91"]
+
+[[interrupts]]
+name = "DMA_IN_CH2"
+source = 73
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:92"]
+
+[[interrupts]]
+name = "DMA_OUT_CH0"
+source = 74
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:93"]
+
+[[interrupts]]
+name = "DMA_OUT_CH1"
+source = 75
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:94"]
+
+[[interrupts]]
+name = "DMA_OUT_CH2"
+source = 76
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:95"]
+
+[[interrupts]]
+name = "KM"
+source = 83
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:102"]
+
+[[interrupts]]
+name = "MAX"
+source = 84
+sources = ["esp-idf:components/soc/esp32c5/include/soc/interrupts.h:103"]
+
+
+# PCR: components/soc/esp32c5/register/soc/pcr_reg.h and pcr_struct.h.
+
+[[registers]]
+peripheral = "PCR"
+register = "UART0_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:16", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:34"]
+
+[[registers]]
+peripheral = "PCR"
+register = "UART0_SCLK_CONF"
+reserved = 0xff800000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:42", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:67"]
+
+[[registers]]
+peripheral = "PCR"
+register = "UART0_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:85", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:86"]
+
+[[registers]]
+peripheral = "PCR"
+register = "UART1_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:104", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:108"]
+
+[[registers]]
+peripheral = "PCR"
+register = "UART1_SCLK_CONF"
+reserved = 0xff800000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:130", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:141"]
+
+[[registers]]
+peripheral = "PCR"
+register = "UART1_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:173", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:160"]
+
+[[registers]]
+peripheral = "PCR"
+register = "MSPI_CONF"
+reserved = 0xfffffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:192", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:186"]
+
+[[registers]]
+peripheral = "PCR"
+register = "MSPI_CLK_CONF"
+reserved = 0xfffff000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:225", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:217"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2C_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:263", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:235"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2C_SCLK_CONF"
+reserved = 0xffa00000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:282", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:268"]
+
+[[registers]]
+peripheral = "PCR"
+register = "UHCI_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:418", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:334"]
+
+[[registers]]
+peripheral = "PCR"
+register = "RMT_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:444", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:352"]
+
+[[registers]]
+peripheral = "PCR"
+register = "RMT_SCLK_CONF"
+reserved = 0xff800000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:463", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:385"]
+
+[[registers]]
+peripheral = "PCR"
+register = "RMT_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:506", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:404"]
+
+[[registers]]
+peripheral = "PCR"
+register = "LEDC_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:525", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:426"]
+
+[[registers]]
+peripheral = "PCR"
+register = "LEDC_SCLK_CONF"
+reserved = 0xff8fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:551", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:448"]
+
+[[registers]]
+peripheral = "PCR"
+register = "LEDC_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:573", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:467"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP0_CONF"
+reserved = 0xffffffe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:592", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:497"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP0_TIMER_CLK_CONF"
+reserved = 0xff8fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:632", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:519"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP0_WDT_CLK_CONF"
+reserved = 0xff8fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:654", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:541"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP1_CONF"
+reserved = 0xffffffe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:676", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:571"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP1_TIMER_CLK_CONF"
+reserved = 0xff8fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:716", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:593"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP1_WDT_CLK_CONF"
+reserved = 0xff8fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:738", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:615"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SYSTIMER_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:760", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:637"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SYSTIMER_FUNC_CLK_CONF"
+reserved = 0xffafffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:786", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:659"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2S_CONF"
+reserved = 0xfffffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:807", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:685"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2S_TX_CLKM_CONF"
+reserved = 0xff800fff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:840", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:715"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2S_TX_CLKM_DIV_CONF"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:873", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:745"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2S_RX_CLKM_CONF"
+reserved = 0xff000fff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:910", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:778"]
+
+[[registers]]
+peripheral = "PCR"
+register = "I2S_RX_CLKM_DIV_CONF"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:949", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:808"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SARADC_CONF"
+reserved = 0xfffffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:986", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:834"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SARADC_CLKM_CONF"
+reserved = 0xff800000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1019", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:867"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TSENS_CLK_CONF"
+reserved = 0xff2fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1062", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:893"]
+
+[[registers]]
+peripheral = "PCR"
+register = "USB_DEVICE_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1090", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:915"]
+
+[[registers]]
+peripheral = "PCR"
+register = "INTMTX_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1116", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:937"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PCNT_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1142", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:959"]
+
+[[registers]]
+peripheral = "PCR"
+register = "ETM_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1168", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:981"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PWM_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1194", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1003"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PWM_CLK_CONF"
+reserved = 0xff800fff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1220", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1029"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PARL_IO_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1249", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1051"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PARL_CLK_RX_CONF"
+reserved = 0xfff00000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1275", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1081"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PARL_CLK_TX_CONF"
+reserved = 0xfff00000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1312", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1111"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PVT_MONITOR_CONF"
+reserved = 0xffffffe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1349", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1141"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PVT_MONITOR_FUNC_CLK_CONF"
+reserved = 0xffaffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1389", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1167"]
+
+[[registers]]
+peripheral = "PCR"
+register = "GDMA_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1417", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1185"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SPI2_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1436", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1207"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SPI2_CLKM_CONF"
+reserved = 0xff800fff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1462", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1234"]
+
+[[registers]]
+peripheral = "PCR"
+register = "AES_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1492", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1256"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SHA_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1518", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1278"]
+
+[[registers]]
+peripheral = "PCR"
+register = "RSA_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1544", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1300"]
+
+[[registers]]
+peripheral = "PCR"
+register = "RSA_PD_CTRL"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1570", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1322"]
+
+[[registers]]
+peripheral = "PCR"
+register = "ECC_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1596", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1344"]
+
+[[registers]]
+peripheral = "PCR"
+register = "ECC_PD_CTRL"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1622", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1366"]
+
+[[registers]]
+peripheral = "PCR"
+register = "DS_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1648", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1388"]
+
+[[registers]]
+peripheral = "PCR"
+register = "HMAC_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1674", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1410"]
+
+[[registers]]
+peripheral = "PCR"
+register = "ECDSA_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1700", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1432"]
+
+[[registers]]
+peripheral = "PCR"
+register = "IOMUX_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1726", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1450"]
+
+[[registers]]
+peripheral = "PCR"
+register = "IOMUX_CLK_CONF"
+reserved = 0xff8fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1745", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1472"]
+
+[[registers]]
+peripheral = "PCR"
+register = "REGDMA_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1767", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1490"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TRACE_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1786", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1508"]
+
+[[registers]]
+peripheral = "PCR"
+register = "ASSIST_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1805", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1526"]
+
+[[registers]]
+peripheral = "PCR"
+register = "CACHE_CONF"
+reserved = 0xfffffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1824", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1552"]
+
+[[registers]]
+peripheral = "PCR"
+register = "MODEM_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1857", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1575"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMEOUT_CONF"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1884", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1594"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SYSCLK_CONF"
+reserved = 0x00fc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1903", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1630"]
+
+[[registers]]
+peripheral = "PCR"
+register = "CPU_FREQ_CONF"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1969", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1666"]
+
+[[registers]]
+peripheral = "PCR"
+register = "AHB_FREQ_CONF"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1983", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1683"]
+
+[[registers]]
+peripheral = "PCR"
+register = "APB_FREQ_CONF"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:1998", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1708"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SYSCLK_FREQ_QUERY_0"
+reserved = 0xfffc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2024", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2224"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PLL_DIV_CLK_EN"
+reserved = 0xfffffe00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2043", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1763"]
+
+[[registers]]
+peripheral = "PCR"
+register = "CTRL_CLK_OUT_EN"
+reserved = 0xfffff800
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2120", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1817"]
+
+[[registers]]
+peripheral = "PCR"
+register = "CTRL_32K_CONF"
+reserved = 0xffff00f8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2202", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1842"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SRAM_POWER_CONF_0"
+reserved = 0xfffffe00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2227", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1865"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SRAM_POWER_CONF_1"
+reserved = 0xff0fc3f0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2254", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1890"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SEC_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2281", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1912"]
+
+[[registers]]
+peripheral = "PCR"
+register = "BUS_CLK_UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2304"]
+
+[[registers]]
+peripheral = "PCR"
+register = "SAR_CLK_DIV"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2320", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1948"]
+
+[[registers]]
+peripheral = "PCR"
+register = "BS_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2339", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1966"]
+
+[[registers]]
+peripheral = "PCR"
+register = "BS_FUNC_CONF"
+reserved = 0xfe7fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2358", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:1985"]
+
+[[registers]]
+peripheral = "PCR"
+register = "BS_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2377", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2004"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP_WDT_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2396", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2022"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TIMERGROUP_XTAL_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2415", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2044"]
+
+[[registers]]
+peripheral = "PCR"
+register = "KM_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2441", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2066"]
+
+[[registers]]
+peripheral = "PCR"
+register = "KM_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2467", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2085"]
+
+[[registers]]
+peripheral = "PCR"
+register = "TCM_MEM_MONITOR_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2486", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2107"]
+
+[[registers]]
+peripheral = "PCR"
+register = "PSRAM_MEM_MONITOR_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2512", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2129"]
+
+[[registers]]
+peripheral = "PCR"
+register = "RESET_EVENT_BYPASS"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2538", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2153"]
+
+[[registers]]
+peripheral = "PCR"
+register = "HPCORE_0_PD_CTRL"
+reserved = 0xfffffff9
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2563", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2172"]
+
+[[registers]]
+peripheral = "PCR"
+register = "CLOCK_GATE"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2613", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2204"]
+
+[[registers]]
+peripheral = "PCR"
+register = "DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pcr_reg.h:2625", "esp-idf:components/soc/esp32c5/register/soc/pcr_struct.h:2255"]
+
+
+# LP_CLKRST: components/soc/esp32c5/register/soc/lp_clkrst_reg.h and lp_clkrst_struct.h.
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "LP_CLK_CONF"
+reserved = 0xfffff000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:16", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:41"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "LP_CLK_PO_EN"
+reserved = 0xfffff800
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:49", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:117"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "LP_CLK_EN"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:153", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:133"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "LP_RST_EN"
+reserved = 0x07ffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:167", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:173"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "RESET_CAUSE"
+reserved = 0x1fffffc0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:217", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:205"]
+
+[[fields]]
+peripheral = "LP_CLKRST"
+register = "RESET_CAUSE"
+field = "CORE0_RESET_CAUSE_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:232"]
+
+[[fields]]
+peripheral = "LP_CLKRST"
+register = "RESET_CAUSE"
+field = "CORE0_RESET_FLAG_SET"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:239"]
+
+[[fields]]
+peripheral = "LP_CLKRST"
+register = "RESET_CAUSE"
+field = "CORE0_RESET_FLAG_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:246"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "CPU_RESET"
+reserved = 0x001fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:259", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:243"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "FOSC_CNTL"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:307", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:258"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "RC32K_CNTL"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:320", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:273"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "CLK_TO_HP"
+reserved = 0x0fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:333", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:307"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "LPMEM_FORCE"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:374", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:323"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "LPPERI"
+reserved = 0x1fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:388", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:351"]
+
+[[registers]]
+peripheral = "LP_CLKRST"
+register = "XTAL32K"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_reg.h:420", "esp-idf:components/soc/esp32c5/register/soc/lp_clkrst_struct.h:377"]
+
+
+# LP_AON: components/soc/esp32c5/register/soc/lp_aon_reg.h and lp_aon_struct.h.
+
+[[registers]]
+peripheral = "LP_AON"
+register = "GPIO_MUX"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:136", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:158"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "CPUCORE0_CFG"
+reserved = 0x0fffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:214", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:259"]
+
+[[fields]]
+peripheral = "LP_AON"
+register = "CPUCORE0_CFG"
+field = "CPU_CORE0_SW_RESET"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:224"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "IO_MUX"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:265", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:275"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "EXT_WAKEUP_CNTL"
+reserved = 0x00003f00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:279", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:313"]
+
+[[fields]]
+peripheral = "LP_AON"
+register = "EXT_WAKEUP_CNTL"
+field = "EXT_WAKEUP_STATUS_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:287"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "USB"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:327", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:329"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "LPBUS"
+reserved = 0x0fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:341", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:359"]
+
+[[fields]]
+peripheral = "LP_AON"
+register = "LPBUS"
+field = "FAST_MEM_MUX_SEL_UPDATE"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:356"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "SDIO_ACTIVE"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:380", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:374"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "SAR_CCT"
+reserved = 0x1fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:423", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:413"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "MODEM_BUS"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:438", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:430"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "DEBUG_SEL0"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:485", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:460"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "DEBUG_SEL1"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:524", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:475"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "BACKUP_DMA_CFG0"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:537", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:497"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "BACKUP_DMA_CFG1"
+reserved = 0x40000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:563", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:524"]
+
+[[registers]]
+peripheral = "LP_AON"
+register = "MEM_CTRL"
+reserved = 0xfffffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_aon_reg.h:609", "esp-idf:components/soc/esp32c5/register/soc/lp_aon_struct.h:563"]
+
+
+# PMU: components/soc/esp32c5/register/soc/pmu_reg.h and pmu_struct.h.
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_ACTIVE_HP_REGULATOR0"
+field = "DIG_DBIAS_INIT"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:368"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_GLOBAL_BBPLL_ICG"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1560"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_GLOBAL_XTAL_ICG"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1567"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_I2C_RETENTION"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1574"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_XPD_BB_I2C"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1581"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_XPD_BBPLL_I2C"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1588"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_XPD_BBPLL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1595"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_LOW_XPD_XTAL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1602"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_GLOBAL_BBPLL_ICG"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1609"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_GLOBAL_XTAL_ICG"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1616"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_I2C_RETENTION"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1623"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_XPD_BB_I2C"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1630"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_XPD_BBPLL_I2C"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1637"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_XPD_BBPLL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1644"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_CK_POWER"
+field = "TIE_HIGH_XPD_XTAL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1651"]
+
+[[registers]]
+peripheral = "PMU"
+register = "IMM_SLEEP_SYSCLK"
+reserved = 0x0fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1662", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:291"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_SLEEP_SYSCLK"
+field = "UPDATE_DIG_ICG_SWITCH"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1663"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_SLEEP_SYSCLK"
+field = "TIE_LOW_ICG_SLP_SEL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1670"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_SLEEP_SYSCLK"
+field = "TIE_HIGH_ICG_SLP_SEL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1677"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_SLEEP_SYSCLK"
+field = "UPDATE_DIG_SYS_CLK_SEL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1684"]
+
+[[registers]]
+peripheral = "PMU"
+register = "IMM_HP_FUNC_ICG"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1695", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:299"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_FUNC_ICG"
+field = "UPDATE_DIG_ICG_FUNC_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1696"]
+
+[[registers]]
+peripheral = "PMU"
+register = "IMM_HP_APB_ICG"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1707", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:307"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_HP_APB_ICG"
+field = "UPDATE_DIG_ICG_APB_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1708"]
+
+[[registers]]
+peripheral = "PMU"
+register = "IMM_MODEM_ICG"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1719", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:315"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_MODEM_ICG"
+field = "UPDATE_DIG_ICG_MODEM_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1720"]
+
+[[registers]]
+peripheral = "PMU"
+register = "IMM_LP_ICG"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1731", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:324"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_LP_ICG"
+field = "TIE_LOW_LP_ROOTCLK_SEL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1732"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_LP_ICG"
+field = "TIE_HIGH_LP_ROOTCLK_SEL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1739"]
+
+[[registers]]
+peripheral = "PMU"
+register = "IMM_PAD_HOLD_ALL"
+reserved = 0x0fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1750", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:335"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_PAD_HOLD_ALL"
+field = "TIE_HIGH_LP_PAD_HOLD_ALL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1751"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_PAD_HOLD_ALL"
+field = "TIE_LOW_LP_PAD_HOLD_ALL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1758"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_PAD_HOLD_ALL"
+field = "TIE_HIGH_HP_PAD_HOLD_ALL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1765"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_PAD_HOLD_ALL"
+field = "TIE_LOW_HP_PAD_HOLD_ALL"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1772"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_I2C_ISO"
+field = "TIE_HIGH_I2C_ISO_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1784"]
+
+[[fields]]
+peripheral = "PMU"
+register = "IMM_I2C_ISO"
+field = "TIE_LOW_I2C_ISO_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1791"]
+
+[[registers]]
+peripheral = "PMU"
+register = "POWER_WAIT_TIMER0"
+reserved = 0x0000001f
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1802", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:365"]
+
+[[registers]]
+peripheral = "PMU"
+register = "POWER_WAIT_TIMER1"
+reserved = 0x000001ff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:1828", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:375"]
+
+[[registers]]
+peripheral = "PMU"
+register = "POWER_HP_PAD"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2319", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:433"]
+
+[[registers]]
+peripheral = "PMU"
+register = "POWER_VDD_SPI_CNTL"
+reserved = 0x0003ffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2338", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:443"]
+
+[[registers]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL0"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2383", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:472"]
+
+[[fields]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL0"
+field = "SLEEP_REQ"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2384"]
+
+[[registers]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL3"
+reserved = 0xfffc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2426", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:490"]
+
+[[registers]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL4"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2452", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:498"]
+
+[[fields]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL4"
+field = "SLP_REJECT_CAUSE_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2453"]
+
+[[registers]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL5"
+reserved = 0x00f00000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2464", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:507"]
+
+[[registers]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL6"
+reserved = 0x3ff00000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2483", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:516"]
+
+[[registers]]
+peripheral = "PMU"
+register = "SLP_WAKEUP_CNTL7"
+reserved = 0x0000ffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2502", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:524"]
+
+[[registers]]
+peripheral = "PMU"
+register = "POR_STATUS"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2569", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:562"]
+
+[[registers]]
+peripheral = "PMU"
+register = "RF_PWC"
+reserved = 0x007fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2581", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:578"]
+
+[[registers]]
+peripheral = "PMU"
+register = "BACKUP_CFG"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2649", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:586"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_INT_CLR"
+field = "LP_CPU_EXC_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2782"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_INT_CLR"
+field = "SDIO_IDLE_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2789"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_INT_CLR"
+field = "SW_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2796"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_INT_CLR"
+field = "SOC_SLEEP_REJECT_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2803"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_INT_CLR"
+field = "SOC_WAKEUP_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:2810"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "LP_CPU_WAKEUP_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3089"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "MODEM_SWITCH_ACTIVE_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3096"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "SLEEP_SWITCH_ACTIVE_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3103"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "SLEEP_SWITCH_MODEM_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3110"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "MODEM_SWITCH_SLEEP_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3117"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "ACTIVE_SWITCH_SLEEP_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3124"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "MODEM_SWITCH_ACTIVE_START_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3131"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "SLEEP_SWITCH_ACTIVE_START_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3138"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "SLEEP_SWITCH_MODEM_START_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3145"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "MODEM_SWITCH_SLEEP_START_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3152"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "ACTIVE_SWITCH_SLEEP_START_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3159"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_INT_CLR"
+field = "HP_SW_TRIGGER_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3166"]
+
+[[registers]]
+peripheral = "PMU"
+register = "LP_CPU_PWR0"
+reserved = 0x0003fffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3177", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:645"]
+
+[[registers]]
+peripheral = "PMU"
+register = "LP_CPU_PWR1"
+reserved = 0x7fff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3245", "esp-idf:components/soc/esp32c5/register/soc/pmu_struct.h:654"]
+
+[[fields]]
+peripheral = "PMU"
+register = "LP_CPU_PWR1"
+field = "LP_CPU_SLEEP_REQ"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3253"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_LP_CPU_COMM"
+field = "LP_TRIGGER_HP"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3265"]
+
+[[fields]]
+peripheral = "PMU"
+register = "HP_LP_CPU_COMM"
+field = "HP_TRIGGER_LP"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/pmu_reg.h:3272"]
+
+
+# LPPERI: components/soc/esp32c5/register/soc/lpperi_reg.h and lpperi_struct.h.
+
+[[registers]]
+peripheral = "LPPERI"
+register = "CLK_EN"
+reserved = 0x00ffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:16", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:70"]
+
+[[registers]]
+peripheral = "LPPERI"
+register = "RESET_EN"
+reserved = 0x007fffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:93", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:134"]
+
+[[fields]]
+peripheral = "LPPERI"
+register = "RESET_EN"
+field = "BUS_RESET_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:94"]
+
+[[fields]]
+peripheral = "LPPERI"
+register = "RESET_EN"
+field = "LP_CPU_RESET_EN"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:166"]
+
+[[registers]]
+peripheral = "LPPERI"
+register = "CPU"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:191", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:163"]
+
+[[registers]]
+peripheral = "LPPERI"
+register = "BUS_TIMEOUT"
+reserved = 0x00003fff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:205", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:187"]
+
+[[fields]]
+peripheral = "LPPERI"
+register = "BUS_TIMEOUT"
+field = "LP_PERI_TIMEOUT_INT_CLEAR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:213"]
+
+[[registers]]
+peripheral = "LPPERI"
+register = "BUS_TIMEOUT_UID"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:245", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:214"]
+
+[[registers]]
+peripheral = "LPPERI"
+register = "INTERRUPT_SOURCE"
+reserved = 0xffffffc0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:299", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:261"]
+
+[[registers]]
+peripheral = "LPPERI"
+register = "RNG_CFG"
+reserved = 0x00fff000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lpperi_reg.h:312", "esp-idf:components/soc/esp32c5/register/soc/lpperi_struct.h:295"]
+
+
+# LP_TIMER: components/soc/esp32c5/register/soc/lp_timer_reg.h and lp_timer_struct.h.
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "TAR0_HIGH"
+field = "MAIN_TIMER_TAR_EN0"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:36"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "TAR1_HIGH"
+field = "MAIN_TIMER_TAR_EN1"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:67"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "UPDATE"
+reserved = 0x07ffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:78", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:76"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "UPDATE"
+field = "MAIN_TIMER_UPDATE"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:79"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "MAIN_OVERFLOW"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:167", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:113"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "MAIN_OVERFLOW"
+field = "MAIN_TIMER_ALARM_LOAD"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:168"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:177", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:131"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "INT_ST"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:196", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:149"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "INT_ENA"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:215", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:167"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "INT_CLR"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:234", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:185"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "INT_CLR"
+field = "OVERFLOW_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:235"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "INT_CLR"
+field = "SOC_WAKEUP_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:242"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "LP_INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:253", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:203"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "LP_INT_ST"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:272", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:221"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "LP_INT_ENA"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:291", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:239"]
+
+[[registers]]
+peripheral = "LP_TIMER"
+register = "LP_INT_CLR"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:310", "esp-idf:components/soc/esp32c5/register/soc/lp_timer_struct.h:257"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "LP_INT_CLR"
+field = "MAIN_TIMER_OVERFLOW_LP_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:311"]
+
+[[fields]]
+peripheral = "LP_TIMER"
+register = "LP_INT_CLR"
+field = "MAIN_TIMER_LP_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_timer_reg.h:318"]
+
+
+# LP_WDT: components/soc/esp32c5/register/soc/lp_wdt_reg.h and lp_wdt_struct.h.
+
+[[registers]]
+peripheral = "LP_WDT"
+register = "FEED"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:198", "esp-idf:components/soc/esp32c5/register/soc/lp_wdt_struct.h:179"]
+
+[[fields]]
+peripheral = "LP_WDT"
+register = "FEED"
+field = "RTC_WDT_FEED"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:199"]
+
+[[registers]]
+peripheral = "LP_WDT"
+register = "SWD_CONFIG"
+reserved = 0x0003fffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:227", "esp-idf:components/soc/esp32c5/register/soc/lp_wdt_struct.h:240"]
+
+[[fields]]
+peripheral = "LP_WDT"
+register = "SWD_CONFIG"
+field = "SWD_RST_FLAG_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:246"]
+
+[[fields]]
+peripheral = "LP_WDT"
+register = "SWD_CONFIG"
+field = "SWD_FEED"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:272"]
+
+[[registers]]
+peripheral = "LP_WDT"
+register = "INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:300", "esp-idf:components/soc/esp32c5/register/soc/lp_wdt_struct.h:278"]
+
+[[registers]]
+peripheral = "LP_WDT"
+register = "INT_ST"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:323", "esp-idf:components/soc/esp32c5/register/soc/lp_wdt_struct.h:300"]
+
+[[registers]]
+peripheral = "LP_WDT"
+register = "INT_ENA"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:346", "esp-idf:components/soc/esp32c5/register/soc/lp_wdt_struct.h:322"]
+
+[[registers]]
+peripheral = "LP_WDT"
+register = "INT_CLR"
+reserved = 0x3fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:369", "esp-idf:components/soc/esp32c5/register/soc/lp_wdt_struct.h:344"]
+
+[[fields]]
+peripheral = "LP_WDT"
+register = "INT_CLR"
+field = "SUPER_WDT_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:370"]
+
+[[fields]]
+peripheral = "LP_WDT"
+register = "INT_CLR"
+field = "LP_WDT_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_wdt_reg.h:379"]
+
+
+# LP_IO_MUX: components/soc/esp32c5/register/soc/lp_iomux_reg.h and lp_iomux_struct.h.
+
+[[registers]]
+peripheral = "LP_IO_MUX"
+register = "DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/lp_iomux_reg.h:786", "esp-idf:components/soc/esp32c5/register/soc/lp_iomux_struct.h:99"]
+
+
+# SPI0: components/soc/esp32c5/register/soc/spi_mem_c_reg.h and spi_mem_c_struct.h.
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_CTRL2"
+field = "MEM_SYNC_RESET"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:351"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_SLV_ST_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1082"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_MST_ST_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1089"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_ECC_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1096"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_PMS_REJECT_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1103"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_AXI_RADDR_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1110"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_AXI_WR_FLASH_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1117"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_AXI_WADDR_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1124"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_DQS0_AFIFO_OVF_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1131"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_DQS1_AFIFO_OVF_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1138"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_BUS_FIFO1_UDF_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1145"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_INT_CLR"
+field = "MEM_BUS_FIFO0_UDF_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:1152"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_TIMING_CALI"
+field = "UPDATE"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:2373"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_XTS_TRIGGER"
+field = "XTS_TRIGGER"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:3681"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_XTS_RELEASE"
+field = "XTS_RELEASE"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:3696"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_XTS_DESTROY"
+field = "XTS_DESTROY"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:3710"]
+
+[[fields]]
+peripheral = "SPI0"
+register = "MEM_MMU_POWER_CTRL"
+field = "MMU_PAGE_SIZE"
+kind = "plain"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi_mem_c_reg.h:3796"]
+
+
+# SPI1: components/soc/esp32c5/register/soc/spi1_mem_reg.h and spi1_mem_struct.h.
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_CMD"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:16"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_CTRL2"
+field = "SPI_MEM_SYNC_RESET"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:350"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_RD_STATUS"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:556"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W0"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:696"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W1"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:708"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W2"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:720"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W3"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:732"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W4"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:744"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W5"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:756"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W6"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:768"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W7"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:780"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W8"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:792"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W9"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:804"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W10"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:816"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W11"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:828"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W12"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:840"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W13"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:852"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W14"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:864"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_W15"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:876"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_FLASH_SUS_CTRL"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:947"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_SUS_STATUS"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1065"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+field = "SPI_MEM_PER_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1221"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+field = "SPI_MEM_PES_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1228"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+field = "SPI_MEM_WPE_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1235"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+field = "SPI_MEM_SLV_ST_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1242"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+field = "SPI_MEM_MST_ST_END_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1249"]
+
+[[fields]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+field = "SPI_MEM_BROWN_OUT_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1256"]
+
+
+# IO_MUX: components/soc/esp32c5/register/soc/io_mux_reg.h and io_mux_struct.h.
+
+[[registers]]
+peripheral = "IO_MUX"
+register = "DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/io_mux_reg.h:283", "esp-idf:components/soc/esp32c5/register/soc/io_mux_struct.h:128"]
+
+
+# SYSTIMER: components/soc/esp32c5/register/soc/systimer_reg.h and systimer_struct.h.
+
+[[registers]]
+peripheral = "SYSTIMER"
+register = "CONF"
+reserved = 0x003ffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:16", "esp-idf:components/soc/esp32c5/register/soc/systimer_struct.h:85"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "COMP0_LOAD"
+field = "TIMER_COMP0_LOAD"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:418"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "COMP1_LOAD"
+field = "TIMER_COMP1_LOAD"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:433"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "COMP2_LOAD"
+field = "TIMER_COMP2_LOAD"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:448"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "UNIT0_LOAD"
+field = "TIMER_UNIT0_LOAD"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:463"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "UNIT1_LOAD"
+field = "TIMER_UNIT1_LOAD"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:478"]
+
+[[registers]]
+peripheral = "SYSTIMER"
+register = "INT_ENA"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:492", "esp-idf:components/soc/esp32c5/register/soc/systimer_struct.h:276"]
+
+[[registers]]
+peripheral = "SYSTIMER"
+register = "INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:518", "esp-idf:components/soc/esp32c5/register/soc/systimer_struct.h:298"]
+
+[[registers]]
+peripheral = "SYSTIMER"
+register = "INT_CLR"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:544", "esp-idf:components/soc/esp32c5/register/soc/systimer_struct.h:320"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "INT_CLR"
+field = "TARGET0_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:545"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "INT_CLR"
+field = "TARGET1_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:552"]
+
+[[fields]]
+peripheral = "SYSTIMER"
+register = "INT_CLR"
+field = "TARGET2_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:559"]
+
+[[registers]]
+peripheral = "SYSTIMER"
+register = "INT_ST"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/systimer_reg.h:570", "esp-idf:components/soc/esp32c5/register/soc/systimer_struct.h:342"]
+
+
+# TIMG0: components/soc/esp32c5/register/soc/timer_group_reg.h and timer_group_struct.h.
+
+[[registers]]
+peripheral = "TIMG0"
+register = "T0UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:103"]
+
+[[registers]]
+peripheral = "TIMG0"
+register = "WDTCONFIG1"
+reserved = 0x0000fffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:313", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:306"]
+
+[[fields]]
+peripheral = "TIMG0"
+register = "WDTCONFIG1"
+field = "WDT_DIVCNT_RST"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:314"]
+
+[[registers]]
+peripheral = "TIMG0"
+register = "RTCCALICFG1"
+reserved = 0x0000007e
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:452", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:445"]
+
+[[registers]]
+peripheral = "TIMG0"
+register = "RTCCALICFG2"
+reserved = 0x00000006
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:550", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:472"]
+
+[[registers]]
+peripheral = "TIMG0"
+register = "NTIMERS_DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:581", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:566"]
+
+
+# TIMG1: components/soc/esp32c5/register/soc/timer_group_reg.h and timer_group_struct.h.
+
+[[registers]]
+peripheral = "TIMG1"
+register = "T0UPDATE"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:103"]
+
+[[registers]]
+peripheral = "TIMG1"
+register = "WDTCONFIG1"
+reserved = 0x0000fffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:313", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:306"]
+
+[[fields]]
+peripheral = "TIMG1"
+register = "WDTCONFIG1"
+field = "WDT_DIVCNT_RST"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:314"]
+
+[[registers]]
+peripheral = "TIMG1"
+register = "RTCCALICFG1"
+reserved = 0x0000007e
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:452", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:445"]
+
+[[registers]]
+peripheral = "TIMG1"
+register = "RTCCALICFG2"
+reserved = 0x00000006
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:550", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:472"]
+
+[[registers]]
+peripheral = "TIMG1"
+register = "NTIMERS_DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/timer_group_reg.h:581", "esp-idf:components/soc/esp32c5/register/soc/timer_group_struct.h:566"]
+
+
+# USB_DEVICE: components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h and usb_serial_jtag_struct.h.
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "EP1"
+fifo = true
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:16", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:30"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:60", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:430"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "INT_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:186", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:508"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "INT_ENA"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:307", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:582"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:424", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:656"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "JTAG_IN_FLUSH_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:425"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "SOF_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:432"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "SERIAL_OUT_RECV_PKT_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:439"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "SERIAL_IN_EMPTY_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:446"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "PID_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:453"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "CRC5_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:460"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "CRC16_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:467"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "STUFF_ERR_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:474"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "IN_TOKEN_REC_IN_EP1_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:481"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "USB_BUS_RESET_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:488"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "OUT_EP1_ZERO_PAYLOAD_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:495"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "OUT_EP2_ZERO_PAYLOAD_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:502"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "RTS_CHG_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:509"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "DTR_CHG_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:516"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "GET_LINE_CODE_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:523"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "INT_CLR"
+field = "SET_LINE_CODE_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:530"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "TEST"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:654", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:165"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "FRAM_NUM"
+reserved = 0xfffff800
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:769", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:714"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "IN_EP0_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:781", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:736"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "IN_EP1_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:807", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:758"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "IN_EP2_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:833", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:780"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "IN_EP3_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:859", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:802"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "OUT_EP0_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:885", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:825"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "OUT_EP1_ST"
+reserved = 0xff800000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:912", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:852"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "OUT_EP2_ST"
+reserved = 0xffff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:946", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:875"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "MISC_CONF"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:973", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:180"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "MEM_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:986", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:198"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "CHIP_RST"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:1005", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:220"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "SET_LINE_CODE_W1"
+reserved = 0xff000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:1043", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:910"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "GET_LINE_CODE_W1"
+reserved = 0xff000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:1082", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:259"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "CONFIG_UPDATE"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:1111", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:274"]
+
+[[fields]]
+peripheral = "USB_DEVICE"
+register = "CONFIG_UPDATE"
+field = "CONFIG_UPDATE"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:1112"]
+
+[[registers]]
+peripheral = "USB_DEVICE"
+register = "BUS_RESET_ST"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_reg.h:1171", "esp-idf:components/soc/esp32c5/register/soc/usb_serial_jtag_struct.h:925"]
+
+
+# EFUSE: components/soc/esp32c5/register/soc/efuse_reg.h and efuse_struct.h.
+
+[[registers]]
+peripheral = "EFUSE"
+register = "RD_RS_DATA_ERR1"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2638", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1528"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2679", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1545"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "CLK"
+reserved = 0xfffefff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2692", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1582"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "CMD"
+access = "read-only"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2879"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2910", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1876"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "INT_ST"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2929", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1894"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "INT_ENA"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2948", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1912"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "INT_CLR"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2967", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1930"]
+
+[[fields]]
+peripheral = "EFUSE"
+register = "INT_CLR"
+field = "READ_DONE_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2968"]
+
+[[fields]]
+peripheral = "EFUSE"
+register = "INT_CLR"
+field = "PGM_DONE_INT_CLR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2975"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "DAC_CONF"
+reserved = 0xfffc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:2986", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1630"]
+
+[[fields]]
+peripheral = "EFUSE"
+register = "DAC_CONF"
+field = "OE_CLR"
+kind = "plain"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3009"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "WR_TIM_CONF0_RS_BYPASS"
+reserved = 0xffe00000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3107", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:1731"]
+
+[[fields]]
+peripheral = "EFUSE"
+register = "WR_TIM_CONF0_RS_BYPASS"
+field = "UPDATE"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:3124"]
+
+[[registers]]
+peripheral = "EFUSE"
+register = "APB2OTP_EN"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/efuse_reg.h:4693", "esp-idf:components/soc/esp32c5/register/soc/efuse_struct.h:3879"]
+
+
+# HP_SYSTEM: components/soc/esp32c5/register/soc/hp_system_reg.h and hp_system_struct.h.
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "EXTERNAL_DEVICE_ENCRYPT_DECRYPT_CONTROL"
+reserved = 0xfffffff0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:16", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:45"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "SRAM_USAGE_CONF"
+reserved = 0xfffef0fe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:56", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:70"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "SEC_DPA_CONF"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:83", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:96"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "CPU_PERI_TIMEOUT_CONF"
+reserved = 0xfffc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:110", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:337"]
+
+[[fields]]
+peripheral = "HP_SYSTEM"
+register = "CPU_PERI_TIMEOUT_CONF"
+field = "CPU_PERI_TIMEOUT_INT_CLEAR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:119"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "CPU_PERI_TIMEOUT_UID"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:152", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:365"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "HP_PERI_TIMEOUT_CONF"
+reserved = 0xfffc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:165", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:393"]
+
+[[fields]]
+peripheral = "HP_SYSTEM"
+register = "HP_PERI_TIMEOUT_CONF"
+field = "HP_PERI_TIMEOUT_INT_CLEAR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:174"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "HP_PERI_TIMEOUT_UID"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:209", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:421"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "MODEM_PERI_TIMEOUT_CONF"
+reserved = 0xfffc0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:224", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:447"]
+
+[[fields]]
+peripheral = "HP_SYSTEM"
+register = "MODEM_PERI_TIMEOUT_CONF"
+field = "MODEM_PERI_TIMEOUT_INT_CLEAR"
+kind = "write-trigger"
+access = "read-write"
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:234"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "MODEM_PERI_TIMEOUT_UID"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:271", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:477"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "SDIO_CTRL"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:285", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:114"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "ROM_TABLE_LOCK"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:304", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:130"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "CORE_DEBUG_RUNSTALL_CONF"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:331", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:166"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "MEM_TEST_CONF"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:356", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:191"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "BITSCRAMBLER_PERI_SEL"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:445", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:274"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "RND_ECO"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:487", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:499"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "DEBUG"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:540", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:544"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "CLOCK_GATE"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:555", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:309"]
+
+[[registers]]
+peripheral = "HP_SYSTEM"
+register = "DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/hp_system_reg.h:568", "esp-idf:components/soc/esp32c5/register/soc/hp_system_struct.h:560"]
+
+
+# INTPRI: components/soc/esp32c5/register/soc/intpri_reg.h and intpri_struct.h.
+
+[[registers]]
+peripheral = "INTPRI"
+register = "DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/intpri_reg.h:64", "esp-idf:components/soc/esp32c5/register/soc/intpri_struct.h:42"]
+
+[[registers]]
+peripheral = "INTPRI"
+register = "CLOCK_GATE"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/intpri_reg.h:76", "esp-idf:components/soc/esp32c5/register/soc/intpri_struct.h:58"]
+
+[[registers]]
+peripheral = "INTPRI"
+register = "RND_ECO"
+reserved = 0xfffffffc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/intpri_reg.h:88", "esp-idf:components/soc/esp32c5/register/soc/intpri_struct.h:78"]
+
+
+# INTERRUPT_CORE0: components/soc/esp32c5/register/soc/interrupt_matrix_reg.h and interrupt_matrix_struct.h.
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "CLOCK_GATE"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1726", "esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_struct.h:1636"]
+
+[[registers]]
+peripheral = "INTERRUPT_CORE0"
+register = "INTERRUPT_DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_reg.h:1738", "esp-idf:components/soc/esp32c5/register/soc/interrupt_matrix_struct.h:1765"]
+
