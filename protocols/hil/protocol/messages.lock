@@ -142,7 +142,7 @@ wifi/station/probe e37fc052d9ec85e9 endpoint
 wifi/station/probe/finished e156497f15ad8e46 topic
 wifi/station/probe/ready 940908ee7694d30f topic
 wifi/station/receive-drop 71f137fcccb01e28 topic
-wifi/station/service-ended 71de44d224203e4e topic
+wifi/station/service-ended f824922e52abd404 topic
 wifi/station/start 0bded670f6ef9188 endpoint
 wifi/station/stop 82add8a7b5f872f9 endpoint
 wifi/station/stopped 3704030980b827e2 topic

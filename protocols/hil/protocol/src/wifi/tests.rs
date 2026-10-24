@@ -276,6 +276,28 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
         StationBackendFault::Deadline,
         StationBackendFault::Capacity,
         StationBackendFault::Clock,
+        StationBackendFault::Retune(StationRetuneFault::MacActive { state: u8::MAX }),
+        StationBackendFault::Retune(StationRetuneFault::RxWalkerEnabled),
+        StationBackendFault::Retune(StationRetuneFault::Refused),
+        StationBackendFault::Retune(StationRetuneFault::ClientFailed),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::Tracking(StationPhyFault::EdgeTimedOut),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::Request {
+                client: StationRadioClient::Wifi,
+                request: StationRadioRequest::Retune,
+            },
+            cause: StationRadioPoisonCause::Channel(StationPhyFault::UnexpectedBinding),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::TrackingRefused(StationPhyDomainError::TimeReversed {
+                previous_us: u64::MAX,
+                now_us: 0,
+            }),
+        })),
         StationBackendFault::Abandoned,
     ];
     let mut faults = std::vec![
@@ -303,10 +325,7 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
     for fault in faults {
         for end in [
             StationServiceEnd::Failed(fault),
-            StationServiceEnd::Poisoned {
-                fault,
-                disable: StationBackendFault::Receive(StationReceiveFault::StopRequested),
-            },
+            StationServiceEnd::Poisoned(fault),
             StationServiceEnd::Quarantined(fault),
         ] {
             event_round_trip(StationServiceEnded {
@@ -319,6 +338,21 @@ fn service_end_preserves_the_fault_and_its_typed_cause() {
         epoch: u32::MAX,
         end: StationServiceEnd::Unavailable,
     });
+    // A retune refused by an earlier failed tick and one that failed itself
+    // stay distinct.
+    let poisoned = |origin| {
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin,
+            cause: StationRadioPoisonCause::Tracking(StationPhyFault::EdgeTimedOut),
+        }))
+    };
+    assert_ne!(
+        poisoned(StationRadioOperation::TrackingTick),
+        poisoned(StationRadioOperation::Request {
+            client: StationRadioClient::Wifi,
+            request: StationRadioRequest::Retune,
+        })
+    );
     // Enabling and submitting faults with the same cause stay distinct.
     let cause = StationBackendFault::Deadline;
     assert_ne!(

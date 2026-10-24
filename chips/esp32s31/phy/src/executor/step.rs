@@ -34,9 +34,11 @@ const RETRY: Duration = Duration::from_micros(1);
 // Leave 100 us for admission, one <=50-us atom and the return path.
 const POLL_ADMISSION_MICROS: u64 = oer_cooperate::POLL_ADMISSION_MICROS as u64;
 
-// T7's answer includes timer/executor resumption: hardware boundary 20 us,
-// measured resume lateness 66 us and 14 us margin. It starts when command
-// publication returns, yields the CPU, and does not delay a ready result.
+// T7's answer window: the hardware boundary is 20 us. It starts when command
+// publication returns, yields the CPU, and does not delay a ready result. A
+// late resume never fails an edge on its own: the bus is sampled before the
+// window decides a timeout, so the window bounds only how long a busy bus is
+// awaited, not the executor's resume lateness.
 pub(crate) const T7_ANSWER_MICROS: u64 = 100;
 
 #[derive(Clone, Copy)]
@@ -400,9 +402,10 @@ impl<'a> Job<'a> {
                     self.deadline = deadline(now)?;
                     self.start_pending = false;
                 }
-                if now > self.deadline {
-                    return Err(Failure::TimedOut);
-                }
+                // The bus is sampled before the deadline is judged: a resume
+                // late after the hardware answered consumes that answer, and
+                // a start busy at its deadline gets this last attempt. Only
+                // a bus still busy at or after the deadline times out below.
                 match transaction.action() {
                     PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
                         if io.i2c(transaction, true)? == PhyColdI2cObservation::EdgeConsumed {
@@ -543,7 +546,7 @@ impl<'a> Job<'a> {
                 }
             }
         }
-        if now == self.deadline {
+        if now >= self.deadline {
             return Err(Failure::TimedOut);
         }
         Ok(Step::WaitAt(

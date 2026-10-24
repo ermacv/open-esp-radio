@@ -21,10 +21,16 @@ with its typed cause (SAE failure, TX refusal, channel refusal, the arbiter's
 leave reason); `RadioFailure` means only that the radio front end refused the
 station port. A service that ends without a stop command publishes, after
 the link's last `Disconnected`, one `StationServiceEnded`, correlated with
-the start request: how the port was left (`Failed`, `Poisoned` with the
-disable's fault, `Quarantined`, or `Unavailable` when the front end never
-registered the port) and the original `StationServiceFault` with
-its backend fault, contract violation or missing terminal. After it, and
+the start request: how the port was left (`Failed`, `Poisoned` when it
+poisoned during an enable or disable, `Quarantined`, or `Unavailable` when
+the front end never registered the port) and the original
+`StationServiceFault` with its backend fault, contract violation or missing
+terminal. A start the radio front end did not retune is `Retune` with its
+cause: the MAC still active, or the radio system's refusal, client failure
+or poison. A poison names the first failure of the shared PHY domain: the
+operation that saw it (the periodic tracking tick, the preparation, the RF
+close or a client's request) and the failing step, so a retune refused after
+an earlier failed tick names that tick. After it, and
 while a stop is pending, `StopStation` and `ProbeStation` are refused with
 `InvalidState` (`StopStation::refusal`, `ProbeStation::refusal`), so every
 command is answered.

@@ -20,12 +20,9 @@ pub struct StationServiceEnded {
 pub enum StationServiceEnd {
     /// The port is disabled and uninstalled.
     Failed(StationServiceFault),
-    /// The disable after the fault failed too, with `disable`; the port
-    /// fail-stopped.
-    Poisoned {
-        fault: StationServiceFault,
-        disable: StationBackendFault,
-    },
+    /// The port poisoned during an owner transition (enable or disable);
+    /// it fail-stopped.
+    Poisoned(StationServiceFault),
     /// Admission ended without another disable; the port fail-stopped.
     Quarantined(StationServiceFault),
     /// The radio front end never registered the station port, so no port
@@ -99,7 +96,117 @@ pub enum StationBackendFault {
     Deadline,
     Capacity,
     Clock,
+    /// The radio front end did not retune the stopped port.
+    Retune(StationRetuneFault),
+    /// The device lost its registers to an earlier failure.
     Abandoned,
+}
+
+/// Why the radio front end did not retune the stopped port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRetuneFault {
+    /// The MAC was still active in `state`; nothing was posted.
+    MacActive { state: u8 },
+    /// The RX walker was still enabled; nothing was posted.
+    RxWalkerEnabled,
+    /// The radio system refused before any hardware write.
+    Refused,
+    /// The client's own hardware work failed and was rolled back.
+    ClientFailed,
+    /// The PHY domain is poisoned by the first failure it names.
+    Poisoned(StationRadioPoison),
+}
+
+/// The first failure that poisoned the shared PHY domain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StationRadioPoison {
+    pub origin: StationRadioOperation,
+    pub cause: StationRadioPoisonCause,
+}
+
+/// The radio system's operation that saw the failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRadioOperation {
+    /// The periodic PHY tracking tick between requests.
+    TrackingTick,
+    /// Registration or RF wake before a join.
+    Prepare,
+    /// The RF close after the last member left.
+    CloseRf,
+    Request {
+        client: StationRadioClient,
+        request: StationRadioRequest,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRadioClient {
+    Wifi,
+    Bluetooth,
+    Ieee802154,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRadioRequest {
+    Join,
+    Track,
+    Retune,
+    Leave,
+}
+
+/// The step that poisoned the shared PHY domain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationRadioPoisonCause {
+    /// Tracking was refused before register access: its clock or the
+    /// domain's state.
+    TrackingRefused(StationPhyDomainError),
+    Tracking(StationPhyFault),
+    Channel(StationPhyFault),
+    Rf(StationPhyFault),
+    Registration(StationPhyFault),
+    Domain(StationPhyDomainError),
+    CommonPower,
+    ModemClock,
+    Rollback,
+    Controller,
+    Custody,
+}
+
+/// How a started PHY transaction failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationPhyFault {
+    EdgeTimedOut,
+    CapabilityUnavailable,
+    HardwareInvariant,
+    RfOperationLimit,
+    UnexpectedBinding,
+    RegistrationEpochMismatch,
+    DeadlineOverflow,
+    Sequence,
+    Radio,
+}
+
+/// Why the PHY domain refused a step before register access.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum StationPhyDomainError {
+    NotRegistered,
+    AlreadyRegistered,
+    TrackingPending,
+    NoTrackingPending,
+    Poisoned,
+    RfClosed,
+    RfOpen,
+    EpochMismatch,
+    ClientsActive,
+    Clock,
+    ClientAbsent,
+    /// The tracking clock's deadline did not fit.
+    TimeOverflow,
+    /// The tracking clock ran backwards from `previous_us` to `now_us`.
+    TimeReversed {
+        previous_us: u64,
+        now_us: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]

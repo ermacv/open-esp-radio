@@ -21,6 +21,8 @@ enum TestClient {}
 impl sealed::Sealed for TestClient {}
 
 impl Client for TestClient {
+    const RADIO: oer_esp32s31_hal::domain::RadioClient =
+        oer_esp32s31_hal::domain::RadioClient::Wifi;
     type Join = u32;
     type Joined = u32;
     type JoinReturned = u32;
@@ -138,12 +140,20 @@ fn pending_leave_returns_the_leave_answer_and_cell() {
         inbox,
         Answer::Leave(Left {
             payload: 42,
-            domain: DomainHealth::Poisoned,
+            domain: DomainHealth::Poisoned(POISON),
         }),
     );
-    assert_eq!((left.payload, left.domain), (42, DomainHealth::Poisoned));
+    assert_eq!(
+        (left.payload, left.domain),
+        (42, DomainHealth::Poisoned(POISON))
+    );
     let _next = cell.join(43);
 }
+
+const POISON: Poison = Poison {
+    origin: PoisonOrigin::TrackingTick,
+    cause: PoisonCause::Tracking(PhyFault::EdgeTimedOut),
+};
 
 fn left() -> Answer<TestClient> {
     Answer::Leave(Left {

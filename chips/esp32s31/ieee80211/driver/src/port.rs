@@ -167,7 +167,19 @@ pub enum Fault {
     Deadline,
     Capacity,
     Clock,
+    /// The radio front end did not retune the stopped port for this start.
+    Retune(WifiRetuneError),
+    /// The device lost its registers to an earlier failure.
     Abandoned,
+}
+
+/// Why the radio front end did not retune a stopped Wi-Fi client.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WifiRetuneError {
+    /// The MAC or its RX walker was still active; nothing was posted.
+    NotStopped(oer_esp32s31_hal::owner::maintenance::Error),
+    /// The radio system answered the retune with this failure.
+    Radio(oer_esp32s31_radio_client::Failure),
 }
 impl From<LowerMacFault> for Fault {
     fn from(value: LowerMacFault) -> Self {
@@ -240,7 +252,11 @@ impl<const B: usize> PortSharedStorage<B> {
         }
     }
     fn poison(&self, cause: Fault) {
-        let _ = self.poisoned.set(cause);
+        let _first = self.poisoned.set(cause).is_ok();
+        #[cfg(test)]
+        if _first {
+            FIRST_POISON.with(|first| first.set(Some(cause)));
+        }
         self.driver.wake();
         self.wake_body();
     }
@@ -249,6 +265,14 @@ impl<const B: usize> PortSharedStorage<B> {
             .get()
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
     }
+}
+
+#[cfg(test)]
+std::thread_local! {
+    /// The cause the test thread's port published first: a frontend that
+    /// sees its quarantine first cancels the body that would read it.
+    pub(crate) static FIRST_POISON: core::cell::Cell<Option<Fault>> =
+        const { core::cell::Cell::new(None) };
 }
 
 impl<const B: usize> Default for PortSharedStorage<B> {

@@ -17,7 +17,7 @@ use oer_esp32s31_hal::{
 };
 use oer_esp32s31_phy::{PhyCalibrationPath, PhyState};
 use oer_esp32s31_radio_client::{
-    ClientCells, Leaving, RcSlow, claim_for_host_test,
+    ClientCells, Leaving, PhyFault, RcSlow, RequestKind, claim_for_host_test,
     wifi::{
         RetuneReport, TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
@@ -28,6 +28,28 @@ use oer_time::{Clock as _, Duration, Instant};
 use oer_time_virtual::VirtualClock;
 
 use super::*;
+
+/// The model's failed preparation.
+pub(super) const PREPARE_CAUSE: PoisonCause = PoisonCause::Registration(PhyFault::EdgeTimedOut);
+/// The preparation poison every later request names.
+pub(super) const PREPARE_POISON: Poison = Poison {
+    origin: PoisonOrigin::Prepare,
+    cause: PREPARE_CAUSE,
+};
+/// The model's failed tracking tick.
+const TICK_CAUSE: PoisonCause = PoisonCause::Tracking(PhyFault::EdgeTimedOut);
+
+pub(super) const fn wifi_poison(request: RequestKind, cause: PoisonCause) -> Poison {
+    Poison::request(oer_esp32s31_hal::domain::RadioClient::Wifi, request, cause)
+}
+const TRACK_POISON: Poison = wifi_poison(
+    RequestKind::Track,
+    PoisonCause::Channel(PhyFault::UnexpectedBinding),
+);
+const RETUNE_POISON: Poison = wifi_poison(
+    RequestKind::Retune,
+    PoisonCause::Channel(PhyFault::EdgeTimedOut),
+);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Event {
@@ -68,6 +90,9 @@ struct Script {
     client_fails_enter: bool,
     poison_track: bool,
     poison_retune: bool,
+    /// The periodic tick of this number (from 1) fails.
+    fail_tick: Option<usize>,
+    ticks: usize,
     not_last: bool,
     close_recoverable: bool,
     deadline: Option<Instant>,
@@ -90,7 +115,7 @@ impl PhyDomain for Model {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
         let mut script = self.0.borrow_mut();
         let result = if script.fail_prepare {
-            Err(Fault)
+            Err(Fault(PREPARE_CAUSE))
         } else if !script.registered {
             script.registered = true;
             script.rf_open = true;
@@ -126,6 +151,10 @@ impl PhyDomain for Model {
             .deadline
             .and_then(|deadline| deadline.checked_add(Duration::from_secs(1)));
         script.log.push(Event::Tick);
+        script.ticks += 1;
+        if script.fail_tick == Some(script.ticks) {
+            return Err(Fault(TICK_CAUSE));
+        }
         Ok(())
     }
 }
@@ -166,7 +195,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
         if self.0.borrow().poison_track {
             return Err(Failed {
                 returned: track.wifi,
-                cause: Failure::Poisoned,
+                cause: Failure::Poisoned(TRACK_POISON),
             });
         }
         Ok(WifiTracked {
@@ -191,7 +220,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
         if self.0.borrow().poison_retune {
             return Err(Failed {
                 returned: retune.wifi,
-                cause: Failure::Poisoned,
+                cause: Failure::Poisoned(RETUNE_POISON),
             });
         }
         Ok(WifiRetuned {
@@ -450,15 +479,15 @@ fn a_failed_preparation_poisons_the_domain_for_every_later_request() {
         let Err(failed) = joined else {
             panic!("the preparation failed")
         };
-        assert_eq!(failed.cause, Failure::Poisoned);
+        assert_eq!(failed.cause, Failure::Poisoned(PREPARE_POISON));
         let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
         let Err(failed) = joined else {
             panic!("the domain stays poisoned")
         };
-        assert_eq!(failed.cause, Failure::Poisoned);
+        assert_eq!(failed.cause, Failure::Poisoned(PREPARE_POISON));
         assert!(matches!(failed.returned, WifiReturned::Cold(_)));
     });
-    assert_eq!(model.log(), vec![Event::Prepare(Err(Fault))]);
+    assert_eq!(model.log(), vec![Event::Prepare(Err(Fault(PREPARE_CAUSE)))]);
 }
 
 #[test]
@@ -482,11 +511,11 @@ fn a_poisoned_track_hands_back_the_member_and_the_client() {
         else {
             panic!("tracking failed")
         };
-        assert_eq!(cause, Failure::Poisoned);
+        assert_eq!(cause, Failure::Poisoned(TRACK_POISON));
         let (_cell, left) = cell
             .leave(Leaving::Untracked(member), WifiLeave { wifi })
             .await;
-        assert_eq!(left.domain, DomainHealth::Poisoned);
+        assert_eq!(left.domain, DomainHealth::Poisoned(TRACK_POISON));
     });
     // A poisoned domain closes no RF.
     assert!(!model.log().contains(&Event::CloseRf));
@@ -555,6 +584,67 @@ fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
             .count(),
         2
     );
+}
+
+#[test]
+fn a_failed_tracking_tick_names_itself_in_the_next_retune_and_stops_tracking() {
+    let clock = clock();
+    let model = model(Script {
+        deadline: Some(at(1_000_000)),
+        fail_tick: Some(110),
+        ..Script::default()
+    });
+    let tick = Poison {
+        origin: PoisonOrigin::TrackingTick,
+        cause: TICK_CAUSE,
+    };
+    run(&model, clock, |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let joined = joined.ok().expect("join");
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let tracked = tracked.ok().expect("track");
+        // A long association: the tick falls due once a second.
+        for second in 1..=120 {
+            clock.advance_to(at(second * 1_000_000));
+            for _ in 0..4 {
+                yield_now().await;
+            }
+        }
+        let config = track_request(tracked.payload.wifi);
+        let (cell, answer) = cell
+            .retune(
+                tracked.member,
+                WifiRetune {
+                    wifi: config.wifi,
+                    channel: config.channel,
+                    tx_ceiling: config.tx_ceiling,
+                },
+            )
+            .await;
+        let Err(Failed {
+            returned: (member, wifi),
+            cause,
+        }) = answer
+        else {
+            panic!("the first request after the failed tick is refused");
+        };
+        assert_eq!(cause, Failure::Poisoned(tick));
+        let (_, left) = cell
+            .leave(Leaving::Tracked(member), WifiLeave { wifi })
+            .await;
+        assert_eq!(left.domain, DomainHealth::Poisoned(tick));
+    });
+    let log = model.log();
+    // Tracking stops at the failed tick, and the refused retune reaches no
+    // hardware.
+    assert_eq!(
+        log.iter().filter(|event| **event == Event::Tick).count(),
+        110
+    );
+    assert!(!log.contains(&Event::Retune));
+    assert!(!log.contains(&Event::CloseRf));
 }
 
 #[test]
@@ -700,7 +790,7 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
         else {
             panic!("retune fails");
         };
-        assert_eq!(cause, Failure::Poisoned);
+        assert_eq!(cause, Failure::Poisoned(RETUNE_POISON));
         let config = track_request(wifi);
         let (cell, answer) = cell
             .retune(
@@ -719,11 +809,11 @@ fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
         else {
             panic!("poison is retained");
         };
-        assert_eq!(cause, Failure::Poisoned);
+        assert_eq!(cause, Failure::Poisoned(RETUNE_POISON));
         let (_, left) = cell
             .leave(Leaving::Tracked(member), WifiLeave { wifi })
             .await;
-        assert_eq!(left.domain, DomainHealth::Poisoned);
+        assert_eq!(left.domain, DomainHealth::Poisoned(RETUNE_POISON));
     });
     assert_eq!(
         model.log(),

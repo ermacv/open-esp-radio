@@ -31,6 +31,8 @@ pub enum Wifi {}
 impl sealed::Sealed for Wifi {}
 
 impl Client for Wifi {
+    const RADIO: oer_esp32s31_hal::domain::RadioClient =
+        oer_esp32s31_hal::domain::RadioClient::Wifi;
     type Join = WifiJoin;
     type Joined = WifiJoined;
     type JoinReturned = WifiReturned;

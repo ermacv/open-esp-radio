@@ -316,8 +316,9 @@ where
                     self.setup = Some(interrupt_setup);
                 }
                 Err(failure) => {
+                    let cause = failure.cause;
                     self.failed_retune = Some(failure);
-                    return Poll::Ready(Err(Fault::Abandoned));
+                    return Poll::Ready(Err(Fault::Retune(cause)));
                 }
             }
         }

@@ -12,7 +12,7 @@ ceiling_bytes = 7024
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_hil_esp32s31::wifi_station::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>>, oer_firmware_hil_esp32s31::wifi_station::station::Callbacks, oer_firmware_hil_esp32s31::wifi_station::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}"
 reason = "The placed service disable poll combines terminal routing and teardown bookkeeping; it runs on the P1 PSRAM task stack."
-ceiling_bytes = 7280
+ceiling_bytes = 7376
 
 [[frame_exceptions.runtime]]
 function = "<oer_firmware_hil_esp32s31::wifi_station::future::Boundary<oer_radio_port::lifecycle::run_port<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>, oer_esp32s31_ieee80211_driver::port::Esp32s31Backend<oer_radio_port::identity::StaticId<oer_firmware_hil_esp32s31::wifi_station::radio::slot::Declaration>, oer_firmware_hil_esp32s31::wifi_station::radio::Device, 1664>, oer_firmware_hil_esp32s31::wifi_station::station::Body>::{closure#0}> as core::future::future::Future>::poll"
