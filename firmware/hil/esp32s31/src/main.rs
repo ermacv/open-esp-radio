@@ -227,7 +227,13 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
             oer_embassy_time::EmbassyClock,
         ),
-        peripherals.TIMG1,
+        oer_esp32s31_hal::watchdog::Watchdogs::new(
+            oer_espressif_esp_hal_soc::handoff::take_watchdogs(
+                peripherals.TIMG0,
+                peripherals.TIMG1,
+                peripherals.LP_WDT,
+            ),
+        ),
     );
 
     #[cfg(feature = "boot-smoke")]

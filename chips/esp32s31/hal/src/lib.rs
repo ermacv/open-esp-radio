@@ -58,3 +58,4 @@ pub mod platform;
 #[cfg(oer_probe)]
 #[doc(hidden)]
 pub mod validation;
+pub mod watchdog;

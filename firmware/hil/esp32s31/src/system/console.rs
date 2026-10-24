@@ -3,13 +3,18 @@
 //! in the `usb-jtag-off` image, the switch of the USB Serial/JTAG off its
 //! pads.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use oer_espressif_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
+use oer_esp32s31_hal::watchdog::{DeadlineBudget, Watchdogs};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{RejectReason, Rejected};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 
 use crate::transport::CONSOLE;
 use oer_hil_agent::base::{Either, PanicRequest, WatchdogRequest};
+
+/// The SoC deadline service on timer group 1's main watchdog, measured on
+/// the image clock.
+pub(crate) type DeadlineWatchdog =
+    oer_esp32s31_hal::watchdog::DeadlineWatchdog<oer_embassy_time::EmbassyClock>;
 
 /// Watchdog tests the console handed over, one at a time.
 static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMode), 1> =
@@ -34,9 +39,9 @@ pub(crate) fn start(
     wake: crate::ExecutorWake,
     (usb, pads): (crate::transport::Usb, Pads),
     mut entropy: crate::Rng,
-    timer: esp_hal::peripherals::TIMG1<'static>,
+    watchdogs: Watchdogs,
 ) -> ! {
-    let service = DeadlineWatchdog::new(timer);
+    let service = DeadlineWatchdog::new(watchdogs.main1, oer_embassy_time::EmbassyClock);
     let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     crate::check_entropy_source(&entropy);
     #[cfg(not(feature = "usb-jtag-off"))]

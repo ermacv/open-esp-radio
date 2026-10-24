@@ -144,7 +144,7 @@ fn arming_latches_the_timeout_before_the_feed_and_the_enable_after_it() {
         [3, 0, 0, 0],
         "stage 0 resets the system, the others do nothing"
     );
-    assert_eq!(config.cpu_reset_length, ResetLength::LONGEST);
+    assert_eq!(config.cpu_reset_length, ResetLength::Longest);
     assert_eq!(config.system_reset_length.code(), 7);
 }
 
@@ -226,7 +226,9 @@ fn a_timely_completion_disarms_and_returns_the_watchdog() {
         .expect("the virtual clock advances");
     let service = lease.complete().expect("completion before the deadline");
     assert_eq!(log.take(), STOP, "completion stops and latches");
-    let _lease = service.arm(budget(100)).expect("the returned owner arms again");
+    let _lease = service
+        .arm(budget(100))
+        .expect("the returned owner arms again");
     assert_eq!(log.take(), ARM);
 }
 

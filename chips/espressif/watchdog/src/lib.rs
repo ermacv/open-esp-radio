@@ -76,14 +76,12 @@ impl MainStageAction {
     }
 }
 
-/// The length of a reset signal a watchdog drives, as its 3-bit selector.
+/// The length of a reset signal a watchdog drives, by its 3-bit selector.
 ///
 /// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:388-425`: 0..7 select 8, 16,
 /// 24, 32, 40, 64, 128 or 256 watchdog clock cycles.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ResetLength(u8);
-
-impl ResetLength {
+pub enum ResetLength {
     /// The longest reset signal (selector 7), which esp-hal and ESP-IDF
     /// program for both the CPU and the system reset.
     ///
@@ -91,11 +89,13 @@ impl ResetLength {
     /// (`wdt_cpu_reset_length` and `wdt_sys_reset_length` 7); ESP-IDF
     /// 4d59230d `components/esp_hal_wdt/wdt_hal_iram.c:58-59,79-80` programs
     /// `WDT_RESET_SIG_LENGTH_3_2us`, also 7.
-    pub const LONGEST: Self = Self(7);
+    Longest = 7,
+}
 
+impl ResetLength {
     /// The selector's value.
     pub const fn code(self) -> u8 {
-        self.0
+        self as u8
     }
 }
 
@@ -127,8 +127,8 @@ impl MainConfig {
             MainStageAction::Off,
             MainStageAction::Off,
         ],
-        cpu_reset_length: ResetLength::LONGEST,
-        system_reset_length: ResetLength::LONGEST,
+        cpu_reset_length: ResetLength::Longest,
+        system_reset_length: ResetLength::Longest,
     };
 }
 
@@ -284,7 +284,7 @@ impl MicrosecondTick {
     /// SOURCE: ESP-IDF 4d59230d `timer_group_reg.h:497-503`: one watchdog
     /// tick is the source clock period times `WDT_CLK_PRESCALE`.
     pub const fn from_source_hz(hz: u32) -> Option<Self> {
-        if hz % 1_000_000 != 0 {
+        if !hz.is_multiple_of(1_000_000) {
             return None;
         }
         let mhz = hz / 1_000_000;

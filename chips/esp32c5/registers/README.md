@@ -20,6 +20,7 @@ reaches.
 | `model/memory.toml` | MMIO regions |
 | `model/reviewed.toml` | Typed reviewed assertions with their applicability and evidence |
 | `policy/api.toml` | Closed-PAC typed blocks, ownership partitions and transactions selected by the publication |
+| `model/peripherals/{timg-wdt,pcr-timg1,lp-wdt}.toml` | The watchdog blocks, typed and claimed by one platform handoff (`WatchdogPeripherals`): both timer groups' main watchdog words (not their timers or RTC calibration words), timer group 1's clock and reset words, the RTC watchdog and the super watchdog (`LP_WDT`, `LP_WDT_SWD`) |
 | `shared-words.toml` | Words the PAC's typed blocks and pinned esp-hal both write, with how the writers are coordinated (`cargo registers check shared-words --chip esp32c5`) |
 | `policy/ownership.toml` | Shared publication scope of named MMIO ranges |
 | `policy/lints.toml` | Reviewed register-model lint policy |

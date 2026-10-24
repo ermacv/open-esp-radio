@@ -121,3 +121,17 @@ radio = "TRNG.DEBUG_CONF (typed block)"
 esp_hal = "RNG.debug_conf in rng_ll_enable (soc/esp32s31/trng.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 1f646c5 sets the startup-test limit and starts the startup test in rng_ll_enable, called from pre_init inside esp_hal::init and from TrngSource::new, which takes the RNG singleton. The entropy handoff consumes RNG after esp_hal::init, so TrngSource::new cannot run while the entropy owner exists; the owner only reads the word."
+
+[[word]]
+address = 0x2058711c
+radio = "HP_SYS_CLKRST_TIMG1.TIMERGRP1_CTRL0 (typed block)"
+esp_hal = "HP_SYS_CLKRST.timergrp1_ctrl0 in the Timg1 clock and reset control (esp-metadata-generated/_generated_esp32s31.rs) and TimgInstance::Timg1's function and watchdog clocks (soc/esp32s31/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores it inside esp_hal::init (disable_peripherals gates the group, Wdt::<TIMG1>::new().disable() configures the watchdog clock) and in TimerGroup::new and Wdt's clock requests. TimerGroup::new needs the TIMG1 singleton, which the watchdog handoff consumes after esp_hal::init; no image constructs a Wdt outside esp_hal::init. Timer group 1's main watchdog owner alone writes the word afterwards, by field."
+
+[[word]]
+address = 0x20801020
+radio = "LP_WDT_SWD.SWD_WPROTECT (typed block)"
+esp_hal = "LP_WDT.swd_wprotect in Swd::set_write_protection (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 stores the super watchdog's key only through Rtc's Swd, which only esp_hal::init builds (rtc.swd.disable()); the watchdog handoff consumes LP_WDT after esp_hal::init and no image builds an Rtc. The super watchdog owner alone writes the key afterwards."

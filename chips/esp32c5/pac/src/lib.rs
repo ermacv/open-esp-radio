@@ -30,6 +30,7 @@ pub(crate) mod modem;
 pub(crate) mod ownership;
 pub(crate) mod phy;
 pub mod platform;
+pub mod watchdog;
 
 pub(crate) use ownership::device_fence;
 

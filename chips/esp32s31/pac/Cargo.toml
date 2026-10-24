@@ -16,6 +16,7 @@ oer-espressif-analog = { path = "../../espressif/analog" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-mmio = { path = "../../../portable/mmio" }
 oer-espressif-efuse = { path = "../../espressif/efuse" }
+oer-espressif-watchdog = { path = "../../espressif/watchdog" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
