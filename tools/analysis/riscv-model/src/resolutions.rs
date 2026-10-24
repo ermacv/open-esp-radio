@@ -14,7 +14,9 @@ pub enum Fact {
     /// The image's static interrupt table: a dispatcher reaches the
     /// handlers of its level and core.
     InterruptTable,
-    /// The image's one waker vtable, the executor's.
+    /// The image's one waker vtable, the executor's, by a complete census:
+    /// every use of a waker clone function's address is that vtable's first
+    /// word, so every waker the image builds carries it.
     WakerVtables,
     /// The functions whose type can be a static field's function pointer.
     FieldType,
@@ -37,9 +39,9 @@ pub enum Fact {
 pub enum Assumption {
     /// The executor invariant: a task header's `poll_fn` matches the storage
     /// it heads, and a pointer erased to `()` or to bytes is read back as its
-    /// own type. Every fact found from the image's types rests on it: a waker
-    /// vtable or a field's function reaches a site only if
-    /// no reinterpreted memory puts another function there. The points-to
+    /// own type. Every fact found from the image's types but not enumerated
+    /// whole rests on it: a field's function reaches a site only if no
+    /// reinterpreted memory puts another function there. The points-to
     /// analysis of the interrupt-reachable sites is to prove it.
     ExecutorInvariant,
 }
@@ -66,12 +68,13 @@ impl std::fmt::Display for Assumption {
 
 impl Fact {
     /// What a resolution from this fact assumes: the interrupt table lists
-    /// every handler outright; the facts found from types rest on the
-    /// executor invariant.
+    /// every handler outright and the waker vtable census enumerates every
+    /// vtable; the other facts found from types rest on the executor
+    /// invariant.
     pub fn assumption(self) -> Option<Assumption> {
         match self {
-            Self::InterruptTable | Self::StageTwoEntry => None,
-            Self::WakerVtables | Self::FieldType | Self::TaskPolls | Self::NoTasks => {
+            Self::InterruptTable | Self::StageTwoEntry | Self::WakerVtables => None,
+            Self::FieldType | Self::TaskPolls | Self::NoTasks => {
                 Some(Assumption::ExecutorInvariant)
             }
         }

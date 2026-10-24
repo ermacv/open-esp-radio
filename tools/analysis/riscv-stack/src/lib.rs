@@ -85,7 +85,7 @@ pub fn image_resolutions<'a>(
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
-    let vtable = waker_vtable(image, dwarf, analysis, control)?;
+    let vtable = waker_vtable(image, dwarf, types, analysis, keep, control)?;
     let mut resolutions = waker_resolutions(analysis, dwarf, vtable.as_ref(), keep, control)?;
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;

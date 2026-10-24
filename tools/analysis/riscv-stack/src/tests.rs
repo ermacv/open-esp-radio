@@ -1992,15 +1992,20 @@ pub extern "C" fn keep_other() -> *const RawWakerVTable {
 fn a_waker_call_reaches_its_slot_of_the_one_waker_vtable() {
     let elf = compiled(WAKER_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dwarf, _) = debug(&elf);
-    let vtable = with_facts(&elf, |facts| {
-        waker_vtable(facts, &dwarf, &analysis, &mut || Ok(()))
-    })
-    .unwrap()
-    .expect("the program builds one waker vtable");
-    // Every relocated word it reads is charged to the work budget.
+    let (dwarf, types) = debug(&elf);
+    let vtable = census(&elf, &dwarf, &types, &analysis)
+        .unwrap()
+        .expect("the program builds one waker vtable");
+    // Every address use it reads is charged to the work budget.
     let error = with_facts(&elf, |facts| {
-        waker_vtable(facts, &dwarf, &analysis, &mut Units(0))
+        waker_vtable(
+            facts,
+            &dwarf,
+            &types,
+            &analysis,
+            &mut ledger(),
+            &mut Units(0),
+        )
     })
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
@@ -2043,20 +2048,132 @@ fn a_waker_call_reaches_its_slot_of_the_one_waker_vtable() {
         .unwrap();
     assert!(bound.unresolved.is_empty(), "{bound:?}");
     assert!(bound.bytes.is_some());
+    // The census enumerated every vtable: the bound rests on no assumption.
+    assert!(bound.assumptions.is_empty(), "{bound:?}");
+}
+
+/// [`waker_vtable`] of `elf` without a work budget.
+fn census(
+    elf: &[u8],
+    dwarf: &Dwarf,
+    types: &TypeFacts,
+    analysis: &Analysis,
+) -> Result<Option<[u32; 4]>> {
+    with_facts(elf, |facts| {
+        waker_vtable(facts, dwarf, types, analysis, &mut ledger(), &mut || Ok(()))
+    })
+}
+
+/// The census of `source`, linked keeping `undefined` too.
+fn census_of(source: &str, undefined: &str) -> Result<Option<[u32; 4]>> {
+    let elf = compiled_linking(source, &[&format!("--undefined={undefined}")]);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    census(&elf, &dwarf, &types, &analysis)
 }
 
 #[test]
 fn a_second_waker_vtable_fails_the_image() {
-    let elf = compiled_linking(&second_vtable_program(), &["--undefined=keep_other"]);
-    let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dwarf, _) = debug(&elf);
-    let error = with_facts(&elf, |facts| {
-        waker_vtable(facts, &dwarf, &analysis, &mut || Ok(()))
-    })
-    .unwrap_err();
+    let error = census_of(&second_vtable_program(), "keep_other").unwrap_err();
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
     assert!(
         error.message.contains("second waker vtable"),
+        "{}",
+        error.message
+    );
+    // The link discards the second one with `keep_other`: its DWARF location
+    // is a tombstone outside every section, and the census counts one.
+    assert!(census_of(&second_vtable_program(), "keep").unwrap().is_some());
+}
+
+#[test]
+fn a_waker_vtable_in_writable_data_is_counted() {
+    let source = WAKER_PROGRAM
+        .replace(
+            "static VTABLE: RawWakerVTable",
+            "static mut VTABLE: RawWakerVTable",
+        )
+        .replace("&VTABLE", "unsafe { &*&raw const VTABLE }");
+    let elf = compiled(&source);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    let vtable = census(&elf, &dwarf, &types, &analysis)
+        .unwrap()
+        .expect("the census counts a vtable in writable data");
+    with_facts(&elf, |facts| {
+        let words: Vec<u32> = facts
+            .words()
+            .iter()
+            .filter(|&&(_, holds)| holds & !1 == vtable[0])
+            .map(|&(address, _)| address)
+            .collect();
+        assert_eq!(words.len(), 1, "{words:x?}");
+        assert_eq!(facts.read_only_word(words[0]), None, "{words:x?}");
+        Ok(())
+    })
+    .unwrap();
+    // A second one there still fails the image.
+    let second = second_vtable_program()
+        .replace(
+            "static OTHER: RawWakerVTable",
+            "static mut OTHER: RawWakerVTable",
+        )
+        .replace("&OTHER", "unsafe { &*&raw const OTHER }");
+    let error = census_of(&second, "keep_other").unwrap_err();
+    assert!(error.message.contains("second waker vtable"), "{error:?}");
+}
+
+#[test]
+fn a_waker_clone_address_outside_a_vtable_fails_the_census() {
+    // Code holding a clone function's address could build a vtable at run
+    // time; so could a lone pointer to it in data.
+    for (kept, undefined) in [
+        (
+            r#"#[unsafe(no_mangle)]
+pub extern "C" fn keep_clone() -> unsafe fn(*const ()) -> RawWaker {
+    clone
+}
+"#,
+            "keep_clone",
+        ),
+        (
+            r#"static CLONE: unsafe fn(*const ()) -> RawWaker = clone;
+#[unsafe(no_mangle)]
+pub extern "C" fn keep_clone() -> *const unsafe fn(*const ()) -> RawWaker {
+    &CLONE
+}
+"#,
+            "keep_clone",
+        ),
+    ] {
+        let source = WAKER_PROGRAM.replace("#[panic_handler]", &format!("{kept}#[panic_handler]"));
+        let error = census_of(&source, undefined).unwrap_err();
+        assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+        assert!(
+            error.message.contains("outside a waker vtable")
+                && error.message.contains("cannot classify"),
+            "{}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn a_typed_waker_vtable_without_its_layout_fails_the_census() {
+    // A `RawWakerVTable` in `.bss` is written at run time.
+    let source = WAKER_PROGRAM.replace(
+        "#[panic_handler]",
+        r#"static mut SLOT: core::mem::MaybeUninit<RawWakerVTable> = core::mem::MaybeUninit::uninit();
+#[unsafe(no_mangle)]
+pub extern "C" fn keep_slot() -> *mut core::mem::MaybeUninit<RawWakerVTable> {
+    &raw mut SLOT
+}
+#[panic_handler]"#,
+    );
+    let error = census_of(&source, "keep_slot").unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(
+        error.message.contains("static `RawWakerVTable`"),
         "{}",
         error.message
     );
@@ -2386,11 +2503,13 @@ fn a_bound_assumes_what_the_resolutions_it_takes_assume() {
             .unwrap()
             .assumptions
     };
-    // The interrupt table lists its handlers outright; a waker vtable found
-    // from the image's types rests on the executor invariant.
+    // The interrupt table lists its handlers outright and the waker vtable
+    // census enumerates every vtable; a field's type rests on the executor
+    // invariant.
     assert_eq!(assumed(Fact::InterruptTable), BTreeSet::new());
+    assert_eq!(assumed(Fact::WakerVtables), BTreeSet::new());
     assert_eq!(
-        assumed(Fact::WakerVtables),
+        assumed(Fact::FieldType),
         BTreeSet::from([Assumption::ExecutorInvariant])
     );
 }

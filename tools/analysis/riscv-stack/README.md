@@ -189,14 +189,24 @@ set of found facts (the waker vtable, field types) is a hole,
   symbol holds, its pointer word and every non-zero handler word carrying the
   relocation that names it) in the chip's `TableLayout`.
 - `Dwarf` reads the chain of functions inlined at an address and the
-  qualified type each function returns. `waker_vtable` finds the image's
-  `RawWakerVTable`: four relocated function pointers in data neither writable
-  nor executable whose first function returns `core::task::wake::RawWaker`.
-  A `&'static RawWakerVTable` points at immutable data, so every vtable a
-  `const` or `static` builds is found; one built at run time in writable
-  memory (a leaked allocation) is not. An image holds at most one, the
-  executor's: a second fails the analysis with `Integrity`, naming both, so
-  every waker the image builds carries that vtable. `waker_resolutions` sends an
+  qualified type each function returns. `waker_vtable` takes a complete
+  census of the image's `RawWakerVTable`s. Safe Rust builds a `Waker` only
+  from a `&'static RawWakerVTable`, and a vtable only through
+  `RawWakerVTable::new`, whose first argument returns
+  `core::task::wake::RawWaker`. The census finds those functions by their
+  DWARF return type and checks every use of their addresses the link kept
+  (`--emit-relocs`), in code and in data of every section, writable
+  (`.data`, SRAM or PSRAM) or not: each must be the first of four relocated
+  function pointers in data whose other three return nothing, a vtable
+  wherever it lies. Every static the DWARF types as or containing a
+  `RawWakerVTable` (`.bss` included) must hold one of those, unless the link
+  discarded it (its location lies in no allocated section). A clone
+  function's address taken anywhere else (code that could build a vtable at
+  run time, a lone pointer, a relocation naming no address), a typed vtable
+  the relocations do not show, or a second vtable fails the analysis with
+  `Integrity`; so the image holds at most one vtable, the executor's, and
+  every waker it builds carries it. `Fact::WakerVtables` therefore assumes
+  nothing. `waker_resolutions` sends an
   unresolved call inside `Waker::wake`, `wake_by_ref`, `drop` or `clone` to
   that slot of the vtable; without one the site keeps an empty set, a hole.
   When the inline scope ends before the call,
@@ -302,10 +312,10 @@ the nesting rule checked; one with any is conditional on the rule those
 sites may break.
 
 A bound also names what it assumes (`Bound::assumptions`, `Assumption`): the
-facts found from the image's types (the waker vtable, field types)
-rest on the executor invariant, that a task header's `poll_fn` matches its
+facts found from the image's types but not enumerated whole (field types,
+task polls) rest on the executor invariant, that a task header's `poll_fn` matches its
 storage and an erased pointer is read back as its own type; the interrupt
-table assumes nothing. `HartStack::assumptions` gathers a hart's. A hart with
+table and the waker vtable census assume nothing. `HartStack::assumptions` gathers a hart's. A hart with
 a bound and no assumption is proven; with some, conditional on them. The
 firmware gate admits exactly the named ones, each until a change proves it.
 
