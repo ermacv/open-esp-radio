@@ -31,7 +31,8 @@
 //! read is filtered there by an allowlist, and the host refuses any line
 //! outside it. An SSID is kept only as whether it is the stand's. The SSH
 //! target, the interface, every SSID and the full BSSID appear in no
-//! message, error or `Debug`; a script's output and stderr are never shown.
+//! message, error or `Debug`. Optional run command evidence redacts secrets
+//! and retains stderr; configuration stdout is never recorded.
 //! Values reach the remote shell quoted by shlex, inside the script on stdin.
 
 use std::{fmt, time::Duration};
@@ -311,8 +312,9 @@ impl Profile {
             // require empty diagnostics as well, without reading back the key.
             Ok(Zeroizing::new(format!(
                 "set +x\n{{\ndiagnostic=$(uci batch 2>&1 <<'OER_W4_KEY'\n\
-                 set wireless.{}.key={}\nOER_W4_KEY\n) && test -z \"$diagnostic\" &&\n\
-                 {}\n}} >/dev/null 2>&1",
+                 set wireless.{}.key={}\nOER_W4_KEY\n)\nbatch_status=$?\n\
+                 if test \"$batch_status\" -ne 0 || test -n \"$diagnostic\"; then printf '%s\\n' \"$diagnostic\" >&2; exit 1; fi\n\
+                 {}\n}} >/dev/null",
                 self.ap_section,
                 key.as_str(),
                 settings.as_str()

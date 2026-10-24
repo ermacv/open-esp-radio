@@ -60,11 +60,8 @@ impl Workload for WifiScenario {
         if !proof.complete() {
             return Err("W4 key conformance evidence is incomplete or contradictory".into());
         }
-        if let oer_hil_lab::config::StationFixtureConfig::OpenWrt(config) = &lab.station_fixture {
-            oer_lab_router::w4::verify_observation_tools(&mut oer_lab_router::ssh::Ssh::new(
-                &config.ssh_target,
-            )?)?;
-        }
+        // Router tool admission runs with the repetition's command recorder,
+        // before any configuration change, so even failures retain stderr.
         Ok(())
     }
     fn run(&self, output: &Path, context: &Context<'_>, _: &Fixtures) -> Result<()> {

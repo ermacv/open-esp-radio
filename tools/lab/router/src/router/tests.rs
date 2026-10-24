@@ -387,7 +387,7 @@ fn w4_router() -> Canned {
             vec![Ok("default\n192.168.178.0/24\n".to_owned())],
         ),
         ("set -e\nconfig=", vec![Ok("a".repeat(64))]),
-        ("set -e\nuci -q delete", vec![Ok(String::new())]),
+        ("set -e\nuci delete", vec![Ok(String::new())]),
         // Even an unexpected echo of the key must not escape apply().
         ("set +x\n", vec![Ok(PASSPHRASE.to_owned())]),
         ("/etc/init.d/firewall reload", vec![Ok(String::new())]),
@@ -460,8 +460,8 @@ fn w4_key_is_only_in_uci_stdin_and_is_quoted_without_shell_expansion() {
         );
         assert!(!prefix.contains(passphrase));
         assert!(!suffix.contains(passphrase));
-        assert!(suffix.starts_with(") && test -z \"$diagnostic\" &&\n"));
-        assert!(suffix.ends_with("} >/dev/null 2>&1"));
+        assert!(suffix.contains("printf '%s\\n' \"$diagnostic\" >&2; exit 1;"));
+        assert!(suffix.ends_with("} >/dev/null"));
     }
 }
 

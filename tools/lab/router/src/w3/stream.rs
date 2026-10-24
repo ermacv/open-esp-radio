@@ -1,26 +1,22 @@
 //! Bounded, memory-only SSH observers, including a readiness barrier for
 //! tcpdump. Dropping an observer stops its owned SSH process group.
 
-use std::{
-    io::{BufRead, BufReader, Read},
-    sync::mpsc,
-    thread::JoinHandle,
-    time::Duration,
-};
+use std::{io::Read, sync::mpsc, thread::JoinHandle, time::Duration};
 
 use oer_os_process::owned::Child;
 
 use crate::{
     mac::Mac,
     router::quote,
-    ssh::{Result, Ssh},
+    ssh::{CommandObservation, Result, Ssh, Stderr, read_stderr},
 };
 
 pub struct Capture {
     child: Child,
     output: Option<JoinHandle<Result<String>>>,
-    diagnostics: Option<JoinHandle<Result<bool>>>,
+    diagnostics: Option<JoinHandle<(bool, Stderr)>>,
     count: u16,
+    command: Option<CommandObservation>,
 }
 
 fn bounded(reader: impl Read) -> Result<String> {
@@ -63,8 +59,8 @@ impl Capture {
         let diagnostics = std::thread::spawn(move || {
             let mut listening = false;
             let mut dropped = false;
-            for line in BufReader::new(stderr.take(8193)).lines() {
-                let line = line.map_err(|_| "cannot read capture status")?;
+            let diagnostics = read_stderr(stderr, |line| {
+                let line = line.trim_end();
                 if line.starts_with("listening on ") {
                     listening = true;
                     let _ = ready.try_send(());
@@ -77,18 +73,25 @@ impl Capture {
                 {
                     dropped = true;
                 }
-            }
-            Ok(listening && !dropped)
+            });
+            (
+                listening && !dropped && diagnostics.error.is_none(),
+                diagnostics,
+            )
         });
         let capture = Self {
             child,
             output: Some(output),
             diagnostics: Some(diagnostics),
             count,
+            command: Some(ssh.observe(&script)),
         };
-        readiness
-            .recv_timeout(Duration::from_secs(10))
-            .map_err(|_| "router capture did not become ready")?;
+        if readiness.recv_timeout(Duration::from_secs(10)).is_err() {
+            // Finish the owned process and retain its actual stderr even when
+            // tcpdump never announced readiness.
+            let _ = capture.finish();
+            return Err("router capture did not become ready".into());
+        }
         Ok(capture)
     }
 
@@ -96,23 +99,63 @@ impl Capture {
         // Let tcpdump deliver its final buffered packet batch and statistics.
         // Killing SSH as soon as ping reports completion can truncate seq 100.
         // Incomplete/failed captures remain failures after this bounded drain.
-        let exited = self
-            .child
-            .wait_timeout(Some(Duration::from_secs(10)))
-            .is_ok_and(|status| status.success());
+        let waited = self.child.wait_timeout(Some(Duration::from_secs(10)));
+        let status = self.child.try_wait().ok().flatten();
+        let (complete, diagnostics) = self
+            .diagnostics
+            .take()
+            .ok_or("missing capture status reader")?
+            .join()
+            .map_err(|_| "capture status reader panicked")?;
+        let error = diagnostics
+            .error
+            .or_else(|| waited.as_ref().err().map(ToString::to_string));
+        if let Some(command) = self.command.take() {
+            command.finish(status, &diagnostics.text, error.as_deref());
+        }
         let text = self
             .output
             .take()
             .ok_or("missing capture reader")?
             .join()
             .map_err(|_| "capture reader panicked")??;
-        let complete = self
-            .diagnostics
-            .take()
-            .ok_or("missing capture status reader")?
-            .join()
-            .map_err(|_| "capture status reader panicked")??;
-        completed_observation(&text, exited, complete, self.count)
+        completed_observation(
+            &text,
+            waited.is_ok_and(|status| status.success()),
+            complete,
+            self.count,
+        )
+    }
+}
+
+impl Drop for Capture {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        if let Some(command) = self.command.take() {
+            let diagnostics = self
+                .diagnostics
+                .take()
+                .and_then(|reader| reader.join().ok());
+            let (stderr, error) = diagnostics.map_or_else(
+                || {
+                    (
+                        String::new(),
+                        Some("capture stderr reader unavailable".to_owned()),
+                    )
+                },
+                |(_, diagnostics)| (diagnostics.text, diagnostics.error),
+            );
+            command.finish(
+                self.child.try_wait().ok().flatten(),
+                &stderr,
+                error
+                    .as_deref()
+                    .or(Some("capture stopped before completion")),
+            );
+        }
+        if let Some(output) = self.output.take() {
+            let _ = output.join();
+        }
     }
 }
 
@@ -132,6 +175,8 @@ fn completed_observation(
 pub struct Departure {
     child: Child,
     output: Option<JoinHandle<Result<String>>>,
+    diagnostics: Option<JoinHandle<Stderr>>,
+    command: Option<CommandObservation>,
 }
 
 impl Departure {
@@ -145,22 +190,16 @@ impl Departure {
         let stdout = child
             .take_stdout()
             .ok_or("departure observer has no stdout")?;
-        // This observer's diagnostics can contain stand identities. Drain and
-        // discard them, never include them in errors or evidence.
         let stderr = child
             .take_stderr()
             .ok_or("departure observer has no stderr")?;
-        let output = std::thread::spawn(move || {
-            let drain = std::thread::spawn(move || {
-                let _ = std::io::copy(&mut stderr.take(8192), &mut std::io::sink());
-            });
-            let result = bounded(stdout);
-            let _ = drain.join();
-            result
-        });
+        let diagnostics = std::thread::spawn(move || read_stderr(stderr, |_| {}));
+        let output = std::thread::spawn(move || bounded(stdout));
         Ok(Self {
             child,
             output: Some(output),
+            diagnostics: Some(diagnostics),
+            command: Some(ssh.observe(&script)),
         })
     }
 
@@ -173,6 +212,20 @@ impl Departure {
         self.child
             .kill()
             .map_err(|_| "cannot stop departure observer")?;
+        let status = self.child.try_wait().ok().flatten();
+        let diagnostics = self
+            .diagnostics
+            .take()
+            .ok_or("missing departure stderr reader")?
+            .join()
+            .map_err(|_| "departure stderr reader panicked")?;
+        let failed = diagnostics.error.is_some();
+        if let Some(command) = self.command.take() {
+            command.finish(status, &diagnostics.text, diagnostics.error.as_deref());
+        }
+        if failed {
+            return Err("departure observer stderr failed; see command evidence".into());
+        }
         let text = self
             .output
             .take()
@@ -183,6 +236,37 @@ impl Departure {
             return Err("invalid departure observation".to_owned());
         }
         Ok(!ended && text.lines().count() == 1)
+    }
+}
+
+impl Drop for Departure {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        if let Some(command) = self.command.take() {
+            let diagnostics = self
+                .diagnostics
+                .take()
+                .and_then(|reader| reader.join().ok());
+            let (stderr, error) = diagnostics.map_or_else(
+                || {
+                    (
+                        String::new(),
+                        Some("departure stderr reader unavailable".to_owned()),
+                    )
+                },
+                |diagnostics| (diagnostics.text, diagnostics.error),
+            );
+            command.finish(
+                self.child.try_wait().ok().flatten(),
+                &stderr,
+                error
+                    .as_deref()
+                    .or(Some("departure observer stopped before completion")),
+            );
+        }
+        if let Some(output) = self.output.take() {
+            let _ = output.join();
+        }
     }
 }
 

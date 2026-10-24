@@ -18,12 +18,14 @@ OER_W4_KEY_CONFORMANCE_RUN=RUN_ID cargo hil run w4 --board s31-a --owner NAME
 ```
 
 The run holds the board, router, passive laptop monitor and exclusive air.
-The managed router must provide native `ip neigh` and `tcpdump`; admission checks these
-before execution and never installs fixture software during qualification.
+The managed router must provide native `ip neigh` and `tcpdump`; the run checks
+these before configuring the router and never installs fixture software.
 It generates the SSID/passphrase, applies WPA2-PSK/CCMP HT20 without HE/PMF,
 then sends `StartStation` at run time. The 100-echo window spans GTK replacement;
-the tool deletes only the station's neighbor entry and the next measured
-router ping triggers a kernel broadcast ARP. Gate c requires the decoded request
+the tool observes the station's neighbor entry, deletes it if present and
+confirms absence. An already absent entry is recorded as the required state;
+a failed deletion passes only if the confirming read observes absence. The
+next measured router ping triggers a kernel broadcast ARP. Gate c requires the decoded request
 on the new GTK and the station's ARP reply, each matched to its protected air
 frame by public Sequence Number, PN and KeyID. Missing either frame fails.
 After router deauthentication,
@@ -31,6 +33,12 @@ a fresh association/handshake and a ten-echo window precede final departure.
 After an accepted StartStation, workload errors also request StopStation;
 a cleanup failure is explicit and never replaces a gate with PASS.
 Credentials and key material enter no scenario, environment, log or result.
+Each router step records its command, exit code/signal and stderr, including
+early observer shutdown and command failures. Generated credentials and stand
+identities are redacted before serialization; configuration stdout is omitted.
+The neighbor refresh records its before/after presence and whether deletion
+was attempted. Command availability or a remaining neighbor is a failure;
+neither command success nor absence alone replaces gate c's frame evidence.
 PTK rekey and SAE are outside this workload.
 
 `w4-initial-gtk` is a separate investigation with group rekey disabled. It

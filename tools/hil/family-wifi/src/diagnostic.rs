@@ -9,26 +9,31 @@ use oer_hil_scenario::{
     Result,
     workload::{context::Context, require_keys},
 };
-use oer_lab_router::{credentials, mac::Mac, router, ssh::Ssh, w4};
+use oer_lab_router::{
+    credentials,
+    mac::Mac,
+    router,
+    ssh::{CommandLog, CommandObservation, Ssh, Stderr, read_stderr},
+    w4,
+};
 use std::{path::Path, time::Duration};
 
 pub(crate) struct Observer {
     child: oer_os_process::owned::Child,
     reader: Option<std::thread::JoinHandle<Result<String>>>,
+    diagnostics: Option<std::thread::JoinHandle<Stderr>>,
+    command: Option<CommandObservation>,
 }
 impl Observer {
     pub(crate) fn start(ssh: &Ssh, script: &str) -> Result<Self> {
         use std::io::Read;
         let mut child = ssh.start(script)?;
         let mut stdout = child.take_stdout().ok_or("observer stdout missing")?;
-        let mut stderr = child.take_stderr().ok_or("observer stderr missing")?;
+        let stderr = child.take_stderr().ok_or("observer stderr missing")?;
+        let diagnostics = std::thread::spawn(move || read_stderr(stderr, |_| {}));
         let reader = std::thread::spawn(move || {
-            let drain = std::thread::spawn(move || {
-                let _ = std::io::copy(&mut stderr.by_ref().take(8192), &mut std::io::sink());
-            });
             let mut bytes = Vec::new();
             let read = stdout.by_ref().take(131073).read_to_end(&mut bytes);
-            let _ = drain.join();
             read.map_err(|_| "observer read failed")?;
             if bytes.len() > 131072 {
                 return Err("observer exceeded bound".into());
@@ -38,15 +43,61 @@ impl Observer {
         Ok(Self {
             child,
             reader: Some(reader),
+            diagnostics: Some(diagnostics),
+            command: Some(ssh.observe(script)),
         })
     }
     pub(crate) fn finish(mut self) -> Result<String> {
         self.child.kill()?;
+        let status = self.child.try_wait()?;
+        let diagnostics = self
+            .diagnostics
+            .take()
+            .ok_or("observer stderr reader missing")?
+            .join()
+            .map_err(|_| "observer stderr reader failed")?;
+        let failed = diagnostics.error.is_some();
+        if let Some(command) = self.command.take() {
+            command.finish(status, &diagnostics.text, diagnostics.error.as_deref());
+        }
+        if failed {
+            return Err("observer stderr failed; see router command evidence".into());
+        }
         self.reader
             .take()
             .ok_or("observer reader missing")?
             .join()
             .map_err(|_| "observer reader failed")?
+    }
+}
+impl Drop for Observer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        if let Some(command) = self.command.take() {
+            let diagnostics = self
+                .diagnostics
+                .take()
+                .and_then(|reader| reader.join().ok());
+            let (stderr, error) = diagnostics.map_or_else(
+                || {
+                    (
+                        String::new(),
+                        Some("observer stderr reader unavailable".to_owned()),
+                    )
+                },
+                |diagnostics| (diagnostics.text, diagnostics.error),
+            );
+            command.finish(
+                self.child.try_wait().ok().flatten(),
+                &stderr,
+                error
+                    .as_deref()
+                    .or(Some("observer stopped before completion")),
+            );
+        }
+        if let Some(reader) = self.reader.take() {
+            let _ = reader.join();
+        }
     }
 }
 /// Project only known hostapd events. A fresh subscription excludes old runs.
@@ -91,9 +142,22 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     };
     let directory = oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Runtime, "routers")?;
     let _router = oer_lab_router::lock::router(&directory, &config.ssh_target)?;
-    let mut ssh = Ssh::new(&config.ssh_target)?;
     let ssid = credentials::ssid("oer-initial-gtk")?;
     let password = credentials::passphrase()?;
+    let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid station identity")?;
+    let target_text = target.octets().map(|byte| format!("{byte:02x}")).join(":");
+    let results = context.results.clone();
+    let log = CommandLog::new(
+        &[
+            ssid.expose(),
+            password.expose(),
+            &config.ssh_target,
+            &config.wireless_interface,
+            &target_text,
+        ],
+        move |record| results.observe("initial-gtk-router-command", &record),
+    );
+    let mut ssh = Ssh::new(&config.ssh_target)?.with_log(log);
     let profile = router::Profile::initial_gtk_diagnostic(
         &config.radio,
         &config.ap_section,
@@ -112,7 +176,6 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         return Err("running diagnostic BSS did not disable group rekey".into());
     }
     drop(profile);
-    let target = Mac::parse(&context.lab.dut.mac).ok_or("invalid station identity")?;
     // First prove the observer's interface, frequency and BSS filter without
     // starting the DUT. An empty projection stops this investigation here.
     let check = AirCapture::start_in_run(applied.channel)?;
