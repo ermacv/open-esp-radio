@@ -436,8 +436,9 @@ own copy:
   index over a fixed-length table; polling and retries belong to the HAL.
   `cargo registers check pac-transactions <directory>` runs it.
 - `shared_words::check`: every MMIO word a write transaction of the radio
-  PAC (`policy/api.toml`, through the published SVD) and pinned esp-hal both
-  store to has a reviewed entry in `chips/<chip>/registers/shared-words.toml`, and
+  PAC (`policy/api.toml`, through the published SVD) or a typed block's
+  claim reaches (every declared word of a typed peripheral) and pinned
+  esp-hal both store to has a reviewed entry in `chips/<chip>/registers/shared-words.toml`, and
   no reviewed word is no longer shared. `cargo registers check shared-words
   --chip <chip> --esp-hal-src <dir> --pac-src <dir>` runs it on the given
   esp-hal and PAC sources.

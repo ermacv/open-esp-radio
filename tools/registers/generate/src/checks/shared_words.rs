@@ -4,7 +4,8 @@
 //! both can store to is a race: a read-modify-write on one side can undo the
 //! other's store. This check lists every word a write transaction of the
 //! closed radio PAC stores to (`chips/<chip>/registers/policy/api.toml`, located
-//! through `chips/<chip>/registers/published/radio.svd`) that pinned esp-hal also
+//! through `chips/<chip>/registers/published/radio.svd`), and every declared
+//! word of a typed block, whose claim reaches all of them, that pinned esp-hal also
 //! writes (a `PERIPHERAL::regs().register().write/modify` in its sources,
 //! resolved to an address through the pinned platform PAC), and requires each
 //! to have a reviewed entry in `chips/<chip>/registers/shared-words.toml` saying how
@@ -169,13 +170,11 @@ pub fn api_write_registers(api: &str) -> Result<BTreeSet<(String, String)>> {
         .flatten()
         .filter_map(toml::Value::as_str)
         .collect::<BTreeSet<_>>();
-    if !typed.is_empty() {
-        registers.extend(
-            api_typed_registers(&typed)
-                .into_iter()
-                .map(|peripheral| (peripheral, TYPED_BLOCK.to_owned())),
-        );
-    }
+    registers.extend(
+        typed
+            .into_iter()
+            .map(|peripheral| (peripheral.to_owned(), TYPED_BLOCK.to_owned())),
+    );
     Ok(registers)
 }
 
@@ -543,6 +542,12 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
                 "[[zero-register-writes]]\nperipheral = \"P\"\nregister = \"GONE\"\n"
             )
             .is_err()
+        );
+        // A typed block's claim reaches every word it declares.
+        let typed = radio_written(svd, "[options]\ntyped-peripherals = [\"P\"]\n").unwrap();
+        assert_eq!(
+            typed.keys().copied().collect::<Vec<_>>(),
+            [0x1000, 0x1004, 0x1010, 0x1018]
         );
     }
 
