@@ -49,3 +49,7 @@ oer-esp32c5-layout = { workspace = true, features = ["build"] }
 [lints]
 workspace = true
 
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { chips = 71, portable = 37, firmware = 23, core = 2, embassy = 4, esp-hal = 14, unnamed = 7, hardware = 6 }
+bootstrap = { esp-hal = 9 }

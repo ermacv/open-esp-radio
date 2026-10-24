@@ -111,6 +111,40 @@ level number or a handler's name, decides the rules:
 Exceptions retain strict placement throughout. Calls into the panic machinery
 from each context's strict code are reported with their sites, not gated.
 
+The `panics` check counts the panic sites each root reaches: a direct call or
+jump into a panic entry (`core::panicking::*`, `unwrap_failed`,
+`expect_failed`, the slice-index failures, `panic_already_*`,
+`rust_begin_unwind`, `oer_platform_panic_hook`) from a function that is not
+one itself. The roots are each interrupt context (hart and level, each
+hart's exception), CPU0 (stage two's entry) and each task root in the
+runtime, and the bootstrap root; it runs with the stack and interrupts
+checks, over their bounds' `reached` inventories. A site belongs to the
+layer of the crate its function's demangled name starts with (the self type
+of `<T as Trait>`): workspace crates by directory (`chips/**/pac`,
+`pac-raw`, `*-pac`, `*-pac-raw` are `pac`; `chips/*/hal` is `hal`; the rest
+of `chips/` is `chips`; `portable`, `protocols`, `firmware`), then `core`
+(core, alloc, compiler_builtins), `embassy` (`embassy_*`), `esp-hal`
+(`esp_*`, `esp32*`), `third-party` (every other crate) and `unnamed` (names
+without a crate: `#[no_mangle]` and assembly symbols). An inlined call counts in the function it is inlined into.
+
+The image's `[package.metadata.open-radio.panic-budget]` gives each ELF's
+budget by layer, sites counted once over all its roots:
+
+```toml
+[package.metadata.open-radio.panic-budget]
+runtime = { chips = 40, core = 12, hardware = 6 }
+bootstrap = { core = 3 }
+```
+
+`hardware` budgets the distinct sites all `Hardware` interrupt contexts
+reach together, whatever their layer. A key it does not name has 0, the
+target of every budget. A count above its budget fails; a count below it is
+a warning naming the lower value. A budget only shrinks: review rejects an increase. Variants of
+one package (`--analysis`, HIL classes) share its budget, the maximum of
+their counts. `runtime-panics.txt` and `bootstrap-panics.txt` give the
+counts and budgets by layer and for `hardware`, each root's sites by layer, and every site with
+its caller, entry and the roots that reach it.
+
 The S31 accesses flash and PSRAM through separate MSPI controllers: a flash
 operation does not disable the PSRAM cache. Placement follows this hardware
 contract. The image linker runs the same interrupt analysis and `CodePlacement`

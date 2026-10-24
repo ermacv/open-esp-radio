@@ -10,12 +10,11 @@
 //! runtime; the bootstrap root in the bootstrap. A site counts once per ELF
 //! however many roots reach it.
 //!
-//! The PAC layer's budget is 0 and cannot be declared; a `Hardware`
-//! interrupt context reaches no panic site in any layer. Every other layer
-//! takes its budget from the image's
-//! `[package.metadata.open-radio.panic-budget]`; a layer it does not name
-//! has 0. More sites than the budget fail; fewer are reported, so the
-//! budget can be lowered.
+//! Each layer takes its budget from the image's
+//! `[package.metadata.open-radio.panic-budget]`, and so do the sites the
+//! `Hardware` interrupt contexts reach together (`hardware`, any layer);
+//! what it does not name has 0, the target of every budget. More sites than
+//! the budget fail; fewer are reported, so the budget can be lowered.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -48,12 +47,15 @@ pub enum Layer {
     Embassy,
     /// esp-hal and its companions (`esp-*`, the esp-pacs `esp32*`).
     EspHal,
-    /// Every other crate, and functions whose name names no crate.
+    /// Every other crate.
     ThirdParty,
+    /// Functions whose name names no crate: `#[no_mangle]` and assembly
+    /// symbols.
+    Unnamed,
 }
 
 impl Layer {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Pac,
         Self::Hal,
         Self::Chips,
@@ -64,6 +66,7 @@ impl Layer {
         Self::Embassy,
         Self::EspHal,
         Self::ThirdParty,
+        Self::Unnamed,
     ];
 
     /// The layer's key in the budget and the reports.
@@ -79,6 +82,7 @@ impl Layer {
             Self::Embassy => "embassy",
             Self::EspHal => "esp-hal",
             Self::ThirdParty => "third-party",
+            Self::Unnamed => "unnamed",
         }
     }
 
@@ -141,7 +145,7 @@ impl Layers {
     /// being the first path segment (of the self type, for `<T as Trait>`).
     pub fn of(&self, name: &str) -> Layer {
         let Some(krate) = crate_of(name) else {
-            return Layer::ThirdParty;
+            return Layer::Unnamed;
         };
         if let Some(&layer) = self.crates.get(krate) {
             return layer;
@@ -290,18 +294,30 @@ pub(crate) fn stack_roots(
         .collect()
 }
 
-/// The image's per-layer panic budget of each ELF.
+/// The budget of one ELF: by layer, and for the `Hardware` contexts.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Limits {
+    pub layers: BTreeMap<Layer, usize>,
+    /// Distinct sites over all `Hardware` interrupt contexts, any layer.
+    pub hardware: usize,
+}
+
+/// The image's panic budget of each ELF.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Budget {
-    pub runtime: BTreeMap<Layer, usize>,
-    pub bootstrap: BTreeMap<Layer, usize>,
+    pub runtime: Limits,
+    pub bootstrap: Limits,
 }
+
+/// The budget key of the `Hardware` interrupt contexts.
+pub const HARDWARE: &str = "hardware";
 
 impl Budget {
     /// The budget an image declares under `panic-budget`, a table of
-    /// `runtime` and `bootstrap`, each a table of layer keys and site
-    /// counts: `{ runtime = { core = 12 }, bootstrap = { core = 3 } }`.
-    /// Nothing declared is a budget of 0 in every layer.
+    /// `runtime` and `bootstrap`, each a table of layer keys (and
+    /// `hardware`) and site counts:
+    /// `{ runtime = { core = 12, hardware = 2 }, bootstrap = { core = 3 } }`.
+    /// Nothing declared is a budget of 0 everywhere.
     pub fn parse(declared: Option<&serde_json::Value>) -> Result<Self> {
         let mut budget = Self::default();
         let Some(declared) = declared else {
@@ -325,40 +341,44 @@ impl Budget {
                 .as_object()
                 .ok_or_else(|| format!("`panic-budget.{elf}` is a table of layers"))?;
             for (key, count) in layers {
-                let layer = Layer::of_key(key).ok_or_else(|| {
-                    format!(
-                        "`panic-budget.{elf}` names the unknown layer `{key}`; the layers are {}",
-                        Layer::ALL.map(Layer::key).join(", ")
-                    )
-                })?;
-                if layer == Layer::Pac {
-                    return Err(format!(
-                        "`panic-budget.{elf}` names `pac`: the PAC layer's budget is 0 and \
-                         is not declared"
-                    )
-                    .into());
-                }
                 let count = count
                     .as_u64()
                     .and_then(|count| usize::try_from(count).ok())
                     .ok_or_else(|| {
                         format!("`panic-budget.{elf}.{key}` is a site count, not {count}")
                     })?;
-                target.insert(layer, count);
+                if key == HARDWARE {
+                    target.hardware = count;
+                    continue;
+                }
+                let layer = Layer::of_key(key).ok_or_else(|| {
+                    format!(
+                        "`panic-budget.{elf}` names the unknown layer `{key}`; the keys are {}, \
+                         {HARDWARE}",
+                        Layer::ALL.map(Layer::key).join(", ")
+                    )
+                })?;
+                target.layers.insert(layer, count);
             }
         }
         Ok(budget)
     }
 
-    /// The budget of `layer` in `elf`.
-    pub fn of(&self, elf: CheckedElf, layer: Layer) -> usize {
+    fn limits(&self, elf: CheckedElf) -> &Limits {
         match elf {
             CheckedElf::Runtime => &self.runtime,
             CheckedElf::Bootstrap => &self.bootstrap,
         }
-        .get(&layer)
-        .copied()
-        .unwrap_or(0)
+    }
+
+    /// The budget of `layer` in `elf`.
+    pub fn of(&self, elf: CheckedElf, layer: Layer) -> usize {
+        self.limits(elf).layers.get(&layer).copied().unwrap_or(0)
+    }
+
+    /// The budget of the `Hardware` contexts in `elf`.
+    pub fn hardware(&self, elf: CheckedElf) -> usize {
+        self.limits(elf).hardware
     }
 }
 
@@ -397,6 +417,15 @@ impl Report<'_> {
             .collect()
     }
 
+    /// Every distinct site a `Hardware` context reaches.
+    fn hardware_sites(&self) -> BTreeSet<Site> {
+        self.roots
+            .iter()
+            .filter(|root| root.hardware)
+            .flat_map(|root| root.sites.iter().copied())
+            .collect()
+    }
+
     /// The distinct sites of each layer over all roots.
     pub fn counts(&self, contract: &Contract) -> BTreeMap<Layer, usize> {
         let mut counts = BTreeMap::new();
@@ -415,30 +444,32 @@ impl Report<'_> {
         let counts = self.counts(contract);
         let mut failed = Vec::new();
         let mut warnings = Vec::new();
-        for layer in Layer::ALL {
-            let count = counts.get(&layer).copied().unwrap_or(0);
-            let budget = contract.budget.of(self.elf, layer);
+        let mut hold = |count: usize, budget: usize, what: String, key: &str| {
             if count > budget {
                 failed.push(format!(
-                    "{elf} reaches {count} panic sites in the {layer} layer, over its budget \
-                     of {budget}"
+                    "{elf} reaches {count} panic sites {what}, over its budget of {budget}"
                 ));
             } else if count < budget {
                 warnings.push(format!(
-                    "{elf} reaches {count} panic sites in the {layer} layer, under its budget \
-                     of {budget}: lower `panic-budget.{elf}.{layer}` to {count}"
+                    "{elf} reaches {count} panic sites {what}, under its budget of {budget}: \
+                     lower `panic-budget.{elf}.{key}` to {count}"
                 ));
             }
+        };
+        for layer in Layer::ALL {
+            hold(
+                counts.get(&layer).copied().unwrap_or(0),
+                contract.budget.of(self.elf, layer),
+                format!("in the {layer} layer"),
+                layer.key(),
+            );
         }
-        for root in self.roots.iter().filter(|root| root.hardware) {
-            if !root.sites.is_empty() {
-                failed.push(format!(
-                    "the hardware interrupt context {} reaches {} panic sites",
-                    root.label,
-                    root.sites.len()
-                ));
-            }
-        }
+        hold(
+            self.hardware_sites().len(),
+            contract.budget.hardware(self.elf),
+            "from its hardware interrupt contexts".to_owned(),
+            HARDWARE,
+        );
         (failed, warnings)
     }
 
@@ -471,6 +502,12 @@ impl Report<'_> {
                 contract.budget.of(self.elf, layer)
             );
         }
+        let _ = writeln!(
+            out,
+            "{HARDWARE}\t{}\t{}",
+            self.hardware_sites().len(),
+            contract.budget.hardware(self.elf)
+        );
         let (failed, _) = self.verdict(contract);
         for problem in &failed {
             let _ = writeln!(out, "FAIL: {problem}");

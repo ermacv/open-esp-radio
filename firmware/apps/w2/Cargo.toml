@@ -48,3 +48,8 @@ workspace = true
 [package.metadata.open-radio]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { pac = 11, hal = 36, chips = 394, portable = 4, protocols = 2, firmware = 63, esp-hal = 7, unnamed = 13, hardware = 11 }
+bootstrap = { esp-hal = 8, unnamed = 2 }

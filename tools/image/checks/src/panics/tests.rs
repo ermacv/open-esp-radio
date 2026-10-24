@@ -77,14 +77,21 @@ fn root(image: &Image, label: &str, hardware: bool) -> Root {
 }
 
 fn contract(runtime: &[(Layer, usize)]) -> Contract {
+    contract_with(runtime, 0)
+}
+
+fn contract_with(runtime: &[(Layer, usize)], hardware: usize) -> Contract {
     Contract {
         layers: Layers::of_packages([
             ("oer-esp32s31-hal", Path::new("chips/esp32s31/hal")),
             ("oer-ieee80211-mac", Path::new("protocols/ieee80211/mac")),
         ]),
         budget: Budget {
-            runtime: runtime.iter().copied().collect(),
-            bootstrap: BTreeMap::new(),
+            runtime: Limits {
+                layers: runtime.iter().copied().collect(),
+                hardware,
+            },
+            bootstrap: Limits::default(),
         },
     }
 }
@@ -156,53 +163,80 @@ fn a_layer_over_its_budget_fails_and_one_under_it_asks_to_lower_it() {
 }
 
 #[test]
-fn a_hardware_context_reaching_a_panic_fails_whatever_the_budget() {
+fn the_hardware_contexts_have_their_own_budget_over_all_layers() {
     let image = program();
     let report = Report {
         elf: CheckedElf::Runtime,
-        roots: vec![root(&image, "hart0-P3", true)],
+        roots: vec![
+            root(&image, "hart0-P3", true),
+            root(&image, "hart0-P1", true),
+        ],
         names: &image.names,
     };
+    let layers = [(Layer::Hal, 1), (Layer::Protocols, 1)];
     let error = report
-        .check(&contract(&[(Layer::Hal, 1), (Layer::Protocols, 1)]))
+        .check(&contract_with(&layers, 1))
         .unwrap_err()
         .to_string();
     assert_eq!(
         error,
-        "the hardware interrupt context hart0-P3 reaches 2 panic sites"
+        "runtime reaches 2 panic sites from its hardware interrupt contexts, over its budget of 1"
+    );
+    assert_eq!(
+        report.check(&contract_with(&layers, 2)).unwrap(),
+        Vec::<String>::new()
+    );
+    assert!(
+        report
+            .render(&contract_with(&layers, 2))
+            .contains("hardware\t2\t2")
+    );
+    // A non-hardware root reaching the same sites takes nothing from it.
+    let task = Report {
+        elf: CheckedElf::Runtime,
+        roots: vec![root(&image, "T0", false)],
+        names: &image.names,
+    };
+    assert_eq!(
+        task.check(&contract_with(&layers, 0)).unwrap(),
+        Vec::<String>::new()
     );
 }
 
 #[test]
-fn the_pac_layer_has_no_budget_but_zero() {
+fn the_pac_layer_is_budgeted_like_the_others() {
     let image = program();
     let report = Report {
         elf: CheckedElf::Bootstrap,
         roots: vec![root(&image, "bootstrap", false)],
         names: &image.names,
     };
-    let pac = Contract {
+    let pac = |declared: serde_json::Value| Contract {
         layers: Layers::of_packages([
             ("oer-esp32s31-hal", Path::new("chips/esp32s31/pac")),
             ("oer-ieee80211-mac", Path::new("protocols/ieee80211/mac")),
         ]),
-        budget: Budget::parse(Some(
-            &serde_json::json!({ "bootstrap": { "protocols": 1 } }),
-        ))
-        .unwrap(),
+        budget: Budget::parse(Some(&declared)).unwrap(),
     };
-    let error = report.check(&pac).unwrap_err().to_string();
+    let error = report
+        .check(&pac(serde_json::json!({ "bootstrap": { "protocols": 1 } })))
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("bootstrap reaches 1 panic sites in the pac layer, over its budget of 0"),
         "{error}"
     );
-    let declared = Budget::parse(Some(&serde_json::json!({ "runtime": { "pac": 1 } })))
+    assert!(
+        report
+            .check(&pac(
+                serde_json::json!({ "bootstrap": { "protocols": 1, "pac": 1 } })
+            ))
+            .is_ok()
+    );
+    let unknown = Budget::parse(Some(&serde_json::json!({ "runtime": { "drivers": 1 } })))
         .unwrap_err()
         .to_string();
-    assert!(
-        declared.contains("the PAC layer's budget is 0"),
-        "{declared}"
-    );
+    assert!(unknown.contains("unknown layer `drivers`"), "{unknown}");
 }
 
 #[test]
@@ -242,11 +276,12 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ("core::ptr::drop_in_place<oer_time::Instant>", Layer::Core),
         ("compiler_builtins::mem::memcpy", Layer::Core),
         ("embassy_sync::signal::Signal<M,T>::wait", Layer::Embassy),
-        ("esp_hal::interrupt::enable", Layer::EspHal),
-        ("esp32s31::Peripherals::steal", Layer::EspHal),
+        ("esp_radio::wifi::start", Layer::EspHal),
+        ("esp32p4::Peripherals::steal", Layer::EspHal),
         ("heapless::vec::Vec<T,_>::push", Layer::ThirdParty),
         ("oer_image_checks::x", Layer::ThirdParty),
-        ("memcpy", Layer::ThirdParty),
+        ("memcpy", Layer::Unnamed),
+        ("FROM_CPU_INTR3", Layer::Unnamed),
     ] {
         assert_eq!(layers.of(name), layer, "{name}");
     }

@@ -119,3 +119,7 @@ workspace = true
 [build-dependencies]
 oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["build"] }
 
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
+runtime = { pac = 11, hal = 39, chips = 489, portable = 122, protocols = 191, firmware = 69, core = 20, embassy = 66, esp-hal = 19, third-party = 63, unnamed = 13, hardware = 11 }
+bootstrap = { esp-hal = 8, unnamed = 2 }

@@ -82,6 +82,16 @@ moves; ownership, orchestration and wiring are rebuilt.
   executor's level or calling a waker, with its reason in the image report).
   The image check applies each class's rules; the level number grants
   nothing.
+- Images have no reachable panics. The image check counts, for each root
+  (the bootstrap, CPU0 as stage two's entry, each task, each interrupt
+  context), the panic sites it reaches, by the crate layer of the function
+  holding them: PAC, HAL, chips, portable, protocols, firmware, core,
+  embassy, esp-hal, third-party, unnamed (`#[no_mangle]` and assembly
+  symbols). Each image declares a budget of its runtime and bootstrap in
+  `[package.metadata.open-radio.panic-budget]`, per layer and for the sites
+  its `Hardware` interrupt contexts reach together (`hardware`); a count
+  above the budget fails the build, and a budget only shrinks. The target of
+  every budget is 0, first for the PAC layer and the `Hardware` contexts.
 - Interrupt handlers and the executor code they run execute from SRAM or ROM.
   P2 tasks may run from PSRAM (the S31 reaches flash and PSRAM through
   separate controllers). Nothing runs from cached flash. The image check

@@ -4,11 +4,11 @@
 //!
 //! ```toml
 //! [package.metadata.open-radio.panic-budget]
-//! runtime = { hal = 2, core = 14 }
+//! runtime = { hal = 2, core = 14, hardware = 6 }
 //! bootstrap = { core = 3 }
 //! ```
 //!
-//! A layer the budget does not name has 0; the PAC layer is always 0.
+//! What the budget does not name has 0.
 
 use std::path::Path;
 
@@ -101,9 +101,35 @@ mod tests {
     }
 
     #[test]
+    fn every_image_declares_a_budget_that_parses() {
+        for text in [
+            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
+            include_str!("../../../../firmware/apps/radio-root/Cargo.toml"),
+            include_str!("../../../../firmware/apps/w0/Cargo.toml"),
+            include_str!("../../../../firmware/apps/w1/Cargo.toml"),
+            include_str!("../../../../firmware/apps/w2/Cargo.toml"),
+            include_str!("../../../../firmware/apps/w3/Cargo.toml"),
+            include_str!("../../../../firmware/hil/esp32c5/Cargo.toml"),
+            include_str!("../../../../firmware/hil/esp32s31/Cargo.toml"),
+            include_str!("../../../../firmware/hil/esp32s31-lower-mac/Cargo.toml"),
+            include_str!("../../../../firmware/hil/esp32s31-phy/Cargo.toml"),
+        ] {
+            let manifest: toml::Value = toml::from_str(text).expect("the manifest parses");
+            let name = manifest["package"]["name"]
+                .as_str()
+                .expect("a package name");
+            let declared = manifest["package"]["metadata"]["open-radio"]
+                .get("panic-budget")
+                .map(|budget| serde_json::to_value(budget).expect("TOML converts to JSON"));
+            assert!(declared.is_some(), "{name} declares no panic budget");
+            Budget::parse(declared.as_ref()).unwrap_or_else(|error| panic!("{name}: {error}"));
+        }
+    }
+
+    #[test]
     fn a_malformed_budget_names_the_package() {
         for declared in [
-            serde_json::json!({ "runtime": { "pac": 0 } }),
+            serde_json::json!({ "runtime": { "hardware": "two" } }),
             serde_json::json!({ "runtime": { "drivers": 1 } }),
             serde_json::json!({ "stage-two": { "core": 1 } }),
             serde_json::json!({ "runtime": { "core": -1 } }),
