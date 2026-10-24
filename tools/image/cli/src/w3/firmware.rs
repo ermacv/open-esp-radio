@@ -12,7 +12,7 @@ use oer_lab_router::{
     ssh::{Remote, Ssh},
     w3::{
         self, Evidence, Ping, Station,
-        stream::{Capture, Departure},
+        stream::{Capture, Departure, DepartureOutcome},
     },
 };
 use oer_os_process as process;
@@ -214,7 +214,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
                 process::sleep(Duration::from_millis(100))?;
             };
             let router_address=ssh.run(&format!("set -e\nip -4 route get {} | awk '{{for(i=1;i<NF;i++) if($i==\"src\") print $(i+1)}}'",lease.address))?.trim().parse().map_err(|_|"ambiguous W3 router route source")?;
-            let capture = Capture::start(&ssh, interface, lease.address)?;
+            let capture = Capture::start(&ssh, interface, lease.address, 100)?;
             report.observations = Some(Evidence {
                 schema: 1,
                 target: target.masked(),
@@ -235,7 +235,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             });
             report.phase = "ping";
             eprintln!("fw: W3 lease observed; router ping and capture started");
-            let ping = w3::ping(&mut ssh, lease.address)?;
+            let ping = w3::ping(&mut ssh, lease.address, 100)?;
             let text = console.join().map_err(|_| "W3 console reader panicked")??;
             let (echoes, complete) = capture.finish()?;
             let evidence = report
@@ -260,7 +260,7 @@ pub fn run(root: &Path, selector: &str, timeout: Duration) -> Result<ExitCode> {
             }
             process::sleep(Duration::from_millis(100))?;
         }
-        evidence.disconnect_event = departure.finish()?;
+        evidence.disconnect_event = departure.finish()? == DepartureOutcome::Unique;
         fs::write(
             directory.join("observations.json"),
             serde_json::to_vec_pretty(evidence)?,

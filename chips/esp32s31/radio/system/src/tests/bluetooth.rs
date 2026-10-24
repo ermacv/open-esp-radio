@@ -3,6 +3,16 @@ use oer_esp32s31_radio_client::bluetooth::{
     self, Bluetooth, BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission,
 };
 
+const fn ble_poison(request: RequestKind, cause: PoisonCause) -> Poison {
+    Poison::request(
+        oer_esp32s31_hal::domain::RadioClient::Bluetooth,
+        request,
+        cause,
+    )
+}
+const BLE_TRACK_POISON: Poison = ble_poison(RequestKind::Track, PoisonCause::Controller);
+const BLE_LEAVE_POISON: Poison = ble_poison(RequestKind::Leave, PoisonCause::Custody);
+
 struct ModelAttachment;
 impl BluetoothBackend<Model, RcSlow> for ModelAttachment {
     fn attached(&mut self, _: &mut Model) {}
@@ -49,7 +59,7 @@ impl BluetoothBackend<Model, RcSlow> for ModelAttachment {
         if shared.0.borrow().ble_fault {
             Err(Failed {
                 returned: installation,
-                cause: Failure::Poisoned,
+                cause: Failure::Poisoned(BLE_TRACK_POISON),
             })
         } else {
             Ok(installation)
@@ -67,7 +77,7 @@ impl BluetoothBackend<Model, RcSlow> for ModelAttachment {
                 BluetoothLeft { stopped: false },
                 Exit {
                     last: false,
-                    health: DomainHealth::Poisoned,
+                    health: DomainHealth::Poisoned(BLE_LEAVE_POISON),
                 },
             );
         }
@@ -232,12 +242,12 @@ fn failed_ble_rf_work_poisons_the_same_domain_seen_by_wifi() {
         let (_, tracked) = ble.track(joined.member, joined.payload.installation).await;
         assert_eq!(
             tracked.err().expect("RF write failed").cause,
-            Failure::Poisoned
+            Failure::Poisoned(BLE_TRACK_POISON)
         );
         let (_, wifi) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
         assert_eq!(
             wifi.err().expect("shared domain poisoned").cause,
-            Failure::Poisoned
+            Failure::Poisoned(BLE_TRACK_POISON)
         );
     });
     assert_eq!(
@@ -279,7 +289,7 @@ fn late_retirement_after_reinstall_never_releases_the_new_graph() {
         let next = next.ok().expect("new tracking");
         let (_, late) = ble.leave(Leaving::Tracked(next.member), old).await;
         assert!(!late.payload.stopped);
-        assert_eq!(late.domain, DomainHealth::Poisoned);
+        assert_eq!(late.domain, DomainHealth::Poisoned(BLE_LEAVE_POISON));
         assert!(model.0.borrow().bluetooth);
         assert!(model.0.borrow().wifi);
     });
@@ -488,7 +498,7 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
     let (ble, failed) = block_on(loan.run_until(ble.join(join())));
     assert_eq!(
         failed.err().expect("failed prepare").cause,
-        Failure::Poisoned
+        Failure::Poisoned(PREPARE_POISON)
     );
     let inbox = loan.detach().ok().expect("no Bluetooth hardware entered");
     let mut loan = actor
@@ -498,7 +508,7 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
     let (_, failed) = block_on(loan.run_until(ble.join(join())));
     assert_eq!(
         failed.err().expect("poison persists").cause,
-        Failure::Poisoned
+        Failure::Poisoned(PREPARE_POISON)
     );
-    assert_eq!(model.log(), vec![Event::Prepare(Err(Fault))]);
+    assert_eq!(model.log(), vec![Event::Prepare(Err(Fault(PREPARE_CAUSE)))]);
 }

@@ -179,11 +179,16 @@ pub async fn serve(channel: FrontendChannel, body: super::station::Body) {
             let mut running = core::pin::pin!(radio::run_port(front, body));
             let _ = super::future::Boundary(running.as_mut()).await;
         }
-        Err(_) => body
-            .attempt
-            .publish(oer_hil_protocol::wifi::StationLinkState::Disconnected {
-                reason: oer_hil_protocol::wifi::StationDisconnectReason::RadioFailure,
-            }),
+        Err(_) => {
+            body.attempt
+                .publish(oer_hil_protocol::wifi::StationLinkState::Disconnected {
+                    reason: oer_hil_protocol::wifi::StationDisconnectReason::RadioFailure,
+                });
+            super::end(
+                body.attempt,
+                oer_hil_protocol::wifi::StationServiceEnd::Unavailable,
+            );
+        }
     }
 }
 async fn install(boot: Boot, config: RadioConfig) -> Result<PortParts<Device, TX>, &'static str> {
@@ -329,7 +334,23 @@ impl port::Device<TX> for Device {
         room: usize,
         cx: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<Self::Receive>, Fault>> {
-        <Inner as port::Device<TX>>::poll_receive(&mut self.0, room, cx)
+        let result = <Inner as port::Device<TX>>::poll_receive(&mut self.0, room, cx);
+        if let Poll::Ready(Ok(DeviceEvent::Tx(
+            oer_esp32s31_ieee80211_driver::tx::WifiTxWake::Interrupt { .. },
+        ))) = &result
+        {
+            for queue in 0..4 {
+                if <Inner as port::Device<TX>>::hardware(&mut self.0)
+                    .wifi_mac_hal()
+                    .ordinary_tx_queue_snapshot(queue)
+                    .collision_pending
+                {
+                    super::observation::COLLISIONS
+                        .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        }
+        result
     }
 
     fn poll_rx_cut(

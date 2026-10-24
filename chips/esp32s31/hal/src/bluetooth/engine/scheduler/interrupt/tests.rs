@@ -160,7 +160,7 @@ fn stale_reply_cannot_free_the_request_seat() {
 fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
     use oer_time::{Clock, Duration};
     use oer_time_virtual::VirtualClock;
-    for ready_on in [None, Some(1), Some(2), Some(3)] {
+    for ready_on in [None, Some(1), Some(2), Some(3), Some(4)] {
         let clock: VirtualClock = VirtualClock::default();
         let outlined = SchedulerInterruptClock::new(&clock);
         assert_eq!(outlined.now(), clock.now());
@@ -178,7 +178,9 @@ fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
         let expected = match ready_on {
             Some(1) => (Ok(1), 1),
             Some(2) => (Ok(2), 2),
-            _ => (Err(crate::settle::Unsettled), 2),
+            // The third attempt follows the read that saw the limit pass.
+            Some(3) => (Ok(3), 3),
+            _ => (Err(crate::settle::Unsettled), 3),
         };
         assert_eq!((result, attempts), expected);
         assert_eq!(outlined.now(), clock.now());

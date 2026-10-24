@@ -17,11 +17,11 @@ ceiling_bytes = 6960
 
 
 [[frame_exceptions.runtime]]
-function = "<oer_memory::static_place::PlacedFuture<<oer_ieee80211_runtime::station_service::StationService<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::run_placed<2, 8, 2, oer_firmware_apps_w3::station::Output, oer_embassy_time::EmbassyClock>::{closure#0}> as core::future::future::Future>::poll"
+function = "<oer_ieee80211_runtime::station_service::StationService<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::run_placed::<2, 8, 2, oer_firmware_apps_w3::station::Output, oer_embassy_time::EmbassyClock>::{closure#0}"
 reason = "The statically backed service poll retains enable/disable bookkeeping and quarantine constructors; service-end custody remains resident in the future backing."
-ceiling_bytes = 11808
+ceiling_bytes = 12208
 
 [[frame_exceptions.runtime]]
 function = "<oer_ieee80211_runtime::station_service::ServiceState<oer_firmware_apps_w3::station::StationComposition<oer_radio_port::identity::StaticId<oer_firmware_apps_w3::radio::slot::Declaration>>, oer_firmware_apps_w3::station::Callbacks, oer_firmware_apps_w3::station::Rates, 1>>::disable::<oer_embassy_time::EmbassyClock>::{closure#0}"
 reason = "The disable poll combines the former owner poll and terminal-routing sink frame so their terminal/fault temporaries can share storage."
-ceiling_bytes = 7216
+ceiling_bytes = 7376

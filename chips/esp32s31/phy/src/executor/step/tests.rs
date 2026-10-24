@@ -490,8 +490,16 @@ fn timer_wait_does_no_atoms_until_the_deadline_and_records_resume_lateness() {
     assert_eq!((stats.polls, stats.pending, stats.ready_edges), (6, 5, 1));
 }
 #[test]
-fn ready_at_deadline_is_accepted_but_a_late_read_is_never_consumed() {
-    for late in [false, true] {
+fn a_late_sample_consumes_a_finished_answer_and_times_out_only_a_busy_bus() {
+    // At the deadline and after it, the one sample decides: a finished answer
+    // is consumed however late the job resumed; a bus still busy times out.
+    for (late, busy) in [
+        (20, false),
+        (21, false),
+        (500, false),
+        (20, true),
+        (21, true),
+    ] {
         let clock = VirtualClock::<1>::new();
         let mut io = Io::default();
         let mut transaction = read();
@@ -502,22 +510,64 @@ fn ready_at_deadline_is_accepted_but_a_late_read_is_never_consumed() {
             Step::Runnable
         );
         clock
-            .advance(Duration::from_micros(if late { 21 } else { 20 }))
+            .advance(Duration::from_micros(late))
             .expect("time fits");
+        io.busy.set(busy);
         let next = io.advance::<TestDelay, _>(&mut job, &clock, clock.now());
-        if late {
+        assert_eq!(io.atoms.get(), 2, "one sample after {late} us");
+        if busy {
             assert_eq!(next, Step::Failure(Failure::TimedOut));
-            assert_eq!(io.atoms.get(), 1);
+            assert!(matches!(
+                transaction.action(),
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+            ));
         } else {
             assert_eq!(next, Step::Runnable);
-            clock
-                .advance(Duration::from_micros(100))
-                .expect("time fits");
             assert!(matches!(
                 io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
                 Step::Complete
             ));
-            assert_eq!(io.atoms.get(), 2);
+            assert!(matches!(
+                transaction.action(),
+                PhyColdI2cAction::Complete(_)
+            ));
+        }
+    }
+}
+
+#[test]
+fn a_start_busy_at_its_deadline_gets_one_last_attempt() {
+    for busy in [false, true] {
+        let clock = VirtualClock::<1>::new();
+        let mut io = Io::default();
+        let mut transaction = read();
+        let mut job =
+            Job::i2c(&mut transaction, clock.now(), I2cTiming::Temperature).expect("deadline fits");
+        io.busy.set(true);
+        assert!(matches!(
+            io.advance::<TestDelay, _>(&mut job, &clock, clock.now()),
+            Step::WaitAt(_)
+        ));
+        // The executor resumes the job far beyond the busy-at-start bound.
+        clock
+            .advance(Duration::from_micros(300))
+            .expect("time fits");
+        io.busy.set(busy);
+        let next = io.advance::<TestDelay, _>(&mut job, &clock, clock.now());
+        assert_eq!(io.atoms.get(), 2);
+        if busy {
+            assert_eq!(next, Step::Failure(Failure::TimedOut));
+            assert!(matches!(
+                transaction.action(),
+                PhyColdI2cAction::StartRead { .. }
+            ));
+        } else {
+            // Published: the answer window now runs from this start.
+            assert!(matches!(next, Step::WaitAt(_)));
+            assert!(matches!(
+                transaction.action(),
+                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+            ));
         }
     }
 }
@@ -690,7 +740,7 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
 }
 
 #[test]
-fn preparation_trace_survives_a_late_failure_without_consuming_the_result() {
+fn preparation_trace_survives_a_late_timeout_of_a_busy_bus() {
     for not_ready_checks in [false, true] {
         let clock = VirtualClock::<1>::new();
         let mut io = Io::default();
@@ -718,8 +768,9 @@ fn preparation_trace_survives_a_late_failure_without_consuming_the_result() {
                 assert!(future.as_mut().poll(&mut cx).is_pending());
                 clock.advance(Duration::from_micros(2)).expect("time fits");
                 assert!(future.as_mut().poll(&mut cx).is_pending());
-                busy.set(false);
             }
+            // The bus is still busy when the job resumes late.
+            busy.set(true);
             clock
                 .advance(Duration::from_micros(130))
                 .expect("time fits");
@@ -729,7 +780,8 @@ fn preparation_trace_survives_a_late_failure_without_consuming_the_result() {
             );
         }
         assert_eq!(trace.commands, 1);
-        assert_eq!(trace.failure_busy, Some(0));
+        // The late check sampled the bus and found it still busy.
+        assert_eq!(trace.failure_busy, Some(1));
         assert_eq!(
             trace.maximum_first_check_micros,
             if not_ready_checks { 1 } else { 130 }
@@ -747,13 +799,13 @@ fn preparation_trace_survives_a_late_failure_without_consuming_the_result() {
                 .map(|s| s.elapsed_micros)
                 .collect::<Vec<_>>(),
             if not_ready_checks {
-                std::vec![1, 3]
+                std::vec![1, 3, 133]
             } else {
-                std::vec![]
+                std::vec![130]
             }
         );
         assert!(trace.complete());
-        assert_eq!(io.actions.len(), if not_ready_checks { 3 } else { 1 });
+        assert_eq!(io.actions.len(), if not_ready_checks { 4 } else { 2 });
         assert!(matches!(
             transaction.action(),
             PhyColdI2cAction::AwaitReadCompletionEdge { .. }
@@ -848,13 +900,46 @@ impl Registers for CommandCost<'_> {
 }
 
 #[test]
-fn t7_answer_window_starts_after_publication_and_accepts_its_exact_boundary() {
-    for late in [false, true] {
+fn a_resume_late_beyond_the_answer_window_consumes_the_finished_answer() {
+    // The tracking tick's temperature read yields while it waits; P2 peers
+    // and interrupts may resume it far beyond the window. The hardware
+    // answered meanwhile: the read completes instead of poisoning the domain.
+    let clock = VirtualClock::<1>::new();
+    let mut io = Io::default();
+    let mut transaction = read();
+    let mut job =
+        Job::i2c(&mut transaction, clock.now(), I2cTiming::Temperature).expect("deadline fits");
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    {
+        let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
+            &mut job, &mut io, &clock, None, None, None
+        ));
+        assert!(future.as_mut().poll(&mut cx).is_pending());
+        clock
+            .advance(Duration::from_micros(10 * T7_ANSWER_MICROS))
+            .expect("time fits");
+        let mut result = future.as_mut().poll(&mut cx);
+        if result.is_pending() {
+            result = future.as_mut().poll(&mut cx);
+        }
+        assert_eq!(result, Poll::Ready(Ok(())));
+    }
+    assert!(matches!(
+        transaction.action(),
+        PhyColdI2cAction::Complete(_)
+    ));
+}
+
+#[test]
+fn t7_answer_window_starts_after_publication_and_times_out_only_a_busy_bus() {
+    for (late, busy) in [(0, false), (1, false), (0, true), (1, true)] {
         let clock = VirtualClock::<1>::new();
         let mut registers = CommandCost {
             io: Io::default(),
             clock: &clock,
         };
+        let bus = registers.io.busy.clone();
         let mut transaction = read();
         let mut job =
             Job::i2c(&mut transaction, clock.now(), I2cTiming::Temperature).expect("deadline fits");
@@ -871,17 +956,19 @@ fn t7_answer_window_starts_after_publication_and_accepts_its_exact_boundary() {
             ));
             assert!(future.as_mut().poll(&mut cx).is_pending());
             clock
-                .advance(Duration::from_micros(T7_ANSWER_MICROS + u64::from(late)))
+                .advance(Duration::from_micros(T7_ANSWER_MICROS + late))
                 .expect("time fits");
+            bus.set(busy);
             let result = future.as_mut().poll(&mut cx);
-            if late {
+            if busy {
                 assert_eq!(result, Poll::Ready(Err(Failure::TimedOut)));
             } else {
                 assert!(result.is_pending());
                 assert_eq!(future.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
             }
         }
-        assert_eq!(registers.io.actions.len(), if late { 1 } else { 2 });
+        // The publication and the one sample at or after the window's end.
+        assert_eq!(registers.io.actions.len(), 2);
     }
 }
 

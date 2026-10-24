@@ -380,8 +380,38 @@ pub enum TargetPhyParamTrackingError {
     /// The registration no longer describes the borrowed PHY partition; the
     /// request was poisoned before any hardware access.
     EpochMismatch,
-    Run(PhyParamTrackingRunError<PhyTargetPortError>),
+    Run(PhyParamTrackingRunError<PhyParamTrackingPortError>),
     MissingCompletedOwner,
+}
+
+/// How one child of a periodic parameter-tracking request failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyParamTrackingPortError {
+    /// A step of the request itself or of one of its leaf children.
+    Step(PhyTargetPortError),
+    /// The calibration-tracking child failed with its own error.
+    CalibrationTracking(crate::executor::PhyCalibrationTrackingRunError<PhyTargetPortError>),
+}
+
+impl From<PhyTargetPortError> for PhyParamTrackingPortError {
+    fn from(error: PhyTargetPortError) -> Self {
+        Self::Step(error)
+    }
+}
+
+impl oer_diagnostics::DiagnosticPath for PhyParamTrackingPortError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        match self {
+            Self::Step(error) => {
+                path.name("Step");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+            Self::CalibrationTracking(error) => {
+                path.name("CalibrationTracking");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+        }
+    }
 }
 
 impl oer_diagnostics::DiagnosticPath for TargetPhyParamTrackingError {
@@ -2024,7 +2054,7 @@ impl<
     O: PhyTargetObserver,
 > PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, P, R, G, D, T, O>
 {
-    type Error = PhyTargetPortError;
+    type Error = PhyParamTrackingPortError;
 
     fn observe(
         &mut self,
@@ -2089,7 +2119,7 @@ impl<
                 );
                 run_phy_calibration_tracking(&mut child, &mut port)
                     .await
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                    .map_err(PhyParamTrackingPortError::CalibrationTracking)?;
                 child
                     .commit()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -2133,7 +2163,7 @@ impl<
                 completion
             }
             PhyParamTrackingAction::Complete(_) => {
-                return Err(PhyTargetPortError::UnexpectedBinding);
+                return Err(PhyTargetPortError::UnexpectedBinding.into());
             }
         };
         self.observer.operation_completed();

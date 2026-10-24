@@ -515,6 +515,24 @@ impl SerialCapture {
             .len()
     }
 
+    /// Host receipt time of this exact message in the capture's epoch clock.
+    /// This does not infer device time from the arrival of a later message.
+    pub fn received_at_micros(&self, message: &Received) -> Option<u64> {
+        let state = self
+            .protocol
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state
+            .messages
+            .iter()
+            .position(|candidate| {
+                candidate.boot_id == message.boot_id
+                    && candidate.message_sequence == message.message_sequence
+            })
+            .and_then(|index| state.received_unix_micros.get(index).copied())
+    }
+
     /// The link's failure, a closed capture or a cancellation, as an error.
     pub fn check_link(&self) -> Result<()> {
         oer_os_process::check_cancelled()?;

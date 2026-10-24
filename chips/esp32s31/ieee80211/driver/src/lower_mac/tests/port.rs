@@ -60,6 +60,8 @@ struct Observed {
     abandoned: bool,
     detached: bool,
     hold_start: bool,
+    /// The next start fails with this fault, as a refused retune does.
+    fail_start: Option<Fault>,
     hold_completion: bool,
     hold_cut: bool,
     hold_stop: bool,
@@ -189,6 +191,10 @@ impl Device<512> for TestDevice {
     }
     fn radio_now(&mut self) -> Result<Ieee80211Instant, radio::ClockError> {
         self.assert_driver_context();
+        // A held start models a retune: the radio actor holds the registers.
+        if self.observed.borrow().hold_start {
+            return Err(radio::ClockError::Unavailable);
+        }
         Ok(Ieee80211Instant::from_micros(
             self.timer.now().as_micros() + 1234,
         ))
@@ -201,6 +207,9 @@ impl Device<512> for TestDevice {
         self.assert_driver_context();
         if self.observed.borrow().hold_start {
             return Poll::Pending;
+        }
+        if let Some(fault) = self.observed.borrow_mut().fail_start.take() {
+            return Poll::Ready(Err(fault));
         }
         self.observed.borrow_mut().starts += 1;
         self.observed.borrow_mut().start_channels.push(channel);
@@ -340,6 +349,7 @@ type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
 mod barriers;
+mod retune;
 mod rx_capacity;
 
 fn installed(
@@ -410,8 +420,15 @@ fn block_on<F: Future>(future: F) -> F::Output {
 }
 
 enum Report<Out> {
-    Uninstalled { output: Out },
-    FailStopped { output: Out, stopped: bool },
+    Uninstalled {
+        output: Out,
+    },
+    FailStopped {
+        output: Out,
+        stopped: bool,
+    },
+    /// The port fail-stopped before the body returned its output.
+    Abandoned,
 }
 
 fn run_body<B, Out>(parts: PortParts<TestDevice, 512>, body: B) -> impl Future<Output = Report<Out>>
@@ -434,7 +451,7 @@ where
                 output,
                 stopped: matches!(outcome.outcome(), radio::Abandon::Stopped(_)),
             },
-            radio::PortEnd::Abandoned { .. } => panic!("the test body returns its Ended result"),
+            radio::PortEnd::Abandoned { .. } => Report::Abandoned,
         }
     })
 }

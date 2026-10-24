@@ -8,6 +8,37 @@ for admission, and `wifi/station/link` for `Associated`, `Authorized` and typed
 boot. `Authorized` means installed RSN keys and an open controlled port.
 `StationPowerSave` admits only `Off`.
 
+`ProbeStation` admits a 100-echo or ten-echo ICMP window. Its correlated
+`StationProbeReady` precedes traffic; `StationProbeFinished` contains distinct
+target-side request/reply counts. `StationGroupKey` reports a successful
+hardware installation's public KeyID/generation, never the GTK.
+`GetStationCounters` returns timeouts, collisions, decoded group ARPs and
+departure counts. `StopStation` is accepted before disconnect/stop; only a
+clean service stop publishes `StationStopped`. None carries a gate verdict.
+
+`Disconnected` names the portable station's reason one variant per reason,
+with its typed cause (SAE failure, TX refusal, channel refusal, the arbiter's
+leave reason); `RadioFailure` means only that the radio front end refused the
+station port. A service that ends without a stop command publishes, after
+the link's last `Disconnected`, one `StationServiceEnded`, correlated with
+the start request: how the port was left (`Failed`, `Poisoned` when it
+poisoned during an enable or disable, `Quarantined`, or `Unavailable` when
+the front end never registered the port) and the original
+`StationServiceFault` with its backend fault, contract violation or missing
+terminal. A start the radio front end did not retune is `Retune` with its
+cause: the MAC still active, or the radio system's refusal, client failure
+or poison. A poison names the first failure of the shared PHY domain: the
+operation that saw it (the periodic tracking tick, the preparation, the RF
+close or a client's request) and the failing step, so a retune refused after
+an earlier failed tick names that tick. A failed calibration-tracking child
+of a tick is `CalibrationTracking` with its own step fault or the
+calibration that failed, not a fault of the tracking parent; a failed
+registration names its step fault, the stage it could not lower, or the part
+of the sequence that failed. After it, and
+while a stop is pending, `StopStation` and `ProbeStation` are refused with
+`InvalidState` (`StopStation::refusal`, `ProbeStation::refusal`), so every
+command is answered.
+
 `NetworkCredentials` owns an SSID of 1..=32 bytes and a passphrase of 8..=63
 bytes. Construction and binary decoding both enforce these bounds. It has no
 `Clone` or `Copy`; drop erases its storage. `clear_passphrase` erases the entire

@@ -130,10 +130,10 @@ where
     async fn serve(&mut self, request: Request<Bluetooth>) -> Answer<Bluetooth> {
         match request {
             Request::Join(join) => {
-                if self.actor.core.is_poisoned() {
+                if let Some(poison) = self.actor.core.poisoned() {
                     return Answer::Join(Err(Failed {
                         returned: join,
-                        cause: Failure::Poisoned,
+                        cause: Failure::Poisoned(poison),
                     }));
                 }
                 if !self.attachment.admits(&self.actor.backend, &join) {
@@ -144,11 +144,14 @@ where
                 }
                 let phy = match boundary::shared(self.actor.backend.prepare()).await {
                     Ok(phy) => phy,
-                    Err(Fault) => {
-                        self.actor.core.poison();
+                    Err(Fault(cause)) => {
+                        let poison = self.actor.core.poison(Poison {
+                            origin: PoisonOrigin::Prepare,
+                            cause,
+                        });
                         return Answer::Join(Err(Failed {
                             returned: join,
-                            cause: Failure::Poisoned,
+                            cause: Failure::Poisoned(poison),
                         }));
                     }
                 };
@@ -186,10 +189,10 @@ where
                 })
             }
             Request::Track(member, installation) => {
-                if self.actor.core.is_poisoned() {
+                if let Some(poison) = self.actor.core.poisoned() {
                     return Answer::Track(Err(Failed {
                         returned: (member, installation),
-                        cause: Failure::Poisoned,
+                        cause: Failure::Poisoned(poison),
                     }));
                 }
                 let tracked = {
@@ -210,7 +213,7 @@ where
                         self.actor.core.failed(cause);
                         Err(Failed {
                             returned: (member, returned),
-                            cause,
+                            cause: self.actor.core.failure(cause),
                         })
                     }
                 })

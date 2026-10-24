@@ -5,9 +5,17 @@ mod credentials;
 #[cfg(feature = "wifi")]
 mod link;
 #[cfg(feature = "wifi")]
+mod observation;
+#[cfg(feature = "wifi")]
+mod service;
+#[cfg(feature = "wifi")]
 pub use credentials::*;
 #[cfg(feature = "wifi")]
 pub use link::*;
+#[cfg(feature = "wifi")]
+pub use observation::*;
+#[cfg(feature = "wifi")]
+pub use service::*;
 
 crate::messages! {
     property Station = "wifi/station";
@@ -16,6 +24,28 @@ crate::messages! {
     endpoint StartStation = "wifi/station/start" => crate::base::Accepted;
     #[cfg(feature = "wifi")]
     topic StationLink = "wifi/station/link";
+    #[cfg(feature = "wifi")]
+    endpoint ProbeStation = "wifi/station/probe" => crate::base::Accepted;
+    #[cfg(feature = "wifi")]
+    topic StationProbeFinished = "wifi/station/probe/finished";
+    #[cfg(feature = "wifi")]
+    topic StationProbeReady = "wifi/station/probe/ready";
+    #[cfg(feature = "wifi")]
+    endpoint GetStationCounters = "wifi/station/counters/get" => StationCounters;
+    #[cfg(feature = "wifi")]
+    topic StationCounters = "wifi/station/counters";
+    #[cfg(feature = "wifi")]
+    topic StationGroupKey = "wifi/station/group-key";
+    #[cfg(feature = "wifi")]
+    topic StationReceiveDrop = "wifi/station/receive-drop";
+    #[cfg(feature = "wifi")]
+    topic StationArpFrame = "wifi/station/arp-frame";
+    #[cfg(feature = "wifi")]
+    endpoint StopStation = "wifi/station/stop" => crate::base::Accepted;
+    #[cfg(feature = "wifi")]
+    topic StationStopped = "wifi/station/stopped";
+    #[cfg(feature = "wifi")]
+    topic StationServiceEnded = "wifi/station/service-ended";
 }
 
 #[cfg(feature = "wifi")]

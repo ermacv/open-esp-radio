@@ -24,15 +24,20 @@ use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold, WifiPowered},
 };
 use oer_esp32s31_phy::{
-    ConcurrentPhyTrackingError, ConcurrentRfError, ConcurrentWifiChannelError, PhyRegisterConfig,
-    PhyTargetObserver, RomShortDelay, close_concurrent_rf,
+    ConcurrentPhyRegisterFailure, ConcurrentPhyTrackingError, ConcurrentRfError,
+    ConcurrentWifiChannelError, PhyCalibrationTrackingFailure, PhyCalibrationTrackingRunError,
+    PhyParamTrackingPortError, PhyParamTrackingRunError, PhyRegisterConfig, PhyRegisterFailure,
+    PhyRegisterRunError, PhyTargetObserver, PhyTargetPortError, RomShortDelay,
+    TargetPhyParamTrackingError, TargetPhyRegisterError, close_concurrent_rf,
     concurrent::{ConcurrentAcquire, ConcurrentPhy, phy_ready},
     maintain_concurrent_phy, register_concurrent_phy, select_concurrent_wifi_channel,
     track_concurrent_phy, wake_concurrent_rf,
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
 };
 use oer_esp32s31_radio_client::{
-    DomainHealth, Failed, Failure, LpClock, PhyPreparation, RcSlow,
+    CalibrationTrackingFailure, CalibrationTrackingFault, DomainHealth, Failed, Failure, LpClock,
+    PhyFault, PhyPreparation, Poison, PoisonCause, RcSlow, RegistrationFailure, RegistrationFault,
+    RequestKind,
     wifi::{
         RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
@@ -46,6 +51,128 @@ use crate::{
 
 mod modem_sleep;
 mod retune;
+
+/// Wi-Fi's request `request` poisoned the domain with `cause`.
+pub(crate) const fn wifi_poisoned(request: RequestKind, cause: PoisonCause) -> Failure {
+    Failure::Poisoned(Poison::request(
+        oer_esp32s31_hal::domain::RadioClient::Wifi,
+        request,
+        cause,
+    ))
+}
+
+/// The client-contract name of a started PHY transaction's failure.
+pub(crate) const fn phy_fault(error: PhyTargetPortError) -> PhyFault {
+    match error {
+        PhyTargetPortError::HardwareEdgeTimedOut => PhyFault::EdgeTimedOut,
+        PhyTargetPortError::HardwareCapabilityUnavailable => PhyFault::CapabilityUnavailable,
+        PhyTargetPortError::HardwareInvariant => PhyFault::HardwareInvariant,
+        PhyTargetPortError::RfOperationLimit => PhyFault::RfOperationLimit,
+        PhyTargetPortError::UnexpectedBinding => PhyFault::UnexpectedBinding,
+        PhyTargetPortError::RegistrationEpochMismatch => PhyFault::RegistrationEpochMismatch,
+        PhyTargetPortError::DeadlineOverflow => PhyFault::DeadlineOverflow,
+    }
+}
+
+/// The poison cause of a tracking transaction that did not settle.
+pub(crate) const fn tracking_cause(error: ConcurrentPhyTrackingError) -> PoisonCause {
+    match error {
+        ConcurrentPhyTrackingError::Rejected(error) => PoisonCause::TrackingRefused(error),
+        ConcurrentPhyTrackingError::Failed(error) => match error {
+            TargetPhyParamTrackingError::EpochMismatch => {
+                PoisonCause::Tracking(PhyFault::RegistrationEpochMismatch)
+            }
+            TargetPhyParamTrackingError::Run(PhyParamTrackingRunError::Port(
+                PhyParamTrackingPortError::Step(error),
+            )) => PoisonCause::Tracking(phy_fault(error)),
+            TargetPhyParamTrackingError::Run(PhyParamTrackingRunError::Port(
+                PhyParamTrackingPortError::CalibrationTracking(error),
+            )) => PoisonCause::CalibrationTracking(calibration_tracking_fault(error)),
+            TargetPhyParamTrackingError::Run(
+                PhyParamTrackingRunError::Transition(_) | PhyParamTrackingRunError::ParentEdgeLimit,
+            )
+            | TargetPhyParamTrackingError::MissingCompletedOwner => {
+                PoisonCause::Tracking(PhyFault::Sequence)
+            }
+        },
+    }
+}
+
+/// The fault of the calibration-tracking child of PHY tracking.
+const fn calibration_tracking_fault(
+    error: PhyCalibrationTrackingRunError<PhyTargetPortError>,
+) -> CalibrationTrackingFault {
+    match error {
+        PhyCalibrationTrackingRunError::Port(error) => {
+            CalibrationTrackingFault::Step(phy_fault(error))
+        }
+        PhyCalibrationTrackingRunError::Transition(_)
+        | PhyCalibrationTrackingRunError::ParentEdgeLimit => {
+            CalibrationTrackingFault::Step(PhyFault::Sequence)
+        }
+        PhyCalibrationTrackingRunError::Radio(failure) => {
+            CalibrationTrackingFault::Radio(match failure {
+                PhyCalibrationTrackingFailure::PbusClearTimedOut(_) => {
+                    CalibrationTrackingFailure::PbusClearTimedOut
+                }
+                PhyCalibrationTrackingFailure::Dcode(_) => CalibrationTrackingFailure::Dcode,
+                PhyCalibrationTrackingFailure::RxGain(_) => CalibrationTrackingFailure::RxGain,
+                PhyCalibrationTrackingFailure::Channel(_) => CalibrationTrackingFailure::Channel,
+                PhyCalibrationTrackingFailure::TxDcPwdet(_) => {
+                    CalibrationTrackingFailure::TxDcPwdet
+                }
+            })
+        }
+    }
+}
+
+/// The poison cause of an RF wake or close that did not complete.
+const fn rf_cause(error: ConcurrentRfError) -> PoisonCause {
+    match error {
+        ConcurrentRfError::Rejected(error) => PoisonCause::Domain(error),
+        ConcurrentRfError::Recoverable(error) | ConcurrentRfError::Failed(error) => {
+            PoisonCause::Rf(phy_fault(error))
+        }
+        ConcurrentRfError::Clock(error) => PoisonCause::ModemClock(error),
+    }
+}
+
+/// The poison cause of a registration that did not complete cleanly.
+fn registration_cause(failure: &ConcurrentPhyRegisterFailure) -> PoisonCause {
+    match failure {
+        ConcurrentPhyRegisterFailure::Rejected(error) => PoisonCause::Domain(*error),
+        ConcurrentPhyRegisterFailure::Failed { failure, .. } => {
+            PoisonCause::Registration(match failure.error() {
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Port(error)) => {
+                    RegistrationFault::Step(phy_fault(error))
+                }
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Lowering { stage, error }) => {
+                    RegistrationFault::Lowering { stage, error }
+                }
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Radio(failure)) => {
+                    RegistrationFault::Radio(match failure {
+                        PhyRegisterFailure::I2cMasterResetTimedOut { index, samples } => {
+                            RegistrationFailure::I2cMasterResetTimedOut { index, samples }
+                        }
+                        PhyRegisterFailure::Rf(_) => RegistrationFailure::Rf,
+                        PhyRegisterFailure::Baseband(_) => RegistrationFailure::Baseband,
+                        PhyRegisterFailure::Temperature(_) => RegistrationFailure::Temperature,
+                        PhyRegisterFailure::FinalI2cDeadlineExceeded => {
+                            RegistrationFailure::FinalI2cDeadlineExceeded
+                        }
+                    })
+                }
+                TargetPhyRegisterError::Run(PhyRegisterRunError::Transition(_))
+                | TargetPhyRegisterError::MissingCompletedModelOwner => {
+                    RegistrationFault::Step(PhyFault::Sequence)
+                }
+            })
+        }
+        ConcurrentPhyRegisterFailure::CalibrationClock { error, .. } => {
+            PoisonCause::ModemClock(*error)
+        }
+    }
+}
 
 /// Where RF stands, as only this backend changes it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -186,10 +313,19 @@ where
             },
             Err(returned) => Failed {
                 returned,
-                cause: Failure::Poisoned,
+                cause: wifi_poisoned(RequestKind::Join, PoisonCause::Rollback),
             },
         }
     }
+}
+
+/// Wi-Fi's leave poisoned the domain with `cause`.
+const fn leave_poisoned(cause: PoisonCause) -> DomainHealth {
+    DomainHealth::Poisoned(Poison::request(
+        oer_esp32s31_hal::domain::RadioClient::Wifi,
+        RequestKind::Leave,
+        cause,
+    ))
 }
 
 impl<C, T, O> PhyDomain for Esp32s31Radio<C, T, O>
@@ -207,14 +343,17 @@ where
                 // state unknown to the actor: it poisons.
                 wake_concurrent_rf::<_, RomShortDelay>(&self.timer, &mut self.radio, &self.clocks)
                     .await
-                    .map_err(|_| Fault)?;
+                    .map_err(|error| Fault(rf_cause(error)))?;
                 self.rf = Rf::Open;
                 Ok(PhyPreparation::Woke {
                     micros: self.micros_since(start),
                 })
             }
             Rf::Unregistered => {
-                let config = self.registration.take().ok_or(Fault)?;
+                let config = self
+                    .registration
+                    .take()
+                    .ok_or(Fault(PoisonCause::Custody))?;
                 let registration = register_concurrent_phy::<_, (), RomShortDelay, O>(
                     &self.timer,
                     &mut self.radio,
@@ -224,7 +363,7 @@ where
                     self.observer.clone(),
                 )
                 .await
-                .map_err(|_| Fault)?;
+                .map_err(|failure| Fault(registration_cause(&failure)))?;
                 self.rf = Rf::Open;
                 let outcome = registration.outcome();
                 Ok(PhyPreparation::Registered {
@@ -251,8 +390,8 @@ where
             Err(ConcurrentRfError::Rejected(_) | ConcurrentRfError::Recoverable(_)) => {
                 Err(CloseFault::Recoverable)
             }
-            Err(ConcurrentRfError::Failed(_) | ConcurrentRfError::Clock(_)) => {
-                Err(CloseFault::Poisoned)
+            Err(error @ (ConcurrentRfError::Failed(_) | ConcurrentRfError::Clock(_))) => {
+                Err(CloseFault::Poisoned(rf_cause(error)))
             }
         }
     }
@@ -278,7 +417,7 @@ where
         )
         .await
         .map(|_tick| ())
-        .map_err(|_| Fault);
+        .map_err(|error| Fault(tracking_cause(error)));
         #[cfg(feature = "bluetooth")]
         if result.is_ok() && self.bluetooth_attached {
             self.wifi.tracking_due = false;
@@ -300,18 +439,20 @@ where
         _lp: &LpClock<RcSlow>,
     ) -> Result<WifiJoined, Failed<WifiReturned>> {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
-            return Err(Failed {
-                returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
-                cause: Failure::Poisoned,
-            });
+        if self.bluetooth_attached {
+            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+                return Err(Failed {
+                    returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
+                    cause: wifi_poisoned(RequestKind::Join, cause),
+                });
+            }
         }
         let WifiJoin { wifi: cold } = join;
         // Wi-Fi enters coexistence before common power.
         if !self.enter_coex() {
             return Err(Failed {
                 returned: WifiReturned::Cold(cold),
-                cause: Failure::Poisoned,
+                cause: wifi_poisoned(RequestKind::Join, PoisonCause::Custody),
             });
         }
         let (powered, power) = match cold.power_up(&mut self.radio, &self.clocks) {
@@ -324,8 +465,9 @@ where
                     CommonRadioPowerError::AlreadyEntered => Failure::ClientFailed,
                     // The first client's power sequence stopped at a
                     // read-back checkpoint: common power is half applied.
-                    CommonRadioPowerError::Power(_) | CommonRadioPowerError::Restore(_) => {
-                        Failure::Poisoned
+                    error @ (CommonRadioPowerError::Power(_)
+                    | CommonRadioPowerError::Restore(_)) => {
+                        wifi_poisoned(RequestKind::Join, PoisonCause::CommonPower(error))
                     }
                 };
                 self.leave_coex();
@@ -344,7 +486,7 @@ where
                 if error == ModemClockError::Poisoned {
                     return Err(Failed {
                         returned: WifiReturned::Powered(powered),
-                        cause: Failure::Poisoned,
+                        cause: wifi_poisoned(RequestKind::Join, PoisonCause::ModemClock(error)),
                     });
                 }
                 // ClientFailed: the planner refused before any clock write;
@@ -357,16 +499,16 @@ where
                     },
                     Err(returned) => Failed {
                         returned,
-                        cause: Failure::Poisoned,
+                        cause: wifi_poisoned(RequestKind::Join, PoisonCause::Rollback),
                     },
                 });
             }
         };
-        if clocked.set_initialized(&mut self.radio, true).is_err() {
+        if let Err(error) = clocked.set_initialized(&mut self.radio, true) {
             // The modem clocks are poisoned.
             return Err(Failed {
                 returned: WifiReturned::Clocked(clocked),
-                cause: Failure::Poisoned,
+                cause: wifi_poisoned(RequestKind::Join, PoisonCause::ModemClock(error)),
             });
         }
         let joined = match phy_ready(&mut self.radio) {
@@ -390,11 +532,13 @@ where
 
     async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
-            return Err(Failed {
-                returned: track.wifi,
-                cause: Failure::Poisoned,
-            });
+        if self.bluetooth_attached {
+            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+                return Err(Failed {
+                    returned: track.wifi,
+                    cause: wifi_poisoned(RequestKind::Track, cause),
+                });
+            }
         }
         let WifiTrack {
             mut wifi,
@@ -407,7 +551,7 @@ where
         let Some(membership) = self.wifi.membership.take() else {
             return Err(Failed {
                 returned: wifi,
-                cause: Failure::Poisoned,
+                cause: wifi_poisoned(RequestKind::Track, PoisonCause::Custody),
             });
         };
         let tracking_micros = if self.wifi.tracking_due {
@@ -430,7 +574,9 @@ where
                         returned: wifi,
                         cause: match error {
                             ConcurrentPhyTrackingError::Rejected(_) => Failure::Refused,
-                            ConcurrentPhyTrackingError::Failed(_) => Failure::Poisoned,
+                            ConcurrentPhyTrackingError::Failed(_) => {
+                                wifi_poisoned(RequestKind::Track, tracking_cause(error))
+                            }
                         },
                     });
                 }
@@ -457,13 +603,16 @@ where
             .await
         };
         if let Err(error) = selected {
-            let cause = if matches!(error, ConcurrentWifiChannelError::Rejected(_)) {
-                // ClientFailed: the channel transaction did not start; the
-                // only shared write is Wi-Fi's own RX enable, cleared again.
-                set_wifi_rx(&mut self.radio, &membership, false);
-                Failure::ClientFailed
-            } else {
-                Failure::Poisoned
+            let cause = match error {
+                ConcurrentWifiChannelError::Rejected(_) => {
+                    // ClientFailed: the channel transaction did not start; the
+                    // only shared write is Wi-Fi's own RX enable, cleared again.
+                    set_wifi_rx(&mut self.radio, &membership, false);
+                    Failure::ClientFailed
+                }
+                ConcurrentWifiChannelError::Failed(error) => {
+                    wifi_poisoned(RequestKind::Track, PoisonCause::Channel(phy_fault(error)))
+                }
             };
             self.wifi.membership = Some(membership);
             return Err(Failed {
@@ -479,13 +628,13 @@ where
                     .with_maximum_quarter_dbm(tx_ceiling.quarter_dbm()),
                 state.temperature_observation(),
             ),
-            Err(_) => {
+            Err(error) => {
                 // The channel switch settled the domain; an unsettled one
                 // breaks that invariant.
                 self.wifi.membership = Some(membership);
                 return Err(Failed {
                     returned: wifi,
-                    cause: Failure::Poisoned,
+                    cause: wifi_poisoned(RequestKind::Track, PoisonCause::Domain(error)),
                 });
             }
         };
@@ -540,11 +689,13 @@ where
 
     async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
-            return Err(Failed {
-                returned: retune.wifi,
-                cause: Failure::Poisoned,
-            });
+        if self.bluetooth_attached {
+            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+                return Err(Failed {
+                    returned: retune.wifi,
+                    cause: wifi_poisoned(RequestKind::Retune, cause),
+                });
+            }
         }
         let WifiRetune {
             mut wifi,
@@ -554,7 +705,7 @@ where
         if self.wifi.membership.is_none() {
             return Err(Failed {
                 returned: wifi,
-                cause: Failure::Poisoned,
+                cause: wifi_poisoned(RequestKind::Retune, PoisonCause::Custody),
             });
         }
         let start = self.timer.now();
@@ -572,16 +723,18 @@ where
                 returned: wifi,
                 cause: match error {
                     ConcurrentWifiChannelError::Rejected(_) => Failure::Refused,
-                    ConcurrentWifiChannelError::Failed(_) => Failure::Poisoned,
+                    ConcurrentWifiChannelError::Failed(error) => {
+                        wifi_poisoned(RequestKind::Retune, PoisonCause::Channel(phy_fault(error)))
+                    }
                 },
             });
         }
         let state = match self.radio.attachment().phy_state() {
             Ok(state) => state,
-            Err(_) => {
+            Err(error) => {
                 return Err(Failed {
                     returned: wifi,
-                    cause: Failure::Poisoned,
+                    cause: wifi_poisoned(RequestKind::Retune, PoisonCause::Domain(error)),
                 });
             }
         };
@@ -600,37 +753,40 @@ where
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
         #[cfg(feature = "bluetooth")]
-        if self.bluetooth_attached && crate::boundary::shared(self.track_tick()).await.is_err() {
-            return (
-                oer_esp32s31_radio_client::wifi::WifiLeft {
-                    wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
-                },
-                Exit {
-                    last: false,
-                    health: DomainHealth::Poisoned,
-                },
-            );
+        if self.bluetooth_attached {
+            if let Err(Fault(cause)) = crate::boundary::shared(self.track_tick()).await {
+                return (
+                    oer_esp32s31_radio_client::wifi::WifiLeft {
+                        wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
+                    },
+                    Exit {
+                        last: false,
+                        health: leave_poisoned(cause),
+                    },
+                );
+            }
         }
         let WifiLeave { wifi } = leave;
-        let poisoned = |wifi, last| {
+        let poisoned = |wifi, last, cause| {
             (
                 WifiLeft { wifi },
                 Exit {
                     last,
-                    health: DomainHealth::Poisoned,
+                    health: leave_poisoned(cause),
                 },
             )
         };
         let Some(membership) = self.wifi.membership.take() else {
-            return poisoned(WifiReturned::Clocked(wifi), false);
+            return poisoned(WifiReturned::Clocked(wifi), false, PoisonCause::Custody);
         };
         set_wifi_rx(&mut self.radio, &membership, false);
         let last = match leave_wifi(&mut self.radio, &wifi, membership) {
             Ok(last) => last,
             Err(failure) => {
                 // The member is retired but the PHY still counts Wi-Fi.
+                let cause = PoisonCause::Domain(failure.error());
                 self.wifi.membership = Some(failure.into_membership());
-                return poisoned(WifiReturned::Clocked(wifi), false);
+                return poisoned(WifiReturned::Clocked(wifi), false, cause);
             }
         };
         match self.roll_back(wifi) {
@@ -643,7 +799,7 @@ where
                     health: DomainHealth::Healthy,
                 },
             ),
-            Err(returned) => poisoned(returned, last),
+            Err(returned) => poisoned(returned, last, PoisonCause::Rollback),
         }
     }
 }

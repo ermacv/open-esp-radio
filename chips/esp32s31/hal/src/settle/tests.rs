@@ -69,11 +69,14 @@ fn concrete_and_erased_clocks_keep_the_same_result_and_attempt_count() {
         (result, attempts)
     }
 
+    // Each attempt takes 5 us of a 10-us limit: the third attempt follows
+    // the read that saw the limit pass, and it is the last.
     for (ready_on, expected) in [
         (Some(1), (Ok(1), 1)),
         (Some(2), (Ok(2), 2)),
-        (Some(3), (Err(Unsettled), 2)),
-        (None, (Err(Unsettled), 2)),
+        (Some(3), (Ok(3), 3)),
+        (Some(4), (Err(Unsettled), 3)),
+        (None, (Err(Unsettled), 3)),
     ] {
         let concrete_clock = VirtualClock::default();
         let concrete: Settle<'_, VirtualClock> = Settle::new(limit(10), &concrete_clock);
@@ -87,4 +90,39 @@ fn concrete_and_erased_clocks_keep_the_same_result_and_attempt_count() {
         assert_eq!(concrete_copy.limit(), erased_copy.limit());
         assert_eq!(concrete_clock.now(), erased_clock.now());
     }
+}
+
+#[test]
+fn an_interrupt_after_a_failed_attempt_still_gets_a_final_attempt() {
+    use oer_time_virtual::VirtualClock;
+
+    // The first attempt finds the hardware busy; an interrupt then holds the
+    // CPU beyond the limit while the hardware completes. The settle samples
+    // once more and takes the value instead of reporting it unsettled.
+    let clock: VirtualClock = VirtualClock::default();
+    let mut attempts = 0;
+    let result = settle(Settle::new(limit(20), &clock), || {
+        attempts += 1;
+        if attempts == 1 {
+            clock
+                .advance(Duration::from_micros(30))
+                .expect("the virtual clock advances past the limit");
+            None
+        } else {
+            Some(attempts)
+        }
+    });
+    assert_eq!(result, Ok(2));
+
+    // A still-busy final attempt ends it.
+    let clock: VirtualClock = VirtualClock::default();
+    let mut attempts = 0;
+    let result: Result<(), _> = settle(Settle::new(limit(20), &clock), || {
+        attempts += 1;
+        clock
+            .advance(Duration::from_micros(30))
+            .expect("the virtual clock advances past the limit");
+        None
+    });
+    assert_eq!((result, attempts), (Err(Unsettled), 2));
 }

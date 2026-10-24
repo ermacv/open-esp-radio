@@ -91,6 +91,7 @@
 //! fixture parsing and serialization do not belong to the product API.
 
 use core::marker::PhantomData;
+use oer_ieee80211_port::TxBufferMemory as _;
 use oer_ieee80211_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_ieee80211_sta::machine::TxRefusal;
 
@@ -517,6 +518,8 @@ pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
 };
 
+mod arp_observation;
+pub use arp_observation::ArpFrameObservation;
 mod ethernet;
 mod msdu_queue;
 pub use ethernet::{EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN};
@@ -573,6 +576,15 @@ pub enum ServiceOutput<
     },
     /// The station's notice.
     Notice(StaNotice),
+    /// A successfully admitted ARP or a protocol-validated received ARP.
+    /// Payload bytes are redacted by Debug and are not a wire record.
+    ArpFrame(ArpFrameObservation),
+    /// A correlated successful hardware group-key installation. This carries
+    /// the public CCMP KeyID only; it contains no key material.
+    GroupKeyChanged {
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        replaced: bool,
+    },
     /// A request refused synchronously, with its original correlation.
     CommandRefused(StaCommandRefused<'id, Path>),
     /// The unique terminal of one admitted station request.
@@ -1125,6 +1137,7 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     slot: <<B::Types<'id> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
+    key_id: Option<oer_ieee80211_wire::ccmp::GroupKeyId>,
     action: PendingGroupAction<'id, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
 }
 
@@ -2054,6 +2067,7 @@ impl<
                         ticket,
                         buffer,
                     } = transmit.into_parts();
+                    let mut arp_observation = None;
                     let access_category = context.access_category();
                     let plan = context.protection(&link).and_then(|protection| {
                         self.rates
@@ -2062,7 +2076,7 @@ impl<
                             .ok_or(TxRefusal::NoRate)
                     });
                     let prepared = match (buffer, plan) {
-                        (ReturnedMpdu::Fresh(buffer), Ok((protection, plan))) => {
+                        (ReturnedMpdu::Fresh(mut buffer), Ok((protection, plan))) => {
                             let protection = match protection {
                                 DataProtection::Open => Ok(TxProtection::Open),
                                 DataProtection::Ccmp(key) => {
@@ -2075,12 +2089,25 @@ impl<
                                 }
                             };
                             match protection {
-                                Ok(protection) => prepare_source::<B, B::Large>(TxSource::Fresh {
-                                    buffer,
-                                    frame: ClassFrame::individual(*context.frame(), plan),
-                                    body: None,
-                                    protection,
-                                }),
+                                Ok(protection) => {
+                                    if let TxProtection::Ccmp(numbered) = &protection {
+                                        arp_observation = buffer
+                                            .bytes_mut()
+                                            .get(..context.frame().frame().len().get())
+                                            .and_then(|bytes| {
+                                                ArpFrameObservation::transmit(
+                                                    bytes,
+                                                    numbered.packet_number,
+                                                )
+                                            });
+                                    }
+                                    prepare_source::<B, B::Large>(TxSource::Fresh {
+                                        buffer,
+                                        frame: ClassFrame::individual(*context.frame(), plan),
+                                        body: None,
+                                        protection,
+                                    })
+                                }
                                 Err(_) => Err((
                                     TxRefusal::PacketNumberExhausted,
                                     <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer),
@@ -2129,7 +2156,12 @@ impl<
                                 .admit(),
                             );
                             match submitted {
-                                Ok(()) => Ok(Follow::Nothing),
+                                Ok(()) => {
+                                    if let Some(observation) = arp_observation {
+                                        io.output.emit(ServiceOutput::ArpFrame(observation));
+                                    }
+                                    Ok(Follow::Nothing)
+                                }
                                 Err(poisoned) => Err(ServiceFault::Submission(poisoned.cause)),
                             }
                         }
@@ -2337,7 +2369,26 @@ impl<
             }
             LowerMacEvent::Tbtt(_) => Ok(None),
             LowerMacEvent::Terminal(terminal) => {
+                let group = match &terminal {
+                    LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { .. }) => self
+                        .pending
+                        .group
+                        .as_ref()
+                        .and_then(|pending| pending.key_id)
+                        .map(|id| (id, false)),
+                    LowerMacTerminal::GroupKeyReplaced { .. } => self
+                        .pending
+                        .group
+                        .as_ref()
+                        .and_then(|pending| pending.key_id)
+                        .map(|id| (id, true)),
+                    _ => None,
+                };
                 self.terminal(arbiter, now, terminal)?;
+                if let Some((key_id, replaced)) = group {
+                    io.output
+                        .emit(ServiceOutput::GroupKeyChanged { key_id, replaced });
+                }
                 Ok(None)
             }
         }
@@ -2367,6 +2418,9 @@ impl<
         let bytes = frame.bytes();
         let counters = &mut self.counters;
         let result = self.station.receive(now, bytes, meta, |parts| {
+            if let Some(observation) = ArpFrameObservation::receive(bytes, &parts) {
+                io.output.emit(ServiceOutput::ArpFrame(observation));
+            }
             Self::queue_received(counters, io, parts);
         });
         if let Err(reason) = result {
@@ -2578,6 +2632,7 @@ impl<
             (action, terminal) => {
                 self.pending.group = Some(PendingGroup {
                     slot: pending.slot,
+                    key_id: pending.key_id,
                     action,
                 });
                 return Err(ContractFault::sealed(
@@ -2962,6 +3017,7 @@ where
                 <B::Types<'id> as PhaseTypes<'id>>::StationKeys::vacant_group_slot_identity(&slot);
             pending_actions.group = Some(PendingGroup {
                 slot: identity,
+                key_id: Some(key_id),
                 action: PendingGroupAction::Install(pending),
             });
             pending_actions
@@ -2993,6 +3049,7 @@ where
             pending_actions.group = Some(PendingGroup {
                 slot,
                 action: PendingGroupAction::Replace(pending),
+                key_id: Some(key_id),
             });
             pending_actions
                 .admissions
@@ -3012,6 +3069,7 @@ where
             pending_actions.group = Some(PendingGroup {
                 slot,
                 action: PendingGroupAction::Select(pending),
+                key_id: None,
             });
             pending_actions
                 .admissions
@@ -3028,6 +3086,7 @@ where
             pending_actions.group = Some(PendingGroup {
                 slot,
                 action: PendingGroupAction::Remove(pending),
+                key_id: None,
             });
             pending_actions
                 .admissions

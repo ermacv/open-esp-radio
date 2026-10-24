@@ -185,6 +185,23 @@ fn readable_serializers_and_registry_redact_the_secret_owner() {
     assert!(!format!("{error:?} {error}").contains("private-test"));
 }
 
+fn event_round_trip<M: Message + Copy + PartialEq + core::fmt::Debug>(message: M) {
+    let mut encoder = FrameEncoder::new();
+    let wire = encoder
+        .encode(&Envelope::new(7, 11, 13, 17, message))
+        .expect("an event fits a frame");
+    let mut decoded = None;
+    FrameDecoder::new().feed(WireKind::Event, wire, |frame| {
+        decoded = frame
+            .expect("an intact frame")
+            .decode::<M>()
+            .expect("the key names a known message")
+            .map(|envelope| envelope.body)
+            .ok();
+    });
+    assert_eq!(decoded, Some(message));
+}
+
 #[test]
 fn link_events_preserve_epoch_and_typed_disconnect_reason() {
     let reasons = [
@@ -192,10 +209,41 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
         StationDisconnectReason::Peer {
             reason_code: 0xffff,
         },
-        StationDisconnectReason::BeaconTimeout,
         StationDisconnectReason::AuthenticationFailed,
+        StationDisconnectReason::Sae(StationSaeFailure::Timeout),
+        StationDisconnectReason::Sae(StationSaeFailure::DeadlineOverflow),
+        StationDisconnectReason::Sae(StationSaeFailure::PeerDisconnect {
+            kind: StationPeerDisconnectKind::Deauthentication,
+            reason_code: 2,
+        }),
+        StationDisconnectReason::Sae(StationSaeFailure::Rejected { status_code: 77 }),
+        StationDisconnectReason::Sae(StationSaeFailure::Protocol(
+            StationSaeError::UnsupportedGroup(20),
+        )),
+        StationDisconnectReason::Sae(StationSaeFailure::Protocol(
+            StationSaeError::ConfirmMismatch,
+        )),
+        StationDisconnectReason::Sae(StationSaeFailure::TokenTooLong),
         StationDisconnectReason::AssociationFailed,
+        StationDisconnectReason::NotFound { partial: true },
         StationDisconnectReason::HandshakeFailed,
+        StationDisconnectReason::SaQueryTimeout,
+        StationDisconnectReason::TransmitRefused(StationTransmitRefusal::PacketNumberExhausted),
+        StationDisconnectReason::TransmitRefused(StationTransmitRefusal::Preparation(
+            StationPreparationError::BlockAckWindow,
+        )),
+        StationDisconnectReason::TransmitRefused(StationTransmitRefusal::Layout(
+            StationLayoutError::BodyOverlap,
+        )),
+        StationDisconnectReason::Refused(StationChannelRefusal::TooSoon {
+            retry_at_us: u64::MAX,
+        }),
+        StationDisconnectReason::Refused(StationChannelRefusal::ScheduleExhausted),
+        StationDisconnectReason::LeaseExchangeRefused,
+        StationDisconnectReason::Arbiter(StationLeaveReason::PortFailed),
+        StationDisconnectReason::Arbiter(StationLeaveReason::Unservable),
+        StationDisconnectReason::DeadlineOverflow,
+        StationDisconnectReason::Encode,
         StationDisconnectReason::RadioFailure,
     ];
     for state in [StationLinkState::Associated, StationLinkState::Authorized]
@@ -206,25 +254,170 @@ fn link_events_preserve_epoch_and_typed_disconnect_reason() {
                 .map(|reason| StationLinkState::Disconnected { reason }),
         )
     {
-        let message = StationLink {
+        event_round_trip(StationLink {
             epoch: u32::MAX,
             state,
-        };
-        let mut encoder = FrameEncoder::new();
-        let wire = encoder
-            .encode(&Envelope::new(7, 11, 13, 17, message))
-            .unwrap();
-        let mut decoded = None;
-        FrameDecoder::new().feed(WireKind::Event, wire, |frame| {
-            decoded = Some(
-                frame
-                    .unwrap()
-                    .decode::<StationLink>()
-                    .unwrap()
-                    .unwrap()
-                    .body,
-            );
         });
-        assert_eq!(decoded, Some(message));
+    }
+    // Reasons the W4 diagnosis could not tell apart decode as distinct values.
+    assert_ne!(
+        StationDisconnectReason::Arbiter(StationLeaveReason::PortFailed),
+        StationDisconnectReason::RadioFailure
+    );
+}
+
+#[test]
+fn service_end_preserves_the_fault_and_its_typed_cause() {
+    let backend = [
+        StationBackendFault::Core(StationLowerMacFault::Tx),
+        StationBackendFault::Core(StationLowerMacFault::KeyUseMismatch),
+        StationBackendFault::Receive(StationReceiveFault::Service),
+        StationBackendFault::Receive(StationReceiveFault::ForeignExecutor),
+        StationBackendFault::Deadline,
+        StationBackendFault::Capacity,
+        StationBackendFault::Clock,
+        StationBackendFault::Retune(StationRetuneFault::MacActive { state: u8::MAX }),
+        StationBackendFault::Retune(StationRetuneFault::RxWalkerEnabled),
+        StationBackendFault::Retune(StationRetuneFault::Refused),
+        StationBackendFault::Retune(StationRetuneFault::ClientFailed),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::Tracking(StationPhyFault::EdgeTimedOut),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::Request {
+                client: StationRadioClient::Wifi,
+                request: StationRadioRequest::Retune,
+            },
+            cause: StationRadioPoisonCause::Channel(StationPhyFault::UnexpectedBinding),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::CalibrationTracking(
+                StationCalibrationTrackingFault::Step(StationPhyFault::EdgeTimedOut),
+            ),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::CalibrationTracking(
+                StationCalibrationTrackingFault::Radio(StationCalibrationTrackingFailure::Dcode),
+            ),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::Prepare,
+            cause: StationRadioPoisonCause::Registration(StationRegistrationFault::Lowering {
+                stage: StationRegisterStage::FinalI2cRead,
+                error: StationRegisterBindingError::UnexpectedOutcome,
+            }),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::Prepare,
+            cause: StationRadioPoisonCause::Registration(StationRegistrationFault::Radio(
+                StationRegistrationFailure::I2cMasterResetTimedOut {
+                    index: u8::MAX,
+                    samples: u16::MAX,
+                },
+            )),
+        })),
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin: StationRadioOperation::TrackingTick,
+            cause: StationRadioPoisonCause::TrackingRefused(StationPhyDomainError::TimeReversed {
+                previous_us: u64::MAX,
+                now_us: 0,
+            }),
+        })),
+        StationBackendFault::Abandoned,
+    ];
+    let mut faults = std::vec![
+        StationServiceFault::RxBlockAckCapacity,
+        StationServiceFault::RxBlockAckEncode,
+        StationServiceFault::Contract(StationContractViolation::UnexpectedTerminal(
+            StationPendingTerminal::Transmit(u8::MAX),
+        )),
+        StationServiceFault::Contract(StationContractViolation::StationKeyBank(
+            StationKeyContractViolation::IncompleteBank,
+        )),
+        StationServiceFault::Contract(StationContractViolation::GroupSlotMismatch),
+    ];
+    for cause in backend {
+        faults.extend([
+            StationServiceFault::EnableRefused(cause),
+            StationServiceFault::Backend(cause),
+            StationServiceFault::Submission(cause),
+            StationServiceFault::DrainedWithOutstanding {
+                cause,
+                missing: StationPendingTerminal::Control(StationControlTerminal::GateClosed),
+            },
+        ]);
+    }
+    for fault in faults {
+        for end in [
+            StationServiceEnd::Failed(fault),
+            StationServiceEnd::Poisoned(fault),
+            StationServiceEnd::Quarantined(fault),
+        ] {
+            event_round_trip(StationServiceEnded {
+                epoch: u32::MAX,
+                end,
+            });
+        }
+    }
+    event_round_trip(StationServiceEnded {
+        epoch: u32::MAX,
+        end: StationServiceEnd::Unavailable,
+    });
+    // A retune refused by an earlier failed tick and one that failed itself
+    // stay distinct.
+    let poisoned = |origin| {
+        StationBackendFault::Retune(StationRetuneFault::Poisoned(StationRadioPoison {
+            origin,
+            cause: StationRadioPoisonCause::Tracking(StationPhyFault::EdgeTimedOut),
+        }))
+    };
+    assert_ne!(
+        poisoned(StationRadioOperation::TrackingTick),
+        poisoned(StationRadioOperation::Request {
+            client: StationRadioClient::Wifi,
+            request: StationRadioRequest::Retune,
+        })
+    );
+    // A failed calibration-tracking child is not a binding error of the
+    // tracking parent.
+    assert_ne!(
+        StationRadioPoisonCause::CalibrationTracking(StationCalibrationTrackingFault::Step(
+            StationPhyFault::EdgeTimedOut
+        )),
+        StationRadioPoisonCause::Tracking(StationPhyFault::UnexpectedBinding)
+    );
+    // Enabling and submitting faults with the same cause stay distinct.
+    let cause = StationBackendFault::Deadline;
+    assert_ne!(
+        StationServiceFault::EnableRefused(cause),
+        StationServiceFault::Backend(cause)
+    );
+}
+
+#[test]
+fn only_a_running_station_admits_stop_and_probe() {
+    use crate::base::RejectReason::{InvalidConfiguration, InvalidState};
+    let probe = ProbeStation {
+        count: 10,
+        identifier: 1,
+    };
+    let invalid = ProbeStation {
+        count: 11,
+        identifier: 1,
+    };
+    assert_eq!(StopStation::refusal(StationRole::Running), None);
+    assert_eq!(probe.refusal(StationRole::Running), None);
+    assert_eq!(
+        invalid.refusal(StationRole::Running),
+        Some(InvalidConfiguration)
+    );
+    // After the service ended nothing would answer an accepted command.
+    for role in [StationRole::Idle, StationRole::Stopping, StationRole::Ended] {
+        assert_eq!(StopStation::refusal(role), Some(InvalidState));
+        assert_eq!(probe.refusal(role), Some(InvalidState));
+        assert_eq!(invalid.refusal(role), Some(InvalidState));
     }
 }

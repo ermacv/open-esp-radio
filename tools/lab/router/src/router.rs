@@ -31,7 +31,8 @@
 //! read is filtered there by an allowlist, and the host refuses any line
 //! outside it. An SSID is kept only as whether it is the stand's. The SSH
 //! target, the interface, every SSID and the full BSSID appear in no
-//! message, error or `Debug`; a script's output and stderr are never shown.
+//! message, error or `Debug`. Optional run command evidence redacts secrets
+//! and retains stderr; configuration stdout is never recorded.
 //! Values reach the remote shell quoted by shlex, inside the script on stdin.
 
 use std::{fmt, time::Duration};
@@ -118,6 +119,7 @@ pub struct Profile {
     channel: u8,
     ssid: Zeroizing<String>,
     security: Security,
+    group_rekey_seconds: u32,
 }
 
 impl fmt::Debug for Profile {
@@ -177,6 +179,7 @@ impl Profile {
             channel,
             ssid: Zeroizing::new(ssid.to_owned()),
             security: Security::Unchanged,
+            group_rekey_seconds: crate::w4::GROUP_REKEY_SECONDS,
         })
     }
 
@@ -212,6 +215,21 @@ impl Profile {
         }
         let mut profile = Self::new(radio, ap_section, interface, channel, ssid)?;
         profile.security = Security::Wpa2(Zeroizing::new(passphrase.to_owned()));
+        Ok(profile)
+    }
+
+    /// Investigate initial GTK reception separately from connected rekey.
+    /// This is not the W4 qualification profile.
+    pub fn initial_gtk_diagnostic(
+        radio: &str,
+        ap_section: &str,
+        interface: &str,
+        channel: u8,
+        ssid: &str,
+        passphrase: &str,
+    ) -> Result<Self> {
+        let mut profile = Self::w4(radio, ap_section, interface, channel, ssid, passphrase)?;
+        profile.group_rekey_seconds = 0;
         Ok(profile)
     }
 
@@ -266,7 +284,7 @@ impl Profile {
                 steps.push(set(
                     &self.ap_section,
                     "wpa_group_rekey",
-                    &crate::w4::GROUP_REKEY_SECONDS.to_string(),
+                    &self.group_rekey_seconds.to_string(),
                 )?);
             }
         }
@@ -294,8 +312,9 @@ impl Profile {
             // require empty diagnostics as well, without reading back the key.
             Ok(Zeroizing::new(format!(
                 "set +x\n{{\ndiagnostic=$(uci batch 2>&1 <<'OER_W4_KEY'\n\
-                 set wireless.{}.key={}\nOER_W4_KEY\n) && test -z \"$diagnostic\" &&\n\
-                 {}\n}} >/dev/null 2>&1",
+                 set wireless.{}.key={}\nOER_W4_KEY\n)\nbatch_status=$?\n\
+                 if test \"$batch_status\" -ne 0 || test -n \"$diagnostic\"; then printf '%s\\n' \"$diagnostic\" >&2; exit 1; fi\n\
+                 {}\n}} >/dev/null",
                 self.ap_section,
                 key.as_str(),
                 settings.as_str()
@@ -325,6 +344,7 @@ pub fn plan() -> Result<Vec<String>> {
         channel: 0,
         ssid: Zeroizing::new("<ssid>".to_owned()),
         security: Security::Unchanged,
+        group_rekey_seconds: crate::w4::GROUP_REKEY_SECONDS,
     };
     Ok(vec![
         CHANGES.to_owned(),
@@ -787,7 +807,7 @@ impl Wireless {
                 || ap.option("ieee80211r") != Some("0")
                 || ap.option("ieee80211w") != Some("0")
                 || ap.option("wpa_group_rekey")
-                    != Some(crate::w4::GROUP_REKEY_SECONDS.to_string().as_str())
+                    != Some(profile.group_rekey_seconds.to_string().as_str())
                 || radio.option("ieee80211ax") != Some("0"))
         {
             return Err(

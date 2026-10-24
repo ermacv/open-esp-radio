@@ -213,8 +213,9 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
         );
         assert_eq!(
             io.actions.len(),
-            4,
-            "read publication/readiness then write publication/readiness"
+            if busy { 5 } else { 4 },
+            "read publication/readiness, write publication/readiness and, for a busy write, \
+             the one readiness sample after the limit"
         );
         if busy {
             assert_eq!(result, Err(Failure::TimedOut));
@@ -291,7 +292,8 @@ fn a_dcode_byte_that_stays_busy_keeps_the_original_twenty_us_timeout() {
     let clock = Rc::new(VirtualClock::<1>::new());
     let mut io = Io {
         i2c_observation_clock: Some(clock.clone()),
-        i2c_observations: [(10, true), (15, true)].into(),
+        // The last sample follows the passed limit and still finds it busy.
+        i2c_observations: [(10, true), (15, true), (0, true)].into(),
         ..Io::default()
     };
     let mut transition = PhyDcodeTransition::new(PhyDcodeParameters {

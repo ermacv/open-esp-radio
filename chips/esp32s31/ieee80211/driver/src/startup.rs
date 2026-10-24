@@ -150,7 +150,7 @@ impl<W> RadioStartFailure<W> {
             Self::Join { failed, .. } => failed.cause,
             Self::Track { failed, .. } => failed.cause,
         };
-        matches!(cause, Failure::Poisoned)
+        matches!(cause, Failure::Poisoned(_))
     }
 }
 

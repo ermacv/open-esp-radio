@@ -9,6 +9,7 @@ publish = false
 description = "The HIL runner: its command line, a run of scenarios on the stand, and the image, flash and executor work it does"
 
 [dependencies]
+oer-hil-family-wifi = { path = "../family-wifi" }
 oer-hil-family-lower-mac = { path = "../family-lower-mac" }
 oer-vendor-phy-esp32s31 = { path = "../../vendor/phy-esp32s31" }
 oer-image-checks = { path = "../../image/checks" }

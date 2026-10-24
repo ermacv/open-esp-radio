@@ -33,11 +33,50 @@ pub const SUITE: &str = "suite.json";
 pub const EVENTS: &str = "events.jsonl";
 pub const SCENARIOS: &str = "scenarios";
 
+/// The public message envelope retained in a protocol log. Payloads are
+/// decoded as their registered type by the consumer of the observation.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolMessage {
+    pub boot_id: u64,
+    pub message_sequence: u32,
+    pub session_id: u64,
+    pub request_id: u32,
+    pub key: String,
+    pub path: String,
+    pub body: serde_json::Value,
+}
+
 /// One published run: its directory and typed manifest.
 #[derive(Clone, Debug)]
 pub struct RunBundle {
     directory: PathBuf,
     manifest: RunManifest,
+}
+
+fn protocol_messages(text: &str) -> Result<Vec<ProtocolMessage>> {
+    text.lines()
+        .filter_map(|line| {
+            let value = match serde_json::from_str::<serde_json::Value>(line) {
+                Ok(value) => value,
+                Err(_) => return Some(Err("invalid protocol record".into())),
+            };
+            match value.get("record").and_then(serde_json::Value::as_str) {
+                Some("host-command" | "link-health" | "capture-end" | "target-link-health") => None,
+                Some("target-event") => Some(
+                    value
+                        .get("message")
+                        .cloned()
+                        .ok_or_else(|| "target protocol record has no message".into())
+                        .and_then(|value| {
+                            serde_json::from_value(value)
+                                .map_err(|_| "invalid target protocol record".into())
+                        }),
+                ),
+                _ => Some(Err("unknown protocol record kind".into())),
+            }
+        })
+        .collect()
 }
 
 impl RunBundle {
@@ -158,6 +197,14 @@ impl RunBundle {
         )
     }
 
+    /// The target's registered message records of a completed capture. Host
+    /// command records contain no payload and are not target observations.
+    pub fn protocol_messages(&self, repetition: &RepetitionResult) -> Result<Vec<ProtocolMessage>> {
+        let text =
+            fs::read_to_string(self.repetition_directory(repetition).join("protocol.jsonl"))?;
+        protocol_messages(&text)
+    }
+
     /// The typed fixture record `R` a repetition's fixtures wrote, labelled
     /// `label` for a kind a repetition holds several of; `None` when the
     /// fixture recorded none.
@@ -239,5 +286,25 @@ impl RunBundle {
     /// finishing its bundle.
     pub fn abandoned(&self) -> bool {
         self.manifest.state == RunState::Running && !self.runner_alive()
+    }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+    #[test]
+    fn protocol_reader_distinguishes_target_observations_and_rejects_truncation() {
+        let text = concat!(
+            "{\"record\":\"host-command\",\"command\":{\"path\":\"wifi/station/start\"}}\n",
+            "{\"record\":\"target-event\",\"message\":{\"boot_id\":7,\"message_sequence\":2,\"session_id\":0,\"request_id\":1,\"key\":\"key\",\"path\":\"lower-mac/prepared\",\"body\":{\"ampdu\":false}}}\n"
+        );
+        let messages = protocol_messages(text).expect("public target records");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].boot_id, 7);
+        assert_eq!(messages[0].path, "lower-mac/prepared");
+        let error = protocol_messages("{\"secret-passphrase\"")
+            .expect_err("truncation is not empty evidence");
+        assert!(!error.to_string().contains("secret-passphrase"));
+        assert!(protocol_messages("{\"record\":\"target-event\"}\n").is_err());
     }
 }

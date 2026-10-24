@@ -258,19 +258,37 @@ and `credentials::passphrase`. The passphrase must be 8–63 printable ASCII
 bytes. **Keys are write-only:** the key is sent in the SSH script on stdin,
 then in a quoted heredoc to `uci batch` on stdin. Neither the local SSH
 command nor the remote UCI command receives the key in argv. Shell tracing
-is disabled and both output streams of the mutation stay on the router;
-the batch must succeed with empty diagnostics, since UCI batch mode does not
-propagate individual command failures. Raw remote errors are replaced by a
-secret-free W4 failure. The profile,
+is disabled. The batch must succeed with empty diagnostics, since UCI batch
+mode does not propagate individual command failures; diagnostics are forwarded
+to stderr on failure. W4 records each router command, exit code or terminating
+signal, stderr and transport/read error through `ssh::CommandLog`. The run's
+generated SSID/passphrase, SSH target, AP interface and station MAC are redacted
+before recording. Configuration stdout is never logged. The profile,
 quoted key, script, generated credentials and random-source buffers are
 zeroized when dropped. Configuration reads admit the security/rekey options
 above and continue to exclude every key option; the key is never read back.
 
 `w4::deauthenticate` takes the selected AP interface and a typed `Mac` for
-the station. It sends `hostapd_cli -i <interface> deauthenticate <station>`
-through the stdin script and requires an exact `OK` reply on the router.
-Replies, errors and the full MAC are kept out of evidence. Callers hold
+the station. It calls the router's own hostapd ubus object
+(`ubus call hostapd.<interface> del_client` with the station address, reason 2,
+`deauth` and `ban_time` 0) through the stdin script; OpenWrt ships no
+`hostapd_cli`. A nonzero exit is an error with its status and stderr, and both
+also use the same redacted command log. Callers hold
 router and exclusive air ownership for the complete run.
+
+`w4::refresh_neighbor` checks native `ip` availability, then reads only the
+station's neighbor entry on the isolated bridge. An absent entry is already
+the required state and is recorded without deletion. A present entry is
+deleted, then read again: even a nonzero deletion status requires an observed
+absence before success. A missing/unusable command or retained entry stops
+the run with command diagnostics. The ongoing measured ping supplies the
+next broadcast ARP; only a decoded request under the new GTK and its station
+reply correlated to protected air frames satisfy gate c.
+
+Streaming router observers retain stderr and completion status on normal
+finish and early drop. Diagnostics are bounded to 128 KiB; overflow/read or
+encoding errors explicitly invalidate the observation and retain the captured
+prefix. No observer silently discards its diagnostics.
 
 ## Stand notes
 

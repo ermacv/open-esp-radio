@@ -1,0 +1,30 @@
+[package]
+name = "oer-hil-family-wifi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Wi-Fi station HIL workloads and independently recomputed acceptance"
+
+[dependencies]
+oer-hil-runs = { path = "../runs" }
+oer-hil-family-lower-mac = { path = "../family-lower-mac" }
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-hil-model = { path = "../model" }
+oer-hil-scenario = { path = "../scenario" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["wifi", "network", "lower-mac"] }
+oer-hil-link = { path = "../link" }
+oer-hil-lab = { path = "../lab" }
+oer-lab-router = { path = "../../lab/router" }
+oer-os-durable = { path = "../../os/durable" }
+oer-os-process = { path = "../../os/process" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+toml = "1.1"
+
+[lints]
+workspace = true

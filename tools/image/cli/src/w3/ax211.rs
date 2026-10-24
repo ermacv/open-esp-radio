@@ -19,7 +19,7 @@ use oer_lab_router::{
     ssh::{Remote, Ssh},
     w3::{
         self, Evidence, Ping, Station,
-        stream::{Capture, Departure},
+        stream::{Capture, Departure, DepartureOutcome},
     },
 };
 use oer_os_process::{self as process, owned::Child};
@@ -460,12 +460,12 @@ fn workload(
         disconnect_event: false,
         after: joined,
     });
-    let capture = Capture::start(ssh, interface, lease.address)?;
+    let capture = Capture::start(ssh, interface, lease.address, 100)?;
     report.phase = "ping";
     eprintln!("fw: AX211 lease observed; exchanging 100 echoes each way at 1 s");
     session.send("ping")?;
     let (station_ping, router_ping) = std::thread::scope(|scope| -> Result<_> {
-        let reverse = scope.spawn(|| w3::ping(ssh, lease.address));
+        let reverse = scope.spawn(|| w3::ping(ssh, lease.address, 100));
         let station = session.event(Duration::from_secs(120));
         let router = reverse
             .join()
@@ -511,7 +511,7 @@ fn workload(
         }
         process::sleep(Duration::from_millis(250))?;
     }
-    e.disconnect_event = departure.finish()?;
+    e.disconnect_event = departure.finish()? == DepartureOutcome::Unique;
     report.checks = checks(e, lease, station_ping);
     report.phase = "complete";
     Ok(())

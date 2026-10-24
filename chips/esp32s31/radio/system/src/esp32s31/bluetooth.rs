@@ -13,12 +13,22 @@ use oer_esp32s31_phy::{
     concurrent::{PhyClientAccess, phy_ready},
 };
 use oer_esp32s31_radio_client::{
-    DomainHealth, Failed, Failure, LpClock, PhyPreparation, RcSlow,
+    DomainHealth, Failed, Failure, LpClock, PhyPreparation, Poison, PoisonCause, RcSlow,
+    RequestKind,
     bluetooth::{BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission},
 };
 
 use super::Esp32s31Radio;
-use crate::{Exit, PhyDomain};
+use crate::{Exit, Fault, PhyDomain};
+
+/// Bluetooth's request `request` poisoned the domain with `cause`.
+const fn bluetooth_poison(request: RequestKind, cause: PoisonCause) -> Poison {
+    Poison::request(
+        oer_esp32s31_hal::domain::RadioClient::Bluetooth,
+        request,
+        cause,
+    )
+}
 
 /// A Bluetooth installation attached to the existing shared backend.
 /// Wi-Fi-only compositions do not contain this state or link its code.
@@ -120,19 +130,23 @@ where
         phy: PhyPreparation,
         _lp: &LpClock<RcSlow>,
     ) -> Result<BluetoothJoined, Failed<BluetoothJoin>> {
-        let failed = || Failed {
+        let failed = |cause| Failed {
             returned: join,
-            cause: Failure::Poisoned,
+            cause: Failure::Poisoned(bluetooth_poison(RequestKind::Join, cause)),
         };
         crate::boundary::shared(shared.track_tick())
             .await
-            .map_err(|_| failed())?;
-        let cold = self.cold.take().ok_or_else(failed)?;
+            .map_err(|Fault(cause)| failed(cause))?;
+        let cold = self
+            .cold
+            .take()
+            .ok_or_else(|| failed(PoisonCause::Custody))?;
         let (powered, power) = match cold.power_up(&mut shared.radio, &shared.clocks) {
             Ok(owners) => owners,
             Err(error) => {
+                let cause = PoisonCause::CommonPower(error.error());
                 self.cold = Some(error.into_owner());
-                return Err(failed());
+                return Err(failed(cause));
             }
         };
         self.power = Some(power);
@@ -140,7 +154,7 @@ where
             Ok(clocked) => clocked,
             Err(error) => {
                 self.powered = Some(error.into_owner());
-                return Err(failed());
+                return Err(failed(PoisonCause::Controller));
             }
         };
         // All later errors retain common power and every controller owner.
@@ -148,23 +162,31 @@ where
             Ok(installation) => Installation(installation),
             Err(error) => {
                 self.clocked = error.returned;
-                return Err(failed());
+                return Err(failed(PoisonCause::Controller));
             }
         };
         self.installation = Some(installation);
-        let coex = self.coex.take().ok_or_else(failed)?;
+        let coex = self
+            .coex
+            .take()
+            .ok_or_else(|| failed(PoisonCause::Custody))?;
         let Coex::Absent(absent) = coex else {
             self.coex = Some(coex);
-            return Err(failed());
+            return Err(failed(PoisonCause::Custody));
         };
         let (present, _) = shared.radio.enter_coex(absent);
         self.coex = Some(Coex::Present(present));
-        let task = self.controller.task_owner().ok_or_else(failed)?;
-        let ready = phy_ready(&mut shared.radio).map_err(|_| failed())?;
+        let task = self
+            .controller
+            .task_owner()
+            .ok_or_else(|| failed(PoisonCause::Custody))?;
+        let ready =
+            phy_ready(&mut shared.radio).map_err(|error| failed(PoisonCause::Domain(error)))?;
         let PhyClientAccess::Available(ready) = ready.client::<BluetoothPhyMembership>() else {
-            return Err(failed());
+            return Err(failed(PoisonCause::Custody));
         };
-        let joined = join_bluetooth(ready, task, &shared.timer).map_err(|_| failed())?;
+        let joined = join_bluetooth(ready, task, &shared.timer)
+            .map_err(|_| failed(PoisonCause::Controller))?;
         self.membership = Some(joined.membership);
         self.configuration = Some(join);
         Ok(BluetoothJoined { installation, phy })
@@ -175,22 +197,26 @@ where
         shared: &mut Esp32s31Radio<C, T, O>,
         installation: Installation,
     ) -> Result<Installation, Failed<Installation>> {
-        let failed = || Failed {
+        let failed = |cause| Failed {
             returned: installation,
-            cause: Failure::Poisoned,
+            cause: Failure::Poisoned(bluetooth_poison(RequestKind::Track, cause)),
         };
         if self.installation != Some(installation) {
-            return Err(failed());
+            return Err(failed(PoisonCause::Custody));
         }
         // Re-evaluate due tracking, including work already serviced for Wi-Fi.
         crate::boundary::shared(shared.track_tick())
             .await
-            .map_err(|_| failed())?;
-        let member = self.membership.as_ref().ok_or_else(failed)?;
-        let ready = bluetooth_rf_ready(&mut shared.radio, member).map_err(|_| failed())?;
+            .map_err(|Fault(cause)| failed(cause))?;
+        let member = self
+            .membership
+            .as_ref()
+            .ok_or_else(|| failed(PoisonCause::Custody))?;
+        let ready = bluetooth_rf_ready(&mut shared.radio, member)
+            .map_err(|error| failed(PoisonCause::Domain(error)))?;
         self.controller
             .initialize_phy(ready)
-            .map_err(|_| failed())?;
+            .map_err(|_| failed(PoisonCause::Controller))?;
         Ok(installation)
     }
 
@@ -199,54 +225,54 @@ where
         shared: &mut Esp32s31Radio<C, T, O>,
         installation: Installation,
     ) -> (BluetoothLeft, Exit) {
-        let poisoned = || {
+        let poisoned = |cause| {
             (
                 BluetoothLeft { stopped: false },
                 Exit {
                     last: false,
-                    health: DomainHealth::Poisoned,
+                    health: DomainHealth::Poisoned(bluetooth_poison(RequestKind::Leave, cause)),
                 },
             )
         };
         if self.installation != Some(installation) || !self.controller.is_retired(installation.0) {
-            return poisoned();
+            return poisoned(PoisonCause::Custody);
         }
-        if crate::boundary::shared(shared.track_tick()).await.is_err() {
-            return poisoned();
+        if let Err(Fault(cause)) = crate::boundary::shared(shared.track_tick()).await {
+            return poisoned(cause);
         }
         let Some(task) = self.controller.task_owner() else {
-            return poisoned();
+            return poisoned(PoisonCause::Custody);
         };
         let Some(member) = self.membership.take() else {
-            return poisoned();
+            return poisoned(PoisonCause::Custody);
         };
         let last = match leave_bluetooth(&mut shared.radio, task, member) {
             Ok(last) => last,
             Err(error) => {
                 self.membership = Some(error.into_membership());
-                return poisoned();
+                return poisoned(PoisonCause::Controller);
             }
         };
         let clocked = match self.controller.reset(&mut shared.radio) {
             Ok(clocked) => clocked,
-            Err(_) => return poisoned(),
+            Err(_) => return poisoned(PoisonCause::Controller),
         };
         let powered = match clocked.disable_clocks(&mut shared.radio) {
             Ok(powered) => powered,
             Err(error) => {
                 self.clocked = Some(error.into_owner());
-                return poisoned();
+                return poisoned(PoisonCause::Controller);
             }
         };
         let Some(Coex::Present(present)) = self.coex.take() else {
             self.powered = Some(powered);
-            return poisoned();
+            return poisoned(PoisonCause::Custody);
         };
         let (absent, _) = shared.radio.leave_coex(present);
         let Some(power) = self.power.take() else {
             self.coex = Some(Coex::Absent(absent));
             self.powered = Some(powered);
-            return poisoned();
+            return poisoned(PoisonCause::Custody);
         };
         match powered.power_down(&mut shared.radio, power, &absent) {
             Ok(cold) => {
@@ -263,11 +289,12 @@ where
                 )
             }
             Err(error) => {
+                let cause = PoisonCause::CommonPower(error.error());
                 let (powered, power) = error.into_owner();
                 self.powered = Some(powered);
                 self.power = Some(power);
                 self.coex = Some(Coex::Absent(absent));
-                poisoned()
+                poisoned(cause)
             }
         }
     }
