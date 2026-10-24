@@ -255,3 +255,40 @@ fn a_waived_breach_passes_and_is_reported_with_the_reason() {
         "{report}"
     );
 }
+
+#[test]
+fn an_exemption_waives_only_its_named_violation() {
+    // A waker exemption does not lift the cached-memory rule.
+    let (stacks, _, _) = fixture(
+        Location::Sram,
+        Location::Psram,
+        1,
+        Class::Exempt(Violation::WakerCall),
+    );
+    let error = stacks.check(Required::Product).unwrap_err().to_string();
+    assert!(error.contains("from cached memory"), "{error}");
+    // Nor does it lift a task poll.
+    let (mut stacks, shared, _) = fixture(
+        Location::Sram,
+        Location::Sram,
+        1,
+        Class::Exempt(Violation::WakerCall),
+    );
+    stacks.hardware = vec![Finding {
+        subject: "hart 0 P1 (hardware)".into(),
+        function: shared,
+        site: shared,
+        breach: Breach::TaskPoll,
+    }];
+    let error = stacks.check(Required::Product).unwrap_err().to_string();
+    assert!(error.contains("polls tasks"), "{error}");
+    // An executor-level exemption does not lift the cached-memory rule.
+    let (stacks, _, _) = fixture(
+        Location::Sram,
+        Location::Psram,
+        2,
+        Class::Exempt(Violation::ExecutorLevel),
+    );
+    let error = stacks.check(Required::Product).unwrap_err().to_string();
+    assert!(error.contains("from cached memory"), "{error}");
+}
