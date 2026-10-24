@@ -991,7 +991,7 @@ fn failure_name(cause: Failure) -> &'static str {
     match cause {
         Failure::Refused => "Refused",
         Failure::ClientFailed => "ClientFailed",
-        Failure::Poisoned => "Poisoned",
+        Failure::Poisoned(_) => "Poisoned",
     }
 }
 

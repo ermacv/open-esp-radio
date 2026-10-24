@@ -1,6 +1,6 @@
 //! Role-neutral ownership after the one-way cold-MAC/runtime transition.
 
-use crate::startup::WifiStartReport;
+use crate::{port::WifiRetuneError, startup::WifiStartReport};
 
 use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiClocksOn},
@@ -107,12 +107,6 @@ pub struct WifiReleaseFailure<W> {
 pub struct WifiRetuneFailure<W> {
     pub cause: WifiRetuneError,
     stopped: WifiStopped<W>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiRetuneError {
-    NotStopped(oer_esp32s31_hal::owner::maintenance::Error),
-    Radio(oer_esp32s31_radio_client::Failure),
 }
 
 impl<W> WifiRetuneFailure<W> {

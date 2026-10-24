@@ -400,7 +400,7 @@ async fn run(
                 &Note::w0_leave(
                     match released.domain {
                         DomainHealth::Healthy => "Healthy",
-                        DomainHealth::Poisoned => "Poisoned",
+                        DomainHealth::Poisoned(_) => "Poisoned",
                     },
                     cold,
                 ),
@@ -460,7 +460,7 @@ fn failure_name(cause: Failure) -> &'static str {
     match cause {
         Failure::Refused => "Refused",
         Failure::ClientFailed => "ClientFailed",
-        Failure::Poisoned => "Poisoned",
+        Failure::Poisoned(_) => "Poisoned",
     }
 }
 

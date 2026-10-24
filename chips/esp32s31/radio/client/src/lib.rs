@@ -22,7 +22,9 @@
 //!   [`Member<K, Tracked>`](Member), which alone permits RF use; `leave`
 //!   takes either state and never refuses. A failed request hands back what
 //!   it lent; its [`Failure`] says what the failure touched (below), and
-//!   after [`Failure::Poisoned`] every later answer returns what was posted.
+//!   after [`Failure::Poisoned`] every later answer returns what was posted
+//!   with the same [`Poison`]: the first failure, the operation that saw it
+//!   (a request or the periodic tracking tick) and its step.
 //! - **Wi-Fi.** The actor brings the Wi-Fi MAC up inside `track`, after the
 //!   initial tracking, the RX enable and the initial channel, in the order of
 //!   the driver's cold start: the driver lends its clocked Wi-Fi client
@@ -35,6 +37,7 @@
 pub mod bluetooth;
 mod lp_clock;
 mod member;
+mod poison;
 pub mod wifi;
 
 use core::{
@@ -47,6 +50,10 @@ use core::{
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
 pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
 pub use oer_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
+pub use poison::{
+    CalibrationTrackingFailure, CalibrationTrackingFault, PhyFault, Poison, PoisonCause,
+    PoisonOrigin, RegistrationFailure, RegistrationFault, RequestKind,
+};
 
 /// The provisional bound of one poll of the actor future
 /// (docs/architecture.md, "Radio system").
@@ -131,7 +138,7 @@ pub enum PhyPreparation {
 /// | --- | --- |
 /// | [`Refused`](Self::Refused) | Nothing: refused before any hardware write, a clock planner's refusal before its first write included. |
 /// | [`ClientFailed`](Self::ClientFailed) | Only the client's own hardware (its MAC partition, its clocks, its coexistence participation), and the rollback restored it. The shared domain (PHY, shared radio registers, common power) was not touched, or not left in an intermediate state. |
-/// | [`Poisoned`](Self::Poisoned) | Shared state was written before the failure, or the rollback failed: the domain is poisoned until reset. |
+/// | [`Poisoned`](Self::Poisoned) | Shared state was written before the failure, or the rollback failed: the domain is poisoned until reset. The [`Poison`] names the first failure, which may precede this request. |
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Failure {
     /// Refused before any hardware write; nothing changed.
@@ -140,8 +147,8 @@ pub enum Failure {
     /// domain is healthy.
     ClientFailed,
     /// Shared hardware work failed, or had failed before: the PHY domain is
-    /// poisoned until reset.
-    Poisoned,
+    /// poisoned until reset by the first failure it names.
+    Poisoned(Poison),
 }
 
 /// A failed request and what it hands back.
@@ -184,7 +191,8 @@ pub type RetuneAnswer<K> =
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainHealth {
     Healthy,
-    Poisoned,
+    /// Poisoned by the first failure it names.
+    Poisoned(Poison),
 }
 
 /// A client left; `leave` never refuses.

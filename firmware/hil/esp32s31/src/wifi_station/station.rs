@@ -500,10 +500,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             },
             Poisoned { owner, fault, custody } => {
                 let owner = owner.read();
-                super::end(attempt, StationServiceEnd::Poisoned {
-                    fault: super::report::service(fault.read()),
-                    disable: super::report::backend(owner.cause()),
-                });
+                super::end(attempt, StationServiceEnd::Poisoned(super::report::service(fault.read())));
                 drop(custody);
                 rp::Ended::fail_stop(owner.fail_stop(), ())
             },

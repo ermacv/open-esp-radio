@@ -26,6 +26,9 @@
 //!
 //! A hardware failure poisons the domain: the request that saw it and every
 //! later one are answered [`Failure::Poisoned`], handing back what they lent.
+//! The actor keeps the first [`Poison`]: where it happened (a request, the
+//! preparation, the RF close or the periodic tracking tick) and its step, so
+//! a request refused by an earlier failed tick names that tick.
 //! The primary client is `K`; Wi-Fi-only compositions contain no extra inbox.
 //! The `bluetooth` feature adds its cell to the same run future and shared state.
 
@@ -34,14 +37,14 @@ use core::{convert::Infallible, future::poll_fn};
 use embassy_futures::select::{Either, select};
 use oer_esp32s31_radio_client::{
     ActorEnd, Answer, Client, ClientInbox, DomainHealth, Doorbell, Failed, Failure, Joined,
-    Leaving, Left, LpClock, LpSource, MemberMint, PhyPreparation, Request, RfEpoch, TrackedMember,
-    wifi::Wifi,
+    Leaving, Left, LpClock, LpSource, MemberMint, PhyPreparation, Poison, PoisonCause,
+    PoisonOrigin, Request, RfEpoch, TrackedMember, wifi::Wifi,
 };
 
 /// A hardware transaction failed after it started: the PHY domain is
-/// poisoned.
+/// poisoned by this cause.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Fault;
+pub struct Fault(pub PoisonCause);
 
 /// Why closing RF did not complete.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49,8 +52,8 @@ pub enum CloseFault {
     /// Nothing changed, or every issued transaction completed: RF stays open
     /// and the domain is healthy.
     Recoverable,
-    /// The domain is poisoned.
-    Poisoned,
+    /// The domain is poisoned by this cause.
+    Poisoned(PoisonCause),
 }
 
 /// Proof that the last member left the PHY domain: only the actor mints it,
@@ -186,8 +189,11 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     }
 
     async fn tick(&mut self) {
-        if self.backend.track_tick().await.is_err() {
-            self.core.poison();
+        if let Err(Fault(cause)) = self.backend.track_tick().await {
+            self.core.poison(Poison {
+                origin: PoisonOrigin::TrackingTick,
+                cause,
+            });
         }
     }
 
@@ -197,10 +203,10 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     {
         match request {
             Request::Join(join) => {
-                if self.core.is_poisoned() {
+                if let Some(poison) = self.core.poisoned() {
                     return Answer::Join(Err(Failed {
                         returned: Q::join_returned(join),
-                        cause: Failure::Poisoned,
+                        cause: Failure::Poisoned(poison),
                     }));
                 }
                 if !self.backend.admits(&join) {
@@ -211,11 +217,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 }
                 let phy = match boundary::shared(self.backend.prepare()).await {
                     Ok(phy) => phy,
-                    Err(Fault) => {
-                        self.core.poison();
+                    Err(Fault(cause)) => {
+                        let poison = self.core.poison(Poison {
+                            origin: PoisonOrigin::Prepare,
+                            cause,
+                        });
                         return Answer::Join(Err(Failed {
                             returned: Q::join_returned(join),
-                            cause: Failure::Poisoned,
+                            cause: Failure::Poisoned(poison),
                         }));
                     }
                 };
@@ -243,10 +252,10 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                 })
             }
             Request::Track(member, track) => {
-                if self.core.is_poisoned() {
+                if let Some(poison) = self.core.poisoned() {
                     return Answer::Track(Err(Failed {
                         returned: (member, Q::track_returned(track)),
-                        cause: Failure::Poisoned,
+                        cause: Failure::Poisoned(poison),
                     }));
                 }
                 Answer::Track(match self.backend.track(track).await {
@@ -261,16 +270,16 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                         self.core.failed(cause);
                         Err(Failed {
                             returned: (member, returned),
-                            cause,
+                            cause: self.core.failure(cause),
                         })
                     }
                 })
             }
             Request::Retune(member, retune) => {
-                if self.core.is_poisoned() {
+                if let Some(poison) = self.core.poisoned() {
                     return Answer::Retune(Err(Failed {
                         returned: (member, Q::retune_returned(retune)),
-                        cause: Failure::Poisoned,
+                        cause: Failure::Poisoned(poison),
                     }));
                 }
                 Answer::Retune(match self.backend.retune(retune).await {
@@ -279,7 +288,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                         self.core.failed(cause);
                         Err(Failed {
                             returned: (member, returned),
-                            cause,
+                            cause: self.core.failure(cause),
                         })
                     }
                 })

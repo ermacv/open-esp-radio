@@ -219,9 +219,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
         transmitter
     }
     pub(super) fn deadline(&mut self, held: &Held<'_, 'id, Id, D, B>) -> Instant {
+        // The clock sample waits for a start in flight; its own bound wakes
+        // the driver meanwhile.
+        let clock = if starting(held) {
+            Instant::from_micros(u64::MAX)
+        } else {
+            self.clock_deadline
+        };
         let mut deadline = core_views::deadline::<Id, D, B>(self.core.view())
-            .unwrap_or(self.clock_deadline)
-            .min(self.clock_deadline);
+            .unwrap_or(clock)
+            .min(clock);
         if let Some(device) = held.storage.device.borrow().next_deadline() {
             deadline = deadline.min(device);
         }
@@ -524,7 +531,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize> Driver<'id, Id, D, B> 
                 .set(held.rx_out.get().checked_sub(1).ok_or(Fault::Capacity)?);
         }
         let now = device.timer().now();
-        if now >= self.clock_deadline {
+        // A start in flight may lend the device's registers to the radio
+        // actor (a retune): the clock is sampled once the start ended.
+        if !starting(held) && now >= self.clock_deadline {
             device.radio_now().map_err(|_| Fault::Clock)?;
             self.clock_deadline = now.saturating_add(Duration::from_secs(60));
         }
@@ -1227,4 +1236,9 @@ impl<T> TransposeOption<T> for Option<Option<T>> {
             Some(None) => None,
         }
     }
+}
+
+/// The port asked for the radio and the device has not started it yet.
+fn starting<Id: SlotIdentity, D: Device<B>, const B: usize>(held: &Held<'_, '_, Id, D, B>) -> bool {
+    held.want_enabled.get() && !held.enabled.get()
 }

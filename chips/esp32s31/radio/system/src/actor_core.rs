@@ -2,7 +2,8 @@
 use super::*;
 #[derive(Debug, Default)]
 struct State {
-    poisoned: bool,
+    /// The first failure that poisoned the domain.
+    poisoned: Option<Poison>,
     members: u32,
     tracked: u32,
     epoch: Option<RfEpoch>,
@@ -29,16 +30,17 @@ impl ActorCore {
         }
     }
     #[inline(always)]
-    pub(super) fn is_poisoned(&self) -> bool {
+    pub(super) fn poisoned(&self) -> Option<Poison> {
         self.state.poisoned
     }
     #[inline(always)]
     pub(super) fn tracking_active(&self) -> bool {
-        !self.state.poisoned && self.state.tracked > 0
+        self.state.poisoned.is_none() && self.state.tracked > 0
     }
+    /// Keep `poison` unless an earlier one is kept, and return the kept one.
     #[inline(always)]
-    pub(super) fn poison(&mut self) {
-        self.state.poisoned = true;
+    pub(super) fn poison(&mut self, poison: Poison) -> Poison {
+        *self.state.poisoned.get_or_insert(poison)
     }
     #[inline(always)]
     pub(super) fn joined(&mut self) {
@@ -50,32 +52,27 @@ impl ActorCore {
     }
     #[inline(always)]
     pub(super) fn failed(&mut self, cause: Failure) {
-        if cause == Failure::Poisoned {
-            self.poison();
+        if let Failure::Poisoned(poison) = cause {
+            self.poison(poison);
         }
     }
+    /// The answer's cause: the kept poison once the domain is poisoned.
     #[inline(always)]
     pub(super) fn failure(&self, cause: Failure) -> Failure {
-        if self.state.poisoned {
-            Failure::Poisoned
-        } else {
-            cause
-        }
+        self.state.poisoned.map_or(cause, Failure::Poisoned)
     }
     #[inline(always)]
     pub(super) fn health(&self) -> DomainHealth {
-        if self.state.poisoned {
-            DomainHealth::Poisoned
-        } else {
-            DomainHealth::Healthy
-        }
+        self.state
+            .poisoned
+            .map_or(DomainHealth::Healthy, DomainHealth::Poisoned)
     }
     #[inline(always)]
     pub(super) fn failed_enter(&mut self, cause: Failure) -> Action {
         // Both joins admit and prepare from a healthy core before entering;
         // no other actor operation runs during that entered transaction.
-        if cause == Failure::Poisoned {
-            self.poison();
+        if let Failure::Poisoned(poison) = cause {
+            self.poison(poison);
             Action::Continue
         } else if self.state.members == 0 {
             Action::CloseRf
@@ -92,10 +89,10 @@ impl ActorCore {
     #[inline(always)]
     pub(super) fn exited(&mut self, exit: Exit) -> Action {
         self.state.members = self.state.members.saturating_sub(1);
-        if exit.health == DomainHealth::Poisoned {
-            self.poison();
+        if let DomainHealth::Poisoned(poison) = exit.health {
+            self.poison(poison);
             Action::Continue
-        } else if exit.last && !self.state.poisoned {
+        } else if exit.last && self.state.poisoned.is_none() {
             Action::CloseRf
         } else {
             Action::Continue
@@ -115,8 +112,11 @@ impl ActorCore {
     }
     #[inline(always)]
     pub(super) fn closed(&mut self, result: Result<(), CloseFault>) {
-        if matches!(result, Err(CloseFault::Poisoned)) {
-            self.state.poisoned = true;
+        if let Err(CloseFault::Poisoned(cause)) = result {
+            self.poison(Poison {
+                origin: PoisonOrigin::CloseRf,
+                cause,
+            });
         }
     }
 }
