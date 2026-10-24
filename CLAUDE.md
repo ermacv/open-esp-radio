@@ -36,8 +36,9 @@ system these rules serve.
   generate`), never written as a local mask or shift. Code preserves reserved
   and unknown bits. Generated register code has no `unsafe`: volatile access
   lives in `portable/mmio` alone (svd2rust-rendered PAC domains keep theirs
-  until they move). `unsafe` stays in `portable/mmio`, those PAC domains, the
-  placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
+  until they move). `unsafe` stays in `portable/mmio`, the PAC (svd2rust-rendered
+  domains and hand-written roots), probe images, the placement constructor and
+  the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
 - **Air formats** use the `oer-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
