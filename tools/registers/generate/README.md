@@ -543,7 +543,8 @@ own copy:
   P::steal() };` bindings count; an array accessor spans its `[(); N]`
   elements at its `.add(S * n)` stride, and a byte register counts as the
   word that holds it. An entry with `words = N` reviews a run of `N` words
-  four bytes apart from its `address`.
+  four bytes apart from its `address`. The vendor SVD's `soc` blocks are
+  not in the check: no code claims them while esp-hal owns the platform.
 
 `ChipSources` resolves the files a chip's publication manifest names
 without validating them. The binding index format is
@@ -556,6 +557,11 @@ adds the raw PAC and its API facade, and a publication has a PAC API policy
 (`api`) exactly when it has that table. A publication without one, a chip's
 `platform.toml`, describes registers the host reads through JTAG and that
 no firmware reaches: its binding index names no crate.
+
+A chip publication with a PAC may name `[soc]`: `svd` (the vendor SVD,
+unmodified), `overlay` (the chip's strictness overlay) and `report` (the
+generated report). The vendor SVD renders into the PAC API's `soc` module;
+see the [register model library](../model/README.md#the-vendor-svd).
 
 ## Pinned header function signatures
 

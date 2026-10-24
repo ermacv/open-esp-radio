@@ -68,6 +68,42 @@ remain algorithms in PAC code and do not assert a hardware reset. Sourced
 field declarations or changing their bit states. `CAPTURE` contains only
 read-safe bytes with an explicit comparison mask, in physical address order.
 
+## The vendor SVD
+
+`render_soc` renders every peripheral of a chip's vendor SVD as a typed
+register block in the PAC API's `soc` module, after one conservative pass;
+the vendor SVD declares access but no read actions, almost no
+modified-write values and no reserved bits. A register
+
+- keeps its typed field API (reads and read-modify-writes) when every bit is
+  a declared field or a reserved bit, no field is write-only, and no name
+  marks it as a write trigger (`_CLR`, `_START`, `_UPDATE`, `_LOAD`, ...)
+  or a raw interrupt status (`_RAW`);
+- is only read when it has undeclared bits, a write-only field, a trigger
+  candidate, overlapping fields, vendor modified-write values, a write
+  constraint, a field without a snake-case name, or is a raw status;
+- is not rendered when a read may change it (a FIFO or data port by its
+  name), when it is not 32 bits wide, has no fields, shares a word with
+  another register, or when the curated model describes its word.
+
+`derivedFrom` peripherals take their base's registers. The chip's
+`model/strictness.toml` ([`StrictnessOverlay`]) states what the SVD lacks,
+per register (`access`, `reserved`, `read-side-effect`, `fifo`,
+`write-one-to-clear`, `raw-status-writable`) and per field (`access`,
+`kind = "plain" | "write-trigger"`, `values`), and lists the interrupt
+sources the SVD does not. Every entry names existing vendor geometry and
+cites `esp-idf:<path>:<line>` (at the overlay's `esp-idf` pin),
+`esp-hal:<path>:<line>` (at its `esp-hal` pin) or `trm:<section>`. The
+module holds the chip's `Interrupt` enum, one partition `SocPeripherals`
+and its `Claims`, which a PAC root claims at once, and a `const`
+assertion that no vendor block lists a word of another typed block. The
+generated `registers/published/soc.report.toml` lists every register the
+pass narrowed, with its reasons.
+
+A typed block with an interrupt source implements
+`oer_mmio::InterruptSource` on its interrupt side (or on the whole owner
+of a block without sides).
+
 ## Direct register model
 
 `oer-registers-model` owns the portable register publication formats:

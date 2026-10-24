@@ -161,7 +161,10 @@ moves; ownership, orchestration and wiring are rebuilt.
   PAC ([hardware memory](hardware-memory.md)). A bit is described, opaque (a
   use observed, meaning unknown), reserved or absent; only described and
   opaque bits are fields. Pointer fields take typed references; placement is
-  proved by the linker; each block's handover protocol is its HAL engine.
+  proved by the linker; each block's handover protocol is its HAL engine. Every
+  peripheral of the vendor SVD the model does not describe is a typed block
+  of the PAC's `soc` module: read-only where the SVD leaves semantics open,
+  made stricter by the chip's sourced overlay (`model/strictness.toml`).
 - **Radio access.** The S31 Wi-Fi handoff returns one `RadioAccess` by value;
   the driver owns it through the runtime epoch and lends it with `&mut`. No
   shared register arena or dynamic borrow guard.

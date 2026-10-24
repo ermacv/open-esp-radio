@@ -27,6 +27,9 @@ reaches.
 | `evidence/` | Source identities of the reviewed facts |
 | `published/radio.svd`, `published/radio.bindings.toml` | Generated SVD and binding index |
 | `publication/registers.toml` | Source-only publication composition |
+| `upstream/esp32c5.svd` | The vendor SVD, unmodified (esp-pacs `a1f6cf68e` base SVD, Apache-2.0); every peripheral the curated model does not describe renders into the PAC's `soc` module |
+| `model/strictness.toml` | The strictness overlay over the vendor SVD: access, reserved bits, write triggers, write-one-to-clear, FIFO ports and the interrupt sources the SVD lacks, each citing its ESP-IDF header line |
+| `published/soc.report.toml` | Generated report of every vendor register the conservative pass narrowed, with its reasons |
 | `model/platform-device.toml`, `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause word the host reads through JTAG after a power cycle, from the same `peripherals/lp-clkrst-reset-cause.toml` fragment the firmware PAC renders; SVD and `published/platform.bindings.toml` only |
 | `model/peripherals/{lpperi-rng,lp-clkrst-reset-cause,usb-serial-jtag}.toml` | Platform blocks rendered as typed register blocks (`typed-peripherals` in `policy/api.toml`): the random number generator's clock gate, configuration and output, the HP core's reset cause, and the USB Serial/JTAG console's data FIFO, interrupts and pads. Each partition is claimed by its own platform handoff |
 

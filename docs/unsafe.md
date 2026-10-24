@@ -60,7 +60,10 @@ an address in the library crate's `generated.rs`, likewise forbidding unsafe
 code; a chip that places one names its address and claims it like its own
 typed blocks. On the ESP32-C5 every exposed peripheral is typed and
 the chip has no `pac-raw`; the policy's `unexposed-peripherals` (observation
-views kept for bit-use coverage) have no owner. The unsafe code under a
+views kept for bit-use coverage) have no owner. Every other peripheral of the
+chip's vendor SVD is a typed block of the PAC's `soc` module, with the same
+renderer and no `unsafe`; its one partition's `Claims` has no caller while
+esp-hal owns the platform. The unsafe code under a
 typed block is `oer-mmio` (`portable/mmio`) alone:
 
 - `oer_mmio::assume_owned`, the promise that the claimed blocks' words are
