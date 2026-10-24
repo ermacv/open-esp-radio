@@ -27,12 +27,6 @@ The private source modules follow the resources and operations they own:
   reason), consumes `USB_DEVICE` and returns the console's owner, from which
   the HAL's `usb_serial_jtag::console_parts` gives the endpoint, the
   interrupt and the pads.
-- `oer-espressif-esp-hal-irq`: the ESP32-S31 interrupt matrix the image's interrupt
-  table (`oer-interrupt-table`) drives. The platform runtime's handoff adopts the
-  image's table, silences each hart's sources when it installs the hart's
-  interrupt stack and verifies them before it enables interrupts; an owner
-  routes its source with `enable` and its token and silences it with
-  `disable`. Compile-time assertions keep the table's 12-byte entry layout.
 
 Performance counters retain the CACHE witness. Cache sync and writeback stay
 with HAL, which serializes them with its DMA and executable-PSRAM cache

@@ -104,7 +104,6 @@ esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt",
 critical-section = "1.2.0"
 oer-espressif-esp-hal-soc.workspace = true
 oer-espressif-executor = { workspace = true, features = ["esp32s31"] }
-oer-espressif-esp-hal-irq.workspace = true
 oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
 oer-hil-agent = { path = "../../../portable/hil-agent", optional = true, default-features = false }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }

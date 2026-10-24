@@ -134,9 +134,8 @@ table when its length is exact: the index's bounds check on the path to the
 dispatch (`bltu limit, index` or `bgeu index, limit` against a constant) or
 mask (`andi`), or the size of a data object the base starts in a section
 neither writable nor executable, against which the language bounds-checks the
-index (a table in code loaded into RAM, such as esp-hal's
-`__EXTERNAL_INTERRUPTS` handler table, is rewritten at run time, so its file
-bytes are no constant); a zero entry is an empty
+index (a table in code loaded into RAM may be rewritten at run time, so its
+file bytes are no constant); a zero entry is an empty
 `Option<fn>` slot, never a target, since a Rust function pointer is not
 null. Entries of a jump inside its own
 function are already in the sweep. A table of unknown length, such as a
@@ -172,9 +171,31 @@ task stack (PSRAM). Each memory access must address the entry's frame below
 the lower of the two, which the entry may learn only from an unsigned
 comparison of both (a register swap through three `xor`s keeps the values
 apart); an access before that, an unknown transfer or different handlers on
-different paths fail. `TrapEntry::frame` is the deepest `sp` below the
-interrupt stack's position at the handler call: what every nesting level adds
+different paths fail. Before an entry sets `mstatus.MIE` (admits nesting) its
+frame must hold `mepc`, `mcause` and `mstatus` as the trap left them; it
+changes `tcontrol` only once the frame holds it, and it calls its handler
+with the FPU off (`mstatus.FS` cleared). No trap saves the floating-point
+state, so any floating-point instruction fails, and so does a write of a CSR
+other than `mscratch`, `mstatus`, `mepc`, `mcause`, `tcontrol` and the CLIC
+threshold. `TrapEntry::frame` is the deepest `sp` below the interrupt stack's
+position on any path up to the handler call: what every nesting level adds
 beside its handler's bound.
+
+`interrupt_entry` checks an interrupt's entry the same way and then its exit,
+from the handler's return to `mret` on every path. The handler leaves the
+frame, `mscratch` and the callee-saved registers as it found them; every
+other register and `mepc`, `mcause`, `mstatus`, `tcontrol` and the CLIC
+threshold are unknown. The exit must clear `mstatus.MIE` before it restores
+`mepc`, `mcause` (whose `mpil` is the level `mret` returns to), `tcontrol`
+(whose MPTE is the trigger enable `mret` returns to) or the threshold, never
+set it again, keep `sp` within `TrapEntry::frame`, and reach `mret` with
+every register, `sp` and `mscratch` at their values at the trap and those
+CSRs restored from the frame; a value the frame holds is followed through
+its loads, and a flag it holds decides a branch. A lost or stale
+`mepc`/`mcause`/`tcontrol`, a wrong `sp`, an early or repeated `MIE`, a
+deeper exit, the FPU left on or touched, another CSR written or a register
+not restored fails the check (`trap_exit_tests.rs` checks the staged
+runtime's own `vectors.s`).
 
 Facts outside the machine code close indirect sites through
 `Analysis::bound_with` and its `Resolutions`, which apply only where the

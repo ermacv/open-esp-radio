@@ -832,7 +832,7 @@ fn resolved_through(fact: Fact) -> (tempfile::TempDir, StackPolicy, Image) {
 
 #[test]
 fn a_bound_is_proven_only_without_an_assumption() {
-    let (_directory, policy, image) = resolved_through(Fact::InterruptTable);
+    let (_directory, policy, image) = resolved_through(Fact::WakerVtables);
     let mut audit = audit_of(&policy, &image);
     audit.size_source = Some(crate::linker::task_stack::SizeSource::Bound);
     let report = audit.render();
@@ -872,7 +872,6 @@ fn the_site_report_lists_each_taken_site_with_its_fact_and_assumption() {
         ),
         // The waker vtable census is complete: its sites are proven.
         (Fact::WakerVtables, sites::Kind::WakerVtables, vec![]),
-        (Fact::InterruptTable, sites::Kind::InterruptTable, vec![]),
     ] {
         let (_directory, policy, image) = resolved_through(fact);
         let audit = audit_of(&policy, &image);

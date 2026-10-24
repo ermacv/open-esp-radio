@@ -36,7 +36,6 @@ embedded-io-async = "0.7.0"
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-executor = { workspace = true, features = ["esp32c5"] }
-oer-espressif-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
 critical-section = { workspace = true, optional = true }
 embassy-futures = { workspace = true, optional = true }
 embassy-sync = { workspace = true, optional = true }

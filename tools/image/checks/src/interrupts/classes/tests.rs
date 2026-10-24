@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 fn entry(source: u32, level: u32, class: Class, core: u32) -> TableEntry {
     TableEntry {
         source,
+        line: 16 + source,
         level,
         class,
         core,

@@ -18,6 +18,36 @@ pub mod machine {
     /// machine-level CSR addresses").
     pub const MSCRATCH: u16 = 0x340;
 
+    /// `mstatus`.
+    ///
+    /// SOURCE: RISC-V Privileged Architecture, CSR address map (`mstatus`
+    /// 0x300).
+    pub const MSTATUS: u16 = 0x300;
+
+    /// `mtvec`: the trap vector base and mode (mode 3 selects the CLIC).
+    ///
+    /// SOURCE: RISC-V Privileged Architecture, CSR address map (`mtvec`
+    /// 0x305); RISC-V CLIC specification, "mtvec" (mode `0b11`).
+    pub const MTVEC: u16 = 0x305;
+
+    /// `mepc`: the pc a trap return resumes.
+    ///
+    /// SOURCE: RISC-V Privileged Architecture, CSR address map (`mepc`
+    /// 0x341).
+    pub const MEPC: u16 = 0x341;
+
+    /// `mcause`: the trap's cause; under the CLIC it also holds the
+    /// interrupted level (`mpil`), which a trap return restores.
+    ///
+    /// SOURCE: RISC-V Privileged Architecture, CSR address map (`mcause`
+    /// 0x342); RISC-V CLIC specification, "mcause" (`mpil`, `mpie`, `mpp`).
+    pub const MCAUSE: u16 = 0x342;
+
+    /// `mtvec` mode 3: CLIC mode.
+    ///
+    /// SOURCE: RISC-V CLIC specification, "mtvec" (mode `0b11`).
+    pub const MTVEC_CLIC_MODE: usize = 0b11;
+
     /// The floating-point CSRs, numbered consecutively.
     ///
     /// SOURCE: RISC-V Unprivileged ISA, "Floating-Point Control and Status
@@ -120,6 +150,13 @@ pub mod trigger {
     /// (tcontrol, at 0x7a5)", field `mte`.
     pub const TCONTROL_MTE: usize = 1 << 3;
 
+    /// `tcontrol.mpte`, bit 7: `mte` before the last trap into machine
+    /// mode, which a trap sets from `mte` and `mret` copies back.
+    ///
+    /// SOURCE: RISC-V Debug Specification (Sdtrig), "Trigger Control
+    /// (tcontrol, at 0x7a5)", field `mpte`.
+    pub const TCONTROL_MPTE: usize = 1 << 7;
+
     /// Fields of `tdata1` for an address/data match trigger (`mcontrol`).
     pub mod mcontrol {
         /// `mcontrol.m`, bit 6: the trigger fires in machine mode.
@@ -141,5 +178,13 @@ pub mod trigger {
         /// SOURCE: RISC-V Debug Specification (Sdtrig), "Match Control
         /// (mcontrol, at 0x7a1)", field `match`, value 1.
         pub const MATCH_NAPOT: usize = 1 << 7;
+
+        /// `tdata1.dmode`, bit XLEN-5 (27 on RV32): only debug mode may
+        /// write the trigger; machine-mode writes are ignored. A connected
+        /// debugger that owns the trigger sets it.
+        ///
+        /// SOURCE: RISC-V Debug Specification (Sdtrig), "Trigger Data 1
+        /// (tdata1, at 0x7a1)", field `dmode`.
+        pub const DMODE: usize = 1 << (usize::BITS - 5);
     }
 }

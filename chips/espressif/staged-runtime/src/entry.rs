@@ -94,10 +94,10 @@ _runtime_start:
 16:
     call _runtime_stack_bootstrap
     fence.i
-    la t0, _vector_table
+    la t0, _start_trap
     ori t0, t0, 3
     csrw mtvec, t0
-    la t0, _runtime_mtvt_table
+    la t0, _runtime_mtvt
     csrw {mtvt}, t0
     .option pop
     call _runtime_enable_fpu

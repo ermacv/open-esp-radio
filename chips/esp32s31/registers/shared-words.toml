@@ -69,16 +69,16 @@ reason = "Written only by modem_clock_domain_power_state_icg_map_init at the end
 [[word]]
 address = 0x20585210
 radio = "IEEE802154_INTERRUPT_ROUTE.CORE0_ROUTE"
-esp_hal = "INTERRUPT_CORE0.core_0_intr_map[132] in map_raw and reinitialize_vectoring_after_handoff (interrupt/mod.rs)"
+esp_hal = "INTERRUPT_CORE0.core_0_intr_map[132] in map_raw (interrupt/mod.rs)"
 coordination = "radio-reads-only"
-reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff (called from the staged runtime's Handoff::adopt) map every source, MODEM_ZB_MAC included, to disabled, and the table's InterruptRoutes owner (oer-espressif-esp-hal-irq) routes MODEM_ZB_MAC when an image's table binds it (esp-hal 1f646c5 interrupt/mod.rs)."
+reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source, MODEM_ZB_MAC included, to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x20585a10
 radio = "IEEE802154_INTERRUPT_ROUTE.CORE1_ROUTE"
-esp_hal = "INTERRUPT_CORE1.core_1_intr_map[132] in map_raw and reinitialize_vectoring_after_handoff (interrupt/mod.rs)"
+esp_hal = "INTERRUPT_CORE1.core_1_intr_map[132] in map_raw (interrupt/mod.rs)"
 coordination = "radio-reads-only"
-reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff (called from the staged runtime's Handoff::adopt) map every source, MODEM_ZB_MAC included, to disabled, and the table's InterruptRoutes owner (oer-espressif-esp-hal-irq) routes MODEM_ZB_MAC when an image's table binds it (esp-hal 1f646c5 interrupt/mod.rs)."
+reason = "The radio's IEEE802154_INTERRUPT_ROUTE view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the word; the radio PAC only reads it to classify the route. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source, MODEM_ZB_MAC included, to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 
 [[word]]
@@ -157,7 +157,7 @@ words = 48
 radio = "CLIC.CTRL%s (typed block)"
 esp_hal = "CLIC.int_ie, int_ip, int_attr and int_ctl in init, init_vectoring and the CpuInterrupt methods (interrupt/riscv.rs, interrupt/riscv/clic.rs)"
 coordination = "radio-reads-only"
-reason = "The CLIC view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound line. esp-hal is the only writer: init_vectoring, from esp_hal::init and from reinitialize_vectoring_after_handoff in the staged runtime's Handoff::adopt, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
+reason = "The CLIC view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: init_vectoring, from esp_hal::init, gives each level its line; the CpuInterrupt and enable_direct writers have no caller in our images (chip.toml [interrupts] level-writers pins the level writers; esp-hal 1f646c5)."
 
 [[word]]
 address = 0x20585000
@@ -165,7 +165,7 @@ words = 132
 radio = "INTERRUPT_CORE0.MAP_LOW%s (typed block)"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
 coordination = "radio-reads-only"
-reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x20585214
@@ -173,7 +173,7 @@ words = 36
 radio = "INTERRUPT_CORE0.MAP_HIGH%s (typed block)"
 esp_hal = "INTERRUPT_CORE0.core_0_intr_map in map_raw (interrupt/mod.rs)"
 coordination = "radio-reads-only"
-reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x20585800
@@ -181,7 +181,7 @@ words = 132
 radio = "INTERRUPT_CORE1.MAP_LOW%s (typed block)"
 esp_hal = "INTERRUPT_CORE1.core_1_intr_map in map_raw (interrupt/mod.rs)"
 coordination = "radio-reads-only"
-reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x20585a14
@@ -189,7 +189,7 @@ words = 36
 radio = "INTERRUPT_CORE1.MAP_HIGH%s (typed block)"
 esp_hal = "INTERRUPT_CORE1.core_1_intr_map in map_raw (interrupt/mod.rs)"
 coordination = "radio-reads-only"
-reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words; the interrupt table only reads them to check each bound route. esp-hal's interrupt table is the only writer: setup_interrupts and reinitialize_vectoring_after_handoff map every source to disabled, and CoreInterruptRoutes, which the table keeps in each core's matrix owner, routes a source when its owner enables it (esp-hal 1f646c5 interrupt/mod.rs)."
+reason = "The interrupt-matrix view is read-only in the publication, so its typed block has no writer, and no API transaction stores to the words. esp-hal is the only writer: setup_interrupts, from esp_hal::init, maps every source to disabled (esp-hal 1f646c5 interrupt/mod.rs)."
 
 [[word]]
 address = 0x20399000

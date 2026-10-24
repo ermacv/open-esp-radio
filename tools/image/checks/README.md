@@ -103,7 +103,7 @@ level number or a handler's name, decides the rules:
 - **Exempt** entries are hardware handlers that break one named rule:
   `ExecutorLevel` (on their core's executor level) or `WakerCall` (a waker
   call that only their own handler reaches is waived; the same site reached
-  from the dispatcher or another entry still fails). `interrupt-stack.txt`
+  from the trap entry or another entry still fails). `interrupt-stack.txt`
   prints each one's violation and reason, the bytes of the symbol
   `table-exemption-prefix` plus its handler symbol, and lists the waived
   sites.
@@ -254,7 +254,7 @@ Each ELF contains:
   exception, CPU0 and the task roots; the bootstrap root), every indirect site
   its bound took (`Bound::sites`): the site, its function and offset, the
   number of targets, the facts that give them (`JumpTable` and
-  `ValueAnalysis` from the machine code; `InterruptTable`, `StageTwoEntry`,
+  `ValueAnalysis` from the machine code; `StageTwoEntry`,
   `WakerVtables`, `FieldType` from outside it) and what they assume. Each root counts its sites by fact; the totals
   count the distinct sites by fact and by assumption, `none` for proven
   sites. The reports read the bounds the gates computed and change no

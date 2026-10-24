@@ -55,7 +55,7 @@ pub use cha::{
     StorageEvidence, TypeFacts, TypedStore, UnknownUse, audit_function_addresses,
     function_pointer_resolutions, typed_function_pointer_resolutions,
 };
-pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
+pub use contexts::{HartStack, LevelStack, Stacks, Vector, interrupt_stacks};
 pub use dwarf::{DebugMetadata, Dwarf, Returned, read as read_debug};
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
@@ -68,7 +68,7 @@ pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
 pub use tasks::{TASK_POLL_RECORD, task_poll_resolutions};
-pub use trap::{TrapEntry, trap_entry, vector_table};
+pub use trap::{TrapEntry, interrupt_entry, trap_entry, vector_table};
 pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
 pub use wakers::{waker_resolutions, waker_vtable};
 

@@ -10,8 +10,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use oer_analysis_riscv_stack::{
-    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, Violation,
-    interrupt_table, parse_summaries, trap_entry, vector_table,
+    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, Vector, Violation,
+    interrupt_entry, interrupt_table, parse_summaries, trap_entry, vector_table,
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -748,6 +748,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &TableLayout {
             entry: interrupts.table_entry_bytes,
             source: field(interrupts.table_source.into()),
+            line: field(interrupts.table_line.into()),
             level: field(interrupts.table_level.into()),
             class: field(interrupts.table_class.into()),
             core: field(interrupts.table_core.into()),
@@ -756,11 +757,23 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &mut control,
     )?;
     reject_unstacked_cores(&table, &interrupts.harts)?;
-    let vectors = vector_table(&facts, &interrupts.vector_table_symbol, &mut control)?
+    // Each hart's table holds `vector_table_hart_slots` words; each entry
+    // must also return through the checked exit.
+    let slots = interrupts.vector_table_hart_slots.max(1) as usize;
+    let mut vectors = Vec::new();
+    for (index, entry) in vector_table(&facts, &interrupts.vector_table_symbol, &mut control)?
         .into_iter()
-        .flatten()
-        .map(|entry| trap_entry(&facts, entry, &mut control))
-        .collect::<oer_analysis_riscv_model::Result<Vec<_>>>()?;
+        .enumerate()
+    {
+        let Some(entry) = entry else {
+            continue;
+        };
+        vectors.push(Vector {
+            hart: u32::try_from(index / slots)?,
+            line: u32::try_from(index % slots)?,
+            entry: interrupt_entry(&facts, entry, &mut control)?,
+        });
+    }
     let exception = trap_entry(
         &facts,
         symbol(&interrupts.exception_entry_symbol)?,
@@ -795,13 +808,11 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         .collect();
     let level_writers = level_writers(dwarf, interrupts)?;
 
-    let sources = source_table(elf, &interrupts.source_table_symbol)?;
     let inputs = Stacks {
         table: &table,
         cores: &interrupts.harts,
         vectors: &vectors,
         exception,
-        sources,
         resolutions,
     };
     let harts =
@@ -1178,20 +1189,13 @@ fn level_writers(
     Ok(problems)
 }
 
-/// The address of esp-hal's per-source handler table.
-fn source_table(elf: &[u8], symbol: &str) -> Result<u32> {
-    oer_analysis_elf::Elf::parse(elf)?
-        .address(symbol)
-        .map(|address| address as u32)
-        .ok_or_else(|| format!("the runtime has no `{symbol}`").into())
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
     fn a_table_entry_for_a_core_without_an_interrupt_stack_is_refused() {
         let entry = |core| TableEntry {
             source: 7,
+            line: 16,
             level: 2,
             class: Class::Executor,
             core,

@@ -132,11 +132,20 @@ pub fn derive<'m>(
     }
     println!("stack-root\t{}\t{root:?}", task.root);
     let mut resolutions = image_resolutions(image, analysis, dwarf, types, keep, c)?;
-    let vectors = vector_table(image, &irq.vector_table_symbol, c)?
+    let slots = irq.vector_table_hart_slots.max(1) as usize;
+    let mut vectors = Vec::new();
+    for (index, entry) in vector_table(image, &irq.vector_table_symbol, c)?
         .into_iter()
-        .flatten()
-        .map(|entry| trap_entry(image, entry, c))
-        .collect::<Result<Vec<_>>>()?;
+        .enumerate()
+    {
+        if let Some(entry) = entry {
+            vectors.push(Vector {
+                hart: u32::try_from(index / slots)?,
+                line: u32::try_from(index % slots)?,
+                entry: interrupt_entry(image, entry, c)?,
+            });
+        }
+    }
     let exception = trap_entry(image, symbol(&irq.exception_entry_symbol)?.address, c)?;
     println!(
         "stack-trap-entries\t{}\t{:?}\texception={exception:?}",
@@ -150,18 +159,13 @@ pub fn derive<'m>(
         &TableLayout {
             entry: irq.table_entry_bytes,
             source: field(irq.table_source.into()),
+            line: field(irq.table_line.into()),
             level: field(irq.table_level.into()),
             class: field(irq.table_class.into()),
             core: field(irq.table_core.into()),
             handler: irq.table_handler,
         },
         c,
-    )?;
-    let sources = u32::try_from(
-        image
-            .file()
-            .address(&irq.source_table_symbol)
-            .ok_or("missing IRQ source table")?,
     )?;
     let harts = interrupt_stacks(
         analysis,
@@ -170,7 +174,6 @@ pub fn derive<'m>(
             cores: &irq.harts,
             vectors: &vectors,
             exception,
-            sources,
             resolutions: &resolutions,
         },
         keep,

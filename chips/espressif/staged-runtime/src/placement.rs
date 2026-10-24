@@ -69,14 +69,15 @@ macro_rules! panic_hook {
     };
 }
 
-/// The image's fatal-exception handler: the trap entry calls `$handler` on
-/// an SRAM stack with the saved registers, also when the interrupted task
-/// ran from PSRAM. It does not return. The image linker analyses the
-/// exception path and places its strict code in SRAM.
+/// The image's fatal-exception handler: the exception entry `_start_trap`
+/// calls `$handler` on an SRAM stack with the saved frame, also when the
+/// interrupted task ran from PSRAM. It does not return. Without one the
+/// runtime's `oer_default_exception` stops the hart. The image linker
+/// analyses the exception path and places its strict code in SRAM.
 #[macro_export]
 macro_rules! exception_handler {
     ($handler:path) => {
-        #[unsafe(export_name = "ExceptionHandler")]
+        #[unsafe(export_name = "oer_exception_handler")]
         extern "C" fn __oer_exception_handler(context: &$crate::trap::TrapFrame) -> ! {
             $handler(context)
         }

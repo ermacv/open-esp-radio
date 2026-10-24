@@ -16,13 +16,11 @@ port-slots = ["dep:oer-radio-port"]
 esp32s31 = [
     "chip",
     "esp-hal/esp32s31",
-    "oer-espressif-esp-hal-irq/esp32s31",
     "dep:oer-esp32s31-hal",
 ]
 esp32c5 = [
     "chip",
     "esp-hal/esp32c5",
-    "oer-espressif-esp-hal-irq/esp32c5",
     "dep:oer-esp32c5-hal",
 ]
 # The executor and time driver, which a chip feature selects.
@@ -31,7 +29,6 @@ chip = [
     "dep:esp-hal",
     "dep:portable-atomic",
     "dep:riscv",
-    "dep:oer-espressif-esp-hal-irq",
     "dep:oer-interrupt-table",
     "dep:oer-riscv",
     "dep:oer-mmio",
@@ -48,7 +45,6 @@ embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optio
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "1f646c5af4f4ca2774f493783581237fea2379dc", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table", optional = true }
-oer-espressif-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
 oer-riscv = { path = "../../../portable/riscv", optional = true }
 oer-mmio = { path = "../../../portable/mmio", optional = true }
 oer-esp32s31-hal = { path = "../../esp32s31/hal", optional = true }

@@ -85,7 +85,6 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/espressif/staged-layout",
     "chips/espressif/staged-runtime",
     "chips/espressif/executor",
-    "chips/espressif/esp-hal-irq",
     "chips/espressif/esp-hal/",
     "chips/esp32c5/esp-hal-soc",
     "portable/embassy/",

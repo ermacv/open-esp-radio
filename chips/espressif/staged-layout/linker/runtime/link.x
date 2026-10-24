@@ -1,63 +1,110 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_runtime_start)
 
-/* Minimal esp-riscv-rt integration. Runtime has its own entry and its data/BSS
-   are initialized by the bootstrap, but the normal vectored interrupt stubs
-   are still used after the handoff. Default handlers belong to this runtime. */
-EXTERN(_default_abort);
-EXTERN(_default_start_trap);
+/* Stage two's own runtime: its entry, its traps and vector tables
+   (staged-runtime `vectors.s`) and its default handlers. Each line's vector
+   calls `__oer_interrupt_h<hart>_l<line>`: the interrupt table's handler of
+   the entry bound to that line, else the runtime's unhandled-interrupt stop.
+   An exception calls the image's `oer_exception_handler`, else the
+   runtime's default stop. */
 EXTERN(oer_unhandled_interrupt);
 EXTERN(oer_default_exception);
-PROVIDE(abort = _default_abort);
-PROVIDE(_pre_init_trap = _default_abort);
-PROVIDE(_start_trap = _default_start_trap);
-PROVIDE(_runtime_mtvt_table = _mtvt_table);
-PROVIDE(ExceptionHandler = oer_default_exception);
-PROVIDE(DefaultHandler = oer_unhandled_interrupt);
-PROVIDE(_start_DefaultHandler_trap = _start_trap);
-PROVIDE(_max_hart_id = HART_COUNT - 1);
-PROVIDE(main = runtime_main);
-PROVIDE(hal_main = runtime_main);
-
-/* riscv-rt's unused normal-reset path remains in the same LTO object as its
-   vector table. Satisfy its initialization aliases without letting it touch
-   the already relocated runtime image. */
-__sdata = 0;
-__edata = 0;
-__sidata = 0;
-PROVIDE(interrupt0 = DefaultHandler);
-PROVIDE(interrupt1 = DefaultHandler);
-PROVIDE(interrupt2 = DefaultHandler);
-PROVIDE(interrupt3 = DefaultHandler);
-PROVIDE(interrupt4 = DefaultHandler);
-PROVIDE(interrupt5 = DefaultHandler);
-PROVIDE(interrupt6 = DefaultHandler);
-PROVIDE(interrupt7 = DefaultHandler);
-PROVIDE(interrupt8 = DefaultHandler);
-PROVIDE(interrupt9 = DefaultHandler);
-PROVIDE(interrupt10 = DefaultHandler);
-PROVIDE(interrupt11 = DefaultHandler);
-PROVIDE(interrupt12 = DefaultHandler);
-PROVIDE(interrupt13 = DefaultHandler);
-PROVIDE(interrupt14 = DefaultHandler);
-PROVIDE(interrupt15 = DefaultHandler);
-PROVIDE(interrupt16 = DefaultHandler);
-PROVIDE(interrupt17 = DefaultHandler);
-PROVIDE(interrupt18 = DefaultHandler);
-PROVIDE(interrupt19 = DefaultHandler);
-PROVIDE(interrupt20 = DefaultHandler);
-PROVIDE(interrupt21 = DefaultHandler);
-PROVIDE(interrupt22 = DefaultHandler);
-PROVIDE(interrupt23 = DefaultHandler);
-PROVIDE(interrupt24 = DefaultHandler);
-PROVIDE(interrupt25 = DefaultHandler);
-PROVIDE(interrupt26 = DefaultHandler);
-PROVIDE(interrupt27 = DefaultHandler);
-PROVIDE(interrupt28 = DefaultHandler);
-PROVIDE(interrupt29 = DefaultHandler);
-PROVIDE(interrupt30 = DefaultHandler);
-PROVIDE(interrupt31 = DefaultHandler);
-INCLUDE "device.x"
+EXTERN(_runtime_mtvt);
+PROVIDE(oer_exception_handler = oer_default_exception);
+PROVIDE(__oer_interrupt_h0_l1 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l2 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l3 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l4 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l5 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l6 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l7 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l8 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l9 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l10 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l11 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l12 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l13 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l14 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l15 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l16 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l17 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l18 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l19 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l20 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l21 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l22 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l23 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l24 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l25 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l26 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l27 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l28 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l29 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l30 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l31 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l32 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l33 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l34 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l35 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l36 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l37 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l38 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l39 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l40 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l41 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l42 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l43 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l44 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l45 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l46 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h0_l47 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l1 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l2 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l3 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l4 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l5 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l6 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l7 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l8 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l9 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l10 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l11 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l12 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l13 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l14 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l15 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l16 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l17 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l18 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l19 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l20 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l21 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l22 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l23 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l24 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l25 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l26 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l27 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l28 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l29 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l30 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l31 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l32 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l33 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l34 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l35 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l36 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l37 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l38 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l39 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l40 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l41 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l42 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l43 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l44 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l45 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l46 = oer_unhandled_interrupt);
+PROVIDE(__oer_interrupt_h1_l47 = oer_unhandled_interrupt);
 
 INCLUDE "runtime/memory.x"
 INCLUDE "runtime/sections.x"
