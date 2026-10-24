@@ -410,26 +410,23 @@ The comparison prints a table per image, byte changes for each ELF, new and
 removed functions/types, analysis resource use, per-image verdicts and the
 overall verdict. `same` means no size, allocation, bound, hole, assumption or
 section change; differing provenance commits and resource consumption alone do
-not change it. `report` means changes that are only reported. `stop`
-returns exit 1; errors (including incompatible provenance) also return exit 1.
-The command never asks a question itself: the agent takes a `stop` to the owner.
+not change it. `report` means changes that are only reported; both exit 0.
+Errors (unreadable input, mismatched image sets, incompatible provenance)
+exit 1.
 
 The verdicts follow the "Sizes" rule in
 [`CLAUDE.md`](../../../CLAUDE.md) and are decided in
-[`sizes/compare.rs`](src/sizes/compare.rs). Only growth of an SRAM section or
-of an allocated stack (task or interrupt) is a `stop`. Growth of code,
-read-only data, writable PSRAM, types, frames, computed bounds and root frames, and a new
-stack-bound hole, are `report`: the numbers stay in the table, nothing stops.
+[`sizes/compare.rs`](src/sizes/compare.rs). Every growth is `report`: the
+numbers stay in the table and nothing stops. Growth of an SRAM section or of an
+allocated stack (task or interrupt), and a section moving into SRAM, also get a
+`GROWTH:` line.
 
 Code growth is the **net** change in executable and read-only image contents
 across the runtime and bootstrap, excluding linker filler and byte-verified
 embedded copies of the runtime; shrinking contents offsets growth elsewhere,
-including a move between sections. Growth of an individual SRAM section
-(code, read-only data or writable data) stops, and so does a section moving
-into SRAM; a writable PSRAM section is RAM in the table but its growth is
-`report`.
-Input-free linker filler carries no owned RAM or image-content budget. An
-allocated stack growing stops; shrinking or removal is `report`. A new hole
+including a move between sections. A writable PSRAM section is RAM in the
+table.
+Input-free linker filler carries no owned RAM or image-content budget. A new hole
 on an interrupt path already fails `cargo fw build`. Executable and read-only
 SRAM also contribute to net code. `NOBITS` reserves occupy RAM where
 applicable but are not image contents.

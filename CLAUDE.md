@@ -86,9 +86,9 @@ system these rules serve.
   `riscv32imafc-unknown-none-elf`. Judge a check only by its own exit code,
   never through a pipe (redirect to a file and print `exit=$?`).
 - **Sizes.** `cargo fw sizes` for the images the change reaches. Growth of
-  code, `.rodata`, writable PSRAM, a type, future or frame is reported. Growth
-  of an SRAM section, an allocated task stack or an interrupt stack stops the
-  pull request until the owner answers.
+  any memory (code, `.rodata`, SRAM and PSRAM sections, a type, future or
+  frame, an allocated task or interrupt stack) is reported in the pull
+  request, not a stop. A limit the owner sets for an image is its own gate.
 - **Stand.** Runs only when they answer a real question. Hardware runs hold
   the board's lock; never kill another holder, wait. The owner's limits on
   secrets, eFuse writes, protected boards and hub ports apply. A claim about

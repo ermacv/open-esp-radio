@@ -129,20 +129,30 @@ fn code_growth_is_reported_never_stopped() {
     }
 }
 #[test]
-fn sram_section_and_allocated_stack_growth_stops() {
+fn sram_section_and_allocated_stack_growth_is_reported_never_stopped() {
     let a = summary();
     let mut b = a.clone();
     let m = runtime(&mut b);
     m.sections.get_mut(".data").unwrap().bytes += 4;
     m.sections.get_mut(".bss").unwrap().bytes -= 100;
-    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Stop);
-    for (bytes, expected) in [(8191, Verdict::Report), (8193, Verdict::Stop)] {
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
+    for (bytes, expected) in [(8191, Verdict::Report), (8193, Verdict::Report)] {
         let mut b = a.clone();
         runtime(&mut b)
             .allocated_stacks
             .insert("cpu0".into(), bytes);
-        assert_eq!(compare(&a, &b).unwrap().0, expected);
+        let (verdict, _, shown) = compare(&a, &b).unwrap();
+        assert_eq!(verdict, expected);
+        assert_eq!(
+            shown.contains("GROWTH: ") && shown.contains("allocated stack `cpu0`"),
+            bytes > 8192
+        );
     }
+    let mut b = a.clone();
+    runtime(&mut b).sections.get_mut(".data").unwrap().bytes += 4;
+    let (verdict, _, shown) = compare(&a, &b).unwrap();
+    assert_eq!(verdict, Verdict::Report);
+    assert!(shown.contains("GROWTH: ") && shown.contains("section `.data` +4 B"));
 }
 #[test]
 fn a_new_hole_is_reported_and_an_equal_count_cannot_hide_a_different_one() {
@@ -248,7 +258,7 @@ fn stack_allocation_flags_are_reported_by_the_allocation_rule() {
     runtime(&mut b)
         .allocated_stacks
         .insert("cpu0".into(), 16384);
-    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Stop);
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
 }
 
 fn psram_contents(bytes: u64, executable: bool) -> Section {
@@ -338,13 +348,13 @@ fn executable_and_read_only_sram_are_also_ram() {
             .unwrap()
             .bytes += 4;
         let (verdict, _, shown) = compare(&a, &b).unwrap();
-        assert_eq!(verdict, Verdict::Stop);
-        assert!(shown.contains("section `.critical.rodata` grows +4 B"));
+        assert_eq!(verdict, Verdict::Report);
+        assert!(shown.contains("section `.critical.rodata` +4 B"));
     }
 }
 
 #[test]
-fn moving_code_to_sram_has_zero_net_code_but_still_stops_for_ram() {
+fn moving_code_to_sram_has_zero_net_code_and_the_ram_growth_is_reported() {
     let mut a = summary();
     runtime(&mut a).sections.get_mut(".text").unwrap().memory = "psram".into();
     let mut b = a.clone();
@@ -353,9 +363,9 @@ fn moving_code_to_sram_has_zero_net_code_but_still_stops_for_ram() {
     hot.memory = "sram".into();
     runtime(&mut b).sections.insert(".hot.text".into(), hot);
     let (verdict, code, shown) = compare(&a, &b).unwrap();
-    assert_eq!((verdict, code), (Verdict::Stop, 0));
-    assert!(shown.contains("section `.hot.text` grows +512 B"));
-    assert!(!shown.contains("STOP: code growth"));
+    assert_eq!((verdict, code), (Verdict::Report, 0));
+    assert!(shown.contains("section `.hot.text` +512 B"));
+    assert!(!shown.contains("code growth"));
 }
 
 #[test]
@@ -574,7 +584,7 @@ fn an_interrupt_stack_grows_only_as_an_allocated_stack() {
     runtime(&mut b)
         .allocated_stacks
         .insert("irq hart 0".into(), 4112);
-    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Stop);
+    assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
     runtime(&mut b)
         .allocated_stacks
         .insert("irq hart 0".into(), 4080);
@@ -582,7 +592,7 @@ fn an_interrupt_stack_grows_only_as_an_allocated_stack() {
 }
 
 #[test]
-fn writable_psram_growth_is_reported_while_sram_growth_stops() {
+fn writable_psram_growth_is_reported_and_so_is_sram_growth() {
     let mut a = summary();
     let psram = Section {
         writable: true,
@@ -599,7 +609,7 @@ fn writable_psram_growth_is_reported_while_sram_growth_stops() {
     assert_eq!(compare(&a, &b).unwrap().0, Verdict::Report);
     let mut c = a.clone();
     runtime(&mut c).sections.get_mut(".data").unwrap().bytes += 4;
-    assert_eq!(compare(&a, &c).unwrap().0, Verdict::Stop);
+    assert_eq!(compare(&a, &c).unwrap().0, Verdict::Report);
 }
 
 #[test]
@@ -623,13 +633,13 @@ fn a_composition_uses_the_sum_without_weakening_same_image_provenance() {
     *runtime(&mut head).allocated_stacks.get_mut("cpu0").unwrap() += 1;
     assert_eq!(
         composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
-        Verdict::Stop
+        Verdict::Report
     );
     *runtime(&mut head).allocated_stacks.get_mut("cpu0").unwrap() -= 1;
     runtime(&mut head).sections.get_mut(".bss").unwrap().bytes += 1;
     assert_eq!(
         composition(&[a.clone(), b.clone()], &head).unwrap().verdict,
-        Verdict::Stop
+        Verdict::Report
     );
     head.provenance.rustc = "different compiler".into();
     assert!(composition(&[a, b], &head).is_err());
@@ -656,7 +666,7 @@ fn empty_composition_placeholders_do_not_change_storage_class_or_budget() {
         .bytes += 1;
     assert_eq!(
         composition(&[a, b], &larger).unwrap().verdict,
-        Verdict::Stop
+        Verdict::Report
     );
 }
 
