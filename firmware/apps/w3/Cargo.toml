@@ -16,7 +16,7 @@ oer-embassy-net = { path = "../../../portable/embassy/net" }
 embassy-futures = "0.1.2"
 oer-ieee80211-arbiter = { path = "../../../protocols/ieee80211/arbiter" }
 oer-time = { path = "../../../portable/time" }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "a08440081886cfcbc6c282017a8402d65f389fba", features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "0c018c843303508300cbb15fb3be0ee7d58862ab", features = ["medium-ethernet", "ipv4", "dhcpv4", "raw-ip", "icmp-ping-reply"] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 embassy-sync = "0.8.0"
@@ -24,7 +24,7 @@ embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 heapless = "0.9.3"
 static_cell = { workspace = true }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "b2dd237c491664d2c3bcb5ddca8e6d3d6953cc59", features = ["async"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "ed9bf37f25c610566033e31abd14d7eb5096d93f", features = ["async"] }
 oer-radio-port = { path = "../../../protocols/radio/port" }
 oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
 oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
@@ -51,7 +51,7 @@ oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "b2dd237c491664d2c3bcb5ddca8e6d3d6953cc59", features = ["async"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "ed9bf37f25c610566033e31abd14d7eb5096d93f", features = ["async"] }
 
 [build-dependencies]
 oer-esp32s31-layout = { workspace = true, features = ["build"] }
