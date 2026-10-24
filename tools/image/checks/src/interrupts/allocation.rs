@@ -68,9 +68,13 @@ impl InterruptStacks {
                 .get(&hart.core)
                 .is_some_and(|stack| stack.from_bound)
             {
-                "proven bound"
+                match crate::stack::conditions(&hart.assumptions(), !hart.level_drops().is_empty())
+                {
+                    None => "proven bound".to_owned(),
+                    Some(conditions) => format!("conditional bound ({conditions})"),
+                }
             } else {
-                "contract maximum"
+                "contract maximum".to_owned()
             };
             let _ = writeln!(
                 out,

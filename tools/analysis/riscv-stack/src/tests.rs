@@ -431,6 +431,8 @@ fn a_callee_runs_below_its_call_site_depth() {
     assert_eq!(bound.bytes, Some(48));
     assert!(bound.unresolved.is_empty());
     assert_eq!(bound.path, [(TEXT, 16), (leaf_address, 32)]);
+    // A direct call is no indirect site.
+    assert!(bound.sites.is_empty());
 }
 
 #[test]
@@ -532,6 +534,17 @@ fn a_resolution_gives_an_unresolved_site_each_of_its_targets() {
         .unwrap();
     assert_eq!(bound.bytes, Some(16 + 32));
     assert_eq!(bound.path.last(), Some(&(large, 32)));
+    // The bound records the site it took, its fact and that fact's assumption.
+    let taken = TakenSite {
+        targets: 2,
+        source: SiteSource::Facts(BTreeSet::from([Fact::FieldType])),
+    };
+    assert_eq!(bound.sites, BTreeMap::from([(site, taken.clone())]));
+    assert_eq!(
+        taken.source.assumptions(),
+        BTreeSet::from([Assumption::ExecutorInvariant])
+    );
+    assert_eq!(bound.assumptions, taken.source.assumptions());
     // A site the analysis resolved keeps its own target.
     let mut only_small = Resolutions::new();
     only_small.add(site, Fact::FieldType, [small]);
@@ -817,6 +830,13 @@ fn a_call_through_a_constant_table_object_reaches_every_entry() {
         .unwrap();
     assert_eq!(bound.bytes, Some(48));
     assert_eq!(bound.path, [(TEXT, 16), (large, 32)]);
+    // The machine code's own table resolves the site, on no assumption.
+    let taken = TakenSite {
+        targets: 2,
+        source: SiteSource::Code(CodeFact::JumpTable),
+    };
+    assert_eq!(bound.sites, BTreeMap::from([(TEXT + 32, taken)]));
+    assert!(bound.assumptions.is_empty());
 }
 
 #[test]

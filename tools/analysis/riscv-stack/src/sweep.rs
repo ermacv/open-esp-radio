@@ -397,6 +397,8 @@ pub(crate) struct Swept {
     pub transfers: Vec<Transfer>,
     /// Indirect jumps through a table of known entries, with every entry.
     pub jumps: Vec<(u32, Vec<u32>)>,
+    /// Indirect calls and jumps whose targets a table of known entries gives.
+    pub tables: Vec<u32>,
     /// Instructions that can lower the interrupt level, by site.
     pub level_drops: Vec<(u32, LevelDrop)>,
     /// Floating-point instructions and accesses of the floating-point CSRs
@@ -415,6 +417,7 @@ pub(crate) fn transfers(
     let outside = |target: u32| target < start || target >= end;
     let mut transfers = Vec::new();
     let mut jumps = Vec::new();
+    let mut tables = Vec::new();
     let mut offset = 0usize;
     let mut previous: Option<(u8, u32)> = None;
     let mut writes = [None::<Write>; 32];
@@ -537,6 +540,7 @@ pub(crate) fn transfers(
                     // call, or a jump out of the function; the sweep
                     // already covers jumps inside it.
                     _ if dispatched.is_some() => {
+                        ledger.push(&mut tables, pc, control)?;
                         if !link {
                             let mut entries = Vec::new();
                             for &entry in dispatched.iter().flatten() {
@@ -647,6 +651,7 @@ pub(crate) fn transfers(
     Ok(Swept {
         transfers,
         jumps,
+        tables,
         level_drops,
         float_sites,
     })

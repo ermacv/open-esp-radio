@@ -23,6 +23,7 @@ mod coverage;
 pub mod frames;
 pub mod handoff;
 pub mod reachability;
+pub mod sites;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -50,6 +51,35 @@ use crate::stack::contract::Contract;
 /// leaves this list in the pull request that proves it.
 pub const ADMITTED: &[oer_analysis_riscv_stack::Assumption] =
     &[oer_analysis_riscv_stack::Assumption::ExecutorInvariant];
+
+/// What a bound with a number rests on, by short name: each assumption, and
+/// `nesting` where a handler may lower the interrupt level. `None` when it
+/// rests on nothing: the bound is proven.
+pub fn conditions(
+    assumptions: &BTreeSet<oer_analysis_riscv_stack::Assumption>,
+    nesting: bool,
+) -> Option<String> {
+    let names: Vec<&str> = assumptions
+        .iter()
+        .map(|assumption| assumption.name())
+        .chain(nesting.then_some("nesting"))
+        .collect();
+    (!names.is_empty()).then(|| names.join(", "))
+}
+
+/// A bound's state in a report: `proven` only when it rests on nothing,
+/// `conditional (…)` naming what it rests on, `partial` without a number.
+pub fn bound_state(
+    bytes: Option<u64>,
+    assumptions: &BTreeSet<oer_analysis_riscv_stack::Assumption>,
+    nesting: bool,
+) -> String {
+    match (bytes, conditions(assumptions, nesting)) {
+        (None, _) => "partial".to_owned(),
+        (Some(_), None) => "proven".to_owned(),
+        (Some(_), Some(conditions)) => format!("conditional ({conditions})"),
+    }
+}
 
 /// The runtime task stacks' report.
 pub const RUNTIME_REPORT: &str = "runtime-stack.txt";
@@ -375,22 +405,26 @@ impl Image {
     /// The name of the function (of the image or a companion) that holds
     /// `address`.
     fn function_at(&self, address: u32) -> String {
-        let Some((&start, facts)) = self.analysis.functions.range(..=address).next_back() else {
-            return format!("{address:#010x}");
-        };
+        match self.containing(address) {
+            Some((name, 0)) => name,
+            Some((name, offset)) => format!("{name}+{offset:#x}"),
+            None => format!("{address:#010x}"),
+        }
+    }
+
+    /// The name of the function (of the image or a companion) that holds
+    /// `address`, and the address's offset in it.
+    pub(crate) fn containing(&self, address: u32) -> Option<(String, u32)> {
+        let (&start, facts) = self.analysis.functions.range(..=address).next_back()?;
         if address - start >= facts.function.size {
-            return format!("{address:#010x}");
+            return None;
         }
         let name = self
             .names
             .get(&start)
             .cloned()
             .unwrap_or_else(|| oer_analysis_elf::demangle(&facts.function.label()));
-        if address == start {
-            name
-        } else {
-            format!("{name}+{:#x}", address - start)
-        }
+        Some((name, address - start))
     }
 
     /// The linked bounds of `storage`, or `None` when the image links
@@ -480,6 +514,16 @@ impl StackAudit {
     pub(crate) fn render_reachability(&self, image: &Image, policy: &StackPolicy) -> String {
         let report = reachability::Report::new(image, policy);
         let mut out = report.header(self.witness_memory_peak);
+        for (label, bound) in self.roots(policy) {
+            out.push_str(&report.root(&label, bound));
+        }
+        out
+    }
+
+    /// Each root's report label and bound: the linked stacks, then the
+    /// independent task roots.
+    pub(crate) fn roots(&self, policy: &StackPolicy) -> Vec<(String, &Bound)> {
+        let mut roots = Vec::new();
         for (index, stack) in self.stacks.iter().enumerate() {
             let label = if stack.name == "bootstrap stack" {
                 "bootstrap".to_owned()
@@ -488,12 +532,12 @@ impl StackAudit {
             } else {
                 format!("T{}", index.saturating_sub(1))
             };
-            out.push_str(&report.root(&label, &stack.linked.1));
+            roots.push((label, &stack.linked.1));
         }
         for (index, bound) in self.task_bounds.iter().enumerate() {
-            out.push_str(&report.root(&format!("T{index}"), bound));
+            roots.push((format!("T{index}"), bound));
         }
-        out
+        roots
     }
     pub(crate) fn of(
         image: &Image,
@@ -673,7 +717,9 @@ impl StackAudit {
         }
         let mut out = budget::header(&resources, resources.usage.peak_admitted_bytes);
         if self.declared_proven {
-            out.push_str("task stacks: the image declares them proven\n");
+            out.push_str(
+                "task stacks: the image sizes them from their bound; an unresolved path fails\n",
+            );
         }
         if self.expression_limited_functions != 0 {
             let _ = writeln!(
@@ -706,6 +752,13 @@ impl StackAudit {
         }
         if let Some(source) = self.size_source {
             for stack in &self.stacks {
+                let source = match source {
+                    crate::linker::task_stack::SizeSource::Bound => format!(
+                        "the {} bound plus the policy's minimum free bytes",
+                        stack.state()
+                    ),
+                    other => other.to_string(),
+                };
                 let _ = writeln!(
                     out,
                     "{}: {} bytes allocated from {source}; minimum free {} bytes",
@@ -718,16 +771,22 @@ impl StackAudit {
 }
 
 impl StackBound {
+    /// The bound's state: `proven`, `conditional (…)` or `partial`.
+    pub fn state(&self) -> String {
+        let bound = &self.linked.1;
+        bound_state(bound.bytes, &bound.assumptions, false)
+    }
+
     /// This stack's section of the report.
     pub fn render(&self) -> String {
         let mut out = String::new();
         let (capacity, bound) = &self.linked;
         let budget = capacity.saturating_sub(self.minimum_free_bytes);
-        let (bytes, state) = match bound.bytes {
-            Some(bytes) if bound.assumptions.is_empty() => (bytes.to_string(), "proven"),
-            Some(bytes) => (bytes.to_string(), "conditional"),
-            None => (format!("{} + ?", bound.partial), "partial"),
-        };
+        let bytes = bound.bytes.map_or_else(
+            || format!("{} + ?", bound.partial),
+            |bytes| bytes.to_string(),
+        );
+        let state = self.state();
         let used = bound.bytes.unwrap_or(bound.partial);
         let headroom = if used <= budget {
             format!("{} bytes of headroom", budget - used)

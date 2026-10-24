@@ -130,6 +130,9 @@ pub struct FunctionFacts {
     pub terminal_recursive_callees: bool,
     /// Direct calls and out-of-function jumps, by site.
     pub transfers: Vec<Transfer>,
+    /// The indirect sites whose targets the machine code itself gives, by
+    /// site: their [`Self::transfers`] carry the targets.
+    pub code_facts: BTreeMap<u32, CodeFact>,
     /// Every reaching word-load definition of each unresolved transfer's
     /// target, only when the local graph and every incoming path prove it.
     pub target_loads: BTreeMap<u32, Vec<Load>>,
@@ -156,6 +159,47 @@ pub struct FunctionFacts {
     pub level_drops: Vec<(u32, LevelDrop)>,
     /// Floating-point instructions and floating-point CSR accesses, by site.
     pub float_sites: Vec<u32>,
+}
+
+/// How the machine code itself gives an indirect site's targets, with no
+/// fact from outside it and no assumption.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum CodeFact {
+    /// A table of exactly known entries: the link's relocations, a sized
+    /// data object, or a bounds check or mask on the index.
+    JumpTable,
+    /// The value analysis: the target register holds known values at the
+    /// site on every path.
+    ValueAnalysis,
+}
+
+/// What an indirect site a bound's walk took reaches, and how its targets
+/// are known.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TakenSite {
+    /// The distinct functions (or exits) the site reaches.
+    pub targets: usize,
+    pub source: SiteSource,
+}
+
+/// Where a taken indirect site's targets come from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SiteSource {
+    /// The machine code itself.
+    Code(CodeFact),
+    /// Facts outside the machine code ([`Resolutions`]); each names what it
+    /// assumes ([`Fact::assumption`]).
+    Facts(BTreeSet<Fact>),
+}
+
+impl SiteSource {
+    /// What the site's targets assume: none for the machine code's own.
+    pub fn assumptions(&self) -> BTreeSet<Assumption> {
+        match self {
+            Self::Code(_) => BTreeSet::new(),
+            Self::Facts(facts) => facts.iter().filter_map(|fact| fact.assumption()).collect(),
+        }
+    }
 }
 
 /// Why a reachable site or function leaves a bound unknown.
@@ -242,6 +286,9 @@ pub struct Bound {
     /// What the resolutions the root's walk took assume: a bound with any
     /// is conditional on them.
     pub assumptions: BTreeSet<Assumption>,
+    /// Every indirect site the walk took, by site: the facts behind
+    /// [`Self::assumptions`] and the machine code's own resolutions.
+    pub sites: BTreeMap<u32, TakenSite>,
     /// Every function the root reaches over what is resolved, the root
     /// included: what checks of a context's code read.
     pub reached: BTreeSet<u32>,
@@ -693,6 +740,11 @@ fn function_facts(
             work.insert(&mut unresolved_registers, t.site, *registers, control)?;
         }
     }
+    // The indirect sites before a table or the value analysis resolves them.
+    let mut indirect = BTreeSet::new();
+    for transfer in transfers.iter().filter(|t| t.target.is_none()) {
+        work.add(&mut indirect, transfer.site, control)?;
+    }
     let mut dispatched = Vec::new();
     // Sites whose table the link's relocations or a sized object name:
     // their entries replace whatever the value analysis read.
@@ -763,6 +815,19 @@ fn function_facts(
         }
     }
     transfers.sort_by_key(|t| (t.site, t.target));
+    let mut code_facts = BTreeMap::new();
+    for transfer in transfers.iter().filter(|t| t.target.is_some()) {
+        let fact = if tabled.contains(&transfer.site)
+            || swept.tables.binary_search(&transfer.site).is_ok()
+        {
+            CodeFact::JumpTable
+        } else if indirect.contains(&transfer.site) {
+            CodeFact::ValueAnalysis
+        } else {
+            continue;
+        };
+        work.insert(&mut code_facts, transfer.site, fact, control)?;
+    }
     let mut call_arguments = BTreeMap::new();
     for t in &transfers {
         if t.kind == TransferKind::Call
@@ -807,6 +872,7 @@ fn function_facts(
         open_exit_target_loads,
         load_bases,
         transfers,
+        code_facts,
         site_depths: observation.site_depths,
         level_drops: swept.level_drops,
         float_sites: swept.float_sites,
@@ -835,6 +901,7 @@ impl FunctionFacts {
                 .chain(self.open_exit_target_loads.values())
                 .map(|loads| loads.capacity() * size_of::<Load>())
                 .sum::<usize>()
+            + self.code_facts.len() * size_of::<(u32, CodeFact)>()
             + self.site_depths.len() * size_of::<(u32, u64)>()
             + self.call_arguments.len() * size_of::<(u32, [Option<u32>; 8])>()
             + self.table_bases.len() * size_of::<(u32, u32)>()
@@ -915,6 +982,7 @@ impl Analysis {
             stack: Vec::new(),
             unresolved: BTreeSet::new(),
             assumptions: BTreeSet::new(),
+            sites: BTreeMap::new(),
             root,
             predecessors: BTreeMap::new(),
             keep,
@@ -938,6 +1006,7 @@ impl Analysis {
             path,
             level_drops,
             assumptions: walk.assumptions,
+            sites: walk.sites,
             reached,
             predecessors: std::rc::Rc::new(walk.predecessors),
         })
@@ -993,6 +1062,7 @@ struct Walk<'a, 'k, 'm> {
     stack: Vec<(u32, bool)>,
     unresolved: BTreeSet<(u32, Reason)>,
     assumptions: BTreeSet<Assumption>,
+    sites: BTreeMap<u32, TakenSite>,
     root: u32,
     predecessors: BTreeMap<u32, Predecessor>,
     keep: &'k mut Ledger<'m>,
@@ -1038,10 +1108,35 @@ impl Walk<'_, '_, '_> {
                 continue;
             }
             let targets: Vec<u32> = match (transfer.target, self.resolutions.get(transfer.site)) {
-                (Some(target), _) => vec![target],
+                (Some(target), _) => {
+                    if let Some(&fact) = facts.code_facts.get(&transfer.site)
+                        && !self.sites.contains_key(&transfer.site)
+                    {
+                        let targets = facts
+                            .transfers
+                            .iter()
+                            .filter(|t| t.site == transfer.site)
+                            .count();
+                        let site = TakenSite {
+                            targets,
+                            source: SiteSource::Code(fact),
+                        };
+                        self.keep
+                            .insert(&mut self.sites, transfer.site, site, self.control)?;
+                    }
+                    vec![target]
+                }
                 (None, Some(resolved)) if resolved.resolves() => {
                     self.assumptions
                         .extend(resolved.facts.iter().filter_map(|fact| fact.assumption()));
+                    if !self.sites.contains_key(&transfer.site) {
+                        let site = TakenSite {
+                            targets: resolved.targets.len(),
+                            source: SiteSource::Facts(resolved.facts.clone()),
+                        };
+                        self.keep
+                            .insert(&mut self.sites, transfer.site, site, self.control)?;
+                    }
                     resolved.targets.iter().copied().collect()
                 }
                 (None, Some(_)) => {

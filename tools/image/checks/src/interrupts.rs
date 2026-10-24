@@ -439,13 +439,11 @@ impl InterruptStacks {
                 hart.bytes
                     .map_or(format!("{} + ?", hart.partial), |bytes| bytes.to_string()),
                 self.usable_bytes(hart.core),
-                match hart.bytes {
-                    None => "partial",
-                    Some(_) if hart.assumptions().is_empty() && hart.level_drops().is_empty() => {
-                        "proven"
-                    }
-                    Some(_) => "conditional",
-                }
+                crate::stack::bound_state(
+                    hart.bytes,
+                    &hart.assumptions(),
+                    !hart.level_drops().is_empty()
+                )
             );
             for assumption in hart.assumptions() {
                 let _ = writeln!(out, "  assumes {assumption}");
@@ -964,6 +962,7 @@ mod tests {
             path: Vec::new(),
             level_drops: Vec::new(),
             assumptions: BTreeSet::new(),
+            sites: BTreeMap::new(),
             reached: BTreeSet::new(),
             predecessors: Default::default(),
         };
@@ -1087,6 +1086,7 @@ mod tests {
             target_loads: BTreeMap::new(),
             open_exit_target_loads: BTreeMap::new(),
             load_bases: BTreeMap::new(),
+            code_facts: BTreeMap::new(),
             transfers: callee
                 .map(|target| Transfer {
                     site: address,
@@ -1212,14 +1212,33 @@ mod tests {
     fn a_bound_on_an_admitted_assumption_passes_conditional() {
         let mut stacks = partial(1000);
         stacks.harts[0].bytes = Some(1000);
-        assert!(stacks.render().contains(", proven"));
+        stacks.allocations.insert(
+            0,
+            LinkedStack {
+                bottom: 0,
+                bytes: stacks.contract.interrupts.irq_stack_bytes,
+                from_bound: true,
+            },
+        );
+        assert!(stacks.render().contains(", proven\n"));
+        assert!(stacks.render().contains("\tproven bound\n"));
         stacks.harts[0]
             .exception
             .bound
             .assumptions
             .insert(Assumption::ExecutorInvariant);
-        // The gate names it in a warning and the report.
-        assert!(stacks.render().contains("conditional"));
+        // The gate names it in a warning and the report; neither the hart nor
+        // the size source of its allocation reads proven.
+        let report = stacks.render();
+        assert!(
+            report.contains(", conditional (ExecutorInvariant)\n"),
+            "{report}"
+        );
+        assert!(
+            report.contains("\tconditional bound (ExecutorInvariant)\n"),
+            "{report}"
+        );
+        assert!(!report.contains("proven"), "{report}");
         let warnings = stacks.check(Required::Product).unwrap();
         assert_eq!(warnings.len(), 1);
         assert!(
