@@ -184,12 +184,14 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
             member: "radio".to_owned(),
             description: "test".to_owned(),
             peripherals: vec!["RADIO".to_owned()],
+            handoff: false,
         },
         OwnershipPartition {
             name: "OtherPeripherals".to_owned(),
             member: "other".to_owned(),
             description: "test".to_owned(),
             peripherals: vec!["OTHER".to_owned()],
+            handoff: false,
         },
     ];
     pack.fixed_register_images.push(FixedRegisterImage {
@@ -357,12 +359,14 @@ fn partitioned_pack() -> PacApiPack {
             member: "radio".to_owned(),
             description: "test".to_owned(),
             peripherals: vec!["RADIO".to_owned()],
+            handoff: false,
         },
         OwnershipPartition {
             name: "OtherPeripherals".to_owned(),
             member: "other".to_owned(),
             description: "test".to_owned(),
             peripherals: vec!["OTHER".to_owned()],
+            handoff: false,
         },
     ];
     pack
@@ -783,4 +787,28 @@ fn a_library_declares_nothing_a_chip_owns() {
         .render_library_typed_rust(&svd(&block()))
         .expect_err("a library typed list is refused");
     assert!(error.to_string().contains("types every layout"), "{error}");
+}
+
+#[test]
+fn a_handoff_partition_has_its_own_claims_and_the_root_does_not_claim_it() {
+    let mut pack = partitioned_pack();
+    pack.ownership_partitions[1].handoff = true;
+    let rust = pack
+        .render_typed_rust(&svd(&block()), &Default::default())
+        .expect("the handoff pack renders");
+    for item in [
+        "pub type Claims = super::radio::Claim;",
+        "pub type OtherPeripheralsClaims = super::other::Claim;",
+        "pub fn from_claims(claims: OtherPeripheralsClaims) -> Self",
+        "oer_mmio::check::disjoint_blocks(",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    assert!(!rust.contains("pub other: OtherPeripherals"), "{rust}");
+    pack.ownership_partitions[0].handoff = true;
+    let rust = pack
+        .render_typed_rust(&svd(&block()), &Default::default())
+        .expect("the handoff pack renders");
+    assert!(!rust.contains("pub type Claims"), "{rust}");
+    assert!(rust.contains("pub type RadioPeripheralsClaims"), "{rust}");
 }
