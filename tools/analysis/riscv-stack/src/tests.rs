@@ -1932,19 +1932,38 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 }
 "#;
 
+/// [`WAKER_PROGRAM`] with a second vtable a kept waker carries.
+fn second_vtable_program() -> String {
+    WAKER_PROGRAM.replace(
+        "#[panic_handler]",
+        r#"static OTHER: RawWakerVTable = RawWakerVTable::new(other_clone, by_ref, by_ref, drop);
+unsafe fn other_clone(data: *const ()) -> RawWaker {
+    mark(5);
+    RawWaker::new(data, &OTHER)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep_other() -> *const RawWakerVTable {
+    &OTHER
+}
+
+#[panic_handler]"#,
+    )
+}
+
 #[test]
-fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
+fn a_waker_call_reaches_its_slot_of_the_one_waker_vtable() {
     let elf = compiled(WAKER_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (dwarf, _) = debug(&elf);
-    let vtables = with_facts(&elf, |facts| {
-        waker_vtables(facts, &dwarf, &analysis, &mut ledger(), &mut || Ok(()))
+    let vtable = with_facts(&elf, |facts| {
+        waker_vtable(facts, &dwarf, &analysis, &mut || Ok(()))
     })
-    .unwrap();
-    assert_eq!(vtables.len(), 1, "{vtables:x?}");
+    .unwrap()
+    .expect("the program builds one waker vtable");
     // Every relocated word it reads is charged to the work budget.
     let error = with_facts(&elf, |facts| {
-        waker_vtables(facts, &dwarf, &analysis, &mut ledger(), &mut Units(0))
+        waker_vtable(facts, &dwarf, &analysis, &mut Units(0))
     })
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
@@ -1962,7 +1981,10 @@ fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
         None
     );
     let resolutions =
-        waker_resolutions(&analysis, &dwarf, &vtables, &mut ledger(), &mut || Ok(())).unwrap();
+        waker_resolutions(&analysis, &dwarf, Some(&vtable), &mut ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     // `_start`'s `wake_by_ref` reaches `by_ref` (slot 2), not `wake`.
     let site = analysis.functions[&start]
         .transfers
@@ -1972,7 +1994,7 @@ fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
         .site;
     assert_eq!(
         resolutions.get(site).unwrap().targets,
-        BTreeSet::from([vtables[0][2]])
+        BTreeSet::from([vtable[2]])
     );
     let bound = analysis
         .bound_with(
@@ -1984,6 +2006,23 @@ fn a_waker_call_reaches_its_slot_of_every_waker_vtable() {
         .unwrap();
     assert!(bound.unresolved.is_empty(), "{bound:?}");
     assert!(bound.bytes.is_some());
+}
+
+#[test]
+fn a_second_waker_vtable_fails_the_image() {
+    let elf = compiled_linking(&second_vtable_program(), &["--undefined=keep_other"]);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, _) = debug(&elf);
+    let error = with_facts(&elf, |facts| {
+        waker_vtable(facts, &dwarf, &analysis, &mut || Ok(()))
+    })
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(
+        error.message.contains("second waker vtable"),
+        "{}",
+        error.message
+    );
 }
 
 #[test]
