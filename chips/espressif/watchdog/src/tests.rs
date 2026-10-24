@@ -8,9 +8,10 @@ use oer_time::Duration;
 use oer_time_virtual::VirtualClock;
 
 use super::{
-    LOCK, MainConfig, MainStageAction, MainWatchdog, MainWatchdogRegisters, MicrosecondTick,
-    Microseconds, ResetLength, RtcWatchdog, RtcWatchdogRegisters, SuperWatchdog,
-    SuperWatchdogRegisters, WRITE_KEY, WriteProtected,
+    Access, LOCK, MainConfig, MainStageAction, MainWatchdog, MainWatchdogEnable,
+    MainWatchdogRegisters, MicrosecondTick, Microseconds, ResetLength, RtcWatchdog,
+    RtcWatchdogRegisters, StoppedMainWatchdog, SuperWatchdog, SuperWatchdogRegisters, WRITE_KEY,
+    WriteProtected,
     deadline::{DeadlineBudget, DeadlineError, DeadlineWatchdog},
 };
 
@@ -46,40 +47,43 @@ impl Recorder<'_> {
 }
 
 impl WriteProtected for Recorder<'_> {
-    fn store_write_key(&mut self, key: u32) {
+    fn store_write_key(&mut self, _: Access<'_>, key: u32) {
         self.record(Op::Key(key));
     }
 }
 
-impl MainWatchdogRegisters for Recorder<'_> {
-    fn configure(&mut self, config: MainConfig) {
-        self.record(Op::Configure(config));
-    }
-    fn set_running(&mut self, enabled: bool, flash_boot: bool) {
+impl MainWatchdogEnable for Recorder<'_> {
+    fn set_running(&mut self, _: Access<'_>, enabled: bool, flash_boot: bool) {
         self.record(Op::Running {
             enabled,
             flash_boot,
         });
     }
-    fn set_prescale(&mut self, prescale: u16) {
-        self.record(Op::Prescale(prescale));
-    }
-    fn reset_divider(&mut self) {
-        self.record(Op::ResetDivider);
-    }
-    fn set_stage0_timeout(&mut self, ticks: u32) {
-        self.record(Op::Stage0(ticks));
-    }
-    fn feed(&mut self) {
-        self.record(Op::Feed);
-    }
-    fn latch(&mut self) {
+    fn latch(&mut self, _: Access<'_>) {
         self.record(Op::Latch);
     }
 }
 
+impl MainWatchdogRegisters for Recorder<'_> {
+    fn configure(&mut self, _: Access<'_>, config: MainConfig) {
+        self.record(Op::Configure(config));
+    }
+    fn set_prescale(&mut self, _: Access<'_>, prescale: u16) {
+        self.record(Op::Prescale(prescale));
+    }
+    fn reset_divider(&mut self, _: Access<'_>) {
+        self.record(Op::ResetDivider);
+    }
+    fn set_stage0_timeout(&mut self, _: Access<'_>, ticks: u32) {
+        self.record(Op::Stage0(ticks));
+    }
+    fn feed(&mut self, _: Access<'_>) {
+        self.record(Op::Feed);
+    }
+}
+
 impl RtcWatchdogRegisters for Recorder<'_> {
-    fn set_running(&mut self, enabled: bool, flash_boot: bool) {
+    fn set_running(&mut self, _: Access<'_>, enabled: bool, flash_boot: bool) {
         self.record(Op::Running {
             enabled,
             flash_boot,
@@ -88,7 +92,7 @@ impl RtcWatchdogRegisters for Recorder<'_> {
 }
 
 impl SuperWatchdogRegisters for Recorder<'_> {
-    fn set_auto_feed(&mut self, enabled: bool) {
+    fn set_auto_feed(&mut self, _: Access<'_>, enabled: bool) {
         self.record(Op::AutoFeed(enabled));
     }
 }
@@ -157,16 +161,52 @@ fn disabling_latches_the_stop_on_every_chip() {
 }
 
 #[test]
-fn an_unlocked_watchdog_locks_when_dropped_without_a_latch() {
+fn every_session_latches_and_locks_however_it_ends() {
     let log = Log::default();
     let mut watchdog = owned(&log);
-    {
-        let mut unlocked = watchdog.unlock();
-        unlocked.feed();
-    }
-    assert_eq!(log.take(), [Op::Key(WRITE_KEY), Op::Feed, Op::Key(LOCK)]);
-    watchdog.unlock().lock();
-    assert_eq!(log.take(), [Op::Key(WRITE_KEY), Op::Key(LOCK)]);
+    let fed = [Op::Key(WRITE_KEY), Op::Feed, Op::Latch, Op::Key(LOCK)];
+
+    watchdog.with_unlocked(|session| session.feed());
+    assert_eq!(log.take(), fed, "a completed session");
+
+    let early = |session: &mut super::MainSession<'_, Recorder<'_>>, leave: bool| {
+        session.feed();
+        if leave {
+            return Err(());
+        }
+        session.stop();
+        Ok(())
+    };
+    assert_eq!(
+        watchdog.with_unlocked(|session| early(session, true)),
+        Err(())
+    );
+    assert_eq!(log.take(), fed, "an early return");
+
+    let panicked = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
+        watchdog.with_unlocked(|session| {
+            session.feed();
+            panic!("an operation that panics");
+        })
+    }));
+    assert!(panicked.is_err());
+    assert_eq!(log.take(), fed, "a panic");
+
+    watchdog.with_unlocked(|_| ());
+    assert_eq!(
+        log.take(),
+        [Op::Key(WRITE_KEY), Op::Latch, Op::Key(LOCK)],
+        "an empty session"
+    );
+}
+
+#[test]
+fn a_main_watchdog_without_its_clock_is_only_stopped() {
+    let log = Log::default();
+    let mut watchdog = StoppedMainWatchdog::new(Recorder(&log));
+    assert_eq!(log.take(), STOP, "taking it stops it");
+    watchdog.disable();
+    assert_eq!(log.take(), STOP);
 }
 
 #[test]

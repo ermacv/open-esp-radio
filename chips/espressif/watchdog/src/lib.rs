@@ -8,13 +8,13 @@
 //! register traits below with its typed field accessors, one field at a
 //! time; this crate holds the order of the writes and contains no address.
 //!
-//! [`Unlocked`] is the write-protect key as a typestate: every write to a
-//! watchdog's configuration goes through it, so no write is lost to a
-//! locked block, and dropping it stores the lock, so no path leaves the
-//! block unlocked. A main watchdog applies its configuration words only
-//! when its configuration latch is written; [`Unlocked::commit`] latches and
-//! locks. Writing stage actions or timeouts unlatched is not prevented by
-//! type, since a feed needs no latch; the sequences here always commit.
+//! The write-protect key is held only inside one operation of this crate:
+//! the key is stored before it and the lock after it, however it ends, so no
+//! write is lost to a locked block and no path leaves a block unlocked. A
+//! main watchdog applies its configuration words only when its
+//! configuration latch is written; [`MainWatchdog::with_unlocked`] latches
+//! after every operation, before it locks. The register traits take an
+//! [`Access`] only this crate makes, so no other code calls them.
 //!
 //! ```compile_fail,E0599
 //! # use oer_espressif_watchdog::{MainWatchdog, MainWatchdogRegisters};
@@ -26,9 +26,31 @@
 //! ```compile_fail,E0499
 //! # use oer_espressif_watchdog::{MainWatchdog, MainWatchdogRegisters};
 //! fn two_sessions<R: MainWatchdogRegisters>(watchdog: &mut MainWatchdog<R>) {
-//!     let first = watchdog.unlock();
-//!     let second = watchdog.unlock();
-//!     first.commit();
+//!     watchdog.with_unlocked(|_| watchdog.with_unlocked(|_| ()));
+//! }
+//! ```
+//!
+//! ```compile_fail,E0521
+//! # use oer_espressif_watchdog::{MainSession, MainWatchdog, MainWatchdogRegisters};
+//! fn keep_unlocked<'a, R: MainWatchdogRegisters>(
+//!     watchdog: &'a mut MainWatchdog<R>,
+//!     kept: &mut Option<&'a mut MainSession<'a, R>>,
+//! ) {
+//!     watchdog.with_unlocked(|session| *kept = Some(session)); // a session never escapes
+//! }
+//! ```
+//!
+//! ```compile_fail,E0507
+//! # use oer_espressif_watchdog::{MainWatchdog, MainWatchdogRegisters};
+//! fn forget_unlocked<R: MainWatchdogRegisters>(watchdog: &mut MainWatchdog<R>) {
+//!     watchdog.with_unlocked(|session| core::mem::forget(*session)); // no session is owned
+//! }
+//! ```
+//!
+//! ```compile_fail,E0624
+//! # use oer_espressif_watchdog::{Access, WRITE_KEY, WriteProtected};
+//! fn raw_key<R: WriteProtected>(registers: &mut R) {
+//!     registers.store_write_key(Access::new(), WRITE_KEY); // only this crate calls the traits
 //! }
 //! ```
 #![no_std]
@@ -51,7 +73,7 @@ mod tests;
 /// the main, RTC and super watchdogs of both chips.
 pub const WRITE_KEY: u32 = 0x50D8_3AA1;
 
-/// The value [`Unlocked`] stores to lock a watchdog again.
+/// The value every operation stores to lock a watchdog again.
 ///
 /// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:233` (`mwdt_ll_write_protect_enable`)
 /// and `rwdt_ll.h:275-278`.
@@ -132,82 +154,138 @@ impl MainConfig {
     };
 }
 
+/// Proof that a register call comes from this crate's sequences.
+///
+/// Every register trait method takes one by value, and only this crate
+/// makes one, so the chip PAC implements the traits but no other code calls
+/// them: the write-protect key, the configuration words and the latch are
+/// reached only through the sessions below.
+pub struct Access<'a>(core::marker::PhantomData<&'a mut ()>);
+
+impl Access<'_> {
+    const fn new() -> Self {
+        Self(core::marker::PhantomData)
+    }
+}
+
 /// A watchdog's write-protect word.
 pub trait WriteProtected {
     /// Store `key` in the write-protect word.
-    fn store_write_key(&mut self, key: u32);
+    fn store_write_key(&mut self, access: Access<'_>, key: u32);
+}
+
+/// The fields that stop a main watchdog: enable, flash boot and the
+/// configuration latch. A main watchdog whose clock the image does not run
+/// implements only these.
+///
+/// Each method writes only the fields it names, by read-modify-write, and
+/// keeps every other bit of the word.
+pub trait MainWatchdogEnable: WriteProtected {
+    /// Write only the enable and flash boot fields of the configuration
+    /// word.
+    fn set_running(&mut self, access: Access<'_>, enabled: bool, flash_boot: bool);
+    /// Latch the configuration words into the watchdog's clock domain (a
+    /// write trigger).
+    fn latch(&mut self, access: Access<'_>);
 }
 
 /// A main watchdog's words, as the chip PAC's typed fields reach them.
 ///
 /// Each method writes only the fields it names, by read-modify-write, and
 /// keeps every other bit of the word.
-pub trait MainWatchdogRegisters: WriteProtected {
+pub trait MainWatchdogRegisters: MainWatchdogEnable {
     /// Write every field of `config` into the configuration word.
-    fn configure(&mut self, config: MainConfig);
-    /// Write only the enable and flash boot fields of the configuration
-    /// word.
-    fn set_running(&mut self, enabled: bool, flash_boot: bool);
+    fn configure(&mut self, access: Access<'_>, config: MainConfig);
     /// Write the clock prescaler.
-    fn set_prescale(&mut self, prescale: u16);
+    fn set_prescale(&mut self, access: Access<'_>, prescale: u16);
     /// Reset the prescaler's divider counter (a write trigger).
-    fn reset_divider(&mut self);
+    fn reset_divider(&mut self, access: Access<'_>);
     /// Write stage 0's timeout, in watchdog ticks.
-    fn set_stage0_timeout(&mut self, ticks: u32);
+    fn set_stage0_timeout(&mut self, access: Access<'_>, ticks: u32);
     /// Restart the watchdog from stage 0.
-    fn feed(&mut self);
-    /// Latch the configuration words into the watchdog's clock domain (a
-    /// write trigger).
-    fn latch(&mut self);
+    fn feed(&mut self, access: Access<'_>);
 }
 
 /// The RTC watchdog's words.
 pub trait RtcWatchdogRegisters: WriteProtected {
     /// Write only the enable and flash boot fields of the configuration
     /// word.
-    fn set_running(&mut self, enabled: bool, flash_boot: bool);
+    fn set_running(&mut self, access: Access<'_>, enabled: bool, flash_boot: bool);
 }
 
 /// The super watchdog's words.
 pub trait SuperWatchdogRegisters: WriteProtected {
     /// Write only the automatic feed field of the configuration word.
-    fn set_auto_feed(&mut self, enabled: bool);
+    fn set_auto_feed(&mut self, access: Access<'_>, enabled: bool);
 }
 
-/// A watchdog's words while they hold [`WRITE_KEY`]. Dropping it stores
-/// [`LOCK`].
-#[must_use = "dropping the unlocked watchdog locks it again at once"]
-pub struct Unlocked<'a, R: WriteProtected> {
+/// A watchdog's words while they hold [`WRITE_KEY`]; dropping it stores
+/// [`LOCK`]. It lives only inside one of this crate's operations, so no
+/// caller holds, forgets or leaks it.
+struct Unlocked<'a, R: WriteProtected> {
     registers: &'a mut R,
 }
 
 impl<'a, R: WriteProtected> Unlocked<'a, R> {
     fn new(registers: &'a mut R) -> Self {
-        registers.store_write_key(WRITE_KEY);
+        registers.store_write_key(Access::new(), WRITE_KEY);
         Self { registers }
     }
-
-    /// Lock the watchdog again.
-    pub fn lock(self) {}
 }
 
 impl<R: WriteProtected> Drop for Unlocked<'_, R> {
     fn drop(&mut self) {
-        self.registers.store_write_key(LOCK);
+        self.registers.store_write_key(Access::new(), LOCK);
     }
 }
 
-impl<R: MainWatchdogRegisters> Unlocked<'_, R> {
-    /// Program stage 0's timeout to `timeout`, restarting the divider.
-    pub fn set_stage0_timeout(&mut self, tick: MicrosecondTick, timeout: Microseconds) {
-        self.registers.set_prescale(tick.prescale());
-        self.registers.reset_divider();
-        self.registers.set_stage0_timeout(timeout.0);
+/// An unlocked main watchdog that latches its configuration when dropped,
+/// before [`Unlocked`] locks it.
+struct Latched<'a, R: MainWatchdogEnable>(Unlocked<'a, R>);
+
+impl<R: MainWatchdogEnable> Latched<'_, R> {
+    fn registers(&mut self) -> &mut R {
+        self.0.registers
+    }
+}
+
+impl<R: MainWatchdogEnable> Drop for Latched<'_, R> {
+    fn drop(&mut self) {
+        self.registers().latch(Access::new());
+    }
+}
+
+/// A main watchdog's words inside [`MainWatchdog::with_unlocked`].
+///
+/// The operation stores [`WRITE_KEY`] before it and, however it ends, a
+/// panic included, latches the configuration and stores [`LOCK`] after it,
+/// so no change is left unlatched and no path leaves the watchdog unlocked.
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/timer/timg.rs:655-669`: the
+/// ESP32-S31 latches its configuration asynchronously, a disable included,
+/// and the ESP32-C5 applies stage writes only when latched (ESP-IDF 4d59230d
+/// `components/esp_hal_wdt/esp32c5/include/hal/mwdt_ll.h:122`). Both chips
+/// latch every session here, a disable included; esp-hal does not latch a
+/// disable on the ESP32-C5.
+pub struct MainSession<'a, R: MainWatchdogRegisters> {
+    latched: Latched<'a, R>,
+    tick: MicrosecondTick,
+}
+
+impl<R: MainWatchdogRegisters> MainSession<'_, R> {
+    /// Program stage 0's timeout to `timeout` at the watchdog's tick,
+    /// restarting the divider.
+    pub fn set_stage0_timeout(&mut self, timeout: Microseconds) {
+        let prescale = self.tick.prescale();
+        let registers = self.latched.registers();
+        registers.set_prescale(Access::new(), prescale);
+        registers.reset_divider(Access::new());
+        registers.set_stage0_timeout(Access::new(), timeout.0);
     }
 
     /// Write the whole configuration word.
     pub fn configure(&mut self, config: MainConfig) {
-        self.registers.configure(config);
+        self.latched.registers().configure(Access::new(), config);
     }
 
     /// Stop counting and clear flash boot protection, keeping the stage
@@ -218,57 +296,20 @@ impl<R: MainWatchdogRegisters> Unlocked<'_, R> {
     /// resets) and `components/bootloader_support/src/bootloader_init.c:106-110`
     /// (flash boot protection cleared field by field).
     pub fn stop(&mut self) {
-        self.registers.set_running(false, false);
+        self.latched
+            .registers()
+            .set_running(Access::new(), false, false);
     }
 
     /// Restart the watchdog from stage 0.
     pub fn feed(&mut self) {
-        self.registers.feed();
+        self.latched.registers().feed(Access::new());
     }
 
-    /// Latch the configuration written so far.
+    /// Latch the configuration written so far; the session latches again
+    /// when it ends.
     pub fn latch(&mut self) {
-        self.registers.latch();
-    }
-
-    /// Latch the configuration and lock the watchdog.
-    ///
-    /// SOURCE: esp-hal 1f646c5 `esp-hal/src/timer/timg.rs:655-669`: the
-    /// ESP32-S31 latches its configuration asynchronously, a disable
-    /// included, and the ESP32-C5 applies stage writes only when latched
-    /// (ESP-IDF 4d59230d `components/esp_hal_wdt/esp32c5/include/hal/mwdt_ll.h:122`).
-    /// Both chips latch every change here, a disable included; esp-hal
-    /// does not latch a disable on the ESP32-C5.
-    pub fn commit(mut self) {
-        self.latch();
-    }
-}
-
-impl<R: RtcWatchdogRegisters> Unlocked<'_, R> {
-    /// Stop the RTC watchdog and clear its flash boot protection, keeping
-    /// the stage actions and reset lengths.
-    ///
-    /// SOURCE: ESP-IDF 4d59230d `components/esp_system/startup_funcs.c:145-153`
-    /// (`init_disable_rtc_wdt` clears `WDT_EN` alone, through
-    /// `rwdt_ll_disable`) and `bootloader_init.c:86-89` (flash boot
-    /// protection cleared alone). esp-hal 1f646c5
-    /// `esp-hal/src/rtc_cntl/mod.rs:573-598` stores zero in the whole word,
-    /// which also clears the reset lengths and the pause in sleep.
-    pub fn stop_rtc(&mut self) {
-        self.registers.set_running(false, false);
-    }
-}
-
-impl<R: SuperWatchdogRegisters> Unlocked<'_, R> {
-    /// Let the hardware feed the super watchdog by itself, or stop it
-    /// doing so.
-    ///
-    /// SOURCE: ESP-IDF 4d59230d `components/bootloader_support/src/esp32s31/bootloader_esp32s31.c:118-123`
-    /// and `esp32c5/bootloader_esp32c5.c:75-80` (`bootloader_super_wdt_auto_feed`
-    /// sets `SWD_AUTO_FEED_EN` alone). esp-hal 1f646c5
-    /// `esp-hal/src/rtc_cntl/mod.rs:676-686` stores the whole word.
-    pub fn set_auto_feed(&mut self, enabled: bool) {
-        self.registers.set_auto_feed(enabled);
+        self.latched.registers().latch(Access::new());
     }
 }
 
@@ -321,9 +362,7 @@ impl<R: MainWatchdogRegisters> MainWatchdog<R> {
     /// flash boot protection off, latched and locked.
     pub fn new(registers: R, tick: MicrosecondTick) -> Self {
         let mut watchdog = Self { registers, tick };
-        let mut unlocked = watchdog.unlock();
-        unlocked.stop();
-        unlocked.commit();
+        watchdog.disable();
         watchdog
     }
 
@@ -332,9 +371,15 @@ impl<R: MainWatchdogRegisters> MainWatchdog<R> {
         self.tick
     }
 
-    /// Unlock the watchdog's words until the returned value is dropped.
-    pub fn unlock(&mut self) -> Unlocked<'_, R> {
-        Unlocked::new(&mut self.registers)
+    /// Run `operation` on the unlocked watchdog: store [`WRITE_KEY`], run
+    /// it, then latch the configuration and store [`LOCK`], however
+    /// `operation` ends.
+    pub fn with_unlocked<T>(&mut self, operation: impl FnOnce(&mut MainSession<'_, R>) -> T) -> T {
+        let mut session = MainSession {
+            latched: Latched(Unlocked::new(&mut self.registers)),
+            tick: self.tick,
+        };
+        operation(&mut session)
     }
 
     /// Reset the system `timeout` from now unless stopped first.
@@ -343,21 +388,43 @@ impl<R: MainWatchdogRegisters> MainWatchdog<R> {
     /// `:679-687` then `:640-668` (`set_timeout`, `feed`, `enable`): the
     /// timeout is latched before the feed and the enable after it.
     pub fn arm_system_reset(&mut self, timeout: Microseconds) {
-        let tick = self.tick;
-        let mut unlocked = self.unlock();
-        unlocked.set_stage0_timeout(tick, timeout);
-        unlocked.latch();
-        unlocked.feed();
-        unlocked.configure(MainConfig::SYSTEM_RESET_ON_STAGE0);
-        unlocked.commit();
+        self.with_unlocked(|session| {
+            session.set_stage0_timeout(timeout);
+            session.latch();
+            session.feed();
+            session.configure(MainConfig::SYSTEM_RESET_ON_STAGE0);
+        });
     }
 
     /// Stop the watchdog: disabled, flash boot protection off, latched and
     /// locked.
     pub fn disable(&mut self) {
-        let mut unlocked = self.unlock();
-        unlocked.stop();
-        unlocked.commit();
+        self.with_unlocked(|session| session.stop());
+    }
+}
+
+/// A main watchdog whose clock the image does not run, owned so that
+/// nothing else writes it. It is only stopped: armed without its clock it
+/// would never count.
+pub struct StoppedMainWatchdog<R: MainWatchdogEnable>(R);
+
+impl<R: MainWatchdogEnable> StoppedMainWatchdog<R> {
+    /// Own the watchdog and stop it: disabled, flash boot protection off,
+    /// latched and locked.
+    pub fn new(registers: R) -> Self {
+        let mut watchdog = Self(registers);
+        watchdog.disable();
+        watchdog
+    }
+
+    /// Stop the watchdog again: disabled, flash boot protection off,
+    /// latched and locked.
+    ///
+    /// SOURCE: ESP-IDF 4d59230d `mwdt_ll.h:70-77` and
+    /// `bootloader_init.c:106-110`, as [`MainSession::stop`].
+    pub fn disable(&mut self) {
+        let mut latched = Latched(Unlocked::new(&mut self.0));
+        latched.registers().set_running(Access::new(), false, false);
     }
 }
 
@@ -376,14 +443,19 @@ impl<R: RtcWatchdogRegisters> RtcWatchdog<R> {
         Self(registers)
     }
 
-    /// Unlock the watchdog's words until the returned value is dropped.
-    pub fn unlock(&mut self) -> Unlocked<'_, R> {
-        Unlocked::new(&mut self.0)
-    }
-
-    /// Stop the RTC watchdog and its flash boot protection, field by field.
+    /// Stop the RTC watchdog and clear its flash boot protection, keeping
+    /// the stage actions and reset lengths: unlocked, the two fields
+    /// written, locked.
+    ///
+    /// SOURCE: ESP-IDF 4d59230d `components/esp_system/startup_funcs.c:145-153`
+    /// (`init_disable_rtc_wdt` clears `WDT_EN` alone, through
+    /// `rwdt_ll_disable`) and `bootloader_init.c:86-89` (flash boot
+    /// protection cleared alone). esp-hal 1f646c5
+    /// `esp-hal/src/rtc_cntl/mod.rs:573-598` stores zero in the whole word,
+    /// which also clears the reset lengths and the pause in sleep.
     pub fn disable(&mut self) {
-        self.unlock().stop_rtc();
+        let unlocked = Unlocked::new(&mut self.0);
+        unlocked.registers.set_running(Access::new(), false, false);
     }
 }
 
@@ -396,14 +468,15 @@ impl<R: SuperWatchdogRegisters> SuperWatchdog<R> {
         Self(registers)
     }
 
-    /// Unlock the watchdog's words until the returned value is dropped.
-    pub fn unlock(&mut self) -> Unlocked<'_, R> {
-        Unlocked::new(&mut self.0)
-    }
-
     /// Let the hardware feed the super watchdog, as the ESP-IDF bootloader
-    /// leaves it.
+    /// leaves it: unlocked, the automatic feed field set, locked.
+    ///
+    /// SOURCE: ESP-IDF 4d59230d `components/bootloader_support/src/esp32s31/bootloader_esp32s31.c:118-123`
+    /// and `esp32c5/bootloader_esp32c5.c:75-80` (`bootloader_super_wdt_auto_feed`
+    /// sets `SWD_AUTO_FEED_EN` alone). esp-hal 1f646c5
+    /// `esp-hal/src/rtc_cntl/mod.rs:676-686` stores the whole word.
     pub fn feed_automatically(&mut self) {
-        self.unlock().set_auto_feed(true);
+        let unlocked = Unlocked::new(&mut self.0);
+        unlocked.registers.set_auto_feed(Access::new(), true);
     }
 }

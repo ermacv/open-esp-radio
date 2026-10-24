@@ -7,11 +7,32 @@
 //! partition. Each owner implements the register traits of
 //! `oer-espressif-watchdog` with the typed fields, one read-modify-write per
 //! call, so every other bit of a word, reserved ones included, is kept and
-//! every write trigger is zero except in its own trigger.
+//! every write trigger is zero except in its own trigger. The traits' calls
+//! need an `oer_espressif_watchdog::Access`, which only that crate's
+//! sequences make, so an owner's words are written only through them.
+//!
+//! ```compile_fail,E0061
+//! # use oer_esp32c5_pac::watchdog::Mwdt1Registers;
+//! # use oer_espressif_watchdog::{WRITE_KEY, WriteProtected};
+//! fn raw_key(mut mwdt1: Mwdt1Registers) {
+//!     mwdt1.store_write_key(WRITE_KEY); // the key is stored only inside a session
+//! }
+//! ```
+//!
+//! Timer group 0's watchdog clock is not the image's, so its watchdog is
+//! only stopped, never armed:
+//!
+//! ```compile_fail,E0277
+//! # use oer_esp32c5_pac::watchdog::Mwdt0Registers;
+//! # use oer_espressif_watchdog::{MainWatchdog, MicrosecondTick};
+//! fn arm(mwdt0: Mwdt0Registers, tick: MicrosecondTick) {
+//!     let _armable = MainWatchdog::new(mwdt0, tick);
+//! }
+//! ```
 
 use oer_espressif_watchdog::{
-    MainConfig, MainStageAction, MainWatchdogRegisters, ResetLength, RtcWatchdogRegisters,
-    SuperWatchdogRegisters, WriteProtected,
+    Access, MainConfig, MainStageAction, MainWatchdogEnable, MainWatchdogRegisters, ResetLength,
+    RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };
 use oer_mmio::{Bits, Fixed, Placement};
 
@@ -96,7 +117,13 @@ impl WatchdogBlocks {
 }
 
 /// Timer group 0's main watchdog. Timer group 0's bus clock is never gated
-/// (esp-hal keeps it running for its RTC calibration).
+/// (esp-hal keeps it running for its RTC calibration), but its watchdog
+/// clock is esp-hal's, which gates it: the owner implements only the stop
+/// fields ([`MainWatchdogEnable`]), so it is never armed.
+///
+/// SOURCE: esp-hal 1f646c5 `esp-hal/src/lib.rs:782` and
+/// `esp-hal/src/timer/timg.rs:670-673` (timer group 0's watchdog disabled and
+/// its clock released in `esp_hal::init`).
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct Mwdt0Registers<P: Placement = Fixed<{ timg0_wdt::BASE }>>(Timg0Wdt<P>);
 
@@ -163,74 +190,77 @@ const fn reset_length(length: ResetLength) -> Bits<3> {
     }
 }
 
-/// The main watchdog trait over one timer group's typed watchdog block.
-macro_rules! main_watchdog_registers {
+/// The write-protect and stop traits over one timer group's typed watchdog
+/// block.
+macro_rules! main_watchdog_enable {
     ([$($generics:tt)*] $owner:ty, $field:tt) => {
         impl<$($generics)*> WriteProtected for $owner {
-            fn store_write_key(&mut self, key: u32) {
+            fn store_write_key(&mut self, _: Access<'_>, key: u32) {
                 self.$field.modify_wdtwprotect(|w| {
                     w.set_wdt_wkey(key);
                 });
             }
         }
 
-        impl<$($generics)*> MainWatchdogRegisters for $owner {
-            fn configure(&mut self, config: MainConfig) {
-                let [stage0, stage1, stage2, stage3] = config.stages;
-                self.$field.modify_wdtconfig0(|w| {
-                    w.set_wdt_en(config.enabled)
-                        .set_wdt_flashboot_mod_en(config.flash_boot)
-                        .set_wdt_stg0(main_stage(stage0))
-                        .set_wdt_stg1(main_stage(stage1))
-                        .set_wdt_stg2(main_stage(stage2))
-                        .set_wdt_stg3(main_stage(stage3))
-                        .set_wdt_cpu_reset_length(reset_length(config.cpu_reset_length))
-                        .set_wdt_sys_reset_length(reset_length(config.system_reset_length));
-                });
-            }
-
-            fn set_running(&mut self, enabled: bool, flash_boot: bool) {
+        impl<$($generics)*> MainWatchdogEnable for $owner {
+            fn set_running(&mut self, _: Access<'_>, enabled: bool, flash_boot: bool) {
                 self.$field.modify_wdtconfig0(|w| {
                     w.set_wdt_en(enabled).set_wdt_flashboot_mod_en(flash_boot);
                 });
             }
 
-            fn set_prescale(&mut self, prescale: u16) {
-                self.$field.modify_wdtconfig1(|w| {
-                    w.set_wdt_clk_prescale(prescale);
-                });
-            }
-
-            fn reset_divider(&mut self) {
-                self.$field.trigger_wdtconfig1_wdt_divcnt_rst();
-            }
-
-            fn set_stage0_timeout(&mut self, ticks: u32) {
-                self.$field.modify_wdtconfig2(|w| {
-                    w.set_wdt_stg0_hold(ticks);
-                });
-            }
-
-            /// SOURCE: ESP-IDF 4d59230d `components/esp_hal_wdt/esp32c5/include/hal/mwdt_ll.h:219-222` (`mwdt_ll_feed`
-            /// writes one; any value feeds).
-            fn feed(&mut self) {
-                self.$field.write_wdtfeed(|w| {
-                    w.set_wdt_feed(1);
-                });
-            }
-
-            fn latch(&mut self) {
+            fn latch(&mut self, _: Access<'_>) {
                 self.$field.trigger_wdtconfig0_wdt_conf_update_en();
             }
         }
     };
 }
 
-main_watchdog_registers!([P: Placement] Mwdt0Registers<P>, 0);
-main_watchdog_registers!([P: Placement, Q: Placement] Mwdt1Registers<P, Q>, wdt);
+main_watchdog_enable!([P: Placement] Mwdt0Registers<P>, 0);
+main_watchdog_enable!([P: Placement, Q: Placement] Mwdt1Registers<P, Q>, wdt);
+
+impl<P: Placement, Q: Placement> MainWatchdogRegisters for Mwdt1Registers<P, Q> {
+    fn configure(&mut self, _: Access<'_>, config: MainConfig) {
+        let [stage0, stage1, stage2, stage3] = config.stages;
+        self.wdt.modify_wdtconfig0(|w| {
+            w.set_wdt_en(config.enabled)
+                .set_wdt_flashboot_mod_en(config.flash_boot)
+                .set_wdt_stg0(main_stage(stage0))
+                .set_wdt_stg1(main_stage(stage1))
+                .set_wdt_stg2(main_stage(stage2))
+                .set_wdt_stg3(main_stage(stage3))
+                .set_wdt_cpu_reset_length(reset_length(config.cpu_reset_length))
+                .set_wdt_sys_reset_length(reset_length(config.system_reset_length));
+        });
+    }
+
+    fn set_prescale(&mut self, _: Access<'_>, prescale: u16) {
+        self.wdt.modify_wdtconfig1(|w| {
+            w.set_wdt_clk_prescale(prescale);
+        });
+    }
+
+    fn reset_divider(&mut self, _: Access<'_>) {
+        self.wdt.trigger_wdtconfig1_wdt_divcnt_rst();
+    }
+
+    fn set_stage0_timeout(&mut self, _: Access<'_>, ticks: u32) {
+        self.wdt.modify_wdtconfig2(|w| {
+            w.set_wdt_stg0_hold(ticks);
+        });
+    }
+
+    /// SOURCE: ESP-IDF 4d59230d `components/esp_hal_wdt/esp32c5/include/hal/mwdt_ll.h:219-222` (`mwdt_ll_feed`
+    /// writes one; any value feeds).
+    fn feed(&mut self, _: Access<'_>) {
+        self.wdt.write_wdtfeed(|w| {
+            w.set_wdt_feed(1);
+        });
+    }
+}
 
 impl<P: Placement> WriteProtected for RwdtRegisters<P> {
-    fn store_write_key(&mut self, key: u32) {
+    fn store_write_key(&mut self, _: Access<'_>, key: u32) {
         self.0.modify_wprotect(|w| {
             w.set_wdt_wkey(key);
         });
@@ -238,7 +268,7 @@ impl<P: Placement> WriteProtected for RwdtRegisters<P> {
 }
 
 impl<P: Placement> RtcWatchdogRegisters for RwdtRegisters<P> {
-    fn set_running(&mut self, enabled: bool, flash_boot: bool) {
+    fn set_running(&mut self, _: Access<'_>, enabled: bool, flash_boot: bool) {
         self.0.modify_config0(|w| {
             w.set_wdt_en(enabled).set_wdt_flashboot_mod_en(flash_boot);
         });
@@ -246,7 +276,7 @@ impl<P: Placement> RtcWatchdogRegisters for RwdtRegisters<P> {
 }
 
 impl<P: Placement> WriteProtected for SwdRegisters<P> {
-    fn store_write_key(&mut self, key: u32) {
+    fn store_write_key(&mut self, _: Access<'_>, key: u32) {
         self.0.modify_swd_wprotect(|w| {
             w.set_swd_wkey(key);
         });
@@ -254,7 +284,7 @@ impl<P: Placement> WriteProtected for SwdRegisters<P> {
 }
 
 impl<P: Placement> SuperWatchdogRegisters for SwdRegisters<P> {
-    fn set_auto_feed(&mut self, enabled: bool) {
+    fn set_auto_feed(&mut self, _: Access<'_>, enabled: bool) {
         self.0.modify_swd_config(|w| {
             w.set_swd_auto_feed_en(enabled);
         });

@@ -10,7 +10,8 @@ pub use oer_esp32s31_pac::watchdog::{
     Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters, WatchdogBlocks, WatchdogHandoff,
 };
 pub use oer_espressif_watchdog::{
-    MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, SuperWatchdog, Unlocked,
+    MainSession, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, StoppedMainWatchdog,
+    SuperWatchdog,
     deadline::{DeadlineBudget, DeadlineError},
 };
 
@@ -26,8 +27,9 @@ pub const MAIN_WATCHDOG_TICK: MicrosecondTick = match MicrosecondTick::from_sour
 
 /// Every watchdog of the chip, owned for the image's lifetime.
 pub struct Watchdogs {
-    /// Timer group 0's main watchdog.
-    pub main0: MainWatchdog<Mwdt0Registers>,
+    /// Timer group 0's main watchdog, only stopped: its watchdog clock is
+    /// esp-hal's, which gates it.
+    pub main0: StoppedMainWatchdog<Mwdt0Registers>,
     /// Timer group 1's main watchdog, the system deadline's timer.
     pub main1: MainWatchdog<Mwdt1Registers>,
     /// The RTC watchdog.
@@ -49,7 +51,7 @@ impl Watchdogs {
         } = blocks;
         mwdt1.start_clock();
         Self {
-            main0: MainWatchdog::new(mwdt0, MAIN_WATCHDOG_TICK),
+            main0: StoppedMainWatchdog::new(mwdt0),
             main1: MainWatchdog::new(mwdt1, MAIN_WATCHDOG_TICK),
             rtc: RtcWatchdog::new(rwdt),
             super_watchdog: SuperWatchdog::new(swd),

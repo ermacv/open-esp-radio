@@ -10,14 +10,16 @@ pub use oer_esp32c5_pac::watchdog::{
     Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters, WatchdogBlocks, WatchdogHandoff,
 };
 pub use oer_espressif_watchdog::{
-    MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, SuperWatchdog, Unlocked,
+    MainSession, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, StoppedMainWatchdog,
+    SuperWatchdog,
     deadline::{DeadlineBudget, DeadlineError},
 };
 
 /// Every watchdog of the chip, owned for the image's lifetime.
 pub struct Watchdogs {
-    /// Timer group 0's main watchdog.
-    pub main0: MainWatchdog<Mwdt0Registers>,
+    /// Timer group 0's main watchdog, only stopped: its watchdog clock is
+    /// esp-hal's, which gates it.
+    pub main0: StoppedMainWatchdog<Mwdt0Registers>,
     /// Timer group 1's main watchdog, the system deadline's timer.
     pub main1: MainWatchdog<Mwdt1Registers>,
     /// The RTC watchdog.
@@ -28,7 +30,7 @@ pub struct Watchdogs {
 
 impl Watchdogs {
     /// Own every watchdog: run timer group 1 from reset on the XTAL clock,
-    /// which the main watchdogs count at `tick`, and stop both main
+    /// which its main watchdog counts at `tick`, and stop both main
     /// watchdogs, latched and locked. The RTC and super watchdogs are left
     /// as they are. The XTAL is 40 or 48 MHz, a fact of the module that
     /// esp-hal detects.
@@ -41,7 +43,7 @@ impl Watchdogs {
         } = blocks;
         mwdt1.start_clock();
         Self {
-            main0: MainWatchdog::new(mwdt0, tick),
+            main0: StoppedMainWatchdog::new(mwdt0),
             main1: MainWatchdog::new(mwdt1, tick),
             rtc: RtcWatchdog::new(rwdt),
             super_watchdog: SuperWatchdog::new(swd),

@@ -5,7 +5,7 @@ use esp_hal::{
     usb::usb_serial_jtag::UsbPadControl,
 };
 use oer_espressif_watchdog::{
-    MainWatchdog, MainWatchdogRegisters, MicrosecondTick,
+    MainWatchdog, MainWatchdogRegisters, StoppedMainWatchdog,
     deadline::{DeadlineBudget, DeadlineWatchdog},
 };
 use oer_espressif_esp_hal_soc::handoff::{take_entropy, take_reset_causes, take_watchdogs};
@@ -82,10 +82,9 @@ pub fn watchdogs(
     timg0: TIMG0<'static>,
     timg1: TIMG1<'static>,
     lp_wdt: LP_WDT<'static>,
-    tick: MicrosecondTick,
 ) {
     let blocks = take_watchdogs(timg0, timg1, lp_wdt);
-    let mut main0 = MainWatchdog::new(blocks.mwdt0, tick);
+    let mut main0 = StoppedMainWatchdog::new(blocks.mwdt0);
     main0.disable();
     #[cfg(ui_reject)]
     let _second = take_watchdogs(
@@ -95,7 +94,7 @@ pub fn watchdogs(
     );
 }
 pub fn locked_watchdog<R: MainWatchdogRegisters>(mut main: MainWatchdog<R>) {
-    main.unlock().feed();
+    main.with_unlocked(|session| session.feed());
     #[cfg(ui_reject)]
     main.feed(); // ui-error: E0599
 }

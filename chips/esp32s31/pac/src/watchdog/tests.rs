@@ -1,12 +1,14 @@
 //! The watchdog owners over host memory: each test fills the words with a
-//! pattern, runs one register trait call and reads the fields back through
-//! the typed block, never through an address or a mask.
+//! pattern, runs one sequence of `oer-espressif-watchdog` on an owner and
+//! reads the fields back through a typed view of the same words, never
+//! through an address or a mask.
 
+use core::num::NonZeroU32;
 use std::{vec, vec::Vec};
 
 use oer_espressif_watchdog::{
-    LOCK, MainConfig, MainWatchdogRegisters, RtcWatchdogRegisters, SuperWatchdogRegisters,
-    WRITE_KEY, WriteProtected,
+    LOCK, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, StoppedMainWatchdog,
+    SuperWatchdog,
 };
 
 use super::{Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters};
@@ -16,26 +18,37 @@ fn memory(size: usize, fill: u32) -> Vec<u32> {
     vec![fill; size / 4]
 }
 
+fn tick() -> MicrosecondTick {
+    MicrosecondTick::from_source_hz(40_000_000).expect("40 MHz is whole megahertz")
+}
+
 #[test]
 fn stopping_a_main_watchdog_clears_only_enable_and_flash_boot() {
     let mut words = memory(timg0_wdt::SIZE, u32::MAX);
-    let mut mwdt = Mwdt0Registers::host(&mut words).expect("host memory holds the block");
-    mwdt.set_running(false, false);
-    let config = mwdt.0.read_wdtconfig0();
+    let _stopped =
+        StoppedMainWatchdog::new(Mwdt0Registers::host(&mut words).expect("host memory holds it"));
+    let view = Mwdt0Registers::host(&mut words).expect("host memory holds the block");
+    let config = view.0.read_wdtconfig0();
     assert!(!config.wdt_en() && !config.wdt_flashboot_mod_en());
     assert_eq!(config.wdt_stg0().get(), 3, "the stage actions are kept");
     assert_eq!(config.wdt_sys_reset_length().get(), 7);
     assert!(config.wdt_appcpu_reset_en() && config.wdt_procpu_reset_en());
+    assert_eq!(view.0.read_wdtwprotect().wdt_wkey(), LOCK, "locked again");
 }
 
 #[test]
-fn configuring_a_main_watchdog_writes_every_stage_and_reset_length() {
+fn arming_a_main_watchdog_writes_its_timeout_stages_and_reset_lengths() {
     let mut words = memory(timg1_wdt::SIZE, 0);
     let mut clock = memory(hp_sys_clkrst_timg1::SIZE, 0);
-    let mut mwdt =
-        Mwdt1Registers::host(&mut words, &mut clock).expect("host memory holds the blocks");
-    mwdt.configure(MainConfig::SYSTEM_RESET_ON_STAGE0);
-    let config = mwdt.wdt.read_wdtconfig0();
+    let mut watchdog = MainWatchdog::new(
+        Mwdt1Registers::host(&mut words, &mut clock).expect("host memory holds the blocks"),
+        tick(),
+    );
+    watchdog.arm_system_reset(Microseconds::new(
+        NonZeroU32::new(1_000_000).expect("nonzero"),
+    ));
+    let view = Mwdt1Registers::host(&mut words, &mut clock).expect("host memory holds the blocks");
+    let config = view.wdt.read_wdtconfig0();
     assert!(config.wdt_en() && !config.wdt_flashboot_mod_en());
     assert_eq!(
         [
@@ -53,43 +66,9 @@ fn configuring_a_main_watchdog_writes_every_stage_and_reset_length() {
         !config.wdt_appcpu_reset_en(),
         "the reset masks are not written"
     );
-}
-
-#[test]
-fn the_timeout_lands_in_the_prescaler_and_the_stage0_hold() {
-    let mut words = memory(timg0_wdt::SIZE, 0);
-    let mut mwdt = Mwdt0Registers::host(&mut words).expect("host memory holds the block");
-    mwdt.set_prescale(40);
-    mwdt.set_stage0_timeout(1_000_000);
-    mwdt.reset_divider();
-    mwdt.latch();
-    mwdt.feed();
-    assert_eq!(mwdt.0.read_wdtconfig1().wdt_clk_prescale(), 40);
-    assert_eq!(mwdt.0.read_wdtconfig2().wdt_stg0_hold(), 1_000_000);
-    assert!(
-        !mwdt.0.read_wdtconfig0().wdt_en(),
-        "neither trigger enables"
-    );
-}
-
-#[test]
-fn the_write_key_is_stored_whole_and_cleared_to_lock() {
-    let mut words = memory(timg0_wdt::SIZE, 0);
-    let mut mwdt = Mwdt0Registers::host(&mut words).expect("host memory holds the block");
-    mwdt.store_write_key(WRITE_KEY);
-    assert_eq!(mwdt.0.read_wdtwprotect().wdt_wkey(), WRITE_KEY);
-    mwdt.store_write_key(LOCK);
-    assert_eq!(mwdt.0.read_wdtwprotect().wdt_wkey(), LOCK);
-
-    let mut words = memory(lp_wdt::SIZE, 0);
-    let mut rwdt = RwdtRegisters::host(&mut words).expect("host memory holds the block");
-    rwdt.store_write_key(WRITE_KEY);
-    assert_eq!(rwdt.0.read_wprotect().wdt_wkey(), WRITE_KEY);
-
-    let mut words = memory(lp_wdt_swd::SIZE, 0);
-    let mut swd = SwdRegisters::host(&mut words).expect("host memory holds the block");
-    swd.store_write_key(WRITE_KEY);
-    assert_eq!(swd.0.read_swd_wprotect().swd_wkey(), WRITE_KEY);
+    assert_eq!(view.wdt.read_wdtconfig1().wdt_clk_prescale(), 40);
+    assert_eq!(view.wdt.read_wdtconfig2().wdt_stg0_hold(), 1_000_000);
+    assert_eq!(view.wdt.read_wdtwprotect().wdt_wkey(), LOCK, "locked again");
 }
 
 #[test]
@@ -107,9 +86,9 @@ fn group_one_runs_out_of_reset_with_its_watchdog_on_xtal() {
 #[test]
 fn stopping_the_rtc_watchdog_keeps_its_reset_lengths_and_sleep_pause() {
     let mut words = memory(lp_wdt::SIZE, u32::MAX);
-    let mut rwdt = RwdtRegisters::host(&mut words).expect("host memory holds the block");
-    rwdt.set_running(false, false);
-    let config = rwdt.0.read_config0();
+    RtcWatchdog::new(RwdtRegisters::host(&mut words).expect("host memory holds it")).disable();
+    let view = RwdtRegisters::host(&mut words).expect("host memory holds the block");
+    let config = view.0.read_config0();
     assert!(!config.wdt_en() && !config.wdt_flashboot_mod_en());
     assert!(
         config.wdt_pause_in_slp(),
@@ -117,14 +96,17 @@ fn stopping_the_rtc_watchdog_keeps_its_reset_lengths_and_sleep_pause() {
     );
     assert_eq!(config.wdt_cpu_reset_length().get(), 7);
     assert_eq!(config.wdt_stg0().get(), 7);
+    assert_eq!(view.0.read_wprotect().wdt_wkey(), LOCK, "locked again");
 }
 
 #[test]
 fn the_super_watchdog_feeds_itself_and_keeps_its_signal_width() {
     let mut words = memory(lp_wdt_swd::SIZE, 0x12c0_0000);
-    let mut swd = SwdRegisters::host(&mut words).expect("host memory holds the block");
-    swd.set_auto_feed(true);
-    let config = swd.0.read_swd_config();
+    SuperWatchdog::new(SwdRegisters::host(&mut words).expect("host memory holds it"))
+        .feed_automatically();
+    let view = SwdRegisters::host(&mut words).expect("host memory holds the block");
+    let config = view.0.read_swd_config();
     assert!(config.swd_auto_feed_en() && !config.swd_disable());
     assert_eq!(config.swd_signal_width().get(), 300);
+    assert_eq!(view.0.read_swd_wprotect().swd_wkey(), LOCK, "locked again");
 }
