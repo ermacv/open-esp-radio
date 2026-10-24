@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{marker::PhantomData, task::Context};
 
 use embassy_executor::{SendSpawner, Spawner, raw};
 use esp_hal::{
@@ -11,8 +11,10 @@ use esp_hal::{
 };
 use oer_interrupt_table::{
     Entry,
-    signal::{IrqSignal, SignalExecutor, SignalList},
+    signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
 };
+
+use crate::task_handle::{CurrentTask, EmbassyTask};
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::ready::ExecutorIndex::COUNT;
@@ -113,11 +115,20 @@ fn trace_executor(executor_id: u32) -> crate::ready::ExecutorIndex {
 pub(crate) fn task_ready_begin(executor_id: u32) {
     EMBASSY_WORK_PENDING.0[trace_executor(executor_id).index()].ready_begin();
 }
-pub(crate) fn task_exec_begin(executor_id: u32) {
+pub(crate) fn task_exec_begin(executor_id: u32, task: u32) {
     let swi = trace_executor(executor_id);
     EMBASSY_WORK_PENDING.0[swi.index()].exec_begin();
+    CURRENT_TASKS[swi.index()].begin(task);
     stamp_poll(swi);
 }
+pub(crate) fn task_exec_end(executor_id: u32) {
+    CURRENT_TASKS[trace_executor(executor_id).index()].end();
+}
+
+/// The task each executor polls now, from the trace hooks; only that
+/// executor's context reads it, to name a polling task for its signals.
+static CURRENT_TASKS: [CurrentTask; SOFTWARE_INTERRUPT_COUNT] =
+    [const { CurrentTask::new() }; SOFTWARE_INTERRUPT_COUNT];
 
 // Keep the clock and timestamp publication out of the ready-counter hook.
 // The tail call avoids keeping the hook's frame across the clock read.
@@ -456,7 +467,7 @@ impl<const SWI: u8> Executor<SWI> {
 
 /// The signals each interrupt-mode executor's handler services before it
 /// polls; only that executor's context touches its list.
-static SIGNAL_LISTS: [SignalList; SOFTWARE_INTERRUPT_COUNT] =
+static SIGNAL_LISTS: [SignalList<EmbassyTask>; SOFTWARE_INTERRUPT_COUNT] =
     [const { SignalList::new() }; SOFTWARE_INTERRUPT_COUNT];
 
 /// Pend the interrupt-mode executor `SWI` for a raised signal: raise its
@@ -489,16 +500,28 @@ pub struct InterruptExecutor<const SWI: u8> {
 // SAFETY: `signal_context::<SWI>` is true only while this executor's
 // handler polls (`as_running`), which never reenters itself on its core;
 // `pend_signal::<SWI>` raises that handler's interrupt, which services
-// `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`).
+// `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`). `current`
+// names a task only for the waker of the task this executor polls now
+// (`CURRENT_TASKS[SWI]`, set by the trace hooks around each poll); `wake`
+// enqueues the task and pends its executor, never polling it in place.
 unsafe impl<const SWI: u8> SignalExecutor for InterruptExecutor<SWI> {
+    type Task = EmbassyTask;
     fn pend(signal: &'static IrqSignal<Self>) {
         pend_signal::<SWI>(signal);
     }
     fn running() -> bool {
         signal_context::<SWI>()
     }
-    fn list() -> &'static SignalList {
+    fn list() -> &'static SignalList<EmbassyTask> {
         &SIGNAL_LISTS[SWI as usize]
+    }
+    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<EmbassyTask, ForeignTask> {
+        CURRENT_TASKS[SWI as usize]
+            .matching(cx.waker())
+            .ok_or(ForeignTask)
+    }
+    fn wake(task: EmbassyTask, _: &ContextToken) {
+        task.wake();
     }
 }
 
