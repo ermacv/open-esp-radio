@@ -1,5 +1,5 @@
 //! Bounded initial-GTK investigation, distinct from W4 qualification.
-use super::workload::{authorized, network, stop_on_error};
+use super::workload::{Station, StopEnd, authorized, ended, network, stop_on_error, stop_station};
 use oer_hil_lab::{
     air::{AirCapture, station::Direction},
     config::StationFixtureConfig,
@@ -228,14 +228,23 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
         if let Ok(counters) = counters {
             context.results.observe("initial-gtk-counters", &counters);
         }
-        let stopped = || -> Result<()> {
-            let command = capture.command(StopStation, Duration::from_secs(10))?;
-            let stopped: StationStopped = capture.wait_command(command, Duration::from_secs(10))?;
-            context.results.observe("initial-gtk-stopped", &stopped.0);
-            Ok(())
+        let stopped = || -> Result<Option<StationServiceEnded>> {
+            match stop_station(&Station { capture, start })? {
+                StopEnd::Stopped(counters) => {
+                    context.results.observe("initial-gtk-stopped", &counters);
+                    Ok(None)
+                }
+                StopEnd::Ended(end) => {
+                    context.results.observe("initial-gtk-service-ended", &end);
+                    Ok(Some(end))
+                }
+            }
         };
         let work = match work {
-            Ok(()) => stopped(),
+            Ok(()) => match stopped()? {
+                None => Ok(()),
+                Some(end) => Err(ended(&end).into()),
+            },
             Err(e) => stop_on_error::<()>(Err(e), stopped),
         };
         // The canonical protocol stream retains link, key and receive-drop

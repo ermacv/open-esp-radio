@@ -9,7 +9,7 @@ use embassy_futures::select::{Either, select};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_hil_protocol::wifi::{StationDisconnectReason, StationLinkState};
+use oer_hil_protocol::wifi::{StationLinkState, StationServiceEnd};
 use oer_ieee80211_port::*;
 use oer_ieee80211_rsn::{Pmk, nonce::SNonceSource, sae::SaePassword};
 use oer_ieee80211_runtime::station_service::*;
@@ -244,7 +244,7 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 
                 self.link.set(false);
                 self.retry.set(true);
                 self.attempt.publish(StationLinkState::Disconnected {
-                    reason: disconnect_reason(reason),
+                    reason: super::report::disconnect(reason),
                 });
             }
             ServiceOutput::CommandCompleted(terminal) => self.ready.set(Some(terminal.request)),
@@ -259,18 +259,6 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 
         }
     }
 }
-fn disconnect_reason(reason: machine::StaDisconnectReason) -> StationDisconnectReason {
-    use machine::StaDisconnectReason as R;
-    match reason {
-        R::Requested => StationDisconnectReason::LocalRequest,
-        R::Peer { reason_code } => StationDisconnectReason::Peer { reason_code },
-        R::AuthenticationFailed | R::Sae(_) => StationDisconnectReason::AuthenticationFailed,
-        R::AssociationFailed | R::NotFound { .. } => StationDisconnectReason::AssociationFailed,
-        R::HandshakeFailed | R::SaQueryTimeout => StationDisconnectReason::HandshakeFailed,
-        _ => StationDisconnectReason::RadioFailure,
-    }
-}
-
 type Service<'id, Id> = StationService<'id, StationComposition<Id>, Callbacks, Rates, 1>;
 type Completed<'p, 'id, Id> =
     ServiceCompleted<'p, 'id, StationComposition<Id>, Callbacks, Rates, 1>;
@@ -503,9 +491,27 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
                 }
                 rp::Ended::uninstall(owner.read(), (), ())
             },
-            Failed { owner, fault, custody } => { attempt.publish(StationLinkState::Disconnected {reason: StationDisconnectReason::RadioFailure}); drop((fault, custody)); owner.read().uninstall((), ()) },
-            Poisoned { owner, fault, custody } => { attempt.publish(StationLinkState::Disconnected {reason: StationDisconnectReason::RadioFailure}); drop((fault, custody)); rp::Ended::fail_stop(owner.read().fail_stop(), ()) },
-            Quarantined { request, fault, custody } => { attempt.publish(StationLinkState::Disconnected {reason: StationDisconnectReason::RadioFailure}); drop((fault, custody)); rp::Ended::fail_stop(request.read(), ()) },
+            // A Disconnected the runtime published precedes the service
+            // end; the image adds none of its own.
+            Failed { owner, fault, custody } => {
+                super::end(attempt, StationServiceEnd::Failed(super::report::service(fault.read())));
+                drop(custody);
+                owner.read().uninstall((), ())
+            },
+            Poisoned { owner, fault, custody } => {
+                let owner = owner.read();
+                super::end(attempt, StationServiceEnd::Poisoned {
+                    fault: super::report::service(fault.read()),
+                    disable: super::report::backend(owner.cause()),
+                });
+                drop(custody);
+                rp::Ended::fail_stop(owner.fail_stop(), ())
+            },
+            Quarantined { request, fault, custody } => {
+                super::end(attempt, StationServiceEnd::Quarantined(super::report::service(fault.read())));
+                drop(custody);
+                rp::Ended::fail_stop(request.read(), ())
+            },
         });
         ended
     }
