@@ -36,7 +36,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     #[cfg(feature = "system-watchdog")]
     /// The USB Serial/JTAG console, to esp-hal's async driver.
     console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu,
-        Exempt(WakerCall, "esp-hal async USB console wakes its AtomicWaker; removed by #441");
+        Exempt(WakerCall, "esp-hal async USB console wakes its task waker; removed by #441");
 }
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
