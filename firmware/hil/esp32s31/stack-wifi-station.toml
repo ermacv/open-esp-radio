@@ -1,11 +1,6 @@
 schema = 6
 extends = "../../../chips/esp32s31/platform/stack.toml"
 
-[[frame_exceptions.runtime]]
-function = "<oer_memory::static_place::PlacedFuture<oer_firmware_hil_esp32s31::wifi_station::console_work::{closure#0}> as core::future::future::Future>::poll"
-reason = "The statically backed P1 console worker polls the USB base intake and W4 command dispatcher with bounded decoder/outbound records. It runs on the existing PSRAM task stack; the measured frame remains below the personal service's largest P1 frame."
-ceiling_bytes = 9584
-
 # Personal StationService runs on the P1 PSRAM task stack. Each exact
 # implementation is measured; the 64-byte initial margin follows the frame policy.
 
