@@ -87,7 +87,7 @@ pub struct NeighborState {
     pub present: bool,
 }
 
-/// Establish an absent station neighbor, accepting an already absent entry
+/// Establish an absent station neighbor (BusyBox `ip` has `flush`, no `del`), accepting an already absent entry
 /// and a racing deletion only after a successful confirming read. The next
 /// measured router ping triggers ARP; only air/target evidence passes gate c.
 pub fn refresh_neighbor(
@@ -122,7 +122,7 @@ pub fn refresh_neighbor(
         });
     }
     let delete = execute(&format!(
-        "ip -4 neigh del {address} dev {}",
+        "ip -4 neigh flush to {address} dev {}",
         quote(interface)?
     ))?;
     if matches!(delete.status.code(), Some(126 | 127)) {
@@ -299,7 +299,9 @@ mod tests {
             assert_eq!(result.is_ok(), success);
             assert!(answers.is_empty());
             assert_eq!(
-                scripts.iter().any(|script| script.contains(" neigh del ")),
+                scripts
+                    .iter()
+                    .any(|script| script.contains(" neigh flush to 10.231.0.100 dev br-oer-w3")),
                 deleted
             );
             assert!(scripts.iter().all(|script| !script.contains("/dev/null")));
