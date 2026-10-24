@@ -15,13 +15,24 @@ use oer_hil_agent::base::{Either, PanicRequest, WatchdogRequest};
 static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMode), 1> =
     Channel::new();
 
+/// The USB Serial/JTAG's pads.
+type Pads = esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>;
+
+oer_espressif_executor::tasks! {
+    /// The watchdog image's tasks.
+    WatchdogTasks: Executor<0> {
+        test_watchdog(service: DeadlineWatchdog) = test_watchdog;
+        panic_on_request() = super::panic::panic_on_request;
+        #[cfg(feature = "usb-jtag-off")]
+        disable_on_request(pads: Pads) = usb_off::disable_on_request;
+        run(usb: crate::transport::Usb, boot: u64) = run;
+    }
+}
+
 pub(crate) fn start(
-    executor: &'static mut crate::Executor<0>,
+    executor: crate::Executor<0>,
     wake: crate::ExecutorWake,
-    (usb, pads): (
-        crate::transport::Usb,
-        esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
-    ),
+    (usb, pads): (crate::transport::Usb, Pads),
     rng: esp_hal::peripherals::RNG<'static>,
     timer: esp_hal::peripherals::TIMG1<'static>,
 ) -> ! {
@@ -33,11 +44,11 @@ pub(crate) fn start(
     let _pads = pads;
     CONSOLE.start(boot);
     executor.run(wake, |spawner| {
-        spawner.spawn(test_watchdog(service).expect("system watchdog test task"));
-        spawner.spawn(super::panic::panic_on_request().expect("panic task"));
+        WatchdogTasks::test_watchdog(spawner, service).expect("system watchdog test task");
+        WatchdogTasks::panic_on_request(spawner).expect("panic task");
         #[cfg(feature = "usb-jtag-off")]
-        spawner.spawn(usb_off::disable_on_request(pads).expect("USB switch task"));
-        spawner.spawn(run(usb, boot).expect("system console task"));
+        WatchdogTasks::disable_on_request(spawner, pads).expect("USB switch task");
+        WatchdogTasks::run(spawner, usb, boot).expect("system console task");
     });
 }
 
@@ -55,7 +66,6 @@ fn queue_test(
 }
 
 #[cfg(not(feature = "usb-jtag-off"))]
-#[embassy_executor::task]
 async fn run(usb: crate::transport::Usb, boot: u64) {
     crate::transport::serve(
         usb,
@@ -70,7 +80,6 @@ async fn run(usb: crate::transport::Usb, boot: u64) {
 }
 
 #[cfg(feature = "usb-jtag-off")]
-#[embassy_executor::task]
 async fn run(usb: crate::transport::Usb, boot: u64) {
     use oer_hil_agent::base::UsbRequest;
     crate::transport::serve(
@@ -112,10 +121,7 @@ mod usb_off {
     /// Acknowledges the request, then takes the USB Serial/JTAG off its
     /// pads and drops its pull-ups: the host sees the device leave USB. Only a reset of the chip,
     /// which restores the pads for the ROM, brings it back.
-    #[embassy_executor::task]
-    pub(super) async fn disable_on_request(
-        pads: esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
-    ) {
+    pub(super) async fn disable_on_request(pads: super::Pads) {
         let request = REQUESTS.receive().await;
         let sequence = CONSOLE
             .publish_reliably(request.session_id, request.request_id, &UsbDisabled)
@@ -130,7 +136,6 @@ mod usb_off {
 }
 
 /// Arms the SoC deadline watchdog for each test and misbehaves as asked.
-#[embassy_executor::task]
 async fn test_watchdog(mut service: DeadlineWatchdog) {
     loop {
         let (request, mode) = TESTS.receive().await;

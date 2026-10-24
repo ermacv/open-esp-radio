@@ -83,16 +83,17 @@ level number or a handler's name, decides the rules:
   `Exempt(ExecutorLevel)` entry with no executor beside it fail every policy
   (`interrupt_table!` refuses them at compile time).
 - **Hardware** levels, and the handler of each `Exempt` entry, run strict
-  code throughout: from SRAM/ROM, with no task poll (`TaskPolls`/`NoTasks`
-  sites) and no call through a waker's vtable (`WakerVtables` sites).
+  code throughout: from SRAM/ROM, with no task poll (the executor's direct
+  calls of its recorded task poll boundaries) and no call through a waker's vtable (`WakerVtables` sites).
   `Required::Product` fails a breach, `Required::Diagnostic` warns per
   context. The cached data their strict code references is reported per
   context, writable (`.data`/`.bss`) and read-only objects by name, and not
   gated yet.
-- **Executor** levels separate their task polls using resolution facts. For
-  each hart and priority the gate follows the bound's root with exactly that
-  context's resolutions. `Analysis::reached_cut` stops at the dequeue calls
-  identified by `TaskPolls` or `NoTasks`, retaining their owning functions.
+- **Executor** levels separate their task polls. For each hart and priority
+  the gate follows the bound's root with exactly that context's resolutions.
+  `Analysis::reached_cut` stops at the executor's direct calls of its
+  recorded task poll boundaries (`task_poll_sites`), retaining their owning
+  functions.
   Functions beyond the cut are tasks; any function also reached on a strict
   path remains strict. Only an executor's level grants this task-side
   permission: its tasks and callees may execute from PSRAM as well as
@@ -220,8 +221,7 @@ Each ELF contains:
   its bound took (`Bound::sites`): the site, its function and offset, the
   number of targets, the facts that give them (`JumpTable` and
   `ValueAnalysis` from the machine code; `InterruptTable`, `StageTwoEntry`,
-  `WakerVtables`, `FieldType`, `TaskPolls`, `NoTasks` from outside
-  it) and what they assume. Each root counts its sites by fact; the totals
+  `WakerVtables`, `FieldType` from outside it) and what they assume. Each root counts its sites by fact; the totals
   count the distinct sites by fact and by assumption, `none` for proven
   sites. The reports read the bounds the gates computed and change no
   verdict.
@@ -274,8 +274,8 @@ The chip policies select `core::fmt::write`, `Formatter` methods, the runtime
 implementations of Debug, Display, Binary, Octal, LowerHex, UpperHex, Pointer,
 LowerExp and UpperExp. Selectors are general and may watch other functions.
 
-`runtime-reachability.txt` reports CPU0 and each linked Embassy
-`TaskStorage::poll` as T0, T1, ... in address order.
+`runtime-reachability.txt` reports CPU0 and each task root (a recorded task
+poll boundary, `__OER_TASK_POLL.*`) as T0, T1, ... in address order.
 `interrupt-reachability.txt` reports each hart/priority and its exception
 context with the same context-specific resolutions as the interrupt bound.
 `bootstrap-reachability.txt` reports the bootstrap root.

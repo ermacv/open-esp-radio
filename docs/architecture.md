@@ -51,9 +51,10 @@ Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
 time. Only a protocol's runtime awaits, and it binds no executor: time comes
-from `oer-time`, interrupt signals from `portable/`, no `embassy-executor`,
+from `oer-time`, interrupt signals from `portable/`, no executor,
 `embassy-time`, `embassy-net` or HAL dependency (`embassy-sync` and
-`embassy-futures` are allowed). The firmware composition spawns the futures.
+`embassy-futures` are allowed). The firmware composition declares the tasks
+that poll the futures.
 Drivers own hardware and wait; adapters bind executors.
 
 Code whose value is recovered knowledge or a pure algorithm is kept when it
@@ -127,8 +128,11 @@ moves; ownership, orchestration and wiring are rebuilt.
   singletons. Each word both sides can write has one runtime writer, listed in
   `chips/esp32s31/registers/shared-words.toml` and checked by `cargo
   registers check shared-words`. `embassy-sync`, `embassy-futures`,
-  `embassy-net` and `embassy-time` stay; `embassy-executor` is being replaced
-  by our executor.
+  `embassy-net` and `embassy-time` stay; tasks run on our own static
+  executor (`chips/espressif/executor`): each executor's tasks are declared
+  when the image compiles, live in static slots, are polled by a direct call
+  and wake through one waker vtable whose data names the executor and the
+  task.
 - **Register model.** Registers, analog-I2C bytes (a separate space addressed
   by block and index) and the memory the hardware reads and writes (DMA
   descriptors, the RX control prefix, TX descriptor words, BLE exchange

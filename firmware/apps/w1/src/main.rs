@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![forbid(unsafe_code)]
+#![feature(type_alias_impl_trait)]
 
 //! W1: a passive scan on the product receive path. The radio system brings
 //! Wi-Fi up on the configured channel (as W0); the receive runner binds its
@@ -32,7 +33,6 @@ mod report;
 
 use core::convert::Infallible;
 
-use embassy_executor::SendSpawner;
 use embassy_futures::select::{Either, select};
 use esp_hal::{
     Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
@@ -58,7 +58,9 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{Failure, LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_esp_hal_radio::{PlatformClocks, RadioHandoffError, RadioSingletons, take_radio};
-use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder, timer_observation::Window};
+use oer_espressif_executor::{
+    Executor, InterruptExecutor, LevelOrder, Spawner, timer_observation::Window,
+};
 use oer_espressif_staged_runtime::{panic, stacks};
 use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_wire::{
@@ -151,8 +153,27 @@ type Leases = heapless::Vec<(Held, Fingerprint), SLOTS>;
 type ReleaseSlots = [Option<(Held, Fingerprint)>; SLOTS];
 type Receiver = FrameReceiver<'static, SLOTS, BUFFER, crate::irq::RadioExecutor>;
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    RadioTasks: InterruptExecutor<2> {
+        radio_actor(actor: &'static mut Actor) = radio_actor;
+        p2_timers(lines: oer_memory::AffineSpscSender<'static, TimerLine, 2>) = measure::p2_timers;
+        rx_task(
+            registers: oer_esp32s31_hal::owner::RadioAccess,
+            interrupt_setup: oer_esp32s31_hal::owner::MacInterruptSetup,
+            routes: ImageRoutes,
+            doorbell: ImageDoorbell,
+            bound: oer_memory::AffineSpscSender<'static, Bound, 1>,
+        ) = irq::rx_task;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        w1(boot: Boot) = w1;
+    }
+}
 static BOUND: static_cell::ConstStaticCell<AffineSpscQueue<Bound, 1>> =
     static_cell::ConstStaticCell::new(AffineSpscQueue::new());
 static TIMER_LINES: static_cell::ConstStaticCell<AffineSpscQueue<TimerLine, 2>> =
@@ -188,7 +209,7 @@ struct Boot {
     rng: RngOwner<'static>,
     station: [u8; 6],
     access_point: [u8; 6],
-    radio: SendSpawner,
+    radio: Spawner<RadioTasks>,
     routes: ImageRoutes,
     doorbell: ImageDoorbell,
     bound: (
@@ -317,21 +338,11 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         }
     };
     let (timer_sender, timer_lines) = TIMER_LINES.take().split();
-    let radio = RADIO_EXECUTOR
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
+    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
-    // Each task's one slot is free: these are their only spawns.
-    if let Ok(token) = radio_actor(actor) {
-        radio.spawn(token);
-    }
-    if let Ok(token) = measure::p2_timers(timer_sender) {
-        radio.spawn(token);
-    }
-    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    RadioTasks::radio_actor(&radio, actor).expect("the radio actor's first start");
+    RadioTasks::p2_timers(&radio, timer_sender).expect("the P2 timers' first start");
+    let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     adopted.enable_interrupts();
     let boot = Boot {
         console,
@@ -350,20 +361,16 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         timer_lines,
     };
     executor.run(interrupts.wake, move |spawner| {
-        if let Ok(token) = w1(boot) {
-            spawner.spawn(token);
-        }
+        AppTasks::w1(spawner, boot).expect("the run's first start");
     })
 }
 
 /// The radio system's actor, on the radio executor (P2), each poll timed.
-#[embassy_executor::task]
 async fn radio_actor(actor: &'static mut Actor) {
     match measure::timed(core::pin::pin!(actor.run()), &measure::ACTOR, || {}).await {}
 }
 
 /// The run, on the application executor.
-#[embassy_executor::task]
 async fn w1(boot: Boot) {
     let mut console = boot.console;
     let Some(config) = CONFIG else {
@@ -399,7 +406,7 @@ struct Parts {
     rng: RngOwner<'static>,
     station: [u8; 6],
     access_point: [u8; 6],
-    radio: SendSpawner,
+    radio: Spawner<RadioTasks>,
     routes: ImageRoutes,
     doorbell: ImageDoorbell,
     bound: (
@@ -704,9 +711,18 @@ async fn run(
     let cold_mask = owner.transition_report().cold_interrupt_mask;
     let applied = owner.current_channel();
     let rx_channel = Channel::from(applied);
-    match irq::rx_task(registers, interrupt_setup, routes, doorbell, bound_sender) {
-        Ok(token) => radio.spawn(token),
-        Err(_) => return Err("rx-spawn"),
+    // A second start is refused: the receive runner binds its arena once.
+    if RadioTasks::rx_task(
+        &radio,
+        registers,
+        interrupt_setup,
+        routes,
+        doorbell,
+        bound_sender,
+    )
+    .is_err()
+    {
+        return Err("rx-spawn");
     }
     let bind_deadline = after(BIND);
     let bound = loop {

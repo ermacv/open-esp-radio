@@ -1,9 +1,9 @@
-//! Deadline bookkeeping around the single Embassy queue owned by the time driver.
-use core::task::Waker;
-use embassy_time_queue_utils::Queue;
+//! One executor's timers: one deadline per task, by the task's index, so an
+//! expired timer wakes its task by its handle and never through a waker.
+use crate::task::MAX_TASKS;
 
 pub(crate) struct WakeQueue {
-    queue: Queue,
+    deadlines: [u64; MAX_TASKS as usize],
     next_deadline: u64,
     armed: u64,
 }
@@ -11,7 +11,7 @@ pub(crate) struct WakeQueue {
 impl WakeQueue {
     pub(crate) const fn new() -> Self {
         Self {
-            queue: Queue::new(),
+            deadlines: [u64::MAX; MAX_TASKS as usize],
             next_deadline: u64::MAX,
             armed: u64::MAX,
         }
@@ -32,30 +32,45 @@ impl WakeQueue {
         Some(self.next_deadline)
     }
 
-    /// Return the sampled time when the hardware alarm needs reconciliation.
+    /// Wake task `index` at `at`, or at its earlier retained deadline. Return
+    /// the sampled time when the hardware alarm needs reconciliation. A task
+    /// whose deadline is already due is woken at once through `wake`, with
+    /// every other due task.
     pub(crate) fn schedule_wake(
         &mut self,
         at: u64,
-        waker: &Waker,
+        index: u8,
         now: impl FnOnce() -> u64,
+        wake: impl FnMut(u8),
     ) -> Option<u64> {
-        if !self.queue.schedule_wake(at, waker) {
+        let deadline = self.deadlines.get_mut(usize::from(index))?;
+        if at >= *deadline {
             return None;
         }
+        *deadline = at;
         self.next_deadline = self.next_deadline.min(at);
         let now = now();
         if self.next_deadline <= now {
-            // Consume through the existing queue: this retires the old entry,
-            // wakes every due task and preserves the earliest future deadline.
-            self.dispatch_expired(now);
+            self.dispatch_expired(now, wake);
         }
         Some(now)
     }
 
-    pub(crate) fn dispatch_expired(&mut self, now: u64) {
-        self.next_deadline = self.queue.next_expiration(now);
+    /// Wake every task whose deadline is due by `now` and keep the earliest
+    /// future deadline.
+    pub(crate) fn dispatch_expired(&mut self, now: u64, mut wake: impl FnMut(u8)) {
+        let mut next = u64::MAX;
+        for (index, deadline) in (0..MAX_TASKS).zip(&mut self.deadlines) {
+            if *deadline <= now {
+                *deadline = u64::MAX;
+                wake(index);
+            } else {
+                next = next.min(*deadline);
+            }
+        }
+        self.next_deadline = next;
     }
 }
 
-#[cfg(all(test, not(feature = "chip")))]
+#[cfg(test)]
 mod tests;

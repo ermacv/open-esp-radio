@@ -34,7 +34,7 @@ include!(concat!(env!("OUT_DIR"), "/w3_config.rs"));
 
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<RadioTasks>, Priority2, ProCpu, Executor;
     doorbell: DoorbellToken = FROM_CPU_INTR3 => crate::irq::doorbell, Priority3, ProCpu, Hardware;
     wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::irq::wifi_mac, Priority3, ProCpu, Hardware;
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu, Hardware;
@@ -42,8 +42,29 @@ oer_espressif_staged_runtime::interrupt_table! {
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
 }
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+/// The application's console.
+type Console = UsbSerialJtag<'static, esp_hal::Blocking>;
+
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    RadioTasks: InterruptExecutor<2> {
+        radio_actor(actor: &'static mut Actor) = radio_actor;
+        driver(boot: radio::Boot, channel: radio::DriverChannel) = radio::drive;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        reporting(console: Console) = reporting;
+        station_task(
+            channel: radio::FrontendChannel,
+            config: W3Config,
+            address: [u8; 6],
+            seed: u64,
+        ) = radio::serve;
+    }
+}
 static REPORT: OnceValue<report::Report> = OnceValue::new();
 const LEVELS: LevelOrder<WifiMacToken, RadioToken, WakeToken> = LevelOrder::new();
 static ACTOR: StaticCell<Actor> = StaticCell::new();
@@ -125,19 +146,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         SoftwareInterrupt::new(peripherals.FROM_CPU_INTR3),
         interrupts.doorbell,
     );
-    let radio = RADIO
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
+    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
     let mut rng = RngOwner::new(peripherals.RNG);
     let seed = (u64::from(rng.random()) << 32) | u64::from(rng.random());
     let entropy = rng.random();
     let (driver_channel, frontend_channel) = radio::channels();
-    if let Ok(task) = radio_actor(actor) {
-        radio.spawn(task);
-    }
-    if let Ok(task) = driver(
+    RadioTasks::radio_actor(&radio, actor).expect("the radio actor's first start");
+    RadioTasks::driver(
+        &radio,
         radio::Boot {
             cell: cells.wifi,
             wifi: partitions.wifi,
@@ -153,28 +170,21 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             entropy,
         },
         driver_channel,
-    ) {
-        radio.spawn(task);
-    }
-    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    )
+    .expect("the driver's first start");
+    let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
-        if let Ok(task) = reporting(console) {
-            spawner.spawn(task);
-        }
-        spawner
-            .spawn(station_task(frontend_channel, config, station, seed).expect("station P1 task"));
+        AppTasks::reporting(spawner, console).expect("the report's first start");
+        AppTasks::station_task(spawner, frontend_channel, config, station, seed)
+            .expect("station P1 task");
     })
 }
 
-#[embassy_executor::task]
 async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
-#[embassy_executor::task]
-async fn reporting(mut console: UsbSerialJtag<'static, esp_hal::Blocking>) {
+async fn reporting(mut console: Console) {
     let result = loop {
         if let Some(report) = REPORT.get() {
             break report;
@@ -192,28 +202,4 @@ fn park() -> ! {
 
 pub fn print_report(report: report::Report) {
     let _ = REPORT.set(report);
-}
-#[embassy_executor::task]
-async fn driver(boot: radio::Boot, channel: radio::DriverChannel) {
-    radio::drive(boot, channel).await;
-}
-type StationTaskFuture = impl core::future::Future<Output = ()>;
-static STATION_TASK: embassy_executor::raw::TaskStorage<StationTaskFuture> =
-    embassy_executor::raw::TaskStorage::new();
-fn station_task(
-    channel: radio::FrontendChannel,
-    config: W3Config,
-    address: [u8; 6],
-    seed: u64,
-) -> Result<embassy_executor::SpawnToken<impl Sized>, embassy_executor::SpawnError> {
-    STATION_TASK.spawn(move || station_task_future(channel, config, address, seed))
-}
-#[define_opaque(StationTaskFuture)]
-fn station_task_future(
-    channel: radio::FrontendChannel,
-    config: W3Config,
-    address: [u8; 6],
-    seed: u64,
-) -> StationTaskFuture {
-    radio::serve(channel, config, address, seed)
 }

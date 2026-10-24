@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![forbid(unsafe_code)]
+#![feature(type_alias_impl_trait)]
 
 //! W0: the radio system's first run on the chip. The actor registers the PHY
 //! domain for Wi-Fi's `join`, tracks it, prepares the MAC for `track` and
@@ -57,7 +58,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<RadioTasks>, Priority2, ProCpu, Executor;
     /// The radio executor's timer alarm; it only acknowledges and pends.
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     /// The application executor's timer alarm.
@@ -69,8 +70,19 @@ const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::n
 
 type Console = UsbSerialJtag<'static, Blocking>;
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    RadioTasks: InterruptExecutor<2> {
+        radio_actor(actor: &'static mut Actor) = radio_actor;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        w0(boot: Boot) = w0;
+    }
+}
 
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 
@@ -183,17 +195,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // publishes its deadlines to it.
     oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
     oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
-    let radio = RADIO_EXECUTOR
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
+    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
-    if let Ok(token) = radio_actor(actor) {
-        radio.spawn(token);
-    }
-    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    RadioTasks::radio_actor(&radio, actor).expect("the radio actor's first start");
+    let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     adopted.enable_interrupts();
     let boot = Boot {
         console,
@@ -204,23 +209,18 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         access_point,
     };
     executor.run(interrupts.wake, move |spawner| {
-        // The task's one slot is free: this is its only spawn.
-        if let Ok(token) = w0(boot) {
-            spawner.spawn(token);
-        }
+        AppTasks::w0(spawner, boot).expect("the client's first start");
     })
 }
 
 include!(concat!(env!("OUT_DIR"), "/w0_config.rs"));
 
 /// The radio system's actor, on the radio executor (P2).
-#[embassy_executor::task]
 async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
 
 /// The Wi-Fi client, on the application executor.
-#[embassy_executor::task]
 async fn w0(boot: Boot) {
     let Boot {
         mut console,

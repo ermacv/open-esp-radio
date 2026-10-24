@@ -29,7 +29,7 @@ use oer_memory::{Doorbell, Poster, RequestSlot};
 use static_cell::StaticCell;
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<RadioTasks>, Priority2, ProCpu, Executor;
     doorbell: DoorbellToken = FROM_CPU_INTR3 => crate::irq::doorbell, Priority3, ProCpu, Hardware;
     wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::irq::wifi_mac, Priority3, ProCpu, Hardware;
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu, Hardware;
@@ -39,8 +39,22 @@ oer_espressif_staged_runtime::interrupt_table! {
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
 }
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    RadioTasks: InterruptExecutor<2> {
+        radio_actor(actor: &'static mut Actor) = radio_actor;
+        serve_driver(boot: suite::Boot, channel: suite::DriverChannel) = serve_driver;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        console(usb: transport::Usb, boot: u64) = console;
+        dispatch(poster: Poster<Request, Answer>) = dispatch;
+        serve_port(channel: suite::FrontendChannel) = serve_port;
+    }
+}
 const LEVELS: LevelOrder<WifiMacToken, RadioToken, WakeToken> = LevelOrder::new();
 static DOORBELL: Doorbell = Doorbell::new();
 static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
@@ -121,52 +135,45 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         SoftwareInterrupt::new(peripherals.FROM_CPU_INTR3),
         interrupts.doorbell,
     );
-    let radio = RADIO
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
+    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
     let mut rng = RngOwner::new(peripherals.RNG);
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let (driver_channel, frontend_channel) = suite::channels();
-    radio.spawn(radio_actor(actor).expect("radio actor task"));
-    radio.spawn(
-        serve_driver(
-            suite::Boot {
-                cell: cells.wifi,
-                wifi: partitions.wifi,
-                rng,
-                station,
-                ap,
-                routes: irq::ImageRoutes {
-                    mac: interrupts.wifi_mac,
-                    power: interrupts.wifi_pwr,
-                },
-                bell,
+    RadioTasks::radio_actor(&radio, actor).expect("radio actor task");
+    RadioTasks::serve_driver(
+        &radio,
+        suite::Boot {
+            cell: cells.wifi,
+            wifi: partitions.wifi,
+            rng,
+            station,
+            ap,
+            routes: irq::ImageRoutes {
+                mac: interrupts.wifi_mac,
+                power: interrupts.wifi_pwr,
             },
-            driver_channel,
-        )
-        .expect("conformance task"),
-    );
+            bell,
+        },
+        driver_channel,
+    )
+    .expect("conformance task");
     let poster = SLOT.claim().expect("one diagnostic requester");
     let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
-    EXECUTOR
-        .init(Executor::<0>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR0,
-        )))
-        .run(interrupts.wake, move |spawner| {
-            spawner.spawn(console(usb, boot).expect("diagnostic console task"));
-            spawner.spawn(dispatch(poster).expect("diagnostic dispatch task"));
-            spawner.spawn(serve_port(frontend_channel).expect("P1 conformance body task"));
-        });
+    Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
+        interrupts.wake,
+        move |spawner| {
+            AppTasks::console(spawner, usb, boot).expect("diagnostic console task");
+            AppTasks::dispatch(spawner, poster).expect("diagnostic dispatch task");
+            AppTasks::serve_port(spawner, frontend_channel).expect("P1 conformance body task");
+        },
+    );
 }
-#[embassy_executor::task]
 async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
-#[embassy_executor::task]
 async fn console(usb: transport::Usb, boot: u64) {
     let keys =
         oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-lower-mac");
@@ -190,7 +197,6 @@ async fn console(usb: transport::Usb, boot: u64) {
         .await;
 }
 
-#[embassy_executor::task]
 async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
         let (id, request) = REQUESTS.receive().await;
@@ -216,12 +222,10 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
         }
     }
 }
-#[embassy_executor::task]
 async fn serve_driver(boot: suite::Boot, channel: suite::DriverChannel) {
     let slot = suite::Slot::take_static().expect("one static conformance slot");
     suite::drive(boot, slot, channel).await
 }
-#[embassy_executor::task]
 async fn serve_port(channel: suite::FrontendChannel) {
     suite::serve(channel).await
 }

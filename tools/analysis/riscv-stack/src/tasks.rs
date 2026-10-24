@@ -1,112 +1,101 @@
-//! Executor task polls. Embassy's executor runs a task through the
-//! `poll_fn` its header holds: the call it leaves unresolved where the DWARF
-//! says `SyncExecutor::poll`'s dequeue closure is inlined reaches each
-//! candidate task's `TaskStorage<F>::poll`, and `poll_exited`, the
-//! `poll_fn` of a task that has returned. A `poll_fn` is set only by its
-//! task's spawn, so this is every function the site can reach under the
-//! executor invariant. An executor running on an interrupt stack (the radio
-//! executor) thereby bounds its tasks' polls on that stack. A task leaves
-//! another executor's candidates only after every address-taking relocation
-//! proves an immediate spawn on an identified executor. Missing provenance
-//! leaves it in every candidate set.
-//! An image without any task poll in either its functions or its concrete
-//! DWARF instances cannot enqueue a task under the same invariant.
-use crate::dwarf::Dwarf;
-use crate::{Analysis, Fact, Resolutions, TransferKind, TypeFacts};
-use oer_analysis_riscv_model::{Ledger, Result, RunControl};
+//! Executor task polls. Each task the executor (`oer-espressif-executor`)
+//! declares exports its poll boundary: a `#[used]` record named
+//! `__OER_TASK_POLL.<module path>` whose one word, relocated, is the address
+//! of the task's instance of `task::poll_task`, the never-inlined function
+//! through which the executor polls the task (`task::PollBoundary`).
+//!
+//! Every direct call of a recorded boundary is a task poll, and the boundary
+//! is the task's root. The records, not function names, mark where a
+//! context's own code ends, and the analysis fails rather than find fewer
+//! boundaries than the image declares: a record whose boundary no direct
+//! call reaches (the poll was inlined, or the task is never polled), or an
+//! image that links the executor's waker and records no boundary, is an
+//! error. The calls are direct, so the polls assume nothing.
+use crate::{Analysis, Resolutions, TransferKind};
+use oer_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
 use oer_analysis_riscv_program::facts::ImageFacts;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
-/// The closure of `SyncExecutor::poll` that calls each dequeued task's
-/// `poll_fn`.
-const DEQUEUE: &str = "<embassy_executor::raw::SyncExecutor>::poll::{closure#0}";
+/// The name prefix of every task's exported poll-boundary record.
+pub const TASK_POLL_RECORD: &str = "__OER_TASK_POLL.";
 
-/// Whether `name`, demangled, is a function a task header's `poll_fn` holds.
-fn is_task_poll(name: &str) -> bool {
-    (name.starts_with("<embassy_executor::raw::TaskStorage<") && name.ends_with(">>::poll"))
-        || name == "embassy_executor::raw::poll_exited"
-}
-
-/// The targets of every unresolved call inside the executor's dequeue
-/// closure: each task poll among `functions` (address, demangled name).
-pub fn task_poll_resolutions<'a>(
+/// The task polls of `image`: the direct calls of the boundaries its records
+/// name, each boundary a task root. `executor` says whether the image links
+/// the executor's waker, which polls tasks only through recorded boundaries.
+///
+/// # Errors
+/// A record that is not one relocated read-only word naming a function, a
+/// boundary no direct call reaches, or an image with the executor's waker
+/// and no record.
+pub fn task_poll_resolutions(
     image: &ImageFacts<'_>,
     analysis: &Analysis,
-    dwarf: &Dwarf,
-    types: &TypeFacts,
-    functions: impl IntoIterator<Item = (u32, &'a str)>,
+    executor: bool,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
-    let mut scratch = Ledger::new(keep.memory(), control)?;
-    let mut polls = BTreeSet::new();
-    let mut named_poll = false;
-    for (address, name) in functions {
+    let invalid = |message: String| Error::new(ErrorCode::Integrity, message);
+    // Each boundary, by address, with the first record naming it.
+    let mut boundaries = BTreeMap::new();
+    for symbol in image.file().symbols() {
         control.checkpoint(1)?;
-        if is_task_poll(name) {
-            named_poll = true;
-            if analysis.functions.contains_key(&address) {
-                scratch.add(&mut polls, address, control)?;
-            }
+        if !symbol.name.starts_with(TASK_POLL_RECORD) {
+            continue;
         }
+        let name = symbol.name;
+        let at = u32::try_from(symbol.address)
+            .map_err(|_| invalid(format!("`{name}` lies beyond RV32")))?;
+        let word = image
+            .read_only_word(at)
+            .ok_or_else(|| invalid(format!("`{name}` at {at:#010x} is not read-only data")))?;
+        if image.word(at) != Some(word) {
+            return Err(invalid(format!(
+                "`{name}`'s boundary word at {at:#010x} has no relocation"
+            )));
+        }
+        let boundary = word & !1;
+        if !analysis.functions.contains_key(&boundary) {
+            return Err(invalid(format!(
+                "`{name}` names {boundary:#010x}, which starts no function"
+            )));
+        }
+        if let std::collections::btree_map::Entry::Vacant(entry) = boundaries.entry(boundary) {
+            keep.admit(size_of::<(u32, (String, bool))>() + name.len(), control)?;
+            entry.insert((name.to_owned(), false));
+        }
+    }
+    if executor && boundaries.is_empty() {
+        return Err(invalid(format!(
+            "the image links the executor's waker but records no task poll boundary \
+             (`{TASK_POLL_RECORD}*`): its task polls cannot be found"
+        )));
     }
     let mut resolutions = Resolutions::new();
-    if polls.is_empty() && (named_poll || dwarf.has_instance(is_task_poll, control)?) {
-        return Ok(resolutions);
-    }
-    let fact = if polls.is_empty() {
-        Fact::NoTasks
-    } else {
-        Fact::TaskPolls
-    };
-    let owners = if polls.is_empty() {
-        Default::default()
-    } else {
-        crate::task_spawns::owners(image, analysis, types, &polls, &mut scratch, control)?
-    };
     for facts in analysis.functions.values() {
         for transfer in &facts.transfers {
-            if transfer.target.is_some()
-                || !matches!(transfer.kind, TransferKind::Call | TransferKind::Tail)
-            {
-                continue;
-            }
             control.checkpoint(1)?;
-            let chain = dwarf.inline_chain(transfer.site)?;
-            if chain.first().map(String::as_str) != Some(DEQUEUE) {
+            if !matches!(transfer.kind, TransferKind::Call | TransferKind::Tail) {
                 continue;
             }
-            let executor = chain
-                .iter()
-                .find_map(|name| crate::task_spawns::poll_executor(name));
-            let candidates =
-                polls
-                    .iter()
-                    .copied()
-                    .filter(|poll| match (executor, owners.get(poll)) {
-                        (Some(executor), Some(owners)) => owners.contains(&executor),
-                        _ => true,
-                    });
-            keep.admit(Resolutions::admission(polls.len()), control)?;
-            resolutions.add(transfer.site, fact, candidates);
+            if let Some((_, called)) = transfer
+                .target
+                .and_then(|target| boundaries.get_mut(&target))
+            {
+                *called = true;
+                keep.admit(size_of::<u32>(), control)?;
+                resolutions.add_task_poll(transfer.site);
+            }
         }
     }
-    Ok(resolutions)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_task_poll;
-
-    #[test]
-    fn a_task_storage_poll_and_the_exited_poll_are_task_polls() {
-        assert!(is_task_poll(
-            "<embassy_executor::raw::TaskStorage<app::__radio_actor_task::__radio_actor_task_inner_function::{closure#0}>>::poll"
-        ));
-        assert!(is_task_poll("embassy_executor::raw::poll_exited"));
-        assert!(!is_task_poll("<embassy_executor::raw::SyncExecutor>::poll"));
-        assert!(!is_task_poll(
-            "<embassy_executor::raw::TaskStorage<app::Task>>::spawn"
-        ));
+    for (&boundary, (name, called)) in &boundaries {
+        if !called {
+            return Err(invalid(format!(
+                "task poll boundary `{name}` ({boundary:#010x}) has no direct call: the \
+                 executor's poll of the task was inlined, or the task is never polled"
+            )));
+        }
+        keep.admit(size_of::<u32>(), control)?;
+        resolutions.add_task_root(boundary);
     }
+    Ok(resolutions)
 }

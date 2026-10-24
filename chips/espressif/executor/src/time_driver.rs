@@ -3,10 +3,12 @@
 //!
 //! - Each executor bound with [`bind`] owns a queue that only its own context
 //!   touches: a timer is registered while the executor polls the task, and
-//!   expired timers are dispatched before it polls. A timer registered from
-//!   another context than its task's executor wakes the task at once, so it
-//!   registers again from its own context. No queue is shared between
-//!   contexts, and none is locked.
+//!   expired timers are dispatched before it polls. The queue holds one
+//!   deadline per task, by the task's index, which the waker names; an
+//!   expired deadline marks its task ready. A timer registered from another
+//!   context than its task's executor, or with another executor's waker,
+//!   wakes the task at once, so it registers again from its own context. No
+//!   queue is shared between contexts, and none is locked.
 //! - Each bound executor has its own comparator, whose alarm interrupt
 //!   ([`alarm_interrupt`]) only acknowledges its own bit in `INT_CLR` (a
 //!   write-one-to-clear, no read-modify-write) and pends that executor.
@@ -27,20 +29,15 @@
 use core::{cell::UnsafeCell, task::Waker};
 
 use embassy_time_driver::Driver;
-use esp_hal::{
-    interrupt::Priority,
-    peripherals::{Interrupt, SYSTIMER},
-    system::Cpu,
-    time::Instant,
-    timer::systimer::SystemTimer,
-};
 use oer_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 use crate::{
+    chip::{Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, SYSTIMER},
     deadline_cell::DeadlineCell,
-    executor::{NO_EXECUTOR, SOFTWARE_INTERRUPT_COUNT, executor_of, pend, running},
+    executor::{NO_EXECUTOR, pend, ready, running},
     systimer::{Comparator, ComparatorAcknowledger, ComparatorWriter},
+    task::TaskId,
     timer_queue::WakeQueue,
 };
 
@@ -149,11 +146,7 @@ fn with_slot<R>(swi: u8, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
     Some(f(slot))
 }
 
-// Share the same clock read with cooperative admission and poll stamping.
-#[inline(never)]
-pub(crate) fn now() -> u64 {
-    Instant::now().duration_since_epoch().as_micros()
-}
+use crate::chip::now;
 
 /// The comparator whose alarm interrupt is `source`.
 const fn comparator_of_source(source: Interrupt) -> u8 {
@@ -204,7 +197,7 @@ where
             .is_ok(),
         "the time driver is installed already"
     );
-    let ticks_per_second = SystemTimer::ticks_per_second();
+    let ticks_per_second = crate::chip::ticks_per_second();
     let ticks_per_microsecond = u32::try_from(ticks_per_second / 1_000_000).unwrap_or(0);
     assert!(
         ticks_per_microsecond != 0 && ticks_per_second.is_multiple_of(1_000_000),
@@ -292,6 +285,16 @@ fn program(comparator: Comparator, deadline: u64) {
     );
 }
 
+/// Mark executor `swi`'s task ready, in its context before it polls.
+fn mark(swi: u8) -> impl FnMut(u8) {
+    let ready = ready(swi);
+    move |index| {
+        if let Some(ready) = ready {
+            ready.mark(index);
+        }
+    }
+}
+
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
 fn rearm(swi: u8, comparator: Comparator, slot: &mut Slot, now: u64, fired: bool) {
@@ -337,7 +340,7 @@ pub(crate) fn service(swi: u8) {
                     .interrupt(entered.value, acknowledged.value);
             }
         }
-        slot.queue.dispatch_expired(start);
+        slot.queue.dispatch_expired(start, mark(swi));
         #[cfg(oer_profile)]
         slot.observation.dispatch(start, now());
         // Only an actual alarm leaves the comparator idle. A task's self-wake
@@ -405,7 +408,7 @@ struct EmbassyTimeDriver;
     unsafe_code,
     reason = "Embassy requires one exported global time-driver instance"
 )]
-#[unsafe(link_section = ".critical.data.embassy_time")]
+#[unsafe(link_section = ".critical.data.executor_time")]
 static EMBASSY_TIME_DRIVER: EmbassyTimeDriver = EmbassyTimeDriver;
 
 #[allow(
@@ -433,27 +436,21 @@ impl Driver for EmbassyTimeDriver {
     }
 
     fn schedule_wake(&self, at: u64, waker: &Waker) {
-        let task = embassy_executor::raw::task_from_waker(waker);
-        #[allow(
-            unsafe_code,
-            reason = "the task's executor is only compared, never dereferenced for polling"
-        )]
-        // SAFETY: the reference is used only to read the executor's id.
-        let executor = unsafe { task.executor() }.and_then(|executor| executor_of(executor.id()));
-        let Some(swi) = executor else {
+        let Some(task) = TaskId::of(waker) else {
             waker.wake_by_ref();
             return;
         };
-        let swi = swi as u8;
-        let Some(comparator) =
-            Comparator::from_index(COMPARATOR_OF[swi as usize].load(Ordering::Acquire))
+        let swi = task.executor();
+        let Some(comparator) = COMPARATOR_OF
+            .get(usize::from(swi))
+            .and_then(|assignment| Comparator::from_index(assignment.load(Ordering::Acquire)))
         else {
             panic!("executor {swi} has no timer comparator");
         };
         let registered = with_slot(swi, |slot| {
             #[cfg(oer_profile)]
             slot.observation.registration(at, now());
-            if let Some(now) = slot.queue.schedule_wake(at, waker, now) {
+            if let Some(now) = slot.queue.schedule_wake(at, task.index(), now, mark(swi)) {
                 rearm(swi, comparator, slot, now, false);
             }
         });

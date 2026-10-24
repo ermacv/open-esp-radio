@@ -1,263 +1,184 @@
-//! Linked fixtures for the distinction between no tasks and missing poll symbols.
+//! A linked fixture of the static executor's direct task polls and the
+//! boundary records its declared tasks export.
 use super::*;
 
-const NO_TASK_PROGRAM: &str = r#"
+/// The executor's boundary with its tasks, as `oer-espressif-executor`
+/// shapes it: a never-inlined poll per task type, and the record type that
+/// names its instance. `BOUNDARY` and `INLINE` stand for the function's name
+/// and its inlining.
+const EXECUTOR_LIBRARY: &str = r#"
 #![no_std]
-#![no_main]
-use embassy_executor::raw::SyncExecutor;
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _start(executor: &SyncExecutor) {
-    unsafe { executor.poll(); }
+pub mod task {
+    pub trait Body { fn run(); }
+    #[derive(Clone, Copy)]
+    pub struct PollBoundary(pub fn() -> bool);
+    #[INLINE]
+    pub fn BOUNDARY<F: Body>() -> bool { F::run(); core::hint::black_box(false) }
 }
-#[unsafe(no_mangle)]
-pub unsafe fn keep(callback: unsafe fn()) { unsafe { callback(); } }
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 "#;
 
-fn poll_names(elf: &[u8]) -> Vec<String> {
+/// Two tasks polled by index, as a declared task set's poll is, each with
+/// its exported boundary record (`RECORDS`).
+const EXECUTOR_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use oer_espressif_executor::task::{Body, BOUNDARY};
+struct First;
+struct Second;
+impl Body for First { #[inline(never)] fn run() { core::hint::black_box([1u8; 256]); } }
+impl Body for Second { #[inline(never)] fn run() { core::hint::black_box([2u8; 32]); } }
+RECORDS
+#[inline(never)]
+fn poll(index: u8) {
+    match index {
+        0 => { BOUNDARY::<First>(); }
+        1 => { BOUNDARY::<Second>(); }
+        _ => {}
+    }
+}
+#[unsafe(no_mangle)] pub extern "C" fn _start() -> ! {
+    loop { poll(core::hint::black_box(0)); poll(core::hint::black_box(1)); }
+}
+#[unsafe(no_mangle)] pub fn keep() {}
+#[panic_handler] fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
+"#;
+
+/// Each task's record, as `tasks!` exports it.
+const RECORDS: &str = r#"
+#[used]
+#[unsafe(export_name = "__OER_TASK_POLL.image::first")]
+static FIRST: oer_espressif_executor::task::PollBoundary =
+    oer_espressif_executor::task::PollBoundary(BOUNDARY::<First>);
+#[used]
+#[unsafe(export_name = "__OER_TASK_POLL.image::second")]
+static SECOND: oer_espressif_executor::task::PollBoundary =
+    oer_espressif_executor::task::PollBoundary(BOUNDARY::<Second>);
+"#;
+
+/// The fixture with its boundary named `boundary`, inlined or not, and
+/// with or without its records.
+fn executor_image(boundary: &str, inline: &str, records: bool) -> Vec<u8> {
+    compiled_named_library(
+        &EXECUTOR_LIBRARY
+            .replace("BOUNDARY", boundary)
+            .replace("INLINE", inline),
+        "2",
+        &EXECUTOR_PROGRAM
+            .replace("RECORDS", if records { RECORDS } else { "" })
+            .replace("BOUNDARY", boundary),
+        "oer_espressif_executor",
+        "image",
+    )
+}
+
+/// The task polls of `elf`, which links the executor's waker or not.
+fn task_polls(elf: &[u8], analysis: &Analysis, executor: bool) -> Result<Resolutions> {
+    with_facts(elf, |facts| {
+        task_poll_resolutions(facts, analysis, executor, &mut ledger(), &mut || Ok(()))
+    })
+}
+
+/// The addresses of the functions `elf` names `boundary::<…>`.
+fn instances(elf: &[u8], boundary: &str) -> BTreeSet<u32> {
+    let prefix = format!("oer_espressif_executor::task::{boundary}::<");
     functions(elf)
         .unwrap()
         .iter()
-        .flat_map(|function| &function.names)
-        .map(|name| oer_analysis_elf::demangle(name))
-        .filter(|name| {
-            (name.contains("TaskStorage<") && name.ends_with("::poll"))
-                || name == "embassy_executor::raw::poll_exited"
-        })
-        .collect()
-}
-
-fn resolve(elf: &[u8], analysis: &Analysis, dwarf: &Dwarf, types: &TypeFacts) -> Resolutions {
-    with_facts(elf, |image| {
-        let names: Vec<_> = image
-            .functions()
-            .iter()
-            .flat_map(|function| {
-                function
-                    .names
-                    .iter()
-                    .map(|name| (function.address, oer_analysis_elf::demangle(name)))
-            })
-            .collect();
-        task_poll_resolutions(
-            image,
-            analysis,
-            dwarf,
-            types,
-            names
-                .iter()
-                .map(|(address, name)| (*address, name.as_str())),
-            &mut ledger(),
-            &mut || Ok(()),
-        )
-    })
-    .unwrap()
-}
-
-fn entry(elf: &[u8]) -> u32 {
-    oer_analysis_elf::Elf::parse(elf)
-        .unwrap()
-        .symbol("_start")
-        .unwrap()
-        .address as u32
-}
-
-#[test]
-fn no_task_polls_proves_only_the_dequeue_call_empty_and_the_bound_conditional() {
-    let elf = executor_image(NO_TASK_PROGRAM);
-    assert!(poll_names(&elf).is_empty());
-    let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dwarf, types) = debug(&elf);
-    let root = entry(&elf);
-    let before = analysis
-        .bound(root, &mut crate::tests::ledger(), &mut || Ok(()))
-        .unwrap();
-    assert_eq!(before.bytes, None);
-    assert_eq!(before.unresolved.len(), 1);
-    let resolutions = resolve(&elf, &analysis, &dwarf, &types);
-    assert_eq!(resolutions.len(), 1, "{resolutions:?}");
-    let (site, resolution) = resolutions.iter().next().unwrap();
-    assert_eq!(site, before.unresolved[0].0);
-    assert!(resolution.targets.is_empty());
-    assert_eq!(resolution.facts, BTreeSet::from([Fact::NoTasks]));
-    assert!(resolution.resolves());
-    let bound = analysis
-        .bound_with(root, &resolutions, &mut crate::tests::ledger(), &mut || {
-            Ok(())
-        })
-        .unwrap();
-    assert_eq!(bound.bytes, Some(before.partial));
-    assert!(bound.unresolved.is_empty());
-    assert_eq!(
-        bound.assumptions,
-        BTreeSet::from([Assumption::ExecutorInvariant])
-    );
-    let unrelated = oer_analysis_elf::Elf::parse(&elf)
-        .unwrap()
-        .symbol("keep")
-        .unwrap()
-        .address as u32;
-    assert_eq!(
-        analysis
-            .bound_with(
-                unrelated,
-                &resolutions,
-                &mut crate::tests::ledger(),
-                &mut || Ok(())
-            )
-            .unwrap()
-            .bytes,
-        None
-    );
-    assert_eq!(
-        dwarf
-            .has_instance(|_| false, &mut Units(0))
-            .unwrap_err()
-            .code,
-        ErrorCode::ResourceLimited
-    );
-}
-
-#[test]
-fn a_task_poll_with_a_lost_symbol_keeps_the_dequeue_call_unresolved() {
-    let mut elf = executor_image(
-        &EXECUTOR_PROGRAM.replace("E0.run(&FIRST); E1.run(&SECOND);", "E0.run(&FIRST);"),
-    );
-    let names = poll_names(&elf);
-    assert_eq!(names.len(), 1, "{names:?}");
-    // Lose only the symbol's recognizable spelling; retain its code and
-    // unchanged linkage name in .debug_str, as after symbol merging/renaming.
-    let at = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
-        let symbol = file
-            .symbols()
-            .find(|symbol| symbol.demangled() == names[0])
-            .unwrap();
-        let strings = file.section_by_name(".strtab").unwrap();
-        strings.file_offset as usize
-            + strings
-                .data
-                .windows(symbol.name.len())
-                .position(|bytes| bytes == symbol.name.as_bytes())
-                .unwrap()
-    };
-    elf[at] = b'?';
-    assert!(poll_names(&elf).is_empty());
-    let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dwarf, types) = debug(&elf);
-    assert!(!dwarf.instances(&[&names[0]])[&names[0]].is_empty());
-    let resolutions = resolve(&elf, &analysis, &dwarf, &types);
-    assert!(resolutions.is_empty(), "{resolutions:?}");
-    assert_eq!(
-        analysis
-            .bound_with(
-                entry(&elf),
-                &resolutions,
-                &mut crate::tests::ledger(),
-                &mut || Ok(())
-            )
-            .unwrap()
-            .bytes,
-        None
-    );
-}
-
-#[test]
-fn an_inlined_task_poll_or_exited_poll_keeps_the_dequeue_call_unresolved() {
-    for exited in [false, true] {
-        let (library, call, name) = if exited {
-            (
-                EXECUTOR_LIBRARY.replace(
-                    "pub mod raw {",
-                    "pub mod raw { #[inline(always)] pub unsafe fn poll_exited() { core::hint::black_box(7u32); }",
-                ),
-                "embassy_executor::raw::poll_exited()",
-                "embassy_executor::raw::poll_exited",
-            )
-        } else {
-            (
-                EXECUTOR_LIBRARY
-                    .replace(
-                        "#[inline(never)]\n        pub unsafe fn poll",
-                        "#[inline(always)]\n        pub unsafe fn poll",
-                    )
-                    .replace(
-                        "{ F::poll(); }",
-                        "{ core::hint::black_box(9u32); F::poll(); }",
-                    ),
-                "embassy_executor::raw::TaskStorage::<Only>::poll(core::ptr::null())",
-                "<embassy_executor::raw::TaskStorage<oer_espressif_executor::Only>>::poll",
-            )
-        };
-        let program = NO_TASK_PROGRAM.replace(
-            "pub unsafe fn keep(callback: unsafe fn()) { unsafe { callback(); } }",
-            &format!("pub unsafe fn keep() {{ unsafe {{ {call}; }} }}"),
-        ) + "\nstruct Only; impl embassy_executor::raw::Future for Only { #[inline(never)] fn poll() { core::hint::black_box(3u32); } }";
-        let elf = compiled_named_library(
-            &library,
-            "2",
-            &program,
-            "embassy_executor",
-            "oer_espressif_executor",
-        );
-        assert!(poll_names(&elf).is_empty(), "{:?}", poll_names(&elf));
-        let analysis = analyze(&elf, &[], &[]).unwrap();
-        let (dwarf, types) = debug(&elf);
-        assert!(!dwarf.instances(&[name])[name].is_empty(), "{name}");
-        let resolutions = resolve(&elf, &analysis, &dwarf, &types);
-        assert!(resolutions.is_empty(), "{resolutions:?}");
-        assert_eq!(
-            analysis
-                .bound_with(
-                    entry(&elf),
-                    &resolutions,
-                    &mut crate::tests::ledger(),
-                    &mut || Ok(())
-                )
-                .unwrap()
-                .bytes,
-            None
-        );
-    }
-}
-
-#[test]
-fn one_task_keeps_its_existing_task_polls_fact_and_candidate() {
-    let elf = executor_image(
-        &EXECUTOR_PROGRAM.replace("E0.run(&FIRST); E1.run(&SECOND);", "E0.run(&FIRST);"),
-    );
-    let names = poll_names(&elf);
-    assert_eq!(names.len(), 1, "{names:?}");
-    let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dwarf, types) = debug(&elf);
-    let resolutions = resolve(&elf, &analysis, &dwarf, &types);
-    assert_eq!(resolutions.len(), 1, "{resolutions:?}");
-    let resolution = resolutions.iter().next().unwrap().1;
-    assert_eq!(resolution.facts, BTreeSet::from([Fact::TaskPolls]));
-    let poll = functions(&elf)
-        .unwrap()
-        .into_iter()
-        .find(|function| {
+        .filter(|function| {
             function
                 .names
                 .iter()
-                .any(|name| oer_analysis_elf::demangle(name) == names[0])
+                .any(|name| oer_analysis_elf::demangle(name).starts_with(&prefix))
         })
+        .map(|function| function.address)
+        .collect()
+}
+
+#[test]
+fn the_direct_task_polls_are_the_cut_and_their_bound_assumes_nothing() {
+    let elf = executor_image("poll_task", "inline(never)", true);
+    let polls = instances(&elf, "poll_task");
+    assert_eq!(polls.len(), 2);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let resolutions = task_polls(&elf, &analysis, true).unwrap();
+    let sites = task_poll_sites(&resolutions);
+    // Every task poll is a direct call of one recorded boundary, which is
+    // the task's root.
+    let called: BTreeSet<u32> = analysis
+        .functions
+        .values()
+        .flat_map(|facts| &facts.transfers)
+        .filter(|transfer| sites.contains(&transfer.site))
+        .filter_map(|transfer| transfer.target)
+        .collect();
+    assert_eq!(called, polls);
+    assert_eq!(resolutions.task_roots(), &polls);
+    assert!(resolutions.is_empty(), "no indirect site needs a fact");
+
+    let root = oer_analysis_elf::Elf::parse(&elf)
         .unwrap()
-        .address;
-    assert_eq!(resolution.targets, BTreeSet::from([poll]));
-    assert!(!Fact::TaskPolls.proves_empty());
+        .symbol("_start")
+        .unwrap()
+        .address as u32;
+    let bound = analysis
+        .bound_with(root, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
+    assert!(bound.bytes.is_some(), "{bound:?}");
+    assert!(bound.unresolved.is_empty());
+    assert!(bound.assumptions.is_empty(), "{:?}", bound.assumptions);
+    for poll in &polls {
+        assert!(bound.reached.contains(poll));
+    }
+
+    // The executor's own code ends at the polls.
+    let strict = analysis
+        .reached_cut(root, &resolutions, &sites, &mut ledger(), &mut || Ok(()))
+        .unwrap();
+    assert!(strict.is_disjoint(&polls), "{strict:?}");
+    assert!(strict.contains(&root));
+}
+
+#[test]
+fn a_renamed_boundary_is_found_by_its_records() {
+    let named = executor_image("poll_task", "inline(never)", true);
+    let renamed = executor_image("renamed_poll_task", "inline(never)", true);
+    let found = |elf: &[u8]| {
+        let analysis = analyze(elf, &[], &[]).unwrap();
+        let resolutions = task_polls(elf, &analysis, true).unwrap();
+        (
+            task_poll_sites(&resolutions).len(),
+            resolutions.task_roots().len(),
+        )
+    };
+    assert_eq!(found(&named), (2, 2));
+    assert_eq!(found(&renamed), (2, 2), "no name decides a task poll");
+}
+
+#[test]
+fn an_inlined_boundary_fails_the_analysis() {
+    // The records keep an outlined instance, but the executor's polls no
+    // longer call it: its tasks' code would count as the executor's.
+    let elf = executor_image("poll_task", "inline(always)", true);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let error = task_polls(&elf, &analysis, true).unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error}");
+    assert!(error.to_string().contains("has no direct call"), "{error}");
+}
+
+#[test]
+fn an_executor_without_boundary_records_fails_the_analysis() {
+    let elf = executor_image("poll_task", "inline(never)", false);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    // An image that links the executor's waker polls tasks only through
+    // recorded boundaries: none found is an error, never an empty set.
+    let error = task_polls(&elf, &analysis, true).unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error}");
     assert!(
-        analysis
-            .bound_with(
-                entry(&elf),
-                &resolutions,
-                &mut crate::tests::ledger(),
-                &mut || Ok(())
-            )
-            .unwrap()
-            .bytes
-            .is_some()
+        error.to_string().contains("records no task poll boundary"),
+        "{error}"
     );
+    // An image without the executor has no task polls to find.
+    let resolutions = task_polls(&elf, &analysis, false).unwrap();
+    assert!(task_poll_sites(&resolutions).is_empty());
+    assert!(resolutions.task_roots().is_empty());
 }

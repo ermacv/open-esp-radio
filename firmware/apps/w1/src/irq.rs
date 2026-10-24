@@ -122,7 +122,7 @@ pub fn doorbell() {
 /// The radio executor's software interrupt (P2): each run's cycles.
 pub fn radio_executor() {
     let start = Mcycle.now();
-    oer_espressif_executor::interrupt_handler::<2>();
+    oer_espressif_executor::interrupt_handler::<crate::RadioTasks>();
     measure::record(&measure::SWI2, Mcycle.now().wrapping_sub(start));
 }
 
@@ -208,7 +208,6 @@ static CLOCK: EmbassyClock = EmbassyClock;
 
 /// The receive runner on the radio executor (P2): bind the arena, send the
 /// application its ends, then receive until the stop and park.
-#[embassy_executor::task]
 pub async fn rx_task(
     mut registers: RadioAccess,
     interrupt_setup: MacInterruptSetup,

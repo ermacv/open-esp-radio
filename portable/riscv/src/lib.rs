@@ -67,6 +67,13 @@ pub mod clic {
     /// (CSR 0xFB1).
     pub const MINTSTATUS: u16 = 0xfb1;
 
+    /// `mintstatus.mil`, bits 31:24: the machine interrupt level the hart
+    /// runs at, 0 outside every interrupt handler.
+    ///
+    /// SOURCE: RISC-V CLIC specification, "CLIC CSRs", `mintstatus` (field
+    /// `mil`, bits 31:24).
+    pub const MINTSTATUS_MIL_SHIFT: u32 = 24;
+
     /// `mintthresh`: machine interrupt-level threshold.
     ///
     /// SOURCE: RISC-V CLIC specification, "CLIC CSRs", `mintthresh`

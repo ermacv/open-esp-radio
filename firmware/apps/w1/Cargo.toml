@@ -15,7 +15,6 @@ oer-sort = { path = "../../../portable/sort" }
 oer-sync = { path = "../../../portable/sync" }
 crc = { version = "=3.4.0", default-features = false }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
-embassy-executor = { version = "0.10.0", default-features = false }
 embassy-futures = "0.1.2"
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 heapless = "0.9.3"

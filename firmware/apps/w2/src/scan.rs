@@ -118,7 +118,6 @@ impl WifiTxEntropy for Entropy {
     }
 }
 
-#[embassy_executor::task]
 pub async fn scanner(boot: Boot) {
     let mut report = Report::new(boot.config, boot.station);
     let sender = boot.sender;

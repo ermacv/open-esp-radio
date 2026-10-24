@@ -86,7 +86,7 @@ fn hardware_code_neither_polls_tasks_nor_calls_wakers_and_its_data_is_reported()
     let mut dequeue_facts = crate::interrupts::placement::tests::facts(dequeue, 32);
     dequeue_facts.transfers = vec![oer_analysis_riscv_stack::Transfer {
         site: dequeue,
-        target: None,
+        target: Some(shared),
         kind: oer_analysis_riscv_stack::TransferKind::Call,
         source: None,
         table: None,
@@ -94,7 +94,7 @@ fn hardware_code_neither_polls_tasks_nor_calls_wakers_and_its_data_is_reported()
     }];
     analysis.functions.insert(dequeue, dequeue_facts);
     let mut resolutions = Resolutions::new();
-    resolutions.add(dequeue, Fact::TaskPolls, [shared]);
+    resolutions.add_task_poll(dequeue);
     let reached = BTreeSet::from([dequeue]);
     let found = hardware_code("hart 0 P3 (hardware)", &analysis, &reached, &resolutions);
     assert_eq!(

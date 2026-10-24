@@ -54,7 +54,27 @@ oer_esp32s31_hal::dma_static! {static ARENA:Arena=zeroed in ".dma.bss.bluetooth.
 static CELLS: ControllerEventCells<X> =
     ControllerEventCells::new(&irq::SCHEDULER_SIGNAL, &irq::TIMER_SIGNAL);
 
-struct Boot {
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    pub(crate) RadioTasks: InterruptExecutor<2> {
+        driver(boot: &'static mut Boot) = task::driver;
+        supervisor() = bridge::supervisor;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    pub(crate) AppTasks: Executor<0> {
+        serve(
+            console: host::Console,
+            rng: host::Rng,
+            channel: bridge::FrontendChannel,
+            power: TxPower,
+        ) = host::serve;
+    }
+}
+
+pub(crate) struct Boot {
     actor: Option<Actor>,
     inbox: Option<ClientInbox<Bluetooth>>,
     cold: Option<ColdOwner>,
@@ -180,9 +200,7 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         irq::initialize(SoftwareInterrupt::new(p.FROM_CPU_INTR3), tokens.doorbell);
     let bell = SCHEDULER.init(bell);
     let _ = bridge::clock_state();
-    let radio = RADIO_EXECUTOR
-        .init(X::new(SoftwareInterrupt::new(p.FROM_CPU_INTR2)))
-        .start(tokens.radio, LEVELS);
+    let radio = X::new(SoftwareInterrupt::new(p.FROM_CPU_INTR2)).start(tokens.radio, LEVELS);
     let boot = BOOT.init_with(|| Boot {
         actor: Some(actor),
         inbox: Some(inbox),
@@ -203,14 +221,14 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         profile,
         address: base,
     });
-    radio.spawn(driver(boot).expect("one P2 driver task"));
-    radio.spawn(bridge::supervisor().expect("one P2 port supervisor"));
-    let app = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(p.FROM_CPU_INTR0)));
+    RadioTasks::driver(&radio, boot).expect("one P2 driver task");
+    RadioTasks::supervisor(&radio).expect("one P2 port supervisor");
+    let app = Executor::<0>::new(SoftwareInterrupt::new(p.FROM_CPU_INTR0));
     adopted.enable_interrupts();
     app.run(tokens.wake, |spawner| {
         let (_, power) = permission(profile);
-        spawner
-            .spawn(host::serve(console, p.RNG, bridge::frontend(), power).expect("one HCI task"));
+        AppTasks::serve(spawner, console, p.RNG, bridge::frontend(), power)
+            .expect("one HCI task");
     })
 }
 async fn hold<T>(owner: &mut T) -> ! {
@@ -233,12 +251,10 @@ async fn fault<T>(
     hold(owner).await
 }
 mod task {
-    #[embassy_executor::task]
     pub(super) async fn driver(boot: &'static mut super::Boot) {
         super::WORKER.take().future(|| super::worker(boot)).await;
     }
 }
-use task::driver;
 type Worker = impl core::future::Future<Output = ()>;
 static WORKER: static_cell::ConstStaticCell<oer_memory::StaticPlace<Worker>> =
     static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());

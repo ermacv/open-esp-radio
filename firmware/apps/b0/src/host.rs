@@ -2,6 +2,11 @@
 use super::*;
 use core::{future::poll_fn, ops::ControlFlow};
 use esp_hal::{peripherals::RNG, usb::usb_serial_jtag::UsbSerialJtag};
+
+/// The host's console.
+pub(crate) type Console = UsbSerialJtag<'static, esp_hal::Blocking>;
+/// The host's entropy source.
+pub(crate) type Rng = RNG<'static>;
 use oer_bluetooth_hci::{
     HciControllerResponse,
     bt_hci::{
@@ -33,8 +38,8 @@ enum Received {
     Framing,
 }
 struct Io {
-    console: UsbSerialJtag<'static, esp_hal::Blocking>,
-    rng: RNG<'static>,
+    console: Console,
+    rng: Rng,
     commands: Commands,
     entropy: RandomValue,
 }
@@ -248,10 +253,9 @@ impl HciControllerResponse for StopComplete {
         &[0x0e, 4, 1, 0, 0xfc, 0]
     }
 }
-#[embassy_executor::task]
 pub async fn serve(
-    console: UsbSerialJtag<'static, esp_hal::Blocking>,
-    rng: RNG<'static>,
+    console: Console,
+    rng: Rng,
     channel: bridge::FrontendChannel,
     power: TxPower,
 ) {

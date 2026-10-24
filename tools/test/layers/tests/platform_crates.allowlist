@@ -23,12 +23,8 @@ chips/espressif/esp-hal/soc/src/flash/mmu.rs 1
 chips/espressif/esp-hal/soc/src/reset.rs 1
 chips/espressif/esp-hal/soc/src/watchdog.rs 1
 chips/espressif/executor/Cargo.toml 3
-chips/espressif/executor/src/doorbell.rs 1
-chips/espressif/executor/src/executor.rs 4
-chips/espressif/executor/src/idle_accounting.rs 1
+chips/espressif/executor/src/chip.rs 1
 chips/espressif/executor/src/systimer_ack.rs 2
-chips/espressif/executor/src/systimer.rs 1
-chips/espressif/executor/src/time_driver.rs 1
 chips/espressif/executor/tests/chip/c5.rs 1
 chips/espressif/executor/tests/chip/s31.rs 3
 chips/espressif/staged-bootstrap/Cargo.toml 1
@@ -43,7 +39,7 @@ chips/espressif/usb-fifo/Cargo.toml 1
 chips/espressif/usb-fifo/src/lib.rs 3
 firmware/apps/b0/Cargo.toml 1
 firmware/apps/b0/src/entry.rs 1
-firmware/apps/b0/src/host.rs 3
+firmware/apps/b0/src/host.rs 2
 firmware/apps/b0/src/irq.rs 1
 firmware/apps/b0/src/radio.rs 3
 firmware/apps/boot-smoke/Cargo.toml 1
@@ -91,7 +87,7 @@ firmware/hil/esp32s31/src/exception.rs 1
 firmware/hil/esp32s31/src/fatal.rs 5
 firmware/hil/esp32s31/src/main.rs 4
 firmware/hil/esp32s31/src/software_interrupt.rs 2
-firmware/hil/esp32s31/src/system/console.rs 4
+firmware/hil/esp32s31/src/system/console.rs 3
 firmware/hil/esp32s31/src/system/mod.rs 2
 firmware/hil/esp32s31/src/system/panic_reset.rs 2
 firmware/hil/esp32s31/src/system/postmortem.rs 2

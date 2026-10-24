@@ -26,12 +26,6 @@ pub enum Fact {
     WakerVtables,
     /// The functions whose type can be a static field's function pointer.
     FieldType,
-    /// Every task poll of the image, for the executor's call of a dequeued
-    /// task's `poll_fn`.
-    TaskPolls,
-    /// Neither the image's functions nor its concrete DWARF instances
-    /// contain a task poll: no task can reach the executor's dequeue call.
-    NoTasks,
     /// The jump out of the bootstrap into the stage-two entry the stack
     /// policy names. The checks verify, in both ELFs, that the site jumps
     /// to the entry and that the entry installs its stack pointer before any
@@ -43,11 +37,10 @@ pub enum Fact {
 /// bound resting on one is conditional, and names it.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum Assumption {
-    /// The executor invariant: a task header's `poll_fn` matches the storage
-    /// it heads, and a pointer erased to `()` or to bytes is read back as its
-    /// own type. Every fact found from the image's types but not enumerated
-    /// whole rests on it: a field's function reaches a site only if no
-    /// reinterpreted memory puts another function there. The points-to
+    /// The executor invariant: a pointer erased to `()` or to bytes is read
+    /// back as its own type. Every fact found from the image's types but not
+    /// enumerated whole rests on it: a field's function reaches a site only
+    /// if no reinterpreted memory puts another function there. The points-to
     /// analysis of the interrupt-reachable sites is to prove it.
     ExecutorInvariant,
 }
@@ -65,8 +58,7 @@ impl std::fmt::Display for Assumption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::ExecutorInvariant => {
-                "the executor invariant (a task header's poll_fn matches its storage, and an \
-                 erased pointer is read back as its own type)"
+                "the executor invariant (an erased pointer is read back as its own type)"
             }
         })
     }
@@ -80,18 +72,15 @@ impl Fact {
     pub fn assumption(self) -> Option<Assumption> {
         match self {
             Self::InterruptTable | Self::StageTwoEntry | Self::WakerVtables => None,
-            Self::FieldType | Self::TaskPolls | Self::NoTasks => {
-                Some(Assumption::ExecutorInvariant)
-            }
+            Self::FieldType => Some(Assumption::ExecutorInvariant),
         }
     }
 
     /// Whether an empty set from this fact proves the site reaches nothing:
-    /// the interrupt table lists every handler. No tasks proves the executor's
-    /// dequeue call unreachable. Waker vtables and field types are found,
-    /// not listed, so their empty set is a hole.
+    /// the interrupt table lists every handler. Waker vtables and field
+    /// types are found, not listed, so their empty set is a hole.
     pub fn proves_empty(self) -> bool {
-        matches!(self, Self::InterruptTable | Self::NoTasks)
+        matches!(self, Self::InterruptTable)
     }
 }
 
@@ -117,6 +106,11 @@ pub struct Resolutions {
     /// Addresses a transfer leaves the analysed stack for good: the stack
     /// below the transfer belongs to the code it enters, not to this root.
     exits: BTreeSet<u32>,
+    /// The direct calls by which an executor polls one of its tasks: each
+    /// enters the task's code.
+    task_polls: BTreeSet<u32>,
+    /// The functions those calls enter: each task's root.
+    task_roots: BTreeSet<u32>,
 }
 
 impl Resolutions {
@@ -146,9 +140,32 @@ impl Resolutions {
         self.exits.contains(&address)
     }
 
-    /// Add every resolution and exit of `other`.
+    /// Declare the call at `site` an executor's poll of a task.
+    pub fn add_task_poll(&mut self, site: u32) {
+        self.task_polls.insert(site);
+    }
+
+    /// The calls by which an executor polls its tasks.
+    pub fn task_polls(&self) -> &BTreeSet<u32> {
+        &self.task_polls
+    }
+
+    /// Declare the function at `address` a task's root: the function an
+    /// executor's task poll calls.
+    pub fn add_task_root(&mut self, address: u32) {
+        self.task_roots.insert(address);
+    }
+
+    /// The roots of the tasks the executor polls.
+    pub fn task_roots(&self) -> &BTreeSet<u32> {
+        &self.task_roots
+    }
+
+    /// Add every resolution, exit, task poll and task root of `other`.
     pub fn extend(&mut self, other: Resolutions) {
         self.exits.extend(other.exits);
+        self.task_polls.extend(other.task_polls);
+        self.task_roots.extend(other.task_roots);
         for (site, resolution) in other.sites {
             let into = self.sites.entry(site).or_default();
             into.facts.extend(resolution.facts);

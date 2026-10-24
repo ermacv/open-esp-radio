@@ -320,17 +320,8 @@ impl Image {
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
         }
-        let resolutions = image_resolutions(
-            &facts,
-            &analysis,
-            &dwarf,
-            &types,
-            names
-                .iter()
-                .map(|(&address, name)| (address, name.as_str())),
-            &mut keep,
-            &mut control,
-        )?;
+        let resolutions =
+            image_resolutions(&facts, &analysis, &dwarf, &types, &mut keep, &mut control)?;
         drop(types);
         let stack_sizes = stack_sizes(&facts, &mut keep, &mut control)?;
         drop(companions);
@@ -558,15 +549,13 @@ impl StackAudit {
             }
             let mut task_bounds = Vec::new();
             if stacks.iter().any(|(name, _)| *name == "CPU0 task stack") {
-                for (&address, name) in &image.names {
-                    if name.contains("TaskStorage<") && name.ends_with("::poll") {
-                        task_bounds.push(image.analysis.bound_with(
-                            address,
-                            &image.resolutions,
-                            keep,
-                            control,
-                        )?);
-                    }
+                for &address in image.resolutions.task_roots() {
+                    task_bounds.push(image.analysis.bound_with(
+                        address,
+                        &image.resolutions,
+                        keep,
+                        control,
+                    )?);
                 }
             }
             Ok((bounds, task_bounds))

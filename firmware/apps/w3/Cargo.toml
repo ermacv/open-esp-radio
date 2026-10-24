@@ -20,7 +20,6 @@ owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 embassy-sync = "0.8.0"
-embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 heapless = "0.9.3"
 static_cell = { workspace = true }

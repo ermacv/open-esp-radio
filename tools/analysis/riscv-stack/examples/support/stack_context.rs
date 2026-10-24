@@ -131,20 +131,7 @@ pub fn derive<'m>(
         }
     }
     println!("stack-root\t{}\t{root:?}", task.root);
-    let names: Vec<_> = image
-        .functions()
-        .iter()
-        .map(|f| (f.address, oer_analysis_elf::demangle(&f.label())))
-        .collect();
-    let mut resolutions = image_resolutions(
-        image,
-        analysis,
-        dwarf,
-        types,
-        names.iter().map(|(a, n)| (*a, n.as_str())),
-        keep,
-        c,
-    )?;
+    let mut resolutions = image_resolutions(image, analysis, dwarf, types, keep, c)?;
     let vectors = vector_table(image, &irq.vector_table_symbol, c)?
         .into_iter()
         .flatten()

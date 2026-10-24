@@ -27,7 +27,6 @@ system-watchdog = [
 ]
 
 [dependencies]
-embassy-executor.workspace = true
 embassy-time.workspace = true
 esp-hal.workspace = true
 oer-espressif-staged-runtime = { workspace = true, features = ["esp32c5"] }

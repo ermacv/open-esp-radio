@@ -135,7 +135,6 @@ pub fn fail_clock(cause: Fault) {
     });
 }
 
-#[embassy_executor::task]
 pub async fn supervisor() {
     let mut first = Some(rpc::MailboxDevice::new(
         EmbassyClock,

@@ -41,8 +41,6 @@ pub(super) enum FunctionUsePolicy {
 }
 
 pub(super) struct FunctionUse {
-    pub symbol: Option<u32>,
-    pub canonical: u32,
     pub containing: Option<u32>,
     pub function: Option<u32>,
     pub exact: bool,
@@ -105,8 +103,6 @@ pub(super) fn function_use(
         })
     };
     Ok(Some(FunctionUse {
-        symbol,
-        canonical,
         containing,
         function,
         exact: function == Some(raw) && symbol.is_none_or(|symbol| symbol == raw),

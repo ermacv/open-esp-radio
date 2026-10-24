@@ -1,4 +1,4 @@
-//! A linked call graph: root -> dequeue -> task -> PHY, with a helper
+//! A linked call graph: root -> poll -> task -> PHY, with a helper
 //! called independently by both root and task.
 use super::*;
 
@@ -62,7 +62,7 @@ fn first_discovery_witnesses_use_only_traversed_edges_and_do_not_cross_a_hole() 
         partial.reached,
         BTreeSet::from([TEXT, TEXT + 12, TEXT + 32])
     );
-    resolutions.add(TEXT + 12, Fact::TaskPolls, [TEXT + 20]);
+    resolutions.add(TEXT + 12, Fact::FieldType, [TEXT + 20]);
     let complete = analysis
         .bound_with(TEXT, &resolutions, &mut keep, &mut || Ok(()))
         .unwrap();
@@ -120,7 +120,8 @@ fn predecessor_storage_is_refused_before_exceeding_working_memory() {
 fn task_poll_cut_keeps_the_dequeue_owner_and_independent_strict_paths() {
     let analysis = fixture();
     let mut resolutions = Resolutions::new();
-    resolutions.add(TEXT + 12, Fact::TaskPolls, [TEXT + 20]);
+    resolutions.add(TEXT + 12, Fact::FieldType, [TEXT + 20]);
+    resolutions.add_task_poll(TEXT + 12);
     resolutions.add(TEXT + 24, Fact::FieldType, [TEXT + 36]);
     let cut = task_poll_sites(&resolutions);
     assert_eq!(cut, BTreeSet::from([TEXT + 12]));
@@ -177,14 +178,13 @@ fn task_poll_cut_keeps_the_dequeue_owner_and_independent_strict_paths() {
 }
 
 #[test]
-fn no_tasks_is_a_cut_without_a_task_root_and_unrelated_facts_are_not_cuts() {
+fn unrelated_facts_are_not_cuts() {
     let analysis = fixture();
     let mut resolutions = Resolutions::new();
-    resolutions.add(TEXT + 12, Fact::NoTasks, []);
+    resolutions.add(TEXT + 12, Fact::FieldType, [TEXT + 20]);
     resolutions.add(TEXT + 24, Fact::FieldType, [TEXT + 36]);
     resolutions.add(TEXT + 32, Fact::WakerVtables, [TEXT + 36]);
-    assert_eq!(task_poll_sites(&resolutions), BTreeSet::from([TEXT + 12]));
-    assert!(resolutions.get(TEXT + 12).unwrap().targets.is_empty());
+    assert!(task_poll_sites(&resolutions).is_empty());
     assert_eq!(
         analysis
             .reached_cut(

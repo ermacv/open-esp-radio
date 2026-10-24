@@ -139,12 +139,8 @@ impl CodePlacement {
                         .iter()
                         .filter_map(|address| analysis.functions.get(address))
                         .flat_map(|facts| &facts.transfers)
-                        .filter(|transfer| {
-                            transfer.target.is_none() && cut.contains(&transfer.site)
-                        })
-                        .filter_map(|transfer| resolutions.get(transfer.site))
-                        .filter(|resolution| resolution.resolves())
-                        .flat_map(|resolution| resolution.targets.iter().copied())
+                        .filter(|transfer| cut.contains(&transfer.site))
+                        .filter_map(|transfer| transfer.target)
                         .collect()
                 } else {
                     BTreeSet::new()

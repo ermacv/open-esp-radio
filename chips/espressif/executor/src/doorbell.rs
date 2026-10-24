@@ -14,17 +14,13 @@
 
 use core::sync::atomic::{Ordering, fence};
 
-use esp_hal::{
-    interrupt::{
-        Priority,
-        software::{SoftwareInterrupt, SoftwareInterruptAcknowledger, SoftwareInterruptSender},
-    },
-    peripherals::Interrupt,
-    system::Cpu,
-};
 use oer_interrupt_table::Entry;
 
-use crate::executor::{SameLevel, software_interrupt_source};
+use crate::chip::{
+    Cpu, Interrupt, Priority, SoftwareInterrupt, SoftwareInterruptAcknowledger,
+    SoftwareInterruptSender, software_interrupt_source,
+};
+use crate::executor::SameLevel;
 
 /// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`).
 pub struct Doorbell<const SWI: u8> {

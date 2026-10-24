@@ -27,8 +27,6 @@ pub enum Kind {
     StageTwoEntry,
     WakerVtables,
     FieldType,
-    TaskPolls,
-    NoTasks,
 }
 
 impl Kind {
@@ -45,8 +43,6 @@ impl Kind {
             Fact::StageTwoEntry => Self::StageTwoEntry,
             Fact::WakerVtables => Self::WakerVtables,
             Fact::FieldType => Self::FieldType,
-            Fact::TaskPolls => Self::TaskPolls,
-            Fact::NoTasks => Self::NoTasks,
         }
     }
 }

@@ -6,7 +6,7 @@
 - [Wire and evidence contracts](../../../protocols/hil/protocol/README.md)
 
 This workspace selects the shared board boot and memory profile and owns the
-Embassy executor, the USB Serial/JTAG transport and the HIL workloads of the
+static executor, the USB Serial/JTAG transport and the HIL workloads of the
 system images and the personal station image. Effective dependency locks are
 archived beside each image.
 
@@ -67,7 +67,7 @@ The personal image's `stack-wifi-station.toml` names the measured P1
 frames that exceed the move limit, each with its own checked ceiling. IRQ
 stacks retain the normal per-hart guard and percentage margin and are sized
 from the actual P2/ISR bound. Polling and destruction of placed worker futures
-stay outside the small Embassy task shells.
+stay outside the small task shells.
 
 ## Panic and exception records
 

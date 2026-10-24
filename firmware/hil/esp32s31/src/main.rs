@@ -2,7 +2,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![recursion_limit = "256"]
-#![cfg_attr(feature = "wifi-station", feature(type_alias_impl_trait))]
+#![feature(type_alias_impl_trait)]
 #[cfg(not(any(
     feature = "boot-smoke",
     feature = "system-watchdog",
@@ -39,10 +39,9 @@ use oer_diagnostics::Note;
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
 use oer_espressif_executor::Executor;
-use static_cell::StaticCell;
 
 oer_espressif_staged_runtime::interrupt_table! {
-    /// Wakes the core-0 Embassy executor.
+    /// Wakes the core-0 executor.
     wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
     #[cfg(not(feature = "wifi-station"))]
     /// The Embassy time driver's alarm (system timer comparator 0).
@@ -52,7 +51,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     #[cfg(feature = "wifi-station")]
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     #[cfg(feature = "wifi-station")]
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<wifi_station::RadioTasks>, Priority2, ProCpu, Executor;
     #[cfg(feature = "wifi-station")]
     doorbell: DoorbellToken = FROM_CPU_INTR3 => crate::wifi_station::irq::doorbell, Priority3, ProCpu, Hardware;
     #[cfg(feature = "wifi-station")]
@@ -104,7 +103,13 @@ const PROFILE_DATA_START: u32 = oer_esp32s31_layout::LAYOUT.psram.origin;
 const PROFILE_DATA_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
 const PROFILE_NAME: &str = "psram-code-psram-data-psram-stack";
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
+#[cfg(feature = "boot-smoke")]
+oer_espressif_executor::tasks! {
+    /// The boot smoke's task.
+    BootSmokeTasks: Executor<0> {
+        boot_smoke(console: boot_smoke_console::BootSmokeConsole) = boot_smoke;
+    }
+}
 /// Layout probes: each lives in the section it checks and reads back its
 /// initializer once the runtime has loaded or zeroed that section.
 static INITIALIZED_DATA: AtomicU32 = AtomicU32::new(DATA_SENTINEL);
@@ -186,9 +191,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
     oer_espressif_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
 
-    let executor = EXECUTOR.init(Executor::<0>::new(software_interrupt::executor0(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    let executor = Executor::<0>::new(software_interrupt::executor0(peripherals.FROM_CPU_INTR0));
 
     adopted.enable_interrupts();
 
@@ -211,17 +214,14 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
     #[cfg(feature = "boot-smoke")]
     executor.run(interrupts.wake, move |spawner| {
-        let Ok(task) = boot_smoke(boot_smoke_console::BootSmokeConsole::new(
-            peripherals.USB_DEVICE,
-        )) else {
+        let console = boot_smoke_console::BootSmokeConsole::new(peripherals.USB_DEVICE);
+        if BootSmokeTasks::boot_smoke(spawner, console).is_err() {
             fail("task-allocation");
-        };
-        spawner.spawn(task);
+        }
     });
 }
 
 #[cfg(feature = "boot-smoke")]
-#[embassy_executor::task]
 async fn boot_smoke(mut console: boot_smoke_console::BootSmokeConsole) {
     console.embassy_started();
     Timer::after(Duration::from_millis(50)).await;

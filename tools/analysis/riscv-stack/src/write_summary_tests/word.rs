@@ -635,7 +635,7 @@ fn resolved_contexts_keep_the_existing_executor_assumption() {
             .is_none()
     );
     let mut targets = Resolutions::new();
-    targets.add(0x1000, Fact::TaskPolls, [0x1000]);
+    targets.add(0x1000, Fact::FieldType, [0x1000]);
     let context = call_stack_context_with_targets(
         &idx,
         0x1000,
