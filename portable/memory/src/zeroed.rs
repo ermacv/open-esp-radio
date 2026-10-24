@@ -150,6 +150,10 @@ impl<T> ZeroedOnce<T> {
     /// writing context at a time (an interrupt reads with [`Self::get`]); a
     /// call that finds another write in progress panics rather than wait.
     #[allow(unsafe_code, reason = "the winning exchange is the only writer")]
+    #[expect(
+        clippy::expect_used,
+        reason = "both match arms leave the cell `ONCE_READY`; a miss is a defect of this type"
+    )]
     pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
         match self.state.compare_exchange(
             ONCE_EMPTY,
@@ -168,10 +172,7 @@ impl<T> ZeroedOnce<T> {
                 "a zeroed once cell is written by one context at a time"
             ),
         }
-        // SAFETY: either this call wrote the value and stored `ONCE_READY`,
-        // or the failed exchange observed `ONCE_READY`; the value is never
-        // written again.
-        unsafe { (*self.value.get()).assume_init_ref() }
+        self.get().expect("a written once cell is ready")
     }
 }
 
