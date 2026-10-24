@@ -28,9 +28,13 @@ system these rules serve.
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor. The one exception is
   a named settle of a known length up to 20 µs. Before an executor exists
-  (the bootstrap and early boot) there is nothing to yield to, so console
+  (the bootstrap and early boot) there is nothing to yield to: console
   output there may wait for room in the USB FIFO up to a bounded budget per
-  record. Portable protocols take no `critical-section` and no blocking mutex.
+  record, and hardware bring-up (PLL, RC calibration, cache, MSPI, PSRAM)
+  may poll in named boot waits, each with its own bound from its source and
+  all under one boot deadline below the armed RTC watchdog; a timeout is a
+  typed boot failure, never a fallback value. Portable protocols take no
+  `critical-section` and no blocking mutex.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `chips/<chip>/registers/` and regenerated (`cargo registers
   generate`), never written as a local mask or shift. Code preserves reserved
