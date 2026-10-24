@@ -174,8 +174,9 @@ jobs:
           cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
-        # reviewed entry (chips/esp32s31/registers/shared-words.toml). Cargo resolves
-        # the pinned esp-hal and PAC sources of the workspace.
+        # reviewed entry (chips/<chip>/registers/shared-words.toml). Cargo resolves
+        # the pinned esp-hal, esp-metadata-generated and PAC sources of the
+        # workspace.
         run: |
           meta="$RUNNER_TEMP/firmware-metadata.json"
           cargo metadata --locked --format-version 1 > "$meta"
@@ -184,7 +185,12 @@ jobs:
           }
           cargo registers check shared-words --chip esp32s31 \
             --esp-hal-src "$(source_of esp-hal)/src" \
+            --esp-metadata-generated-src "$(source_of esp-metadata-generated)/src" \
             --pac-src "$(source_of esp32s31)/src"
+          cargo registers check shared-words --chip esp32c5 \
+            --esp-hal-src "$(source_of esp-hal)/src" \
+            --esp-metadata-generated-src "$(source_of esp-metadata-generated)/src" \
+            --pac-src "$(source_of esp32c5)/src"
       - name: Image build
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |

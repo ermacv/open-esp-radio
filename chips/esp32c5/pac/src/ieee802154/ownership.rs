@@ -12,7 +12,7 @@
 //! snapshot fields and the generated affine W1C acknowledge.
 
 use crate::generated::ieee802154_mac::{
-    self as mac, Ieee802154Mac, Ieee802154MacInterrupt, Ieee802154MacTask,
+    self as mac, Ieee802154Mac, Ieee802154MacIrq, Ieee802154MacTask,
 };
 
 /// The register index of one of the four multipan contexts.
@@ -234,8 +234,8 @@ impl MultipanIdentityReadback {
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaticMacPolicyReadback {
-    frequency_code: u8,
-    cca_mode: u8,
+    frequency_code: oer_mmio::Bits<7>,
+    cca_mode: oer_mmio::Bits<2>,
     cca_threshold_code: u8,
     ack_timeout: u16,
     auto_ack_tx: bool,
@@ -249,11 +249,11 @@ pub struct StaticMacPolicyReadback {
 }
 
 impl StaticMacPolicyReadback {
-    pub const fn frequency_code(self) -> u8 {
+    pub const fn frequency_code(self) -> oer_mmio::Bits<7> {
         self.frequency_code
     }
 
-    pub const fn cca_mode(self) -> u8 {
+    pub const fn cca_mode(self) -> oer_mmio::Bits<2> {
         self.cca_mode
     }
 
@@ -303,11 +303,11 @@ impl StaticMacPolicyReadback {
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacConfigurationReadback {
-    frequency_code: u8,
-    tx_power_code: u8,
-    cca_mode: u8,
+    frequency_code: oer_mmio::Bits<7>,
+    tx_power_code: oer_mmio::Bits<5>,
+    cca_mode: oer_mmio::Bits<2>,
     cca_threshold_code: u8,
-    ed_sample_rate: u8,
+    ed_sample_rate: oer_mmio::Bits<2>,
     ack_timeout: u16,
     auto_ack_tx: bool,
     auto_ack_rx: bool,
@@ -321,15 +321,15 @@ pub struct MacConfigurationReadback {
 }
 
 impl MacConfigurationReadback {
-    pub const fn frequency_code(self) -> u8 {
+    pub const fn frequency_code(self) -> oer_mmio::Bits<7> {
         self.frequency_code
     }
 
-    pub const fn tx_power_code(self) -> u8 {
+    pub const fn tx_power_code(self) -> oer_mmio::Bits<5> {
         self.tx_power_code
     }
 
-    pub const fn cca_mode(self) -> u8 {
+    pub const fn cca_mode(self) -> oer_mmio::Bits<2> {
         self.cca_mode
     }
 
@@ -337,7 +337,7 @@ impl MacConfigurationReadback {
         self.cca_threshold_code
     }
 
-    pub const fn ed_sample_rate(self) -> u8 {
+    pub const fn ed_sample_rate(self) -> oer_mmio::Bits<2> {
         self.ed_sample_rate
     }
 
@@ -394,8 +394,8 @@ pub struct FoundationReadback {
     rx_aborts_masked: bool,
     tx_aborts_masked: bool,
     ed_uses_average: bool,
-    txrx_pti: u8,
-    ack_pti: u8,
+    txrx_pti: oer_mmio::Bits<4>,
+    ack_pti: oer_mmio::Bits<4>,
     txon_delay_applied: bool,
 }
 
@@ -420,11 +420,11 @@ impl FoundationReadback {
         self.ed_uses_average
     }
 
-    pub const fn txrx_pti(self) -> u8 {
+    pub const fn txrx_pti(self) -> oer_mmio::Bits<4> {
         self.txrx_pti
     }
 
-    pub const fn ack_pti(self) -> u8 {
+    pub const fn ack_pti(self) -> oer_mmio::Bits<4> {
         self.ack_pti
     }
 }
@@ -449,16 +449,16 @@ fn rx_aborts_all_masked(r: &mac::rx_abort_enable::R) -> bool {
         || r.coexistence_break()
         || r.unexpected_ack()
         || r.rx_restart()
-        || r.rx_abort_en_9_14() != 0
+        || r.rx_abort_en_9_14().get() != 0
         || r.tx_ack_timeout()
         || r.tx_ack_stop()
         || r.tx_ack_coexistence_break()
         || r.enhanced_ack_security_error()
-        || r.rx_abort_en_19_22() != 0
+        || r.rx_abort_en_19_22().get() != 0
         || r.ed_abort()
         || r.ed_stop()
         || r.ed_coexistence_reject()
-        || r.rx_abort_en_26_30() != 0)
+        || r.rx_abort_en_26_30().get() != 0)
 }
 
 /// Whether exactly the finite ED/CCA receive-abort reasons are enabled.
@@ -475,13 +475,13 @@ fn rx_aborts_ed_operation_only(r: &mac::rx_abort_enable::R) -> bool {
             || r.coexistence_break()
             || r.unexpected_ack()
             || r.rx_restart()
-            || r.rx_abort_en_9_14() != 0
+            || r.rx_abort_en_9_14().get() != 0
             || r.tx_ack_timeout()
             || r.tx_ack_stop()
             || r.tx_ack_coexistence_break()
             || r.enhanced_ack_security_error()
-            || r.rx_abort_en_19_22() != 0
-            || r.rx_abort_en_26_30() != 0)
+            || r.rx_abort_en_19_22().get() != 0
+            || r.rx_abort_en_26_30().get() != 0)
 }
 
 /// Whether no transmit-abort reason is enabled.
@@ -495,15 +495,15 @@ fn tx_aborts_all_masked(r: &mac::tx_abort_enable::R) -> bool {
         || r.rx_ack_coexistence_break()
         || r.rx_ack_type_not_ack()
         || r.rx_ack_restart()
-        || r.tx_abort_en_9_14() != 0
+        || r.tx_abort_en_9_14().get() != 0
         || r.rx_ack_timeout()
         || r.tx_stop()
         || r.tx_coexistence_break()
         || r.tx_security_error()
-        || r.tx_abort_en_19_22() != 0
+        || r.tx_abort_en_19_22().get() != 0
         || r.cca_failed()
         || r.cca_busy()
-        || r.tx_abort_en_25_30() != 0)
+        || r.tx_abort_en_25_30().get() != 0)
 }
 
 /// Closed classification of `RX_ABORT_ENABLE` for one finite ED/CCA operation.
@@ -683,7 +683,7 @@ impl Ieee802154EventReadback {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TransmitSecurityControlReadback {
     enabled: bool,
-    payload_offset: u8,
+    payload_offset: oer_mmio::Bits<7>,
 }
 
 impl TransmitSecurityControlReadback {
@@ -691,7 +691,7 @@ impl TransmitSecurityControlReadback {
         self.enabled
     }
 
-    pub const fn payload_offset(self) -> u8 {
+    pub const fn payload_offset(self) -> oer_mmio::Bits<7> {
         self.payload_offset
     }
 }
@@ -837,7 +837,7 @@ impl TaskRegisters {
     /// Read the recovered low twenty-four-bit ED duration.
     #[doc(hidden)]
     pub fn ed_duration(&self) -> u32 {
-        self.registers.read_ed_duration().duration()
+        self.registers.read_ed_duration().duration().get()
     }
 
     /// Publish one complete TX DMA address word.
@@ -1162,13 +1162,13 @@ impl TaskRegisters {
                 == mac::ed_config::EdSampleMode::Average,
             txrx_pti: coex_pti.txrx_pti(),
             ack_pti: coex_pti.ack_pti(),
-            txon_delay_applied: u32::from(tx_on_delay.txon_delay())
+            txon_delay_applied: tx_on_delay.txon_delay().get()
                 == crate::generated::Ieee802154TxOnDelay::Delay40.bits()
-                && u32::from(tx_off_delay.txoff_delay())
+                && tx_off_delay.txoff_delay().get()
                     == crate::generated::Ieee802154TxOffDelay::Delay0.bits()
-                && u32::from(rx_on_delay.rxon_delay())
+                && rx_on_delay.rxon_delay().get()
                     == crate::generated::Ieee802154RxOnDelay::Delay50.bits()
-                && u32::from(txrx_switch_delay.txrx_switch_delay())
+                && txrx_switch_delay.txrx_switch_delay().get()
                     == crate::generated::Ieee802154TxRxSwitchDelay::Delay122.bits(),
         }
     }
@@ -1262,29 +1262,29 @@ impl TaskRegisters {
 /// There is no conversion to the task owner and no raw register accessor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InterruptRxStatusReadback {
-    abort_reason_code: u8,
+    abort_reason_code: oer_mmio::Bits<5>,
 }
 
 impl InterruptRxStatusReadback {
-    pub const fn abort_reason_code(&self) -> u8 {
+    pub const fn abort_reason_code(&self) -> oer_mmio::Bits<5> {
         self.abort_reason_code
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InterruptTxStatusReadback {
-    abort_reason_code: u8,
+    abort_reason_code: oer_mmio::Bits<5>,
 }
 
 impl InterruptTxStatusReadback {
-    pub const fn abort_reason_code(&self) -> u8 {
+    pub const fn abort_reason_code(&self) -> oer_mmio::Bits<5> {
         self.abort_reason_code
     }
 }
 
 #[must_use = "the interrupt owner must be deactivated and reunited"]
 pub struct InterruptRegisters {
-    registers: Ieee802154MacInterrupt,
+    registers: Ieee802154MacIrq,
 }
 
 impl InterruptRegisters {
@@ -1365,7 +1365,7 @@ impl InterruptRegisters {
     /// Observe only the generated RX/TX state subfields from the IRQ-owned
     /// sideband words.
     #[doc(hidden)]
-    pub fn state_codes(&self) -> (u8, u8) {
+    pub fn state_codes(&self) -> (oer_mmio::Bits<3>, oer_mmio::Bits<4>) {
         (
             self.registers.read_rx_status().state(),
             self.registers.read_tx_status().state(),

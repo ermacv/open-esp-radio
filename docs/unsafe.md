@@ -40,7 +40,7 @@ Below it are, by directory (`/` ends a domain):
 
 | Kind | Directories |
 | --- | --- |
-| Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
+| Generated register access | `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
 | The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
@@ -53,31 +53,48 @@ Below it are, by directory (`/` ends a domain):
 
 Typed register blocks are generated without `unsafe`. The register
 generator renders the peripherals a chip's API policy lists in
-`typed-peripherals` (on the ESP32-C5 the IEEE 802.15.4 MAC) into the chip
-PAC's `generated.rs`, which starts with `#![forbid(unsafe_code)]`; svd2rust
-renders the chip's other peripherals into its `pac-raw` package. The unsafe
-code under a typed block is `oer-mmio` (`portable/mmio`) alone:
+`typed-peripherals` into the chip PAC's `generated.rs`, which starts with
+`#![forbid(unsafe_code)]`; svd2rust renders a chip's other peripherals into
+its `pac-raw` package. On the ESP32-C5 every exposed peripheral is typed and
+the chip has no `pac-raw`; the policy's `unexposed-peripherals` (observation
+views kept for bit-use coverage) have no owner. The unsafe code under a
+typed block is `oer-mmio` (`portable/mmio`) alone:
 
-- `Span::assume_owned`, the promise that a register range is the caller's
-  alone. Only the chip PAC's radio root makes it, from the platform
-  handoff (clippy `disallowed-methods` refuses it elsewhere); a probe image
-  may take a block's span again after dropping the block's owner.
-- The volatile reads and writes of a `Block` and of a `Part`. Every offset,
-  stride and element count is a const generic, checked against the block's
-  size at compile time; an array index is an `Index<N>` from a checked
-  constructor; the two parts of a split own disjoint word lists, checked at
-  compile time, and a part writes only the words it owns.
+- `oer_mmio::assume_owned`, the promise that the claimed blocks' words are
+  the caller's alone. A block's authority is the list of its declared words,
+  not the address range they span, so blocks whose ranges interleave and
+  radio views of platform blocks claim only their own words. Only the chip
+  PAC's radio root makes the promise, once for every typed block, from the
+  platform handoff (clippy `disallowed-methods` refuses it elsewhere); a
+  probe image may claim a block again after dropping the block's owner.
+  The generated `const` assertion beside the claim checks that no two
+  blocks list the same word. A word esp-hal also writes is claimed only
+  with its reviewed coordination in the chip's
+  `registers/shared-words.toml` (`cargo registers check shared-words`).
+- The volatile reads and writes of a `Block` and of a `Part`. Every word
+  offset, stride and element count is a const generic, checked against the
+  block's word list at compile time; an array index is an `Index<N>` from a
+  checked constructor; the two parts of a split own disjoint word lists,
+  checked at compile time, and a part writes only the words it owns. A
+  block the policy divides into its interrupt-handler and task sides
+  (`[[register-sides]]`, owners `<Block>Irq` and `<Block>Task`) is checked
+  at compile time to give every word to exactly one side.
+- `oer_mmio::fence`, the device-access ordering instruction.
 - `VolatileCell`, the volatile word of the generated memory layouts, and
   its `Zeroable` implementation, from which the layouts derive theirs; and
   the `unsafe` constructors of `DmaWindowAddress` and `DmaRef`.
 
 A generated register writer takes typed field values only: `bool`, a value
-enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`. A read-modify-write
-keeps every other bit, reserved and undeclared ones included; a
-write-one-to-clear register is acknowledged with exactly one affine sample;
-a DMA address field is written only by its policy transaction, which takes
-a typed DMA address. Each rendered transaction asserts its masks against
-the register's declared fields in a `const` item beside it.
+enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`; a reader returns
+the same type, so a value read back is written again without a
+conversion. A read-modify-write keeps every other bit, reserved and
+undeclared ones included; a write-one-to-clear register is acknowledged
+with exactly one affine sample; a DMA address field is written only by its
+policy transaction, which takes a typed DMA address. Each rendered
+transaction asserts its masks against the register's declared fields in a
+`const` item beside it. The one exception is a policy fixed image marked
+`whole-word`: the vendor's store of a whole word, with its evidence
+sources, which also writes the bits the model leaves undeclared.
 
 `esp32s31/pac-raw/` is the `oer-esp32s31-pac-raw` package and
 `espressif/ieee80211-pac-raw/` the `oer-espressif-ieee80211-pac-raw` package of the

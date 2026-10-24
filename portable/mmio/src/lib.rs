@@ -1,20 +1,23 @@
 //! The one volatile register-access core under the generated register code.
 //!
 //! The register generator renders typed register blocks that hold a
-//! [`Block`] (or the [`Part`]s of one) and call only its offset-checked
-//! reads and writes; the generated code contains no `unsafe`. Everything a
+//! [`Block`] (or the [`Part`]s of one) and call only its word-checked reads
+//! and writes; the generated code contains no `unsafe`. Everything a
 //! volatile access needs to be sound is decided here:
 //!
-//! - **Where a block lives.** A [`Span`] is the exclusive authority over one
-//!   range of device registers. Its constructor is the one `unsafe` promise a
-//!   chip's PAC root makes; splitting it and taking a [`Block`] from it are
-//!   checked at compile time, so two blocks never cover the same address.
-//!   [`Block::host`] places a block in host memory instead, for tests of the
-//!   rendered accessors.
-//! - **Which words an access touches.** Every offset, stride and count is a
-//!   const generic, checked against the block's size when the access is
-//!   monomorphized. A runtime array index is an [`Index`], made only by a
-//!   checked constructor.
+//! - **Which words a block has.** A block's authority is the list of its
+//!   declared words ([`Registers`]), not the address range they span: two
+//!   blocks whose ranges interleave, or a radio view of a platform block
+//!   whose other words another owner writes, each reach only their own
+//!   words. Every read and write names its word as a const generic, checked
+//!   against the list when it is monomorphized; a runtime array index is an
+//!   [`Index`], made only by a checked constructor.
+//! - **Where a block lives.** A block of device registers is made only by
+//!   [`assume_owned`], the one `unsafe` promise a chip's PAC root makes, for
+//!   the whole set of blocks it owns at once ([`Claim`]: a block or a tuple of
+//!   claims). The PAC asserts at compile time that the claimed blocks list
+//!   disjoint words ([`check::disjoint_blocks`]). [`Block::host`] places a
+//!   block in host memory instead, for tests of the rendered accessors.
 //! - **Who may write a word.** [`Block::split`] divides a block into two
 //!   [`Part`]s whose owned word lists ([`Words`]) are disjoint, again at
 //!   compile time; a part writes only its owned words and also reads the
@@ -46,6 +49,17 @@ mod sealed {
         /// A second handle on the same placement, for the parts of a split.
         fn duplicate(&self) -> Self;
     }
+
+    /// The token only this crate makes: claims are built by
+    /// [`assume_owned`](super::assume_owned) alone.
+    pub struct Promise(pub(super) ());
+
+    /// A set of device-register blocks made from one promise; private to
+    /// this crate.
+    pub trait Claimed: Sized {
+        /// The blocks, once the caller of `assume_owned` promised them.
+        fn claimed(promise: &Promise) -> Self;
+    }
 }
 
 /// Where a register block lives: device registers at a fixed address
@@ -54,9 +68,9 @@ pub trait Placement: sealed::Sealed {}
 
 /// Device registers at the fixed address `BASE`.
 ///
-/// It is made only from a [`Span`], so its existence is the span's promise
-/// that the registers are this block's alone. It is `Send` (an owner moves
-/// between execution contexts) and not `Sync`.
+/// It is made only by [`assume_owned`], so its existence is the promise that
+/// the block's words are its alone. It is `Send` (an owner moves between
+/// execution contexts) and not `Sync`.
 pub struct Fixed<const BASE: usize> {
     _owner: PhantomData<Cell<()>>,
 }
@@ -98,148 +112,241 @@ impl sealed::Sealed for Host<'_> {
 
 impl Placement for Host<'_> {}
 
-/// The exclusive authority over the device registers `START..END`.
-///
-/// ```compile_fail,E0133
-/// let span = oer_mmio::Span::<0x1000, 0x1100>::assume_owned();
-/// ```
-#[must_use = "dropping a span permanently loses its register authority"]
-pub struct Span<const START: usize, const END: usize> {
-    _owner: PhantomData<Cell<()>>,
+/// The declared words of one register block, as byte offsets from its base,
+/// strictly ascending; an array lists every element.
+pub trait Registers {
+    /// The block's words.
+    const WORDS: &'static [usize];
 }
 
-impl<const START: usize, const END: usize> Span<START, END> {
-    /// Take the registers `START..END`.
-    ///
-    /// # Safety
-    ///
-    /// `START..END` are device registers, word aligned, that no other code
-    /// accesses for as long as the span or anything taken from it exists,
-    /// and no other span over any of them exists at the same time.
-    #[allow(unsafe_code, reason = "the caller promises exclusive registers")]
-    pub const unsafe fn assume_owned() -> Self {
-        const {
-            assert!(
-                START <= END && START.is_multiple_of(4) && END.is_multiple_of(4),
-                "a span is a word-aligned address range"
-            );
-        };
-        Self {
-            _owner: PhantomData,
-        }
-    }
+/// Blocks of device registers one promise of [`assume_owned`] makes: a
+/// [`Block`] at a [`Fixed`] address, or a tuple of up to eight claims.
+pub trait Claim: sealed::Claimed {}
 
-    /// Divide the span at `MID`; the halves cover disjoint registers.
-    pub const fn split_at<const MID: usize>(self) -> (Span<START, MID>, Span<MID, END>) {
+impl<const BASE: usize, R: Registers> sealed::Claimed for Block<Fixed<BASE>, R> {
+    fn claimed(_promise: &sealed::Promise) -> Self {
         const {
             assert!(
-                START <= MID && MID <= END && MID.is_multiple_of(4),
-                "a span splits at a word-aligned address inside it"
+                BASE.is_multiple_of(4) && !R::WORDS.is_empty() && ascending(R::WORDS),
+                "a claimed block lists word-aligned words, strictly ascending"
             );
-        };
-        (
-            Span {
-                _owner: PhantomData,
-            },
-            Span {
-                _owner: PhantomData,
-            },
-        )
-    }
-
-    /// The register block of `SIZE` bytes at the span's start; the rest of
-    /// the span is given up.
-    pub const fn into_block<const SIZE: usize>(self) -> Block<Fixed<START>, SIZE> {
-        const {
             assert!(
-                SIZE.is_multiple_of(4) && START + SIZE <= END,
-                "a block lies inside its span"
+                BASE.checked_add(end(R::WORDS)).is_some(),
+                "a claimed block lies inside the address space"
             );
         };
         Block {
             place: Fixed {
                 _owner: PhantomData,
             },
+            registers: PhantomData,
         }
     }
 }
 
-/// The exclusive authority over one register block of `SIZE` bytes.
+impl<const BASE: usize, R: Registers> Claim for Block<Fixed<BASE>, R> {}
+
+macro_rules! tuple_claims {
+    ($($claim:ident),+) => {
+        impl<$($claim: Claim),+> sealed::Claimed for ($($claim,)+) {
+            fn claimed(promise: &sealed::Promise) -> Self {
+                ($($claim::claimed(promise),)+)
+            }
+        }
+
+        impl<$($claim: Claim),+> Claim for ($($claim,)+) {}
+    };
+}
+
+tuple_claims!(A);
+tuple_claims!(A, B);
+tuple_claims!(A, B, C);
+tuple_claims!(A, B, C, D);
+tuple_claims!(A, B, C, D, E);
+tuple_claims!(A, B, C, D, E, F);
+tuple_claims!(A, B, C, D, E, F, G);
+tuple_claims!(A, B, C, D, E, F, G, H);
+
+/// Take the device-register blocks of `C`.
+///
+/// ```compile_fail,E0133
+/// struct Control;
+/// impl oer_mmio::Registers for Control {
+///     const WORDS: &'static [usize] = &[0];
+/// }
+/// let block: oer_mmio::Block<oer_mmio::Fixed<0x1000>, Control> = oer_mmio::assume_owned();
+/// ```
+///
+/// # Safety
+///
+/// Every word each block of `C` lists, at its block's base, is a device
+/// register that no other code accesses for as long as the block or anything
+/// taken from it exists, except a word the chip's reviewed shared-word list
+/// names with the coordination of its writers; no word is listed by two
+/// blocks of `C` or by a block of another claim that exists at the same time.
+#[allow(unsafe_code, reason = "the caller promises exclusive registers")]
+pub unsafe fn assume_owned<C: Claim>() -> C {
+    C::claimed(&sealed::Promise(()))
+}
+
+/// Order every device-memory access before this call against every one
+/// after it: the fence a driver places at a hardware ownership boundary.
+#[inline]
+pub fn fence() {
+    #[cfg(target_arch = "riscv32")]
+    #[allow(unsafe_code, reason = "an ordering instruction")]
+    // SAFETY: the instruction only orders memory and device accesses; it
+    // reads and writes no memory and changes no register Rust relies on.
+    unsafe {
+        core::arch::asm!("fence iorw, iorw", options(nostack, preserves_flags))
+    }
+    #[cfg(not(target_arch = "riscv32"))]
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+/// The exclusive authority over the words `R` lists of one register block.
 ///
 /// Its reads and writes take the word's byte offset as a const generic;
-/// an offset outside the block fails to compile.
+/// an offset `R` does not list fails to compile.
 #[must_use = "dropping a register block permanently loses its register authority"]
-pub struct Block<P: Placement, const SIZE: usize> {
+pub struct Block<P: Placement, R: Registers> {
     place: P,
+    registers: PhantomData<fn() -> R>,
 }
 
 /// Host memory too small for the block placed in it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostTooSmall {
-    /// The block's size in bytes.
+    /// The bytes the block's last word ends at.
     pub required: usize,
     /// The memory's size in bytes.
     pub available: usize,
 }
 
-impl<'a, const SIZE: usize> Block<Host<'a>, SIZE> {
-    /// A block over `words`, which holds at least `SIZE` bytes.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, HostTooSmall> {
+impl<'a, R: Registers> Block<Host<'a>, R> {
+    /// A block over `words`, which holds every word `R` lists.
+    ///
+    /// It is a `const fn` so that a block whose words end past the address
+    /// space fails where it is placed, even in a constant.
+    pub const fn host(words: &'a mut [u32]) -> Result<Self, HostTooSmall> {
+        let required = const {
+            assert!(
+                ascending(R::WORDS),
+                "a block lists word-aligned words, strictly ascending"
+            );
+            end(R::WORDS)
+        };
         let available = words.len().saturating_mul(4);
-        if available < SIZE {
+        if available < required {
             return Err(HostTooSmall {
-                required: SIZE,
+                required,
                 available,
             });
         }
         Ok(Self {
             place: Host {
-                base: NonNull::from(words).cast(),
+                base: NonNull::from_mut(words).cast(),
                 _memory: PhantomData,
             },
+            registers: PhantomData,
         })
     }
 }
 
-/// Whether the word at byte `offset` lies inside a block of `size` bytes.
-const fn in_block(offset: usize, size: usize) -> bool {
-    offset.is_multiple_of(4) && offset < size && size - offset >= 4
+/// Whether `list` holds word-aligned offsets in strictly ascending order.
+const fn ascending(mut list: &[usize]) -> bool {
+    let mut previous: Option<usize> = None;
+    while let [word, rest @ ..] = list {
+        if !word.is_multiple_of(4) {
+            return false;
+        }
+        if let Some(previous) = previous
+            && *word <= previous
+        {
+            return false;
+        }
+        previous = Some(*word);
+        list = rest;
+    }
+    true
 }
 
-/// Whether every element of an array of `count` words, `stride` bytes apart
-/// from `offset`, lies inside a block of `size` bytes.
-const fn array_in_block(offset: usize, stride: usize, count: usize, size: usize) -> bool {
-    if count == 0 || !stride.is_multiple_of(4) {
+/// The byte just past the last word of an ascending `list`.
+///
+/// It is evaluated only at compile time: a list whose last word ends past
+/// the address space fails the evaluation instead of wrapping.
+const fn end(list: &[usize]) -> usize {
+    match list.last() {
+        Some(last) => {
+            assert!(
+                *last <= usize::MAX - 4,
+                "a block's words lie inside the address space"
+            );
+            *last + 4
+        }
+        None => 0,
+    }
+}
+
+/// Whether the ascending `list` holds `word`.
+const fn listed(mut list: &[usize], word: usize) -> bool {
+    while !list.is_empty() {
+        let (low, high) = list.split_at(list.len() / 2);
+        let [middle, rest @ ..] = high else {
+            return false;
+        };
+        if *middle == word {
+            return true;
+        }
+        list = if *middle < word { rest } else { low };
+    }
+    false
+}
+
+/// Whether `list` holds every element of an array of `count` words,
+/// `stride` bytes apart from `offset`.
+const fn array_listed(list: &[usize], offset: usize, stride: usize, count: usize) -> bool {
+    if count == 0 {
         return false;
     }
-    match stride.checked_mul(count - 1) {
-        Some(span) => match offset.checked_add(span) {
-            Some(last) => in_block(offset, size) && in_block(last, size),
-            None => false,
-        },
-        None => false,
+    let mut element = 0;
+    while element < count {
+        let word = match stride.checked_mul(element) {
+            Some(step) => match offset.checked_add(step) {
+                Some(word) => word,
+                None => return false,
+            },
+            None => return false,
+        };
+        if !contains(list, word) {
+            return false;
+        }
+        element += 1;
     }
+    true
 }
 
 #[allow(
     unsafe_code,
     reason = "the volatile accesses of a block's checked words"
 )]
-impl<P: Placement, const SIZE: usize> Block<P, SIZE> {
+impl<P: Placement, R: Registers> Block<P, R> {
     /// One volatile read of the word at byte `OFFSET`.
     #[inline(always)]
     pub fn read<const OFFSET: usize>(&self) -> u32 {
-        const { assert!(in_block(OFFSET, SIZE), "the word lies inside the block") };
-        // SAFETY: the block is the exclusive authority over its `SIZE`
-        // bytes (a span's promise, or host memory it borrows mutably) and
-        // the word lies inside them, checked at compile time above.
+        const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
+        // SAFETY: the block is the exclusive authority over the words it
+        // lists (`assume_owned`'s promise, or host memory it borrows mutably
+        // and checked to reach the end of its last word, an end computed
+        // without overflow at compile time) and lists this one, checked at
+        // compile time above.
         unsafe { self.place.word(OFFSET).read_volatile() }
     }
 
     /// One volatile write of the whole word at byte `OFFSET`.
     #[inline(always)]
     pub fn write<const OFFSET: usize>(&mut self, value: u32) {
-        const { assert!(in_block(OFFSET, SIZE), "the word lies inside the block") };
+        const { assert!(listed(R::WORDS, OFFSET), "the block lists the word") };
         // SAFETY: as in `read`; `&mut self` makes this the only access.
         unsafe { self.place.word(OFFSET).write_volatile(value) }
     }
@@ -252,12 +359,12 @@ impl<P: Placement, const SIZE: usize> Block<P, SIZE> {
     ) -> u32 {
         const {
             assert!(
-                array_in_block(OFFSET, STRIDE, COUNT, SIZE),
-                "every element lies inside the block"
+                array_listed(R::WORDS, OFFSET, STRIDE, COUNT),
+                "the block lists every element"
             );
         };
-        // SAFETY: every element lies inside the block (checked at compile
-        // time above) and `index < COUNT` by `Index`'s constructor.
+        // SAFETY: the block lists every element (checked at compile time
+        // above) and `index < COUNT` by `Index`'s constructor.
         unsafe {
             self.place
                 .word(OFFSET + STRIDE * index.get())
@@ -274,8 +381,8 @@ impl<P: Placement, const SIZE: usize> Block<P, SIZE> {
     ) {
         const {
             assert!(
-                array_in_block(OFFSET, STRIDE, COUNT, SIZE),
-                "every element lies inside the block"
+                array_listed(R::WORDS, OFFSET, STRIDE, COUNT),
+                "the block lists every element"
             );
         };
         // SAFETY: as in `read_indexed`; `&mut self` makes this the only access.
@@ -288,20 +395,21 @@ impl<P: Placement, const SIZE: usize> Block<P, SIZE> {
 
     /// Divide the block into a part owning `A`'s words and one owning `B`'s.
     ///
-    /// The two owned lists are disjoint and lie inside the block, checked
-    /// at compile time; each part may also read the words it observes.
-    pub fn split<A: Words, B: Words>(self) -> (Part<P, SIZE, A>, Part<P, SIZE, B>) {
+    /// The two owned lists are disjoint and the block lists every word of
+    /// both parts, checked at compile time; each part may also read the
+    /// words it observes.
+    pub fn split<A: Words, B: Words>(self) -> (Part<P, R, A>, Part<P, R, B>) {
         const {
             assert!(
                 disjoint(A::OWNED, B::OWNED),
                 "the parts of a block own disjoint words"
             );
             assert!(
-                all_in_block(A::OWNED, SIZE)
-                    && all_in_block(A::OBSERVED, SIZE)
-                    && all_in_block(B::OWNED, SIZE)
-                    && all_in_block(B::OBSERVED, SIZE),
-                "every word of a part lies inside the block"
+                all_listed(A::OWNED, R::WORDS)
+                    && all_listed(A::OBSERVED, R::WORDS)
+                    && all_listed(B::OWNED, R::WORDS)
+                    && all_listed(B::OBSERVED, R::WORDS),
+                "the block lists every word of its parts"
             );
         };
         let other = self.place.duplicate();
@@ -318,33 +426,40 @@ impl<P: Placement, const SIZE: usize> Block<P, SIZE> {
     }
 }
 
-impl<const BASE: usize, const SIZE: usize> Block<Fixed<BASE>, SIZE> {
+impl<const BASE: usize, R: Registers> Block<Fixed<BASE>, R> {
     /// The block again, from the two parts of one split.
     ///
-    /// The parts are of the one split there is: device registers come only
-    /// from disjoint [`Span`]s, so at most one block of `SIZE` bytes at
-    /// `BASE` with any word in it exists at a time, and its split made the
-    /// only parts of this type.
+    /// The parts are of the one split there is: device-register blocks come
+    /// only from claims of disjoint, non-empty word lists, so at most one
+    /// block of this type exists at a time, and its split made the only
+    /// parts of this type.
     pub fn join<A: Words, B: Words>(
-        first: Part<Fixed<BASE>, SIZE, A>,
-        second: Part<Fixed<BASE>, SIZE, B>,
+        first: Part<Fixed<BASE>, R, A>,
+        second: Part<Fixed<BASE>, R, B>,
     ) -> Self {
         let Part { place, .. } = first;
         drop(second);
-        Self { place }
+        Self {
+            place,
+            registers: PhantomData,
+        }
     }
 }
 
-impl<'a, const SIZE: usize> Block<Host<'a>, SIZE> {
+impl<'a, R: Registers> Block<Host<'a>, R> {
     /// The block again, from the two parts of one split.
     ///
     /// Blocks over different host memory share a type, so the parts are
     /// checked to lie over the same memory; parts of two blocks are refused
     /// and returned.
+    #[allow(
+        clippy::type_complexity,
+        reason = "the refusal returns both parts unchanged"
+    )]
     pub fn try_join<A: Words, B: Words>(
-        first: Part<Host<'a>, SIZE, A>,
-        second: Part<Host<'a>, SIZE, B>,
-    ) -> Result<Self, NotOneSplit<Part<Host<'a>, SIZE, A>, Part<Host<'a>, SIZE, B>>> {
+        first: Part<Host<'a>, R, A>,
+        second: Part<Host<'a>, R, B>,
+    ) -> Result<Self, NotOneSplit<Part<Host<'a>, R, A>, Part<Host<'a>, R, B>>> {
         // Each host block borrows its memory mutably, so two blocks with
         // words never share a base: equal bases mean the parts of one split.
         if first.place.base != second.place.base {
@@ -352,7 +467,10 @@ impl<'a, const SIZE: usize> Block<Host<'a>, SIZE> {
         }
         let Part { place, .. } = first;
         drop(second);
-        Ok(Self { place })
+        Ok(Self {
+            place,
+            registers: PhantomData,
+        })
     }
 }
 
@@ -400,9 +518,9 @@ const fn disjoint(mut first: &[usize], second: &[usize]) -> bool {
     true
 }
 
-const fn all_in_block(mut list: &[usize], size: usize) -> bool {
+const fn all_listed(mut list: &[usize], words: &[usize]) -> bool {
     while let [word, rest @ ..] = list {
-        if !in_block(*word, size) {
+        if !listed(words, *word) {
             return false;
         }
         list = rest;
@@ -410,27 +528,16 @@ const fn all_in_block(mut list: &[usize], size: usize) -> bool {
     true
 }
 
-const fn array_listed(list: &[usize], offset: usize, stride: usize, count: usize) -> bool {
-    let mut element = 0;
-    while element < count {
-        if !contains(list, offset + stride * element) {
-            return false;
-        }
-        element += 1;
-    }
-    true
-}
-
 /// One part of a split [`Block`]: it writes only the words `W` owns and
 /// reads those and the words `W` observes.
 #[must_use = "a part must be joined with its sibling to recover the block"]
-pub struct Part<P: Placement, const SIZE: usize, W: Words> {
+pub struct Part<P: Placement, R: Registers, W: Words> {
     place: P,
-    words: PhantomData<fn() -> W>,
+    words: PhantomData<fn() -> (R, W)>,
 }
 
 #[allow(unsafe_code, reason = "the volatile accesses of a part's listed words")]
-impl<P: Placement, const SIZE: usize, W: Words> Part<P, SIZE, W> {
+impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     /// One volatile read of a word the part owns or observes.
     #[inline(always)]
     pub fn read<const OFFSET: usize>(&self) -> u32 {
@@ -440,8 +547,8 @@ impl<P: Placement, const SIZE: usize, W: Words> Part<P, SIZE, W> {
                 "a part reads only the words it owns or observes"
             );
         };
-        // SAFETY: the split checked that every listed word lies inside the
-        // block, whose authority the part shares only for the words it lists.
+        // SAFETY: the split checked that the block lists every word of the
+        // part, whose authority the part shares only for the words it lists.
         unsafe { self.place.word(OFFSET).read_volatile() }
     }
 
@@ -473,8 +580,8 @@ impl<P: Placement, const SIZE: usize, W: Words> Part<P, SIZE, W> {
                 "a part reads only the arrays it owns or observes"
             );
         };
-        // SAFETY: every element is a listed word inside the block (checked
-        // above and by the split) and `index < COUNT` by `Index`.
+        // SAFETY: every element is a listed word of the block (checked above
+        // and by the split) and `index < COUNT` by `Index`.
         unsafe {
             self.place
                 .word(OFFSET + STRIDE * index.get())
@@ -504,8 +611,8 @@ impl<P: Placement, const SIZE: usize, W: Words> Part<P, SIZE, W> {
     }
 }
 
-/// The compile-time checks the rendered register transactions assert next
-/// to each transaction: `const _: () = assert!(check::within(..))`.
+/// The compile-time checks the rendered register code asserts in `const`
+/// items: `const _: () = assert!(check::within(..))`.
 pub mod check {
     /// Whether `image` sets only bits of `fields`.
     pub const fn within(image: u32, fields: u32) -> bool {
@@ -520,6 +627,59 @@ pub mod check {
             && input & set == 0
             && keep | input | set == u32::MAX
             && within(!keep, fields)
+    }
+
+    /// Whether `first` and `second` together own every word of `block`,
+    /// each word exactly once, and nothing else: the two sides of a block.
+    pub const fn sides_cover(block: &[usize], first: &[usize], second: &[usize]) -> bool {
+        if block.len() != first.len() + second.len() {
+            return false;
+        }
+        let mut words = block;
+        while let [word, rest @ ..] = words {
+            if super::contains(first, *word) == super::contains(second, *word) {
+                return false;
+            }
+            words = rest;
+        }
+        true
+    }
+
+    /// Whether no two of `blocks` (each a base address and its ascending
+    /// word offsets) list the same absolute word.
+    pub const fn disjoint_blocks(blocks: &[(usize, &[usize])]) -> bool {
+        let mut rest = blocks;
+        while let [first, others @ ..] = rest {
+            let mut tail = others;
+            while let [second, more @ ..] = tail {
+                if !disjoint_words(*first, *second) {
+                    return false;
+                }
+                tail = more;
+            }
+            rest = others;
+        }
+        true
+    }
+
+    /// Whether two blocks' ascending word lists share no absolute word.
+    const fn disjoint_words(
+        (first_base, first): (usize, &[usize]),
+        (second_base, second): (usize, &[usize]),
+    ) -> bool {
+        let (mut left, mut right) = (first, second);
+        while let ([a, left_rest @ ..], [b, right_rest @ ..]) = (left, right) {
+            let (a, b) = (first_base + *a, second_base + *b);
+            if a == b {
+                return false;
+            }
+            if a < b {
+                left = left_rest;
+            } else {
+                right = right_rest;
+            }
+        }
+        true
     }
 }
 
@@ -600,9 +760,20 @@ impl<const WIDTH: u32> Bits<WIDTH> {
         Self(V)
     }
 
+    /// The low `WIDTH` bits of `value`: a field read back from its register.
+    pub const fn truncate(value: u32) -> Self {
+        Self(value & Self::MAX)
+    }
+
     /// The value.
     pub const fn get(self) -> u32 {
         self.0
+    }
+}
+
+impl<const WIDTH: u32> From<Bits<WIDTH>> for u32 {
+    fn from(bits: Bits<WIDTH>) -> Self {
+        bits.0
     }
 }
 

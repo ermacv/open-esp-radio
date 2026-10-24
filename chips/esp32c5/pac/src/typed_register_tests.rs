@@ -190,3 +190,69 @@ fn owners_of_two_blocks_do_not_join() {
     assert!(first.iter().all(|word| *word == 0));
     assert_eq!(changed(&memory(0), &second).len(), 1, "one command written");
 }
+
+#[test]
+fn an_etm_route_writes_its_channel_event_and_task_words_only() {
+    use crate::generated::modem_etm::{self, ModemEtm, ch_event, ch_task};
+    let before = vec![0_u32; modem_etm::SIZE / 4];
+    let mut after = before.clone();
+    let mut etm = ModemEtm::host(&mut after).expect("memory holds the block");
+    etm.route_ieee802154_etm_timer1_to_rx_start();
+    let routed = Index::<2>::constant::<1>();
+    let other = Index::<2>::constant::<0>();
+    assert_eq!(
+        etm.read_ch_event(routed).id_variant(),
+        Some(ch_event::Id::Ieee802154Timer1Overflow),
+        "the routed channel's event"
+    );
+    assert_eq!(
+        etm.read_ch_task(routed).id_variant(),
+        Some(ch_task::Id::Ieee802154RxStart),
+        "the routed channel's task"
+    );
+    assert_eq!(
+        etm.read_ch_event(other).id(),
+        0,
+        "the other channel's event"
+    );
+    assert_eq!(etm.read_ch_task(other).id(), 0, "the other channel's task");
+    let enabled = etm.read_channel_enable();
+    assert!(!enabled.ch0() && !enabled.ch1(), "no channel enabled");
+    drop(etm);
+    assert_eq!(
+        changed(&before, &after).len(),
+        2,
+        "the event and the task word"
+    );
+}
+
+#[test]
+fn enabling_an_etm_channel_keeps_every_other_bit_of_the_set_word() {
+    use crate::generated::modem_etm::{self, ModemEtm};
+    let before = vec![u32::MAX ^ 1; modem_etm::SIZE / 4];
+    let mut after = before.clone();
+    let mut etm = ModemEtm::host(&mut after).expect("memory holds the block");
+    etm.enable_ieee802154_etm_channel0();
+    drop(etm);
+    let difference = changed(&before, &after);
+    assert_eq!(difference.len(), 1, "one word changed");
+    assert_eq!(difference[0].count_ones(), 1, "one bit of it changed");
+}
+
+#[test]
+fn a_modem_reset_line_changes_one_bit_of_its_word() {
+    use crate::generated::{
+        ModemResetState,
+        modem_syscon_radio::{self, ModemSysconRadio},
+    };
+    let before = vec![0_u32; modem_syscon_radio::SIZE / 4];
+    let mut after = before.clone();
+    let mut syscon = ModemSysconRadio::host(&mut after).expect("memory holds the block");
+    syscon.set_ieee802154_mac_reset(ModemResetState::Asserted);
+    assert!(syscon.read_modem_rst_conf().rst_zbmac());
+    assert!(!syscon.read_modem_rst_conf().rst_zbmac_apb());
+    drop(syscon);
+    let difference = changed(&before, &after);
+    assert_eq!(difference.len(), 1, "one word changed");
+    assert_eq!(difference[0].count_ones(), 1, "one bit of it changed");
+}

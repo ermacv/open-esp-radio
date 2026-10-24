@@ -2,17 +2,34 @@
 schema = 5
 
 [options]
-device-access = true
 allow-clippy-empty-docs = true
-# Rendered as typed register blocks over `oer-mmio`; svd2rust renders the rest.
-typed-peripherals = ["IEEE802154_MAC"]
-
-
-[[ownership-partitions]]
-name = "UnexposedPeripherals"
-member = "unexposed"
-description = "Source-qualified MMIO views retained for bit-use coverage. No production transaction or read-safe snapshot exposes these tokens."
-peripherals = ["MODEM_IEEE802154_OBSERVED", "MODEM_WIFI_MAC_OBSERVED", "MODEM_WIFI_MAC_POWER_OBSERVED"]
+# Every exposed peripheral is a typed register block over `oer-mmio`.
+typed-peripherals = [
+    "IEEE802154_MAC",
+    "IEEE802154_INTERRUPT_ROUTE",
+    "MODEM_ETM",
+    "MODEM_SYSCON_RADIO",
+    "MODEM_LPCON_SHARED_CLOCK",
+    "I2C_ANA_MST",
+    "PMU_RADIO",
+    "PHY_BASEBAND_CONFIG",
+    "LP_AON_RADIO",
+    "APB_SARADC_RADIO",
+    "PCR_RADIO",
+    "WIFI_MAC_AUX_TSF_CONTROL",
+    "WIFI_MAC_BSSID_POLICY",
+    "WIFI_MAC_INTERFACE_ADDRESS",
+    "WIFI_MAC_RTC_TIMER_UPDATE",
+    "WIFI_MAC_STA_BEACON_FILTER",
+    "WIFI_MAC_STA_TSF_LOAD",
+    "WIFI_MAC_TX_COMMON",
+    "WIFI_MAC_ERSU_ACK_RATE",
+    "WIFI_MAC_INTERRUPT",
+    "WIFI_MAC_POWER_INTERRUPT",
+]
+# Source-qualified MMIO views retained for bit-use coverage; no owner reaches
+# them (their words lie in the typed blocks above or are not used).
+unexposed-peripherals = ["MODEM_IEEE802154_OBSERVED", "MODEM_WIFI_MAC_OBSERVED", "MODEM_WIFI_MAC_POWER_OBSERVED"]
 
 [[ownership-partitions]]
 name = "Ieee802154Peripherals"
@@ -68,14 +85,17 @@ peripherals = [
     "WIFI_MAC_POWER_INTERRUPT",
 ]
 
-[[register-splits]]
+[[register-sides]]
 peripheral = "IEEE802154_MAC"
-part = "Interrupt"
-rest = "Task"
-registers = ["EVENT_STATUS"]
-observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
+irq = ["EVENT_STATUS"]
+irq-observes = ["RX_STATUS", "TX_STATUS", "ED_CONFIG"]
 description = "The hard interrupt handler samples and acknowledges EVENT_STATUS and reads the RX/TX status words and the ED/CCA result of ED_CONFIG; the task owns every other register, ED_CONFIG's configuration fields included."
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
+
+[[interrupt-sources]]
+peripheral = "IEEE802154_MAC"
+source = 12
+sources = ["ESP_IDF_4D59230D_C5_INTERRUPT_SOURCES"]
 
 [[enum-domains]]
 name = "Ieee802154TxOnDelay"
@@ -463,13 +483,6 @@ register = "CH%s_TASK"
 index = 1
 value = 66
 
-[[field-snapshot-reads]]
-name = "observe_ieee802154_core0_route"
-peripheral = "IEEE802154_INTERRUPT_ROUTE"
-register = "CORE0_ROUTE"
-fields = ["MAP", "PASS_IN_SEC"]
-sources = ["ESP_PACS_5CD68D2_C5_INTERRUPT_MATRIX"]
-
 [[enum-domains]]
 name = "ModemClockGateState"
 description = "Boolean state accepted by reviewed modem clock-gate transactions."
@@ -583,34 +596,6 @@ domain = "ModemClockGateState"
 exposure = "facade"
 sources = ["ESP_IDF_4D59230D_C5_MODEM_CLOCK", "ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT", "HIL_OPEN_C5_MODEM_CLOCK_PROBE_2026_09_27"]
 
-[[field-snapshot-reads]]
-name = "observe_modem_clock_conf"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF"
-fields = ["CLK_ETM_EN", "CLK_ZB_APB_EN", "CLK_ZBMAC_EN", "CLK_MODEM_SEC_APB_EN"]
-sources = ["ESP_IDF_4D59230D_C5_MODEM_CLOCK", "ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_modem_clock_conf1"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "CLK_CONF1"
-fields = ["CLK_BT_APB_EN", "CLK_BTBB_EN"]
-sources = ["ESP_IDF_4D59230D_C5_MODEM_CLOCK", "ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
-
-[[field-snapshot-reads]]
-name = "observe_ieee802154_resets"
-peripheral = "MODEM_SYSCON_RADIO"
-register = "MODEM_RST_CONF"
-fields = ["RST_ZBMAC_APB", "RST_ZBMAC"]
-sources = ["ESP_IDF_4D59230D_C5_MODEM_CLOCK", "ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
-
-[[field-reads]]
-name = "observe_coexistence_clock"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "CLK_CONF"
-field = "CLK_COEX_EN"
-sources = ["ESP_IDF_4D59230D_C5_MODEM_CLOCK", "ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
-
 [[field-replace-modifies]]
 name = "configure_phy_i2c_host_map"
 peripheral = "I2C_ANA_MST"
@@ -643,47 +628,12 @@ register = "I2C0_CTRL"
 fields = ["SLAVE_ADDR", "SLAVE_REG_ADDR", "DATA", "READ_WRITE", "START_OR_RESET"]
 sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
 
-[[field-reads]]
-name = "observe_phy_i2c_host0_busy"
-peripheral = "I2C_ANA_MST"
-register = "I2C0_CTRL"
-field = "BUSY"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
-
-[[field-reads]]
-name = "observe_phy_i2c_host0_data"
-peripheral = "I2C_ANA_MST"
-register = "I2C0_CTRL"
-field = "DATA"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
-
 [[zero-based-field-writes]]
 name = "publish_phy_i2c_host1_command"
 peripheral = "I2C_ANA_MST"
 register = "I2C1_CTRL"
 fields = ["SLAVE_ADDR", "SLAVE_REG_ADDR", "DATA", "READ_WRITE", "START_OR_RESET"]
 sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
-
-[[field-reads]]
-name = "observe_phy_i2c_host1_busy"
-peripheral = "I2C_ANA_MST"
-register = "I2C1_CTRL"
-field = "BUSY"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
-
-[[field-reads]]
-name = "observe_phy_i2c_host1_data"
-peripheral = "I2C_ANA_MST"
-register = "I2C1_CTRL"
-field = "DATA"
-sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
-
-[[field-reads]]
-name = "observe_analog_i2c_master_clock"
-peripheral = "MODEM_LPCON_SHARED_CLOCK"
-register = "CLK_CONF"
-field = "CLK_I2C_MST_EN"
-sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST", "ESP_IDF_4D59230D_C5_MODEM_LPCON_STRUCT"]
 
 [[field-or-modifies]]
 name = "power_rf_analog_i2c"
@@ -728,20 +678,6 @@ sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES", "ESP_IDF_4D59230D_C5_PMU"]
 [[field-or-modifies.fields]]
 field = "TIE_HIGH_XPD_BB_I2C"
 source-bit-offset = 0
-
-[[field-reads]]
-name = "observe_peripheral_analog_i2c_power"
-peripheral = "PMU_RADIO"
-register = "RF_PWC"
-field = "XPD_PERIF_I2C"
-sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES", "ESP_IDF_4D59230D_C5_PMU"]
-
-[[field-reads]]
-name = "observe_peripheral_analog_i2c_released"
-peripheral = "PMU_RADIO"
-register = "RF_PWC"
-field = "PERIF_I2C_RSTB"
-sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES", "ESP_IDF_4D59230D_C5_PMU"]
 
 [[field-or-modifies]]
 name = "power_peripheral_analog_i2c"
@@ -1129,6 +1065,7 @@ name = "set_phy_power_detector_word_810"
 peripheral = "PHY_BASEBAND_CONFIG"
 register = "WORD_0810_OPAQUE"
 value = 0x0f0f0fff
+whole-word = true
 sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_2"]
 
 [[fixed-register-images]]
@@ -1136,6 +1073,7 @@ name = "set_phy_power_detector_word_814"
 peripheral = "PHY_BASEBAND_CONFIG"
 register = "WORD_0814_OPAQUE"
 value = 0xff0f64
+whole-word = true
 sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_2"]
 
 [[field-replace-modifies]]
@@ -1377,13 +1315,6 @@ register = "ANA_CONF0"
 fields = [{ field = "BBPLL_CAL_MODE", source-bit-offset = 0 }]
 domain = "PhyBbpllCalibrationMode"
 exposure = "facade"
-sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_5"]
-
-[[field-reads]]
-name = "observe_phy_i2c_bbpll_calibration_mode"
-peripheral = "I2C_ANA_MST"
-register = "ANA_CONF0"
-field = "BBPLL_CAL_MODE"
 sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_5"]
 
 [[enum-domains]]

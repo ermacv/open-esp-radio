@@ -120,12 +120,6 @@ impl Ieee802154SecurityPayloadOffset {
     pub const fn value(self) -> u8 {
         self.0
     }
-
-    /// The observed seven-bit field value.
-    #[doc(hidden)]
-    pub const fn from_field(value: u8) -> Self {
-        Self(value)
-    }
 }
 
 /// Readable transmit-security control state without write-only key material.

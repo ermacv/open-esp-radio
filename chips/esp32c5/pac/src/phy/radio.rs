@@ -14,12 +14,12 @@
 
 #![forbid(unsafe_code)]
 
+use crate::generated::peripheral_ownership::PhyRadioPeripherals;
 #[cfg(oer_probe)]
 use crate::generated::{
-    self, PhyDacScale, PhyPowerDetectorMode, PhyRateBit, PhyRxEvmEnable, PhyRxEvmParameter,
-    PhyRxIqScale, PhySar2PowerDetectorCapacitor,
+    PhyDacScale, PhyPowerDetectorMode, PhyRateBit, PhyRxEvmEnable, PhyRxEvmParameter, PhyRxIqScale,
+    PhySar2PowerDetectorCapacitor,
 };
-use crate::svd;
 
 /// Unique owner of the PHY's PMU fields and baseband configuration words.
 #[must_use = "dropping the PHY radio owner loses its register authority"]
@@ -31,23 +31,23 @@ pub struct PhyRadioRegisters {
             reason = "the product capability reserves the PHY registers; only probes drive them"
         )
     )]
-    peripherals: svd::peripheral_ownership::PhyRadioPeripherals,
+    peripherals: PhyRadioPeripherals,
 }
 
 impl PhyRadioRegisters {
-    pub(crate) const fn new(peripherals: svd::peripheral_ownership::PhyRadioPeripherals) -> Self {
+    pub(crate) const fn new(peripherals: PhyRadioPeripherals) -> Self {
         Self { peripherals }
     }
 }
 
 #[cfg(oer_probe)]
 impl PhyRadioRegisters {
-    fn pmu(&self) -> &svd::PmuRadio {
-        &self.peripherals.pmu_radio
+    fn pmu(&mut self) -> &mut crate::generated::pmu_radio::PmuRadio {
+        &mut self.peripherals.pmu_radio
     }
 
-    fn baseband(&self) -> &svd::PhyBasebandConfig {
-        &self.peripherals.phy_baseband_config
+    fn baseband(&mut self) -> &mut crate::generated::phy_baseband_config::PhyBasebandConfig {
+        &mut self.peripherals.phy_baseband_config
     }
 
     /// Power the RF analog I2C blocks as `phy_open_i2c_xpd` does: power the
@@ -55,22 +55,22 @@ impl PhyRadioRegisters {
     /// the BB I2C power high, power and reset-pulse the peripheral I2C when
     /// it was off, and release its reset when it is still held.
     pub fn power_analog_i2c(&mut self) {
-        generated::power_rf_analog_i2c(self.pmu());
-        generated::tie_high_bb_analog_i2c_power(self.pmu());
-        if !svd::field_read::observe_peripheral_analog_i2c_power(self.pmu()) {
-            generated::power_peripheral_analog_i2c(self.pmu());
-            generated::hold_peripheral_analog_i2c_reset(self.pmu());
-            generated::release_peripheral_analog_i2c_reset(self.pmu());
+        self.pmu().power_rf_analog_i2c();
+        self.pmu().tie_high_bb_analog_i2c_power();
+        if !self.pmu().read_rf_pwc().xpd_perif_i2c() {
+            self.pmu().power_peripheral_analog_i2c();
+            self.pmu().hold_peripheral_analog_i2c_reset();
+            self.pmu().release_peripheral_analog_i2c_reset();
         }
-        if !svd::field_read::observe_peripheral_analog_i2c_released(self.pmu()) {
-            generated::release_peripheral_analog_i2c_reset(self.pmu());
+        if !self.pmu().read_rf_pwc().perif_i2c_rstb() {
+            self.pmu().release_peripheral_analog_i2c_reset();
         }
     }
 
     /// Power the 5 GHz clock generator, as `phy_rf_init` does after
     /// `phy_open_i2c_xpd`.
     pub fn power_5g_clock_generator(&mut self) {
-        generated::power_5g_clock_generator(self.pmu());
+        self.pmu().power_5g_clock_generator();
     }
 
     /// The baseband half of `phy_adc_rate_set(rate)`: bit 1 and then bit 0
@@ -81,22 +81,22 @@ impl PhyRadioRegisters {
         } else {
             PhyRateBit::Clear
         };
-        generated::set_phy_adc_rate_high(self.baseband(), bit);
-        generated::set_phy_adc_rate_low(self.baseband(), bit);
+        self.baseband().set_phy_adc_rate_high(bit);
+        self.baseband().set_phy_adc_rate_low(bit);
     }
 
     /// The baseband half of `phy_dac_rate_set`: clear bit 3 and then bit 2.
     pub fn clear_dac_rate_bits(&mut self) {
-        generated::clear_phy_dac_rate_high(self.baseband());
-        generated::clear_phy_dac_rate_low(self.baseband());
+        self.baseband().clear_phy_dac_rate_high();
+        self.baseband().clear_phy_dac_rate_low();
     }
 
     /// `phy_open_fe_bb_clk`: open the front-end clock gate, the front-end
     /// and baseband clock enables and the baseband clock gate.
     pub fn open_front_end_baseband_clocks(&mut self) {
-        svd::fixed_register_image::open_phy_front_end_clock_gate(self.baseband());
-        generated::open_phy_fe_bb_clock(self.baseband());
-        svd::fixed_register_image::open_phy_baseband_clock_gate(self.baseband());
+        self.baseband().open_phy_front_end_clock_gate();
+        self.baseband().open_phy_fe_bb_clock();
+        self.baseband().open_phy_baseband_clock_gate();
     }
 
     /// `phy_iq_swap_set`, with `high_band` the phy_param byte 0x2A, which the
@@ -104,32 +104,32 @@ impl PhyRadioRegisters {
     /// is at least 3001 MHz.
     pub fn set_iq_swap(&mut self, high_band: bool) {
         if high_band {
-            generated::clear_phy_front_end_init_0c08_first(self.baseband());
+            self.baseband().clear_phy_front_end_init_0c08_first();
         } else {
-            generated::set_phy_front_end_init_0c08(self.baseband());
+            self.baseband().set_phy_front_end_init_0c08();
         }
-        generated::clear_phy_rx_dco_calibration_control(self.baseband());
+        self.baseband().clear_phy_rx_dco_calibration_control();
     }
 
     /// `phy_fe_reg_init`, with `high_band` the phy_param byte 0x2A being set
     /// and `rx_iq_scale` the phy_param byte 0x28A.
     pub fn initialize_front_end(&mut self, high_band: bool, rx_iq_scale: u8) {
         let baseband = self.baseband();
-        generated::enable_phy_front_end_0894(baseband);
-        generated::clear_phy_front_end_clear_first(baseband);
-        generated::set_phy_table_memory_base_index(baseband);
-        generated::enable_phy_front_end_init(baseband);
-        generated::set_phy_rx_iq_correction_modes(baseband);
-        generated::set_phy_tx_iq_correction_modes(baseband);
-        generated::set_phy_rx_iq_scale_high(baseband, PhyRxIqScale::Zero);
-        generated::set_phy_rx_iq_scale_low(baseband, PhyRxIqScale::Zero);
+        baseband.enable_phy_front_end_0894();
+        baseband.clear_phy_front_end_clear_first();
+        baseband.set_phy_table_memory_base_index();
+        baseband.enable_phy_front_end_init();
+        baseband.set_phy_rx_iq_correction_modes();
+        baseband.set_phy_tx_iq_correction_modes();
+        baseband.set_phy_rx_iq_scale_high(PhyRxIqScale::Zero);
+        baseband.set_phy_rx_iq_scale_low(PhyRxIqScale::Zero);
         if high_band {
-            generated::set_phy_front_end_iq_swap(baseband);
+            baseband.set_phy_front_end_iq_swap();
         } else {
-            generated::clear_phy_front_end_iq_swap(baseband);
+            baseband.clear_phy_front_end_iq_swap();
         }
-        generated::set_phy_front_end_init_0c20(baseband);
-        generated::set_phy_pa_on_bt_delay(baseband);
+        baseband.set_phy_front_end_init_0c20();
+        baseband.set_phy_pa_on_bt_delay();
         self.initialize_power_detector();
         self.set_dac_scale(true);
         self.set_rx_iq_scale(rx_iq_scale);
@@ -138,19 +138,17 @@ impl PhyRadioRegisters {
     /// `phy_pwdet_reg_init`.
     pub fn initialize_power_detector(&mut self) {
         let baseband = self.baseband();
-        svd::fixed_register_image::set_phy_power_detector_word_810(baseband);
-        svd::fixed_register_image::set_phy_power_detector_word_814(baseband);
-        generated::set_phy_power_detector_calibration_field(baseband);
-        svd::fixed_register_image::set_phy_power_detector_reference(baseband);
-        generated::set_phy_power_detector_mode(
-            baseband,
-            PhyPowerDetectorMode::RegisterInitialization,
-        );
-        generated::drive_saradc2_from_power_detector(&self.peripherals.apb_saradc_radio);
-        generated::set_sar2_power_detector_capacitor(
-            &self.peripherals.lp_aon_radio,
-            PhySar2PowerDetectorCapacitor::Four,
-        );
+        baseband.set_phy_power_detector_word_810();
+        baseband.set_phy_power_detector_word_814();
+        baseband.set_phy_power_detector_calibration_field();
+        baseband.set_phy_power_detector_reference();
+        baseband.set_phy_power_detector_mode(PhyPowerDetectorMode::RegisterInitialization);
+        self.peripherals
+            .apb_saradc_radio
+            .drive_saradc2_from_power_detector();
+        self.peripherals
+            .lp_aon_radio
+            .set_sar2_power_detector_capacitor(PhySar2PowerDetectorCapacitor::Four);
     }
 
     /// `phy_dac_scale_set(full)`.
@@ -160,8 +158,8 @@ impl PhyRadioRegisters {
         } else {
             PhyDacScale::Zero
         };
-        generated::set_phy_dac_scale_high(self.baseband(), scale);
-        generated::set_phy_dac_scale_low(self.baseband(), scale);
+        self.baseband().set_phy_dac_scale_high(scale);
+        self.baseband().set_phy_dac_scale_low(scale);
     }
 
     /// `phy_rxiq_scale_set`, with `selection` the phy_param byte 0x28A.
@@ -171,35 +169,34 @@ impl PhyRadioRegisters {
             2 => (PhyRxIqScale::Zero, PhyRxIqScale::MinusSix),
             _ => (PhyRxIqScale::Zero, PhyRxIqScale::Zero),
         };
-        generated::set_phy_rx_iq_scale_high(self.baseband(), high);
-        generated::set_phy_rx_iq_scale_low(self.baseband(), low);
+        self.baseband().set_phy_rx_iq_scale_high(high);
+        self.baseband().set_phy_rx_iq_scale_low(low);
     }
 
     /// `phy_pwdet_sar2_init`, with `high_band` the phy_param byte 0x2A being
     /// set.
     pub fn initialize_power_detector_sar2(&mut self, high_band: bool) {
         let baseband = self.baseband();
-        generated::set_phy_power_detector_sar_mode(baseband);
-        generated::clear_phy_power_detector_sar_config(baseband);
-        svd::fixed_register_image::set_phy_power_detector_reference(baseband);
-        generated::set_phy_power_detector_mode(baseband, PhyPowerDetectorMode::Sar2Initialization);
-        generated::set_sar2_power_detector_capacitor(
-            &self.peripherals.lp_aon_radio,
-            if high_band {
+        baseband.set_phy_power_detector_sar_mode();
+        baseband.clear_phy_power_detector_sar_config();
+        baseband.set_phy_power_detector_reference();
+        baseband.set_phy_power_detector_mode(PhyPowerDetectorMode::Sar2Initialization);
+        self.peripherals
+            .lp_aon_radio
+            .set_sar2_power_detector_capacitor(if high_band {
                 PhySar2PowerDetectorCapacitor::Four
             } else {
                 PhySar2PowerDetectorCapacitor::Two
-            },
-        );
+            });
     }
 
     /// The register writes of the `phy_rf_init` prologue after
     /// `phy_open_i2c_xpd`: power the 5 GHz clock generator, enable the SAR
     /// ADC register clock and set the low byte of PCR word 0x14C.
     pub fn open_rf_initialization_clocks(&mut self) {
-        generated::power_5g_clock_generator(self.pmu());
-        generated::enable_saradc_register_clock(&self.peripherals.pcr_radio);
-        generated::set_pcr_register_014c_low_byte(&self.peripherals.pcr_radio);
+        self.pmu().power_5g_clock_generator();
+        self.peripherals.pcr_radio.enable_saradc_register_clock();
+        self.peripherals.pcr_radio.set_pcr_register_014c_low_byte();
     }
 
     /// `phy_set_tsens_power(on)`.
@@ -209,23 +206,23 @@ impl PhyRadioRegisters {
         } else {
             PhyRateBit::Clear
         };
-        generated::set_tsens_power(&self.peripherals.apb_saradc_radio, bit);
+        self.peripherals.apb_saradc_radio.set_tsens_power(bit);
     }
 
     /// `phy_set_tsens_pwr`: power the temperature sensor and select its clock.
     pub fn power_temperature_sensor(&mut self) {
         self.set_temperature_sensor_power(true);
-        generated::select_tsens_clock(&self.peripherals.apb_saradc_radio);
+        self.peripherals.apb_saradc_radio.select_tsens_clock();
     }
 
     /// `phy_tsens_read_init`: enable the SAR ADC and temperature-sensor
     /// clocks, release the sensor's reset, select its clock and power it.
     pub fn initialize_temperature_sensor(&mut self) {
-        let pcr = &self.peripherals.pcr_radio;
-        generated::enable_saradc_clocks(pcr);
-        generated::enable_tsens_clock(pcr);
-        generated::release_tsens_reset(pcr);
-        generated::select_tsens_clock(&self.peripherals.apb_saradc_radio);
+        let pcr = &mut self.peripherals.pcr_radio;
+        pcr.enable_saradc_clocks();
+        pcr.enable_tsens_clock();
+        pcr.release_tsens_reset();
+        self.peripherals.apb_saradc_radio.select_tsens_clock();
         self.power_temperature_sensor();
     }
 
@@ -237,27 +234,24 @@ impl PhyRadioRegisters {
         third: PhyRxEvmParameter,
     ) {
         let baseband = self.baseband();
-        generated::set_phy_rx_evm_mode(baseband);
-        generated::set_phy_rx_evm_third_parameter(baseband, third);
-        generated::set_phy_rx_evm_second_parameter(baseband, second);
-        generated::set_phy_rx_evm_enable(
-            baseband,
-            if enable {
-                PhyRxEvmEnable::Enabled
-            } else {
-                PhyRxEvmEnable::Disabled
-            },
-        );
-        generated::clear_phy_rx_evm_word_7920(baseband);
+        baseband.set_phy_rx_evm_mode();
+        baseband.set_phy_rx_evm_third_parameter(third);
+        baseband.set_phy_rx_evm_second_parameter(second);
+        baseband.set_phy_rx_evm_enable(if enable {
+            PhyRxEvmEnable::Enabled
+        } else {
+            PhyRxEvmEnable::Disabled
+        });
+        baseband.clear_phy_rx_evm_word_7920();
         self.reset_rx_evm_memory();
     }
 
     /// `phy_rxevm_reset_mem`: pulse both RX EVM memory resets.
     pub fn reset_rx_evm_memory(&mut self) {
         let baseband = self.baseband();
-        generated::assert_phy_rx_evm_memory_reset(baseband);
-        generated::release_phy_rx_evm_memory_reset(baseband);
-        generated::assert_phy_rx_evm_memory_reset_2(baseband);
-        generated::release_phy_rx_evm_memory_reset_2(baseband);
+        baseband.assert_phy_rx_evm_memory_reset();
+        baseband.release_phy_rx_evm_memory_reset();
+        baseband.assert_phy_rx_evm_memory_reset_2();
+        baseband.release_phy_rx_evm_memory_reset_2();
     }
 }

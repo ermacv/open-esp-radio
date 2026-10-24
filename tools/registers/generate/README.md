@@ -123,44 +123,68 @@ A PAC API policy's `[options] typed-peripherals` lists the peripherals the
 generator renders itself, as typed register blocks over `oer-mmio`
 ([`portable/mmio`](../../../portable/mmio/src/lib.rs)), into the PAC API
 output (`generated.rs`, which starts with `#![forbid(unsafe_code)]`).
-svd2rust renders the other peripherals from the published SVD with the
-typed ones cut out; their transactions, pointer fields, register-bound
-domains and partition members leave its policy.
+`[options] unexposed-peripherals` lists SVD peripherals kept only for
+bit-use coverage: they belong to no partition and neither backend renders
+them. svd2rust renders the other peripherals from the published SVD with
+the typed and unexposed ones cut out; the typed ones' transactions, pointer
+fields, register-bound domains and partition members leave its policy. A
+publication whose PAC names no `raw` crate (and no `crate-name`) has every
+peripheral typed or unexposed.
 
-A typed block is a module named after the peripheral with `BASE`, `SIZE`,
-its `Span` and an owner type generic over its placement: device registers
-(`new(Span)`) or host memory (`host(&mut [u32])`, for tests of the
-accessors). Per register the owner has `read_<register>` (an `R` value with
-a getter per field), `modify_<register>` (a read-modify-write through a `W`
-that keeps every bit no setter changes) or, for a write-only register,
-`write_<register>` (a `W` from zero). A write-one-to-clear register has
-`sample_<register>`, an affine `Snapshot` of its declared fields that
-`retain_<field>` narrows, and `acknowledge_<register>`, which writes
-exactly that snapshot. An array takes an `oer_mmio::Index<N>`. Each
-register module holds `FIELDS`, `OFFSET` and a value enum per enumerated
-field (`<field>_variant` reads it). A field setter takes `bool`, the value
-enum, the exact native integer (8, 16, 32 bits) or `oer_mmio::Bits<WIDTH>`;
-a read-only field and a DMA address field have none. A register changed by
-its read is read through `&mut`; a cluster, a field array, a register that
-is not 32 bits wide, mixed write-one-to-clear and ordinary fields, a
-write-only field in a readable register and a write range narrower than the
-field are refused.
+A typed block is a module named after the peripheral with `BASE`, `SIZE`
+(the bytes to the end of its last word), `BlockWords` (its declared words:
+the block's whole register authority), its `Claim` type and an owner type
+generic over its placement: device registers (`new(Claim)`) or host memory
+(`host(&mut [u32])`, for tests of the accessors). Per register the owner
+has `read_<register>` (an `R` value with a getter per field),
+`modify_<register>` (a read-modify-write through a `W` that keeps every bit
+no setter changes) or, for a write-only register, `write_<register>` (a `W`
+from zero; a write-only write-one-to-clear register is written so too). A
+readable write-one-to-clear register has `sample_<register>`, an affine
+`Snapshot` of its declared fields that `retain_<field>` narrows, and
+`acknowledge_<register>`, which writes exactly that snapshot. An array
+takes an `oer_mmio::Index<N>`. Each register module holds `FIELDS`,
+`OFFSET` and a value enum per enumerated field (`<field>_variant` reads it).
+A field setter takes `bool`, the value enum, the exact native integer (8,
+16, 32 bits) or `oer_mmio::Bits<WIDTH>`, and its getter returns the same
+type; a read-only field and a DMA address field have no setter. A register
+changed by its read is read through `&mut`; a cluster, a field array, a
+register that is not 32 bits wide, mixed write-one-to-clear and ordinary
+fields in a readable register, a write-only field in a readable register
+and a write range narrower than the field are refused.
 
-`[[register-splits]]` divides one typed block between two owners by word:
-`part` owns `registers` and observes (reads only) `observes`, which must
-have no read side effect; `rest` owns every other register. The block's
-`split` and `join` move between the whole owner and the two, and
-`oer-mmio` checks at compile time that the owned word lists are disjoint.
+The policy's `[[ownership-partitions]]` of typed peripherals become
+`peripheral_ownership`: a struct per partition holding its owners,
+`PeripheralPartitions`, `Claims` (every typed block, as nested tuples the
+PAC root claims with one `oer_mmio::assume_owned`) and `partition`, which
+gives each claimed block to its owner. A `const` assertion beside them
+checks that no two typed blocks list the same word. A partition mixing typed
+and untyped peripherals is refused.
+
+`[[register-sides]]` divides one typed block between its interrupt
+handler's side, `<Block>Irq`, which owns `irq` and observes (reads only)
+`irq-observes` (registers without a read side effect), and its task side,
+`<Block>Task`, which owns every other register. The block's `split` and
+`join` move between the whole owner and the two; `oer-mmio` checks at
+compile time that the owned word lists are disjoint, and a generated
+`const` assertion that every word of the block belongs to exactly one side.
+`[[interrupt-sources]]` gives a typed block's interrupt-matrix source
+number, rendered as its `SOURCE` constant with the evidence sources.
 
 The policy's transactions on a typed peripheral become methods of every
 owner that owns their register (a read: owns or observes):
 `full-register-writes`, `full-register-reads` (opaque domain),
-`fixed-register-images`, `masked-register-modifies`, `field-or-modifies`,
-`field-clear-modifies`, `field-replace-modifies` and
-`zero-based-field-writes`. Their masks are asserted against the register's
-declared fields in `const` items beside them. The other transaction kinds
-are refused on a typed peripheral; a W1C register needs no
-`w1c-register-snapshots` entry.
+`fixed-register-images`, `fixed-register-sequences`,
+`masked-register-modifies`, `field-or-modifies`, `field-clear-modifies`,
+`field-replace-modifies` and `zero-based-field-writes`. Their masks are
+asserted against the register's declared fields in `const` items beside
+them, except a fixed image marked `whole-word = true`: the vendor's store
+of a whole word, with its evidence sources, which also writes the bits the
+model leaves undeclared. The other transaction kinds are refused on a
+typed peripheral (a field read is the register's typed reader); a W1C
+register needs no `w1c-register-snapshots` entry. A bounded domain whose
+range is every value of a field width also takes that field's value read
+back, `from_bits(oer_mmio::Bits<WIDTH>)`.
 
 ## Peripheral review defaults
 
@@ -412,11 +436,15 @@ own copy:
   index over a fixed-length table; polling and retries belong to the HAL.
   `cargo registers check pac-transactions <directory>` runs it.
 - `shared_words::check`: every MMIO word a write transaction of the radio
-  PAC (`policy/api.toml`, through the published SVD) and pinned esp-hal both
-  store to has a reviewed entry in `chips/<chip>/registers/shared-words.toml`, and
-  no reviewed word is no longer shared. `cargo registers check shared-words
-  --chip <chip> --esp-hal-src <dir> --pac-src <dir>` runs it on the given
-  esp-hal and PAC sources.
+  PAC (`policy/api.toml`, through the published SVD) or a typed block's
+  claim reaches (every declared word of a typed peripheral) and pinned
+  esp-hal both store to has a reviewed entry in `chips/<chip>/registers/shared-words.toml`, and
+  no reviewed word is no longer shared. esp-hal's stores include the clock
+  and reset writers of the chip's `esp-metadata-generated` file, and its
+  peripheral names resolve through that file's singleton aliases
+  (`SYSTEM <= PCR`). `cargo registers check shared-words --chip <chip>
+  --esp-hal-src <dir> --esp-metadata-generated-src <dir> --pac-src <dir>`
+  runs it on the given esp-hal, esp-metadata-generated and PAC sources.
 
 `ChipSources` resolves the files a chip's publication manifest names
 without validating them. The binding index format is

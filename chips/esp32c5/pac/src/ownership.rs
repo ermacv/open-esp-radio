@@ -1,6 +1,12 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
-use super::*;
+use crate::generated::{
+    ieee802154_interrupt_route::Ieee802154InterruptRoute,
+    ieee802154_mac::Ieee802154Mac,
+    peripheral_ownership::{
+        self, Claims, PeripheralPartitions, WifiInterruptPeripherals, WifiMacPeripherals,
+    },
+};
 
 /// Physical owners used by one IEEE 802.15.4 task register set.
 ///
@@ -9,15 +15,15 @@ use super::*;
 /// the common PHY it depends on is not modelled by this crate yet.
 pub(crate) struct Ieee802154TaskPeripheralOwners {
     pub(crate) ieee802154_mac: crate::ieee802154::ownership::TaskRegisters,
-    pub(crate) ieee802154_interrupt_route: svd::Ieee802154InterruptRoute,
+    pub(crate) ieee802154_interrupt_route: Ieee802154InterruptRoute,
     pub(crate) etm: crate::modem::etm::Ieee802154EtmChannels,
 }
 
 /// Opaque IEEE 802.15.4 MAC and interrupt-route register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct Ieee802154Partition {
-    mac: crate::generated::ieee802154_mac::Ieee802154Mac,
-    peripherals: svd::peripheral_ownership::Ieee802154Peripherals,
+    mac: Ieee802154Mac,
+    interrupt_route: Ieee802154InterruptRoute,
     etm: crate::modem::etm::Ieee802154EtmChannels,
 }
 
@@ -26,15 +32,13 @@ pub struct Ieee802154Partition {
 /// No driver owns it yet: it only reserves the reviewed Wi-Fi MAC register
 /// views so that no other partition can reach them.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
-pub struct WifiMacPartition(#[allow(dead_code)] svd::peripheral_ownership::WifiMacPeripherals);
+pub struct WifiMacPartition(#[allow(dead_code)] WifiMacPeripherals);
 
 /// Opaque Wi-Fi MAC and power interrupt bank partition.
 ///
 /// No driver owns it yet: it only reserves the two interrupt banks.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
-pub struct WifiInterruptPartition(
-    #[allow(dead_code)] svd::peripheral_ownership::WifiInterruptPeripherals,
-);
+pub struct WifiInterruptPartition(#[allow(dead_code)] WifiInterruptPeripherals);
 
 /// Proof that the platform transferred every ESP32-C5 radio singleton.
 #[must_use = "the radio root needs the consumed platform ownership"]
@@ -87,34 +91,24 @@ impl RadioPartitions {
         reason = "the consumed handoff proves unique register ownership"
     )]
     pub fn from_handoff(_handoff: RadioHandoff) -> Self {
-        // SAFETY: RadioHandoff's constructor guarantees exclusive, permanent
-        // ownership of every radio register partition. No independent
-        // generated singleton is acquired.
-        let peripherals = unsafe { svd::Peripherals::steal() };
         #[allow(
             clippy::disallowed_methods,
-            reason = "the radio root takes the typed blocks' registers once, from the handoff"
+            reason = "the radio root claims the typed blocks once, from the handoff"
         )]
-        // SAFETY: as above; the IEEE 802.15.4 MAC block is one of the
-        // partitions the handoff transferred. One raw view overlaps its span:
-        // `svd::Peripherals` holds `MODEM_IEEE802154_OBSERVED`, whose only
-        // register is the span's word at +0x98. `from_peripherals` moves that
-        // token into `unexposed` and drops it without an access (it is a
-        // zero-sized handle without `Drop`). No second token exists: the
-        // single `steal` above made the only one and set the singleton flag,
-        // so `Peripherals::take` returns `None`. Only the typed block reaches
-        // the span's words.
-        let ieee802154_mac = unsafe { crate::generated::ieee802154_mac::Span::assume_owned() };
-        Self::from_peripherals(peripherals, ieee802154_mac)
+        // SAFETY: `RadioHandoff`'s constructor guarantees exclusive, permanent
+        // ownership of every radio register partition, so no other code
+        // accesses the words the typed blocks list. The generated `const`
+        // assertion beside `Claims` checks that no two blocks list the same
+        // word; the unexposed observation views own no words. Words esp-hal
+        // also writes are reviewed with their coordination in
+        // `registers/shared-words.toml`.
+        let claims = unsafe { oer_mmio::assume_owned::<Claims>() };
+        Self::from_claims(claims)
     }
 
-    /// Bind the generated singleton and the typed blocks' spans to the
-    /// opaque partition owners.
-    pub(crate) fn from_peripherals(
-        peripherals: svd::Peripherals,
-        ieee802154_mac: crate::generated::ieee802154_mac::Span,
-    ) -> Self {
-        let svd::peripheral_ownership::PeripheralPartitions {
+    /// Bind the claimed typed blocks to the opaque partition owners.
+    pub(crate) fn from_claims(claims: Claims) -> Self {
+        let PeripheralPartitions {
             ieee802154,
             modem_etm,
             modem_clock,
@@ -122,15 +116,11 @@ impl RadioPartitions {
             phy_radio,
             wifi_mac,
             wifi_interrupts,
-            // Inventory-only word views have no runtime owner: dropped here
-            // without an access. `MODEM_IEEE802154_OBSERVED` among them lies
-            // inside the typed MAC block's span, which alone reaches it.
-            unexposed: _,
-        } = svd::peripheral_ownership::partition(peripherals);
+        } = peripheral_ownership::partition(claims);
         Self {
             ieee802154: Ieee802154Partition {
-                mac: crate::generated::ieee802154_mac::Ieee802154Mac::new(ieee802154_mac),
-                peripherals: ieee802154,
+                mac: ieee802154.ieee802154_mac,
+                interrupt_route: ieee802154.ieee802154_interrupt_route,
                 etm: crate::modem::etm::ieee802154_channels(modem_etm),
             },
             modem_clock: crate::modem::clock::ModemClockRegisters::new(modem_clock),
@@ -146,28 +136,25 @@ impl RadioPartitions {
     #[doc(hidden)]
     #[allow(
         unsafe_code,
-        reason = "a host-test root is fictitious; each test needs its own fresh singleton"
+        reason = "a host-test root is fictitious; each test needs its own fresh claim"
     )]
     pub fn for_validation() -> Self {
-        // SAFETY: only host tests and validation probes build this root. In
-        // a host test it is fictitious: no real MMIO exists behind it, so the
-        // singleton need not be unique; a probe image takes it once.
-        let peripherals = unsafe { svd::Peripherals::steal() };
         #[allow(
             clippy::disallowed_methods,
-            reason = "a validation root takes the typed blocks' registers once"
+            reason = "a validation root claims the typed blocks once"
         )]
-        // SAFETY: as above, for the typed IEEE 802.15.4 MAC block; the
-        // `MODEM_IEEE802154_OBSERVED` token over its word at +0x98 is dropped
-        // unused in `from_peripherals`, as in `from_handoff`.
-        let ieee802154_mac = unsafe { crate::generated::ieee802154_mac::Span::assume_owned() };
-        Self::from_peripherals(peripherals, ieee802154_mac)
+        // SAFETY: only host tests and validation probes build this root. In
+        // a host test it is fictitious: no device register exists behind it
+        // and no test accesses one, so the claim need not be unique; a probe
+        // image claims the blocks once.
+        let claims = unsafe { oer_mmio::assume_owned::<Claims>() };
+        Self::from_claims(claims)
     }
 }
 
 #[inline]
 pub(crate) fn device_fence() {
-    svd::device_access::fence();
+    oer_mmio::fence();
 }
 
 /// Ordinary task-side owner of the IEEE 802.15.4 MAC partition.
@@ -182,10 +169,7 @@ impl Ieee802154TaskRegisters {
     pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
         let Ieee802154Partition {
             mac,
-            peripherals:
-                svd::peripheral_ownership::Ieee802154Peripherals {
-                    ieee802154_interrupt_route,
-                },
+            interrupt_route: ieee802154_interrupt_route,
             etm,
         } = partition;
         let (task_mac, interrupt_mac) = crate::ieee802154::ownership::split(mac);
@@ -213,9 +197,7 @@ impl Ieee802154TaskRegisters {
         } = self.peripherals;
         Ieee802154Partition {
             mac: crate::ieee802154::ownership::reunite(task_mac, interrupts.registers),
-            peripherals: svd::peripheral_ownership::Ieee802154Peripherals {
-                ieee802154_interrupt_route,
-            },
+            interrupt_route: ieee802154_interrupt_route,
             etm,
         }
     }

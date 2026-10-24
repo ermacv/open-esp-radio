@@ -197,3 +197,12 @@ fn production_deactivation_stops_every_engine_before_final_affine_ack() {
         ]
     );
 }
+
+#[test]
+fn a_security_payload_offset_is_made_only_inside_seven_bits() {
+    use super::Ieee802154SecurityPayloadOffset as Offset;
+
+    assert_eq!(Offset::new(Offset::MAX).map(Offset::value), Some(0x7f));
+    assert_eq!(Offset::new(0x80), None);
+    assert_eq!(Offset::new(u8::MAX), None);
+}

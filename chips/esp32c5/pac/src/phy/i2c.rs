@@ -14,7 +14,7 @@
 
 #[cfg(any(test, feature = "test-support", oer_probe))]
 use crate::analog_i2c::{Address, Field, Host, Request, Route, fields, registers};
-use crate::svd;
+use crate::generated::peripheral_ownership::PhyI2cPeripherals;
 
 /// One command of each host in a parallel write, as `phy_i2c_paral_write`
 /// publishes them: host 0 first, then host 1, without the start bit.
@@ -481,7 +481,7 @@ pub enum PhyI2cAccessError {
     )
 )]
 pub struct PhyI2cRegisters {
-    peripherals: svd::peripheral_ownership::PhyI2cPeripherals,
+    peripherals: PhyI2cPeripherals,
     /// The host map was rewritten for a command that has not started yet
     /// because its host was busy. The map image is the same for every block,
     /// so a retry only polls the host, as the vendor leaves do.
@@ -489,7 +489,7 @@ pub struct PhyI2cRegisters {
 }
 
 impl PhyI2cRegisters {
-    pub(crate) const fn new(peripherals: svd::peripheral_ownership::PhyI2cPeripherals) -> Self {
+    pub(crate) const fn new(peripherals: PhyI2cPeripherals) -> Self {
         Self {
             peripherals,
             host_map_pending: false,
@@ -509,33 +509,32 @@ impl PhyI2cRegisters {
         }
     }
 
-    fn master(&self) -> &svd::I2cAnaMst {
-        &self.peripherals.i2c_ana_mst
+    fn master(&mut self) -> &mut crate::generated::i2c_ana_mst::I2cAnaMst {
+        &mut self.peripherals.i2c_ana_mst
     }
 
     /// Replace the host-selection field and return the block's host, as
     /// `phy_get_i2c_hostid_` does on every access.
     pub fn configure_and_select_host(&mut self, block: Route) -> Host {
-        crate::generated::configure_phy_i2c_host_map(self.master());
+        self.master().configure_phy_i2c_host_map();
         block.host
     }
 
     /// Install the host map of the parallel initialization sequence.
     pub fn select_parallel_host_map(&mut self) {
-        crate::generated::configure_phy_i2c_parallel_host_map(self.master());
+        self.master().configure_phy_i2c_parallel_host_map();
     }
 
     /// Restore the normal host map after a parallel sequence.
     pub fn restore_host_map(&mut self) {
-        crate::generated::configure_phy_i2c_host_map(self.master());
+        self.master().configure_phy_i2c_host_map();
     }
 
     /// Publish both commands of a parallel write, host 0 first, without
     /// waiting for either host.
     pub fn start_parallel_pair(&mut self, pair: PhyI2cParallelWrite) {
         let (address, value) = pair.first;
-        svd::zero_based_field_write::publish_phy_i2c_host0_command(
-            self.master(),
+        self.master().publish_phy_i2c_host0_command(
             address.block(),
             address.index(),
             value,
@@ -543,8 +542,7 @@ impl PhyI2cRegisters {
             false,
         );
         let (address, value) = pair.second;
-        svd::zero_based_field_write::publish_phy_i2c_host1_command(
-            self.master(),
+        self.master().publish_phy_i2c_host1_command(
             address.block(),
             address.index(),
             value,
@@ -563,12 +561,14 @@ impl PhyI2cRegisters {
         let guard = PhyI2cSdaSideGuard::new(n).expect("a selection fits the guard field");
         let pulse = PhyI2cSclPulseDuration::new(if n == 0 { 1 } else { 2 * n })
             .expect("twice a guard fits the pulse field");
-        crate::generated::set_phy_i2c_host0_sda_side_guard(self.master(), guard);
-        crate::generated::set_phy_i2c_host0_scl_pulse_duration(self.master(), pulse);
-        crate::generated::set_phy_i2c_host1_sda_side_guard(self.master(), guard);
-        crate::generated::set_phy_i2c_host1_scl_pulse_duration(self.master(), pulse);
-        crate::generated::set_phy_i2c_hardware_host_sda_side_guard(self.master(), guard);
-        crate::generated::set_phy_i2c_hardware_host_scl_pulse_duration(self.master(), pulse);
+        self.master().set_phy_i2c_host0_sda_side_guard(guard);
+        self.master().set_phy_i2c_host0_scl_pulse_duration(pulse);
+        self.master().set_phy_i2c_host1_sda_side_guard(guard);
+        self.master().set_phy_i2c_host1_scl_pulse_duration(pulse);
+        self.master()
+            .set_phy_i2c_hardware_host_sda_side_guard(guard);
+        self.master()
+            .set_phy_i2c_hardware_host_scl_pulse_duration(pulse);
     }
 
     /// `phy_i2cmst_reg_init`: select PHY register mode two and enable PHY
@@ -577,8 +577,8 @@ impl PhyI2cRegisters {
     /// SOURCE: reviewed evidence `C5_BLOB_LIBPHY_RF_INIT_LEAVES_2`.
     #[cfg(oer_probe)]
     pub fn initialize_master_registers(&mut self) {
-        crate::generated::set_phy_i2c_master_register_mode(self.master());
-        crate::generated::enable_phy_i2c_master_registers(self.master());
+        self.master().set_phy_i2c_master_register_mode();
+        self.master().enable_phy_i2c_master_registers();
     }
 
     /// `phy_bbpll_cal(start)`: select BBPLL calibration mode two when
@@ -592,7 +592,7 @@ impl PhyI2cRegisters {
         } else {
             PhyBbpllCalibrationMode::One
         };
-        crate::generated::set_phy_i2c_bbpll_calibration_mode(self.master(), mode);
+        self.master().set_phy_i2c_bbpll_calibration_mode(mode);
     }
 
     /// `phy_bbpll_recal`: mode two, one read of the master control word, then
@@ -600,15 +600,19 @@ impl PhyI2cRegisters {
     #[cfg(oer_probe)]
     pub fn recalibrate_bbpll(&mut self) {
         self.calibrate_bbpll(true);
-        let _ = svd::field_read::observe_phy_i2c_bbpll_calibration_mode(self.master());
+        let _ = self
+            .peripherals
+            .i2c_ana_mst
+            .read_ana_conf0()
+            .bbpll_cal_mode();
         self.calibrate_bbpll(false);
     }
 
     /// Whether a host is executing a command.
     pub fn is_busy(&self, host: Host) -> bool {
         match host {
-            Host::Host0 => svd::field_read::observe_phy_i2c_host0_busy(self.master()),
-            Host::Host1 => svd::field_read::observe_phy_i2c_host1_busy(self.master()),
+            Host::Host0 => self.peripherals.i2c_ana_mst.read_i2c0_ctrl().busy(),
+            Host::Host1 => self.peripherals.i2c_ana_mst.read_i2c1_ctrl().busy(),
         }
     }
 
@@ -616,16 +620,14 @@ impl PhyI2cRegisters {
         self.host_map_pending = false;
         let code = address.route().command_code;
         match host {
-            Host::Host0 => svd::zero_based_field_write::publish_phy_i2c_host0_command(
-                self.master(),
+            Host::Host0 => self.master().publish_phy_i2c_host0_command(
                 code,
                 address.index(),
                 value,
                 write,
                 true,
             ),
-            Host::Host1 => svd::zero_based_field_write::publish_phy_i2c_host1_command(
-                self.master(),
+            Host::Host1 => self.master().publish_phy_i2c_host1_command(
                 code,
                 address.index(),
                 value,
@@ -647,10 +649,8 @@ impl PhyI2cRegisters {
         if self.is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
-        svd::zero_based_field_write::publish_phy_i2c_read_mask(
-            self.master(),
-            address.route().complemented_read_select(),
-        );
+        self.master()
+            .publish_phy_i2c_read_mask(address.route().complemented_read_select());
         self.publish(host, address, 0, false);
         Ok(())
     }
@@ -666,8 +666,8 @@ impl PhyI2cRegisters {
             return Err(PhyI2cAccessError::Busy);
         }
         Ok(match host {
-            Host::Host0 => svd::field_read::observe_phy_i2c_host0_data(self.master()),
-            Host::Host1 => svd::field_read::observe_phy_i2c_host1_data(self.master()),
+            Host::Host0 => self.peripherals.i2c_ana_mst.read_i2c0_ctrl().data(),
+            Host::Host1 => self.peripherals.i2c_ana_mst.read_i2c1_ctrl().data(),
         })
     }
 

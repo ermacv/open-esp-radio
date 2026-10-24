@@ -25,14 +25,19 @@ mod typed_register_tests;
 )]
 mod generated;
 
-use oer_esp32c5_pac_raw as svd;
-
 pub(crate) mod ieee802154;
 pub(crate) mod modem;
 pub(crate) mod ownership;
 pub(crate) mod phy;
 
 pub(crate) use ownership::device_fence;
+
+/// A field of at most eight bits read back, as the byte the shared
+/// IEEE 802.15.4 value types take.
+pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) -> u8 {
+    const { assert!(WIDTH <= 8, "the field fits a byte") };
+    bits.get().to_le_bytes()[0]
+}
 
 #[doc(hidden)]
 pub use ieee802154::mac::{Ieee802154PolledRegisterLease, Ieee802154RegisterLease};

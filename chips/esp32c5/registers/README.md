@@ -11,15 +11,16 @@ A cited exact whole-register initialization image remains one closed image
 operation when reset is unknown. The image alone gives its lanes no bit
 accessors and supplies no reset value. Sparse MMIO use facts in
 `evidence/mmio-use.toml` retain their source masks and conservative indexed
-qualifications; their unexposed PAC partition grants no production operation
-or read-safe snapshot.
+qualifications; they are the policy's unexposed peripherals, which no owner
+reaches.
 
 | Path | Owner and purpose |
 | --- | --- |
 | `model/device.toml`, `model/peripherals/` | Reviewed hardware register geometry and semantics |
 | `model/memory.toml` | MMIO regions |
 | `model/reviewed.toml` | Typed reviewed assertions with their applicability and evidence |
-| `policy/api.toml` | Closed-PAC ownership partitions and typed transactions selected by the publication |
+| `policy/api.toml` | Closed-PAC typed blocks, ownership partitions and transactions selected by the publication |
+| `shared-words.toml` | Words the PAC's typed blocks and pinned esp-hal both write, with how the writers are coordinated (`cargo registers check shared-words --chip esp32c5`) |
 | `policy/ownership.toml` | Shared publication scope of named MMIO ranges |
 | `policy/lints.toml` | Reviewed register-model lint policy |
 | `evidence/` | Source identities of the reviewed facts |
@@ -57,8 +58,7 @@ cargo registers validate --manifest chips/esp32c5/registers/publication/register
 cargo registers generate --check --manifest chips/esp32c5/registers/publication/registers.toml
 ```
 
-The generated outputs are this directory's `published/` files. Do not edit
-them directly. No ESP32-C5 PAC crate exists yet: the publication selects
-neither `policy/api.toml` nor PAC outputs, so its binding index names no
-crate; `policy/api.toml` is kept but checked by nothing. A change that adds
-the PAC crates selects both.
+The generated outputs are this directory's `published/` files and the PAC's
+`chips/esp32c5/pac/src/generated.rs`. Do not edit them directly. Every
+exposed peripheral is a typed register block over `oer-mmio`, so the PAC
+has no raw svd2rust crate and the binding index names no crate.

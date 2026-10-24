@@ -132,11 +132,8 @@ impl Ieee802154FrequencyCode {
     }
 
     /// The code the seven-bit field reader returned.
-    const fn from_field(value: u8) -> Self {
-        match Self::new(value) {
-            Some(code) => code,
-            None => panic!("the frequency-code reader returns seven bits"),
-        }
+    const fn from_field(bits: oer_mmio::Bits<7>) -> Self {
+        Self(bits)
     }
 
     /// Return the field value, not a complete register image.
@@ -169,11 +166,8 @@ impl Ieee802154Pti {
     }
 
     /// The priority the four-bit field reader returned.
-    const fn from_field(value: u8) -> Self {
-        match Self::new(value) {
-            Some(pti) => pti,
-            None => panic!("the PTI field reader returns four bits"),
-        }
+    const fn from_field(bits: oer_mmio::Bits<4>) -> Self {
+        Self(bits)
     }
 
     /// Return the bounded field value, not a shifted register image.
@@ -518,8 +512,9 @@ impl Ieee802154FoundationSnapshot {
 #[doc(hidden)]
 pub struct Ieee802154RegisterLease<'registers> {
     registers: &'registers mut crate::ieee802154::ownership::TaskRegisters,
-    interrupt_route: &'registers crate::svd::Ieee802154InterruptRoute,
-    etm: &'registers crate::modem::etm::Ieee802154EtmChannels,
+    interrupt_route:
+        &'registers crate::generated::ieee802154_interrupt_route::Ieee802154InterruptRoute,
+    etm: &'registers mut crate::modem::etm::Ieee802154EtmChannels,
 }
 
 /// Exclusive task-side lease for the two reviewed MAC timers.
@@ -803,7 +798,8 @@ impl Ieee802154RegisterLease<'_> {
         let control = self.registers.transmit_security_control();
         Ieee802154TransmitSecurityControl::new(
             control.enabled(),
-            Ieee802154SecurityPayloadOffset::from_field(control.payload_offset()),
+            Ieee802154SecurityPayloadOffset::new(crate::field_byte(control.payload_offset()))
+                .expect("the payload-offset field is seven bits wide"),
         )
     }
 
@@ -823,7 +819,7 @@ impl Ieee802154RegisterLease<'_> {
         let identity = readback.identity();
         Ieee802154MacPolicySnapshot {
             frequency_code: Ieee802154FrequencyCode::from_field(readback.frequency_code()),
-            cca_mode: Ieee802154CcaMode::from_field(readback.cca_mode()),
+            cca_mode: Ieee802154CcaMode::from_field(crate::field_byte(readback.cca_mode())),
             cca_threshold_code: readback.cca_threshold_code() as i8,
             ack_timeout: Ieee802154AckTimeoutUnits::new(readback.ack_timeout()),
             control: Ieee802154MacControl::new(
@@ -860,11 +856,12 @@ impl Ieee802154RegisterLease<'_> {
         ];
         Ieee802154MacConfigurationReadback {
             frequency_code: Ieee802154FrequencyCode::from_field(readback.frequency_code()),
-            tx_power_code: Ieee802154TxPowerCode::new(u32::from(readback.tx_power_code()))
-                .expect("raw PAC field is eight bits"),
-            cca_mode: Ieee802154CcaMode::from_field(readback.cca_mode()),
+            tx_power_code: Ieee802154TxPowerCode::from_bits(readback.tx_power_code()),
+            cca_mode: Ieee802154CcaMode::from_field(crate::field_byte(readback.cca_mode())),
             cca_threshold_code: readback.cca_threshold_code() as i8,
-            ed_sample_rate: Ieee802154EdSampleRate::from_field(readback.ed_sample_rate()),
+            ed_sample_rate: Ieee802154EdSampleRate::from_field(crate::field_byte(
+                readback.ed_sample_rate(),
+            )),
             ack_timeout: Ieee802154AckTimeoutUnits::new(readback.ack_timeout()),
             control: Ieee802154MacControl::new(
                 readback.auto_ack_tx(),
@@ -1003,8 +1000,8 @@ impl Ieee802154PolledRegisterLease<'_> {
     pub fn state_snapshot(&self) -> Ieee802154StateSnapshot {
         let (rx, tx) = self.interrupt.state_codes();
         Ieee802154StateSnapshot::new(
-            Ieee802154RxStateCode::from_field(rx),
-            Ieee802154TxStateCode::from_field(tx),
+            Ieee802154RxStateCode::from_field(crate::field_byte(rx)),
+            Ieee802154TxStateCode::from_field(crate::field_byte(tx)),
         )
     }
 
@@ -1044,10 +1041,8 @@ impl Ieee802154PolledRegisterLease<'_> {
     /// Classify the source-12 route without exposing its register image.
     #[doc(hidden)]
     pub fn interrupt_route_state(&self) -> Ieee802154RouteState {
-        let (map, pass_in_sec) = crate::svd::field_snapshot_read::observe_ieee802154_core0_route(
-            self.task.interrupt_route,
-        );
-        Ieee802154RouteState::from_observation(map != 0, pass_in_sec)
+        let route = self.task.interrupt_route.read_core0_route();
+        Ieee802154RouteState::from_observation(route.map().get() != 0, route.pass_in_sec())
     }
 }
 
@@ -1179,9 +1174,9 @@ impl Ieee802154InterruptRegisters {
 
     /// `ieee802154_ll_get_rx_abort_reason`.
     pub fn rx_abort_reason(&self) -> Ieee802154RxAbortReasonObservation {
-        Ieee802154RxAbortReasonObservation::from_field(
+        Ieee802154RxAbortReasonObservation::from_field(crate::field_byte(
             self.registers.rx_status_readback().abort_reason_code(),
-        )
+        ))
     }
 
     /// `ieee802154_ll_get_ed_rss`.
@@ -1196,9 +1191,9 @@ impl Ieee802154InterruptRegisters {
 
     /// `ieee802154_ll_get_tx_abort_reason`.
     pub fn tx_abort_reason(&self) -> Ieee802154TxAbortReasonObservation {
-        Ieee802154TxAbortReasonObservation::from_field(
+        Ieee802154TxAbortReasonObservation::from_field(crate::field_byte(
             self.registers.tx_status_readback().abort_reason_code(),
-        )
+        ))
     }
 
     /// Close one finite hard-IRQ epoch and return inactive setup ownership.
@@ -1230,7 +1225,7 @@ impl Ieee802154TaskRegisters {
         Ieee802154RegisterLease {
             registers: &mut self.peripherals.ieee802154_mac,
             interrupt_route: &self.peripherals.ieee802154_interrupt_route,
-            etm: &self.peripherals.etm,
+            etm: &mut self.peripherals.etm,
         }
     }
 }

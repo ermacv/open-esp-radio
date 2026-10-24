@@ -4,9 +4,13 @@
 //! both can store to is a race: a read-modify-write on one side can undo the
 //! other's store. This check lists every word a write transaction of the
 //! closed radio PAC stores to (`chips/<chip>/registers/policy/api.toml`, located
-//! through `chips/<chip>/registers/published/radio.svd`) that pinned esp-hal also
-//! writes (a `PERIPHERAL::regs().register().write/modify` in its sources,
-//! resolved to an address through the pinned platform PAC), and requires each
+//! through `chips/<chip>/registers/published/radio.svd`), and every declared
+//! word of a typed block, whose claim reaches all of them, that pinned esp-hal also
+//! writes (a `PERIPHERAL::regs().register().write/modify` in its sources or
+//! in the chip's file of the pinned `esp-metadata-generated`, whose clock and
+//! reset writers esp-hal expands; an esp-hal peripheral name such as `SYSTEM`
+//! resolves through that file's singleton aliases, `SYSTEM <= PCR`, to the
+//! pinned platform PAC and its addresses), and requires each
 //! to have a reviewed entry in `chips/<chip>/registers/shared-words.toml` saying how
 //! the two writers are coordinated. A reviewed word that is no longer shared
 //! is rejected too, so the list stays exact. There is no pending list: a new
@@ -161,14 +165,44 @@ pub fn api_write_registers(api: &str) -> Result<BTreeSet<(String, String)>> {
             }
         }
     }
+    let typed = policy
+        .get("options")
+        .and_then(|options| options.get("typed-peripherals"))
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    registers.extend(
+        typed
+            .into_iter()
+            .map(|peripheral| (peripheral.to_owned(), TYPED_BLOCK.to_owned())),
+    );
     Ok(registers)
 }
+
+/// The register name standing for every word of a typed block: the block's
+/// claim reaches all of them, so each counts as written.
+const TYPED_BLOCK: &str = "*";
 
 /// Words the radio PAC's write transactions store to, with register names.
 pub fn radio_written(svd: &str, api: &str) -> Result<BTreeMap<u32, BTreeSet<String>>> {
     let registers = radio_registers(svd)?;
     let mut words: BTreeMap<u32, BTreeSet<String>> = BTreeMap::new();
     for (peripheral, register) in api_write_registers(api)? {
+        if register == TYPED_BLOCK {
+            for ((owner, name), addresses) in &registers {
+                if *owner == peripheral {
+                    for address in addresses {
+                        words
+                            .entry(*address)
+                            .or_default()
+                            .insert(format!("{owner}.{name} (typed block)"));
+                    }
+                }
+            }
+            continue;
+        }
         let addresses = registers
             .get(&(peripheral.clone(), register.clone()))
             .ok_or_else(|| {
@@ -361,24 +395,75 @@ fn rust_files(directory: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
+/// The PAC peripheral behind each esp-hal peripheral singleton that
+/// `esp-metadata-generated` declares under another name:
+/// `peri_type #[doc = ".."] SYSTEM <= PCR() (unstable)`. Virtual singletons,
+/// which have no registers, and singletons named as their PAC peripheral are
+/// left out.
+pub fn singleton_aliases(generated: &str) -> BTreeMap<String, String> {
+    let mut aliases = BTreeMap::new();
+    for (index, _) in generated.match_indices(" <= ") {
+        let name = trailing_constant(generated[..index].trim_end());
+        let after = &generated[index + " <= ".len()..];
+        let Some((pac, _)) = after.split_once('(') else {
+            continue;
+        };
+        let pac = pac.trim();
+        if name.is_empty()
+            || pac == name
+            || pac.is_empty()
+            || !pac
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        {
+            continue;
+        }
+        aliases.insert(name.to_owned(), pac.to_owned());
+    }
+    aliases
+}
+
+/// The pinned esp-hal sources whose stores count: every file of esp-hal's
+/// `src` that `chip` compiles, and the chip's `esp-metadata-generated` file.
+pub struct EspHalSources<'a> {
+    /// esp-hal's `src` directory.
+    pub esp_hal: &'a Path,
+    /// `esp-metadata-generated`'s `src` directory.
+    pub metadata_generated: &'a Path,
+}
+
 /// Every esp-hal store resolved to absolute word addresses.
 fn esp_hal_words(
-    esp_hal_src: &Path,
+    sources: &EspHalSources<'_>,
     pac_src: &Path,
     chip: &str,
 ) -> Result<BTreeMap<u32, BTreeSet<String>>> {
     let peripherals = pac_peripherals(&fs::read_to_string(pac_src.join("lib.rs"))?);
+    let generated_path = sources
+        .metadata_generated
+        .join(format!("_generated_{chip}.rs"));
+    let generated = fs::read_to_string(&generated_path)
+        .map_err(|error| format!("{}: {error}", generated_path.display()))?;
+    let aliases = singleton_aliases(&generated);
     let mut modules = BTreeMap::new();
     let mut files = Vec::new();
-    rust_files(esp_hal_src, &mut files)?;
-    let mut words: BTreeMap<u32, BTreeSet<String>> = BTreeMap::new();
+    rust_files(sources.esp_hal, &mut files)?;
+    let mut texts = Vec::new();
     for file in files {
-        let relative = file.strip_prefix(esp_hal_src)?;
-        if !applies_to(relative, chip) {
-            continue;
+        let relative = file.strip_prefix(sources.esp_hal)?;
+        if applies_to(relative, chip) {
+            texts.push((relative.display().to_string(), fs::read_to_string(&file)?));
         }
-        for (peripheral, register) in esp_hal_stores(&fs::read_to_string(&file)?) {
-            let Some((module, base)) = peripherals.get(&peripheral) else {
+    }
+    texts.push((
+        format!("esp-metadata-generated/_generated_{chip}.rs"),
+        generated,
+    ));
+    let mut words: BTreeMap<u32, BTreeSet<String>> = BTreeMap::new();
+    for (relative, text) in &texts {
+        for (peripheral, register) in esp_hal_stores(text) {
+            let pac_name = aliases.get(&peripheral).unwrap_or(&peripheral);
+            let Some((module, base)) = peripherals.get(pac_name) else {
                 continue;
             };
             if !modules.contains_key(module) {
@@ -395,7 +480,7 @@ fn esp_hal_words(
                 words
                     .entry(address)
                     .or_default()
-                    .insert(format!("{peripheral}.{register} ({})", relative.display()));
+                    .insert(format!("{peripheral}.{register} ({relative})"));
             }
         }
     }
@@ -403,7 +488,12 @@ fn esp_hal_words(
 }
 
 /// Checks `chip`'s shared words against its review file.
-pub fn check(root: &Path, chip: &str, esp_hal_src: &Path, pac_src: &Path) -> Result<usize> {
+pub fn check(
+    root: &Path,
+    chip: &str,
+    esp_hal: &EspHalSources<'_>,
+    pac_src: &Path,
+) -> Result<usize> {
     let publication = crate::ChipSources::load(
         &root.join(format!("chips/{chip}/registers/publication/registers.toml")),
     )?;
@@ -411,7 +501,7 @@ pub fn check(root: &Path, chip: &str, esp_hal_src: &Path, pac_src: &Path) -> Res
         &fs::read_to_string(&publication.svd)?,
         &fs::read_to_string(&publication.api)?,
     )?;
-    let esp_hal = esp_hal_words(esp_hal_src, pac_src, chip)?;
+    let esp_hal = esp_hal_words(esp_hal, pac_src, chip)?;
     let shared: BTreeSet<u32> = radio
         .keys()
         .filter(|address| esp_hal.contains_key(address))
@@ -492,7 +582,7 @@ register = "CONF"
 peripheral = "P"
 steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
 "#;
-        let words = radio_written(svd, api).unwrap();
+        let words = radio_written(svd, api).expect("the policy resolves");
         // A read-write register only read through the API is not a radio store.
         assert_eq!(
             words.keys().copied().collect::<Vec<_>>(),
@@ -504,6 +594,13 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
                 "[[zero-register-writes]]\nperipheral = \"P\"\nregister = \"GONE\"\n"
             )
             .is_err()
+        );
+        // A typed block's claim reaches every word it declares.
+        let typed = radio_written(svd, "[options]\ntyped-peripherals = [\"P\"]\n")
+            .expect("a typed block resolves");
+        assert_eq!(
+            typed.keys().copied().collect::<Vec<_>>(),
+            [0x1000, 0x1004, 0x1010, 0x1018]
         );
     }
 
@@ -547,6 +644,86 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
         .map(|(p, r)| (p.to_owned(), r.to_owned()))
         .collect();
         assert_eq!(stores, expected);
+    }
+
+    #[test]
+    fn singleton_aliases_name_the_pac_peripheral() {
+        let generated = r#"
+            _for_each_inner_peripheral!((@ peri_type #[doc =
+            "SYSTEM peripheral singleton"] SYSTEM <= PCR() (unstable)));
+            _for_each_inner_peripheral!((@ peri_type #[doc = "UART0 peripheral singleton"] UART0 <= UART0(UART0 : {}) (unstable)));
+            _for_each_inner_peripheral!((@ peri_type #[doc = "ADC1 peripheral singleton"] ADC1 <= virtual() (unstable)));
+        "#;
+        let aliases = singleton_aliases(generated);
+        assert_eq!(
+            aliases.into_iter().collect::<Vec<_>>(),
+            [("SYSTEM".to_owned(), "PCR".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_generated_writer_through_an_alias_is_found() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let esp_hal = directory.path().join("esp-hal");
+        let generated = directory.path().join("generated");
+        let pac = directory.path().join("pac");
+        for path in [&esp_hal, &generated, &pac] {
+            fs::create_dir(path).expect("a source directory");
+        }
+        fs::write(
+            esp_hal.join("lib.rs"),
+            "PCR::regs().uart0_conf().write(|w| w);",
+        )
+        .expect("an esp-hal source");
+        fs::write(
+            generated.join("_generated_chip-a.rs"),
+            r#"(@ peri_type #[doc = "SYSTEM peripheral singleton"] SYSTEM <= PCR() (unstable))
+            Peripheral::Saradc => {
+                crate::peripherals::SYSTEM::regs()
+                    .saradc_conf()
+                    .modify(|_, w| w.saradc_reg_clk_en().bit(enable));
+            }"#,
+        )
+        .expect("a generated source");
+        // Another chip's generated file is not read.
+        fs::write(
+            generated.join("_generated_chip-b.rs"),
+            "PCR::regs().other_conf().write(|w| w);",
+        )
+        .expect("another chip's generated source");
+        fs::write(
+            pac.join("lib.rs"),
+            "pub type PCR = crate::Periph<pcr::RegisterBlock, 0x6009_6000>;",
+        )
+        .expect("a PAC root");
+        fs::write(
+            pac.join("pcr.rs"),
+            r#"
+    #[doc = "0x00 - UART0_CONF"]
+    pub const fn uart0_conf(&self) -> &UART0_CONF {
+    #[doc = "0x08 - OTHER_CONF"]
+    pub const fn other_conf(&self) -> &OTHER_CONF {
+    #[doc = "0x88 - SARADC_CONF"]
+    pub const fn saradc_conf(&self) -> &SARADC_CONF {"#,
+        )
+        .expect("a PAC module");
+        let words = esp_hal_words(
+            &EspHalSources {
+                esp_hal: &esp_hal,
+                metadata_generated: &generated,
+            },
+            &pac,
+            "chip-a",
+        )
+        .expect("the sources resolve");
+        assert_eq!(
+            words.keys().copied().collect::<Vec<_>>(),
+            [0x6009_6000, 0x6009_6088]
+        );
+        assert_eq!(
+            words[&0x6009_6088].iter().collect::<Vec<_>>(),
+            ["SYSTEM.saradc_conf (esp-metadata-generated/_generated_chip-a.rs)"]
+        );
     }
 
     #[test]

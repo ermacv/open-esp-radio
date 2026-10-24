@@ -76,6 +76,11 @@ enum Check {
         /// esp-hal's `src` directory, as the firmware workspace resolves it.
         #[arg(long)]
         esp_hal_src: PathBuf,
+        /// `esp-metadata-generated`'s `src` directory, whose chip file holds
+        /// the clock and reset writers esp-hal expands and its peripheral
+        /// singleton aliases.
+        #[arg(long)]
+        esp_metadata_generated_src: PathBuf,
         /// The chip PAC's `src` directory.
         #[arg(long)]
         pac_src: PathBuf,
@@ -164,12 +169,16 @@ fn run() -> oer_registers_generate::Result<()> {
         Command::Check(Check::SharedWords {
             chip,
             esp_hal_src,
+            esp_metadata_generated_src,
             pac_src,
         }) => {
             let shared = oer_registers_generate::checks::shared_words::check(
                 &ctx.root,
                 &chip,
-                &esp_hal_src,
+                &oer_registers_generate::checks::shared_words::EspHalSources {
+                    esp_hal: &esp_hal_src,
+                    metadata_generated: &esp_metadata_generated_src,
+                },
                 &pac_src,
             )?;
             println!("shared MMIO words of {chip}: {shared} reviewed");

@@ -201,4 +201,24 @@ edition = "2024"
     assert!(oer_registers_generate::Publication::load(&root.join("platform.toml")).is_err());
     write(root, "platform.toml", &source.replace(pac, ""));
     assert!(oer_registers_generate::Publication::load(&root.join("platform.toml")).is_err());
+
+    // A PAC without a raw crate renders every peripheral typed or leaves it
+    // unexposed; a raw crate names its crate.
+    let typed_only = source
+        .replace("raw = \"raw.rs\"\n", "")
+        .replace("crate-name = \"fixture_pac\"\n", "");
+    write(root, "typed.toml", &typed_only);
+    let typed = oer_registers_generate::Publication::load(&root.join("typed.toml"))
+        .expect("a typed-only publication loads");
+    let refused = typed
+        .generate(false)
+        .expect_err("a peripheral neither typed nor unexposed is refused")
+        .to_string();
+    assert!(refused.contains("neither typed nor unexposed"), "{refused}");
+    write(
+        root,
+        "unnamed.toml",
+        &source.replace("crate-name = \"fixture_pac\"\n", ""),
+    );
+    assert!(oer_registers_generate::Publication::load(&root.join("unnamed.toml")).is_err());
 }

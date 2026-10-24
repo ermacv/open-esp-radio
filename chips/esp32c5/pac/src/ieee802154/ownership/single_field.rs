@@ -14,9 +14,9 @@ use super::{
 /// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawRxStatus {
-    pub filter_fail_reason: u8,
-    pub abort_reason: u8,
-    pub state: u8,
+    pub filter_fail_reason: oer_mmio::Bits<4>,
+    pub abort_reason: oer_mmio::Bits<5>,
+    pub state: oer_mmio::Bits<3>,
     pub preamble_match: bool,
     pub sfd_match: bool,
 }
@@ -24,9 +24,9 @@ pub struct RawRxStatus {
 /// Complete `TX_STATUS` observation (`ieee802154_ll_get_tx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawTxStatus {
-    pub state: u8,
-    pub abort_reason: u8,
-    pub security_error: u8,
+    pub state: oer_mmio::Bits<4>,
+    pub abort_reason: oer_mmio::Bits<5>,
+    pub security_error: oer_mmio::Bits<4>,
 }
 
 /// One diagnostic counter field (`ieee802154_ll_get_*_cnt`).
@@ -142,7 +142,7 @@ impl TaskRegisters {
 
     /// `ieee802154_ll_get_freq`.
     #[doc(hidden)]
-    pub fn frequency_code(&self) -> u8 {
+    pub fn frequency_code(&self) -> oer_mmio::Bits<7> {
         self.registers.read_channel().frequency_code()
     }
 
@@ -338,7 +338,7 @@ impl TaskRegisters {
 
     /// `ieee802154_ll_get_security_offset`.
     #[doc(hidden)]
-    pub fn security_payload_offset(&self) -> u8 {
+    pub fn security_payload_offset(&self) -> oer_mmio::Bits<7> {
         self.registers.read_security_control().payload_offset()
     }
 
