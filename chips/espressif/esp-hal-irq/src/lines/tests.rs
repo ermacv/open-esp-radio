@@ -82,3 +82,41 @@ fn a_source_is_silent_or_on_its_level_line() {
         Err(LineError::NoSuchLevel { level: 0 })
     );
 }
+
+#[test]
+fn a_bound_source_routed_to_another_line_is_refused() {
+    // A level-3 source, such as ZB_MAC through the radio view's word,
+    // routed to line 24 while its level's line 18 holds 0x5f.
+    assert_eq!(
+        check_bound(3, line(3), Some(24)),
+        Err(LineError::WrongLine {
+            line: 24,
+            expected: 18
+        })
+    );
+    assert_eq!(check_bound(3, line(3), Some(18)), Ok(()));
+    assert_eq!(check_bound(3, line(3), Some(0)), Ok(()));
+    assert_eq!(check_bound(3, line(3), None), Err(LineError::NoRouteWord));
+    // The level's own line is checked before the route.
+    assert_eq!(
+        check_bound(3, line(2), Some(18)),
+        Err(LineError::WrongControl {
+            line: 18,
+            control: 0x3f,
+            expected: 0x5f
+        })
+    );
+}
+
+#[test]
+fn a_routed_line_without_a_level_has_none() {
+    // Line 24 at its reset control byte 0 holds no level: no level, no
+    // panic, and the route check refuses the line itself.
+    assert_eq!(routed_level(24, |_| Some(0)), None);
+    assert_eq!(routed_level(24, |_| None), None);
+    assert_eq!(routed_level(0, |_| Some(0x5f)), None);
+    assert_eq!(
+        routed_level(18, |line| (line == 18).then_some(0x5f)),
+        Some(3)
+    );
+}

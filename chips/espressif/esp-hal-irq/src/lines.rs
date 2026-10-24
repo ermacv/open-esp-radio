@@ -56,7 +56,8 @@ pub struct LineState {
 pub enum LineError {
     /// The table names a level no vectored line holds.
     NoSuchLevel { level: u8 },
-    /// The source's route word is not one the matrix block declares.
+    /// The source's route word is not one the matrix block declares, or it
+    /// names no CPU line.
     NoRouteWord,
     /// The source is routed to `line`, not to its level's `expected` line.
     WrongLine { line: u8, expected: u8 },
@@ -121,6 +122,28 @@ pub fn check_route(level: u8, routed: u8) -> Result<(), LineError> {
             expected,
         })
     }
+}
+
+/// Check a source bound at `level`: its level's line, in `state`
+/// ([`check_line`]), and its route, `routed` the line its route word names
+/// ([`check_route`]) or `None` when the matrix declares no word for it.
+///
+/// # Errors
+///
+/// The first disagreement.
+pub fn check_bound(level: u8, state: LineState, routed: Option<u8>) -> Result<(), LineError> {
+    check_line(level, state)?;
+    check_route(level, routed.ok_or(LineError::NoRouteWord)?)
+}
+
+/// The level of `routed`, the line a source's route word names: `None` for
+/// a silent source (line zero) and for a line whose control byte, which
+/// `control` reads, holds no level or cannot be read.
+pub fn routed_level(routed: u8, control: impl FnOnce(u8) -> Option<u8>) -> Option<u8> {
+    if routed == 0 {
+        return None;
+    }
+    level_of_control(control(routed)?)
 }
 
 /// The level a line's control byte holds, when it holds one.

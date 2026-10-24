@@ -83,6 +83,24 @@ pub struct EspHalMatrix {
 }
 
 impl EspHalMatrix {
+    /// The CPU line the route word of `source` names, zero for none; `None`
+    /// when no block of this core declares the word or its line is no CPU
+    /// line.
+    fn routed_line(&self, source: Interrupt) -> Option<u8> {
+        match self.words.word(source)? {
+            RouteWord::Line(line) => Some(line),
+            // The IEEE 802.15.4 route view, which the radio's owner holds,
+            // owns the word; esp-hal's read of the same word names its line.
+            // esp-hal, its only writer, stores CPU lines or zero alone.
+            RouteWord::Elsewhere => {
+                match esp_hal::interrupt::mapped_to(self.routes.core(), source) {
+                    None => Some(0),
+                    Some(line) => u8::try_from(line as u32).ok(),
+                }
+            }
+        }
+    }
+
     /// The line state of `line` in this hart's CLIC.
     fn line(&self, line: u8) -> Option<LineState> {
         let clic = self.clic.as_ref()?;
@@ -95,8 +113,8 @@ impl EspHalMatrix {
         })
     }
 
-    /// Check every present entry of the current core against the lines:
-    /// its level's line, and its route when the matrix block declares it.
+    /// Check every present entry of the current core against the lines: its
+    /// level's line and its route, the radio view's word included.
     fn check_lines(&self, table: &Table<Self>) -> Result<(), VerifyError> {
         let current = self.current_core();
         for binding in table
@@ -114,14 +132,7 @@ impl EspHalMatrix {
             let state = self
                 .line(lines::line_of(level))
                 .ok_or(VerifyError::NoLineController { core: current })?;
-            lines::check_line(level, state).map_err(line)?;
-            match self.words.word(binding.source) {
-                Some(RouteWord::Line(routed)) => lines::check_route(level, routed).map_err(line)?,
-                // Its route is the radio view's word, which the generic
-                // check reads through esp-hal.
-                Some(RouteWord::Elsewhere) => {}
-                None => return Err(line(LineError::NoRouteWord)),
-            }
+            lines::check_bound(level, state, self.routed_line(binding.source)).map_err(line)?;
         }
         Ok(())
     }
@@ -215,27 +226,20 @@ impl Matrix for EspHalMatrix {
         self.routes.disable(source);
     }
 
-    /// The level of the line the source is routed to, from the typed route
-    /// word and the line's control byte; `None` for a silent source and
-    /// for a line that holds no level, which the line check refuses.
+    /// The level of the line the source is routed to, from its route word
+    /// and the line's control byte in the typed CLIC; `None` for a silent
+    /// source and for a line that holds no level, which the line check
+    /// refuses.
     fn routed(&self, core: Cpu, source: Interrupt) -> Option<Priority> {
         assert_eq!(
             core,
             self.routes.core(),
             "the matrix owner belongs to another core"
         );
-        match self.words.word(source)? {
-            RouteWord::Line(0) => None,
-            RouteWord::Line(line) => {
-                let level = lines::level_of_control(self.line(line)?.control)?;
-                PRIORITIES.get(usize::from(level).checked_sub(1)?).copied()
-            }
-            // The radio view owns the word; esp-hal reads it until the table
-            // writes the routes.
-            RouteWord::Elsewhere => {
-                esp_hal::interrupt::mapped_to(core, source).map(|line| line.priority())
-            }
-        }
+        lines::routed_level(self.routed_line(source)?, |line| {
+            self.line(line).map(|state| state.control)
+        })
+        .and_then(|level| PRIORITIES.get(usize::from(level).checked_sub(1)?).copied())
     }
 
     fn slot(&self, source: Interrupt) -> usize {
