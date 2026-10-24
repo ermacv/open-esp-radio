@@ -10,6 +10,7 @@ use oer_analysis_riscv_model::{
 };
 use std::io::Write;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
+mod chip_facts;
 mod command_tree;
 
 #[derive(Clone, Copy, Default, ValueEnum)]
@@ -1017,7 +1018,9 @@ fn parse_input(value: OsString) -> Result<Input> {
         let (chip, id) = pin
             .split_once('/')
             .ok_or_else(|| invalid("expected pin:CHIP/ID"))?;
-        let path = oer_tool_pins::artifacts::ensure(&root()?, chip, id)
+        let root = root()?;
+        chip_facts::check(&root, chip)?;
+        let path = oer_tool_pins::artifacts::ensure(&root, chip, id)
             .map_err(|error| invalid(&format!("pin {pin}: {error}")))?;
         return Ok(Input { role, path });
     }
