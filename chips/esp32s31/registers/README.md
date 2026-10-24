@@ -22,6 +22,7 @@ analysis read this model; neither owns a second copy.
 | `published/radio.bindings.toml` | Generated binding index |
 | `publication/registers.toml` | Source-only publication manifest |
 | `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause register the host reads through JTAG after a power cycle; SVD and `published/platform.bindings.toml` only, no PAC (ESP-HAL owns the block at runtime) |
+| `model/peripherals/{efuse,trng,lp-periclkrst-rng}.toml`, `model/platform/lp-aon-hpcore1-reset-cause.toml` | Reviewed fragments of the eFuse MAC words, the TRNG read side, the TRNG clock and reset, and HP core 1's reset cause; no device model lists them yet, so no publication renders them |
 
 The generic generator is
 [`tools/registers/model`](../../../tools/registers/model/README.md).

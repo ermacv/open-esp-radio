@@ -160,3 +160,23 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7:
 [[sources]]
 id = "IDF_S31_TSENS_POWER_LIFECYCLE"
 description = "Pinned ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7; linked phy_override.c::phy_set_tsens_power dispatches to sar_tsens_ctrl.c temperature power acquire/release. Last release disables TSENS, its clock and SAR-I2C power. First acquire asserts PERIF_I2C reset, settles 1 us, enables its power and releases reset, then enables/resets TSENS and powers it. sar_tsens_ctrl.c sha256 212a4a717ff4ca1cbe2daebb3d99030d321966fa33e5a713e5a22965a1ab1e4e; S31 hal/regi2c_ctrl_ll.h sha256 590a4548f84d2ba30fc8e77d7a6253e913f8553115fba10238cd406587a702f7."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_EFUSE_MAC"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/efuse_reg.h sha256 066c77f8cb869c9a0c2c0585beecca73c60bfd20c7fb4eba2fc4efdeb93fe6c6 (lines 1239-1356) places the read-only EFUSE_RD_MAC_SYS0 at DR_REG_EFUSE_BASE + 0x50 (MAC_0, bits 31:0), RD_MAC_SYS1 at + 0x54 (MAC_1 bits 15:0, MAC_EXT bits 31:16) and RD_MAC_SYS3 at + 0x5c (MAC_RESERVED_2 bits 17:0 for internal debugging, WAFER_VERSION_MINOR 21:18, WAFER_VERSION_MAJOR 23:22, DISABLE_WAFER_VERSION_MAJOR 24, DISABLE_BLK_VERSION_MAJOR 25, BLK_VERSION_MINOR 28:26, BLK_VERSION_MAJOR 30:29, PSRAM_CAP 31), all reset zero; reg_base.h sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d sets DR_REG_EFUSE_BASE to 0x20715000. components/efuse/esp32s31/esp_efuse_table.c lines 818-825 list the MAC_FACTORY octets from block-1 bit 40 down to bit 0."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_TRNG"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/trng_reg.h sha256 87132234449ca62635625aa8b43ac91a7ecab810ba3016c483d32457dbb4d494. CONF at + 0x0: NOISE_SOURCE_SEL 4:0, NOISE_POS_SEL 9:5, REPETITION_VALUE_C 18:10, ADPATIVE_VALUE_C 27:19 (R/W), FIFO_RESET 28 (WT), RANDOM_OUTPUT_MODE 29, NOISE_CRC_EN 30 (R/W, reset one), SAMPLE_ENABLE 31. DEBUG_CONF at + 0x4: STARTUP_TEST_START 0 (WT), STARTUP_TEST_LIMIT 16:1 (R/W, reset 1024), DEBUG_DATA 24:17 (RO), DEBUG_MODE 25 (R/W), HEALTH_TEST_ERROR_CODE 28:26 (RO), HEALTH_TEST_END 29 (WT), HEALTH_TEST_BYPASS 30 (R/W). INT_RAW at + 0x2c: ERROR_INT_RAW bit 0 (R/WTC/SS). trng_struct.h sha256 22ef399f5150abef917b7195248861a9456dc319e88ffc1fc1819052b02892e2 declares DEBUG_CONF bit 31 (reserved_31) and INT_RAW bits 31:1 (reserved_1) reserved. CRC_SYNC_DATA at + 0x48: SW_CRC_RANDOM_DATA_SYNC 31:0 (RO). reg_base.h sets DR_REG_TRNG_BASE to 0x20814000."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/lp_peri_clkrst_reg.h sha256 01c0a0541a373bf3aef7f456d4eabb1b496094fb3c83b79c9f0cde4b68ee0205 (lines 321-338) places LP_PERICLKRST_RNG_CTRL at DR_REG_LP_PERICLKRST_BASE + 0x3c with LP_RNG_CLK_EN bit 30 (R/W, reset one) and LP_RNG_RST_EN bit 31 (R/W, reset zero); lp_peri_clkrst_struct.h sha256 4f7c47b409bab983fe6e7723b3813f9ed51fb823b446491ddcab5aee14a249e0 declares bits 29:0 reserved_0. reg_base.h sets DR_REG_LP_PERICLKRST_BASE to 0x20710000."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_LP_CLKRST_HPCORE1"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/lp_clkrst_reg.h sha256 0f545692ddb5bc4fd5fee64752871425cd0012090ee203701978bb654874f211 (lines 341-388) defines LP_AONCLKRST_HPCORE1_RESET_CAUSE_REG at DR_REG_LP_AONCLKRST_BASE + 0x34: read-only HPCORE1_RESET_FLAG bit 0 and HPCORE1_RESET_CAUSE bits 6:1 with the codes of soc/reset_reasons.h, and the write-trigger HPCORE1_RESET_CAUSE_CLR bit 30 and HPCORE1_RESET_FLAG_CLR bit 31; lp_clkrst_struct.h sha256 c20b1f7074c95a46e9c12058f012b42ab334e8f5accfdc1b1fb80387a15b31d6 declares bits 29:7 reserved_7."
+
+[[sources]]
+id = "ROM_REV0_RESET_CAUSE_READ"
+description = "ESP32-S31 rev0 ROM (esp-rom-elfs/20260528, pin esp32s31/rom), sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87, read with cargo blobray function-records and register-accesses. The complete reset-reason getter at 0x2f805938 (seven instructions) loads 0x20701030 for core argument zero and 0x20701034 for any other, shifts right by one and masks with 63: exactly bits 6:1 of the selected word reach the returned value and no other bit is read."
