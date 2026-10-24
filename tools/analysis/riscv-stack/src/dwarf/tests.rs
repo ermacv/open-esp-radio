@@ -437,6 +437,82 @@ fn noreturn_does_not_inherit_origins_or_specifications_and_conflicts_stay_false(
     }
 }
 
+#[test]
+fn a_return_follows_origins_and_specifications_and_says_unknown_where_dwarf_does_not() {
+    let mut fixture = Fixture::new();
+    let raw_waker = fixture.ty("RawWaker");
+    let declaration = fixture.die(
+        gimli::DW_TAG_subprogram,
+        false,
+        &[reference_attr(gimli::DW_AT_type, raw_waker)],
+    );
+    let abstract_ = fixture.die(
+        gimli::DW_TAG_subprogram,
+        false,
+        &[reference_attr(gimli::DW_AT_specification, declaration)],
+    );
+    let concrete = |fixture: &mut Fixture, pc: u32, extra: &[Attr]| {
+        let mut attrs = range(pc, pc + 4).to_vec();
+        attrs.extend_from_slice(extra);
+        fixture.die(gimli::DW_TAG_subprogram, false, &attrs);
+    };
+    // An out-of-line copy of an inlined function: abstract origin, then
+    // specification.
+    concrete(
+        &mut fixture,
+        100,
+        &[reference_attr(gimli::DW_AT_abstract_origin, abstract_)],
+    );
+    concrete(
+        &mut fixture,
+        120,
+        &[reference_attr(gimli::DW_AT_specification, declaration)],
+    );
+    concrete(
+        &mut fixture,
+        140,
+        &[reference_attr(gimli::DW_AT_type, raw_waker)],
+    );
+    // No return type in a unit that describes types: nothing.
+    concrete(&mut fixture, 160, &[]);
+    // A present origin that names no entry does not fall through.
+    concrete(
+        &mut fixture,
+        180,
+        &[
+            number(gimli::DW_AT_abstract_origin, gimli::DW_FORM_data4, 1),
+            reference_attr(gimli::DW_AT_specification, declaration),
+        ],
+    );
+    let cycle = fixture.info.len();
+    concrete(
+        &mut fixture,
+        200,
+        &[reference_attr(gimli::DW_AT_abstract_origin, cycle)],
+    );
+    // Two descriptions of one entry that disagree.
+    concrete(
+        &mut fixture,
+        220,
+        &[reference_attr(gimli::DW_AT_type, raw_waker)],
+    );
+    concrete(&mut fixture, 220, &[]);
+    let (dwarf, _) = read_fixture(&fixture.finish(), DebugMetadata::Standard);
+    for pc in [100, 120, 140] {
+        assert_eq!(dwarf.returned(pc), Returned::Type("RawWaker"), "{pc}");
+    }
+    assert_eq!(dwarf.returned(160), Returned::Nothing);
+    for pc in [180, 200, 220, 240] {
+        assert_eq!(dwarf.returned(pc), Returned::Unknown, "{pc}");
+    }
+    // A unit with line tables only describes no type: its functions'
+    // returns are unknown.
+    let mut untyped = Fixture::new();
+    concrete(&mut untyped, 100, &[]);
+    let (dwarf, _) = read_fixture(&untyped.finish(), DebugMetadata::Standard);
+    assert_eq!(dwarf.returned(100), Returned::Unknown);
+}
+
 fn local_image(start: u32, register: u8, count: usize) -> Rc<[u8]> {
     let mut fixture = Fixture::new();
     let ty = fixture.ty("word");

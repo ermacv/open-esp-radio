@@ -57,7 +57,7 @@ pub use cha::{
     function_pointer_resolutions, typed_function_pointer_resolutions,
 };
 pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
-pub use dwarf::{DebugMetadata, Dwarf, read as read_debug};
+pub use dwarf::{DebugMetadata, Dwarf, Returned, read as read_debug};
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
 pub use oer_analysis_riscv_analysis::TrapSemantics;
@@ -85,7 +85,7 @@ pub fn image_resolutions<'a>(
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
-    let vtable = waker_vtable(image, dwarf, analysis, control)?;
+    let vtable = waker_vtable(image, dwarf, types, analysis, keep, control)?;
     let mut resolutions = waker_resolutions(analysis, dwarf, vtable.as_ref(), keep, control)?;
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;

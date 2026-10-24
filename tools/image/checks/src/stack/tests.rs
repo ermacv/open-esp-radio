@@ -843,7 +843,7 @@ fn a_bound_is_proven_only_without_an_assumption() {
         report.contains("allocated from the proven bound plus"),
         "{report}"
     );
-    let (_directory, policy, image) = resolved_through(Fact::WakerVtables);
+    let (_directory, policy, image) = resolved_through(Fact::FieldType);
     let mut audit = audit_of(&policy, &image);
     audit.size_source = Some(crate::linker::task_stack::SizeSource::Bound);
     let report = audit.render();
@@ -865,10 +865,12 @@ fn the_site_report_lists_each_taken_site_with_its_fact_and_assumption() {
     let site = TEXT + 4 * (6 + 3 + 3);
     for (fact, kind, assumptions) in [
         (
-            Fact::WakerVtables,
-            sites::Kind::WakerVtables,
+            Fact::FieldType,
+            sites::Kind::FieldType,
             vec![Assumption::ExecutorInvariant],
         ),
+        // The waker vtable census is complete: its sites are proven.
+        (Fact::WakerVtables, sites::Kind::WakerVtables, vec![]),
         (Fact::InterruptTable, sites::Kind::InterruptTable, vec![]),
     ] {
         let (_directory, policy, image) = resolved_through(fact);

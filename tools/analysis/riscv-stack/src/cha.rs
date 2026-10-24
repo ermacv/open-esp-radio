@@ -347,6 +347,99 @@ impl TypeFacts {
         Ok(false)
     }
 
+    /// The address of every object of the type `name` that a static holds,
+    /// whole or as a member or array element at any depth (never behind a
+    /// pointer), whether its section has contents or not.
+    pub(crate) fn static_objects(
+        &self,
+        name: &str,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<Vec<u32>> {
+        #[allow(clippy::too_many_arguments)]
+        fn visit(
+            facts: &TypeFacts,
+            id: usize,
+            at: u64,
+            name: &str,
+            depth: usize,
+            out: &mut Vec<u64>,
+            keep: &mut Ledger<'_>,
+            control: &mut dyn RunControl,
+        ) -> Result<()> {
+            control.checkpoint(1)?;
+            if depth > 32 {
+                return Ok(());
+            }
+            let Some((_, ty)) = facts.resolve(id) else {
+                return Ok(());
+            };
+            if ty.name.as_deref() == Some(name) {
+                return keep.push(out, at, control);
+            }
+            if ty.tag == gimli::DW_TAG_array_type {
+                if let Some(element) = ty.target
+                    && let Some(stride) = facts.size(element).filter(|size| *size != 0)
+                    && let Some(size) = ty.size
+                {
+                    for index in 0..size / stride {
+                        visit(
+                            facts,
+                            element,
+                            at + index * stride,
+                            name,
+                            depth + 1,
+                            out,
+                            keep,
+                            control,
+                        )?;
+                    }
+                }
+                return Ok(());
+            }
+            if ty.tag == gimli::DW_TAG_pointer_type || ty.tag == gimli::DW_TAG_reference_type {
+                return Ok(());
+            }
+            for &(offset, member) in &ty.members {
+                visit(
+                    facts,
+                    member,
+                    at + offset,
+                    name,
+                    depth + 1,
+                    out,
+                    keep,
+                    control,
+                )?;
+            }
+            Ok(())
+        }
+        let mut addresses = Vec::new();
+        for &(start, bytes, offset, ty) in &self.globals {
+            control.checkpoint(1)?;
+            let mut offsets = Vec::new();
+            visit(self, ty, 0, name, 0, &mut offsets, keep, control)?;
+            for at in offsets {
+                // A piece of a variable holds the bytes from its offset on.
+                let Some(within) = at.checked_sub(offset) else {
+                    continue;
+                };
+                if bytes.is_some_and(|bytes| within >= bytes) {
+                    continue;
+                }
+                if let Some(address) = u32::try_from(within)
+                    .ok()
+                    .and_then(|within| start.checked_add(within))
+                {
+                    keep.push(&mut addresses, address, control)?;
+                }
+            }
+        }
+        addresses.sort_unstable();
+        addresses.dedup();
+        Ok(addresses)
+    }
+
     /// Embassy macros erase a task pool to a `TaskPoolHolder` whose size
     /// and alignment come from `TaskPool<F, N>` at compile time. Recovering
     /// that erased layout rests on the executor invariant. The image must
