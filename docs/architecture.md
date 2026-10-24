@@ -116,13 +116,19 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 ## Hardware
 
-- **Two roots, split by phase.** esp-hal (the owner's fork) owns the SoC and
-  everything before the radio handoff: boot, clocks, interrupts, PSRAM,
-  flash, console, time. Our HAL owns the radio blocks after the handoff,
-  taken through a safe constructor that consumes esp-hal's radio singletons.
-  Each word both sides can write has one runtime writer, listed in
+- **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
+  owns parts of the SoC before the radio handoff: boot, clocks, interrupt
+  dispatch, PSRAM, flash, console, time. esp-hal, esp-pacs, esp-riscv-rt and
+  esp-metadata are used only at the sites listed in
+  `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use
+  elsewhere, and new platform code goes into our HAL and PAC crates. Each
+  domain that moves to our code removes its lines. Our HAL owns the radio blocks after the
+  handoff, taken through a safe constructor that consumes esp-hal's radio
+  singletons. Each word both sides can write has one runtime writer, listed in
   `chips/esp32s31/registers/shared-words.toml` and checked by `cargo
-  registers check shared-words`.
+  registers check shared-words`. `embassy-sync`, `embassy-futures`,
+  `embassy-net` and `embassy-time` stay; `embassy-executor` is being replaced
+  by our executor.
 - **Register model.** Registers, analog-I2C bytes (a separate space addressed
   by block and index) and the memory the hardware reads and writes (DMA
   descriptors, the RX control prefix, TX descriptor words, BLE exchange
