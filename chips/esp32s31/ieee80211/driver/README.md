@@ -25,6 +25,16 @@ DMA rings, keys and the P3/P2 interrupt path. Capabilities and their state:
   through the abandonment protocol in its own context, and the installation
   stays quarantined until reset. Packet-number exhaustion is a typed refusal
   before backend handoff. No retry after a hardware TX timeout.
+- **Protocol RX.** The port validates protected Data through the MAC's CCMP
+  validator, retains its public header and PN, and removes the verified MIC
+  trailer before protocol delivery. Integrity is hardware evidence only after
+  that validation; replay admission remains in the protocol. The borrowed view
+  keeps its original DMA lease and on-air length. Raw monitor normalization
+  does not assert cipher integrity.
+  The CCMP validators execute from `.hot.text.open_radio_rx_hot` in SRAM on
+  every protected protocol RX frame. This validation path has a 1056-byte
+  additional SRAM placement budget; other SRAM sections and allocated stacks
+  retain their existing limits.
 - **GTK replacement.** The station keeps one physical group-key slot. A key
   table write failure poisons the port even when an internal rollback restores
   the old material; no success terminal or reusable old GTK is returned.

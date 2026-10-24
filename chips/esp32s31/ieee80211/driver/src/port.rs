@@ -44,6 +44,8 @@ mod keys;
 mod lifecycle;
 mod phase;
 mod placement;
+#[cfg(any(target_arch = "riscv32", test))]
+mod receive;
 mod settings;
 use oer_sync::PriorityWaker;
 use placement::Prepared;

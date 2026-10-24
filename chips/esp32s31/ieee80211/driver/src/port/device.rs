@@ -52,7 +52,7 @@ pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPo
 pub struct StagedReceive<const Q: usize, const RB: usize>(NetworkRxFrame<'static, Q, RB>);
 impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     fn normalized(&self) -> Result<NormalizedRxFrame<'_>, RxError> {
-        self.0.normalized(W1_INGRESS)
+        super::receive::normalize(self.0.segment(), W1_INGRESS)
     }
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
