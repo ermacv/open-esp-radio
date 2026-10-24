@@ -61,6 +61,8 @@ pub(super) struct PlacedFunction {
 pub(super) struct ContextCode {
     pub hart: u32,
     pub level: u32,
+    /// The level's bound root: its worst trap entry's handler.
+    pub root: u32,
     /// The level's class ([`super::classes::context_class`]); `None` for the
     /// exception.
     pub class: Option<Class>,
@@ -171,6 +173,7 @@ impl CodePlacement {
                 contexts.push(ContextCode {
                     hart: hart.core,
                     level: level.level,
+                    root: level.bound.root,
                     class,
                     strict: reached,
                     tasks: task_code,

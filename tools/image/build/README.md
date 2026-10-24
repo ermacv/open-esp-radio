@@ -46,7 +46,8 @@ plus its policy's minimum free bytes, by the image linker (see the
 the size. A policy that also sets `allocation_bytes` is an error. Any other
 value of the key is an error. HIL retains its
 `Product`/`Diagnostic` interrupt policy according to image class: diagnostic
-images report large unexcepted frames and strict/P2 code placement violations as warnings; other images
+images report large unexcepted frames and strict/executor-task code placement violations and breaches of the
+hardware class as warnings; other images
 enforce them.
 
 The chip profile's boot kind selects the pipeline:
@@ -245,7 +246,7 @@ in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
 Each hart's exception bound (including its entry frame) plus the largest
 own function frame reached at any of its levels, including the exception
-and P2 tasks, must fit that hart's `irq-stack-guard-bytes` in the chip's
+and executor tasks, must fit that hart's `irq-stack-guard-bytes` in the chip's
 `chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024; C5 has 4096.
 The image linker exports `__runtime_cpu{hart}_irq_stack_guard_bytes` from
 this contract; the runtime reads that absolute symbol to program its trigger.
@@ -270,10 +271,13 @@ the deepest path still counts: reachability is the union of `Bound::reached`
 at every level and the exception. `Required::Product` rejects a guard violation;
 `Required::Diagnostic` warns, also naming any function whose frame is unknown.
 Its placement summary lines separate strict code in cached memory by hart/level
-from P2 task code in PSRAM and name the task roots. The task boundary comes from
+from executor task code in PSRAM and name the task roots. A level's class is
+its table entries' (`oer_interrupt_table::Class`): the level of an `Executor`
+entry is the executor's, every other level is hardware. Only an executor's
+level has a task boundary; it comes from
 `TaskPolls`/`NoTasks` resolution facts through `Analysis::reached_cut`; each level
 uses the same interrupt routes as its stack bound. Strict code, including the
-exception and panic paths, must lie in SRAM/ROM; P2 tasks may also use PSRAM,
+exception and panic paths, must lie in SRAM/ROM; executor tasks may also use PSRAM,
 while cached flash fails on both sides under `Required::Product`.
 `Required::Diagnostic` reports these placement violations and code outside
 the permitted regions as warnings, one per kind and hart/level, with function

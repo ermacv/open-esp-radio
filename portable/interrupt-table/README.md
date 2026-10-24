@@ -1,7 +1,7 @@
 # oer-interrupt-table
 
 Each image's static table of its peripheral interrupt sources: for every
-source its handler, its level and its core, declared once per image with
+source its handler, its level, its core and its handler's class, declared once per image with
 `interrupt_table!` (a chip's platform wraps it with its types, such as
 `oer_espressif_staged_runtime::interrupt_table!`).
 
@@ -17,8 +17,20 @@ For each entry the macro defines:
   core, or for a token whose source the table does not list so. `Entry` is an
   `unsafe` trait and the token's constructor an `unsafe fn`: only the macro
   creates a token;
+- for an `Exempt(VIOLATION, "reason")` entry, the reason's bytes exported as
+  `__OER_INTERRUPT_EXEMPT_<SOURCE>` for the image gate's report;
 - with `#[cfg(...)]` before its doc comment, nothing at all in a build that
   leaves the entry out: its table element has no handler (a zero word).
+
+Each entry ends with its `Class`: `Hardware` (capture, acknowledge, latch,
+raise a signal; strict code), `Executor` (an executor's interrupt: strict up
+to its task polls) or `Exempt(VIOLATION, "reason")`: a hardware handler that
+breaks the one named rule, `ExecutorLevel` (it sits on its core's executor
+level) or `WakerCall` (it calls a waker). The table fails to compile when two
+`Executor` entries share a level and core, a `Hardware` or
+`Exempt(WakerCall, ..)` entry sits on an executor's level of its core, or an
+`Exempt(ExecutorLevel, ..)` entry does not; the image gate checks each
+class's code and waives only the named rule.
 
 The table is `INTERRUPT_TABLE`, a slice of `#[repr(C)]` bindings exported as
 `__OER_INTERRUPT_TABLE` for the tools that read the image; the image hands it

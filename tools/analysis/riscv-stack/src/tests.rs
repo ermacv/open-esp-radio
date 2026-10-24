@@ -1363,6 +1363,7 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
             (25, 1, 0, 0, Some(TEXT)),
             (67, 8, 1, 1, None),
             (68, 8, 2, 1, None),
+            (69, 8, 3, 1, None),
         ],
         true,
     );
@@ -1387,7 +1388,14 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
             TableEntry {
                 source: 68,
                 level: 8,
-                class: Class::Exempt,
+                class: Class::Exempt(Violation::ExecutorLevel),
+                core: 1,
+                handler: None
+            },
+            TableEntry {
+                source: 69,
+                level: 8,
+                class: Class::Exempt(Violation::WakerCall),
                 core: 1,
                 handler: None
             },
@@ -1397,10 +1405,10 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
 
 #[test]
 fn an_unknown_handler_class_fails_the_table() {
-    let elf = table_image(&[(25, 1, 3, 0, Some(TEXT))], true);
+    let elf = table_image(&[(25, 1, 4, 0, Some(TEXT))], true);
     let error = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap_err();
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
-    assert!(error.to_string().contains("no handler class 3"), "{error}");
+    assert!(error.to_string().contains("no handler class 4"), "{error}");
 }
 
 #[test]

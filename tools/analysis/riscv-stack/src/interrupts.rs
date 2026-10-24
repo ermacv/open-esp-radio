@@ -36,8 +36,17 @@ pub enum Class {
     Hardware,
     /// An executor's interrupt: strict up to its task polls.
     Executor,
-    /// A hardware handler on the level of its core's executor.
-    Exempt,
+    /// A hardware handler that breaks the one named rule.
+    Exempt(Violation),
+}
+
+/// The one hardware rule an exempt entry breaks.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Violation {
+    /// It sits on the level of its core's executor.
+    ExecutorLevel,
+    /// It calls a waker.
+    WakerCall,
 }
 
 impl Class {
@@ -45,7 +54,8 @@ impl Class {
         match value {
             0 => Some(Self::Hardware),
             1 => Some(Self::Executor),
-            2 => Some(Self::Exempt),
+            2 => Some(Self::Exempt(Violation::ExecutorLevel)),
+            3 => Some(Self::Exempt(Violation::WakerCall)),
             _ => None,
         }
     }
@@ -56,7 +66,8 @@ impl std::fmt::Display for Class {
         out.write_str(match self {
             Self::Hardware => "hardware",
             Self::Executor => "executor",
-            Self::Exempt => "exempt",
+            Self::Exempt(Violation::ExecutorLevel) => "exempt (shares its core's executor level)",
+            Self::Exempt(Violation::WakerCall) => "exempt (calls a waker)",
         })
     }
 }

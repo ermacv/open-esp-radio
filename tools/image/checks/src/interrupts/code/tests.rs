@@ -240,6 +240,7 @@ fn diagnostic_warnings_group_functions_by_violation_and_context() {
     let mut other_context = ContextCode {
         hart: 1,
         level: 1,
+        root: 0,
         class: Some(Class::Hardware),
         panics: Vec::new(),
         strict: BTreeSet::from([shared]),

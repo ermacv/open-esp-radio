@@ -15,7 +15,7 @@
 /// Each entry names the token field, the token type, the `Interrupt` source,
 /// the handler (`fn()`), the `Priority`, the `Cpu` and the handler's class
 /// (`oer_interrupt_table::Class`: `Hardware`, `Executor` or
-/// `Exempt("reason")`), which the image gate checks. The macro defines the
+/// `Exempt(VIOLATION, "reason")`), which the image gate checks. The macro defines the
 /// source's handler symbol in SRAM, which the source's vector slot holds from
 /// the link on, the token type, and `Interrupts::take` that hands out each
 /// token once. The image needs `esp-hal` as a dependency.

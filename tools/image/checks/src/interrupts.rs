@@ -10,8 +10,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use oer_analysis_riscv_stack::{
-    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, interrupt_table,
-    parse_summaries, trap_entry, vector_table,
+    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, Violation,
+    interrupt_table, parse_summaries, trap_entry, vector_table,
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -24,7 +24,7 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
 mod classes;
-pub use classes::{Breach, Finding};
+pub use classes::{Breach, CachedData, Finding};
 mod code;
 pub use code::CodePlacement;
 pub(crate) mod allocation;
@@ -83,6 +83,12 @@ pub struct InterruptStacks {
     /// What the code of hardware levels and exempt entries does that the
     /// hardware class forbids.
     pub hardware: Vec<Finding>,
+    /// Breaches of the hardware class that only an exempt entry's own
+    /// handler reaches, and which its named violation waives: reported.
+    pub waived: Vec<Finding>,
+    /// Cached data the strict code of each level and exempt entry
+    /// references: reported, not gated.
+    pub strict_data: Vec<CachedData>,
 }
 
 /// What the code every interrupt level reaches (its handlers and what they
@@ -384,13 +390,14 @@ impl InterruptStacks {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "classes: {} entries, {} misplaced, {} hardware-class breaches",
+            "classes: {} entries, {} misplaced, {} hardware-class breaches, {} waived",
             self.table
                 .iter()
                 .filter(|entry| entry.handler.is_some())
                 .count(),
             self.misplaced.len(),
-            self.hardware.len()
+            self.hardware.len(),
+            self.waived.len()
         );
         for entry in self.table.iter() {
             let Some(handler) = entry.handler else {
@@ -407,7 +414,7 @@ impl InterruptStacks {
             );
             match self.exemptions.iter().find(|(slot, _)| *slot == handler) {
                 Some((_, reason)) => {
-                    let _ = writeln!(out, " (shares its core's executor level): {reason}");
+                    let _ = writeln!(out, ": {reason}");
                 }
                 None => out.push('\n'),
             }
@@ -415,15 +422,40 @@ impl InterruptStacks {
         for problem in &self.misplaced {
             let _ = writeln!(out, "  misplaced: {problem}");
         }
-        for finding in &self.hardware {
+        for (prefix, findings) in [("", &self.hardware), ("waived: ", &self.waived)] {
+            for finding in findings {
+                let _ = writeln!(
+                    out,
+                    "  {prefix}{}: {} at {:#010x} {}",
+                    finding.subject,
+                    self.name(finding.function),
+                    finding.site,
+                    finding.breach
+                );
+            }
+        }
+        for data in &self.strict_data {
+            if data.references == 0 {
+                continue;
+            }
             let _ = writeln!(
                 out,
-                "  {}: {} at {:#010x} {}",
-                finding.subject,
-                self.name(finding.function),
-                finding.site,
-                finding.breach
+                "strict cached data of {} (reported only): {} references, {} writable objects, {} \
+                 read-only objects",
+                data.subject,
+                data.references,
+                data.writable.len(),
+                data.read_only.len()
             );
+            for (kind, objects) in [("writable", &data.writable), ("read-only", &data.read_only)] {
+                if !objects.is_empty() {
+                    let _ = writeln!(
+                        out,
+                        "    {kind}: {}",
+                        objects.iter().cloned().collect::<Vec<_>>().join(", ")
+                    );
+                }
+            }
         }
         let panics: usize = self
             .code_placement
@@ -794,37 +826,79 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &mut control,
     )?;
     let parsed = oer_analysis_elf::Elf::parse(elf)?;
-    let cached_data = |reached: &BTreeSet<u32>| -> Result<Vec<(u32, u32, u64)>> {
-        let code: Vec<_> = parsed
-            .sections()
-            .filter(|section| section.executable)
-            .collect();
-        Ok(
+    let code_sections: Vec<_> = parsed
+        .sections()
+        .filter(|section| section.executable)
+        .collect();
+    let strict_data_of = |subject: String, reached: &BTreeSet<u32>| -> Result<CachedData> {
+        let references: Vec<_> =
             cached_hook_references(&parsed, functions, reached, &contract.memory)?
                 .into_iter()
-                .filter(|(_, _, target)| !code.iter().any(|section| section.contains(*target)))
-                .collect(),
-        )
+                .filter(|(_, _, target)| {
+                    !code_sections
+                        .iter()
+                        .any(|section| section.contains(*target))
+                })
+                .collect();
+        Ok(classes::cached_data(subject, &parsed, &references))
     };
     let mut hardware = Vec::new();
+    let mut waived = Vec::new();
+    let mut strict_data = Vec::new();
     for context in &mut code_placement.contexts {
         context.panics = handler_code(analysis, &context.strict, names, &contract.memory).panics;
-        if context.class == Some(Class::Hardware) {
-            let resolutions = inputs.resolutions_for(analysis, context.hart, context.level);
-            hardware.extend(classes::hardware_code(
-                &context.to_string(),
-                analysis,
-                &context.strict,
-                &resolutions,
-                &cached_data(&context.strict)?,
-            ));
+        if context.class.is_none() {
+            continue;
         }
+        strict_data.push(strict_data_of(context.to_string(), &context.strict)?);
+        if context.class != Some(Class::Hardware) {
+            continue;
+        }
+        let resolutions = inputs.resolutions_for(analysis, context.hart, context.level);
+        let found = classes::hardware_code(
+            &context.to_string(),
+            analysis,
+            &context.strict,
+            &resolutions,
+        );
+        if found.is_empty() {
+            continue;
+        }
+        // Who reaches each breach: the dispatch path alone (without the
+        // table's handlers), and each entry's handler.
+        let prefix = analysis.reached_cut(
+            context.root,
+            inputs.resolutions,
+            &BTreeSet::new(),
+            &mut keep,
+            &mut control,
+        )?;
+        let mut entries = Vec::new();
+        for entry in table
+            .iter()
+            .filter(|entry| entry.core == context.hart && entry.level == context.level)
+        {
+            if let Some(handler) = entry.handler {
+                entries.push((
+                    entry.class,
+                    analysis.reached_cut(
+                        handler,
+                        &resolutions,
+                        &BTreeSet::new(),
+                        &mut keep,
+                        &mut control,
+                    )?,
+                ));
+            }
+        }
+        let (failed, exempt) = classes::waive(found, &prefix, &entries);
+        hardware.extend(failed);
+        waived.extend(exempt);
     }
     let exemptions = exemption_reasons(&parsed, &table, &interrupts.table_exemption_prefix)?;
-    for entry in table
-        .iter()
-        .filter(|entry| entry.class == Class::Exempt && entry.handler.is_some())
-    {
+    for entry in table.iter().filter(|entry| {
+        entry.class == Class::Exempt(Violation::ExecutorLevel) && entry.handler.is_some()
+    }) {
         let Some(handler) = entry.handler else {
             continue;
         };
@@ -836,21 +910,22 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
             &mut keep,
             &mut control,
         )?;
+        let subject = format!(
+            "exempt {} on hart {} P{}",
+            names
+                .get(&handler)
+                .cloned()
+                .unwrap_or_else(|| format!("{handler:#010x}")),
+            entry.core,
+            entry.level
+        );
         hardware.extend(classes::hardware_code(
-            &format!(
-                "exempt {} on hart {} P{}",
-                names
-                    .get(&handler)
-                    .cloned()
-                    .unwrap_or_else(|| format!("{handler:#010x}")),
-                entry.core,
-                entry.level
-            ),
+            &subject,
             analysis,
             &reached,
             &resolutions,
-            &cached_data(&reached)?,
         ));
+        strict_data.push(strict_data_of(subject, &reached)?);
     }
     let misplaced = classes::misplaced(&table);
     let hook = names
@@ -896,6 +971,8 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         misplaced,
         exemptions,
         hardware,
+        waived,
+        strict_data,
     })
 }
 
@@ -907,7 +984,10 @@ fn exemption_reasons(
     prefix: &str,
 ) -> Result<Vec<(u32, String)>> {
     let mut reasons = Vec::new();
-    for entry in table.iter().filter(|entry| entry.class == Class::Exempt) {
+    for entry in table
+        .iter()
+        .filter(|entry| matches!(entry.class, Class::Exempt(_)))
+    {
         let Some(handler) = entry.handler else {
             continue;
         };
@@ -1182,6 +1262,8 @@ mod tests {
             misplaced: Vec::new(),
             exemptions: Vec::new(),
             hardware: Vec::new(),
+            waived: Vec::new(),
+            strict_data: Vec::new(),
         }
     }
 
@@ -1232,6 +1314,8 @@ mod tests {
             misplaced: Vec::new(),
             exemptions: Vec::new(),
             hardware: Vec::new(),
+            waived: Vec::new(),
+            strict_data: Vec::new(),
         }
     }
 

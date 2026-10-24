@@ -41,8 +41,15 @@ fn an_executor_s_level_on_its_core_takes_no_hardware_handler() {
     ];
     assert_eq!(misplaced(&two).len(), 2);
     assert!(misplaced(&two)[0].contains("one of 2 executors"));
-    let alone = [entry(3, 2, Class::Exempt, 0)];
+    let alone = [entry(3, 2, Class::Exempt(Violation::ExecutorLevel), 0)];
     assert!(misplaced(&alone)[0].contains("no executor of core 0"));
+    // A waker exemption sits where a hardware handler may.
+    let waker = [
+        entry(1, 2, Class::Executor, 0),
+        entry(2, 2, Class::Exempt(Violation::WakerCall), 0),
+    ];
+    assert!(misplaced(&waker)[0].contains("shares level 2"));
+    assert!(misplaced(&waker[1..]).is_empty());
 }
 
 #[test]
@@ -61,14 +68,13 @@ fn a_misplaced_class_fails_every_policy() {
 }
 
 #[test]
-fn hardware_code_neither_polls_tasks_nor_calls_wakers_nor_reads_cached_data() {
+fn hardware_code_neither_polls_tasks_nor_calls_wakers_and_its_data_is_reported() {
     // The fixture's dequeue polls its task: on a hardware level that is a
     // breach, wherever the code lies.
     let (mut stacks, shared, _) = fixture(Location::Sram, Location::Sram, 3, Class::Hardware);
     let memory = &stacks.contract.memory;
     let root = memory.sram.origin + 0x1000;
     let dequeue = root + 0x40;
-    let psram = u64::from(memory.psram.unwrap().origin) + 0x100;
     let context = &stacks.code_placement.contexts[0];
     assert_eq!(context.to_string(), "hart 0 P3 (hardware)");
     let mut analysis = Analysis {
@@ -90,32 +96,41 @@ fn hardware_code_neither_polls_tasks_nor_calls_wakers_nor_reads_cached_data() {
     let mut resolutions = Resolutions::new();
     resolutions.add(dequeue, Fact::TaskPolls, [shared]);
     let reached = BTreeSet::from([dequeue]);
-    let found = hardware_code(
-        "hart 0 P3 (hardware)",
-        &analysis,
-        &reached,
-        &resolutions,
-        &[(dequeue, dequeue + 8, psram), (root, root, psram)],
-    );
+    let found = hardware_code("hart 0 P3 (hardware)", &analysis, &reached, &resolutions);
     assert_eq!(
         found
             .iter()
             .map(|finding| finding.breach)
             .collect::<Vec<_>>(),
-        [Breach::TaskPoll, Breach::CachedData(psram)]
+        [Breach::TaskPoll]
     );
+    // Code the context does not reach is not its breach.
+    let other = hardware_code("other", &analysis, &BTreeSet::from([root]), &resolutions);
+    assert!(other.is_empty());
     let mut wakers = Resolutions::new();
     wakers.add(dequeue, Fact::WakerVtables, [shared]);
-    let found = hardware_code("waker", &analysis, &reached, &wakers, &[]);
+    let found = hardware_code("waker", &analysis, &reached, &wakers);
     assert_eq!(found[0].breach, Breach::WakerCall);
 
-    stacks.hardware = hardware_code(
-        "hart 0 P3 (hardware)",
-        &analysis,
-        &reached,
-        &resolutions,
-        &[],
+    // Cached data is reported, never failed.
+    stacks.strict_data = vec![CachedData {
+        subject: "hart 0 P3 (hardware)".into(),
+        references: 3,
+        writable: BTreeSet::from(["WRITER".to_owned()]),
+        read_only: BTreeSet::from([".Lanon.1".to_owned(), ".Lswitch.table.X".to_owned()]),
+    }];
+    stacks.check(Required::Product).unwrap();
+    let report = stacks.render();
+    assert!(
+        report.contains(
+            "strict cached data of hart 0 P3 (hardware) (reported only): 3 references, 1 \
+             writable objects, 2 read-only objects\n    writable: WRITER\n    read-only: \
+             .Lanon.1, .Lswitch.table.X\n"
+        ),
+        "{report}"
     );
+
+    stacks.hardware = hardware_code("hart 0 P3 (hardware)", &analysis, &reached, &resolutions);
     let error = stacks.check(Required::Product).unwrap_err().to_string();
     assert!(
         error.contains("hardware code of hart 0 P3 (hardware) polls tasks"),
@@ -133,7 +148,7 @@ fn hardware_code_neither_polls_tasks_nor_calls_wakers_nor_reads_cached_data() {
 #[test]
 fn an_exempt_entry_beside_the_executor_passes_with_its_reason_in_the_report() {
     let (mut stacks, _, _) = fixture(Location::Sram, Location::Psram, 2, Class::Executor);
-    let exempt = entry(9, 2, Class::Exempt, 0);
+    let exempt = entry(9, 2, Class::Exempt(Violation::ExecutorLevel), 0);
     stacks.table.push(exempt);
     stacks.misplaced = misplaced(&stacks.table);
     assert!(stacks.misplaced.is_empty());
@@ -150,4 +165,93 @@ fn an_exempt_entry_beside_the_executor_passes_with_its_reason_in_the_report() {
         "{report}"
     );
     assert!(report.contains("level 2 (executor)"), "{report}");
+}
+
+#[test]
+fn a_waker_exemption_waives_only_its_own_handler_s_waker_calls() {
+    let finding = |function, breach| Finding {
+        subject: "hart 0 P1 (hardware)".into(),
+        function,
+        site: function,
+        breach,
+    };
+    let (usb, wake, other) = (0x100, 0x200, 0x300);
+    let found = vec![
+        finding(wake, Breach::WakerCall),
+        finding(usb, Breach::TaskPoll),
+    ];
+    let exempt = Class::Exempt(Violation::WakerCall);
+    // Only the exempt USB handler reaches the waker call: waived. Its task
+    // poll is not the named violation: it fails.
+    let (failed, waived) = waive(
+        found.clone(),
+        &BTreeSet::from([other]),
+        &[
+            (exempt, BTreeSet::from([usb, wake])),
+            (Class::Hardware, BTreeSet::from([other])),
+        ],
+    );
+    assert_eq!(waived, [finding(wake, Breach::WakerCall)]);
+    assert_eq!(failed, [finding(usb, Breach::TaskPoll)]);
+    // A hardware entry, or the dispatch path, reaching the same call fails.
+    let (failed, waived) = waive(
+        found.clone(),
+        &BTreeSet::new(),
+        &[
+            (exempt, BTreeSet::from([usb, wake])),
+            (Class::Hardware, BTreeSet::from([wake])),
+        ],
+    );
+    assert!(waived.is_empty());
+    assert_eq!(failed.len(), 2);
+    let (failed, _) = waive(
+        found.clone(),
+        &BTreeSet::from([wake]),
+        &[(exempt, BTreeSet::from([usb, wake]))],
+    );
+    assert_eq!(failed.len(), 2);
+    // An executor-level exemption waives no waker call.
+    let (failed, _) = waive(
+        found,
+        &BTreeSet::new(),
+        &[(
+            Class::Exempt(Violation::ExecutorLevel),
+            BTreeSet::from([usb, wake]),
+        )],
+    );
+    assert_eq!(failed.len(), 2);
+}
+
+#[test]
+fn a_waived_breach_passes_and_is_reported_with_the_reason() {
+    let (mut stacks, _, _) = fixture(Location::Sram, Location::Sram, 1, Class::Hardware);
+    let usb = entry(2, 1, Class::Exempt(Violation::WakerCall), 0);
+    stacks.table.push(usb);
+    let slot = usb.handler.unwrap();
+    stacks.names.insert(slot, "USB_DEVICE".into());
+    stacks.exemptions = vec![(slot, "its console wakes an AtomicWaker".into())];
+    stacks.waived = vec![Finding {
+        subject: "hart 0 P1 (hardware)".into(),
+        function: slot,
+        site: slot + 4,
+        breach: Breach::WakerCall,
+    }];
+    let warnings = stacks.check(Required::Product).unwrap();
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| !warning.contains("hardware class"))
+    );
+    let report = stacks.render();
+    assert!(
+        report.contains(
+            "  USB_DEVICE (source 2): core 0 level 1, exempt (calls a waker): its console wakes \
+             an AtomicWaker\n"
+        ),
+        "{report}"
+    );
+    assert!(
+        report.contains("  waived: hart 0 P1 (hardware): USB_DEVICE at 0x40800024 calls a waker\n"),
+        "{report}"
+    );
 }

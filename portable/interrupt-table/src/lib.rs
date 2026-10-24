@@ -96,9 +96,14 @@ pub enum Class {
     /// level and core.
     Executor = 1,
     /// A [`Class::Hardware`] handler on the level of its core's
-    /// [`Class::Executor`], the one rule it breaks. The entry names its
-    /// reason, which the image gate's report prints.
-    Exempt = 2,
+    /// [`Class::Executor`], the one rule it breaks; declared
+    /// `Exempt(ExecutorLevel, "reason")`. The entry names its reason, which
+    /// the image gate's report prints.
+    ExemptExecutorLevel = 2,
+    /// A [`Class::Hardware`] handler that calls a waker, the one rule it
+    /// breaks; declared `Exempt(WakerCall, "reason")`, never on its core's
+    /// executor level.
+    ExemptWakerCall = 3,
 }
 
 /// One entry of an image's interrupt table, laid out for the tools that read
@@ -353,12 +358,14 @@ pub fn verify_required<M: Matrix>(
 /// A chip's platform wraps it with its types; each entry reads
 /// `field: Token = SOURCE => handler, LEVEL, CORE, CLASS;` and defines the
 /// token type `Token`, while `Interrupts::take` hands out every token once.
-/// `CLASS` is a [`Class`]: `Hardware`, `Executor` or `Exempt("reason")`;
-/// an exempt entry's reason is exported as
+/// `CLASS` is a [`Class`]: `Hardware`, `Executor` or
+/// `Exempt(VIOLATION, "reason")`, where `VIOLATION` names the one hardware
+/// rule the entry breaks (`ExecutorLevel` or `WakerCall`); an exempt entry's
+/// reason is exported as
 /// `__OER_INTERRUPT_EXEMPT_<SOURCE>` for the image gate's report. The table
 /// fails to compile when two `Executor` entries share a level and core, when
-/// a `Hardware` entry sits on the level of its core's `Executor`, or when an
-/// `Exempt` entry does not. An entry's `#[cfg(...)]` attributes, before its
+/// a `Hardware` or `Exempt(WakerCall, ..)` entry sits on the level of its
+/// core's `Executor`, or when an `Exempt(ExecutorLevel, ..)` entry does not. An entry's `#[cfg(...)]` attributes, before its
 /// doc comment, leave all of it out: token, handler symbol, reason and table
 /// entry.
 ///
@@ -401,7 +408,7 @@ pub fn verify_required<M: Matrix>(
 ///     core: Core = Core,
 ///     handler_attributes: [];
 ///     // Nothing to exempt: no executor shares the level.
-///     timer: TimerToken = Timer => on_timer, Two, Zero, Exempt("no executor here");
+///     timer: TimerToken = Timer => on_timer, Two, Zero, Exempt(ExecutorLevel, "no executor here");
 /// }
 /// ```
 ///
@@ -420,7 +427,22 @@ pub fn verify_required<M: Matrix>(
 ///     handler_attributes: [];
 ///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
 ///     timer: TimerToken = Timer => on_timer, Two, One, Hardware;
-///     absent: AbsentToken = Absent => on_absent, Two, Zero, Exempt("until its port");
+///     absent: AbsentToken = Absent => on_absent, Two, Zero, Exempt(ExecutorLevel, "until its port");
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # oer_interrupt_table::__fake_types!();
+/// # pub fn on_timer() {}
+/// # pub fn on_radio() {}
+/// oer_interrupt_table::interrupt_table! {
+///     source: Source = Source,
+///     level: Level = Level,
+///     core: Core = Core,
+///     handler_attributes: [];
+///     radio: RadioToken = Radio => on_radio, Two, Zero, Executor;
+///     // A waker exemption does not exempt the executor's level too.
+///     timer: TimerToken = Timer => on_timer, Two, Zero, Exempt(WakerCall, "its driver");
 /// }
 /// ```
 #[macro_export]
@@ -434,7 +456,7 @@ macro_rules! interrupt_table {
             $(#[cfg($cfg:meta)])*
             $(#[doc = $doc:literal])*
             $field:ident: $token:ident = $source:ident => $handler:path, $level:ident, $core:ident,
-                $class:ident $(($reason:literal))?;
+                $class:ident $(($violation:ident, $reason:literal))?;
         )*
     ) => {
         #[allow(unused_imports)]
@@ -472,8 +494,7 @@ macro_rules! interrupt_table {
             $($crate::__private::Declared {
                 level: __OerInterruptLevels::$level as u32,
                 core: __OerInterruptCores::$core as u32,
-                class: $crate::Class::$class,
-                reason: $crate::__named!($($reason)?),
+                class: $crate::__class!($class $($violation)?),
                 present: cfg!(all($($cfg),*)),
             },)*
         ]);
@@ -509,7 +530,7 @@ macro_rules! interrupt_table {
             $($crate::Binding {
                 source: __OerInterruptSources::$source,
                 level: __OerInterruptLevels::$level,
-                class: $crate::Class::$class,
+                class: $crate::__class!($class $($violation)?),
                 core: __OerInterruptCores::$core,
                 handler: {
                     #[cfg(all($($cfg),*))]
@@ -556,15 +577,21 @@ macro_rules! __exemption {
     };
 }
 
-/// Whether an entry names a reason.
+/// An entry's [`Class`] from its declaration.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __named {
-    () => {
-        false
+macro_rules! __class {
+    (Hardware) => {
+        $crate::Class::Hardware
     };
-    ($reason:literal) => {
-        true
+    (Executor) => {
+        $crate::Class::Executor
+    };
+    (Exempt ExecutorLevel) => {
+        $crate::Class::ExemptExecutorLevel
+    };
+    (Exempt WakerCall) => {
+        $crate::Class::ExemptWakerCall
     };
 }
 
@@ -577,28 +604,24 @@ pub mod __private {
         pub level: u32,
         pub core: u32,
         pub class: Class,
-        /// The entry names a reason.
-        pub reason: bool,
         /// A `cfg` keeps the entry in this build.
         pub present: bool,
     }
 
     /// The class rules of a table, at compile time: one `Executor` per
-    /// level and core, no `Hardware` on its level, every `Exempt` on it and
-    /// with a reason.
+    /// level and core, no `Hardware` or waker exemption on its level, every
+    /// level exemption on it.
     pub const fn check_classes(entries: &[Declared]) {
-        let mut index = 0;
-        while index < entries.len() {
-            let entry = &entries[index];
-            index += 1;
+        let mut rest = entries;
+        while let [entry, tail @ ..] = rest {
+            rest = tail;
             if !entry.present {
                 continue;
             }
             let mut executors = 0;
-            let mut other = 0;
-            while other < entries.len() {
-                let candidate = &entries[other];
-                other += 1;
+            let mut others = entries;
+            while let [candidate, tail @ ..] = others {
+                others = tail;
                 if candidate.present
                     && candidate.level == entry.level
                     && candidate.core == entry.core
@@ -612,31 +635,29 @@ pub mod __private {
                     executors == 1,
                     "two Executor entries share a level and core"
                 ),
-                Class::Hardware => assert!(
+                Class::Hardware | Class::ExemptWakerCall => assert!(
                     executors == 0,
                     "a Hardware entry shares the level of its core's Executor"
                 ),
-                Class::Exempt => assert!(
+                Class::ExemptExecutorLevel => assert!(
                     executors == 1,
-                    "an Exempt entry is not on the level of its core's Executor"
+                    "an Exempt(ExecutorLevel) entry is not on the level of its core's Executor"
                 ),
             }
-            assert!(
-                entry.reason == matches!(entry.class, Class::Exempt),
-                "an Exempt entry, and only it, names its reason"
-            );
         }
     }
 
     /// The bytes of `text`, which holds `N`.
     pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
-        let text = text.as_bytes();
         let mut out = [0; N];
-        let mut index = 0;
-        while index < N {
-            out[index] = text[index];
-            index += 1;
+        let mut from = text.as_bytes();
+        let mut to: &mut [u8] = &mut out;
+        while let ([byte, from_tail @ ..], [slot, to_tail @ ..]) = (from, to) {
+            *slot = *byte;
+            from = from_tail;
+            to = to_tail;
         }
+        assert!(from.is_empty(), "the reason holds its length");
         out
     }
 
