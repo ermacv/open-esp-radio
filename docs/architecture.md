@@ -109,12 +109,13 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 ## Hardware
 
-- **Platform code is ours.** Boot, clocks, interrupts, PSRAM, flash, console
-  and time are written in our HAL and PAC crates. esp-hal, esp-pacs,
-  esp-riscv-rt and esp-metadata remain only at the sites listed in
-  `tools/test/layers/tests/platform_crates.allowlist`, and a test fails on any
-  use elsewhere; each domain that moves to our code removes its lines. The
-  esp-hal fork takes fixes only. Our HAL owns the radio blocks after the
+- **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
+  owns parts of the SoC before the radio handoff: boot, clocks, interrupt
+  dispatch, PSRAM, flash, console, time. esp-hal, esp-pacs, esp-riscv-rt and
+  esp-metadata are used only at the sites listed in
+  `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use
+  elsewhere, and new platform code goes into our HAL and PAC crates. Each
+  domain that moves to our code removes its lines. Our HAL owns the radio blocks after the
   handoff, taken through a safe constructor that consumes esp-hal's radio
   singletons. Each word both sides can write has one runtime writer, listed in
   `chips/esp32s31/registers/shared-words.toml` and checked by `cargo
