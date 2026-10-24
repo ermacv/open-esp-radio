@@ -1132,12 +1132,37 @@ pub mod ieee802154_mac {
         pub const fn new(span: Span) -> Self {
             Self(span.into_block::<0x184>())
         }
+
+        /// The block again, from the two owners of its one split.
+        pub fn join(rest: Ieee802154MacTask, part: Ieee802154MacInterrupt) -> Self {
+            Self(oer_mmio::Block::join(rest.0, part.0))
+        }
     }
 
     impl<'a> Ieee802154Mac<oer_mmio::Host<'a>> {
         /// The block over host memory, for tests of its accessors.
         pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
             oer_mmio::Block::host(words).map(Self)
+        }
+
+        /// The block again, from the two owners of one split; owners of
+        /// two blocks are refused and returned.
+        pub fn try_join(
+            rest: Ieee802154MacTask<oer_mmio::Host<'a>>,
+            part: Ieee802154MacInterrupt<oer_mmio::Host<'a>>,
+        ) -> Result<
+            Self,
+            oer_mmio::NotOneSplit<
+                Ieee802154MacTask<oer_mmio::Host<'a>>,
+                Ieee802154MacInterrupt<oer_mmio::Host<'a>>,
+            >,
+        > {
+            oer_mmio::Block::try_join(rest.0, part.0)
+                .map(Self)
+                .map_err(|refused| oer_mmio::NotOneSplit {
+                    first: Ieee802154MacTask(refused.first),
+                    second: Ieee802154MacInterrupt(refused.second),
+                })
         }
     }
 
@@ -1146,11 +1171,6 @@ pub mod ieee802154_mac {
         pub fn split(self) -> (Ieee802154MacTask<P>, Ieee802154MacInterrupt<P>) {
             let (rest, part) = self.0.split::<TaskWords, InterruptWords>();
             (Ieee802154MacTask(rest), Ieee802154MacInterrupt(part))
-        }
-
-        /// The block again, from the two owners of one split.
-        pub fn join(rest: Ieee802154MacTask<P>, part: Ieee802154MacInterrupt<P>) -> Self {
-            Self(oer_mmio::Block::join(rest.0, part.0))
         }
 
         /// Write `COMMAND` from zero: the fields set, zero in every other bit.

@@ -18,7 +18,8 @@
 //! - **Who may write a word.** [`Block::split`] divides a block into two
 //!   [`Part`]s whose owned word lists ([`Words`]) are disjoint, again at
 //!   compile time; a part writes only its owned words and also reads the
-//!   words it observes.
+//!   words it observes. Joining parts of device registers is checked by
+//!   their type; host parts are checked to lie over the same memory.
 //!
 //! Memory the hardware reads by DMA is typed here too: [`DmaWindowAddress`]
 //! and [`DmaRef`] are made only by their `unsafe` constructors (a chip HAL's
@@ -315,12 +316,58 @@ impl<P: Placement, const SIZE: usize> Block<P, SIZE> {
             },
         )
     }
+}
 
+impl<const BASE: usize, const SIZE: usize> Block<Fixed<BASE>, SIZE> {
     /// The block again, from the two parts of one split.
-    pub fn join<A: Words, B: Words>(first: Part<P, SIZE, A>, second: Part<P, SIZE, B>) -> Self {
+    ///
+    /// The parts are of the one split there is: device registers come only
+    /// from disjoint [`Span`]s, so at most one block of `SIZE` bytes at
+    /// `BASE` with any word in it exists at a time, and its split made the
+    /// only parts of this type.
+    pub fn join<A: Words, B: Words>(
+        first: Part<Fixed<BASE>, SIZE, A>,
+        second: Part<Fixed<BASE>, SIZE, B>,
+    ) -> Self {
         let Part { place, .. } = first;
         drop(second);
         Self { place }
+    }
+}
+
+impl<'a, const SIZE: usize> Block<Host<'a>, SIZE> {
+    /// The block again, from the two parts of one split.
+    ///
+    /// Blocks over different host memory share a type, so the parts are
+    /// checked to lie over the same memory; parts of two blocks are refused
+    /// and returned.
+    pub fn try_join<A: Words, B: Words>(
+        first: Part<Host<'a>, SIZE, A>,
+        second: Part<Host<'a>, SIZE, B>,
+    ) -> Result<Self, NotOneSplit<Part<Host<'a>, SIZE, A>, Part<Host<'a>, SIZE, B>>> {
+        // Each host block borrows its memory mutably, so two blocks with
+        // words never share a base: equal bases mean the parts of one split.
+        if first.place.base != second.place.base {
+            return Err(NotOneSplit { first, second });
+        }
+        let Part { place, .. } = first;
+        drop(second);
+        Ok(Self { place })
+    }
+}
+
+/// Two parts given to a join that come from different splits; both are
+/// returned unchanged.
+pub struct NotOneSplit<F, S> {
+    /// The first part given.
+    pub first: F,
+    /// The second part given.
+    pub second: S,
+}
+
+impl<F, S> core::fmt::Debug for NotOneSplit<F, S> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("NotOneSplit")
     }
 }
 

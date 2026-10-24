@@ -1,4 +1,4 @@
-use super::{Bits, Block, Host, Index, IndexError, ValueError, VolatileCell, Words};
+use super::{Bits, Block, Host, Index, IndexError, NotOneSplit, ValueError, VolatileCell, Words};
 
 const SIZE: usize = 16;
 
@@ -83,10 +83,36 @@ fn split_parts_write_their_own_words_and_read_observed_ones() {
     low.write::<4>(1);
     high.write::<8>(2);
     assert_eq!(low.read::<8>(), 2);
-    let block = Block::join(low, high);
+    let block = Block::try_join(low, high).expect("parts of one split");
     assert_eq!(block.read::<4>(), 1);
     drop(block);
     assert_eq!(memory, [0, 1, 2, 0]);
+}
+
+#[test]
+fn parts_of_two_host_blocks_do_not_join() {
+    let mut first = [0_u32; 4];
+    let mut second = [0_u32; 4];
+    let (low, high) = Block::<Host<'_>, SIZE>::host(&mut first)
+        .expect("four words")
+        .split::<Low, High>();
+    let (other_low, other_high) = Block::<Host<'_>, SIZE>::host(&mut second)
+        .expect("four words")
+        .split::<Low, High>();
+    // The refused parts come back and join with their own siblings.
+    let Err(NotOneSplit {
+        first: low,
+        second: other_high,
+    }) = Block::try_join(low, other_high)
+    else {
+        panic!("a part of another block's split joined");
+    };
+    let mut block = Block::try_join(low, high).expect("parts of one split");
+    block.write::<12>(3);
+    drop(block);
+    drop(Block::try_join(other_low, other_high).expect("parts of one split"));
+    assert_eq!(first, [0, 0, 0, 3]);
+    assert_eq!(second, [0; 4]);
 }
 
 #[test]

@@ -524,6 +524,36 @@ impl<'a> TypedBlock<'a> {
             output.push_str("///\n");
             push_doc(output, &clean(description), "");
         }
+        let (fixed_join, host_join) = match self.split {
+            Some(split) => {
+                let rest = format!("{owner}{}", split.rest);
+                let part = format!("{owner}{}", split.part);
+                (
+                    format!(
+                        "\n/// The block again, from the two owners of its one split.\n\
+                         pub fn join(rest: {rest}, part: {part}) -> Self {{\n\
+                         Self(oer_mmio::Block::join(rest.0, part.0))\n\
+                         }}\n"
+                    ),
+                    format!(
+                        "\n/// The block again, from the two owners of one split; owners of\n\
+                         /// two blocks are refused and returned.\n\
+                         pub fn try_join(\n\
+                         rest: {rest}<oer_mmio::Host<'a>>,\n\
+                         part: {part}<oer_mmio::Host<'a>>,\n\
+                         ) -> Result<Self, oer_mmio::NotOneSplit<{rest}<oer_mmio::Host<'a>>, {part}<oer_mmio::Host<'a>>>> {{\n\
+                         oer_mmio::Block::try_join(rest.0, part.0)\n\
+                         .map(Self)\n\
+                         .map_err(|refused| oer_mmio::NotOneSplit {{\n\
+                         first: {rest}(refused.first),\n\
+                         second: {part}(refused.second),\n\
+                         }})\n\
+                         }}\n"
+                    ),
+                )
+            }
+            None => (String::new(), String::new()),
+        };
         let _ = writeln!(
             output,
             "pub mod {module} {{\n\
@@ -541,12 +571,14 @@ impl<'a> TypedBlock<'a> {
              pub const fn new(span: Span) -> Self {{\n\
              Self(span.into_block::<0x{size:x}>())\n\
              }}\n\
+             {fixed_join}\
              }}\n\n\
              impl<'a> {owner}<oer_mmio::Host<'a>> {{\n\
              /// The block over host memory, for tests of its accessors.\n\
              pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {{\n\
              oer_mmio::Block::host(words).map(Self)\n\
              }}\n\
+             {host_join}\
              }}\n",
             module = self.module,
             name = self.peripheral.name,
@@ -566,10 +598,6 @@ impl<'a> TypedBlock<'a> {
                      pub fn split(self) -> ({rest}<P>, {part}<P>) {{\n\
                      let (rest, part) = self.0.split::<{}Words, {}Words>();\n\
                      ({rest}(rest), {part}(part))\n\
-                     }}\n\n\
-                     /// The block again, from the two owners of one split.\n\
-                     pub fn join(rest: {rest}<P>, part: {part}<P>) -> Self {{\n\
-                     Self(oer_mmio::Block::join(rest.0, part.0))\n\
                      }}\n",
                     split.rest, split.part,
                 );

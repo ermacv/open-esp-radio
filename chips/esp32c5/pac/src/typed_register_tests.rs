@@ -5,7 +5,7 @@
 //! address, mask or shift: only what changed and what the typed readers see.
 
 use crate::generated::ieee802154_mac::{self as mac, Ieee802154Mac};
-use oer_mmio::Index;
+use oer_mmio::{Index, NotOneSplit};
 use std::{vec, vec::Vec};
 
 fn memory(fill: u32) -> Vec<u32> {
@@ -86,7 +86,7 @@ fn an_acknowledge_writes_exactly_the_retained_sample() {
     let status = interrupt.read_event_status();
     assert!(status.tx_done());
     assert!(!status.rx_done() && !status.rx_sfd_done());
-    drop(Ieee802154Mac::join(task, interrupt));
+    drop(Ieee802154Mac::try_join(task, interrupt).expect("owners of one split"));
     let difference = changed(&before, &after);
     assert_eq!(difference.len(), 1, "one word written");
     assert_eq!(
@@ -157,7 +157,7 @@ fn a_split_part_reaches_only_its_words() {
         interrupt.read_ed_config().cca_mode_variant(),
         mac::ed_config::CcaMode::EnergyDetection
     );
-    drop(Ieee802154Mac::join(task, interrupt));
+    drop(Ieee802154Mac::try_join(task, interrupt).expect("owners of one split"));
     assert_eq!(changed(&before, &after).len(), 2);
 }
 
@@ -165,4 +165,28 @@ fn a_split_part_reaches_only_its_words() {
 fn host_memory_smaller_than_the_block_is_refused() {
     let mut words = vec![0_u32; mac::SIZE / 4 - 1];
     assert!(Ieee802154Mac::host(&mut words).is_err());
+}
+
+#[test]
+fn owners_of_two_blocks_do_not_join() {
+    let mut first = memory(0);
+    let mut second = memory(0);
+    let (task, interrupt) = Ieee802154Mac::host(&mut first)
+        .expect("memory holds the block")
+        .split();
+    let (mut other_task, other_interrupt) = Ieee802154Mac::host(&mut second)
+        .expect("memory holds the block")
+        .split();
+    let Err(NotOneSplit {
+        first: task,
+        second: other_interrupt,
+    }) = Ieee802154Mac::try_join(task, other_interrupt)
+    else {
+        panic!("owners of two blocks joined");
+    };
+    other_task.issue_ieee802154_tx_start();
+    drop(Ieee802154Mac::try_join(task, interrupt).expect("owners of one split"));
+    drop(Ieee802154Mac::try_join(other_task, other_interrupt).expect("owners of one split"));
+    assert!(first.iter().all(|word| *word == 0));
+    assert_eq!(changed(&memory(0), &second).len(), 1, "one command written");
 }
