@@ -6,7 +6,8 @@ device-access = true
 allow-clippy-empty-docs = true
 # Typed register blocks over `oer-mmio`; svd2rust renders every other
 # exposed peripheral. The platform blocks (eFuse, TRNG, reset cause,
-# watchdogs) are claimed by their own platform handoffs.
+# watchdogs) are claimed by their own platform handoffs, as are the step-4
+# blocks (system timer, software interrupt lines, interrupt matrix and CLIC).
 typed-peripherals = [
     "IEEE802154_MAC",
     "IEEE802154_INTERRUPT_ROUTE",
@@ -20,6 +21,17 @@ typed-peripherals = [
     "HP_SYS_CLKRST_TIMG1",
     "LP_WDT",
     "LP_WDT_SWD",
+    "SYSTIMER",
+    "SYSTIMER_COUNTER",
+    "FROM_CPU_0",
+    "FROM_CPU_1",
+    "FROM_CPU_2",
+    "FROM_CPU_3",
+    "CLIC",
+    "INTERRUPT_CORE0",
+    "INTERRUPT_CORE0_STATUS",
+    "INTERRUPT_CORE1",
+    "INTERRUPT_CORE1_STATUS",
 ]
 
 
@@ -50,6 +62,27 @@ member = "watchdog"
 description = "The main watchdogs of both timer groups, timer group 1's clock and reset, and the RTC and super watchdogs, owned by the watchdog owners."
 peripherals = ["TIMG0_WDT", "TIMG1_WDT", "HP_SYS_CLKRST_TIMG1", "LP_WDT", "LP_WDT_SWD"]
 handoff = true
+
+[[ownership-partitions]]
+name = "SystemTimerPeripherals"
+member = "system_timer"
+handoff = true
+description = "The system timer: the comparators the time driver programs and the shared counter latch every context reads. Claimed by the time driver's platform handoff."
+peripherals = ["SYSTIMER", "SYSTIMER_COUNTER"]
+
+[[ownership-partitions]]
+name = "SoftwareInterruptPeripherals"
+member = "software_interrupts"
+handoff = true
+description = "The four software interrupt lines: each executor and the radio doorbell owns one. Claimed by the executor's platform handoff."
+peripherals = ["FROM_CPU_0", "FROM_CPU_1", "FROM_CPU_2", "FROM_CPU_3"]
+
+[[ownership-partitions]]
+name = "InterruptMatrixPeripherals"
+member = "interrupt_matrix"
+handoff = true
+description = "The interrupt matrix route and pending words and the CLIC line words, which the interrupt table checks. Claimed by the interrupt table's platform handoff; esp-hal still writes the routes and the lines until the table writes them."
+peripherals = ["CLIC", "INTERRUPT_CORE0", "INTERRUPT_CORE0_STATUS", "INTERRUPT_CORE1", "INTERRUPT_CORE1_STATUS"]
 
 [[ownership-partitions]]
 name = "UnexposedPeripherals"
@@ -11041,3 +11074,44 @@ peripheral = "LP_WDT_SWD"
 register = "SWD_CONFIG"
 field = "SWD_FEED"
 sources = ["ESP_IDF_4D59230D_S31_RTC_WDT"]
+
+[[write-trigger-fields]]
+peripheral = "SYSTIMER_COUNTER"
+register = "UNIT0_OP"
+field = "UPDATE"
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[shared-blocks]]
+peripheral = "SYSTIMER_COUNTER"
+description = "The counter latch of system timer unit zero, which every context reads for the current time."
+sources = ["ESP_IDF_4D59230D_S31_SYSTIMER"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_0"
+description = "Software interrupt line 0: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_1"
+description = "Software interrupt line 1: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_2"
+description = "Software interrupt line 2: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "FROM_CPU_3"
+description = "Software interrupt line 3: wakers raise it from every context and its handler lowers it."
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+
+[[shared-blocks]]
+peripheral = "INTERRUPT_CORE0_STATUS"
+description = "The pending sources at INTERRUPT_CORE0, which every context polls."
+sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]
+
+[[shared-blocks]]
+peripheral = "INTERRUPT_CORE1_STATUS"
+description = "The pending sources at INTERRUPT_CORE1, which every context polls."
+sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"]

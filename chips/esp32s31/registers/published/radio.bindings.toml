@@ -5,6 +5,59 @@ schema = 2
 crate-name = "oer_esp32s31_pac_raw"
 
 [[registers]]
+address = 276828160
+width = 32
+access = "read-write"
+identity = "CLIC.CTRL%s"
+peripheral = "CLIC"
+peripheral-type = "Clic"
+peripheral-module = "clic"
+scope = []
+register-method = "ctrl"
+
+[[registers.fields]]
+svd-name = "IP"
+method = "ip"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "IE"
+method = "ie"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ATTR_SHV"
+method = "attr_shv"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ATTR_TRIG"
+method = "attr_trig"
+bit-offset = 17
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ATTR_MODE"
+method = "attr_mode"
+bit-offset = 22
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CTL"
+method = "ctl"
+bit-offset = 24
+bit-width = 8
+access = "read-write"
+
+[[registers]]
 address = 537919504
 width = 32
 access = "read-write"
@@ -53966,6 +54019,305 @@ bit-width = 8
 access = "write-only"
 
 [[registers]]
+address = 540643328
+width = 32
+access = "read-write"
+identity = "SYSTIMER.CONF"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "conf"
+
+[[registers.fields]]
+svd-name = "ETM_EN"
+method = "etm_en"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET2_WORK_EN"
+method = "target2_work_en"
+bit-offset = 22
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET1_WORK_EN"
+method = "target1_work_en"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET0_WORK_EN"
+method = "target0_work_en"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT1_CORE1_STALL_EN"
+method = "timer_unit1_core1_stall_en"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT1_CORE0_STALL_EN"
+method = "timer_unit1_core0_stall_en"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT0_CORE1_STALL_EN"
+method = "timer_unit0_core1_stall_en"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT0_CORE0_STALL_EN"
+method = "timer_unit0_core0_stall_en"
+bit-offset = 28
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT1_WORK_EN"
+method = "timer_unit1_work_en"
+bit-offset = 29
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT0_WORK_EN"
+method = "timer_unit0_work_en"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CLK_EN"
+method = "clk_en"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 540643332
+width = 32
+access = "read-write"
+identity = "SYSTIMER_COUNTER.UNIT0_OP"
+peripheral = "SYSTIMER_COUNTER"
+peripheral-type = "SystimerCounter"
+peripheral-module = "systimer_counter"
+scope = []
+register-method = "unit0_op"
+
+[[registers.fields]]
+svd-name = "VALUE_VALID"
+method = "value_valid"
+bit-offset = 29
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "UPDATE"
+method = "update"
+bit-offset = 30
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 540643356
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET%s_HI"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_hi"
+
+[[registers.fields]]
+svd-name = "HI"
+method = "hi"
+bit-offset = 0
+bit-width = 20
+access = "read-write"
+
+[[registers]]
+address = 540643360
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET%s_LO"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_lo"
+
+[[registers.fields]]
+svd-name = "LO"
+method = "lo"
+bit-offset = 0
+bit-width = 32
+access = "read-write"
+
+[[registers]]
+address = 540643380
+width = 32
+access = "read-write"
+identity = "SYSTIMER.TARGET%s_CONF"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "target_conf"
+
+[[registers.fields]]
+svd-name = "PERIOD"
+method = "period"
+bit-offset = 0
+bit-width = 26
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PERIOD_MODE"
+method = "period_mode"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TIMER_UNIT_SEL"
+method = "timer_unit_sel"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 540643392
+width = 32
+access = "read-only"
+identity = "SYSTIMER_COUNTER.UNIT0_VALUE_HI"
+peripheral = "SYSTIMER_COUNTER"
+peripheral-type = "SystimerCounter"
+peripheral-module = "systimer_counter"
+scope = []
+register-method = "unit0_value_hi"
+
+[[registers.fields]]
+svd-name = "VALUE_HI"
+method = "value_hi"
+bit-offset = 0
+bit-width = 20
+access = "read-only"
+
+[[registers]]
+address = 540643396
+width = 32
+access = "read-only"
+identity = "SYSTIMER_COUNTER.UNIT0_VALUE_LO"
+peripheral = "SYSTIMER_COUNTER"
+peripheral-type = "SystimerCounter"
+peripheral-module = "systimer_counter"
+scope = []
+register-method = "unit0_value_lo"
+
+[[registers.fields]]
+svd-name = "VALUE_LO"
+method = "value_lo"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 540643408
+width = 32
+access = "write-only"
+identity = "SYSTIMER.COMP%s_LOAD"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "comp_load"
+
+[[registers.fields]]
+svd-name = "LOAD"
+method = "load"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers]]
+address = 540643428
+width = 32
+access = "read-write"
+identity = "SYSTIMER.INT_ENA"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "int_ena"
+
+[[registers.fields]]
+svd-name = "TARGET0_INT_ENA"
+method = "target0_int_ena"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET1_INT_ENA"
+method = "target1_int_ena"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TARGET2_INT_ENA"
+method = "target2_int_ena"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 540643436
+width = 32
+access = "write-only"
+identity = "SYSTIMER.INT_CLR"
+peripheral = "SYSTIMER"
+peripheral-type = "Systimer"
+peripheral-module = "systimer"
+scope = []
+register-method = "int_clr"
+
+[[registers.fields]]
+svd-name = "TARGET0_INT_CLR"
+method = "target0_int_clr"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "TARGET1_INT_CLR"
+method = "target1_int_clr"
+bit-offset = 1
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "TARGET2_INT_CLR"
+method = "target2_int_clr"
+bit-offset = 2
+bit-width = 1
+access = "write-only"
+
+[[registers]]
 address = 542638152
 width = 32
 access = "read-write"
@@ -54300,6 +54652,31 @@ bit-width = 32
 access = "read-write"
 
 [[registers]]
+address = 542658560
+width = 32
+access = "read-write"
+identity = "INTERRUPT_CORE0.MAP_LOW%s"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_low"
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PASS_LEVEL"
+method = "pass_level"
+bit-offset = 8
+bit-width = 2
+access = "read-write"
+
+[[registers]]
 address = 542659088
 width = 32
 access = "read-only"
@@ -54325,6 +54702,164 @@ bit-width = 2
 access = "read-only"
 
 [[registers]]
+address = 542659092
+width = 32
+access = "read-write"
+identity = "INTERRUPT_CORE0.MAP_HIGH%s"
+peripheral = "INTERRUPT_CORE0"
+peripheral-type = "InterruptCore0"
+peripheral-module = "interrupt_core0"
+scope = []
+register-method = "map_high"
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PASS_LEVEL"
+method = "pass_level"
+bit-offset = 8
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 542659240
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_0"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_0"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542659244
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_1"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_1"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542659248
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_2"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_2"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542659252
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_3"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_3"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542659256
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_4"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_4"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542659260
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE0_STATUS.INT_STATUS_5"
+peripheral = "INTERRUPT_CORE0_STATUS"
+peripheral-type = "InterruptCore0Status"
+peripheral-module = "interrupt_core0_status"
+scope = []
+register-method = "int_status_5"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 9
+access = "read-only"
+
+[[registers]]
+address = 542660608
+width = 32
+access = "read-write"
+identity = "INTERRUPT_CORE1.MAP_LOW%s"
+peripheral = "INTERRUPT_CORE1"
+peripheral-type = "InterruptCore1"
+peripheral-module = "interrupt_core1"
+scope = []
+register-method = "map_low"
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PASS_LEVEL"
+method = "pass_level"
+bit-offset = 8
+bit-width = 2
+access = "read-write"
+
+[[registers]]
 address = 542661136
 width = 32
 access = "read-only"
@@ -54348,6 +54883,211 @@ method = "pass_level"
 bit-offset = 8
 bit-width = 2
 access = "read-only"
+
+[[registers]]
+address = 542661140
+width = 32
+access = "read-write"
+identity = "INTERRUPT_CORE1.MAP_HIGH%s"
+peripheral = "INTERRUPT_CORE1"
+peripheral-type = "InterruptCore1"
+peripheral-module = "interrupt_core1"
+scope = []
+register-method = "map_high"
+
+[[registers.fields]]
+svd-name = "MAP"
+method = "map"
+bit-offset = 0
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "PASS_LEVEL"
+method = "pass_level"
+bit-offset = 8
+bit-width = 2
+access = "read-write"
+
+[[registers]]
+address = 542661288
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE1_STATUS.INT_STATUS_0"
+peripheral = "INTERRUPT_CORE1_STATUS"
+peripheral-type = "InterruptCore1Status"
+peripheral-module = "interrupt_core1_status"
+scope = []
+register-method = "int_status_0"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542661292
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE1_STATUS.INT_STATUS_1"
+peripheral = "INTERRUPT_CORE1_STATUS"
+peripheral-type = "InterruptCore1Status"
+peripheral-module = "interrupt_core1_status"
+scope = []
+register-method = "int_status_1"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542661296
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE1_STATUS.INT_STATUS_2"
+peripheral = "INTERRUPT_CORE1_STATUS"
+peripheral-type = "InterruptCore1Status"
+peripheral-module = "interrupt_core1_status"
+scope = []
+register-method = "int_status_2"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542661300
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE1_STATUS.INT_STATUS_3"
+peripheral = "INTERRUPT_CORE1_STATUS"
+peripheral-type = "InterruptCore1Status"
+peripheral-module = "interrupt_core1_status"
+scope = []
+register-method = "int_status_3"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542661304
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE1_STATUS.INT_STATUS_4"
+peripheral = "INTERRUPT_CORE1_STATUS"
+peripheral-type = "InterruptCore1Status"
+peripheral-module = "interrupt_core1_status"
+scope = []
+register-method = "int_status_4"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 542661308
+width = 32
+access = "read-only"
+identity = "INTERRUPT_CORE1_STATUS.INT_STATUS_5"
+peripheral = "INTERRUPT_CORE1_STATUS"
+peripheral-type = "InterruptCore1Status"
+peripheral-module = "interrupt_core1_status"
+scope = []
+register-method = "int_status_5"
+
+[[registers.fields]]
+svd-name = "SOURCES"
+method = "sources"
+bit-offset = 0
+bit-width = 9
+access = "read-only"
+
+[[registers]]
+address = 542662672
+width = 32
+access = "read-write"
+identity = "FROM_CPU_0.LINE"
+peripheral = "FROM_CPU_0"
+peripheral-type = "FromCpu0"
+peripheral-module = "from_cpu_0"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542662676
+width = 32
+access = "read-write"
+identity = "FROM_CPU_1.LINE"
+peripheral = "FROM_CPU_1"
+peripheral-type = "FromCpu1"
+peripheral-module = "from_cpu_1"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542662680
+width = 32
+access = "read-write"
+identity = "FROM_CPU_2.LINE"
+peripheral = "FROM_CPU_2"
+peripheral-type = "FromCpu2"
+peripheral-module = "from_cpu_2"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 542662684
+width = 32
+access = "read-write"
+identity = "FROM_CPU_3.LINE"
+peripheral = "FROM_CPU_3"
+peripheral-type = "FromCpu3"
+peripheral-module = "from_cpu_3"
+scope = []
+register-method = "line"
+
+[[registers.fields]]
+svd-name = "RAISED"
+method = "raised"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
 
 [[registers]]
 address = 542666816

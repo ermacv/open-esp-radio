@@ -11289,6 +11289,568 @@ documentation establishes their electrical meaning.</description>
       </registers>
     </peripheral>
     <peripheral>
+      <name>SYSTIMER</name>
+      <description>The system timer's comparators: their enables in CONF, targets, modes, load
+strobes and interrupt enables and acknowledgements. The counter latch of unit
+zero is the separate shared block SYSTIMER_COUNTER; unit one, the unit loads
+and the read-back registers are not described.</description>
+      <baseAddress>0x6000A000</baseAddress>
+      <registers>
+        <register>
+          <name>CONF</name>
+          <description>Project-assigned name. Clock, unit and comparator enables.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x46000000</resetValue>
+          <fields>
+            <field>
+              <name>SYSTIMER_CLK_FO</name>
+              <description>Project-assigned name. Forces the system timer clock on.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ETM_EN</name>
+              <description>Project-assigned name. Enables the generation of ETM events.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET2_WORK_EN</name>
+              <description>Project-assigned name. Enables comparator 2.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET1_WORK_EN</name>
+              <description>Project-assigned name. Enables comparator 1.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET0_WORK_EN</name>
+              <description>Project-assigned name. Enables comparator 0.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT1_CORE1_STALL_EN</name>
+              <description>Project-assigned name. Stalls unit 1 while core 1 is stalled.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT1_CORE0_STALL_EN</name>
+              <description>Project-assigned name. Stalls unit 1 while core 0 is stalled.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT0_CORE1_STALL_EN</name>
+              <description>Project-assigned name. Stalls unit 0 while core 1 is stalled.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT0_CORE0_STALL_EN</name>
+              <description>Project-assigned name. Stalls unit 0 while core 0 is stalled.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT1_WORK_EN</name>
+              <description>Project-assigned name. Enables unit 1.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT0_WORK_EN</name>
+              <description>Project-assigned name. Enables unit 0.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLK_EN</name>
+              <description>Project-assigned name. Keeps the register clock enabled for every access.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TARGET%s_HI</name>
+          <description>Project-assigned name. High 20 bits of comparator %s's alarm target.</description>
+          <addressOffset>0x1C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>HI</name>
+              <description>Project-assigned name. Target bits 51:32.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>20</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TARGET%s_LO</name>
+          <description>Project-assigned name. Low 32 bits of comparator %s's alarm target.</description>
+          <addressOffset>0x20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>LO</name>
+              <description>Project-assigned name. Target bits 31:0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TARGET%s_CONF</name>
+          <description>Project-assigned name. Alarm mode of comparator %s.</description>
+          <addressOffset>0x34</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>PERIOD</name>
+              <description>Project-assigned name. Alarm period in period mode.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>26</bitWidth>
+            </field>
+            <field>
+              <name>PERIOD_MODE</name>
+              <description>Project-assigned name. Selects period mode instead of one-shot target mode.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER_UNIT_SEL</name>
+              <description>Project-assigned name. Selects unit 1 instead of unit 0 as the compared counter.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>COMP%s_LOAD</name>
+          <description>Project-assigned name. Load strobe of comparator %s: writing one loads its target and mode.</description>
+          <addressOffset>0x50</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>LOAD</name>
+              <description>Project-assigned name. Loads the comparator's target and mode.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>INT_ENA</name>
+          <description>Project-assigned name. Comparator interrupt enables.</description>
+          <addressOffset>0x64</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>TARGET0_INT_ENA</name>
+              <description>Project-assigned name. Enables comparator 0's interrupt.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET1_INT_ENA</name>
+              <description>Project-assigned name. Enables comparator 1's interrupt.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET2_INT_ENA</name>
+              <description>Project-assigned name. Enables comparator 2's interrupt.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>INT_CLR</name>
+          <description>Project-assigned name. Comparator interrupt acknowledgements: writing one clears the raw bit.</description>
+          <addressOffset>0x6C</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>TARGET0_INT_CLR</name>
+              <description>Project-assigned name. Clears comparator 0's interrupt.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET1_INT_CLR</name>
+              <description>Project-assigned name. Clears comparator 1's interrupt.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TARGET2_INT_CLR</name>
+              <description>Project-assigned name. Clears comparator 2's interrupt.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>SYSTIMER_COUNTER</name>
+      <description>The counter latch of system timer unit zero: the UPDATE strobe copies the
+counter into VALUE_HI and VALUE_LO and VALUE_VALID reports the copy done.
+Every context reads the counter, so this is a shared block: a strobe
+writes UPDATE alone and the values are read without a side effect.</description>
+      <baseAddress>0x6000A004</baseAddress>
+      <registers>
+        <register>
+          <name>UNIT0_OP</name>
+          <description>Project-assigned name. Unit zero's latch strobe and its done flag.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>VALUE_VALID</name>
+              <description>Project-assigned name. Set when the latched value is synchronized and valid (R/SS/WTC: a written one clears it, so the strobe writes zero here).</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>UPDATE</name>
+              <description>Project-assigned name. Writing one latches unit zero's count into VALUE_HI and VALUE_LO.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>UNIT0_VALUE_HI</name>
+          <description>Project-assigned name. High 20 bits of unit zero's latched count.</description>
+          <addressOffset>0x3C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>VALUE_HI</name>
+              <description>Project-assigned name. Count bits 51:32.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>20</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>UNIT0_VALUE_LO</name>
+          <description>Project-assigned name. Low 32 bits of unit zero's latched count.</description>
+          <addressOffset>0x40</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>VALUE_LO</name>
+              <description>Project-assigned name. Count bits 31:0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>FROM_CPU_0</name>
+      <description>Software interrupt line 0 (interrupt source FROM_CPU_INTR0): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole.</description>
+      <baseAddress>0x600C5090</baseAddress>
+      <registers>
+        <register>
+          <name>LINE</name>
+          <description>Project-assigned name. The level of software interrupt line 0.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RAISED</name>
+              <description>Project-assigned name. One raises the line's interrupt; zero lowers it.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>FROM_CPU_1</name>
+      <description>Software interrupt line 1 (interrupt source FROM_CPU_INTR1): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole.</description>
+      <baseAddress>0x600C5094</baseAddress>
+      <registers>
+        <register>
+          <name>LINE</name>
+          <description>Project-assigned name. The level of software interrupt line 1.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RAISED</name>
+              <description>Project-assigned name. One raises the line's interrupt; zero lowers it.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>FROM_CPU_2</name>
+      <description>Software interrupt line 2 (interrupt source FROM_CPU_INTR2): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole.</description>
+      <baseAddress>0x600C5098</baseAddress>
+      <registers>
+        <register>
+          <name>LINE</name>
+          <description>Project-assigned name. The level of software interrupt line 2.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RAISED</name>
+              <description>Project-assigned name. One raises the line's interrupt; zero lowers it.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>FROM_CPU_3</name>
+      <description>Software interrupt line 3 (interrupt source FROM_CPU_INTR3): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole.</description>
+      <baseAddress>0x600C509C</baseAddress>
+      <registers>
+        <register>
+          <name>LINE</name>
+          <description>Project-assigned name. The level of software interrupt line 3.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RAISED</name>
+              <description>Project-assigned name. One raises the line's interrupt; zero lowers it.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>CLIC</name>
+      <description>The core-local interrupt controller of the hart that accesses it, as 32-bit
+words: each line's word holds its pending, enable, attribute and control
+bytes. Invariant: every vectored line is level-triggered, so a write of the
+word that changes its enable or control writes back the pending bit read
+without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES).</description>
+      <baseAddress>0x20800000</baseAddress>
+      <registers>
+        <register>
+          <name>CTRL%s</name>
+          <description>Project-assigned name. Line %s: pending, enable, attribute and level control.</description>
+          <addressOffset>0x1000</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>IP</name>
+              <description>Project-assigned name. The line's pending bit; for a level-triggered line it follows the source.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>IE</name>
+              <description>Project-assigned name. Enables the line.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ATTR_SHV</name>
+              <description>Project-assigned name. Selects hardware vectoring for the line.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ATTR_TRIG</name>
+              <description>Project-assigned name. Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>ATTR_MODE</name>
+              <description>Project-assigned name. Privilege mode of the line.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>CTL</name>
+              <description>Project-assigned name. Level and priority control; with three level bits a level-n line holds 0x1f | (n - 1) &lt;&lt; 5.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>INTERRUPT_CORE0</name>
+      <description>The interrupt-matrix route words of core 0, one per peripheral source, by source
+number. Source 12 (ZB_MAC) is left out: its route word belongs to the
+IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
+around it.</description>
+      <baseAddress>0x60010000</baseAddress>
+      <registers>
+        <register>
+          <name>MAP_LOW%s</name>
+          <description>Project-assigned name. Route of source %s (sources 0 to 11).</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>MAP</name>
+              <description>Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+            <field>
+              <name>PASS_IN_SEC</name>
+              <description>Project-assigned name. The PASS_IN_SEC flag of the source.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>MAP_HIGH%s</name>
+          <description>Project-assigned name. Route of source 13 + %s (sources 13 to 83).</description>
+          <addressOffset>0x34</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>MAP</name>
+              <description>Project-assigned name. The CPU interrupt line the source is routed to; zero routes it nowhere.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+            <field>
+              <name>PASS_IN_SEC</name>
+              <description>Project-assigned name. The PASS_IN_SEC flag of the source.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>INTERRUPT_CORE0_STATUS</name>
+      <description>The pending state of every peripheral source at core 0's interrupt matrix.
+Every context polls it, so it is a shared block of side-effect-free reads.</description>
+      <baseAddress>0x60010150</baseAddress>
+      <registers>
+        <register>
+          <name>INT_STATUS_0</name>
+          <description>Project-assigned name. Pending state of sources 0 to 31, one bit each.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SOURCES</name>
+              <description>Project-assigned name. Bit k is set while source 0 + k raises its interrupt.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>INT_STATUS_1</name>
+          <description>Project-assigned name. Pending state of sources 32 to 63, one bit each.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SOURCES</name>
+              <description>Project-assigned name. Bit k is set while source 32 + k raises its interrupt.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>INT_STATUS_2</name>
+          <description>Project-assigned name. Pending state of sources 64 to 83, one bit each.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SOURCES</name>
+              <description>Project-assigned name. Bit k is set while source 64 + k raises its interrupt.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>20</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
       <name>WIFI_MAC_INTERFACE_ADDRESS</name>
       <description>Four interface-address pairs consumed by MAC receive filtering.</description>
       <baseAddress>0x600A405C</baseAddress>

@@ -52,4 +52,10 @@ owned-ranges = [
     "pcr-timg1-conf",
     "pcr-timg1-wdt-clk-conf",
     "lp-wdt",
+    "systimer",
+    "clic-lines",
+    "interrupt-core0-routes-low",
+    "interrupt-core0-routes-high",
+    "interrupt-core0-status",
+    "from-cpu-interrupts",
 ]

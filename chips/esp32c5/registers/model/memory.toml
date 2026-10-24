@@ -424,3 +424,55 @@ kind = "mmio"
 start = 0x600B1C00
 end-exclusive = 0x600B1C24
 permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_C5_SYSTIMER
+[[regions]]
+name = "systimer"
+address-space = "cpu"
+kind = "mmio"
+start = 0x6000A000
+end-exclusive = 0x6000A070
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_C5_CLIC
+[[regions]]
+name = "clic-lines"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20801000
+end-exclusive = 0x208010C0
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_C5_INTERRUPT_MATRIX
+[[regions]]
+name = "interrupt-core0-routes-low"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60010000
+end-exclusive = 0x60010030
+permissions = "rw"
+
+[[regions]]
+name = "interrupt-core0-routes-high"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60010034
+end-exclusive = 0x60010150
+permissions = "rw"
+
+[[regions]]
+name = "interrupt-core0-status"
+address-space = "cpu"
+kind = "mmio"
+start = 0x60010150
+end-exclusive = 0x6001015C
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_C5_FROM_CPU
+[[regions]]
+name = "from-cpu-interrupts"
+address-space = "cpu"
+kind = "mmio"
+start = 0x600C5090
+end-exclusive = 0x600C50A0
+permissions = "rw"

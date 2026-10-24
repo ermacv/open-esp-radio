@@ -192,3 +192,23 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7:
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"
 description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h sha256 1ea5f6783bf861b4f59e90799db46e5746ce0f6d52440ec0339661a5f9241043 (lines 2891-2955): TIMERGRP1_CTRL0 at DR_REG_HP_SYS_CLKRST_BASE + 0x11c with APB_CLK_EN 0 (reset one), RST_EN 1, FORCE_NORST 2, T0_SRC_SEL 4:3, T0_CLK_EN 5 (reset one), T1_SRC_SEL 7:6, T1_CLK_EN 8 (reset one), WDT_SRC_SEL 10:9 and WDT_CLK_EN 11 (reset one). reg_base.h sets DR_REG_HP_SYS_CLKRST_BASE 0x20587000. mwdt_ll.h enables the watchdog clock through this word's WDT_CLK_EN."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_SYSTIMER"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/systimer_reg.h sha256 51d57c950c5e19c6a6b01a7c1bf8510e848c76031a8d0e7040b0d22265a2e4b8 and components/soc/esp32s31/register/soc/reg_base.h sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d. DR_REG_SYSTIMER_BASE is 0x20399000. CONF at +0x0 (ETM_EN bit 1, TARGET2..0_WORK_EN bits 22..24, unit stall enables bits 25..28, TIMER_UNIT1_WORK_EN bit 29, TIMER_UNIT0_WORK_EN bit 30 default 1, CLK_EN bit 31; unit-1 stall enables default 1); UNIT0_OP at +0x4 (TIMER_UNIT0_VALUE_VALID bit 29 R/SS/WTC, TIMER_UNIT0_UPDATE bit 30 WT); TARGETn_HI/LO at +0x1c + 8n (20 and 32 bits); TARGETn_CONF at +0x34 + 4n (PERIOD bits 25:0, PERIOD_MODE bit 30, TIMER_UNIT_SEL bit 31); UNIT0_VALUE_HI/LO at +0x40/+0x44 (20 and 32 bits, RO); COMPn_LOAD at +0x50 + 4n (LOAD bit 0, WT); INT_ENA at +0x64 and INT_CLR at +0x6c (TARGETn bits 0..2, INT_CLR WT write-one-to-clear)."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/interrupt_core0_reg.h sha256 60785a48a2b2be35670a789bf2e0a82a45f4bd85f110fc18c197de14211f311e and interrupt_core1_reg.h sha256 e7966b5cda22b0df047182c6f7758c385b95edb991cdc40d0794127fdfdaf335, with reg_base.h sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d (INTERRUPT_CORE0 at 0x20585000, INTERRUPT_CORE1 at +0x800). Each core has one route word per source 0..168 at +4*source with the CPU line in bits 5:0 and PASS_LEVEL in bits 9:8, the rest reserved; source 132 (MODEM_ZB_MAC) at +0x210. INT_STATUS_REG_0..5 at +0x2a8..+0x2bc are read-only pending bits of sources 0..168, the last word bits 8:0."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_CLIC"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/include/soc/clic_reg.h sha256 84dc973bdc352ed8952d4399ed7b079b91ee3d207a6648c5568af862225e09da. DR_REG_CLIC_BASE 0x10800000, the accessing hart's own controller (DUALCORE_CLIC_CTRL_OFF 0x10000 reaches the other one); NLBITS 3; CLIC_INT_CTRL_REG(i) at 0x10801000 + 4i holds IP bit 0, IE bit 8, ATTR_SHV bit 16, ATTR_TRIG bits 18:17 (trig[0] clear is level), ATTR_MODE bits 23:22 and CTL bits 31:24."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_FROM_CPU"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/hp_system_reg.h sha256 808e417c1cfbf10b686c1ca0beb9ba6a4309d415e855149303ca847a225e9d6f and reg_base.h sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d: HP_SYSTEM_CPU_INT_FROM_CPU_0..3_REG at DR_REG_HP_SYS_BASE (0x20586000) + 0x10..0x1c, each with the R/W level bit 0 that raises its FROM_CPU interrupt source."
+
+[[sources]]
+id = "ESP_HAL_1F646C5_CLIC_LEVEL_LINES"
+description = "Pinned esp-hal fork commit 1f646c5af4f4ca2774f493783581237fea2379dc: esp-hal/src/interrupt/riscv/clic.rs sha256 6eb3270df3965a435173f193dc170394a0b19935c65b90c0a1d221e4aa83223d, whose init sets every CLIC line hardware-vectored and positive-level triggered, and esp-hal/src/interrupt/riscv.rs sha256 ea219e90206625ac1770bda13e3e042127fc08e4806d1f7dcd36cd35cbae46a4, whose init_vectoring calls it and gives line 15 + n level n (CTL 0x1f | (n - 1) << 5). ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7 components/hal/include/hal/interrupt_clic_ll.h sha256 f67f3972c229931602991529174e54aa354852c1104f703bd99383b31bca0126 reads ATTR_TRIG bit 0 clear as level-triggered."

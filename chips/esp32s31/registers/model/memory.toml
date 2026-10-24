@@ -207,10 +207,19 @@ end-exclusive = 0x20581068
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-between-timg1-wdt-and-ieee802154-core0-route"
+name = "hp-system-between-timg1-wdt-and-interrupt-core0"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20581068
+end-exclusive = 0x20585000
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX
+[[regions]]
+name = "interrupt-core0-routes-low"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585000
 end-exclusive = 0x20585210
 permissions = "rw"
 
@@ -223,10 +232,42 @@ end-exclusive = 0x20585214
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-between-ieee802154-routes"
+name = "interrupt-core0-routes-high"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20585214
+end-exclusive = 0x205852A4
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-interrupt-core0-assert-in-sec"
+address-space = "cpu"
+kind = "mmio"
+start = 0x205852A4
+end-exclusive = 0x205852A8
+permissions = "rw"
+
+[[regions]]
+name = "interrupt-core0-status"
+address-space = "cpu"
+kind = "mmio"
+start = 0x205852A8
+end-exclusive = 0x205852C0
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-interrupt-core0-status-and-core1"
+address-space = "cpu"
+kind = "mmio"
+start = 0x205852C0
+end-exclusive = 0x20585800
+permissions = "rw"
+
+[[regions]]
+name = "interrupt-core1-routes-low"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585800
 end-exclusive = 0x20585A10
 permissions = "rw"
 
@@ -239,10 +280,51 @@ end-exclusive = 0x20585A14
 permissions = "rw"
 
 [[regions]]
-name = "hp-system-between-ieee802154-core1-route-and-radio-modem-control"
+name = "interrupt-core1-routes-high"
 address-space = "cpu"
 kind = "mmio"
 start = 0x20585A14
+end-exclusive = 0x20585AA4
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-interrupt-core1-assert-in-sec"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585AA4
+end-exclusive = 0x20585AA8
+permissions = "rw"
+
+[[regions]]
+name = "interrupt-core1-status"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585AA8
+end-exclusive = 0x20585AC0
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-interrupt-core1-status-and-from-cpu"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585AC0
+end-exclusive = 0x20586010
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_S31_FROM_CPU
+[[regions]]
+name = "from-cpu-interrupts"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20586010
+end-exclusive = 0x20586020
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-from-cpu-and-radio-modem-control"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20586020
 end-exclusive = 0x20587040
 permissions = "rw"
 
@@ -577,4 +659,22 @@ address-space = "cpu"
 kind = "ram"
 start = 0x2F000000
 end-exclusive = 0x2F080000
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_S31_SYSTIMER
+[[regions]]
+name = "systimer"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20399000
+end-exclusive = 0x20399070
+permissions = "rw"
+
+# SOURCE: ESP_IDF_4D59230D_S31_CLIC
+[[regions]]
+name = "clic-lines"
+address-space = "cpu"
+kind = "mmio"
+start = 0x10801000
+end-exclusive = 0x108010C0
 permissions = "rw"

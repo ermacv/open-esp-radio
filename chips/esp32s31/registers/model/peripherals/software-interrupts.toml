@@ -1,0 +1,193 @@
+schema = 2
+
+[[peripherals]]
+name = "FROM_CPU_0"
+description = """
+Software interrupt line 0 (interrupt source FROM_CPU_INTR0): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole."""
+baseAddress = 0x20586010
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "LINE"
+description = "The level of software interrupt line 0."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "RAISED"
+description = "One raises the line's interrupt; zero lowers it."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals]]
+name = "FROM_CPU_1"
+description = """
+Software interrupt line 1 (interrupt source FROM_CPU_INTR1): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole."""
+baseAddress = 0x20586014
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "LINE"
+description = "The level of software interrupt line 1."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "RAISED"
+description = "One raises the line's interrupt; zero lowers it."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals]]
+name = "FROM_CPU_2"
+description = """
+Software interrupt line 2 (interrupt source FROM_CPU_INTR2): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole."""
+baseAddress = 0x20586018
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "LINE"
+description = "The level of software interrupt line 2."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "RAISED"
+description = "One raises the line's interrupt; zero lowers it."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals]]
+name = "FROM_CPU_3"
+description = """
+Software interrupt line 3 (interrupt source FROM_CPU_INTR3): one level bit a
+store of one raises and a store of zero lowers. Wakers raise it from every
+context and the line's handler lowers it, so it is a shared block whose one
+register is stored whole."""
+baseAddress = 0x2058601c
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "LINE"
+description = "The level of software interrupt line 3."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "RAISED"
+description = "One raises the line's interrupt; zero lowers it."
+bitOffset = 0
+bitWidth = 1
+
+[[peripheral-review]]
+entity = "FROM_CPU_0"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "FROM_CPU_1"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "FROM_CPU_2"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[peripheral-review]]
+entity = "FROM_CPU_3"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_FROM_CPU"]
+naming = "descriptive"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
