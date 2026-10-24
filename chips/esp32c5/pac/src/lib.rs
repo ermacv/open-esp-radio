@@ -29,6 +29,7 @@ pub(crate) mod ieee802154;
 pub(crate) mod modem;
 pub(crate) mod ownership;
 pub(crate) mod phy;
+pub mod platform;
 
 pub(crate) use ownership::device_fence;
 

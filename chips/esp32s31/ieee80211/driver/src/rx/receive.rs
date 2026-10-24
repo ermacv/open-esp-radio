@@ -46,7 +46,6 @@ use oer_interrupt_table::signal::SignalExecutor;
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
 };
-use oer_esp32s31_hal::settle::{Settle, SettleLimit};
 use oer_esp32s31_ieee80211_mac::{
     init::{
         MacRuntimeStartHardware, MacRuntimeStopHardware, MacSnifferHardware,
@@ -60,6 +59,7 @@ use oer_esp32s31_ieee80211_mac::{
     rx::{RxBufferFullCounter, RxDma, RxRingLive, pool::RxStagePool},
 };
 use oer_memory::HandlerCell;
+use oer_time::settle::{Settle, SettleLimit};
 use oer_time::{Duration, Instant, Timer};
 
 use super::{

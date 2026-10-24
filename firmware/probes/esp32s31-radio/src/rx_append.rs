@@ -15,7 +15,7 @@ use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::model::RxWalkerModel,
     rx_storage::{PlacedRxDma, RxDmaStorage},
 };
-use oer_esp32s31_hal::settle::{Settle, SettleLimit};
+use oer_time::settle::{Settle, SettleLimit};
 use oer_time::{Clock, Duration, Instant};
 
 /// Descriptors of the compared ring.

@@ -44,4 +44,7 @@ owned-ranges = [
     "pcr-tsens-clk-conf",
     "pcr-undocumented-014c",
     "apb-saradc-tsens-ctrl",
+    "lpperi-clk-en",
+    "lpperi-rng",
+    "lp-clkrst-reset-cause",
 ]

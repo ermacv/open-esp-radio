@@ -1,8 +1,9 @@
+//! The named settle on a stepping clock and on virtual time.
+
 use core::cell::Cell;
 
+use oer_time::settle::{Settle, SettleLimit, Unsettled, settle};
 use oer_time::{Clock, Duration, Instant};
-
-use super::*;
 
 /// A clock that advances one microsecond at every read.
 struct Stepping(Cell<u64>);
@@ -15,8 +16,9 @@ impl Clock for Stepping {
     }
 }
 
+#[expect(clippy::expect_used, reason = "a test helper outside a test function")]
 fn limit(micros: u64) -> SettleLimit {
-    SettleLimit::new(Duration::from_micros(micros)).unwrap()
+    SettleLimit::new(Duration::from_micros(micros)).expect("a test limit is a valid settle limit")
 }
 
 #[test]
@@ -63,7 +65,9 @@ fn concrete_and_erased_clocks_keep_the_same_result_and_attempt_count() {
         let mut attempts = 0;
         let result = settle(wait, || {
             attempts += 1;
-            clock.advance(Duration::from_micros(5)).unwrap();
+            clock
+                .advance(Duration::from_micros(5))
+                .expect("the virtual clock advances");
             (Some(attempts) == ready_on).then_some(attempts)
         });
         (result, attempts)

@@ -13,8 +13,8 @@
   <width>32</width>
   <peripherals>
     <peripheral>
-      <name>LP_CLKRST</name>
-      <description>Low-power clock/reset registers: the reset cause of the HP core, which the stand reads after a power cycle.</description>
+      <name>LP_CLKRST_RESET_CAUSE</name>
+      <description>Low-power clock/reset registers: the reset cause of the HP core. Firmware reads it after boot; the host reads it through JTAG after a power cycle.</description>
       <baseAddress>0x600B0400</baseAddress>
       <registers>
         <register>

@@ -14,7 +14,7 @@ pub use oer_espressif_efuse::{FactoryMac, Interface, MacAddress};
 use oer_mmio::Placement;
 use oer_time::{Clock, Duration, Instant};
 
-use crate::settle::{Settle, SettleLimit, settle};
+use oer_time::settle::{Settle, SettleLimit, settle};
 
 #[cfg(test)]
 mod tests;

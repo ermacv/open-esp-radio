@@ -112,3 +112,10 @@ radio = "PMU_RADIO.RF_PWC"
 esp_hal = "PMU.rf_pwc in rtc::init (rtc_cntl/rtc/esp32c5.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal's only ESP32-C5 store is rtc::init inside esp_hal::init (esp-hal 1f646c5 rtc_cntl/rtc/esp32c5.rs), before any radio owner exists; neither the sleep driver nor the clocks touch it. The radio's read-modify-write writers run after the handoff, in probe images only."
+
+[[word]]
+address = 0x600b2800
+radio = "LPPERI_RNG.CLK_EN (typed block)"
+esp_hal = "LP_PERI.clk_en in LpI2c::enable (i2c/lp_i2c/lp_i2c.rs); analog/adc/p4.rs and soc/esp32h4/mod.rs are other chips' paths"
+coordination = "unreached-esp-hal-path"
+reason = "On the ESP32-C5 esp-hal 1f646c5 stores the word only from the LP I2C driver: LpI2c::init (from LpI2c::new) and LpI2c::disable call enable, a read-modify-write of LP_EXT_I2C_CK_EN, and constructing an LpI2c takes the LP_I2C0 singleton. No C5 image constructs an LpI2c, and esp_hal::init does not store the word. The P4 ADC and the H4 init writers are compiled for other chips only. The entropy owner sets only RNG_CK_EN, by a read-modify-write that keeps the other gates."

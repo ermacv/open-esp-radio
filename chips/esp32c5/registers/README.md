@@ -26,7 +26,8 @@ reaches.
 | `evidence/` | Source identities of the reviewed facts |
 | `published/radio.svd`, `published/radio.bindings.toml` | Generated SVD and binding index |
 | `publication/registers.toml` | Source-only publication composition |
-| `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause register the host reads through JTAG after a power cycle; SVD and `published/platform.bindings.toml` only, no PAC (ESP-HAL owns the block at runtime) |
+| `model/platform-device.toml`, `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause word the host reads through JTAG after a power cycle, from the same `peripherals/lp-clkrst-reset-cause.toml` fragment the firmware PAC renders; SVD and `published/platform.bindings.toml` only |
+| `model/peripherals/{lpperi-rng,lp-clkrst-reset-cause}.toml` | Platform blocks rendered as typed register blocks (`typed-peripherals` in `policy/api.toml`): the random number generator's clock gate, configuration and output, and the HP core's reset cause. Each partition is claimed by its own platform handoff |
 
 The model publishes, for chip revision v1.0, the IEEE 802.15.4 MAC aperture
 at `0x600A3000` with its interrupt route, the analog I2C master, the shared

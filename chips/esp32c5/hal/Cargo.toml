@@ -14,6 +14,8 @@ test-support = ["oer-esp32c5-pac/test-support", "oer-espressif-ieee802154-engine
 [dependencies]
 oer-esp32c5-pac = { path = "../pac" }
 oer-memory = { path = "../../../portable/memory" }
+oer-mmio = { path = "../../../portable/mmio" }
+oer-time = { path = "../../../portable/time" }
 oer-espressif-coex = { path = "../../espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
 oer-espressif-analog = { path = "../../espressif/analog" }

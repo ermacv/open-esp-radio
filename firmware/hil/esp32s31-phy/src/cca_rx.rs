@@ -13,7 +13,6 @@ use oer_esp32s31_hal::{
     },
     owner::RadioAccess,
     power::PlatformClockBackend,
-    settle::Settle,
 };
 use oer_esp32s31_ieee80211_driver::rx::{
     receive::{DRAIN_POLL, DRAIN_TIMEOUT, RELOAD_SETTLE_LIMIT},
@@ -29,6 +28,7 @@ use oer_esp32s31_ieee80211_mac::{
 };
 use oer_hil_protocol::base::RejectReason;
 use oer_ieee80211_wire::{frame::DecodedHeader, scan::parse_management};
+use oer_time::settle::Settle;
 use oer_time::{Clock, Duration, Timer};
 
 const COUNT: usize = 4;

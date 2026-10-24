@@ -8,7 +8,7 @@
 //! may make, and it counts against the step bound of its context. A wait of
 //! unknown length is a timer-woken step with a deadline instead.
 
-use oer_time::{Clock, Duration};
+use crate::{Clock, Duration};
 
 /// The longest a settle may wait: nonzero and at most [`Self::MAX`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -93,6 +93,3 @@ pub fn settle<C: Clock + ?Sized, T>(
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -69,7 +69,7 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   radio views of platform blocks claim only their own words. Only the chip
   PAC's root makes the promise, once for each domain's typed blocks, from
   that domain's platform handoff: the radio root for the radio blocks, and
-  one handoff per platform domain (such as the S31's eFuse, entropy and
+  one handoff per platform domain (such as the eFuse, entropy and
   reset-cause blocks) that an esp-hal adapter makes after consuming the
   domain's esp-hal singletons (clippy `disallowed-methods` refuses it
   elsewhere); a probe image may claim a block again after dropping the

@@ -165,8 +165,8 @@ fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
         let outlined = SchedulerInterruptClock::new(&clock);
         assert_eq!(outlined.now(), clock.now());
         let mut attempts = 0;
-        let result = crate::settle::settle(
-            crate::settle::Settle::new(super::super::DIAGNOSTIC_SETTLE, &outlined),
+        let result = oer_time::settle::settle(
+            oer_time::settle::Settle::new(super::super::DIAGNOSTIC_SETTLE, &outlined),
             || {
                 attempts += 1;
                 clock
@@ -180,7 +180,7 @@ fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
             Some(2) => (Ok(2), 2),
             // The third attempt follows the read that saw the limit pass.
             Some(3) => (Ok(3), 3),
-            _ => (Err(crate::settle::Unsettled), 3),
+            _ => (Err(oer_time::settle::Unsettled), 3),
         };
         assert_eq!((result, attempts), expected);
         assert_eq!(outlined.now(), clock.now());

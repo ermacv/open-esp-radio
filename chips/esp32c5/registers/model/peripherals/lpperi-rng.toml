@@ -1,0 +1,101 @@
+schema = 2
+
+[[peripherals]]
+name = "LPPERI_RNG"
+description = "Low-power peripheral registers: the random number generator's clock gate, its sampling and timer configuration and its synchronized output."
+baseAddress = 0x600B2800
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_EN"
+description = "Clock gates of the low-power peripherals. The word is shared with the LP UART, LP IO, LP I2C, eFuse and LP CPU gates; only the generator's gate is described, and every change keeps the other bits."
+addressOffset = 0x00
+size = 32
+access = "read-write"
+resetValue = 0x7f000000
+reserved = { mask = 0x00ffffff, sources = ["ESP_IDF_4D59230D_C5_LPPERI_RNG"] }
+
+[[peripherals.registers.register.fields]]
+name = "RNG_CK_EN"
+description = "Random number generator clock enable; set after reset."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RNG_CFG"
+description = "Random number generator sampling and timer configuration."
+addressOffset = 0x24
+size = 32
+access = "read-write"
+resetValue = 0x00000ffe
+reserved = { mask = 0x00fff000, sources = ["ESP_IDF_4D59230D_C5_LPPERI_RNG"] }
+
+[[peripherals.registers.register.fields]]
+name = "RNG_SAMPLE_ENABLE"
+description = "Enables sampling of the ring oscillator; clear after reset."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RNG_TIMER_PSCALE"
+description = "Clock divider of the generator's timer."
+bitOffset = 1
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "RNG_TIMER_EN"
+description = "XORs the asynchronous generator timer into the output."
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RTC_TIMER_EN"
+description = "XORs the RTC timer into the output: bit 0 before the CRC, bit 1 after it."
+bitOffset = 10
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "RNG_SAMPLE_CNT"
+description = "Count of ring-oscillator samples."
+bitOffset = 24
+bitWidth = 8
+access = "read-only"
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RNG_DATA_SYNC"
+description = "The generator's output, synchronized to the bus clock."
+addressOffset = 0x28
+size = 32
+access = "read-only"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "RND_SYNC_DATA"
+description = "One 32-bit word of random data."
+bitOffset = 0
+bitWidth = 32
+
+[[peripheral-review]]
+entity = "LPPERI_RNG"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_C5_LPPERI_RNG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_C5_LPPERI_RNG"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_C5_LPPERI_RNG"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

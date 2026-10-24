@@ -19,6 +19,9 @@
 //! - [`Coordinate`] names an instant of either axis by its microseconds and
 //!   span type, the only view a clock relation takes to carry time across.
 //!
+//! [`settle`] is the one busy-wait a driver may make: a named settle of a
+//! known length up to 20 µs, measured on the caller's [`Clock`].
+//!
 //! Both axes represent microseconds in `u64`. Radio spans include every
 //! value from zero through `u64::MAX`; [`RadioWindow`] additionally requires
 //! a non-zero span and a representable exclusive endpoint.
@@ -40,6 +43,7 @@
 //!   protocol's message lock; it enables `serde`.
 
 pub mod deadline;
+pub mod settle;
 
 use core::future::Future;
 

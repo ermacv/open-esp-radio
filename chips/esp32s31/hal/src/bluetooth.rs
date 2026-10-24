@@ -41,12 +41,12 @@ mod scheduler_execution_modify;
 mod scheduler_stop;
 mod shutdown;
 
-use crate::settle::{self, Settle, Unsettled};
 use controller_time::ControllerTimeLatch;
 pub use controller_time::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchRequest,
     BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError,
 };
+use oer_time::settle::{self, Settle, Unsettled};
 pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
 pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::BluetoothSchedulerStop;

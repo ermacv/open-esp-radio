@@ -1,7 +1,7 @@
 //! Direct hardware observation: a named settle bounded in time, and the
 //! the time bounds of measured direct observations.
 
-use oer_esp32s31_hal::settle::{self, Settle, SettleLimit, Unsettled};
+use oer_time::settle::{self, Settle, SettleLimit, Unsettled};
 use oer_time::{Clock, Duration};
 
 /// The longest a direct observation of a measured site may wait: the worst

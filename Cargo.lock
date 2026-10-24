@@ -2696,8 +2696,10 @@ dependencies = [
  "oer-espressif-ieee802154-engine",
  "oer-espressif-modem-clock",
  "oer-memory",
+ "oer-mmio",
  "oer-radio-regulatory",
  "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
@@ -3298,8 +3300,10 @@ dependencies = [
  "embassy-time",
  "esp-hal",
  "oer-diagnostics",
+ "oer-embassy-time",
  "oer-esp32c5-board",
  "oer-esp32c5-esp-hal-soc",
+ "oer-esp32c5-hal",
  "oer-esp32c5-layout",
  "oer-espressif-esp-hal-irq",
  "oer-espressif-executor",

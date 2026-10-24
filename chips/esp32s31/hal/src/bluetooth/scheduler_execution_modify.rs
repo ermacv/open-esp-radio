@@ -22,7 +22,7 @@ use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
 #[cfg(test)]
-use crate::settle::Unsettled;
+use oer_time::settle::Unsettled;
 
 #[derive(Debug)]
 enum Phase {
