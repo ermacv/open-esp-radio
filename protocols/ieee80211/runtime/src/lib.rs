@@ -37,8 +37,7 @@
 //!
 //! [`monitor`] provides bounded capture and injection handoffs. [`connected_tasks`]
 //! coordinates finite task shutdown, and [`station_network`] retains network
-//! ownership across station associations. [`stack_boundary`] provides an explicit
-//! poll boundary for large async state machines.
+//! ownership across station associations.
 //! [`station_service`] is the station's thin service on a lower-MAC port:
 //! one waiting point, every machine's actions after each input. Hardware access and concrete
 //! task assembly belong to the chip backend and its integration.
@@ -51,7 +50,6 @@
 //!
 pub mod connected_tasks;
 pub mod monitor;
-pub mod stack_boundary;
 pub mod station_network;
 pub mod station_service;
 pub mod survey;
