@@ -2,7 +2,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 //! The chip-neutral steps of the staged-boot bootstrap.
 //!
-//! Each chip's bootstrap (`platform/<chip>/bootstrap`) is a Flash-resident
+//! Each chip's bootstrap (`firmware/bootstrap/<chip>`) is a Flash-resident
 //! ESP-IDF application that carries the packed stage-two runtime as Flash
 //! read-only data. After it initialized esp-hal and its board's PSRAM it calls
 //! [`stage`], which checks the payload's header and checksum, copies it to its

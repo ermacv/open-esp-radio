@@ -3,10 +3,10 @@
 //!
 //! These output sections are `NOLOAD`: no bytes of their inputs reach the
 //! image, and the boot clears the range. A static placed there by name must
-//! therefore start as all zero bytes, or its initializer is silently lost.
-//! Nothing checks after the link that no input carries initialized bytes
-//! there. A test keeps
-//! [`RUNTIME_ZEROED_REGIONS`] equal to the linker script.
+//! therefore start as all zero bytes, or its initializer is silently lost; the
+//! image linker (`tools/image/checks`) refuses a link in which an input there
+//! carries one. A test keeps [`RUNTIME_ZEROED_REGIONS`] equal to the linker
+//! script, and the chip profiles' `[staged] zeroed-inputs` equal to it.
 
 /// One output section the boot zeroes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

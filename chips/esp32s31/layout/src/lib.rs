@@ -30,6 +30,11 @@ pub const LAYOUT: Layout = Layout {
     // `iram_loader_seg`; asserted as `bootloader_iram_loader_seg_start`).
     second_stage_loader_start: 0x2f06_cfb0,
     // The unified 64-MiB Flash XIP instruction/data window.
+    //
+    // SOURCE: ESP-IDF 4d59230d `components/soc/esp32s31/include/soc/soc.h:138-141`
+    // (`SOC_IROM_LOW`..`SOC_IROM_HIGH`, 64 MiB). esp-metadata's `irom` range is
+    // 256 MiB (0x40000000..0x50000000) and the bootloader's PMA entry 15 covers
+    // 512 MiB; the bootstrap maps and checks only these 64 MiB.
     flash_xip: Region::new(0x4000_0000, 0x0400_0000),
     // Cached external RAM aperture of the fitted 16-MiB PSRAM.
     psram: Region::new(0x5000_0000, 0x0100_0000),

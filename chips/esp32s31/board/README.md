@@ -86,7 +86,7 @@ the macro links each handler into its source's slot of esp-hal's
 `INTERRUPT_TABLE` to `Handoff::adopt`. Each 12-byte entry holds the `Interrupt` (`u16`), the
 `Priority` (`u8`), the `Cpu` (a 4-byte C enum at offset 4) and the handler
 address at offset 8 (zero for an entry a `cfg` leaves out); compile-time
-assertions in `interrupts.rs` keep that layout. Installing a hart's
+assertions in `chips/espressif/esp-hal-irq/src/table.rs` keep that layout. Installing a hart's
 interrupt stack silences every source of that hart's entries and checks the
 slots; `enable_interrupts` checks again that every slot holds its
 handler and every table source is silent or routed to its level. An owner
