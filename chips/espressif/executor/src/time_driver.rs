@@ -21,16 +21,17 @@
 //!   programs that executor's comparator. A torn read is skipped: the
 //!   publisher pends the writer again after every write.
 //!
-//! [`init`] consumes esp-hal's SYSTIMER singleton through [`ComparatorWriter`].
-//! Comparator programming and W1C acknowledgement belong to this executor.
-//! `Instant::now()` and `SystemTimer::ticks_per_second()` stay with esp-hal:
-//! its `UNIT0_OP` counter latch shares no word with the comparators.
+//! [`init`] consumes esp-hal's SYSTIMER singleton through [`ComparatorWriter`],
+//! which claims the system timer's typed blocks: the comparators, their
+//! acknowledgements and the counter latch every context reads for the time
+//! ([`crate::counter`]). The counter counts 16 ticks per microsecond on both
+//! chips.
 
 use core::{cell::UnsafeCell, task::Waker};
 
 use embassy_time_driver::Driver;
 use oer_interrupt_table::Entry;
-use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use portable_atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::{
     chip::{Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, SYSTIMER},
@@ -119,8 +120,6 @@ static WRITER: AtomicU8 = AtomicU8::new(NO_EXECUTOR);
 /// Each executor's next deadline, published to the writer.
 static PUBLISHED: [DeadlineCell; SOFTWARE_INTERRUPT_COUNT] =
     [const { DeadlineCell::new(u64::MAX) }; SOFTWARE_INTERRUPT_COUNT];
-/// SYSTIMER ticks per microsecond.
-static TICKS_PER_MICROSECOND: AtomicU32 = AtomicU32::new(0);
 
 #[cfg(oer_profile)]
 /// Each comparator's last alarm entry and acknowledgement, in microseconds.
@@ -197,13 +196,6 @@ where
             .is_ok(),
         "the time driver is installed already"
     );
-    let ticks_per_second = crate::chip::ticks_per_second();
-    let ticks_per_microsecond = u32::try_from(ticks_per_second / 1_000_000).unwrap_or(0);
-    assert!(
-        ticks_per_microsecond != 0 && ticks_per_second.is_multiple_of(1_000_000),
-        "the system timer counts whole ticks per microsecond"
-    );
-    TICKS_PER_MICROSECOND.store(ticks_per_microsecond, Ordering::Relaxed);
     bind::<WRITER_SWI, A>(alarm);
 }
 
@@ -276,7 +268,7 @@ where
 fn program(comparator: Comparator, deadline: u64) {
     let ticks = (deadline != u64::MAX).then(|| {
         deadline
-            .saturating_mul(u64::from(TICKS_PER_MICROSECOND.load(Ordering::Relaxed)))
+            .saturating_mul(crate::chip::TICKS_PER_MICROSECOND)
             .min(TICK_MASK)
     });
     assert!(

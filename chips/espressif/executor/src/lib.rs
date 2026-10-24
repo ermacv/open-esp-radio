@@ -10,9 +10,11 @@
 //! not own radio policy, board electrical parameters, credentials, sockets or
 //! a host protocol. Timer observations, idle accounting and poll timing,
 //! compiled for an image that declares the profile class (`cfg(oer_profile)`),
-//! describe only its own execution. Applications supply the ESP-HAL
-//! software interrupt capabilities and the system timer explicitly, with the
-//! tokens of their sources in the image's interrupt table.
+//! describe only its own execution. Applications supply esp-hal's software
+//! interrupt lines and system timer explicitly, with the tokens of their
+//! sources in the image's interrupt table; each is consumed by its platform
+//! handoff, and the executor drives our typed blocks (`FROM_CPU_0..3`, the
+//! SYSTIMER comparators and its shared counter latch) from then on.
 //!
 //! - Each executor's tasks are declared by [`tasks!`] into static slots and
 //!   polled by a direct call per task; [`task`] describes the slots, the
@@ -42,6 +44,8 @@ mod context;
 #[cfg(feature = "chip")]
 mod cooperative;
 #[cfg(any(feature = "chip", test))]
+mod counter;
+#[cfg(any(feature = "chip", test))]
 mod deadline_cell;
 #[cfg(feature = "chip")]
 mod doorbell;
@@ -55,14 +59,10 @@ mod poll_stamp;
 pub mod port_slot;
 #[cfg(feature = "chip")]
 pub use cooperative::Cooperative;
-#[cfg(feature = "chip")]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "this module consumes SYSTIMER and owns its comparator register writes"
-)]
-pub mod systimer;
 #[cfg(any(feature = "chip", test))]
-mod systimer_ack;
+mod software_line;
+#[cfg(feature = "chip")]
+pub mod systimer;
 #[cfg(any(feature = "chip", test))]
 pub mod task;
 #[cfg(feature = "chip")]
@@ -71,7 +71,7 @@ mod time_driver;
 mod timer_queue;
 
 #[cfg(feature = "chip")]
-pub use doorbell::{Doorbell, DoorbellAcknowledger};
+pub use doorbell::{Doorbell, DoorbellAcknowledger, LineAcknowledger};
 #[cfg(feature = "chip")]
 pub use executor::{
     Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,

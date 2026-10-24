@@ -84,12 +84,14 @@ impl Handoff {
         interrupt_table: &'static InterruptTable,
         board: B,
     ) -> (B::Mapping, Adopted) {
-        oer_espressif_esp_hal_irq::adopt(interrupt_table);
         let mapping = board.adopt(&self.proof);
         // SAFETY: the handoff proves interrupts are disabled on the only
         // running hart, and no driver relies on the bootloader's interrupt
         // mappings yet.
         unsafe { esp_hal::interrupt::reinitialize_vectoring_after_handoff() };
+        // After esp-hal's vectoring: the table claims the matrix and the
+        // CLIC once esp-hal's last vectoring store of this boot is done.
+        oer_espressif_esp_hal_irq::adopt(interrupt_table);
         // SAFETY: interrupts are disabled and this hart has not admitted one.
         unsafe { stacks::install_current_hart_interrupt_stack() };
         unsafe extern "C" {
@@ -122,12 +124,15 @@ impl Adopted {
     ///
     /// # Panics
     /// When a hardware-vector slot of the hart's active MTVT is not the
-    /// runtime's stack-switching entry, or the interrupt matrix disagrees with
-    /// the image's interrupt table ([`interrupts`]).
+    /// runtime's stack-switching entry, or the interrupt matrix or a bound
+    /// CPU line disagrees with the image's interrupt table ([`interrupts`]):
+    /// the typed boot failure `oer_espressif_esp_hal_irq::VerifyError`.
     #[allow(unsafe_code, reason = "sets mstatus.MIE")]
     pub fn enable_interrupts(self) {
         stacks::verify_current_hart_vectors();
-        oer_espressif_esp_hal_irq::verify_current_hart();
+        if let Err(error) = oer_espressif_esp_hal_irq::verify_current_hart() {
+            panic!("the interrupt lines disagree with the image's table: {error:?}");
+        }
         // SAFETY: as above, no source is routed but by its bound owner;
         // setting MIE touches no memory and leaves the stack unchanged.
         unsafe {

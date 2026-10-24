@@ -70,7 +70,9 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   PAC's root makes the promise, once for each domain's typed blocks, from
   that domain's platform handoff: the radio root for the radio blocks, and
   one handoff per platform domain (such as the eFuse, entropy,
-  reset-cause and watchdog blocks) that an esp-hal adapter makes after
+  reset-cause and watchdog blocks, the system timer, each software
+  interrupt line and the interrupt matrix with the CLIC) that the domain's
+  owner makes after
   consuming the domain's esp-hal singletons (clippy `disallowed-methods` refuses it
   elsewhere); a probe image may claim a block again after dropping the
   block's owner.

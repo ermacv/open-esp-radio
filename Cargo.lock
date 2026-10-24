@@ -2944,8 +2944,11 @@ name = "oer-espressif-esp-hal-irq"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
+ "oer-esp32c5-hal",
+ "oer-esp32s31-hal",
  "oer-interrupt-table",
  "oer-memory",
+ "oer-mmio",
  "static_cell",
 ]
 
@@ -2978,12 +2981,13 @@ dependencies = [
  "bytemuck",
  "embassy-time-driver",
  "esp-hal",
- "esp32c5",
- "esp32s31",
  "oer-cooperate",
+ "oer-esp32c5-hal",
+ "oer-esp32s31-hal",
  "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
  "oer-memory",
+ "oer-mmio",
  "oer-radio-port",
  "oer-riscv",
  "oer-test-ui-cases",

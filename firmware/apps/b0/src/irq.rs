@@ -5,7 +5,6 @@ use core::{
     cell::RefCell,
     sync::atomic::{AtomicBool, Ordering},
 };
-use esp_hal::interrupt::software::SoftwareInterruptAcknowledger;
 use oer_esp32s31_bluetooth_driver::port::Fault;
 use oer_esp32s31_bluetooth_driver::{
     interrupt::{ControllerInterruptHalf, SchedulerWakeCell},
@@ -16,7 +15,7 @@ use oer_esp32s31_hal::bluetooth::{
     ModemLpTimerHandlerRegisterStep, ModemLpTimerInterruptReadyOwner, ModemLpTimerInterruptStep,
     ModemLpTimerSoftwarePendingOwner,
 };
-use oer_espressif_executor::{Doorbell, SameLevel};
+use oer_espressif_executor::{Doorbell, LineAcknowledger, SameLevel};
 use oer_firmware_apps_b0::routes::{self, Routes};
 use oer_interrupt_table::signal::IrqSignal;
 use oer_memory::{
@@ -56,8 +55,8 @@ oer_espressif_staged_runtime::placed_static! {
     static STATE:HandlerCell<State>=HandlerCell::new(),in critical_data "b0";
     static STORAGE:StaticCell<State>=StaticCell::new(),in critical_data "b0";
     static QUEUES:StaticCell<TimerQueues>=StaticCell::new(),in critical_data "b0";
-    static ACK:HandlerCell<SoftwareInterruptAcknowledger<'static, 3>>=HandlerCell::new(),in critical_data "b0";
-    static ACK_STORE:StaticCell<SoftwareInterruptAcknowledger<'static, 3>>=StaticCell::new(),in critical_data "b0";
+    static ACK:HandlerCell<LineAcknowledger<3>>=HandlerCell::new(),in critical_data "b0";
+    static ACK_STORE:StaticCell<LineAcknowledger<3>>=StaticCell::new(),in critical_data "b0";
     pub static FAULT:AtomicBool=AtomicBool::new(false),in critical_data "b0";
     pub static SCHEDULER_SIGNAL:IrqSignal<X>=IrqSignal::new(),in critical_data "b0";
     pub static REPLY:IrqSignal<X>=IrqSignal::new(),in critical_data "b0";
@@ -134,7 +133,7 @@ pub fn initialize(
 }
 
 pub fn doorbell() {
-    let _ = ACK.with(|ack| ack.reset());
+    let _ = ACK.with(LineAcknowledger::acknowledge);
     let _ = STATE.with(|s| {
         if let Ok(owner) = s.ready.try_receive() {
             if matches!(s.timer, TimerState::Vacant) {

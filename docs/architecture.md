@@ -129,7 +129,10 @@ moves; ownership, orchestration and wiring are rebuilt.
 
 - **Two roots, one shrinking.** esp-hal (the owner's fork, fixes only) still
   owns parts of the SoC before the radio handoff: boot, clocks, interrupt
-  dispatch, PSRAM, flash, console, time. esp-hal, esp-pacs, esp-riscv-rt and
+  dispatch and the routes and CPU lines it writes, PSRAM, flash, console.
+  The executor's time, software interrupt lines and timer comparators, and
+  the interrupt table's checks of routes and lines, run on our typed
+  platform blocks. esp-hal, esp-pacs, esp-riscv-rt and
   esp-metadata are used only at the sites listed in
   `tools/test/layers/tests/platform_crates.allowlist`; a test fails on any use
   elsewhere, and new platform code goes into our HAL and PAC crates. Each
