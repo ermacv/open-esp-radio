@@ -1,4 +1,4 @@
-schema = 5
+schema = 6
 extends = "../../../chips/esp32s31/platform/stack.toml"
 
 # Personal StationService runs on the P1 PSRAM task stack. Each exact

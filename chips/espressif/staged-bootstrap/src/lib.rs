@@ -34,7 +34,17 @@ fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
 }
 
 /// Report the bootstrap's start on the USB Serial/JTAG console. Call first.
+/// Any hart but [`oer_espressif_staged_layout::boot::BOOT_HART`] stops here.
 pub fn start() {
+    let hart: usize;
+    // SAFETY: reading `mhartid` touches no memory.
+    #[allow(unsafe_code, reason = "reads mhartid")]
+    unsafe {
+        asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack))
+    };
+    if !oer_espressif_staged_layout::boot::may_boot(hart) {
+        fail("OER_BOOT bootstrap=FAIL reason=not-boot-hart\r\n");
+    }
     print("OER_BOOT bootstrap=START\r\n");
 }
 

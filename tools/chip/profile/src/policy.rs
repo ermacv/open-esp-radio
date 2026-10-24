@@ -1,13 +1,17 @@
-//! The stack policy of an image family (`stack.toml`, schema 5): the stacks
+//! The stack policy of an image family (`stack.toml`, schema 6): the stacks
 //! the gate bounds, each by the function that runs on it, the compiler move
 //! limit and the runtime headroom the firmware's stack painting enforces.
 //!
 //! A policy that names no stacks sets only the compiler move and function-frame limit: the
 //! image is compiled with every image flag (frame records included), and the
 //! whole-stack check has nothing to bound. A policy that names stacks names the
-//! coverage review and the CPU0 task stack, and the interrupt stacks' and a
-//! bootstrap image's stack where the image has them.
+//! coverage review and, for every core of the chip (`[core.N.task_stack]` and
+//! `[core.N.interrupt_stack]`), either the stack's proven root or
+//! `unused = true`, and a bootstrap image's stack where the image has one.
+//! The gate proves an unused stack: nothing in the image starts the core,
+//! routes an interrupt to it or allocates it a byte.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -15,7 +19,7 @@ use serde::Deserialize;
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// The policy schema this gate reads.
-pub const SCHEMA: u32 = 5;
+pub const SCHEMA: u32 = 6;
 
 /// A target's stack policy.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -37,11 +41,10 @@ pub struct StackPolicy {
     /// `*` matches any substring; all other characters are literal.
     #[serde(default)]
     pub observed_functions: Vec<String>,
-    /// The runtime's primary task stack.
+    /// The runtime's stacks of each core, by core number: every core of the
+    /// chip when the policy names stacks.
     #[serde(default)]
-    pub cpu0_task_stack: Option<TaskStack>,
-    #[serde(default)]
-    pub interrupt_stacks: Option<InterruptStacks>,
+    pub core: BTreeMap<u32, CoreStacks>,
     /// The bootstrap image's only stack.
     #[serde(default)]
     pub bootstrap_stack: Option<TaskStack>,
@@ -72,8 +75,53 @@ pub struct FrameException {
 pub struct Stacks<'a> {
     pub coverage_policy: &'a Path,
     pub cpu0_task_stack: &'a TaskStack,
-    pub interrupt_stacks: Option<&'a InterruptStacks>,
     pub bootstrap_stack: Option<&'a TaskStack>,
+}
+
+/// One core's task stack and interrupt stack.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CoreStacks {
+    pub task_stack: Slot<TaskStack>,
+    pub interrupt_stack: Slot<InterruptStack>,
+}
+
+/// A stack the image uses, proven from its root, or `unused = true`: no byte
+/// is allocated and the gate proves that nothing runs on it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Slot<T> {
+    Unused(Unused),
+    Used(T),
+}
+
+/// The `unused = true` marker of a [`Slot`].
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Unused {
+    #[serde(deserialize_with = "only_true")]
+    pub unused: bool,
+}
+
+fn only_true<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<bool, D::Error> {
+    if bool::deserialize(deserializer)? {
+        Ok(true)
+    } else {
+        Err(serde::de::Error::custom(
+            "`unused = false`: name the stack's root instead",
+        ))
+    }
+}
+
+impl<T> Slot<T> {
+    pub fn used(&self) -> Option<&T> {
+        match self {
+            Self::Used(stack) => Some(stack),
+            Self::Unused(_) => None,
+        }
+    }
 }
 
 /// One stack, the function that runs on it and the headroom it keeps.
@@ -174,12 +222,14 @@ impl TaskStack {
     }
 }
 
-/// The dedicated SRAM interrupt stacks: their bound and margin are the
+/// A core's dedicated SRAM interrupt stack: its bound and margin are the
 /// interrupt-stack gate's contract, without an independent free-byte reserve.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct InterruptStacks {
-    /// This image's maximum allocation per hart. Absent uses the chip layout.
+pub struct InterruptStack {
+    /// This image's maximum allocation of every used core's interrupt stack
+    /// (the contract has one maximum); only core 0 sets it. Absent uses the
+    /// chip layout.
     #[serde(default)]
     pub allocation_bytes: Option<u32>,
 }
@@ -302,23 +352,16 @@ impl StackPolicy {
         }
         let named = [
             self.coverage_policy.is_some(),
-            self.cpu0_task_stack.is_some(),
-            self.interrupt_stacks.is_some(),
+            !self.core.is_empty(),
             self.bootstrap_stack.is_some(),
         ];
         if !named.iter().any(|named| *named) {
             return Ok(());
         }
         let stacks = self.stacks()?;
-        if let Some(interrupts) = stacks.interrupt_stacks
-            && let Some(bytes) = interrupts.allocation_bytes
-            && (bytes == 0 || bytes % 16 != 0)
-        {
-            return Err("interrupt stack maximum must be positive and aligned to 16 bytes".into());
-        }
-        stacks.cpu0_task_stack.validate("cpu0_task_stack")?;
+        self.validate_cores()?;
         if stacks.cpu0_task_stack.handoff.is_some() {
-            return Err("`handoff` belongs to the bootstrap stack, not `cpu0_task_stack`".into());
+            return Err("`handoff` belongs to the bootstrap stack, not `core.0.task_stack`".into());
         }
         if let Some(bootstrap) = stacks.bootstrap_stack {
             bootstrap.validate("bootstrap_stack")?;
@@ -334,19 +377,118 @@ impl StackPolicy {
         Ok(())
     }
 
+    /// Every core is numbered from 0 without a gap. Core 0 runs the runtime,
+    /// so both its stacks are used; a core that runs a task takes interrupts,
+    /// so its interrupt stack is used too.
+    fn validate_cores(&self) -> Result<()> {
+        for (expected, (&core, stacks)) in self.core.iter().enumerate() {
+            if core as usize != expected {
+                return Err(format!("`core.{expected}` is missing from the stack policy").into());
+            }
+            if let Slot::Used(task) = &stacks.task_stack {
+                task.validate(&format!("core.{core}.task_stack"))?;
+                if stacks.interrupt_stack.used().is_none() {
+                    return Err(format!(
+                        "`core.{core}` runs a task but its interrupt stack is unused"
+                    )
+                    .into());
+                }
+            } else if core == 0 {
+                return Err("`core.0.task_stack` is unused: the runtime runs on core 0".into());
+            }
+            match &stacks.interrupt_stack {
+                Slot::Used(interrupts) => {
+                    if let Some(bytes) = interrupts.allocation_bytes {
+                        if core != 0 {
+                            return Err(format!(
+                                "`core.{core}.interrupt_stack` sets `allocation_bytes`; only core 0 does, for every used core"
+                            )
+                            .into());
+                        }
+                        if bytes == 0 || bytes % 16 != 0 {
+                            return Err(
+                                "interrupt stack maximum must be positive and aligned to 16 bytes"
+                                    .into(),
+                            );
+                        }
+                    }
+                }
+                Slot::Unused(_) if core == 0 => {
+                    return Err(
+                        "`core.0.interrupt_stack` is unused: the runtime takes interrupts on core 0"
+                            .into(),
+                    );
+                }
+                Slot::Unused(_) => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// The policy names exactly the `cores` of the chip.
+    pub fn check_cores(&self, cores: u8) -> Result<()> {
+        if self.core.is_empty() {
+            return Ok(());
+        }
+        if self.core.len() != usize::from(cores) {
+            return Err(format!(
+                "the stack policy names {} cores but the chip has {cores}: every core needs \
+                 `core.N.task_stack` and `core.N.interrupt_stack`, used or `unused = true`",
+                self.core.len()
+            )
+            .into());
+        }
+        Ok(())
+    }
+
+    /// The cores whose task stack the image does not use.
+    pub fn unused_task_cores(&self) -> Vec<u32> {
+        self.core
+            .iter()
+            .filter(|(_, stacks)| stacks.task_stack.used().is_none())
+            .map(|(&core, _)| core)
+            .collect()
+    }
+
+    /// The cores whose interrupt stack the image does not use.
+    pub fn unused_interrupt_cores(&self) -> Vec<u32> {
+        self.core
+            .iter()
+            .filter(|(_, stacks)| stacks.interrupt_stack.used().is_none())
+            .map(|(&core, _)| core)
+            .collect()
+    }
+
+    /// The runtime's primary task stack (core 0).
+    pub fn cpu0_task_stack(&self) -> Option<&TaskStack> {
+        self.core.get(&0)?.task_stack.used()
+    }
+
+    /// Core 0's task stack for an edit; policies built in memory only.
+    pub fn cpu0_task_stack_mut(&mut self) -> Option<&mut TaskStack> {
+        match &mut self.core.get_mut(&0)?.task_stack {
+            Slot::Used(stack) => Some(stack),
+            Slot::Unused(_) => None,
+        }
+    }
+
+    /// The image's maximum allocation of its interrupt stacks.
+    pub fn interrupt_stack_allocation_bytes(&self) -> Option<u32> {
+        self.core.get(&0)?.interrupt_stack.used()?.allocation_bytes
+    }
+
     /// The stacks the gate bounds, or an error for a policy that sets only
     /// the move limit.
     pub fn stacks(&self) -> Result<Stacks<'_>> {
-        match (&self.coverage_policy, &self.cpu0_task_stack) {
+        match (&self.coverage_policy, self.cpu0_task_stack()) {
             (Some(coverage_policy), Some(cpu0)) => Ok(Stacks {
                 coverage_policy,
                 cpu0_task_stack: cpu0,
-                interrupt_stacks: self.interrupt_stacks.as_ref(),
                 bootstrap_stack: self.bootstrap_stack.as_ref(),
             }),
             _ => Err(
                 "a stack policy that names stacks names `coverage_policy` and \
-                 `cpu0_task_stack`"
+                 `core.0.task_stack`"
                     .into(),
             ),
         }
@@ -354,17 +496,21 @@ impl StackPolicy {
 
     /// The runtime's task stacks, by name.
     pub fn runtime_task_stacks(&self) -> Vec<(&'static str, &TaskStack)> {
-        self.cpu0_task_stack
+        const NAMES: [&str; 2] = ["CPU0 task stack", "CPU1 task stack"];
+        self.core
             .iter()
-            .map(|stack| ("CPU0 task stack", stack))
+            .filter_map(|(&core, stacks)| {
+                Some((*NAMES.get(core as usize)?, stacks.task_stack.used()?))
+            })
             .collect()
     }
 
-    /// The headroom reserves the runtime's stack painting enforces, as the
-    /// build environment hands them to the firmware.
+    /// The headroom reserves the runtime's stack painting enforces, and the
+    /// stacks the image does not allocate, as the build environment hands
+    /// them to the firmware.
     pub fn runtime_environment(&self) -> Vec<(&'static str, String)> {
         let mut variables = Vec::new();
-        if let Some(cpu0) = &self.cpu0_task_stack {
+        if let Some(cpu0) = self.cpu0_task_stack() {
             variables.push((
                 "OPEN_RADIO_CPU0_STACK_MINIMUM_FREE_BYTES",
                 cpu0.minimum_free_bytes.to_string(),
@@ -373,10 +519,19 @@ impl StackPolicy {
                 variables.push(("OPEN_RADIO_CPU0_TASK_STACK_BYTES", bytes.to_string()));
             }
         }
-        if let Some(interrupts) = &self.interrupt_stacks {
-            if let Some(bytes) = interrupts.allocation_bytes {
-                variables.push(("OPEN_RADIO_IRQ_STACK_BYTES", bytes.to_string()));
-            }
+        if let Some(bytes) = self.interrupt_stack_allocation_bytes() {
+            variables.push(("OPEN_RADIO_IRQ_STACK_BYTES", bytes.to_string()));
+        }
+        let unused = self.unused_interrupt_cores();
+        if !unused.is_empty() {
+            variables.push((
+                "OPEN_RADIO_UNUSED_IRQ_STACK_HARTS",
+                unused
+                    .iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ));
         }
         variables
     }
@@ -417,8 +572,7 @@ impl StackPolicy {
     /// comes from the proven bound, so the policy must not also name one.
     pub fn proven_task_stack(&self) -> Result<&TaskStack> {
         let stack = self
-            .cpu0_task_stack
-            .as_ref()
+            .cpu0_task_stack()
             .ok_or("the image declares its task stack proven, but its policy names none")?;
         if stack.allocation_bytes.is_some() {
             return Err(
@@ -431,23 +585,32 @@ impl StackPolicy {
     }
 
     /// Apply an image's explicit allocation to both its exact placement
-    /// ranges and its interrupt-stack budget. SRAM, guards and margins stay
-    /// those of the chip; the placement gate verifies the linked ranges.
+    /// ranges and its interrupt-stack budget, and take the cores whose
+    /// interrupt stack is unused out of the contract: they have no stack to
+    /// bound, guard or place. SRAM, guards and margins stay those of the chip;
+    /// the placement gate verifies the linked ranges.
     pub fn runtime_profile(&self, base: &crate::Profile) -> Result<crate::Profile> {
         self.validate()?;
+        self.check_cores(base.properties.cores)?;
         let mut profile = base.clone();
         if let Some(bytes) = self
-            .cpu0_task_stack
-            .as_ref()
+            .cpu0_task_stack()
             .and_then(|stack| stack.allocation_bytes)
         {
             Self::set_task_stack_bytes(&mut profile, bytes)?;
         }
-        let Some(bytes) = self
-            .interrupt_stacks
-            .as_ref()
-            .and_then(|stacks| stacks.allocation_bytes)
-        else {
+        if let Some(interrupts) = profile.interrupts.as_mut() {
+            let unused = self.unused_interrupt_cores();
+            interrupts.harts.retain(|hart| !unused.contains(hart));
+            if let Some(placement) = profile.placement.as_mut() {
+                placement.range.retain(|rule| {
+                    !unused.iter().any(|hart| {
+                        rule.range[0] == format!("__runtime_cpu{hart}_irq_stack_bottom")
+                    })
+                });
+            }
+        }
+        let Some(bytes) = self.interrupt_stack_allocation_bytes() else {
             return Ok(profile);
         };
         let memory = profile
@@ -507,13 +670,13 @@ mod tests {
         let base = directory.path().join("base.toml");
         std::fs::write(
             &base,
-            "schema=5\nmax_move_bytes=4096\nobserved_functions=['core::fmt::write']",
+            "schema=6\nmax_move_bytes=4096\nobserved_functions=['core::fmt::write']",
         )
         .unwrap();
         let extension = directory.path().join("image.toml");
         std::fs::write(
             &extension,
-            "schema=5\nextends='base.toml'\nobserved_functions=['app::*']",
+            "schema=6\nextends='base.toml'\nobserved_functions=['app::*']",
         )
         .unwrap();
         let policy = StackPolicy::load(&extension).unwrap();
@@ -521,7 +684,7 @@ mod tests {
         for patterns in ["['']", "['core::fmt::write']"] {
             std::fs::write(
                 &extension,
-                format!("schema=5\nextends='base.toml'\nobserved_functions={patterns}"),
+                format!("schema=6\nextends='base.toml'\nobserved_functions={patterns}"),
             )
             .unwrap();
             assert!(StackPolicy::load(&extension).is_err());
@@ -536,7 +699,7 @@ mod tests {
         std::fs::write(&base_path, base_source).unwrap();
         let base = StackPolicy::load(&base_path).unwrap();
         let path = directory.path().join("stack.toml");
-        let extension = "schema = 5\nextends = 'base.toml'\n\
+        let extension = "schema = 6\nextends = 'base.toml'\n\
             [[frame_exceptions.runtime]]\nfunction = 'test::frame::<u8>'\n\
             reason = 'the local packet buffer'\nceiling_bytes = 8192\n";
         std::fs::write(&path, extension).unwrap();
@@ -577,7 +740,7 @@ mod tests {
             include_str!("../../../../chips/esp32s31/platform/chip.toml"),
         )
         .unwrap();
-        std::fs::write(&policy, "schema = 5\nextends = 'base.toml'\n").unwrap();
+        std::fs::write(&policy, "schema = 6\nextends = 'base.toml'\n").unwrap();
         std::fs::write(
             &base,
             include_str!("../../../../chips/esp32s31/platform/stack.toml"),
@@ -603,7 +766,7 @@ mod tests {
     fn a_task_allocation_binds_the_link_environment_and_exact_psram_range() {
         let base = profile();
         let mut policy = policy(None);
-        policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(1 << 20);
+        policy.cpu0_task_stack_mut().unwrap().allocation_bytes = Some(1 << 20);
         let adjusted = policy.runtime_profile(&base).unwrap();
         let rule = |profile: &crate::Profile| {
             profile
@@ -618,20 +781,20 @@ mod tests {
         };
         assert_eq!(rule(&base), Some(0x30000));
         assert_eq!(rule(&adjusted), Some(1 << 20));
-        assert_eq!(adjusted.interrupts, base.interrupts);
+        assert_eq!(adjusted.interrupts.as_ref().unwrap().harts, [0]);
         assert!(
             policy
                 .runtime_environment()
                 .contains(&("OPEN_RADIO_CPU0_TASK_STACK_BYTES", "1048576".into()))
         );
         for bytes in [0, 4096, 1048577, 1 << 24] {
-            policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(bytes);
+            policy.cpu0_task_stack_mut().unwrap().allocation_bytes = Some(bytes);
             assert!(policy.runtime_profile(&base).is_err(), "{bytes}");
         }
     }
     #[test]
     fn a_proven_task_stack_is_the_bound_plus_the_reserve_aligned_up() {
-        let stack = policy(None).cpu0_task_stack.unwrap();
+        let stack = policy(None).cpu0_task_stack().unwrap().clone();
         assert_eq!(stack.minimum_free_bytes, 4096);
         assert_eq!(stack.proven_allocation_bytes(880).unwrap(), 4976);
         assert_eq!(stack.proven_allocation_bytes(881).unwrap(), 4992);
@@ -656,7 +819,7 @@ mod tests {
         policy.bootstrap_stack = Some(bootstrap(Some("")));
         assert!(policy.validate().is_err());
         policy.bootstrap_stack = Some(bootstrap(None));
-        policy.cpu0_task_stack.as_mut().unwrap().handoff = Some("_runtime_start".into());
+        policy.cpu0_task_stack_mut().unwrap().handoff = Some("_runtime_start".into());
         let error = policy.validate().unwrap_err().to_string();
         assert!(error.contains("belongs to the bootstrap stack"), "{error}");
     }
@@ -664,10 +827,10 @@ mod tests {
     fn a_proven_task_stack_and_an_explicit_allocation_are_two_sources() {
         let mut policy = policy(None);
         policy.proven_task_stack().unwrap();
-        policy.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(1 << 20);
+        policy.cpu0_task_stack_mut().unwrap().allocation_bytes = Some(1 << 20);
         let error = policy.proven_task_stack().unwrap_err().to_string();
         assert!(error.contains("two sources"), "{error}");
-        policy.cpu0_task_stack = None;
+        policy.core.clear();
         assert!(policy.proven_task_stack().is_err());
     }
     #[test]
@@ -685,6 +848,12 @@ mod tests {
         assert_eq!(rule.bytes, Some(17264));
         assert!(StackPolicy::set_task_stack_bytes(&mut profile, 1 << 24).is_err());
     }
+    fn unused_core() -> CoreStacks {
+        CoreStacks {
+            task_stack: Slot::Unused(Unused { unused: true }),
+            interrupt_stack: Slot::Unused(Unused { unused: true }),
+        }
+    }
     fn policy(bytes: Option<u32>) -> StackPolicy {
         StackPolicy {
             schema: SCHEMA,
@@ -692,18 +861,26 @@ mod tests {
             max_move_bytes: 4096,
             frame_exceptions: FrameExceptions::default(),
             observed_functions: Vec::new(),
-            cpu0_task_stack: Some(TaskStack {
-                root: "runtime_main".into(),
-                storage_symbol: Some("task_stack".into()),
-                bottom_symbol: None,
-                top_symbol: None,
-                minimum_free_bytes: 4096,
-                allocation_bytes: None,
-                handoff: None,
-            }),
-            interrupt_stacks: Some(InterruptStacks {
-                allocation_bytes: bytes,
-            }),
+            core: BTreeMap::from([
+                (1, unused_core()),
+                (
+                    0,
+                    CoreStacks {
+                        task_stack: Slot::Used(TaskStack {
+                            root: "runtime_main".into(),
+                            storage_symbol: Some("task_stack".into()),
+                            bottom_symbol: None,
+                            top_symbol: None,
+                            minimum_free_bytes: 4096,
+                            allocation_bytes: None,
+                            handoff: None,
+                        }),
+                        interrupt_stack: Slot::Used(InterruptStack {
+                            allocation_bytes: bytes,
+                        }),
+                    },
+                ),
+            ]),
             bootstrap_stack: None,
         }
     }
@@ -711,7 +888,8 @@ mod tests {
     fn an_image_allocation_changes_placement_and_budget_together() {
         let base = profile();
         let before = base.clone();
-        assert_eq!(policy(None).runtime_profile(&base).unwrap(), base);
+        let unchanged = policy(None).runtime_profile(&base).unwrap();
+        assert_eq!(unchanged.interrupts.as_ref().unwrap().harts, [0]);
         let requested = base.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
         let image = policy(Some(requested)).runtime_profile(&base).unwrap();
         let contract = image.interrupts.as_ref().unwrap();
@@ -724,6 +902,7 @@ mod tests {
             contract.irq_stack_margin_percent,
             base.interrupts.as_ref().unwrap().irq_stack_margin_percent
         );
+        assert_eq!(contract.harts, [0]);
         for hart in &contract.harts {
             let bottom = format!("__runtime_cpu{hart}_irq_stack_bottom");
             let range = image
@@ -738,10 +917,6 @@ mod tests {
             assert_eq!(range.region, "sram");
         }
         assert_eq!(base, before);
-        assert_eq!(
-            policy(Some(requested)).runtime_profile(&image).unwrap(),
-            image
-        );
         assert!(
             policy(Some(requested))
                 .runtime_environment()
@@ -782,5 +957,97 @@ mod tests {
         for bytes in [0, 4096, 65537, u32::MAX - 15] {
             assert!(policy(Some(bytes)).runtime_profile(&base).is_err());
         }
+    }
+
+    fn parse(source: &str) -> Result<StackPolicy> {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("stack.toml");
+        std::fs::write(&path, source).unwrap();
+        StackPolicy::load(&path)
+    }
+    const CORE_0: &str = "schema = 6\nmax_move_bytes = 4096\ncoverage_policy = 'c.toml'\n\
+        [core.0.task_stack]\nroot = 'runtime_main'\nstorage_symbol = 's'\n\
+        minimum_free_bytes = 4096\n[core.0.interrupt_stack]\n";
+    #[test]
+    fn a_policy_names_every_core_of_the_chip_used_or_unused() {
+        let one_core = parse(CORE_0).unwrap();
+        one_core.check_cores(1).unwrap();
+        let error = one_core.check_cores(2).unwrap_err().to_string();
+        assert!(
+            error.contains("names 1 cores but the chip has 2"),
+            "{error}"
+        );
+        let two_cores = parse(&format!(
+            "{CORE_0}[core.1.task_stack]\nunused = true\n[core.1.interrupt_stack]\nunused = true\n"
+        ))
+        .unwrap();
+        two_cores.check_cores(2).unwrap();
+        assert!(two_cores.check_cores(1).is_err());
+        assert_eq!(two_cores.unused_task_cores(), [1]);
+        assert_eq!(two_cores.unused_interrupt_cores(), [1]);
+        assert!(parse(CORE_0).unwrap().unused_task_cores().is_empty());
+    }
+    #[test]
+    fn an_unused_stack_names_nothing_and_a_gap_or_half_a_core_is_refused() {
+        let core_1 = |task: &str, interrupt: &str| {
+            format!("{CORE_0}[core.1.task_stack]\n{task}\n[core.1.interrupt_stack]\n{interrupt}\n")
+        };
+        for refused in [
+            // unused together with a root, or not unused at all
+            core_1("unused = true\nroot = 'start'", "unused = true"),
+            core_1("unused = false", "unused = true"),
+            core_1("unused = true", "unused = false"),
+            // a core that runs a task takes interrupts
+            core_1(
+                "root = 'core1_main'\nstorage_symbol = 's1'\nminimum_free_bytes = 4096",
+                "unused = true",
+            ),
+            // only core 0 sizes the interrupt stacks
+            core_1("unused = true", "allocation_bytes = 4096"),
+        ] {
+            assert!(parse(&refused).is_err(), "{refused}");
+        }
+        // core 1 without core 0, core 0 unused, or a core number skipped
+        let gap = CORE_0.replace("core.0", "core.1");
+        assert!(parse(&gap).is_err());
+        let unused_zero = CORE_0.replace(
+            "[core.0.task_stack]\nroot = 'runtime_main'\nstorage_symbol = 's'\n\
+        minimum_free_bytes = 4096\n",
+            "[core.0.task_stack]\nunused = true\n",
+        );
+        assert!(parse(&unused_zero).is_err());
+        let used = core_1(
+            "root = 'core1_main'\nstorage_symbol = 's1'\nminimum_free_bytes = 4096",
+            "",
+        );
+        let policy = parse(&used).unwrap();
+        assert!(policy.unused_task_cores().is_empty());
+    }
+    #[test]
+    fn unused_interrupt_stacks_leave_the_contract_and_the_link_environment_names_them() {
+        let base = profile();
+        let image = policy(None).runtime_profile(&base).unwrap();
+        let contract = image.interrupts.as_ref().unwrap();
+        assert_eq!(contract.harts, [0]);
+        let placed = |profile: &crate::Profile, hart: u32| {
+            profile
+                .placement
+                .as_ref()
+                .unwrap()
+                .range
+                .iter()
+                .any(|rule| rule.range[0] == format!("__runtime_cpu{hart}_irq_stack_bottom"))
+        };
+        assert!(placed(&base, 1) && !placed(&image, 1) && placed(&image, 0));
+        assert!(
+            policy(None)
+                .runtime_environment()
+                .contains(&("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS", "1".into()))
+        );
+        let mut both = policy(None);
+        both.core.remove(&1);
+        assert!(both.runtime_profile(&base).is_err());
+        let environment = both.runtime_environment();
+        assert!(environment.iter().all(|(key, _)| !key.contains("UNUSED")));
     }
 }

@@ -81,6 +81,12 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         Err(std::env::VarError::NotPresent) => layout.irq_stack_bytes,
         Err(std::env::VarError::NotUnicode(_)) => panic!("IRQ stack allocation is not Unicode"),
     };
+    println!("cargo:rerun-if-env-changed=OPEN_RADIO_UNUSED_IRQ_STACK_HARTS");
+    let unused_irq_harts = match std::env::var("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS") {
+        Ok(value) => unused_harts(&value).expect("valid unused IRQ stack harts"),
+        Err(std::env::VarError::NotPresent) => Vec::new(),
+        Err(std::env::VarError::NotUnicode(_)) => panic!("unused IRQ stack harts are not Unicode"),
+    };
     link(
         bin,
         layout,
@@ -109,7 +115,11 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         ("IRQ_STACK_HART0_BYTES", irq_stack_bytes),
         (
             "IRQ_STACK_HART1_BYTES",
-            if layout.harts > 1 { irq_stack_bytes } else { 0 },
+            if layout.harts > 1 && !unused_irq_harts.contains(&1) {
+                irq_stack_bytes
+            } else {
+                0
+            },
         ),
         ("HART_COUNT", layout.harts),
         ("RETAINED_RESERVED_TAIL", layout.retained_reserved_tail),
@@ -122,6 +132,19 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
     for argument in shuffle_arguments(seed) {
         println!("cargo:rustc-link-arg-bin={bin}={argument}");
     }
+}
+
+/// The harts whose interrupt stack the image's policy declares unused, from
+/// the comma-separated `OPEN_RADIO_UNUSED_IRQ_STACK_HARTS`. The linker script
+/// has a stack for no hart but 0 and 1, and hart 0 runs the runtime.
+fn unused_harts(value: &str) -> Result<Vec<u32>, &'static str> {
+    value
+        .split(',')
+        .map(|hart| match hart {
+            "1" => Ok(1),
+            _ => Err("only hart 1's interrupt stack can be unused"),
+        })
+        .collect()
 }
 
 fn image_task_stack_bytes(value: &str, psram_bytes: u32) -> Result<u32, &'static str> {

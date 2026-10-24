@@ -369,7 +369,7 @@ ASSERT(__runtime_cpu0_irq_stack_top - __runtime_cpu0_irq_stack_bottom == IRQ_STA
        "runtime requires one exact SRAM IRQ stack per hart");
 ASSERT(__runtime_cpu0_irq_stack_bottom % __runtime_cpu0_irq_stack_guard_bytes == 0,
        "hart 0 IRQ stack bottom must be guard aligned");
-ASSERT(HART_COUNT > 1 ?
+ASSERT(HART_COUNT > 1 && IRQ_STACK_HART1_BYTES > 0 ?
        __runtime_cpu1_irq_stack_bottom % __runtime_cpu1_irq_stack_guard_bytes == 0 : 1,
        "hart 1 IRQ stack bottom must be guard aligned");
 ASSERT(__runtime_cpu0_task_stack_top - __runtime_cpu0_task_stack_bottom == CPU0_PSRAM_TASK_STACK_BYTES,

@@ -503,13 +503,31 @@ pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result
 }
 
 /// Bound every hart's interrupt stack of the runtime ELF bytes `elf`, with
-/// the pinned ROM of the repository at `root`.
+/// the pinned ROM of the repository at `root`. A hart whose linked stack is
+/// empty is one the image's stack policy declares unused, which the image
+/// gate proved at build time; it has no stack to bound.
 pub fn interrupt_stacks(
     root: &Path,
     profile: &oer_chip_profile::Profile,
     elf: Vec<u8>,
 ) -> Result<InterruptStacks> {
-    interrupt_stacks_of(&Image::of_bytes(root, profile, elf)?)
+    let mut profile = profile.clone();
+    if let Some(contract) = profile.interrupts.as_mut() {
+        let file = oer_analysis_elf::Elf::parse(&elf)?;
+        let mut harts = Vec::new();
+        for &hart in &contract.harts {
+            let range = oer_analysis_elf::StorageBounds::range(
+                &file,
+                &format!("__runtime_cpu{hart}_irq_stack_bottom"),
+                &format!("__runtime_cpu{hart}_irq_stack_top"),
+            )?;
+            if range.is_none_or(|range| range.capacity != 0) {
+                harts.push(hart);
+            }
+        }
+        contract.harts = harts;
+    }
+    interrupt_stacks_of(&Image::of_bytes(root, &profile, elf)?)
 }
 
 /// [`interrupt_stacks`] of an analysed runtime image.
@@ -554,6 +572,19 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         },
         &mut control,
     )?;
+    // A core without an interrupt stack takes no interrupt: an entry that
+    // routes a source to it would run a handler on a stack nobody bounded.
+    if let Some(entry) = table
+        .iter()
+        .find(|entry| !interrupts.harts.contains(&entry.core))
+    {
+        return Err(format!(
+            "the interrupt table routes source {} (level {}) to core {}, whose interrupt \
+             stack the image declares unused or the chip does not have",
+            entry.source, entry.level, entry.core
+        )
+        .into());
+    }
     let vectors = vector_table(&facts, &interrupts.vector_table_symbol, &mut control)?
         .into_iter()
         .flatten()

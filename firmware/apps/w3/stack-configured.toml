@@ -1,4 +1,4 @@
-schema = 5
+schema = 6
 extends = "stack.toml"
 
 # Configured W3 only: the unconfigured image does not link these implementations.

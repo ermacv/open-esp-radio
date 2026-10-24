@@ -101,6 +101,17 @@ contexts = [
     "<esp_hal::interrupt::CoreInterruptRoutes>::disable",
 ]
 
+# What releases core 1 from the reset the esp-hal fork holds it in
+# (chips/esp32s31/notes/core1-boot.md). An image links none of these unless its
+# stack policy declares core 1 used and proves its roots; the image gate
+# looks the patterns up among the linked functions.
+[core-start]
+starters = [
+    "*CpuControl*::start_app_core*",
+    "*CpuControl*::unpark_core*",
+    "*::start_core1*",
+]
+
 # The mask ROM the stack analyses read: the pinned ROM ELF
 # (chips/esp32s31/vendor/artifacts.toml), the reviewed function summaries
 # and the vendor radio ROM no product image may call into (no check reads

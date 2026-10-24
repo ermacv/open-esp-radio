@@ -409,16 +409,16 @@ mod frame_limits {
 }
 
 const BASE: &str = r#"
-schema = 5
+schema = 6
 coverage_policy = "coverage.toml"
 max_move_bytes = 4096
 
-[cpu0_task_stack]
+[core.0.task_stack]
 root = "runtime_main"
 storage_symbol = "cpu0_stack"
 minimum_free_bytes = 512
 
-[interrupt_stacks]
+[core.0.interrupt_stack]
 
 [bootstrap_stack]
 root = "runtime_main"
@@ -564,7 +564,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
         Some(directory.path().join("coverage.toml").as_path())
     );
     assert_eq!(
-        base.cpu0_task_stack.as_ref().unwrap().storage(),
+        base.cpu0_task_stack().unwrap().storage(),
         Storage::Symbol("cpu0_stack")
     );
     assert_eq!(
@@ -583,7 +583,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
     std::fs::create_dir(&nested).unwrap();
     std::fs::write(
         nested.join("stack.toml"),
-        "schema = 5\nextends = \"../stack.toml\"\n",
+        "schema = 6\nextends = \"../stack.toml\"\n",
     )
     .unwrap();
     let extended = StackPolicy::load(&nested.join("stack.toml")).unwrap();
@@ -605,7 +605,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
     // An extension adds nothing of its own.
     std::fs::write(
         nested.join("stack.toml"),
-        "schema = 5\nextends = \"../stack.toml\"\nmax_move_bytes = 1\n",
+        "schema = 6\nextends = \"../stack.toml\"\nmax_move_bytes = 1\n",
     )
     .unwrap();
     assert!(StackPolicy::load(&nested.join("stack.toml")).is_err());
@@ -627,7 +627,7 @@ fn a_policy_out_of_its_schema_fails() {
         ))
         .is_err()
     );
-    assert!(load(BASE.replace("schema = 5", "schema = 4")).is_err());
+    assert!(load(BASE.replace("schema = 6", "schema = 4")).is_err());
     // One storage form per stack.
     assert!(
         load(BASE.replace(
@@ -652,19 +652,19 @@ fn a_policy_out_of_its_schema_fails() {
     // A policy of the move limit alone names no stacks; one that names
     // some names all of them.
     let compiler = StackPolicy::load({
-        std::fs::write(&path, "schema = 5\nmax_move_bytes = 4096\n").unwrap();
+        std::fs::write(&path, "schema = 6\nmax_move_bytes = 4096\n").unwrap();
         &path
     })
     .unwrap();
     assert!(compiler.stacks().is_err());
     assert!(compiler.runtime_environment().is_empty());
     assert!(
-        load("schema = 5\nmax_move_bytes = 4096\ncoverage_policy = \"c.toml\"\n".into()).is_err()
+        load("schema = 6\nmax_move_bytes = 4096\ncoverage_policy = \"c.toml\"\n".into()).is_err()
     );
     // An extension may not extend an extension.
     let base = directory.path().join("base.toml");
-    std::fs::write(&base, "schema = 5\nextends = \"stack.toml\"\n").unwrap();
-    assert!(load("schema = 5\nextends = \"base.toml\"\n".to_owned()).is_err());
+    std::fs::write(&base, "schema = 6\nextends = \"stack.toml\"\n").unwrap();
+    assert!(load("schema = 6\nextends = \"base.toml\"\n".to_owned()).is_err());
 }
 
 #[test]
@@ -672,10 +672,7 @@ fn a_bound_within_its_budget_passes_with_its_headroom_reported() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     // 1024 bytes less 512 free: a 512-byte budget for a 48-byte bound.
     let image = image(&program(false), &[("cpu0_stack", 0, 1024)]);
-    let audit = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap();
+    let audit = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap()).unwrap();
     assert_eq!(audit.check().unwrap(), Vec::<String>::new());
     let report = audit.render();
     let usage = budget::header(&image.resources, image.resources.usage.peak_admitted_bytes);
@@ -697,32 +694,25 @@ fn a_bound_within_its_budget_passes_with_its_headroom_reported() {
 fn a_bound_over_its_budget_fails() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     let fits = image(&program(false), &[("cpu0_stack", 0, 512 + 48)]);
-    audit(&policy, &fits, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap()
-    .check()
-    .unwrap();
+    audit(&policy, &fits, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap()
+        .check()
+        .unwrap();
     let over = image(&program(false), &[("cpu0_stack", 0, 512 + 47)]);
-    let error = audit(&policy, &over, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap()
-    .check()
-    .unwrap_err()
-    .to_string();
+    let error = audit(&policy, &over, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap()
+        .check()
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("needs 48 bytes"), "{error}");
     assert!(error.contains("47-byte budget"), "{error}");
     // Storage that cannot keep its reserve fails whatever the bound.
     let small = image(&program(false), &[("cpu0_stack", 0, 512)]);
     assert!(
-        audit(&policy, &small, |policy| policy
-            .cpu0_task_stack
-            .as_ref()
-            .unwrap())
-        .unwrap()
-        .check()
-        .is_err()
+        audit(&policy, &small, |policy| policy.cpu0_task_stack().unwrap())
+            .unwrap()
+            .check()
+            .is_err()
     );
 }
 
@@ -733,11 +723,9 @@ fn a_root_the_image_lacks_fails() {
         ASM_REVIEW,
     );
     let image = image(&program(false), &[("cpu0_stack", 0, 1024)]);
-    let error = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap_err()
-    .to_string();
+    let error = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("has no `absent`"), "{error}");
 }
 
@@ -746,7 +734,7 @@ fn a_stack_the_image_does_not_link_fails() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     let unlinked = image_without_storage();
     let error = audit(&policy, &unlinked, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
+        policy.cpu0_task_stack().unwrap()
     })
     .unwrap_err()
     .to_string();
@@ -762,10 +750,7 @@ fn a_partial_bound_passes_with_its_unresolved_sites_reported() {
     let policy_source = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
     let (_directory, policy) = policy_with(&policy_source, ASM_REVIEW);
     let image = image(&program(false), &[("cpu0_stack", 0, 1024)]);
-    let audit = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap();
+    let audit = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap()).unwrap();
     let warnings = audit.check().unwrap();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].contains("16 + ? bytes"), "{warnings:?}");
@@ -822,10 +807,7 @@ fn image_with_stack(bytes: u32) -> Image {
 }
 
 fn audit_of(policy: &StackPolicy, image: &Image) -> StackAudit {
-    audit(policy, image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap()
+    audit(policy, image, |policy| policy.cpu0_task_stack().unwrap()).unwrap()
 }
 
 #[test]
@@ -893,11 +875,9 @@ fn an_image_without_frame_records_fails() {
         symbol.frame = None;
     }
     let image = image(&code, &[("cpu0_stack", 0, 1024)]);
-    let error = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap_err()
-    .to_string();
+    let error = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("-Z emit-stack-sizes"), "{error}");
 }
 

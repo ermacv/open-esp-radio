@@ -18,6 +18,7 @@
 
 pub mod budget;
 pub mod contract;
+pub mod cores;
 mod coverage;
 pub mod frames;
 pub mod handoff;
@@ -482,7 +483,7 @@ impl StackAudit {
         for (index, stack) in self.stacks.iter().enumerate() {
             let label = if stack.name == "bootstrap stack" {
                 "bootstrap".to_owned()
-            } else if index == 0 && policy.cpu0_task_stack.is_some() {
+            } else if index == 0 && policy.cpu0_task_stack().is_some() {
                 "CPU0".to_owned()
             } else {
                 format!("T{}", index.saturating_sub(1))
@@ -606,9 +607,18 @@ impl StackAudit {
                 )
                 .into());
             }
-            if self.declared_proven && (bound.bytes.is_none() || !stack.unresolved.is_empty()) {
+            // A core other than core 0 runs only with a proven bound.
+            let secondary = stack.name.starts_with("CPU") && stack.name != "CPU0 task stack";
+            if (self.declared_proven || secondary)
+                && (bound.bytes.is_none() || !stack.unresolved.is_empty())
+            {
                 return Err(format!(
-                    "image declares task-stack proven, but the {} has {} unresolved sites:\n{}",
+                    "{}, but the {} has {} unresolved sites:\n{}",
+                    if secondary {
+                        "a core other than core 0 runs only with a proven bound"
+                    } else {
+                        "image declares task-stack proven"
+                    },
                     stack.name,
                     stack.unresolved.len(),
                     stack.render()

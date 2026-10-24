@@ -98,6 +98,10 @@ pub struct Profile {
     /// The placement contract the placement check reads.
     #[serde(default)]
     pub placement: Option<Placement>,
+    /// How code reaches a core other than core 0; a chip with more than one
+    /// core names it.
+    #[serde(default)]
+    pub core_start: Option<CoreStart>,
     /// What the chip's HIL agent may not link; `None` when nothing is
     /// forbidden.
     #[serde(default)]
@@ -116,6 +120,18 @@ pub struct Profile {
     /// stand cannot prove a power loss.
     #[serde(default)]
     pub reset_cause: Option<ResetCause>,
+}
+
+/// The `[core-start]` table: the functions that release a core other than
+/// core 0 from reset or stall. An image that links one has a core running code
+/// of its own, which its stack policy must then declare with a proven root;
+/// an image that declares every other core unused links none.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoreStart {
+    /// Demangled function-name patterns, as the policy's `observed_functions`:
+    /// `*` matches any substring, all other characters are literal.
+    pub starters: Vec<String>,
 }
 
 /// The `[reset-cause]` table: the field of the chip's platform publication
@@ -653,6 +669,13 @@ impl Profile {
             interrupts
                 .validate()
                 .map_err(|error| format!("{}: {error}", path.display()))?;
+        }
+        if (profile.properties.cores > 1) != profile.core_start.is_some() {
+            return Err(format!(
+                "{}: `[core-start]` is named by exactly the chips with more than one core",
+                path.display()
+            )
+            .into());
         }
         Ok(profile)
     }

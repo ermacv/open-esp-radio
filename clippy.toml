@@ -7,6 +7,11 @@ disallowed-methods = [
     { path = "esp_hal::peripherals::RNG::regs", reason = "entropy status borrows the source owner" },
     { path = "esp_hal::peripherals::LP_PERI::regs", reason = "entropy clock status borrows the source owner" },
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
+    # A core other than core 0 runs code only from a root that the image's
+    # stack policy declares and the image gate proves (docs/memory.md, Stacks).
+    { path = "esp_hal::system::CpuControl::start_app_core", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
+    { path = "esp_hal::system::CpuControl::start_app_core_with_stack_guard_offset", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
+    { path = "esp_hal::system::CpuControl::unpark_core", reason = "a core starts only from a root the stack policy declares and the image gate proves", allow-invalid = true },
     # esp-hal's `regs()` reaches a block without its singleton; these blocks
     # pass to the radio HAL at the handoff (oer-espressif-esp-hal-radio).
     { path = "esp_hal::peripherals::IEEE802154::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)" },
