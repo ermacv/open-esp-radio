@@ -13,6 +13,9 @@ extern crate std;
 #[cfg(test)]
 mod test_memory;
 
+#[cfg(test)]
+mod typed_register_tests;
+
 // The generated capability catalog is intentionally broader than this crate's
 // restricted ownership facade. Reviewed leaves stay unreachable until an owner
 // transition exposes them.
@@ -54,6 +57,10 @@ pub use ieee802154::mac::{
     Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
 };
 
+/// The typed IEEE 802.15.4 MAC block, for the register probe's raw writes.
+#[cfg(oer_probe)]
+#[doc(hidden)]
+pub use generated::ieee802154_mac;
 pub use generated::{PhyRxEvmParameter, layouts};
 pub use modem::clock::{Ieee802154ResetObservation, ModemClockDevice, ModemClockRegisters};
 pub use modem::etm::Ieee802154EtmChannels;

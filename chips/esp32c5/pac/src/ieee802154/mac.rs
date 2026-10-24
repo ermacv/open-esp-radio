@@ -80,7 +80,7 @@ const fn event_observation(
 
 /// The shared observation of one affine `EVENT_STATUS` snapshot.
 fn snapshot_observation(
-    snapshot: &crate::svd::w1c_register_snapshot::Ieee802154EventStatusSnapshot,
+    snapshot: &crate::generated::ieee802154_mac::event_status::Snapshot,
 ) -> Ieee802154EventObservation {
     event_observation(
         crate::ieee802154::ownership::Ieee802154EventReadback::from_event_status_snapshot(snapshot),
@@ -517,12 +517,12 @@ pub struct Ieee802154TimerLease<'registers> {
 impl Ieee802154TimerLease<'_> {
     /// Publish one complete TIMER0 threshold without assigning clock units.
     pub fn set_timer0_threshold(&mut self, threshold: Ieee802154Timer0ThresholdWord) {
-        self.registers.publish_timer0_threshold(threshold.get());
+        self.registers.publish_timer0_threshold(threshold);
     }
 
     /// Observe one complete TIMER0 counter word without assigning clock units.
     pub fn timer0_value(&self) -> Ieee802154Timer0ValueWord {
-        Ieee802154Timer0ValueWord::new(self.registers.observe_timer0_value())
+        self.registers.observe_timer0_value()
     }
 
     /// Issue exactly the reviewed TIMER0-start command image.
@@ -537,12 +537,12 @@ impl Ieee802154TimerLease<'_> {
 
     /// Publish one complete TIMER1 threshold without assigning clock units.
     pub fn set_timer1_threshold(&mut self, threshold: Ieee802154Timer1ThresholdWord) {
-        self.registers.publish_timer1_threshold(threshold.get());
+        self.registers.publish_timer1_threshold(threshold);
     }
 
     /// Observe one complete TIMER1 counter word without assigning clock units.
     pub fn timer1_value(&self) -> Ieee802154Timer1ValueWord {
-        Ieee802154Timer1ValueWord::new(self.registers.observe_timer1_value())
+        self.registers.observe_timer1_value()
     }
 
     /// Issue exactly the reviewed TIMER1-start command image.
@@ -570,10 +570,6 @@ impl Ieee802154RegisterLease<'_> {
     /// the public `uint16_t` bitfield assignment does and preserves the
     /// adjacent unowned high byte.
     pub fn set_ed_duration(&mut self, duration: Ieee802154EdDurationUnits) {
-        let duration = match u16::try_from(duration.get()) {
-            Ok(duration) => duration,
-            Err(_) => unreachable!("generated ED-duration domain is bounded to sixteen bits"),
-        };
         self.registers.set_ed_duration(duration);
     }
 
@@ -632,7 +628,7 @@ impl Ieee802154RegisterLease<'_> {
     ///
     /// This preserving update makes no dBm or calibration-table claim.
     pub fn set_tx_power_code(&mut self, code: Ieee802154TxPowerCode) {
-        self.registers.set_tx_power_code(code.get());
+        self.registers.set_tx_power_code(code);
     }
 
     /// Replace the CCA mode through the generated enumerated field.
@@ -1022,7 +1018,7 @@ struct Ieee802154PacInterruptTransitionPort<'task> {
 }
 
 impl Ieee802154InterruptTransitionPort for Ieee802154PacInterruptTransitionPort<'_> {
-    type EventSnapshot = crate::svd::w1c_register_snapshot::Ieee802154EventStatusSnapshot;
+    type EventSnapshot = crate::generated::ieee802154_mac::event_status::Snapshot;
 
     fn stop_operation(&mut self) {
         self.task.peripherals.ieee802154_mac.issue_stop();

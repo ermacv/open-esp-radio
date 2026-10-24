@@ -997,68 +997,32 @@ pub(crate) fn render(
 }
 
 /// The typed addresses of the DMA region: a buffer address and a reference
-/// to a layout placed there. Their constructors are `unsafe`: the caller
+/// to a layout placed there, `oer-mmio`'s types bound to this chip's
+/// window. Their constructors are `unsafe` in `oer-mmio`: the caller
 /// promises an address inside a static the HAL placed in the region.
 fn render_addresses(output: &mut String, layouts: &[MemoryLayout]) {
     let region = region_constant(DMA_REGION);
     let _ = writeln!(
         output,
-        "/// An address inside [`{region}`] whose memory stays reserved for the\n\
+        "/// The [`{region}`] region as `oer-mmio`'s typed addresses name it.\n\
+         pub struct DmaWindow;\n\n\
+         impl oer_mmio::DmaWindow for DmaWindow {{\n\
+         const RANGE: core::ops::Range<u32> = {region};\n\
+         }}\n\n\
+         /// An address inside [`{region}`] whose memory stays reserved for the\n\
          /// hardware while it may read the address, as the hardware reads it.\n\
-         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n\
-         pub struct DmaWindowAddress(u32);\n\n\
-         impl DmaWindowAddress {{\n\
-         /// The address `address`.\n\
-         ///\n\
-         /// # Safety\n\
-         ///\n\
-         /// `address` lies inside [`{region}`], in a static placed there or a\n\
-         /// buffer lent to the hardware, which stays reserved for as long as\n\
-         /// the hardware may read the address.\n\
-         #[allow(unsafe_code, reason = \"the caller promises a placed address\")]\n\
-         pub const unsafe fn new_unchecked(address: u32) -> Self {{\nSelf(address)\n}}\n\n\
-         /// The address as the hardware reads it.\n\
-         pub const fn get(self) -> u32 {{\nself.0\n}}\n\
-         }}\n\n\
-         mod sealed {{\npub trait Sealed {{}}\n}}\n\n\
+         pub type DmaWindowAddress = oer_mmio::DmaWindowAddress<DmaWindow>;\n\n\
+         /// The address of a layout inside [`{region}`].\n\
+         pub use oer_mmio::DmaRef;\n\n\
          /// A layout placed in [`{region}`] only, which a [`DmaRef`] may point at.\n\
-         pub trait DmaLayout: sealed::Sealed {{}}\n\n\
-         /// The address of an `L` inside [`{region}`].\n\
-         pub struct DmaRef<L: DmaLayout> {{\n\
-         address: DmaWindowAddress,\n\
-         layout: core::marker::PhantomData<fn() -> L>,\n\
-         }}\n\n\
-         impl<L: DmaLayout> DmaRef<L> {{\n\
-         /// The reference to the `L` at `address`.\n\
-         ///\n\
-         /// # Safety\n\
-         ///\n\
-         /// An `L`, aligned as `L` requires, lies at `address` for as long as\n\
-         /// the hardware may follow the reference.\n\
-         #[allow(unsafe_code, reason = \"the caller promises a placed layout\")]\n\
-         pub const unsafe fn new_unchecked(address: DmaWindowAddress) -> Self {{\n\
-         Self {{ address, layout: core::marker::PhantomData }}\n\
-         }}\n\n\
-         /// The referenced address.\n\
-         pub const fn address(self) -> DmaWindowAddress {{\nself.address\n}}\n\n\
-         /// The address as the hardware reads it.\n\
-         pub const fn bits(self) -> u32 {{\nself.address.0\n}}\n\
-         }}\n\n\
-         impl<L: DmaLayout> Clone for DmaRef<L> {{\nfn clone(&self) -> Self {{\n*self\n}}\n}}\n\n\
-         impl<L: DmaLayout> Copy for DmaRef<L> {{}}\n\n\
-         impl<L: DmaLayout> PartialEq for DmaRef<L> {{\nfn eq(&self, other: &Self) -> bool {{\nself.address == other.address\n}}\n}}\n\n\
-         impl<L: DmaLayout> Eq for DmaRef<L> {{}}\n\n\
-         impl<L: DmaLayout> core::fmt::Debug for DmaRef<L> {{\n\
-         fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{\n\
-         formatter.debug_tuple(\"DmaRef\").field(&self.address).finish()\n\
-         }}\n\
-         }}\n"
+         pub trait DmaLayout: oer_mmio::DmaLayout<Window = DmaWindow> {{}}\n\n\
+         impl<L: oer_mmio::DmaLayout<Window = DmaWindow>> DmaLayout for L {{}}\n"
     );
     for layout in layouts.iter().filter(|layout| layout.is_dma_target()) {
         let ty = camel(&layout.name);
         let _ = writeln!(
             output,
-            "impl sealed::Sealed for {ty} {{}}\nimpl DmaLayout for {ty} {{}}\n"
+            "impl oer_mmio::DmaLayout for {ty} {{\ntype Window = DmaWindow;\n}}\n"
         );
     }
     if layouts
@@ -1068,18 +1032,11 @@ fn render_addresses(output: &mut String, layouts: &[MemoryLayout]) {
         .any(|field| field.encoding == Some(PointerEncoding::BleCompressed))
     {
         output.push_str(
-            "impl DmaWindowAddress {\n\
-            /// The nonzero BLE word index, if the address is encodable.\n\
-            pub const fn ble_compressed(self) -> Option<u32> {\n\
-            let address = self.get();\n\
+            "/// The nonzero BLE word index of `address`, if it is encodable.\n\
+            pub const fn ble_word_index(address: u32) -> Option<u32> {\n\
             let index = (address >> 2) & 0x000f_ffff;\n\
             if address & 0xffc0_0003 != 0x2f00_0000 || index == 0 { None } else { Some(index) }\n\
-            }\n}\n\
-            impl<L: DmaLayout> DmaRef<L> {\n\
-            /// The nonzero BLE word index, if the address is encodable.\n\
-            pub const fn ble_compressed(self) -> Option<u32> {\n\
-            self.address().ble_compressed()\n\
-            }\n}\n",
+            }\n",
         );
     }
 }
@@ -1095,12 +1052,9 @@ fn render_array(output: &mut String, layout: &MemoryLayout) {
     }
     let _ = writeln!(
         output,
-        "#[repr(C, align({}))]\npub struct {ty} {{ entries: [{element}; {count}] }}\n\
+        "#[repr(C, align({}))]\n#[derive(bytemuck::Zeroable)]\npub struct {ty} {{ entries: [{element}; {count}] }}\n\
         const _: () = {{ assert!(core::mem::size_of::<{ty}>() == {});\n\
         assert!(core::mem::align_of::<{ty}>() == {}); }};\n\
-        #[allow(unsafe_code, reason = \"an array of zeroable layouts is zeroable\")]\n\
-        // SAFETY: each element is a zeroable generated layout and there is no extra state.\n\
-        unsafe impl bytemuck::Zeroable for {ty} {{}}\n\
         impl {ty} {{\n\
         pub const SIZE: usize = {};\n\
         pub const ALIGN: usize = {};\n\
@@ -1138,7 +1092,7 @@ fn render_words(output: &mut String, layout: &MemoryLayout) {
     }
     let _ = writeln!(
         output,
-        "#[repr(C, align({}))]\npub struct {ty} {{",
+        "#[repr(C, align({}))]\n#[derive(bytemuck::Zeroable)]\npub struct {ty} {{",
         layout.align
     );
     for unit in &layout.units {
@@ -1160,13 +1114,6 @@ fn render_words(output: &mut String, layout: &MemoryLayout) {
     );
     let _ = writeln!(
         output,
-        "#[allow(unsafe_code, reason = \"a layout of volatile words is valid as zero bytes\")]\n\
-         // SAFETY: every field is a `VolatileCell<u32>`, a transparent\n\
-         // `UnsafeCell<u32>` wrapper, so the all-zero bit pattern is a valid value.\n\
-         unsafe impl bytemuck::Zeroable for {ty} {{}}\n"
-    );
-    let _ = writeln!(
-        output,
         "impl {ty} {{\n\
          /// The structure's size in bytes.\n\
          pub const SIZE: usize = {};\n\
@@ -1184,7 +1131,7 @@ fn render_words(output: &mut String, layout: &MemoryLayout) {
     for unit in &layout.units {
         let _ = writeln!(
             output,
-            "{}: {ty}{}Cell(vcell::VolatileCell::new(0)),",
+            "{}: {ty}{}Cell(oer_mmio::VolatileCell::new(0)),",
             snake(&unit.name),
             camel(&unit.name)
         );
@@ -1218,7 +1165,9 @@ fn render_word(output: &mut String, layout: &MemoryLayout, unit: &LayoutUnit, ty
     let _ = writeln!(
         output,
         "/// The `{}.{}` word as the hardware may change it: volatile access only.\n\
-         pub struct {value}Cell(vcell::VolatileCell<u32>);\n\n\
+         #[repr(transparent)]\n\
+         #[derive(bytemuck::Zeroable)]\n\
+         pub struct {value}Cell(oer_mmio::VolatileCell<u32>);\n\n\
          impl {value}Cell {{\n\
          /// One volatile read of the word.\n\
          #[inline]\n\
@@ -1343,11 +1292,11 @@ fn render_field(
                 let (parameter, index) = match &field.points_to {
                     Some(target) => (
                         format!("Option<DmaRef<{}>>", camel(target)),
-                        "match value { None => 0, Some(reference) => match reference.ble_compressed() { Some(index) => index, None => return None } }",
+                        "match value { None => 0, Some(reference) => match ble_word_index(reference.bits()) { Some(index) => index, None => return None } }",
                     ),
                     None => (
                         "DmaWindowAddress".to_owned(),
-                        "match value.ble_compressed() { Some(index) => index, None => return None }",
+                        "match ble_word_index(value.get()) { Some(index) => index, None => return None }",
                     ),
                 };
                 let _ = writeln!(

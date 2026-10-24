@@ -21,10 +21,11 @@ disallowed-methods = [
     { path = "esp_hal::peripherals::LP_TSENS::regs", reason = "radio blocks belong to our HAL after the handoff (docs/architecture.md, Hardware)", allow-invalid = true },
     # A typed DMA address comes from placed storage or a loan, made only in
     # the chip's HAL `dma_address` module (docs/hardware-memory.md).
-    { path = "oer_esp32c5_pac::layouts::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from oer_esp32c5_hal::dma_address" },
-    { path = "oer_esp32c5_pac::layouts::DmaRef::new_unchecked", reason = "typed DMA addresses come from oer_esp32c5_hal::dma_address" },
-    { path = "oer_esp32s31_pac::layouts::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from oer_esp32s31_hal::dma_address" },
-    { path = "oer_esp32s31_pac::layouts::DmaRef::new_unchecked", reason = "typed DMA addresses come from oer_esp32s31_hal::dma_address" },
+    { path = "oer_mmio::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_mmio::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    # A typed register block's registers are taken once, by the chip PAC's
+    # radio root (docs/unsafe.md, Generated access).
+    { path = "oer_mmio::Span::assume_owned", reason = "register spans come from the chip PAC's radio root" },
 ]
 
 # The workspace panic lints (`unwrap_used`, `expect_used`, `panic`,

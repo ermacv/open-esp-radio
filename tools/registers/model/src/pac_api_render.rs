@@ -185,6 +185,10 @@ impl PacApiPack {
                     ),
                     "value.bits()".to_owned(),
                 ),
+                crate::FullRegisterValue::Buffer => (
+                    "crate::layouts::DmaWindowAddress".to_owned(),
+                    "value.get()".to_owned(),
+                ),
             };
             output.push_str(&format!(
                 "/// Typed bridge for the reviewed `{}` complete-register transaction.\n#[inline]\npub(crate) fn {}(registers: &crate::svd::{}, value: {}) {{\n    crate::svd::full_register_write::{}(registers, {});\n}}\n\n",
@@ -1769,7 +1773,10 @@ fn field_input_transform_expression(
     format!("let input = {bounded} & 0x{retain_mask:08x};\n                         ")
 }
 
-fn domain_value_expression(domain: &str, flag_or_enum_domains: &BTreeSet<&str>) -> &'static str {
+pub(crate) fn domain_value_expression(
+    domain: &str,
+    flag_or_enum_domains: &BTreeSet<&str>,
+) -> &'static str {
     if flag_or_enum_domains.contains(domain) {
         "value.bits()"
     } else {
@@ -1777,7 +1784,7 @@ fn domain_value_expression(domain: &str, flag_or_enum_domains: &BTreeSet<&str>) 
     }
 }
 
-fn push_doc(output: &mut String, description: &str, indent: &str) {
+pub(crate) fn push_doc(output: &mut String, description: &str, indent: &str) {
     for line in description.lines() {
         output.push_str(indent);
         output.push_str("///");
@@ -1822,7 +1829,7 @@ fn field_bit_verb(kind: &str) -> (&'static str, &'static str) {
     }
 }
 
-fn type_binding_name(value: &str) -> String {
+pub(crate) fn type_binding_name(value: &str) -> String {
     let value = remove_dimension_placeholder(value);
     let mut output = String::new();
     let mut previous_ended_with_digit = false;

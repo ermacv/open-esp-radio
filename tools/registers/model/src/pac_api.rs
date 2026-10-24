@@ -70,6 +70,9 @@ pub struct PacApiPack {
     pub field_argument_modifies: Vec<FieldArgumentModify>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub indexed_bit_set_modifies: Vec<IndexedBitSetModify>,
+    /// Typed register blocks divided between two owners by word.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub register_splits: Vec<RegisterSplit>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -79,6 +82,28 @@ pub struct PacApiOptions {
     pub device_access: bool,
     #[serde(default)]
     pub allow_clippy_empty_docs: bool,
+    /// Peripherals rendered as typed register blocks over `oer-mmio`
+    /// instead of by svd2rust.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub typed_peripherals: Vec<String>,
+}
+
+/// One typed register block divided into two owners: `part` owns
+/// `registers` and observes (reads only) `observes`; `rest` owns every other
+/// register of the block.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RegisterSplit {
+    pub peripheral: String,
+    /// The owner type suffix of the listed registers, such as `Interrupt`.
+    pub part: String,
+    /// The owner type suffix of every other register, such as `Task`.
+    pub rest: String,
+    pub registers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observes: Vec<String>,
+    pub description: String,
+    pub sources: Vec<String>,
 }
 
 /// One target-declared, exhaustive ownership partition of raw SVD peripherals.
@@ -290,6 +315,10 @@ pub struct FullRegisterWrite {
     /// The memory layout a pointer register's `DmaRef` refers to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub points_to: Option<String>,
+    /// The RAM region a buffer-address register's `DmaWindowAddress` lies
+    /// in: `dma-window`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<String>,
     pub exposure: PacApiExposure,
     pub sources: Vec<String>,
 }
@@ -300,16 +329,20 @@ pub enum FullRegisterValue<'a> {
     Domain(&'a str),
     /// A pointer register: a `DmaRef` to this memory layout of the model.
     PointsTo(&'a str),
+    /// A buffer-address register: a `DmaWindowAddress` of the DMA window.
+    Buffer,
 }
 
 impl FullRegisterWrite {
-    /// The value the write takes: exactly one of `domain` and `points-to`.
+    /// The value the write takes: exactly one of `domain`, `points-to` and
+    /// `placement = "dma-window"`.
     pub fn value(&self) -> Result<FullRegisterValue<'_>> {
-        match (&self.domain, &self.points_to) {
-            (Some(domain), None) => Ok(FullRegisterValue::Domain(domain)),
-            (None, Some(layout)) => Ok(FullRegisterValue::PointsTo(layout)),
+        match (&self.domain, &self.points_to, self.placement.as_deref()) {
+            (Some(domain), None, None) => Ok(FullRegisterValue::Domain(domain)),
+            (None, Some(layout), None) => Ok(FullRegisterValue::PointsTo(layout)),
+            (None, None, Some("dma-window")) => Ok(FullRegisterValue::Buffer),
             _ => Err(Error::message(format!(
-                "PAC API full-register-write {:?} takes exactly one of domain and points-to",
+                "PAC API full-register-write {:?} takes exactly one of domain, points-to and placement = \"dma-window\"",
                 self.name
             ))),
         }
@@ -749,6 +782,7 @@ impl PacApiPack {
                 FullRegisterValue::PointsTo(layout) => {
                     validate_component("points-to", &operation.name, layout)?;
                 }
+                FullRegisterValue::Buffer => {}
             }
         }
         for operation in &self.full_register_reads {
@@ -1259,6 +1293,11 @@ impl PacApiPack {
                     .chain(self.field_replace_modifies.iter().map(Operation::sources))
                     .chain(self.field_argument_modifies.iter().map(Operation::sources))
                     .chain(self.indexed_bit_set_modifies.iter().map(Operation::sources))
+                    .chain(
+                        self.register_splits
+                            .iter()
+                            .map(|split| split.sources.as_slice()),
+                    )
                     .flatten()
                     .map(String::as_str),
             )
@@ -1792,6 +1831,7 @@ pub(crate) mod tests {
             field_replace_modifies: Vec::new(),
             field_argument_modifies: Vec::new(),
             indexed_bit_set_modifies: Vec::new(),
+            register_splits: Vec::new(),
         }
     }
 
@@ -2222,6 +2262,7 @@ peripheral-ownership = true
             field: "EVENTS".to_owned(),
             domain: Some("InterruptMask".to_owned()),
             points_to: None,
+            placement: None,
             exposure: PacApiExposure::Facade,
             sources: vec!["VENDOR_IRQ".to_owned()],
         });

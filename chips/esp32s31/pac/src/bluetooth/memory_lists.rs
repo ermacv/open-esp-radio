@@ -116,8 +116,7 @@ impl BluetoothMemoryListPointerImage {
     const fn compressed(self) -> u32 {
         match self {
             Self::Zero => 0,
-            Self::Address(address) => address
-                .ble_compressed()
+            Self::Address(address) => crate::layouts::ble_word_index(address.bits())
                 .expect("a placed buffer header has a nonzero BLE encoding"),
         }
     }

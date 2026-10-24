@@ -1,0 +1,24 @@
+error[E0080]: evaluation panicked: a block lies inside its span
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_mmio::Span::<4096, 4352>::into_block::<260>::{constant#0}` failed here
+  |
+ ::: src/lib.rs
+  |
+  | /             assert!(
+  | |                 SIZE % 4 == 0 && START + SIZE <= END,
+  | |                 "a block lies inside its span"
+  | |             );
+  | |_____________- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/lib.rs
+  |
+  | /         const {
+  | |             assert!(
+  | |                 SIZE % 4 == 0 && START + SIZE <= END,
+  | |                 "a block lies inside its span"
+  | |             );
+  | |         };
+  | |_________^

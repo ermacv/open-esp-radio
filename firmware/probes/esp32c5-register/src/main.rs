@@ -1,7 +1,7 @@
 //! Board observation of the ESP32-C5 IEEE 802.15.4 MAC register model.
 //!
 //! Opens the IEEE 802.15.4 MAC clocks as esp-radio does, then writes all ones
-//! to each probed register through the generated raw PAC and reads the word
+//! to each probed register through a raw `oer-mmio` block over the MAC and reads the word
 //! back. The implemented bits of a read-write register are the ones that
 //! stay set, so every line checks the published field widths against the
 //! silicon. The MAC is idle and no command is issued.
@@ -30,17 +30,27 @@ use oer_esp32c5_pac::analog_i2c::{self, Host, Profile, Request};
 fn normal_route(code: u8) -> Option<analog_i2c::Route> {
     analog_i2c::route(Profile::LibphyNormal, code)
 }
+use oer_esp32c5_pac::ieee802154_mac as mac;
 use oer_esp32c5_pac::{ModemClockDevice, ModemClockRegisters, PhyI2cRegisters, RadioPartitions};
-use oer_esp32c5_pac_raw::Ieee802154Mac;
 use oer_espressif_analog::{AnalogField, FieldRead, FieldWrite, Step};
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+/// The IEEE 802.15.4 MAC block, written raw: the probe looks for implemented
+/// bits the model does not declare, which no typed writer reaches.
+type MacBlock = oer_mmio::Block<oer_mmio::Fixed<{ mac::BASE }>, { mac::SIZE }>;
+
+/// Write all ones to the word at `OFFSET` and read it back.
+fn write_read<const OFFSET: usize>(block: &mut MacBlock) -> u32 {
+    block.write::<OFFSET>(u32::MAX);
+    block.read::<OFFSET>()
+}
 
 /// One read-write word: its name and the implemented bits the model declares.
 struct Probe {
     name: &'static str,
     expected: u32,
-    write_read: fn(&oer_esp32c5_pac_raw::ieee802154_mac::RegisterBlock) -> u32,
+    write_read: fn(&mut MacBlock) -> u32,
 }
 
 const PROBES: &[Probe] = &[
@@ -48,40 +58,24 @@ const PROBES: &[Probe] = &[
         // Bit 7 is implemented although the struct declares it reserved;
         // the first board run (2026-09-27) observed it.
         name: "CHANNEL (freq 6:0, opaque 7)",
-        expected: 0x0000_00ff,
-        write_read: |mac| {
-            // SAFETY: the idle MAC has no user; the probe restores nothing.
-            mac.channel().modify(|_, w| unsafe { w.bits(u32::MAX) });
-            mac.channel().read().bits()
-        },
+        expected: mac::channel::FIELDS,
+        write_read: write_read::<{ mac::channel::OFFSET }>,
     },
     Probe {
         name: "TX_POWER (power 4:0)",
-        expected: 0x0000_001f,
-        write_read: |mac| {
-            // SAFETY: as above.
-            mac.tx_power().modify(|_, w| unsafe { w.bits(u32::MAX) });
-            mac.tx_power().read().bits()
-        },
+        expected: mac::tx_power::FIELDS,
+        write_read: write_read::<{ mac::tx_power::OFFSET }>,
     },
     Probe {
+        // No event source is running.
         name: "EVENT_ENABLE (events 12:0)",
-        expected: 0x0000_1fff,
-        write_read: |mac| {
-            // SAFETY: as above; no event source is running.
-            mac.event_enable()
-                .modify(|_, w| unsafe { w.bits(u32::MAX) });
-            mac.event_enable().read().bits()
-        },
+        expected: mac::event_enable::FIELDS,
+        write_read: write_read::<{ mac::event_enable::OFFSET }>,
     },
     Probe {
         name: "COEX_PTI (pti 3:0, ack 7:4, close_rf_sel 8)",
-        expected: 0x0000_01ff,
-        write_read: |mac| {
-            // SAFETY: as above.
-            mac.coex_pti().modify(|_, w| unsafe { w.bits(u32::MAX) });
-            mac.coex_pti().read().bits()
-        },
+        expected: mac::coex_pti::FIELDS,
+        write_read: write_read::<{ mac::coex_pti::OFFSET }>,
     },
 ];
 
@@ -297,7 +291,7 @@ fn main() -> ! {
 
     let mut failures = 0;
     let RadioPartitions {
-        ieee802154: _ieee802154,
+        ieee802154,
         mut modem_clock,
         mut phy_i2c,
         ..
@@ -322,10 +316,17 @@ fn main() -> ! {
     let mut bus = AnalogI2c::new(phy_i2c);
     probe_analog_bus(&mut bus, &mut failures);
 
-    // SAFETY: the probe is the sole user of the IEEE 802.15.4 MAC.
-    let mac = unsafe { Ieee802154Mac::steal() };
+    // The typed owner goes; the raw block below is the MAC's only owner.
+    drop(ieee802154);
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the probe writes the MAC's words raw after dropping its typed owner"
+    )]
+    // SAFETY: the IEEE 802.15.4 partition, the MAC's only other owner, was
+    // dropped above; the idle MAC has no user and the probe restores nothing.
+    let mut block: MacBlock = unsafe { mac::Span::assume_owned() }.into_block();
     for probe in PROBES {
-        let observed = (probe.write_read)(&mac);
+        let observed = (probe.write_read)(&mut block);
         let verdict = if observed == probe.expected {
             "MATCH"
         } else {

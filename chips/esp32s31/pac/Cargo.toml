@@ -13,12 +13,12 @@ test-support = ["oer-espressif-ieee802154-mac-values/test-support"]
 
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
-bytemuck = { version = "1.25.2", default-features = false }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
+oer-mmio = { path = "../../../portable/mmio" }
 oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-memory = { path = "../../../portable/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
-vcell = "0.1.3"
 
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]

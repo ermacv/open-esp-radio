@@ -2794,9 +2794,11 @@ dependencies = [
 name = "oer-esp32c5-pac"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "oer-esp32c5-pac-raw",
  "oer-espressif-analog",
  "oer-espressif-ieee802154-mac-values",
+ "oer-mmio",
 ]
 
 [[package]]
@@ -2938,7 +2940,7 @@ dependencies = [
  "oer-espressif-ieee80211-pac",
  "oer-espressif-ieee802154-mac-values",
  "oer-memory",
- "vcell",
+ "oer-mmio",
 ]
 
 [[package]]
@@ -3555,8 +3557,8 @@ dependencies = [
  "oer-esp32c5-esp-hal-soc",
  "oer-esp32c5-hal",
  "oer-esp32c5-pac",
- "oer-esp32c5-pac-raw",
  "oer-espressif-analog",
+ "oer-mmio",
 ]
 
 [[package]]
@@ -4215,6 +4217,14 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-sync",
+ "oer-test-ui-cases",
+]
+
+[[package]]
+name = "oer-mmio"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
  "oer-test-ui-cases",
 ]
 

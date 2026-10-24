@@ -2,7 +2,7 @@
 
 #![deny(unsafe_code)]
 
-use crate::layouts::{BleSchedulerItem, DmaRef};
+use crate::layouts::{BleSchedulerItem, DmaRef, ble_word_index};
 
 use crate::{
     BluetoothControllerSramAddress, BluetoothSchedulerHardwareListIndex,
@@ -164,7 +164,7 @@ impl BluetoothSchedulerHardwareListHead {
     pub const fn from_address(
         address: DmaRef<BleSchedulerItem>,
     ) -> Result<Self, BluetoothSchedulerHardwareListHeadError> {
-        match address.ble_compressed() {
+        match ble_word_index(address.bits()) {
             None => Err(BluetoothSchedulerHardwareListHeadError::EncodesEmptyHead),
             Some(image) => Ok(Self(Some(
                 BluetoothControllerSramAddress::from_compressed_image(image),
