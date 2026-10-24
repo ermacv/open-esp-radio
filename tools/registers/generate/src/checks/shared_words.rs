@@ -14,7 +14,9 @@
 //! to have a reviewed entry in `chips/<chip>/registers/shared-words.toml` saying how
 //! the two writers are coordinated. A reviewed word that is no longer shared
 //! is rejected too, so the list stays exact. There is no pending list: a new
-//! shared word is fixed or reviewed in the change that introduces it.
+//! shared word is fixed or reviewed in the change that introduces it. An
+//! entry with `words = N` reviews the run of `N` words from its address, four
+//! bytes apart (a source-indexed route array).
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -60,10 +62,47 @@ struct Review {
 #[serde(deny_unknown_fields)]
 struct ReviewedWord {
     address: u32,
+    /// The words of the run from `address`, four bytes apart; one by default.
+    #[serde(default = "one_word")]
+    words: u32,
     radio: String,
     esp_hal: String,
     coordination: Coordination,
     reason: String,
+}
+
+fn one_word() -> u32 {
+    1
+}
+
+/// Every reviewed word address, each with its entry; a run expands to all
+/// of its words.
+fn reviewed_words(review: &[ReviewedWord]) -> Result<BTreeMap<u32, &ReviewedWord>> {
+    let mut words = BTreeMap::new();
+    for entry in review {
+        if entry.words == 0 {
+            return Err(format!(
+                "{:#010x}: a reviewed run needs at least one word",
+                entry.address
+            )
+            .into());
+        }
+        for index in 0..entry.words {
+            let address = index
+                .checked_mul(4)
+                .and_then(|offset| entry.address.checked_add(offset))
+                .ok_or_else(|| {
+                    format!(
+                        "{:#010x}: the reviewed run leaves the address space",
+                        entry.address
+                    )
+                })?;
+            if words.insert(address, entry).is_some() {
+                return Err(format!("{address:#010x}: reviewed twice").into());
+            }
+        }
+    }
+    Ok(words)
 }
 
 /// The trimmed text of `node`'s child element `name`.
@@ -289,12 +328,44 @@ pub fn pac_peripherals(lib: &str) -> BTreeMap<String, (String, u32)> {
 
 /// Register accessors of one generated register block with their byte
 /// ranges: `#[doc = "0x04 - NAME"]` or `#[doc = "0x10..0x20 - NAME"]`
-/// followed by `pub const fn accessor(`.
+/// followed by `pub const fn accessor(`. An array accessor whose body checks
+/// `[(); N][n]` and steps `.add(S * n)` spans `N` elements `S` bytes apart
+/// from its first offset, whatever its doc range says (svd2rust documents a
+/// byte register array by its element size, not its stride).
 pub fn pac_registers(module: &str) -> BTreeMap<String, (u32, u32)> {
     let mut registers = BTreeMap::new();
     let mut range = None;
+    let mut array: Option<(String, Option<u32>, Option<u32>)> = None;
     for line in module.lines() {
         let line = line.trim();
+        if let Some((name, count, stride)) = &mut array {
+            if let Some(found) = line
+                .strip_prefix("[(); ")
+                .and_then(|rest| rest.split_once(']'))
+                .and_then(|(number, _)| number.parse().ok())
+            {
+                *count = Some(found);
+            }
+            if let Some(found) = line
+                .strip_prefix(".add(")
+                .and_then(|rest| rest.strip_suffix(" * n)"))
+                .and_then(|number| number.parse().ok())
+            {
+                *stride = Some(found);
+            }
+            if let (Some(count), Some(stride)) = (*count, *stride) {
+                if let Some(entry) = registers.get_mut(name.as_str()) {
+                    let (start, _): (u32, u32) = *entry;
+                    *entry = (start, start + count * stride);
+                }
+                array = None;
+            }
+            if line.starts_with("#[doc") || line.starts_with("pub ") {
+                array = None;
+            } else {
+                continue;
+            }
+        }
         if let Some(doc) = line.strip_prefix("#[doc = \"0x") {
             let offsets = doc.split(" - ").next().unwrap_or_default();
             let parse = |hex: &str| u32::from_str_radix(hex.trim_start_matches("0x"), 16).ok();
@@ -305,6 +376,9 @@ pub fn pac_registers(module: &str) -> BTreeMap<String, (u32, u32)> {
         } else if let Some(rest) = line.strip_prefix("pub const fn ") {
             if let (Some(range), Some(name)) = (range.take(), rest.split('(').next()) {
                 registers.insert(name.to_owned(), range);
+                if rest.contains("n: usize") {
+                    array = Some((name.to_owned(), None, None));
+                }
             }
         } else if !line.starts_with("#[") {
             range = None;
@@ -315,11 +389,17 @@ pub fn pac_registers(module: &str) -> BTreeMap<String, (u32, u32)> {
 
 /// `(peripheral, register accessor)` pairs that esp-hal source stores to:
 /// `PERIPHERAL::regs().register(..).write/modify/reset`, also through a
-/// `let name = PERIPHERAL::regs();` binding, across line breaks.
+/// `let name = PERIPHERAL::regs();` or `let name = unsafe {
+/// PERIPHERAL::steal() };` binding, across line breaks.
 pub fn esp_hal_stores(source: &str) -> BTreeSet<(String, String)> {
     let compact: String = source.split_whitespace().collect();
     let mut bindings = BTreeMap::new();
-    for (index, _) in compact.match_indices("::regs();") {
+    let taken = compact
+        .match_indices("::regs();")
+        .chain(compact.match_indices("::steal()};"))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    for index in taken {
         let before = &compact[..index];
         let peripheral = trailing_constant(before);
         if let Some(assignment) = before[..before.len() - peripheral.len()]
@@ -346,7 +426,10 @@ pub fn esp_hal_stores(source: &str) -> BTreeSet<(String, String)> {
         let receiver_end = dot;
         let head = &rest[..receiver_end];
         rest = &rest[dot + 1..];
-        let peripheral = if let Some(stripped) = head.strip_suffix("::regs()") {
+        let peripheral = if let Some(stripped) = head
+            .strip_suffix("::regs()")
+            .or_else(|| head.strip_suffix("::steal()"))
+        {
             trailing_constant(stripped).to_owned()
         } else {
             let name: String = head
@@ -521,7 +604,8 @@ fn esp_hal_words(
             let Some(&(start, end)) = modules[module].get(&register) else {
                 continue;
             };
-            for address in (base + start..base + end).step_by(4) {
+            // A byte register stores into the word that holds it.
+            for address in ((base + start) & !3..base + end).step_by(4) {
                 words
                     .entry(address)
                     .or_default()
@@ -581,11 +665,7 @@ pub fn check(
         .into());
     }
     let mut problems = Vec::new();
-    let reviewed: BTreeMap<u32, &ReviewedWord> = review
-        .word
-        .iter()
-        .map(|word| (word.address, word))
-        .collect();
+    let reviewed = reviewed_words(&review.word)?;
     for address in &shared {
         match reviewed.get(address) {
             None => problems.push(format!(
@@ -606,7 +686,7 @@ pub fn check(
         return Err(format!("shared MMIO words of {chip}:\n{}", problems.join("\n")).into());
     }
     let mut by_coordination: BTreeMap<String, usize> = BTreeMap::new();
-    for word in &review.word {
+    for word in reviewed.values() {
         *by_coordination
             .entry(format!("{:?}", word.coordination))
             .or_default() += 1;
@@ -770,6 +850,94 @@ steps = [{ register = "CH%s_EVENT", index = 1, value = 3 }]
         .map(|(p, r)| (p.to_owned(), r.to_owned()))
         .collect();
         assert_eq!(stores, expected);
+    }
+
+    #[test]
+    fn stores_through_a_stolen_peripheral_are_found() {
+        let source = r#"
+            let clic = unsafe { CLIC::steal() };
+            clic.int_ie(cpu_interrupt as usize)
+                .write(|w| w.int_ie().set_bit());
+            unsafe { CLIC::steal() }.int_config().modify(|_, w| w);
+            clic.int_ip(n).read().int_ip().bit_is_set();
+        "#;
+        let expected: BTreeSet<_> = [("CLIC", "int_ie")]
+            .into_iter()
+            .map(|(p, r)| (p.to_owned(), r.to_owned()))
+            .collect();
+        assert_eq!(esp_hal_stores(source), expected);
+    }
+
+    #[test]
+    fn an_array_spans_its_element_count_at_its_stride() {
+        // svd2rust documents a byte array by element size: 48 one-byte
+        // elements four bytes apart from 0x1001 end at 0x10c1, not 0x1031.
+        let module = r#"
+    #[doc = "0x1001..0x1031 - Interrupt enable register."]
+    #[inline(always)]
+    pub const fn int_ie(&self, n: usize) -> &INT_IE {
+        #[allow(clippy::no_effect)]
+        [(); 48][n];
+        unsafe {
+            &*core::ptr::from_ref(self)
+                .cast::<u8>()
+                .add(4096)
+                .add(4 * n)
+                .cast()
+        }
+    }
+    #[doc = "0x00 - INT_CONFIG"]
+    #[inline(always)]
+    pub const fn int_config(&self) -> &INT_CONFIG {"#;
+        let registers = pac_registers(module);
+        assert_eq!(registers["int_ie"], (0x1001, 0x10c1));
+        assert_eq!(registers["int_config"], (0x0, 0x4));
+    }
+
+    #[test]
+    fn a_reviewed_run_covers_its_words_four_bytes_apart() {
+        let review: Review = toml_edit::de::from_str(
+            r#"schema = 1
+[[word]]
+address = 0x1000
+words = 3
+radio = "R.MAP"
+esp_hal = "P.map"
+coordination = "shared-lock"
+reason = "test"
+[[word]]
+address = 0x2000
+radio = "R.ONE"
+esp_hal = "P.one"
+coordination = "whole-word-stores"
+reason = "test"
+"#,
+        )
+        .expect("a review");
+        let words = reviewed_words(&review.word).expect("disjoint runs");
+        assert_eq!(
+            words.keys().copied().collect::<Vec<_>>(),
+            [0x1000, 0x1004, 0x1008, 0x2000]
+        );
+        let overlapping: Review = toml_edit::de::from_str(
+            r#"schema = 1
+[[word]]
+address = 0x1000
+words = 2
+radio = "R"
+esp_hal = "P"
+coordination = "shared-lock"
+reason = "test"
+[[word]]
+address = 0x1004
+radio = "R"
+esp_hal = "P"
+coordination = "shared-lock"
+reason = "test"
+"#,
+        )
+        .expect("a review");
+        assert!(reviewed_words(&overlapping.word).is_err());
     }
 
     #[test]

@@ -539,6 +539,11 @@ own copy:
   (`SYSTEM <= PCR`). `cargo registers check shared-words --chip <chip>
   --esp-hal-src <dir> --esp-metadata-generated-src <dir> --pac-src <dir>`
   runs it on the given esp-hal, esp-metadata-generated and PAC sources.
+  esp-hal stores through `P::regs()` and through `let p = unsafe {
+  P::steal() };` bindings count; an array accessor spans its `[(); N]`
+  elements at its `.add(S * n)` stride, and a byte register counts as the
+  word that holds it. An entry with `words = N` reviews a run of `N` words
+  four bytes apart from its `address`.
 
 `ChipSources` resolves the files a chip's publication manifest names
 without validating them. The binding index format is
