@@ -26,6 +26,9 @@ fragments = [
     "peripherals/wifi-mac-sta-tsf-load.toml",
     "peripherals/wifi-mac-tx-common.toml",
     "peripherals/wifi-mac-ersu-ack-rate.toml",
+    "peripherals/timg-wdt.toml",
+    "peripherals/lp-wdt.toml",
+    "peripherals/pcr-timg1.toml",
 ]
 
 layouts = ["layouts/phy-i2c-command.toml"]

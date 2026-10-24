@@ -33,4 +33,8 @@ owned-ranges = [
     "pmu-radio-immediate-modem-icg",
     "pmu-radio-rf-power",
     "pmu-radio-analog-peripheral-power",
+    "timg0-wdt",
+    "timg1-wdt",
+    "hp-sys-clkrst-timg1",
+    "lp-wdt",
 ]

@@ -3067,6 +3067,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-espressif-watchdog"
+version = "0.1.0"
+dependencies = [
+ "oer-time",
+ "oer-time-virtual",
+]
+
+[[package]]
 name = "oer-firmware-apps-b0"
 version = "0.1.0"
 dependencies = [

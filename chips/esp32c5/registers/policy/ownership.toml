@@ -47,4 +47,9 @@ owned-ranges = [
     "lpperi-clk-en",
     "lpperi-rng",
     "lp-clkrst-reset-cause",
+    "timg0-wdt",
+    "timg1-wdt",
+    "pcr-timg1-conf",
+    "pcr-timg1-wdt-clk-conf",
+    "lp-wdt",
 ]

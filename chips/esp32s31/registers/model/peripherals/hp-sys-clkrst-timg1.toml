@@ -1,0 +1,62 @@
+schema = 2
+
+[[peripherals]]
+name = "HP_SYS_CLKRST_TIMG1"
+description = "HP system clock/reset registers: timer group 1's bus clock, reset and watchdog clock word."
+baseAddress = 0x20587000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "TIMERGRP1_CTRL0"
+description = "Timer group 1 bus clock, reset and timer and watchdog clock sources and enables."
+addressOffset = 0x11c
+size = 32
+access = "read-write"
+resetValue = 0x00000921
+
+[[peripherals.registers.register.fields]]
+name = "APB_CLK_EN"
+description = "Timer group 1 bus clock enable."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_EN"
+description = "Holds timer group 1 in reset while set."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "WDT_SRC_SEL"
+description = "Watchdog clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M."
+bitOffset = 9
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "WDT_CLK_EN"
+description = "Watchdog clock enable."
+bitOffset = 11
+bitWidth = 1
+
+[[peripheral-review]]
+entity = "HP_SYS_CLKRST_TIMG1"
+
+[peripheral-review.peripheral]
+sources = ["ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[peripheral-review.register]
+sources = ["ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[peripheral-review.field]
+sources = ["ESP_IDF_4D59230D_S31_HP_SYS_CLKRST_TIMG1"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

@@ -10738,6 +10738,557 @@ documentation establishes their electrical meaning.</description>
       </registers>
     </peripheral>
     <peripheral>
+      <name>TIMG0_WDT</name>
+      <description>Timer group 0's main watchdog (MWDT0): only its configuration, feed and write-protect words; the timers and the RTC calibration words of the group are not part of this view.</description>
+      <baseAddress>0x60008000</baseAddress>
+      <registers>
+        <register>
+          <name>WDTCONFIG0</name>
+          <description>Main watchdog enable, stage actions, reset lengths and the configuration latch; written only while unlocked.</description>
+          <addressOffset>0x48</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x0004C000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_APPCPU_RESET_EN</name>
+              <description>Unmasks the CPU reset of the application core.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_PROCPU_RESET_EN</name>
+              <description>Unmasks the CPU reset of the protocol core.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_FLASHBOOT_MOD_EN</name>
+              <description>Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_SYS_RESET_LENGTH</name>
+              <description>System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_CPU_RESET_LENGTH</name>
+              <description>CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_CONF_UPDATE_EN</name>
+              <description>Writing one latches the watchdog configuration words into the watchdog clock domain; reads zero.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>WDT_STG3</name>
+              <description>Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG2</name>
+              <description>Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG1</name>
+              <description>Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG0</name>
+              <description>Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_EN</name>
+              <description>Main watchdog enable.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTCONFIG1</name>
+          <description>Main watchdog clock prescaler and divider reset; written only while unlocked.</description>
+          <addressOffset>0x4C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00010000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_DIVCNT_RST</name>
+              <description>Writing one resets the prescaler's divider counter; reads zero.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>WDT_CLK_PRESCALE</name>
+              <description>Watchdog tick = source clock period times this prescaler.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTCONFIG2</name>
+          <description>Stage 0 timeout; written only while unlocked.</description>
+          <addressOffset>0x50</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x018CBA80</resetValue>
+          <fields>
+            <field>
+              <name>WDT_STG0_HOLD</name>
+              <description>Stage 0 timeout in watchdog ticks.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTFEED</name>
+          <description>Writing any value feeds the main watchdog while unlocked.</description>
+          <addressOffset>0x60</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_FEED</name>
+              <description>Any written value restarts the watchdog from stage 0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTWPROTECT</name>
+          <description>Main watchdog write protection: the key unlocks the watchdog words, any other value locks them.</description>
+          <addressOffset>0x64</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x50D83AA1</resetValue>
+          <fields>
+            <field>
+              <name>WDT_WKEY</name>
+              <description>Write key; 0x50D83AA1 unlocks.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>TIMG1_WDT</name>
+      <description>Timer group 1's main watchdog (MWDT1): only its configuration, feed and write-protect words; the timers and the RTC calibration words of the group are not part of this view.</description>
+      <baseAddress>0x60009000</baseAddress>
+      <registers>
+        <register>
+          <name>WDTCONFIG0</name>
+          <description>Main watchdog enable, stage actions, reset lengths and the configuration latch; written only while unlocked.</description>
+          <addressOffset>0x48</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x0004C000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_APPCPU_RESET_EN</name>
+              <description>Unmasks the CPU reset of the application core.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_PROCPU_RESET_EN</name>
+              <description>Unmasks the CPU reset of the protocol core.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_FLASHBOOT_MOD_EN</name>
+              <description>Flash boot protection: the ROM arms it; a timeout resets the system even while WDT_EN is clear.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_SYS_RESET_LENGTH</name>
+              <description>System reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_CPU_RESET_LENGTH</name>
+              <description>CPU reset signal length: 0..7 select 8, 16, 24, 32, 40, 64, 128 or 256 watchdog clock cycles.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_CONF_UPDATE_EN</name>
+              <description>Writing one latches the watchdog configuration words into the watchdog clock domain; reads zero.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>WDT_STG3</name>
+              <description>Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG2</name>
+              <description>Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG1</name>
+              <description>Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG0</name>
+              <description>Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WDT_EN</name>
+              <description>Main watchdog enable.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTCONFIG1</name>
+          <description>Main watchdog clock prescaler and divider reset; written only while unlocked.</description>
+          <addressOffset>0x4C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00010000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_DIVCNT_RST</name>
+              <description>Writing one resets the prescaler's divider counter; reads zero.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>WDT_CLK_PRESCALE</name>
+              <description>Watchdog tick = source clock period times this prescaler.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTCONFIG2</name>
+          <description>Stage 0 timeout; written only while unlocked.</description>
+          <addressOffset>0x50</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x018CBA80</resetValue>
+          <fields>
+            <field>
+              <name>WDT_STG0_HOLD</name>
+              <description>Stage 0 timeout in watchdog ticks.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTFEED</name>
+          <description>Writing any value feeds the main watchdog while unlocked.</description>
+          <addressOffset>0x60</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_FEED</name>
+              <description>Any written value restarts the watchdog from stage 0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WDTWPROTECT</name>
+          <description>Main watchdog write protection: the key unlocks the watchdog words, any other value locks them.</description>
+          <addressOffset>0x64</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x50D83AA1</resetValue>
+          <fields>
+            <field>
+              <name>WDT_WKEY</name>
+              <description>Write key; 0x50D83AA1 unlocks.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_WDT</name>
+      <description>The RTC watchdog (RWDT) of the low-power watchdog block: its configuration word and write protection. The super watchdog's words are the separate LP_WDT_SWD view.</description>
+      <baseAddress>0x600B1C00</baseAddress>
+      <registers>
+        <register>
+          <name>CONFIG0</name>
+          <description>RTC watchdog enable, stage actions and reset lengths; written only while unlocked.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00013214</resetValue>
+          <fields>
+            <field>
+              <name>WDT_CHIP_RESET_WIDTH</name>
+              <description>Chip reset signal width.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>WDT_CHIP_RESET_EN</name>
+              <description>Enables the chip reset on timeout.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_PAUSE_IN_SLP</name>
+              <description>Pauses the watchdog while the chip sleeps.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_APPCPU_RESET_EN</name>
+              <description>Unmasks the CPU reset of the application core.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_PROCPU_RESET_EN</name>
+              <description>Unmasks the CPU reset of the protocol core.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_FLASHBOOT_MOD_EN</name>
+              <description>Flash boot protection: the ROM arms it; a timeout resets even while WDT_EN is clear.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>WDT_SYS_RESET_LENGTH</name>
+              <description>System reset signal length selector.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_CPU_RESET_LENGTH</name>
+              <description>CPU reset signal length selector.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG3</name>
+              <description>Timeout action of stage 3: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG2</name>
+              <description>Timeout action of stage 2: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG1</name>
+              <description>Timeout action of stage 1: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_STG0</name>
+              <description>Timeout action of stage 0: 0 none, 1 interrupt, 2 CPU reset, 3 system reset, 4 RTC reset.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>WDT_EN</name>
+              <description>RTC watchdog enable.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WPROTECT</name>
+          <description>RTC watchdog write protection: the key unlocks CONFIG0 to FEED, any other value locks them.</description>
+          <addressOffset>0x18</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>WDT_WKEY</name>
+              <description>Write key; 0x50D83AA1 unlocks.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_WDT_SWD</name>
+      <description>The super watchdog (SWD) of the low-power watchdog block: its configuration word and write protection.</description>
+      <baseAddress>0x600B1C00</baseAddress>
+      <registers>
+        <register>
+          <name>SWD_CONFIG</name>
+          <description>Super watchdog control; written only while unlocked.</description>
+          <addressOffset>0x1C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x12C00000</resetValue>
+          <fields>
+            <field>
+              <name>SWD_RESET_FLAG</name>
+              <description>Set when the super watchdog reset the chip.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>SWD_AUTO_FEED_EN</name>
+              <description>The hardware feeds the super watchdog by itself.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SWD_RST_FLAG_CLR</name>
+              <description>Writing one clears SWD_RESET_FLAG; reads zero.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+            <field>
+              <name>SWD_SIGNAL_WIDTH</name>
+              <description>Width of the super watchdog's reset signal.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>10</bitWidth>
+            </field>
+            <field>
+              <name>SWD_DISABLE</name>
+              <description>Disables the super watchdog.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SWD_FEED</name>
+              <description>Writing one feeds the super watchdog; reads zero.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>write-only</access>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SWD_WPROTECT</name>
+          <description>Super watchdog write protection: the key unlocks SWD_CONFIG, any other value locks it.</description>
+          <addressOffset>0x20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SWD_WKEY</name>
+              <description>Write key; 0x50D83AA1 unlocks.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>PCR_TIMG1</name>
+      <description>Peripheral clock/reset registers: timer group 1's bus clock, reset and watchdog clock words.</description>
+      <baseAddress>0x60096000</baseAddress>
+      <registers>
+        <register>
+          <name>TIMERGROUP1_CONF</name>
+          <description>Timer group 1 bus clock and reset.</description>
+          <addressOffset>0x60</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x0000001D</resetValue>
+          <fields>
+            <field>
+              <name>TG1_CLK_EN</name>
+              <description>Timer group 1 bus clock enable.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TG1_RST_EN</name>
+              <description>Holds timer group 1 in reset while set.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TG1_WDT_READY</name>
+              <description>The watchdog is out of reset and ready.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TIMERGROUP1_WDT_CLK_CONF</name>
+          <description>Timer group 1 watchdog clock source and enable.</description>
+          <addressOffset>0x68</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00400000</resetValue>
+          <fields>
+            <field>
+              <name>TG1_WDT_CLK_SEL</name>
+              <description>Watchdog clock source: 0 XTAL, 1 PLL_F80M, 2 RC_FAST.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>TG1_WDT_CLK_EN</name>
+              <description>Watchdog clock enable.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
       <name>WIFI_MAC_INTERFACE_ADDRESS</name>
       <description>Four interface-address pairs consumed by MAC receive filtering.</description>
       <baseAddress>0x600A405C</baseAddress>

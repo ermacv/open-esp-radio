@@ -1,0 +1,18 @@
+[package]
+name = "oer-espressif-watchdog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Espressif watchdog sequences over a chip's typed watchdog registers: the write-protect key as a typestate, the main watchdog's configuration latch, the RTC and super watchdogs and the system-deadline backend"
+
+[dependencies]
+oer-time = { path = "../../../portable/time" }
+
+[dev-dependencies]
+oer-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true
