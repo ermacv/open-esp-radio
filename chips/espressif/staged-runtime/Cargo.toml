@@ -15,6 +15,10 @@ esp32c5 = ["esp-hal/esp32c5"]
 # A second hart: its SRAM interrupt stack and vector table (the chip
 # layout's `harts` is 2).
 two-harts = []
+## Hart 1 runs code. No image enables it, and the crate refuses it: the
+## runtime's critical-section masks only the current hart, so a second
+## running hart needs a cross-hart lock without spinning first.
+cpu1-runs = []
 ## After the record, call the image's `oer_platform_panic_hook`, which
 ## records more of its state without formatting, then reset.
 panic-hook = []
@@ -29,6 +33,9 @@ oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 critical-section = { workspace = true, features = ["restore-state-u32"] }
 esp-hal = { workspace = true }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
 
 [lints]
 workspace = true

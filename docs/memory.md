@@ -56,7 +56,12 @@ contracts: [Hardware memory](hardware-memory.md).
   reset ([how core 1 starts](../chips/esp32s31/notes/core1-boot.md)), the
   staged boot stops any hart but 0, no image links a core starter
   (`[core-start]` of `chip.toml`, also forbidden in `clippy.toml`) and no
-  interrupt-table entry routes to it.
+  interrupt-table entry routes to it. The staged runtime's `critical-section`
+  is hart-local (it masks the current hart's interrupts and takes no lock),
+  so an image where hart 1 runs code may not use it until a cross-hart lock
+  without spinning exists: the runtime's `cpu1-runs` feature, which no image
+  enables, does not build
+  ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
 - esp-hal's cross-core call (IPC) is off in every image: the fork's `ipc`
   feature is not enabled, and no interrupt line is taken without its entry
   in the image's table: each line's vector calls that entry's handler alone. The image

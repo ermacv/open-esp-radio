@@ -3051,6 +3051,7 @@ dependencies = [
  "oer-interrupt-table",
  "oer-memory",
  "oer-riscv",
+ "tempfile",
 ]
 
 [[package]]
