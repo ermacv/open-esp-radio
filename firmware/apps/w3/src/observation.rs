@@ -11,6 +11,7 @@ pub struct Observations {
     pub lease: Option<Lease>,
     pub malformed: u32,
     pub queue_drops: u32,
+    pub bridge: crate::bridge::Counters,
     pub cadence_ok: bool,
     identifier: u16,
     last_request_us: Option<u64>,
@@ -24,6 +25,7 @@ impl Observations {
             lease: None,
             malformed: 0,
             queue_drops: 0,
+            bridge: crate::bridge::Counters::new(),
             cadence_ok: true,
             identifier,
             last_request_us: None,
@@ -82,6 +84,7 @@ impl Observations {
         report.lease = self.lease;
         report.malformed_ip = self.malformed;
         report.queue_drops = self.queue_drops;
+        report.bridge = self.bridge;
         report.sent = self.station.requests();
         report.received = self.station.replies();
         report.peer_requests = self.peer.requests();

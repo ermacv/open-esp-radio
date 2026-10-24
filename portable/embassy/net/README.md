@@ -3,6 +3,11 @@
 `oer-embassy-net` is the owned-packet boundary between the Wi-Fi
 datapath and the Embassy/Xarxa network stack (`docs/network.md`).
 
+The pinned Xarxa fork keeps packet-pool Waker registration in a separate
+`#[inline(never)]` frame from the availability recheck and wake. This retains
+typed Waker call scopes for the proven stack analysis without changing the
+register-then-recheck notification protocol.
+
 ## Optional external RX
 
 `external-rx` enables `ExternalRxOrigin`, admission and accounting for detached

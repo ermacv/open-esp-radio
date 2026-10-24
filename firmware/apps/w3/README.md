@@ -3,16 +3,39 @@
 The image composes the S31 lower-MAC backend, channel arbiter, open
 `StationService` and Espressif rate selection with the owned Embassy network
 adapter. P2 owns the device and port registration; the station and IP stack run
-on P1 in PSRAM. `stack.toml` allocates this image's P1 stack, with the platform's
+on P1 in PSRAM. The linker sizes this image's P1 stack under `stack.toml`, with the platform's
 unchanged interrupt-stack allocation. The image stores the large station future
 in static PSRAM using the same pinned compiler support as the HIL images.
-The calculated P1 bound is 42,224 + ? bytes; its allocation is 58,608 bytes,
-including the 16,384-byte minimum free reserve.
+The image declares its P1 stack proven: unresolved calls fail the build.
+The accepted bound is at most 42,192 bytes; the linker adds the 16,384-byte
+minimum-free reserve to that proven bound.
 
 Outgoing ICMP uses the pinned fork's raw IPv4 socket and checked wire codecs;
 incoming requests use native `icmp-ping-reply`. The image validates observations
 before reading echo identities, counts malformed packets and queue drops, and
 checks each adjacent outgoing request against the 750–1250 ms cadence window.
+The bridge checks the owned endpoint's RX publisher readiness before removing
+an RX input. Each turn drains ready RX frames up to the RX input
+queue capacity and advances TX owners up to the TX input queue capacity, then
+yields. Both output readiness checks precede their input dequeue, so a full
+output retains the source owner. RX pool exhaustion waits for capacity while
+TX remains eligible to return those same pool owners. After a productive
+bounded step the bridge yields; idle waits use readiness wakes and the
+existing one-millisecond link timer. The synchronous drain step stays out of
+the generated poll frame with `#[inline(never)]`; the loop has one await.
+The packet ownership and copy boundaries are unchanged.
+
+A local probe socket error or its 250 ms send deadline consumes that probe
+and is counted separately, without marking the link failed or ending the
+series early. The next probe keeps its one-second schedule. Nonzero counters
+and the last socket error appear in a `w3.probes` diagnostic before the
+unchanged version 1 console block; missing probes still fail gate c. The
+normal final deauthentication and gate f remain required. A `w3.bridge`
+diagnostic records whole-workload turns (including empty RX phases), total RX
+frames dequeued and the maximum RX batch; the host derives the mean from the
+sum and turn count. Probe and bridge diagnostics are typed notes like the
+version 1 report and do not format text on the target.
+
 It uses no power save, hardware AID or fixed PHY rate. A software beacon-loss
 deadline disconnects after six seconds without a matching BSS beacon.
 
