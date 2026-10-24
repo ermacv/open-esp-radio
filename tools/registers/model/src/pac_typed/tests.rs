@@ -307,6 +307,7 @@ fn a_fixed_sequence_writes_its_images_in_order() {
         register: register.to_owned(),
         index: None,
         value,
+        whole_word: false,
     };
     // Two images of one word: the one written last is the one that stays.
     pack.fixed_register_sequences
@@ -811,4 +812,387 @@ fn a_handoff_partition_has_its_own_claims_and_the_root_does_not_claim_it() {
         .expect("the handoff pack renders");
     assert!(!rust.contains("pub type Claims"), "{rust}");
     assert!(rust.contains("pub type RadioPeripheralsClaims"), "{rust}");
+}
+
+fn refused(pack: &PacApiPack, registers: &str, expected: &str) {
+    let error = pack
+        .render_typed_rust(&svd(registers), &Default::default())
+        .expect_err("the typed block is refused");
+    assert!(error.to_string().contains(expected), "{error}");
+}
+
+/// `HEAD` with a 20-bit pointer field beside an ordinary one.
+fn pointed() -> String {
+    register(
+        "HEAD",
+        0,
+        "read-write",
+        "",
+        &(field("ADDRESS_LOW", 0, 20, "") + &field("FORMAT", 20, 4, "")),
+    )
+}
+
+fn pointer_pack(encoding: Option<crate::RegisterPointerEncoding>) -> PacApiPack {
+    let mut pack = typed_pack();
+    pack.pointer_fields.push(crate::PointerField {
+        name: "head_pointer".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "HEAD".to_owned(),
+        field: "ADDRESS_LOW".to_owned(),
+        points_to: "DESCRIPTOR".to_owned(),
+        member_offset: 0,
+        encoding,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack
+}
+
+#[test]
+fn a_pointer_field_has_an_image_setter_and_no_integer_one() {
+    let rust = pointer_pack(Some(crate::RegisterPointerEncoding::LowBits))
+        .render_typed_rust(&svd(&pointed()), &Default::default())
+        .expect("the pointer field renders");
+    assert!(rust.contains("pub fn set_address_low(&mut self, value: AddressLowImage)"));
+    assert!(
+        !rust.contains("value: oer_mmio::Bits<20>) -> &mut Self"),
+        "{rust}"
+    );
+    assert!(rust.contains("every address of the DMA window shares the high bits"));
+}
+
+#[test]
+fn a_pointer_field_of_the_wrong_width_is_refused() {
+    refused(
+        &pointer_pack(None),
+        &pointed(),
+        "must be a writable field of its encoding's width",
+    );
+}
+
+#[test]
+fn only_a_typed_reference_changes_a_pointer_field() {
+    let mut pack = pointer_pack(Some(crate::RegisterPointerEncoding::LowBits));
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        name: "head_image".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "HEAD".to_owned(),
+        value: 0x10,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    refused(&pack, &pointed(), "sets a DMA address field");
+
+    let mut pack = pointer_pack(Some(crate::RegisterPointerEncoding::LowBits));
+    pack.field_clear_modifies.push(crate::FieldOrModify {
+        name: "clear_head".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "HEAD".to_owned(),
+        fields: vec![crate::pac_api::FieldOrProjection {
+            field: "ADDRESS_LOW".to_owned(),
+            source_bit_offset: 0,
+        }],
+        domain: None,
+        value: Some(0xf_ffff),
+        exposure: crate::PacApiExposure::Facade,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    refused(&pack, &pointed(), "only a typed DMA reference or zero sets");
+}
+
+/// `STATUS` (read-only) and its write-only, write-one-to-clear `CLEAR`.
+fn events(status_fields: &str) -> String {
+    register("STATUS", 0, "read-only", "", status_fields)
+        + &register(
+            "CLEAR",
+            4,
+            "write-only",
+            "<modifiedWriteValues>oneToClear</modifiedWriteValues>",
+            &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
+        )
+}
+
+fn snapshot_pack() -> PacApiPack {
+    let mut pack = typed_pack();
+    pack.interrupt_snapshots.push(crate::InterruptSnapshot {
+        name: "events".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        status_register: "STATUS".to_owned(),
+        clear_register: "CLEAR".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack
+}
+
+#[test]
+fn a_snapshot_acknowledges_through_its_clear_register_alone() {
+    let rust = snapshot_pack()
+        .render_typed_rust(
+            &svd(&events(
+                &(field("DONE", 0, 1, "") + &field("LEVEL", 4, 4, "")),
+            )),
+            &Default::default(),
+        )
+        .expect("the snapshot renders");
+    assert!(rust.contains("pub fn acknowledge_events(&mut self, snapshot: EventsSnapshot)"));
+    assert!(
+        rust.contains("pub const EVENTS: u32 = 0x00000001;"),
+        "{rust}"
+    );
+    assert!(!rust.contains("pub fn write_clear("), "{rust}");
+
+    let mut pack = snapshot_pack();
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        name: "clear_everything".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "CLEAR".to_owned(),
+        value: 0x3,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    refused(
+        &pack,
+        &events(&field("DONE", 0, 1, "")),
+        "only its snapshot's acknowledgement writes",
+    );
+}
+
+#[test]
+fn a_status_field_acknowledged_in_part_is_refused() {
+    refused(
+        &snapshot_pack(),
+        &events(&field("STATE", 1, 2, "")),
+        "acknowledged only in part",
+    );
+}
+
+fn capability_pack(registers: &[&str]) -> PacApiPack {
+    let mut pack = typed_pack();
+    pack.read_capabilities.push(crate::ReadCapability {
+        peripheral: "RADIO".to_owned(),
+        name: "Time".to_owned(),
+        registers: registers.iter().map(|name| (*name).to_owned()).collect(),
+        copy: true,
+        description: "The time.".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack
+}
+
+#[test]
+fn a_read_capability_of_the_whole_block_consumes_its_owner() {
+    let time = register("TIME", 0, "read-only", "", &field("VALUE", 0, 32, ""));
+    let rust = capability_pack(&["TIME"])
+        .render_typed_rust(&svd(&time), &Default::default())
+        .expect("the capability renders");
+    assert!(
+        rust.contains("pub fn into_time(self) -> RadioTime<P>"),
+        "{rust}"
+    );
+    assert!(rust.contains("impl<P: oer_mmio::Placement> Copy for RadioTime<P> {}"));
+}
+
+#[test]
+fn a_read_capability_reads_without_side_effects_and_excludes_register_sides() {
+    let changing = register(
+        "TIME",
+        0,
+        "read-only",
+        "<readAction>clear</readAction>",
+        &field("VALUE", 0, 32, ""),
+    );
+    refused(
+        &capability_pack(&["TIME"]),
+        &changing,
+        "reads it with a side effect",
+    );
+    let mut pack = capability_pack(&["CONTROL"]);
+    pack.register_sides.push(RegisterSides {
+        peripheral: "RADIO".to_owned(),
+        irq: vec!["STATUS".to_owned()],
+        irq_observes: Vec::new(),
+        description: "sides".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+    });
+    refused(&pack, &block(), "at most one of register sides");
+}
+
+/// `ENABLE_SET`, a write-only trigger word, and `CH%s`, four channel words.
+fn channels() -> String {
+    register(
+        "ENABLE_SET",
+        0,
+        "write-only",
+        "",
+        &(field("CH0", 0, 1, "") + &field("CH1", 1, 1, "") + &field("CH2", 2, 1, "")),
+    ) + "<register><dim>4</dim><dimIncrement>0x4</dimIncrement><name>CH%s</name>\
+         <addressOffset>0x10</addressOffset><size>32</size><access>read-write</access>\
+         <fields><field><name>ID</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>\
+         </fields></register>"
+}
+
+fn division_pack(low: (&[&str], u32), high: (&[&str], u32)) -> PacApiPack {
+    let mut pack = typed_pack();
+    pack.write_trigger_fields = ["CH0", "CH1"]
+        .iter()
+        .map(|name| trigger("ENABLE_SET", name))
+        .collect();
+    let part = |name: &str, (fields, first): (&[&str], u32)| crate::DivisionPart {
+        name: name.to_owned(),
+        registers: Vec::new(),
+        elements: vec![crate::DivisionElements {
+            register: "CH%s".to_owned(),
+            first,
+            count: 2,
+        }],
+        observes: Vec::new(),
+        triggers: vec![crate::DivisionTrigger {
+            register: "ENABLE_SET".to_owned(),
+            fields: fields.iter().map(|name| (*name).to_owned()).collect(),
+        }],
+    };
+    pack.register_divisions.push(crate::RegisterDivision {
+        peripheral: "RADIO".to_owned(),
+        description: "Two protocols.".to_owned(),
+        sources: vec!["SOURCE".to_owned()],
+        parts: vec![part("Low", low), part("High", high)],
+    });
+    pack
+}
+
+#[test]
+fn a_division_gives_each_part_its_elements_and_trigger_bits() {
+    let rust = division_pack((&["CH0"], 0), (&["CH1"], 2))
+        .render_typed_rust(&svd(&channels()), &Default::default())
+        .expect("the division renders");
+    for item in [
+        "pub fn divide(self) -> (RadioLow<P>, RadioHigh<P>)",
+        "const TRIGGERS: &'static [(usize, u32)] = &[(0x0, 0x00000002)];",
+        "self.0.write_trigger::<0x0>(0x00000001);",
+        "read_indexed::<0x18, 0x4, 2>(index)",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+}
+
+#[test]
+fn a_division_refuses_shared_elements_bits_and_undeclared_triggers() {
+    refused(
+        &division_pack((&["CH0"], 0), (&["CH1"], 1)),
+        &channels(),
+        "element 1 of CH%s has another owner",
+    );
+    refused(
+        &division_pack((&["CH0"], 0), (&["CH0"], 2)),
+        &channels(),
+        "are none or another part's",
+    );
+    refused(
+        &division_pack((&["CH0"], 0), (&["CH2"], 2)),
+        &channels(),
+        "is no declared write-trigger field",
+    );
+}
+
+#[test]
+fn a_range_of_zero_alone_is_a_constant_zero_field() {
+    let keys = register(
+        "KEYS",
+        0,
+        "read-write",
+        "",
+        &(field("VALID", 0, 25, "")
+            + &field(
+                "RESERVED_HIGH",
+                25,
+                7,
+                "<writeConstraint><range><minimum>0</minimum><maximum>0</maximum></range></writeConstraint>",
+            )),
+    );
+    let rust = typed_pack()
+        .render_typed_rust(&svd(&keys), &Default::default())
+        .expect("the zero field renders");
+    assert!(rust.contains("pub const ZERO: u32 = 0xfe000000;"), "{rust}");
+    assert!(rust.contains("& !keys::ZERO"), "{rust}");
+    assert!(!rust.contains("set_reserved_high"), "{rust}");
+    let narrow = register(
+        "KEYS",
+        0,
+        "read-write",
+        "",
+        &field(
+            "VALID",
+            0,
+            8,
+            "<writeConstraint><range><minimum>0</minimum><maximum>9</maximum></range></writeConstraint>",
+        ),
+    );
+    refused(&typed_pack(), &narrow, "renders no bounded field yet");
+}
+
+#[test]
+fn a_partition_image_refuses_a_register_its_read_changes() {
+    let mut pack = partitioned_pack();
+    pack.partition_image_reads.push(crate::PartitionImageRead {
+        name: "image".to_owned(),
+        partition: pack.ownership_partitions[0].name.clone(),
+        exposure: crate::PacApiExposure::Facade,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let changing = block()
+        + &register(
+            "LATCH",
+            0xc,
+            "read-only",
+            "<readAction>clear</readAction>",
+            &field("VALUE", 0, 32, ""),
+        );
+    refused(&pack, &changing, "changes when read");
+    assert!(
+        pack.without_typed_operations()
+            .partition_image_reads
+            .is_empty(),
+        "the svd2rust backend reads no typed partition"
+    );
+}
+
+#[test]
+fn a_library_declares_no_read_capability() {
+    let mut pack = library_pack();
+    pack.read_capabilities = capability_pack(&["CONTROL"]).read_capabilities;
+    let error = pack
+        .render_library_typed_rust(&svd(&block()))
+        .expect_err("the library is refused");
+    assert!(error.to_string().contains("read capability"), "{error}");
+}
+
+#[test]
+fn a_fifo_port_takes_no_pointer_field() {
+    let mut pack = typed_pack();
+    pack.pointer_fields.push(crate::PointerField {
+        name: "base_pointer".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "BASE".to_owned(),
+        field: "ADDRESS".to_owned(),
+        points_to: "DESCRIPTOR".to_owned(),
+        member_offset: 0,
+        encoding: None,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack.fifo_ports.push(fifo("BASE"));
+    refused(
+        &pack,
+        &register("BASE", 0, "read-write", "", &field("ADDRESS", 0, 32, "")),
+        "must be one register with one field that is no pointer field",
+    );
+}
+
+#[test]
+fn an_acknowledged_clear_register_takes_no_write_trigger() {
+    let mut pack = snapshot_pack();
+    pack.write_trigger_fields.push(trigger("CLEAR", "DONE"));
+    refused(
+        &pack,
+        &events(&field("DONE", 0, 1, "")),
+        "writes a register only its snapshot's acknowledgement writes",
+    );
 }

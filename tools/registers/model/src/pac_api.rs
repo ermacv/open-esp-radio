@@ -82,6 +82,13 @@ pub struct PacApiPack {
     /// Typed registers that are FIFO ports: a read takes an element out.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fifo_ports: Vec<FifoPort>,
+    /// Read-only owners given up from a typed block's writes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_capabilities: Vec<ReadCapability>,
+    /// Typed blocks divided between two to four owners, which may share
+    /// write-trigger words bit by bit and arrays element by element.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub register_divisions: Vec<RegisterDivision>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -148,6 +155,72 @@ pub struct FifoPort {
     pub peripheral: String,
     pub register: String,
     pub sources: Vec<String>,
+}
+
+/// A read-only owner of `registers` of one typed block, made by giving up
+/// their writes: `<Block><name>`, `Copy` if `copy`. When `registers` are
+/// all the block's, the block becomes it (`into_<name>`); otherwise the
+/// block splits into it and `<Block>Rest`, which owns every other register
+/// (`split_<name>`). Each register reads without a side effect.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ReadCapability {
+    pub peripheral: String,
+    /// The capability's type suffix, in upper camel case.
+    pub name: String,
+    pub registers: Vec<String>,
+    #[serde(default)]
+    pub copy: bool,
+    pub description: String,
+    pub sources: Vec<String>,
+}
+
+/// One typed block divided between two to four owners, `<Block><part>`,
+/// which the block's `divide` makes and nothing joins again.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RegisterDivision {
+    pub peripheral: String,
+    pub description: String,
+    pub sources: Vec<String>,
+    pub parts: Vec<DivisionPart>,
+}
+
+/// One owner of a divided block: the registers it owns whole, the array
+/// elements it owns, the registers it only reads and its bits of shared
+/// write-only trigger words.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DivisionPart {
+    /// The owner's type suffix, in upper camel case.
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub registers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<DivisionElements>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub triggers: Vec<DivisionTrigger>,
+}
+
+/// The `count` elements of a register array from `first`: the part's own
+/// array, indexed from zero.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DivisionElements {
+    pub register: String,
+    pub first: u32,
+    pub count: u32,
+}
+
+/// The write-trigger `fields` of a shared write-only trigger word that one
+/// part alone writes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DivisionTrigger {
+    pub register: String,
+    pub fields: Vec<String>,
 }
 
 /// One target-declared, exhaustive ownership partition of raw SVD peripherals.
@@ -338,8 +411,28 @@ pub struct PointerField {
     #[serde(default, skip_serializing_if = "is_zero")]
     pub member_offset: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub encoding: Option<crate::PointerEncoding>,
+    pub encoding: Option<RegisterPointerEncoding>,
     pub sources: Vec<String>,
+}
+
+/// How a pointer field holds its address, when not as the whole address.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegisterPointerEncoding {
+    /// Nonzero 20-bit word index, reconstructed with the 0x2f SRAM prefix.
+    BleCompressed,
+    /// The address's low bits, as wide as the field: the hardware supplies
+    /// the high bits, which every address of the DMA window shares (a
+    /// typed block asserts that at compile time).
+    LowBits,
+}
+
+/// Whether `name` is an upper-camel-case type suffix.
+fn is_type_suffix(name: &str) -> bool {
+    name.starts_with(|character: char| character.is_ascii_uppercase())
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
 }
 
 fn is_zero(value: &u32) -> bool {
@@ -470,6 +563,10 @@ pub struct FixedRegisterSequenceStep {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<usize>,
     pub value: u32,
+    /// The vendor's store of the whole word, undeclared bits included, as
+    /// a fixed image's `whole-word`; the sequence's sources are its evidence.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub whole_word: bool,
 }
 /// One sampled, same-register write-one-to-clear transaction.
 ///
@@ -702,6 +799,38 @@ impl PacApiPack {
                 return Err(Error::message(format!(
                     "PAC API write-trigger field {}.{}.{} has no sources or is repeated",
                     trigger.peripheral, trigger.register, trigger.field
+                )));
+            }
+        }
+        let mut capabilities = BTreeSet::new();
+        for capability in &self.read_capabilities {
+            if capability.sources.is_empty()
+                || capability.description.trim().is_empty()
+                || capability.registers.is_empty()
+                || !is_type_suffix(&capability.name)
+                || !capabilities.insert(&capability.peripheral)
+            {
+                return Err(Error::message(format!(
+                    "PAC API read capability {} of {} needs a camel-case name, registers, a description and sources, once per peripheral",
+                    capability.name, capability.peripheral
+                )));
+            }
+        }
+        let mut divisions = BTreeSet::new();
+        for division in &self.register_divisions {
+            let mut names = BTreeSet::new();
+            if division.sources.is_empty()
+                || division.description.trim().is_empty()
+                || !(2..=4).contains(&division.parts.len())
+                || !division
+                    .parts
+                    .iter()
+                    .all(|part| is_type_suffix(&part.name) && names.insert(&part.name))
+                || !divisions.insert(&division.peripheral)
+            {
+                return Err(Error::message(format!(
+                    "PAC API register division of {} needs a description, sources and two to four parts with distinct camel-case names, once per peripheral",
+                    division.peripheral
                 )));
             }
         }
@@ -1406,6 +1535,16 @@ impl PacApiPack {
                             .map(|trigger| trigger.sources.as_slice()),
                     )
                     .chain(self.fifo_ports.iter().map(|port| port.sources.as_slice()))
+                    .chain(
+                        self.read_capabilities
+                            .iter()
+                            .map(|capability| capability.sources.as_slice()),
+                    )
+                    .chain(
+                        self.register_divisions
+                            .iter()
+                            .map(|division| division.sources.as_slice()),
+                    )
                     .flatten()
                     .map(String::as_str),
             )
@@ -1943,6 +2082,8 @@ pub(crate) mod tests {
             interrupt_sources: Vec::new(),
             write_trigger_fields: Vec::new(),
             fifo_ports: Vec::new(),
+            read_capabilities: Vec::new(),
+            register_divisions: Vec::new(),
         }
     }
 

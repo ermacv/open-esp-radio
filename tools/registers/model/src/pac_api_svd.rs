@@ -46,7 +46,11 @@ impl PacApiPack {
                 &pointer.register,
             )?;
             let field = field(&pointer.name, binding.info, &pointer.field)?;
-            let width = if pointer.encoding.is_some() { 20 } else { 32 };
+            let width = match pointer.encoding {
+                None => 32,
+                Some(crate::RegisterPointerEncoding::BleCompressed) => 20,
+                Some(crate::RegisterPointerEncoding::LowBits) => field.bit_width().min(31),
+            };
             if binding.properties.size != Some(32) || field.bit_width() != width {
                 return Err(Error::message(format!(
                     "PAC pointer field {:?} requires a {width}-bit field of a 32-bit register",

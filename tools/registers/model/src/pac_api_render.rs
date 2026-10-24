@@ -24,7 +24,13 @@ impl PacApiPack {
             let target = crate::layouts::camel(&pointer.points_to);
             let encode = match pointer.encoding {
                 None => "Some(address)",
-                Some(crate::PointerEncoding::BleCompressed) => {
+                Some(crate::RegisterPointerEncoding::LowBits) => {
+                    return Err(Error::message(format!(
+                        "PAC pointer field {:?} holds its address's low bits, which only a typed block renders",
+                        pointer.name
+                    )));
+                }
+                Some(crate::RegisterPointerEncoding::BleCompressed) => {
                     "{ let index = (address >> 2) & 0x000f_ffff;\n\
                      if address & 0xffc0_0003 != 0x2f00_0000 || index == 0 { None } else { Some(index) } }"
                 }

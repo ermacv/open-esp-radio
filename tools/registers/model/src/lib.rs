@@ -51,12 +51,14 @@ mod shared;
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,
-    EnumDomain, EnumValue, FieldOrModify, FifoPort, FixedRegisterImage, FixedRegisterSequence,
-    FixedRegisterSequenceStep, FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead,
-    FullRegisterValue, FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify,
-    OpaqueDomain, OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack,
-    PartitionImageRead, PointerField, RegisterImageRead, RegisterImageWrite, RegisterSides,
-    W1cRegisterSnapshot, WriteTriggerField, ZeroBasedFieldWrite, ZeroRegisterWrite,
+    DivisionElements, DivisionPart, DivisionTrigger, EnumDomain, EnumValue, FieldOrModify,
+    FifoPort, FixedRegisterImage, FixedRegisterSequence, FixedRegisterSequenceStep,
+    FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead, FullRegisterValue,
+    FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify, OpaqueDomain,
+    OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack, PartitionImageRead,
+    PointerField, ReadCapability, RegisterDivision, RegisterImageRead, RegisterImageWrite,
+    RegisterPointerEncoding, RegisterSides, W1cRegisterSnapshot, WriteTriggerField,
+    ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};
 pub use partition_image::PartitionRegister;
@@ -343,7 +345,8 @@ pub fn validate_pointer_writes(layouts: &[MemoryLayout], policy: &PacApiPack) ->
             )));
         }
         if layout.is_some_and(|layout| pointer.member_offset >= layout.size)
-            || (pointer.encoding.is_some() && !pointer.member_offset.is_multiple_of(4))
+            || (pointer.encoding == Some(crate::RegisterPointerEncoding::BleCompressed)
+                && !pointer.member_offset.is_multiple_of(4))
         {
             return Err(Error::message(format!(
                 "PAC pointer field {:?} has an invalid member offset",

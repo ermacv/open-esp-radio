@@ -1,5 +1,6 @@
 use super::{
-    Bits, Block, Host, Index, IndexError, NotOneSplit, Registers, ValueError, VolatileCell, Words,
+    Bits, Block, Host, Index, IndexError, NotOneSplit, Reader, Registers, ValueError, VolatileCell,
+    Words,
 };
 
 /// A block of four consecutive words.
@@ -204,4 +205,108 @@ fn two_sides_cover_a_block_only_when_each_word_has_exactly_one() {
     assert!(!sides_cover(&[0, 4, 8], &[0], &[4]));
     assert!(!sides_cover(&[0, 4, 8], &[0, 4], &[4, 8]));
     assert!(!sides_cover(&[0, 4], &[0, 4], &[12]));
+}
+
+/// The first channel's pair of words; it enables its channel with bit 0 of
+/// the shared trigger word at byte 12.
+struct FirstChannel;
+impl Words for FirstChannel {
+    const OWNED: &'static [usize] = &[0];
+    const OBSERVED: &'static [usize] = &[8];
+    const TRIGGERS: &'static [(usize, u32)] = &[(12, 0b0001)];
+}
+
+/// The second channel; bits 1 and 2 of the trigger word are its own.
+struct SecondChannel;
+impl Words for SecondChannel {
+    const OWNED: &'static [usize] = &[4];
+    const OBSERVED: &'static [usize] = &[8];
+    const TRIGGERS: &'static [(usize, u32)] = &[(12, 0b0110)];
+}
+
+/// The status word at byte 8, owned by a third part.
+struct Status;
+impl Words for Status {
+    const OWNED: &'static [usize] = &[8];
+    const OBSERVED: &'static [usize] = &[];
+}
+
+#[test]
+fn divided_parts_store_only_their_own_trigger_bits() {
+    let mut memory = [0_u32; 4];
+    let block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
+    let (mut first, mut second, mut status) =
+        block.divide::<(FirstChannel, SecondChannel, Status)>();
+    first.write::<0>(0x11);
+    second.write::<4>(0x22);
+    status.write::<8>(0x33);
+    assert_eq!(
+        first.read::<8>(),
+        0x33,
+        "a part reads the words it observes"
+    );
+    // Each store carries only the writer's bits; the others are zero.
+    first.write_trigger::<12>(u32::MAX);
+    assert_eq!(status.read::<8>(), 0x33);
+    drop((first, second, status));
+    assert_eq!(memory, [0x11, 0x22, 0x33, 0b0001]);
+
+    let block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
+    let (first, mut second, status) = block.divide::<(FirstChannel, SecondChannel, Status)>();
+    second.write_trigger::<12>(u32::MAX);
+    drop((first, second, status));
+    assert_eq!(memory, [0x11, 0x22, 0x33, 0b0110]);
+}
+
+#[test]
+fn a_reader_reads_the_words_it_took_over_in_every_copy() {
+    let mut memory = [1_u32, 2, 3, 4];
+    let block = Block::<Host<'_>, Four>::host(&mut memory).expect("four words");
+    let (low, high) = block.split::<Low, High>();
+    let reader: Reader<Host<'_>, Four, Low> = low.into_reader();
+    let copy = reader;
+    let mut high = high;
+    high.write::<8>(9);
+    assert_eq!(reader.read::<4>(), 2);
+    assert_eq!(
+        copy.read::<8>(),
+        9,
+        "an observed word shows its owner's write"
+    );
+    drop(high);
+
+    let mut whole = [5_u32, 6, 7, 8];
+    let reader = Block::<Host<'_>, Four>::host(&mut whole)
+        .expect("four words")
+        .into_reader::<Low>();
+    let index = Index::<2>::new(1).expect("index 1 of 2");
+    assert_eq!(reader.read_indexed::<0, 4, 2>(index), 6);
+}
+
+#[test]
+fn the_division_checks_accept_only_disjoint_owners_and_trigger_bits() {
+    use super::{PartWords, owned_disjoint, owners_cover, parts_listed, triggers_disjoint};
+    const FIRST: PartWords = (&[0], &[8], &[(12, 0b0001)]);
+    const SECOND: PartWords = (&[4], &[8], &[(12, 0b0110)]);
+    const BLOCK: &[usize] = &[0, 4, 8, 12];
+    assert!(parts_listed(BLOCK, &[FIRST, SECOND]));
+    assert!(
+        !parts_listed(&[0, 4, 8], &[FIRST]),
+        "the trigger word is listed"
+    );
+    assert!(
+        !parts_listed(BLOCK, &[(&[], &[], &[(12, 0)])]),
+        "a trigger has bits"
+    );
+    assert!(!parts_listed(BLOCK, &[(&[], &[], &[(12, 1), (12, 2)])]));
+    assert!(owned_disjoint(&[FIRST, SECOND]));
+    assert!(!owned_disjoint(&[FIRST, (&[0], &[], &[])]));
+    assert!(triggers_disjoint(&[FIRST, SECOND]));
+    assert!(!triggers_disjoint(&[FIRST, (&[], &[], &[(12, 0b0011)])]));
+    assert!(
+        !triggers_disjoint(&[FIRST, (&[12], &[], &[])]),
+        "no part owns a trigger word"
+    );
+    assert!(owners_cover(BLOCK, &[0, 4], &[8, 12]));
+    assert!(!owners_cover(BLOCK, &[0], &[4, 12]));
 }

@@ -23,6 +23,11 @@
 //!   compile time; a part writes only its owned words and also reads the
 //!   words it observes. Joining parts of device registers is checked by
 //!   their type; host parts are checked to lie over the same memory.
+//!   [`Block::divide`] makes up to four parts, which may also share a
+//!   write-trigger word, each storing only its own bits ([`Words::TRIGGERS`],
+//!   [`Part::write_trigger`]); joined parts own every word of the block.
+//! - **Who may only read.** [`Block::into_reader`] and [`Part::into_reader`]
+//!   give up every write for a `Copy` [`Reader`] of the listed words.
 //!
 //! Memory the hardware reads by DMA is typed here too: [`DmaWindowAddress`]
 //! and [`DmaRef`] are made only by their `unsafe` constructors (a chip HAL's
@@ -44,10 +49,30 @@ use core::{
 mod sealed {
     /// The address arithmetic of a placement; private to this crate.
     pub trait Sealed {
+        /// The read-only handle a [`Reader`](super::Reader) keeps.
+        type Reading: Reading;
         /// The word at byte `offset` from the block's base.
         fn word(&self, offset: usize) -> *mut u32;
         /// A second handle on the same placement, for the parts of a split.
         fn duplicate(&self) -> Self;
+        /// The placement as a read-only handle, which it is copied into.
+        fn reading(self) -> Self::Reading;
+    }
+
+    /// A placement's read-only handle; private to this crate.
+    pub trait Reading: Copy {
+        /// The word at byte `offset` from the block's base.
+        fn word(&self, offset: usize) -> *const u32;
+    }
+
+    /// The word lists of the parts of one division; private to this crate.
+    pub trait Divides {
+        /// The parts, each over the placement `P` of a block of `R`.
+        type Parts<P: super::Placement, R: super::Registers>;
+        /// Each part's owned, observed and trigger words.
+        const WORDS: &'static [super::PartWords];
+        /// Make the parts over `place`.
+        fn parts<P: super::Placement, R: super::Registers>(place: P) -> Self::Parts<P, R>;
     }
 
     /// The token only this crate makes: claims are built by
@@ -76,6 +101,8 @@ pub struct Fixed<const BASE: usize> {
 }
 
 impl<const BASE: usize> sealed::Sealed for Fixed<BASE> {
+    type Reading = FixedReading<BASE>;
+
     #[inline(always)]
     fn word(&self, offset: usize) -> *mut u32 {
         core::ptr::with_exposed_provenance_mut(BASE + offset)
@@ -85,6 +112,22 @@ impl<const BASE: usize> sealed::Sealed for Fixed<BASE> {
         Self {
             _owner: PhantomData,
         }
+    }
+
+    fn reading(self) -> FixedReading<BASE> {
+        FixedReading
+    }
+}
+
+/// The read-only handle on device registers at `BASE` a [`Reader`] keeps:
+/// `Copy`, `Send` and `Sync`, since it only reads.
+#[derive(Clone, Copy)]
+pub struct FixedReading<const BASE: usize>;
+
+impl<const BASE: usize> sealed::Reading for FixedReading<BASE> {
+    #[inline(always)]
+    fn word(&self, offset: usize) -> *const u32 {
+        core::ptr::with_exposed_provenance(BASE + offset)
     }
 }
 
@@ -96,7 +139,9 @@ pub struct Host<'a> {
     _memory: PhantomData<&'a mut [u32]>,
 }
 
-impl sealed::Sealed for Host<'_> {
+impl<'a> sealed::Sealed for Host<'a> {
+    type Reading = HostReading<'a>;
+
     #[inline(always)]
     fn word(&self, offset: usize) -> *mut u32 {
         self.base.as_ptr().wrapping_add(offset / 4)
@@ -107,6 +152,28 @@ impl sealed::Sealed for Host<'_> {
             base: self.base,
             _memory: PhantomData,
         }
+    }
+
+    fn reading(self) -> HostReading<'a> {
+        HostReading {
+            base: self.base,
+            _memory: PhantomData,
+        }
+    }
+}
+
+/// The read-only handle on host memory a [`Reader`] keeps: `Copy`, and
+/// neither `Send` nor `Sync`, like the host block it was taken from.
+#[derive(Clone, Copy)]
+pub struct HostReading<'a> {
+    base: NonNull<u32>,
+    _memory: PhantomData<&'a [u32]>,
+}
+
+impl sealed::Reading for HostReading<'_> {
+    #[inline(always)]
+    fn word(&self, offset: usize) -> *const u32 {
+        self.base.as_ptr().wrapping_add(offset / 4)
     }
 }
 
@@ -397,33 +464,169 @@ impl<P: Placement, R: Registers> Block<P, R> {
     ///
     /// The two owned lists are disjoint and the block lists every word of
     /// both parts, checked at compile time; each part may also read the
-    /// words it observes.
+    /// words it observes. It is the division into the two parts `(A, B)`.
     pub fn split<A: Words, B: Words>(self) -> (Part<P, R, A>, Part<P, R, B>) {
+        self.divide::<(A, B)>()
+    }
+
+    /// Divide the block into the parts of `D`, a tuple of two to four
+    /// [`Words`]: one [`Part`] per element, in order.
+    ///
+    /// Checked at compile time: the block lists every word of every part,
+    /// no two parts own the same word, and a shared write-trigger word
+    /// ([`Words::TRIGGERS`]) is owned by no part and gives each part its own
+    /// bits, disjoint from every other part's.
+    pub fn divide<D: Division>(self) -> D::Parts<P, R> {
         const {
             assert!(
-                disjoint(A::OWNED, B::OWNED),
+                parts_listed(R::WORDS, D::WORDS),
+                "the block lists every word of its parts"
+            );
+            assert!(
+                owned_disjoint(D::WORDS),
                 "the parts of a block own disjoint words"
             );
             assert!(
-                all_listed(A::OWNED, R::WORDS)
-                    && all_listed(A::OBSERVED, R::WORDS)
-                    && all_listed(B::OWNED, R::WORDS)
-                    && all_listed(B::OBSERVED, R::WORDS),
-                "the block lists every word of its parts"
+                triggers_disjoint(D::WORDS),
+                "a shared trigger word is owned by no part and its parts' bits are disjoint"
             );
         };
-        let other = self.place.duplicate();
-        (
-            Part {
-                place: self.place,
-                words: PhantomData,
-            },
-            Part {
-                place: other,
-                words: PhantomData,
-            },
-        )
+        D::parts(self.place)
     }
+
+    /// The block as a [`Reader`] of the words `W` lists, giving up every
+    /// write: no word the block lists is written again.
+    pub fn into_reader<W: Words>(self) -> Reader<P, R, W> {
+        const {
+            assert!(
+                all_listed(W::OWNED, R::WORDS) && all_listed(W::OBSERVED, R::WORDS),
+                "the block lists every word of its reader"
+            );
+        };
+        Reader {
+            place: self.place.reading(),
+            words: PhantomData,
+        }
+    }
+}
+
+/// One part's word lists, as a division checks them: owned, observed and
+/// shared write-trigger words with the part's bits.
+pub type PartWords = (&'static [usize], &'static [usize], &'static [(usize, u32)]);
+
+/// The parts one [`Block::divide`] makes: a tuple of two to four [`Words`].
+pub trait Division: sealed::Divides {}
+
+macro_rules! divisions {
+    ($($part:ident),+) => {
+        impl<$($part: Words),+> sealed::Divides for ($($part,)+) {
+            type Parts<P: Placement, R: Registers> = ($(Part<P, R, $part>,)+);
+            const WORDS: &'static [PartWords] =
+                &[$(($part::OWNED, $part::OBSERVED, $part::TRIGGERS)),+];
+
+            #[allow(non_snake_case, reason = "one binding per part type")]
+            fn parts<P: Placement, R: Registers>(place: P) -> Self::Parts<P, R> {
+                $(let $part = Part {
+                    place: place.duplicate(),
+                    words: PhantomData,
+                };)+
+                drop(place);
+                ($($part,)+)
+            }
+        }
+
+        impl<$($part: Words),+> Division for ($($part,)+) {}
+    };
+}
+
+divisions!(A, B);
+divisions!(A, B, C);
+divisions!(A, B, C, D);
+
+/// Whether `block` lists every owned, observed and trigger word of `parts`,
+/// and no part names a trigger word twice or with no bits.
+const fn parts_listed(block: &[usize], mut parts: &[PartWords]) -> bool {
+    while let [(owned, observed, triggers), rest @ ..] = parts {
+        if !all_listed(owned, block) || !all_listed(observed, block) {
+            return false;
+        }
+        let mut list: &[(usize, u32)] = triggers;
+        while let [(word, mask), others @ ..] = list {
+            if *mask == 0 || !listed(block, *word) || trigger_mask(others, *word) != 0 {
+                return false;
+            }
+            list = others;
+        }
+        parts = rest;
+    }
+    true
+}
+
+/// Whether no two of `parts` own the same word.
+const fn owned_disjoint(mut parts: &[PartWords]) -> bool {
+    while let [(owned, ..), rest @ ..] = parts {
+        let mut others = rest;
+        while let [(other, ..), more @ ..] = others {
+            if !disjoint(owned, other) {
+                return false;
+            }
+            others = more;
+        }
+        parts = rest;
+    }
+    true
+}
+
+/// Whether every trigger word of `parts` is owned by none of them and no two
+/// parts have a common bit in it.
+const fn triggers_disjoint(all: &[PartWords]) -> bool {
+    let mut parts = all;
+    while let [(_, _, triggers), rest @ ..] = parts {
+        let mut list: &[(usize, u32)] = triggers;
+        while let [(word, mask), others @ ..] = list {
+            let mut owners = all;
+            while let [(owned, ..), more @ ..] = owners {
+                if contains(owned, *word) {
+                    return false;
+                }
+                owners = more;
+            }
+            let mut later = rest;
+            while let [(_, _, other), more @ ..] = later {
+                if trigger_mask(other, *word) & *mask != 0 {
+                    return false;
+                }
+                later = more;
+            }
+            list = others;
+        }
+        parts = rest;
+    }
+    true
+}
+
+/// The bits `triggers` gives its part in `word`; zero if it names none.
+const fn trigger_mask(mut triggers: &[(usize, u32)], word: usize) -> u32 {
+    while let [(listed, mask), rest @ ..] = triggers {
+        if *listed == word {
+            return *mask;
+        }
+        triggers = rest;
+    }
+    0
+}
+
+/// Whether the parts `first` and `second` own every word of `block`: then
+/// no other part of the block's division owns or triggers any word.
+const fn owners_cover(block: &[usize], first: &[usize], second: &[usize]) -> bool {
+    let mut words = block;
+    while let [word, rest @ ..] = words {
+        if !contains(first, *word) && !contains(second, *word) {
+            return false;
+        }
+        words = rest;
+    }
+    true
 }
 
 impl<const BASE: usize, R: Registers> Block<Fixed<BASE>, R> {
@@ -433,10 +636,19 @@ impl<const BASE: usize, R: Registers> Block<Fixed<BASE>, R> {
     /// only from claims of disjoint, non-empty word lists, so at most one
     /// block of this type exists at a time, and its split made the only
     /// parts of this type.
+    ///
+    /// Together they own every word of the block, checked at compile time, so
+    /// no third part of a division is still out.
     pub fn join<A: Words, B: Words>(
         first: Part<Fixed<BASE>, R, A>,
         second: Part<Fixed<BASE>, R, B>,
     ) -> Self {
+        const {
+            assert!(
+                owners_cover(R::WORDS, A::OWNED, B::OWNED),
+                "the joined parts own every word of the block"
+            );
+        };
         let Part { place, .. } = first;
         drop(second);
         Self {
@@ -451,7 +663,8 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
     ///
     /// Blocks over different host memory share a type, so the parts are
     /// checked to lie over the same memory; parts of two blocks are refused
-    /// and returned.
+    /// and returned. Together they own every word of the block, checked at
+    /// compile time.
     #[allow(
         clippy::type_complexity,
         reason = "the refusal returns both parts unchanged"
@@ -460,6 +673,12 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
         first: Part<Host<'a>, R, A>,
         second: Part<Host<'a>, R, B>,
     ) -> Result<Self, NotOneSplit<Part<Host<'a>, R, A>, Part<Host<'a>, R, B>>> {
+        const {
+            assert!(
+                owners_cover(R::WORDS, A::OWNED, B::OWNED),
+                "the joined parts own every word of the block"
+            );
+        };
         // Each host block borrows its memory mutably, so two blocks with
         // words never share a base: equal bases mean the parts of one split.
         if first.place.base != second.place.base {
@@ -496,6 +715,11 @@ pub trait Words {
     const OWNED: &'static [usize];
     /// The words the part only reads.
     const OBSERVED: &'static [usize];
+    /// The write-trigger words the part shares with the other parts of its
+    /// division, each with the bits only this part writes: a write-only
+    /// word whose written one starts an action and whose written zero does
+    /// nothing, so each part stores its own bits with zero in every other.
+    const TRIGGERS: &'static [(usize, u32)] = &[];
 }
 
 const fn contains(mut list: &[usize], word: usize) -> bool {
@@ -608,6 +832,105 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
                 .word(OFFSET + STRIDE * index.get())
                 .write_volatile(value)
         }
+    }
+
+    /// One volatile store of the part's bits of the shared write-trigger
+    /// word at `OFFSET`: `value` in them, zero in every other bit, which
+    /// the other parts own and a written zero leaves alone.
+    #[inline(always)]
+    pub fn write_trigger<const OFFSET: usize>(&mut self, value: u32) {
+        let mask = const {
+            let mask = trigger_mask(W::TRIGGERS, OFFSET);
+            assert!(mask != 0, "a part writes only its own trigger words");
+            mask
+        };
+        // SAFETY: the division checked that the block lists the word, that
+        // no part owns it and that no other part has these bits; a device
+        // word is not Rust memory, so the other parts' stores of their bits
+        // are no data race, and a host part is `!Send`, so they run on this
+        // thread one at a time.
+        unsafe { self.place.word(OFFSET).write_volatile(value & mask) }
+    }
+
+    /// The part as a [`Reader`] of the words it owns and observes, giving
+    /// up every write: no word the part owns is written again.
+    pub fn into_reader(self) -> Reader<P, R, W> {
+        Reader {
+            place: self.place.reading(),
+            words: PhantomData,
+        }
+    }
+}
+
+/// Read-only authority over the words `W` owns and observes of one block,
+/// made only by giving up a [`Block`]'s or a [`Part`]'s writes
+/// ([`Block::into_reader`], [`Part::into_reader`]).
+///
+/// It is `Copy`: every copy only reads, and no owner writes the words it
+/// took over. Over device registers it is `Send` and `Sync`; over host
+/// memory neither. It has no write:
+///
+/// ```compile_fail,E0599
+/// struct Words;
+/// impl oer_mmio::Registers for Words {
+///     const WORDS: &'static [usize] = &[0];
+/// }
+/// impl oer_mmio::Words for Words {
+///     const OWNED: &'static [usize] = &[0];
+///     const OBSERVED: &'static [usize] = &[];
+/// }
+/// fn give_up(block: oer_mmio::Block<oer_mmio::Fixed<0x1000>, Words>) {
+///     let mut reader = block.into_reader::<Words>();
+///     reader.write::<0>(1);
+/// }
+/// ```
+pub struct Reader<P: Placement, R: Registers, W: Words> {
+    place: P::Reading,
+    words: PhantomData<fn() -> (R, W)>,
+}
+
+impl<P: Placement, R: Registers, W: Words> Clone for Reader<P, R, W> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<P: Placement, R: Registers, W: Words> Copy for Reader<P, R, W> {}
+
+#[allow(unsafe_code, reason = "the volatile reads of a reader's listed words")]
+impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
+    /// One volatile read of a word the reader lists.
+    #[inline(always)]
+    pub fn read<const OFFSET: usize>(&self) -> u32 {
+        const {
+            assert!(
+                contains(W::OWNED, OFFSET) || contains(W::OBSERVED, OFFSET),
+                "a reader reads only the words it lists"
+            );
+        };
+        // SAFETY: the block or part the reader was made from lists the word
+        // (checked when it was made) and no owner writes it any more but the
+        // sibling that owns an observed word; a device word is not Rust
+        // memory, and a host reader is `!Send` and borrows its memory for as
+        // long as it lives, so no store races this read.
+        unsafe { sealed::Reading::word(&self.place, OFFSET).read_volatile() }
+    }
+
+    /// One volatile read of an array element the reader lists.
+    #[inline(always)]
+    pub fn read_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
+        &self,
+        index: Index<COUNT>,
+    ) -> u32 {
+        const {
+            assert!(
+                array_listed(W::OWNED, OFFSET, STRIDE, COUNT)
+                    || array_listed(W::OBSERVED, OFFSET, STRIDE, COUNT),
+                "a reader reads only the arrays it lists"
+            );
+        };
+        // SAFETY: as in `read`; `index < COUNT` by `Index`.
+        unsafe { sealed::Reading::word(&self.place, OFFSET + STRIDE * index.get()).read_volatile() }
     }
 }
 

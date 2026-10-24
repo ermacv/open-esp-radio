@@ -157,7 +157,33 @@ changed by its read is read through `&mut`; a cluster, a field array, a
 register that is not 32 bits wide, mixed write-one-to-clear and ordinary
 fields in a readable register, a write-only field in a readable register
 that the policy does not declare a write trigger and a write range narrower
-than the field are refused.
+than the field are refused, except the range of zero alone: such a field
+(a reserved lane the vendor always writes zero) has no getter and no
+setter, its register module holds `ZERO`, and every write of the register
+leaves it zero.
+
+`[[pointer-fields]]` on a typed peripheral (`register`, `field`,
+`points-to` a DMA layout, optional `member-offset` and `encoding`) makes the
+field a DMA address: its register module holds `<Field>Image`, made only
+from a `DmaRef` to the layout (`new`, or `NULL`), and the field's setter
+takes that image, never an integer. The image holds the whole address (a
+32-bit field), its low bits (`encoding = "low-bits"`, any narrower width:
+a `const` assertion checks that every address of the DMA window shares the
+high bits the hardware supplies) or the BLE word index (`ble-compressed`, a
+20-bit field; `new` returns `None` for an address without one). A
+zero-based field write takes the image as its argument; no other
+transaction, fixed image or masked modify sets a bit of a DMA address
+field.
+
+`[[interrupt-snapshots]]` on a typed peripheral pairs a status register
+read without a side effect with the write-one-to-clear register that
+acknowledges it: `sample_<name>` returns an affine `<Name>Snapshot` of the
+status fields the clear register declares (`EVENTS`; a status field
+acknowledged only in part is refused), `retain_<field>` narrows it, and
+`acknowledge_<name>` writes exactly the snapshot to the clear register.
+Both methods belong to every owner that owns the clear register and reads
+the status register; the clear register has no other writer, and no
+transaction names it.
 
 `[[write-trigger-fields]]` (`peripheral`, `register`, `field`, `sources`)
 declares a one-bit field whose written one starts a hardware action (an
@@ -198,18 +224,48 @@ compile time that the owned word lists are disjoint, and a generated
 `[[interrupt-sources]]` gives a typed block's interrupt-matrix source
 number, rendered as its `SOURCE` constant with the evidence sources.
 
+`[[read-capabilities]]` (`peripheral`, `name`, `registers`, `copy`,
+`description`, `sources`) gives the reads of some registers of a block to
+`<Block><name>`, an owner over `oer_mmio::Reader` that has only their
+readers; each reads without a side effect. Naming every register, the
+block becomes it (`into_<name>`); otherwise the block splits into it and
+`<Block>Rest`, the owner of every other register (`split_<name>`). Nothing
+writes those registers afterwards, so with `copy = true` the reader is
+`Copy`, and over device registers `Send` and `Sync`.
+
+`[[register-divisions]]` (`peripheral`, `description`, `sources` and two to
+four `parts`) divides a block for good between owners `<Block><part>`,
+which its `divide` makes. A part owns whole `registers`, a range of array
+`elements` (`register`, `first`, `count`: its own array, indexed from
+zero), `observes` registers read without a side effect and has its own
+bits of shared write-only trigger words (`triggers`: `register` and its
+declared write-trigger `fields`). A trigger word's parts store only their
+own bits, zero in every other one, which a written zero leaves alone:
+`trigger_<register>_<field>`, and each fixed image or sequence step that
+sets only the part's bits. `oer-mmio` checks at compile time that no two
+parts own a word or a trigger bit and that no part owns a trigger word.
+A block takes at most one of register sides, a read capability and a
+division.
+
 The policy's transactions on a typed peripheral become methods of every
 owner that owns their register (a read: owns or observes):
 `full-register-writes`, `full-register-reads` (opaque domain),
 `fixed-register-images`, `fixed-register-sequences`,
 `masked-register-modifies`, `field-or-modifies`, `field-clear-modifies`,
-`field-replace-modifies` and `zero-based-field-writes`. Their masks are
-asserted against the register's declared fields in `const` items beside
-them, except a fixed image marked `whole-word = true`: the vendor's store
-of a whole word, with its evidence sources, which also writes the bits the
-model leaves undeclared. The other transaction kinds are refused on a
-typed peripheral (a field read is the register's typed reader); a W1C
-register needs no `w1c-register-snapshots` entry. A bounded domain whose
+`field-replace-modifies`, `zero-based-field-writes` and
+`sampled-bit-zero-writes` (one read, then the field as read and zero in
+every other bit). Their masks are asserted against the register's declared
+fields in `const` items beside them, except a fixed image or a sequence
+step marked `whole-word = true`: the vendor's store of a whole word, with
+its evidence sources, which also writes the bits the model leaves
+undeclared. The other transaction kinds are refused on a typed peripheral
+(a field read is the register's typed reader, a store of zero is the fixed
+image zero); a W1C register needs no `w1c-register-snapshots` entry. A
+`partition-image-reads` entry on a typed partition becomes the
+partition's method of that name and its `<NAME>_LEN`: it reads every
+readable register of the partition once, by index in ascending address
+order, through each block's `read_image_word`; a register whose read
+changes it is refused. A bounded domain whose
 range is every value of a field width also takes that field's value read
 back, `from_bits(oer_mmio::Bits<WIDTH>)`.
 
