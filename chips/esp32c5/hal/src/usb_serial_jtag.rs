@@ -6,8 +6,8 @@
 //! early writer builds the block's owner for each record it holds the block
 //! for, until the esp-hal adapter retires it ([`retire_early_writer`]) and
 //! takes the block for the driver; then every early record goes through the
-//! driver ([`oer_espressif_usb_serial_jtag::Endpoint`]), whose parts
-//! ([`console_parts`]) check that the driver still holds the block.
+//! driver ([`oer_espressif_usb_serial_jtag::Endpoint`]), which holds the
+//! block for good.
 
 use oer_diagnostics::Note;
 use oer_esp32c5_pac::platform::{UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters};
@@ -15,8 +15,8 @@ pub use oer_esp32c5_pac::platform::{
     UsbPadRegisters as UsbPads, UsbSerialJtagHandoff, UsbSerialJtagPlacement,
     UsbSerialJtagRegisters,
 };
+use oer_espressif_usb_serial_jtag::ownership::Ownership;
 pub use oer_espressif_usb_serial_jtag::ownership::RetireError;
-use oer_espressif_usb_serial_jtag::ownership::{Guarded, Owner, Ownership};
 use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
 use oer_mmio::Placement;
 
@@ -26,22 +26,11 @@ mod tests;
 /// The holder of the chip's block.
 static OWNERSHIP: Ownership = Ownership::new();
 
-/// The chip's console, whose [`Ownership`] the driver's parts check.
-pub struct ChipConsole;
+/// The driver's task registers.
+pub type ConsoleEndpoint = UsbEndpoint;
 
-impl Owner for ChipConsole {
-    fn ownership() -> &'static Ownership {
-        &OWNERSHIP
-    }
-}
-
-/// The driver's task registers: they make no access once the fatal path
-/// took the block.
-pub type ConsoleEndpoint = Guarded<ChipConsole, UsbEndpoint>;
-
-/// The driver's interrupt handler registers: they read and acknowledge
-/// nothing once the fatal path took the block.
-pub type ConsoleInterrupt = Guarded<ChipConsole, UsbInterrupt>;
+/// The driver's interrupt handler registers.
+pub type ConsoleInterrupt = UsbInterrupt;
 
 /// The task's registers of the console.
 pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>);
@@ -54,8 +43,7 @@ pub struct UsbInterrupt<P: Placement = UsbSerialJtagPlacement>(UsbInterruptRegis
 pub fn console_parts(
     registers: UsbSerialJtagRegisters,
 ) -> (ConsoleEndpoint, ConsoleInterrupt, UsbPads) {
-    let (endpoint, interrupt, pads) = parts(registers);
-    (Guarded::new(endpoint), Guarded::new(interrupt), pads)
+    parts(registers)
 }
 
 /// The endpoint, interrupt and pads of a block's owner.

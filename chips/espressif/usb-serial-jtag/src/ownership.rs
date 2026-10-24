@@ -15,22 +15,23 @@
 //!   ([`Ownership::retire`]). While a record holds it the driver is refused
 //!   ([`RetireError::Busy`]); afterwards every early record is refused and
 //!   goes to the driver.
-//! - `Free → Fatal`, or `Driver → Fatal` when the caller holds the driver's
-//!   hart for good, for one fatal note ([`Ownership::write_fatal`]). The
-//!   driver's [`Guarded`] parts make no access in `Fatal`. Every other fatal
-//!   note is only counted.
+//! - `Free → Fatal` for one fatal note ([`Ownership::write_fatal`]), for
+//!   good. The fatal path never takes the block from anyone: while an early
+//!   record or the driver holds it, or a fatal note took it before, the note
+//!   is refused and its caller keeps it elsewhere. So every owner of the
+//!   block lives alone, and the driver's parts hold it for as long as they
+//!   live.
 //!
 //! The early writer writes while the FIFO has room, drops the rest and
 //! counts it ([`oer_diagnostics::FifoWriter`]); before an executor exists
 //! there is nothing to yield to, so it waits for room within
 //! [`EARLY_PATIENCE`] per record. A fatal note never waits.
 
-use core::marker::PhantomData;
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use oer_diagnostics::{FifoWriter, Lost, Note, Patience};
 
-use crate::{EndpointRegisters, Events, InterruptRegisters};
+use crate::EndpointRegisters;
 
 #[cfg(test)]
 mod tests;
@@ -131,33 +132,24 @@ impl Ownership {
         }
     }
 
-    /// Writes `note` without waiting, over the owner `capture` builds if
-    /// the block is free, or held by the driver while `driver_suspended`:
-    /// the caller holds the driver's hart, so that neither the driver's
-    /// task nor its interrupt handler runs again. The block then stays the
-    /// fatal path's for good. Otherwise only the note's bytes are counted.
-    /// Returns whether the note was written.
+    /// Writes `note` without waiting over the owner `capture` builds, if
+    /// the block is free; the block then stays the fatal path's for good.
+    /// While anyone holds the block, nothing is built, written or counted:
+    /// returns `false`, and the caller keeps the note elsewhere.
     pub fn write_fatal<R: EndpointRegisters>(
         &self,
-        driver_suspended: bool,
         capture: impl FnOnce() -> R,
         note: &Note<'_>,
     ) -> bool {
-        let taken =
-            match self
-                .state
-                .compare_exchange(FREE, FATAL, Ordering::AcqRel, Ordering::Acquire)
-            {
-                Ok(_) => true,
-                Err(DRIVER) if driver_suspended => self
-                    .state
-                    .compare_exchange(DRIVER, FATAL, Ordering::AcqRel, Ordering::Acquire)
-                    .is_ok(),
-                Err(_) => false,
-            };
-        let fifo = Fifo(taken.then(capture));
-        FifoWriter::new(fifo, &self.lost, Patience::NONE).note(note);
-        taken
+        if self
+            .state
+            .compare_exchange(FREE, FATAL, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return false;
+        }
+        FifoWriter::new(Fifo(Some(capture())), &self.lost, Patience::NONE).note(note);
+        true
     }
 
     /// Gives the block to the console's driver for good, if it is free:
@@ -176,11 +168,6 @@ impl Ownership {
         }
     }
 
-    /// Whether the console's driver holds the block.
-    pub fn driver_holds(&self) -> bool {
-        self.state.load(Ordering::Acquire) == DRIVER
-    }
-
     /// Bytes dropped since the last call, for the driver's owner to report
     /// once it can: a loss is never silent.
     pub fn take_lost(&self) -> u32 {
@@ -191,78 +178,5 @@ impl Ownership {
 impl Default for Ownership {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// The chip's one [`Ownership`] of the block, which its driver's
-/// [`Guarded`] parts check.
-pub trait Owner: 'static {
-    fn ownership() -> &'static Ownership;
-}
-
-/// A part of the console's driver that touches its registers `R` only
-/// while the driver holds the block of `O`: once the fatal path took it,
-/// the part reads no room, no data and no event and writes nothing.
-pub struct Guarded<O, R> {
-    registers: R,
-    owner: PhantomData<fn() -> O>,
-}
-
-impl<O: Owner, R> Guarded<O, R> {
-    pub const fn new(registers: R) -> Self {
-        Self {
-            registers,
-            owner: PhantomData,
-        }
-    }
-
-    fn held() -> bool {
-        O::ownership().driver_holds()
-    }
-}
-
-impl<O: Owner, R: EndpointRegisters> EndpointRegisters for Guarded<O, R> {
-    fn has_room(&self) -> bool {
-        Self::held() && self.registers.has_room()
-    }
-
-    fn push(&mut self, byte: u8) {
-        if Self::held() {
-            self.registers.push(byte);
-        }
-    }
-
-    fn send(&mut self) {
-        if Self::held() {
-            self.registers.send();
-        }
-    }
-
-    fn has_data(&self) -> bool {
-        Self::held() && self.registers.has_data()
-    }
-
-    fn pop(&mut self) -> u8 {
-        if Self::held() {
-            self.registers.pop()
-        } else {
-            0
-        }
-    }
-
-    fn enable_events(&mut self) {
-        if Self::held() {
-            self.registers.enable_events();
-        }
-    }
-}
-
-impl<O: Owner, R: InterruptRegisters> InterruptRegisters for Guarded<O, R> {
-    fn take_events(&mut self) -> Events {
-        if Self::held() {
-            self.registers.take_events()
-        } else {
-            Events::NONE
-        }
     }
 }

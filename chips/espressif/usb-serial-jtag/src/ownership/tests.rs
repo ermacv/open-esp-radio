@@ -1,15 +1,15 @@
 //! The block's ownership over the fake block: one holder at a time, a held
 //! block drops and counts instead of waiting, the driver takes only a free
-//! block, and the fatal path takes it from the driver for good.
+//! block, and the fatal path takes only a free block, for good.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::vec::Vec;
 
 use oer_diagnostics::Note;
 
-use super::{Guarded, Owner, Ownership, RetireError};
-use crate::fake::{Irq, Shared, Task};
-use crate::{EndpointRegisters, Events, InterruptRegisters};
+use super::{Ownership, RetireError};
+use crate::EndpointRegisters;
+use crate::fake::{Shared, Task};
 
 fn sent(block: &Shared) -> Vec<u8> {
     let mut block = block.lock();
@@ -71,20 +71,6 @@ impl EndpointRegisters for Counted<'_> {
     fn enable_events(&mut self) {}
 }
 
-/// A test's own [`Owner`] with its own [`Ownership`].
-macro_rules! owner {
-    ($name:ident) => {
-        struct $name;
-
-        impl Owner for $name {
-            fn ownership() -> &'static Ownership {
-                static OWNERSHIP: Ownership = Ownership::new();
-                &OWNERSHIP
-            }
-        }
-    };
-}
-
 #[test]
 fn the_early_writer_writes_and_hands_the_record_over() {
     let early = Ownership::new();
@@ -114,7 +100,11 @@ fn a_retired_writer_builds_no_owner_and_hands_the_record_to_the_driver() {
     assert!(!wrote, "the driver owns the block");
     assert!(!captured, "no owner is built beside the driver's");
     assert_eq!(early.take_lost(), 0, "the driver writes the record");
-    assert!(early.driver_holds());
+    assert_eq!(
+        early.retire(),
+        Err(RetireError::Taken),
+        "the driver keeps it"
+    );
 }
 
 #[test]
@@ -198,74 +188,50 @@ fn records_of_two_harts_and_the_driver_never_hold_the_block_together() {
 }
 
 #[test]
-fn the_fatal_path_takes_the_block_from_the_suspended_driver_for_good() {
-    owner!(Chip);
-    let early = Chip::ownership();
+fn the_fatal_path_never_takes_the_block_from_the_driver() {
+    let early = Ownership::new();
+    let owners = Owners::default();
     assert_eq!(early.retire(), Ok(()));
-    let block = Shared::default();
-    let mut endpoint = Guarded::<Chip, _>::new(Task(block.clone()));
-    let mut interrupt = Guarded::<Chip, _>::new(Irq(block.clone()));
-    assert!(
-        endpoint.has_room(),
-        "the driver's part works while it holds"
-    );
-
-    assert!(early.write_fatal(true, || Task(block.clone()), &Note::runtime_fail("entropy")));
-    assert!(!sent(&block).is_empty(), "the note went out");
-    assert!(!early.driver_holds());
-
-    block.lock().events.out_received = true;
-    block.lock().out.push_back(b'x');
-    assert!(!endpoint.has_room(), "the driver sees no room");
-    assert!(!endpoint.has_data(), "the driver sees no data");
-    endpoint.push(b'y');
-    endpoint.send();
-    assert!(block.lock().fifo.is_empty(), "the driver writes nothing");
-    assert_eq!(interrupt.take_events(), Events::NONE);
-    assert!(
-        block.lock().acknowledged.is_empty(),
-        "the handler acknowledges nothing"
-    );
-    assert!(!early.write(|| Task(block.clone()), |writer| writer.text(b"late")));
-}
-
-#[test]
-fn the_fatal_path_of_another_hart_leaves_the_driver_the_block() {
-    owner!(Chip);
-    let early = Chip::ownership();
-    assert_eq!(early.retire(), Ok(()));
-    let block = Shared::default();
-    let endpoint = Guarded::<Chip, _>::new(Task(block.clone()));
+    // The driver's owner lives from here on, as its parts do.
+    let _driver = Counted::new(&owners);
     let mut captured = false;
     let wrote = early.write_fatal(
-        false,
         || {
             captured = true;
-            Task(block.clone())
+            Counted::new(&owners)
         },
-        &Note::runtime_fail("layout"),
+        &Note::runtime_fail("entropy"),
     );
-    assert!(!wrote && !captured, "no owner beside the running driver");
-    assert!(early.take_lost() > 0, "the note's bytes are counted");
-    assert!(early.driver_holds());
-    assert!(endpoint.has_room());
+    assert!(!wrote, "the caller keeps the note elsewhere");
+    assert!(!captured, "no owner is built beside the driver's");
+    assert_eq!(owners.most(), 1, "one owner at a time");
+    assert_eq!(early.take_lost(), 0, "a kept note is not lost");
+    assert_eq!(
+        early.retire(),
+        Err(RetireError::Taken),
+        "the driver keeps it"
+    );
 }
 
 #[test]
-fn a_second_fatal_note_and_one_during_a_record_are_only_counted() {
+fn a_fatal_note_during_a_record_and_a_second_one_are_refused() {
     let early = Ownership::new();
     let owners = Owners::default();
     assert!(early.write(
         || Counted::new(&owners),
         |writer| {
-            assert!(!early.write_fatal(true, || Counted::new(&owners), &Note::runtime_fail("a")));
+            assert!(!early.write_fatal(|| Counted::new(&owners), &Note::runtime_fail("a")));
             writer.text(b"record");
         },
     ));
-    assert!(early.write_fatal(true, || Counted::new(&owners), &Note::runtime_fail("b")));
-    assert!(!early.write_fatal(true, || Counted::new(&owners), &Note::runtime_fail("c")));
+    assert!(early.write_fatal(|| Counted::new(&owners), &Note::runtime_fail("b")));
+    assert!(!early.write_fatal(|| Counted::new(&owners), &Note::runtime_fail("c")));
     assert_eq!(owners.most(), 1);
-    assert!(early.take_lost() > 0);
+    assert_eq!(
+        early.take_lost(),
+        0,
+        "refused notes are kept by their callers"
+    );
     assert_eq!(early.retire(), Err(RetireError::Taken));
 }
 
@@ -273,8 +239,40 @@ fn a_second_fatal_note_and_one_during_a_record_are_only_counted() {
 fn a_fatal_note_before_the_driver_writes_and_keeps_the_block() {
     let early = Ownership::new();
     let block = Shared::default();
-    assert!(early.write_fatal(false, || Task(block.clone()), &Note::runtime_fail("layout")));
+    assert!(early.write_fatal(|| Task(block.clone()), &Note::runtime_fail("layout")));
     assert!(!sent(&block).is_empty(), "the note went out");
     assert_eq!(early.take_lost(), 0);
     assert_eq!(early.retire(), Err(RetireError::Taken));
+    assert!(!early.write(|| Task(block.clone()), |writer| writer.text(b"late")));
+}
+
+#[test]
+fn fatal_notes_of_two_harts_and_the_driver_never_hold_the_block_together() {
+    for _ in 0..200 {
+        let early = Ownership::new();
+        let owners = Owners::default();
+        let written = AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..2 {
+                scope.spawn(|| {
+                    if early.write_fatal(|| Counted::new(&owners), &Note::runtime_fail("x")) {
+                        written.fetch_add(1, Ordering::SeqCst);
+                    }
+                });
+            }
+            scope.spawn(|| {
+                if early.retire().is_ok() {
+                    // The driver's owner lives for good.
+                    std::mem::forget(Counted::new(&owners));
+                    written.fetch_add(1, Ordering::SeqCst);
+                }
+            });
+        });
+        assert_eq!(
+            written.load(Ordering::SeqCst),
+            1,
+            "one holder took the block"
+        );
+        assert_eq!(owners.most(), 1, "one owner at a time");
+    }
 }

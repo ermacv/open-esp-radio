@@ -141,9 +141,8 @@ pub fn take_usb_serial_jtag(
     // block exists. esp-hal's console and its `esp_hal::init` never write
     // the block without that singleton. The early writer, the block's only
     // other owner, gave it up above: the retirement succeeds only while no
-    // early record holds the block, and no record takes it afterwards. The fatal path takes the block
-    // from the driver only on the driver's hart, never returning, after which
-    // the driver's guarded parts make no access.
+    // early record holds the block, and no record takes it afterwards. The
+    // fatal path takes only a free block and never one the driver holds.
     let handoff = unsafe { UsbSerialJtagHandoff::assume_exclusive() };
     Ok(UsbSerialJtagRegisters::from_handoff(handoff))
 }

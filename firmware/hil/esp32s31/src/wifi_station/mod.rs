@@ -142,7 +142,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         EmbassyClock,
     );
     if !rng.status().is_healthy() {
-        crate::fail("entropy-source");
+        crate::fail(crate::fatal::Failure::EntropySource);
     }
     let nonces = Placed::init(NONCES.take().uninit(), |place| {
         place.write(SNonceSource::from_entropy(|seed| rng.fill(seed)))

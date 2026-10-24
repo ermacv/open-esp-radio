@@ -1,22 +1,34 @@
 //! The USB Serial/JTAG console on this chip: the early writer before the
-//! console's driver exists, and the parts the driver is built from.
+//! console's driver exists, the parts the driver is built from, and the
+//! fatal note.
 //!
 //! The block's holder is this chip's one
 //! [`Ownership`](oer_espressif_usb_serial_jtag::ownership::Ownership): the
 //! early writer builds the block's owner for each record it holds the block
 //! for, until the esp-hal adapter retires it ([`retire_early_writer`]) and
 //! takes the block for the driver; then every early record goes through the
-//! driver ([`oer_espressif_usb_serial_jtag::Endpoint`]), whose parts
-//! ([`console_parts`]) check that the driver still holds the block.
+//! driver ([`oer_espressif_usb_serial_jtag::Endpoint`]), which holds the
+//! block for good. The fatal note ([`fatal_note`]) takes only a free block.
+//!
+//! The driver's endpoint and pads stay on the hart that took them: neither
+//! is `Send`, so no other hart's task or handler reaches them
+//! (`tests/ui/usb_console_parts_stay_on_their_hart.rs`).
+//!
+//! The interrupt's part moves once, into the handler's static, which needs
+//! it `Send`; the image's interrupt table routes that handler to the
+//! driver's hart.
+
+use core::marker::PhantomData;
 
 use oer_diagnostics::Note;
-use oer_esp32s31_pac::platform::{UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters};
-pub use oer_esp32s31_pac::platform::{
-    UsbPadRegisters as UsbPads, UsbSerialJtagHandoff, UsbSerialJtagPlacement,
-    UsbSerialJtagRegisters,
+use oer_esp32s31_pac::platform::{
+    UsbEndpointRegisters, UsbEvents, UsbInterruptRegisters, UsbPadRegisters,
 };
+pub use oer_esp32s31_pac::platform::{
+    UsbSerialJtagHandoff, UsbSerialJtagPlacement, UsbSerialJtagRegisters,
+};
+use oer_espressif_usb_serial_jtag::ownership::Ownership;
 pub use oer_espressif_usb_serial_jtag::ownership::RetireError;
-use oer_espressif_usb_serial_jtag::ownership::{Guarded, Owner, Ownership};
 use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
 use oer_mmio::Placement;
 
@@ -26,36 +38,38 @@ mod tests;
 /// The holder of the chip's block.
 static OWNERSHIP: Ownership = Ownership::new();
 
-/// The chip's console, whose [`Ownership`] the driver's parts check.
-pub struct ChipConsole;
+/// The driver's task registers.
+pub type ConsoleEndpoint = UsbEndpoint;
 
-impl Owner for ChipConsole {
-    fn ownership() -> &'static Ownership {
-        &OWNERSHIP
-    }
-}
+/// The driver's interrupt handler registers.
+pub type ConsoleInterrupt = UsbInterrupt;
 
-/// The driver's task registers: they make no access once the fatal path
-/// took the block.
-pub type ConsoleEndpoint = Guarded<ChipConsole, UsbEndpoint>;
+/// Keeps a part on the hart that took it: not `Send`.
+type ThisHart = PhantomData<*const ()>;
 
-/// The driver's interrupt handler registers: they read and acknowledge
-/// nothing once the fatal path took the block.
-pub type ConsoleInterrupt = Guarded<ChipConsole, UsbInterrupt>;
-
-/// The task's registers of the console.
-pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>);
+/// The task's registers of the console, which stay on their hart.
+pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>, ThisHart);
 
 /// The interrupt handler's registers of the console.
 pub struct UsbInterrupt<P: Placement = UsbSerialJtagPlacement>(UsbInterruptRegisters<P>);
+
+/// The console's pads, which stay on their hart.
+pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbPadRegisters<P>, ThisHart);
+
+impl<P: Placement> UsbPads<P> {
+    /// Takes the USB Serial/JTAG off its pads and drops its pull-ups: the
+    /// host sees the device leave USB.
+    pub fn disconnect(self) {
+        self.0.disconnect();
+    }
+}
 
 /// The console driver's endpoint, interrupt and pads from the block's
 /// owner the esp-hal adapter took.
 pub fn console_parts(
     registers: UsbSerialJtagRegisters,
 ) -> (ConsoleEndpoint, ConsoleInterrupt, UsbPads) {
-    let (endpoint, interrupt, pads) = parts(registers);
-    (Guarded::new(endpoint), Guarded::new(interrupt), pads)
+    parts(registers)
 }
 
 /// The endpoint, interrupt and pads of a block's owner.
@@ -63,7 +77,11 @@ fn parts<P: Placement>(
     registers: UsbSerialJtagRegisters<P>,
 ) -> (UsbEndpoint<P>, UsbInterrupt<P>, UsbPads<P>) {
     let (endpoint, interrupt, pads) = registers.into_parts();
-    (UsbEndpoint(endpoint), UsbInterrupt(interrupt), pads)
+    (
+        UsbEndpoint(endpoint, PhantomData),
+        UsbInterrupt(interrupt),
+        UsbPads(pads, PhantomData),
+    )
 }
 
 impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
@@ -112,20 +130,17 @@ impl<P: Placement> InterruptRegisters for UsbInterrupt<P> {
     reason = "the early and fatal writers' capture of the block they hold"
 )]
 fn capture() -> UsbEndpoint {
-    // SAFETY: `OWNERSHIP` calls this only after its compare-and-swap made
-    // the caller the block's holder. For an early record it moved the block
-    // from free and frees it only after this owner is dropped; neither the
-    // esp-hal adapter's handoff (`retire_early_writer`) nor another record
-    // takes a block that is not free. For the fatal note it moved the block
-    // from free, when no driver and no record holds it, or from the driver
-    // only for `fatal_note` on the driver's hart under a critical section on
-    // a path that never returns: the driver's task and interrupt handler,
-    // suspended there, never run again, and their guarded parts make no
-    // access once the block is the fatal path's. Afterwards no one takes the
-    // block. So no other owner accesses the block while this one lives.
+    // SAFETY: `OWNERSHIP` calls this only after its compare-and-swap moved
+    // the block from free to the caller: to one early record, which frees
+    // it only after this owner is dropped, or to the fatal note, for good.
+    // Neither the esp-hal adapter's handoff (`retire_early_writer`), nor
+    // another record, nor another fatal note takes a block that is not
+    // free, and nothing takes it from its holder. So no other owner of the
+    // block exists while this one lives.
     let handoff = unsafe { UsbSerialJtagHandoff::assume_exclusive() };
     parts(UsbSerialJtagRegisters::from_handoff(handoff)).0
 }
+
 /// Writes `note` as one `OER-DIAG:01` line through the early writer, or
 /// drops and counts it while another record holds the block. Returns
 /// `false` once the driver or the fatal path took the block: the driver
@@ -162,33 +177,27 @@ pub fn retire_early_writer() -> Result<EarlyWriterRetired, RetireError> {
     OWNERSHIP.retire().map(|()| EarlyWriterRetired(()))
 }
 
-/// The hart the console's driver runs on: the boot hart's executor.
-#[cfg(target_arch = "riscv32")]
-const DRIVER_HART: usize = 0;
+/// Where a fatal note went.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use = "a held note is kept for the next boot by the caller"]
+pub enum FatalNote {
+    /// The block was free: the note went to the host, and the block stays
+    /// the fatal path's for good.
+    Written,
+    /// The console's driver, an early record or an earlier fatal note
+    /// holds the block: nothing touched it, and the caller keeps the note
+    /// for the next boot.
+    Held,
+}
 
-/// Writes `note` on a path that never returns, then `halt`s: the fatal
-/// takeover of the block, which never waits. It takes the block if no one
-/// holds it, or from the console's driver when called on the driver's hart:
-/// the critical section masks interrupts there, so neither the driver's
-/// task nor its interrupt handler runs while this writes, and neither runs
-/// again, since this never returns and holds the section for good. The
-/// driver's guarded parts make no access afterwards. Called from another
-/// hart, or while an early record or an earlier fatal note holds the block,
-/// the note is not written and its bytes are counted instead; the previous
-/// boot's record is kept elsewhere. A packet the driver had half written
-/// may be lost.
-#[cfg(target_arch = "riscv32")]
-#[allow(unsafe_code, reason = "the read of the hart's identity")]
-pub fn fatal_note(
-    note: &Note<'_>,
-    _driver_masked: critical_section::CriticalSection<'_>,
-    halt: impl FnOnce() -> !,
-) -> ! {
-    let hart: usize;
-    // SAFETY: reading `mhartid` touches no memory.
-    unsafe {
-        core::arch::asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack));
+/// Writes `note` without waiting, if no one holds the block; the block then
+/// stays the fatal path's for good. It never takes the block from its
+/// holder, so the console's driver, on any hart, keeps the only owner of
+/// the block. Takes no lock and masks nothing.
+pub fn fatal_note(note: &Note<'_>) -> FatalNote {
+    if OWNERSHIP.write_fatal(capture, note) {
+        FatalNote::Written
+    } else {
+        FatalNote::Held
     }
-    let _written = OWNERSHIP.write_fatal(hart == DRIVER_HART, capture, note);
-    halt()
 }

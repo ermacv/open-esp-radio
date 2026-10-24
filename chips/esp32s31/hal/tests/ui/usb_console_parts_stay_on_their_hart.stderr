@@ -1,0 +1,125 @@
+error[E0277]: `*const ()` cannot be sent between threads safely
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:11:16
+   |
+11 |     other_hart(endpoint); // ui-error: E0277
+   |     ---------- ^^^^^^^^ `*const ()` cannot be sent between threads safely
+   |     |
+   |     required by a bound introduced by this call
+   |
+   = help: within `UsbEndpoint<P>`, the trait `Send` is not implemented for `*const ()`
+note: required because it appears within the type `PhantomData<*const ()>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `UsbEndpoint<P>`
+  --> src/usb_serial_jtag.rs
+   |
+   | pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>, ThisHart);
+   |            ^^^^^^^^^^^
+note: required by a bound in `other_hart`
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:5:18
+   |
+ 5 | fn other_hart<T: Send>(_: T) {}
+   |                  ^^^^ required by this bound in `other_hart`
+
+error[E0277]: `P` cannot be sent between threads safely
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:11:16
+   |
+11 |     other_hart(endpoint); // ui-error: E0277
+   |     ---------- ^^^^^^^^ `P` cannot be sent between threads safely
+   |     |
+   |     required by a bound introduced by this call
+   |
+note: required because it appears within the type `Part<P, oer_esp32s31_pac::generated::usb_serial_jtag::BlockWords, oer_esp32s31_pac::generated::usb_serial_jtag::TaskWords>`
+  --> $WORKSPACE/portable/mmio/src/lib.rs
+   |
+   | pub struct Part<P: Placement, R: Registers, W: Words> {
+   |            ^^^^
+note: required because it appears within the type `oer_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagTask<P>`
+  --> $WORKSPACE/chips/esp32s31/pac/src/generated.rs
+   |
+   |     pub struct UsbSerialJtagTask<P: oer_mmio::Placement = oer_mmio::Fixed<0x20391000>>(
+   |                ^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `oer_esp32s31_pac::platform::usb_serial_jtag::UsbEndpointRegisters<P>`
+  --> $WORKSPACE/chips/esp32s31/pac/src/platform/usb_serial_jtag.rs
+   |
+   | pub struct UsbEndpointRegisters<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagTask<P>);
+   |            ^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `UsbEndpoint<P>`
+  --> src/usb_serial_jtag.rs
+   |
+   | pub struct UsbEndpoint<P: Placement = UsbSerialJtagPlacement>(UsbEndpointRegisters<P>, ThisHart);
+   |            ^^^^^^^^^^^
+note: required by a bound in `other_hart`
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:5:18
+   |
+ 5 | fn other_hart<T: Send>(_: T) {}
+   |                  ^^^^ required by this bound in `other_hart`
+help: consider further restricting type parameter `P` with trait `Send`
+      |
+ 7 | pub fn keep<P: Placement + core::marker::Send>(endpoint: UsbEndpoint<P>, pads: UsbPads<P>) {
+   |                          ++++++++++++++++++++
+
+error[E0277]: `*const ()` cannot be sent between threads safely
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:13:16
+   |
+13 |     other_hart(pads); // ui-error: E0277
+   |     ---------- ^^^^ `*const ()` cannot be sent between threads safely
+   |     |
+   |     required by a bound introduced by this call
+   |
+   = help: within `UsbPads<P>`, the trait `Send` is not implemented for `*const ()`
+note: required because it appears within the type `PhantomData<*const ()>`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub struct PhantomData<T: PointeeSized>;
+   |            ^^^^^^^^^^^
+note: required because it appears within the type `UsbPads<P>`
+  --> src/usb_serial_jtag.rs
+   |
+   | pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbPadRegisters<P>, ThisHart);
+   |            ^^^^^^^
+note: required by a bound in `other_hart`
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:5:18
+   |
+ 5 | fn other_hart<T: Send>(_: T) {}
+   |                  ^^^^ required by this bound in `other_hart`
+
+error[E0277]: `P` cannot be sent between threads safely
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:13:16
+   |
+13 |     other_hart(pads); // ui-error: E0277
+   |     ---------- ^^^^ `P` cannot be sent between threads safely
+   |     |
+   |     required by a bound introduced by this call
+   |
+note: required because it appears within the type `Block<P, oer_esp32s31_pac::generated::usb_serial_jtag_pads::BlockWords>`
+  --> $WORKSPACE/portable/mmio/src/lib.rs
+   |
+   | pub struct Block<P: Placement, R: Registers> {
+   |            ^^^^^
+note: required because it appears within the type `oer_esp32s31_pac::generated::usb_serial_jtag_pads::UsbSerialJtagPads<P>`
+  --> $WORKSPACE/chips/esp32s31/pac/src/generated.rs
+   |
+   |     pub struct UsbSerialJtagPads<P: oer_mmio::Placement = oer_mmio::Fixed<0x20391000>>(
+   |                ^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `oer_esp32s31_pac::platform::usb_serial_jtag::UsbPadRegisters<P>`
+  --> $WORKSPACE/chips/esp32s31/pac/src/platform/usb_serial_jtag.rs
+   |
+   | pub struct UsbPadRegisters<P: Placement = UsbSerialJtagPlacement>(UsbSerialJtagPads<P>);
+   |            ^^^^^^^^^^^^^^^
+note: required because it appears within the type `UsbPads<P>`
+  --> src/usb_serial_jtag.rs
+   |
+   | pub struct UsbPads<P: Placement = UsbSerialJtagPlacement>(UsbPadRegisters<P>, ThisHart);
+   |            ^^^^^^^
+note: required by a bound in `other_hart`
+  --> tests/ui/usb_console_parts_stay_on_their_hart.rs:5:18
+   |
+ 5 | fn other_hart<T: Send>(_: T) {}
+   |                  ^^^^ required by this bound in `other_hart`
+help: consider further restricting type parameter `P` with trait `Send`
+      |
+ 7 | pub fn keep<P: Placement + core::marker::Send>(endpoint: UsbEndpoint<P>, pads: UsbPads<P>) {
+   |                          ++++++++++++++++++++

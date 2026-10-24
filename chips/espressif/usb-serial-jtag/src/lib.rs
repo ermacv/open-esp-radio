@@ -17,9 +17,8 @@
 //! those and raises the endpoint's static
 //! [`IrqSignal`](oer_interrupt_table::signal::IrqSignal); it calls no
 //! waker, and the interrupt enables belong to the task, which sets them once,
-//! so the two share no register and no lock. A fatal path takes the block
-//! from a driver that can never run again; the driver's
-//! [`Guarded`](ownership::Guarded) parts then make no access.
+//! so the two share no register and no lock. A fatal path takes only a free
+//! block, for good, and never one the driver or an early record holds.
 
 #[cfg(test)]
 extern crate std;

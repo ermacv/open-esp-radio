@@ -251,7 +251,7 @@ fn system_main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             interrupts.console_usb,
         ));
         if BootSmokeTasks::boot_smoke(spawner, console).is_err() {
-            fail("task-allocation");
+            fail(fatal::Failure::TaskAllocation);
         }
     });
 }
@@ -330,7 +330,7 @@ fn validate_runtime_layout() {
         || dma_probe != 0x444d_4131
         || dma_bss_probe != 0
     {
-        fail("layout");
+        fail(fatal::Failure::Layout);
     }
     early(&Note::placement_pass());
 }
@@ -353,7 +353,7 @@ pub(crate) fn check_entropy_source(entropy: &Rng) {
     if entropy.status().is_healthy() {
         transport::CONSOLE.note_immediately(&Note::entropy_pass());
     } else {
-        fail("entropy-source");
+        fail(fatal::Failure::EntropySource);
     }
 }
 
@@ -362,15 +362,15 @@ fn early(note: &Note<'_>) {
     usb::early(note);
 }
 
-/// Reports a failed boot check and halts. It takes the block from the
-/// console for the report; the critical section, held for good, keeps the
-/// console's driver from running again.
-fn fail(reason: &'static str) -> ! {
-    critical_section::with(|section| {
-        oer_esp32s31_hal::usb_serial_jtag::fatal_note(&Note::runtime_fail(reason), section, halt)
-    })
-}
-
-fn halt() -> ! {
-    oer_espressif_staged_runtime::idle()
+/// Reports a failed boot check and halts this hart. The note goes to the
+/// host only while no one holds the USB block; while the console's driver
+/// holds it, the note is kept for the next boot instead, so the fatal path
+/// never makes a second owner of the block. It takes no lock and masks only
+/// this hart's interrupts.
+fn fail(failure: fatal::Failure) -> ! {
+    use oer_esp32s31_hal::usb_serial_jtag::{FatalNote, fatal_note};
+    if fatal_note(&Note::runtime_fail(failure.name())) == FatalNote::Held {
+        fatal::record_failure(failure);
+    }
+    oer_espressif_staged_runtime::halt()
 }

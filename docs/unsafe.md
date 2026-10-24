@@ -83,9 +83,9 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   finds the block held is dropped and counted; the esp-hal adapter's
   `take_usb_serial_jtag` takes only a free block and consumes `USB_DEVICE`
   to make the driver's owner. The ESP32-S31's `fatal_note` makes the
-  handoff once more, from a free block or from the driver on the driver's
-  hart under a critical section on a path that never returns; the driver's
-  parts are guarded and make no access once the fatal path holds the block.
+  handoff once more, only from a free block, which it keeps for good; it
+  never takes the block from the driver or an early record, so every owner
+  of the block lives alone. Its driver's endpoint and pads are not `Send`.
   The generated `const` assertion beside the claim checks that no two
   blocks list the same word. A word esp-hal also writes is claimed only
   with its reviewed coordination in the chip's

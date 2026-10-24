@@ -152,6 +152,19 @@ pub fn idle() -> ! {
     }
 }
 
+/// Mask this hart's interrupts (`mstatus.MIE`) and wait for good: the end
+/// of a fatal path. It takes no lock and touches no other hart, which keeps
+/// running.
+#[allow(unsafe_code, reason = "the clear of mstatus.MIE")]
+pub fn halt() -> ! {
+    // SAFETY: clearing MIE touches no memory and leaves the stack unchanged;
+    // afterwards no handler runs on this hart.
+    unsafe {
+        core::arch::asm!("csrci mstatus, {mie}", mie = const oer_riscv::machine::status::MIE, options(nomem, nostack))
+    };
+    idle()
+}
+
 /// The image's entry: `runtime_main`, which `_runtime_start` calls once on
 /// CPU0, gives `$main` the one [`Handoff`].
 ///

@@ -6,6 +6,8 @@
 //! a register read through a typed accessor or a bounded copy, so the fatal
 //! path stays a short leaf in every context's stack bound. The chip then
 //! resets, and the next boot's [`report_previous`] prints the record once.
+//! A failed boot check whose note the console's driver kept off the USB
+//! block records only its [`Failure`] and the hart, then halts.
 
 use esp_hal::system::Cpu;
 use oer_diagnostics::Note;
@@ -15,6 +17,7 @@ const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
 const PANIC: u32 = 1;
 const EXCEPTION: u32 = 2;
+const FAILURE: u32 = 3;
 /// The interrupt matrix's sources, in 32-bit words.
 const SOURCE_WORDS: usize = 6;
 
@@ -35,7 +38,8 @@ struct Slot {
     mtvt: u32,
     /// The handler MTVT holds for the vector in `mcause`.
     mtvt_slot: u32,
-    /// The image's diagnostic stage, for a panic.
+    /// The image's diagnostic stage, for a panic; the [`Failure`], for a
+    /// failed boot check.
     stage: u32,
     /// The vector's CLIC line: bit 0 pending, 1 enabled, 2 edge-triggered,
     /// bits 8.. its level; zero when no source is routed to it.
@@ -86,6 +90,48 @@ oer_espressif_staged_runtime::retained_static! {
 #[cfg(feature = "panic-hook")]
 pub(crate) fn record_panic(stage: u32) {
     record(PANIC, 0, stage);
+}
+
+/// A boot check that halts the image.
+#[derive(Clone, Copy)]
+#[repr(u32)]
+pub(crate) enum Failure {
+    Layout = 1,
+    TaskAllocation = 2,
+    EntropySource = 3,
+}
+
+impl Failure {
+    const ALL: [Self; 3] = [Self::Layout, Self::TaskAllocation, Self::EntropySource];
+
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Layout => "layout",
+            Self::TaskAllocation => "task-allocation",
+            Self::EntropySource => "entropy-source",
+        }
+    }
+
+    fn from_word(word: u32) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|failure| *failure as u32 == word)
+    }
+}
+
+/// Record a failed boot check for the next boot, whose note the console's
+/// driver kept off the block. Never waits: while the other hart records its
+/// own failure, this one's is skipped.
+pub(crate) fn record_failure(failure: Failure) {
+    let Some(mut slot) = SLOT.try_lock() else {
+        return;
+    };
+    *slot = bytemuck::Zeroable::zeroed();
+    slot.magic = MAGIC;
+    slot.kind = FAILURE;
+    slot.hart = TrapRegisters::read().hart as u32;
+    slot.stage = failure as u32;
+    slot.checksum = slot.sum();
 }
 
 /// Record an exception's machine state and its `ra`, then reset.
@@ -188,6 +234,12 @@ pub(crate) fn report_previous() {
         mtvt_slot,
         ..
     } = *slot;
+    if slot.kind == FAILURE {
+        if let Some(failure) = Failure::from_word(stage) {
+            crate::usb::early(&Note::fatal_fail(hart, failure.name()));
+        }
+        return;
+    }
     if slot.kind == EXCEPTION {
         crate::usb::early(&Note::fatal_exception(
             hart, mcause, mepc, mtval, ra, mscratch,

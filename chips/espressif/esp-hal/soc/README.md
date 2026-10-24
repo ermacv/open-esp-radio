@@ -25,8 +25,8 @@ The private source modules follow the resources and operations they own:
   `take_usb_serial_jtag` retires the HAL's early USB writer if no early
   record holds the block (otherwise it returns `USB_DEVICE` with the
   reason), consumes `USB_DEVICE` and returns the console's owner, from which
-  the HAL's `usb_serial_jtag::console_parts` gives the endpoint and the
-  interrupt, guarded by the block's ownership, and the pads.
+  the HAL's `usb_serial_jtag::console_parts` gives the endpoint, the
+  interrupt and the pads.
 - `oer-espressif-esp-hal-irq`: the ESP32-S31 interrupt matrix the image's interrupt
   table (`oer-interrupt-table`) drives. The platform runtime's handoff adopts the
   image's table, silences each hart's sources when it installs the hart's
