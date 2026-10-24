@@ -659,3 +659,25 @@ fn empty_composition_placeholders_do_not_change_storage_class_or_budget() {
         Verdict::Stop
     );
 }
+
+#[test]
+fn an_unused_interrupt_stack_is_an_allocation_difference_not_an_incompatible_build() {
+    let mut a = summary();
+    a.provenance.flags.insert(
+        "runtime".into(),
+        BTreeMap::from([("RUSTFLAGS".into(), "same compiler flags".into())]),
+    );
+    let mut b = a.clone();
+    b.provenance
+        .flags
+        .get_mut("runtime")
+        .unwrap()
+        .insert("OPEN_RADIO_UNUSED_IRQ_STACK_HARTS".into(), "1".into());
+    runtime(&mut a)
+        .allocated_stacks
+        .insert("hart1_irq".into(), 2144);
+    runtime(&mut b)
+        .allocated_stacks
+        .insert("hart1_irq".into(), 0);
+    assert!(compare(&a, &b).is_ok());
+}
