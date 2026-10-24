@@ -14,6 +14,14 @@ fn valid_id(id: &str) -> bool {
         && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
         && id.contains('-')
 }
+
+fn same_device(
+    record: &oer_hil_runs::format::run::CellProvenance,
+    cell: &str,
+    device: &str,
+) -> bool {
+    record.cell_id == cell && record.device_id == device
+}
 pub fn load(lab: &oer_hil_lab::config::LabConfig) -> Result<(String, KeyEvidence)> {
     let id=std::env::var(INPUT).map_err(|_| "W4 requires OER_W4_KEY_CONFORMANCE_RUN naming its independent s31-a key conformance run")?;
     if !valid_id(&id) {
@@ -22,11 +30,7 @@ pub fn load(lab: &oer_hil_lab::config::LabConfig) -> Result<(String, KeyEvidence
     let run = oer_hil_runs::store::RunStore::shared()?.open(&id)?;
     run.validate()?;
     if run.manifest().state != RunState::Completed
-        || !run
-            .manifest()
-            .cell
-            .device_id
-            .eq_ignore_ascii_case(&lab.dut.mac)
+        || !same_device(&run.manifest().cell, lab.cell_id(), &lab.dut.id)
     {
         return Err("W4 conformance run is unfinished or belongs to another board".into());
     }
@@ -90,6 +94,18 @@ pub fn load(lab: &oer_hil_lab::config::LabConfig) -> Result<(String, KeyEvidence
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn proof_uses_the_runs_device_label_and_cell_identity() {
+        let record = oer_hil_runs::format::run::CellProvenance {
+            cell_id: "lab-a".to_owned(),
+            device_id: "s31-a".to_owned(),
+            serial_device: "/dev/test-board".into(),
+        };
+        assert!(same_device(&record, "lab-a", "s31-a"));
+        assert!(!same_device(&record, "lab-a", "s31-b"));
+        assert!(!same_device(&record, "lab-b", "s31-a"));
+        assert!(!same_device(&record, "lab-a", "02:00:00:00:00:01"));
+    }
     #[test]
     fn input_names_one_run_and_cannot_be_a_path_or_a_credential() {
         assert!(valid_id("1792798821710-0002806d"));
