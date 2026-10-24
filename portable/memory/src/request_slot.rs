@@ -250,6 +250,10 @@ impl<Req, Ans> Responder<'_, Req, Ans> {
 }
 
 impl<Req, Ans> Drop for Responder<'_, Req, Ans> {
+    #[expect(
+        clippy::unreachable,
+        reason = "internal invariant: `answer` consumes the responder without running this drop, so reaching it means the request was dropped unanswered"
+    )]
     fn drop(&mut self) {
         unreachable!("a taken request must be answered");
     }

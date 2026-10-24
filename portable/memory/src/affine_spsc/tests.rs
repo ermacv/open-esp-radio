@@ -23,20 +23,40 @@ fn local_producer_copies_publish_whole_non_clone_values_in_fifo_order_with<C: Sp
         assert!(second.try_send(Payload(std::boxed::Box::new(2))).is_ok());
         let refused = first
             .try_send(Payload(std::boxed::Box::new(3)))
-            .err()
-            .expect("full")
+            .expect_err("full")
             .0;
         assert_eq!(*refused.0, 3);
-        assert_eq!(*receiver.try_receive().ok().expect("first owner").0, 1);
+        assert_eq!(
+            *receiver
+                .try_receive()
+                .map_err(|_| ())
+                .expect("first owner")
+                .0,
+            1
+        );
         assert!(second.try_send(refused).is_ok());
-        assert_eq!(*receiver.try_receive().ok().expect("second owner").0, 2);
+        assert_eq!(
+            *receiver
+                .try_receive()
+                .map_err(|_| ())
+                .expect("second owner")
+                .0,
+            2
+        );
     }
-    assert_eq!(*consumer.try_receive().ok().expect("third owner").0, 3);
+    assert_eq!(
+        *consumer
+            .try_receive()
+            .map_err(|_| ())
+            .expect("third owner")
+            .0,
+        3
+    );
     assert!(producer.try_send(Payload(std::boxed::Box::new(4))).is_ok());
     assert_eq!(
         *consumer
             .try_receive()
-            .ok()
+            .map_err(|_| ())
             .expect("original endpoint again")
             .0,
         4
@@ -254,7 +274,10 @@ fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() 
                     .is_ok()
             );
         }
-        let first = receiver.try_receive().ok().expect("first affine owner");
+        let first = receiver
+            .try_receive()
+            .map_err(|_| ())
+            .expect("first affine owner");
         assert_eq!(first.id, 0);
         drop(first);
         assert_eq!(dropped[0].load(Ordering::SeqCst), 1);

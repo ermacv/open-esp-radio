@@ -188,6 +188,15 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
         }
     }
 
+    /// The cell a cursor position names.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "internal invariant: a cursor reduced modulo DEPTH is below DEPTH"
+    )]
+    fn slot(&self, cursor: usize) -> &UnsafeCell<MaybeUninit<T>> {
+        &self.values[cursor % DEPTH]
+    }
+
     const fn advance(cursor: usize) -> usize {
         if cursor + 1 == DEPTH * 2 {
             0
@@ -231,7 +240,7 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
         )]
         // SAFETY: the producer's Release cursor initialized this slot, and
         // only the consumer moves its affine value out before returning it.
-        let value = unsafe { (*self.values[consumer % DEPTH].get()).assume_init_read() };
+        let value = unsafe { (*self.slot(consumer).get()).assume_init_read() };
         self.consumer
             .counter()
             .store(Self::advance(consumer), Ordering::Release);
@@ -257,7 +266,7 @@ impl<T, const DEPTH: usize, C: SpscCursor> Drop for AffineSpscQueue<T, DEPTH, C>
             // SAFETY: exclusive queue ownership proves no endpoint exists;
             // every cursor-visible slot still contains one initialized value.
             unsafe {
-                self.values[consumer % DEPTH].get_mut().assume_init_drop();
+                (*self.slot(consumer).get()).assume_init_drop();
             }
             consumer = Self::advance(consumer);
         }
@@ -344,7 +353,7 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscSendPermit<'_, T, DEPTH, C>
         // neither constructor permits a competing publication at this cursor.
         // The consumer can only free more cells before this Release write.
         unsafe {
-            (*self.queue.values[self.producer % DEPTH].get()).write(value);
+            (*self.queue.slot(self.producer).get()).write(value);
         }
         self.queue.producer.counter().store(
             AffineSpscQueue::<T, DEPTH, C>::advance(self.producer),

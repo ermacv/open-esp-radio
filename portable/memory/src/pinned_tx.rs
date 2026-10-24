@@ -26,6 +26,30 @@ const SLOT_RADIO: u8 = 3;
 const DMA_OVERRUN_GUARD_SIZE: usize = 32;
 const DMA_OVERRUN_GUARD_BYTE: u8 = 0xa5;
 
+/// The first eight guard bytes as a diagnostic word.
+fn guard_prefix(guard: &[u8; DMA_OVERRUN_GUARD_SIZE]) -> u64 {
+    let [b0, b1, b2, b3, b4, b5, b6, b7, ..] = *guard;
+    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7])
+}
+
+/// The Ethernet frame of `length` bytes behind the headroom.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "internal invariant: length is checked against FRAME_CAPACITY at publish, and storage holds HEADROOM + FRAME_CAPACITY + TRAILER"
+)]
+fn frame<const HEADROOM: usize>(storage: &[u8], length: usize) -> &[u8] {
+    &storage[HEADROOM..HEADROOM + length]
+}
+
+/// The mutable Ethernet frame of `length` bytes behind the headroom.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "internal invariant: length is checked against FRAME_CAPACITY at publish, and storage holds HEADROOM + FRAME_CAPACITY + TRAILER"
+)]
+fn frame_mut<const HEADROOM: usize>(storage: &mut [u8], length: usize) -> &mut [u8] {
+    &mut storage[HEADROOM..HEADROOM + length]
+}
+
 #[repr(C)]
 struct PinnedTxBytes<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize> {
     headroom: [u8; HEADROOM],
@@ -103,6 +127,10 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         unsafe_code,
         reason = "the guard observes whether a hardware actor crossed the DMA region boundary"
     )]
+    #[expect(
+        clippy::panic,
+        reason = "fatal by contract: a DMA actor wrote outside its region, no recovery is sound"
+    )]
     fn assert_dma_boundary(&self, index: u8) {
         // SAFETY: CPU writers never mutate this guard after initialization.
         // A differing byte is diagnostic evidence that the external DMA actor
@@ -114,11 +142,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
             .enumerate()
             .find(|(_, byte)| *byte != DMA_OVERRUN_GUARD_BYTE)
         {
-            let prefix = u64::from_le_bytes(
-                guard[..8]
-                    .try_into()
-                    .expect("the guard prefix is eight bytes"),
-            );
+            let prefix = guard_prefix(guard);
             panic!(
                 "pinned TX DMA crossed its backing boundary; slot={index} offset={offset} value={byte} guard_prefix={prefix:#018x}"
             );
@@ -147,11 +171,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     fn dma_boundary_prefix(&self) -> u64 {
         // SAFETY: see `assert_dma_boundary`; this is an observation-only read.
         let guard = unsafe { &*self.dma_overrun_guard.get() };
-        u64::from_le_bytes(
-            guard[..8]
-                .try_into()
-                .expect("the guard prefix is eight bytes"),
-        )
+        guard_prefix(guard)
     }
 
     fn publish_ready(&self, index: u8, length: usize) {
@@ -321,6 +341,19 @@ impl<
     const QUEUE_DEPTH: usize,
 > PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
 {
+    /// The slot `index` names.
+    #[expect(
+        clippy::expect_used,
+        reason = "documented panic of the claims: the index comes from this pool's own channels, so a foreign one is a driver defect"
+    )]
+    fn slot_of(&self, index: u8) -> &'static PinnedTxSlot<FRAME_CAPACITY, HEADROOM, TRAILER> {
+        self.pool
+            .get_ref()
+            .slots
+            .get(usize::from(index))
+            .expect("pinned TX index belongs to this pool")
+    }
+
     /// Claim a free slot for a unique network writer.
     ///
     /// # Panics
@@ -337,12 +370,7 @@ impl<
         // 2,112 guard bytes before each Ethernet frame could be written.
         // Keep the complete scan explicit for lifecycle/diagnostic use while
         // retaining fail-closed checks at both real ownership boundaries.
-        let slot = self
-            .pool
-            .get_ref()
-            .slots
-            .get(usize::from(index))
-            .expect("pinned TX index belongs to this pool");
+        let slot = self.slot_of(index);
         slot.claim(
             index,
             SLOT_FREE,
@@ -362,15 +390,23 @@ impl<
     /// after DMA ownership ends. This whole-pool pass is intended for an
     /// explicit lifecycle or diagnostic audit, including quarantined slots
     /// which will deliberately never return to the free queue.
+    #[expect(
+        clippy::panic,
+        reason = "fatal by contract: a DMA actor wrote outside its region, no recovery is sound"
+    )]
     fn assert_dma_boundaries(&self) {
-        if let Some((damaged_slot, (offset, byte))) = self
+        if let Some((damaged_slot, damaged, (offset, byte))) = self
             .pool
             .slots
             .iter()
             .enumerate()
-            .find_map(|(slot, value)| value.dma_boundary_damage().map(|damage| (slot, damage)))
+            .find_map(|(slot, value)| {
+                value
+                    .dma_boundary_damage()
+                    .map(|damage| (slot, value, damage))
+            })
         {
-            let prefix = self.pool.slots[damaged_slot].dma_boundary_prefix();
+            let prefix = damaged.dma_boundary_prefix();
             panic!(
                 "pinned TX pool boundary changed; damaged_slot={damaged_slot} offset={offset} value={byte} guard_prefix={prefix:#018x}"
             );
@@ -386,12 +422,7 @@ impl<
         &self,
         index: u8,
     ) -> PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
-        let slot = self
-            .pool
-            .get_ref()
-            .slots
-            .get(usize::from(index))
-            .expect("pinned TX index belongs to this pool");
+        let slot = self.slot_of(index);
         slot.claim(
             index,
             SLOT_READY,
@@ -465,7 +496,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
                 self.slot.storage_capacity(),
             )
         };
-        let result = write(&mut storage[HEADROOM..HEADROOM + length]);
+        let result = write(frame_mut::<HEADROOM>(storage, length));
         self.slot.publish_ready(self.index, length);
         self.live = false;
         (self.index, result)
@@ -495,7 +526,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
                 self.slot.storage_capacity(),
             )
         };
-        let result = match write(&mut storage[HEADROOM..HEADROOM + length]) {
+        let result = match write(frame_mut::<HEADROOM>(storage, length)) {
             Ok(result) => result,
             Err(error) => return Err((self, error)),
         };
@@ -565,7 +596,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
 
     pub fn ethernet(&self) -> &[u8] {
         let length = self.ethernet_length();
-        &self.slot.storage()[HEADROOM..HEADROOM + length]
+        frame::<HEADROOM>(self.slot.storage(), length)
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -574,7 +605,7 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
 
     pub fn ethernet_mut(&mut self) -> &mut [u8] {
         let length = self.ethernet_length();
-        &mut self.storage_mut()[HEADROOM..HEADROOM + length]
+        frame_mut::<HEADROOM>(self.storage_mut(), length)
     }
 
     pub fn storage_mut(&mut self) -> &mut [u8] {
@@ -717,21 +748,39 @@ impl<B: IndexedStableDmaLease, R: DmaIndexReturn> ReturningStableDmaBacking<B, R
     }
 }
 
+impl<B: IndexedStableDmaLease, R: DmaIndexReturn> ReturningStableDmaBacking<B, R> {
+    #[expect(
+        clippy::expect_used,
+        reason = "internal invariant: the backing is taken only by the drop that ends the value"
+    )]
+    fn live_backing(&self) -> &B {
+        self.backing
+            .as_ref()
+            .expect("returning DMA backing remains live until drop")
+    }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "internal invariant: the backing is taken only by the drop that ends the value"
+    )]
+    fn live_backing_mut(&mut self) -> &mut B {
+        self.backing
+            .as_mut()
+            .expect("returning DMA backing remains live until drop")
+    }
+}
+
 impl<B: IndexedStableDmaLease, R: DmaIndexReturn> Deref for ReturningStableDmaBacking<B, R> {
     type Target = B;
 
     fn deref(&self) -> &Self::Target {
-        self.backing
-            .as_ref()
-            .expect("returning DMA backing remains live until drop")
+        self.live_backing()
     }
 }
 
 impl<B: IndexedStableDmaLease, R: DmaIndexReturn> DerefMut for ReturningStableDmaBacking<B, R> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.backing
-            .as_mut()
-            .expect("returning DMA backing remains live until drop")
+        self.live_backing_mut()
     }
 }
 

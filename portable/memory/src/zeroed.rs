@@ -68,6 +68,10 @@ impl<T: Zeroable> Default for ZeroedStatic<T> {
 
 impl<T> ZeroedStatic<T> {
     /// The value, the first time; panics on a second claim.
+    #[expect(
+        clippy::expect_used,
+        reason = "documented panic: a second claim of a once-claimed static is a defect of the caller"
+    )]
     pub fn take(&'static self) -> &'static mut T {
         self.try_take().expect("a zeroed static is claimed once")
     }
@@ -146,6 +150,10 @@ impl<T> ZeroedOnce<T> {
     /// writing context at a time (an interrupt reads with [`Self::get`]); a
     /// call that finds another write in progress panics rather than wait.
     #[allow(unsafe_code, reason = "the winning exchange is the only writer")]
+    #[expect(
+        clippy::expect_used,
+        reason = "both match arms leave the cell `ONCE_READY`; a miss is a defect of this type"
+    )]
     pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
         match self.state.compare_exchange(
             ONCE_EMPTY,
@@ -235,7 +243,10 @@ mod tests {
         assert!(CELL.get().is_none());
         assert_eq!(CELL.get_or_init(|| [1, 2, 3, 4]), &[1, 2, 3, 4]);
         // A second initializer does not run.
-        assert_eq!(CELL.get_or_init(|| unreachable!()), &[1, 2, 3, 4]);
+        assert_eq!(
+            CELL.get_or_init(|| panic!("a second initializer does not run")),
+            &[1, 2, 3, 4]
+        );
         assert_eq!(CELL.get(), Some(&[1, 2, 3, 4]));
     }
 

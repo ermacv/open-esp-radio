@@ -79,7 +79,7 @@ impl<'a, T> Placed<'a, T> {
         // valid for T. The old loan was consumed and will never drop T again.
         unsafe { ptr::copy_nonoverlapping(pointer.as_ptr(), destination.as_mut_ptr(), 1) };
         Placed {
-            pointer: NonNull::new(destination.as_mut_ptr()).expect("storage is non-null"),
+            pointer: NonNull::from(destination).cast(),
             loan: PhantomData,
         }
     }
@@ -107,6 +107,10 @@ impl<'a, T> Placed<'a, T> {
     /// consumed parent. Every field is projected exactly once; the parent has
     /// no Drop implementation. Only the placement macros establish this.
     #[doc(hidden)]
+    #[expect(
+        clippy::expect_used,
+        reason = "internal invariant: the placement macros project fields of a live parent, whose pointers are non-null"
+    )]
     pub unsafe fn __field(pointer: *mut T, _: &PlaceLoan<'a>) -> Self {
         Self {
             pointer: NonNull::new(pointer).expect("field is non-null"),
@@ -245,6 +249,10 @@ pub struct PollPlaced<'a, 'f, F: Future> {
 }
 impl<'a, F: Future> Future for PollPlaced<'a, '_, F> {
     type Output = Placed<'a, F::Output>;
+    #[expect(
+        clippy::expect_used,
+        reason = "the Future contract: polling after completion may panic, and the wrapper holds the output place once"
+    )]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         let storage = this

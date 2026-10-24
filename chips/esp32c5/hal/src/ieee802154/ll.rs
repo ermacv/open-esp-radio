@@ -49,11 +49,24 @@ use crate::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
 ///
 /// The reviewed field is twenty-four bits wide, so every duration is
 /// accepted.
-const fn ed_duration_units(units: u16) -> oer_esp32c5_pac::Ieee802154EdDurationUnits {
-    match oer_esp32c5_pac::Ieee802154EdDurationUnits::new(units as u32) {
-        Some(duration) => duration,
-        None => panic!("the reviewed ED-duration field is wider than sixteen bits"),
-    }
+fn ed_duration_units(units: u16) -> oer_esp32c5_pac::Ieee802154EdDurationUnits {
+    proven(oer_esp32c5_pac::Ieee802154EdDurationUnits::new(u32::from(
+        units,
+    )))
+}
+
+/// The PAC value of a conversion whose source type already bounds it to the
+/// field's range, so `None` cannot occur.
+// The one panic site of these conversions: each caller's source type (an
+// engine newtype, a narrower integer or a masked value) is no wider than the
+// PAC field, so a failure is a defect of the pairing, never of a value from
+// the air or the host.
+#[expect(
+    clippy::expect_used,
+    reason = "internal invariant: the source type is bounded to the PAC field's range"
+)]
+fn proven<T>(converted: Option<T>) -> T {
+    converted.expect("the source value fits the PAC field")
 }
 
 /// The PAC mode of a chip-neutral CCA mode.
@@ -93,12 +106,21 @@ const fn command_into_pac(command: Ieee802154LlCommand) -> PacMacCommand {
     }
 }
 
-fn event_into_pac(event: Ieee802154Event) -> PacEvent {
-    EVENTS
-        .iter()
-        .find(|(engine, _)| *engine == event)
-        .map(|(_, pac)| *pac)
-        .expect("every engine event has a PAC event")
+const fn event_into_pac(event: Ieee802154Event) -> PacEvent {
+    match event {
+        Ieee802154Event::TxDone => PacEvent::TxDone,
+        Ieee802154Event::RxDone => PacEvent::RxDone,
+        Ieee802154Event::AckTxDone => PacEvent::AckTxDone,
+        Ieee802154Event::AckRxDone => PacEvent::AckRxDone,
+        Ieee802154Event::RxAbort => PacEvent::RxAbort,
+        Ieee802154Event::TxAbort => PacEvent::TxAbort,
+        Ieee802154Event::EdDone => PacEvent::EdDone,
+        Ieee802154Event::Timer0Overflow => PacEvent::Timer0Overflow,
+        Ieee802154Event::Timer1Overflow => PacEvent::Timer1Overflow,
+        Ieee802154Event::ClockCountMatch => PacEvent::ClockCountMatch,
+        Ieee802154Event::TxSfdDone => PacEvent::TxSfdDone,
+        Ieee802154Event::RxSfdDone => PacEvent::RxSfdDone,
+    }
 }
 
 fn event_mask_into_pac(mask: Ieee802154EventMask) -> PacEventMask {
@@ -187,8 +209,7 @@ fn rx_status_from_pac(status: PacRxStatus) -> Ieee802154RxStatus {
     Ieee802154RxStatus::new(
         status.filter_fail_reason(),
         rx_abort_reason_from_pac(status.abort_reason()),
-        Ieee802154RxStateCode::new(status.state().value())
-            .expect("the PAC state field is three bits"),
+        proven(Ieee802154RxStateCode::new(status.state().value())),
         status.preamble_match(),
         status.sfd_match(),
     )
@@ -238,7 +259,7 @@ const fn ed_sample_mode_into_pac(mode: Ieee802154EdSampleMode) -> PacEdSampleMod
 }
 
 fn multipan_index_into_pac(index: Ieee802154MultipanIndex) -> PacMultipanIndex {
-    PacMultipanIndex::new(index.value()).expect("both vocabularies name four contexts")
+    proven(PacMultipanIndex::new(index.value()))
 }
 
 fn multipan_state_into_pac(state: Ieee802154MultipanEnableState) -> PacMultipanEnableState {
@@ -247,7 +268,7 @@ fn multipan_state_into_pac(state: Ieee802154MultipanEnableState) -> PacMultipanE
 }
 
 fn multipan_state_from_pac(state: PacMultipanEnableState) -> Ieee802154MultipanEnableState {
-    let enabled = |index| state.contains(PacMultipanIndex::new(index).expect("context index"));
+    let enabled = |index| state.contains(proven(PacMultipanIndex::new(index)));
     Ieee802154MultipanEnableState::new(enabled(0), enabled(1), enabled(2), enabled(3))
 }
 
@@ -269,7 +290,7 @@ const fn etm_route_into_pac(route: Ieee802154EtmRoute) -> PacEtmRoute {
 /// A four-bit shared-table priority in the MAC's four-bit PTI field, written
 /// unchanged as libcoexist writes it.
 fn mac_pti(pti: CoexPti) -> PacPti {
-    PacPti::new(pti.value()).expect("a four-bit priority fits the four-bit field")
+    proven(PacPti::new(pti.value()))
 }
 
 /// The task owner and its active interrupt owner, held together for the
@@ -469,8 +490,9 @@ impl Ieee802154LowLevel for Ieee802154MacOwners {
     }
 
     fn set_security_offset(&mut self, offset: u8) {
-        let offset = PacSecurityPayloadOffset::new(offset & PacSecurityPayloadOffset::MAX)
-            .expect("seven bits fit the payload-offset field");
+        let offset = proven(PacSecurityPayloadOffset::new(
+            offset & PacSecurityPayloadOffset::MAX,
+        ));
         self.task.lease().set_security_payload_offset(offset);
     }
 
@@ -505,7 +527,7 @@ impl Ieee802154LowLevel for Ieee802154MacOwners {
     }
 
     fn disable_coex(&mut self) {
-        let pti = PacPti::new(COEX_DISABLED_PTI).expect("the disabled PTI fits four bits");
+        let pti = proven(PacPti::new(COEX_DISABLED_PTI));
         let mut lease = self.task.lease();
         lease.set_txrx_pti(pti);
         lease.set_ack_pti(pti);
@@ -520,15 +542,13 @@ impl Ieee802154LowLevel for Ieee802154MacOwners {
     }
 
     fn set_channel(&mut self, channel: Ieee802154Channel) {
-        self.task.lease().set_frequency_code(
-            PacFrequencyCode::new(channel.frequency_code())
-                .expect("2.4 GHz frequency codes fit the seven-bit field"),
-        );
+        self.task
+            .lease()
+            .set_frequency_code(proven(PacFrequencyCode::new(channel.frequency_code())));
     }
 
     fn set_tx_power(&mut self, power: &Ieee802154ResolvedTxPower<'_>) {
-        let code = PacTxPowerCode::new(u32::from(power.field_code().value()))
-            .expect("the ESP32-C5 provider has sixteen levels, which fit the five-bit field");
+        let code = proven(PacTxPowerCode::new(u32::from(power.field_code().value())));
         self.task.lease().set_tx_power_code(code);
     }
 

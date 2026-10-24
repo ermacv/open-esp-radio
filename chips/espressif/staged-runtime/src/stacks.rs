@@ -131,13 +131,15 @@ pub unsafe fn install_current_hart_interrupt_stack() {
     let hart: usize;
     // SAFETY: reading `mhartid` touches no memory.
     unsafe { asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack)) };
-    let stack = interrupt_stack(hart).unwrap_or_else(|| panic!("invalid hart for interrupt stack"));
+    let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
+        invalid_hart()
+    };
     let (bottom, top) = (stack.start, stack.end);
-    if !IRQ_PAINTED[hart].load(Ordering::Acquire) {
+    if !painted.load(Ordering::Acquire) {
         // SAFETY: the caller owns this hart's inactive IRQ stack before
         // admission; the linker script reserved `bottom..top` for it alone.
         unsafe { watermark::paint(bottom as *mut u32, stack.len() / 4) };
-        IRQ_PAINTED[hart].store(true, Ordering::Release);
+        painted.store(true, Ordering::Release);
     }
     // SAFETY: interrupts are disabled on this hart and the trigger is not
     // one ESP-HAL or the stack sampler uses.
@@ -204,14 +206,39 @@ pub(crate) fn verify_current_hart_vectors() {
     // SAFETY: `table` is this hart's active 48-slot MTVT.
     let active: [u32; 48] = core::array::from_fn(|slot| unsafe { table.add(slot).read_volatile() });
     if let Some(slot) = foreign_vector(&active, source) {
-        panic!("interrupt vector {slot} is not the runtime's stack-switching entry");
+        foreign_vector_installed(slot);
     }
+}
+
+/// Stop on a hart id with no interrupt stack.
+#[cold]
+#[expect(
+    clippy::panic,
+    reason = "fail-stop on a corrupt `mhartid` read before the interrupt stack exists; no caller input"
+)]
+fn invalid_hart() -> ! {
+    panic!("invalid hart for interrupt stack")
+}
+
+/// Stop on a vector slot that is not the runtime's stack-switching entry.
+#[cold]
+#[expect(
+    clippy::panic,
+    reason = "fail-stop on a corrupted interrupt vector table; the image's own table, no caller input"
+)]
+fn foreign_vector_installed(slot: usize) -> ! {
+    panic!("interrupt vector {slot} is not the runtime's stack-switching entry");
 }
 
 /// The first hardware-vector slot (slot zero is none) of `active` that differs
 /// from `source`.
 fn foreign_vector(active: &[u32; 48], source: &[u32; 48]) -> Option<usize> {
-    (1..source.len()).find(|&slot| active[slot] != source[slot])
+    active
+        .iter()
+        .zip(source)
+        .enumerate()
+        .skip(1)
+        .find_map(|(slot, (active, source))| (active != source).then_some(slot))
 }
 
 /// Make every store into the aligned guard of this hart's interrupt
@@ -271,12 +298,11 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     unsafe {
         asm!("csrr {hart}, mhartid", "mv {sp}, sp", hart = out(reg) hart, sp = out(reg) sp, options(nomem, nostack))
     };
-    let stack = interrupt_stack(hart).unwrap_or_else(|| panic!("invalid hart for interrupt stack"));
+    let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
+        invalid_hart()
+    };
     let bottom = stack.start as *const u32;
-    assert!(
-        IRQ_PAINTED[hart].load(Ordering::Acquire),
-        "IRQ stack is not painted"
-    );
+    assert!(painted.load(Ordering::Acquire), "IRQ stack is not painted");
     assert!(
         !(stack.start..=stack.end).contains(&sp),
         "IRQ stack sampling requires thread mode"

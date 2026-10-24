@@ -130,6 +130,12 @@ impl<T> Drop for __InitField<T> {
     }
 }
 
+impl<T> __InitField<T> {
+    /// The complete initializer must construct the destination's exact type.
+    #[inline(always)]
+    pub fn check<A>(_: &core::mem::MaybeUninit<T>, _: impl FnOnce(A) -> T) {}
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -364,10 +370,4 @@ mod tests {
         }));
         assert!(result.is_err());
     }
-}
-
-impl<T> __InitField<T> {
-    /// The complete initializer must construct the destination's exact type.
-    #[inline(always)]
-    pub fn check<A>(_: &core::mem::MaybeUninit<T>, _: impl FnOnce(A) -> T) {}
 }

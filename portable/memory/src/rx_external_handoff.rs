@@ -43,6 +43,10 @@ impl ExternalRxReturn {
         Self::decode(self.0.load(Ordering::Acquire))
     }
 
+    #[expect(
+        clippy::unreachable,
+        reason = "internal invariant: the atomic holds only values `encode` produced"
+    )]
     fn decode(state: u8) -> ExternalRxReturnState {
         match state {
             0 => ExternalRxReturnState::Attached,
@@ -134,11 +138,12 @@ impl ExternalRxBuffer {
     }
 
     fn frame(&self, offset: usize, length: usize) -> &[u8] {
-        let end = offset
-            .checked_add(length)
-            .filter(|&end| end <= self.length)
-            .expect("external RX view stays inside initialized bytes");
-        let _ = end;
+        assert!(
+            offset
+                .checked_add(length)
+                .is_some_and(|end| end <= self.length),
+            "external RX view stays inside initialized bytes"
+        );
         // SAFETY: the affine value retains exclusive CPU ownership and the
         // checked range lies inside its stable allocation.
         #[allow(unsafe_code, reason = "affine external buffer owns this range")]
@@ -148,11 +153,12 @@ impl ExternalRxBuffer {
     }
 
     fn frame_mut(&mut self, offset: usize, length: usize) -> &mut [u8] {
-        let end = offset
-            .checked_add(length)
-            .filter(|&end| end <= self.length)
-            .expect("external RX mutable view stays inside initialized bytes");
-        let _ = end;
+        assert!(
+            offset
+                .checked_add(length)
+                .is_some_and(|end| end <= self.length),
+            "external RX mutable view stays inside initialized bytes"
+        );
         // SAFETY: `&mut self` borrows the sole affine owner and the range was
         // checked against initialized bytes.
         #[allow(unsafe_code, reason = "affine external buffer owns this range")]
@@ -255,11 +261,12 @@ impl ExternalRxHandoffSlot {
 
     fn publish(&self, owner: u8, offset: usize, length: usize) {
         let initialized = self.initialized_length();
-        let end = offset
-            .checked_add(length)
-            .filter(|&end| end <= initialized)
-            .expect("published external RX range stays initialized");
-        let _ = end;
+        assert!(
+            offset
+                .checked_add(length)
+                .is_some_and(|end| end <= initialized),
+            "published external RX range stays initialized"
+        );
         // SAFETY: the current affine owner is the only stage allowed to alter
         // the published view before its Release transition.
         #[allow(unsafe_code, reason = "slot owner exclusively mutates range metadata")]
@@ -411,31 +418,38 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
         if SLOT_COUNT == 0 || SLOT_COUNT > usize::from(u8::MAX) + 1 {
             return Err(buffer);
         }
-        let mut buffer = Some(buffer);
+        let mut buffer = buffer;
         for distance in 0..SLOT_COUNT {
             let index = (start + distance) % SLOT_COUNT;
-            let candidate = buffer
-                .take()
-                .expect("unclaimed external buffer remains affine");
-            match self.slots[index].try_claim_radio(candidate) {
+            let Some(slot) = self.slots.get(index) else {
+                continue;
+            };
+            match slot.try_claim_radio(buffer) {
                 Ok(()) => {
                     return Ok(ExternalRxRadioLease {
-                        slot: &self.slots[index],
+                        slot,
                         index: index as u8,
                         live: true,
                     });
                 }
-                Err(candidate) => buffer = Some(candidate),
+                Err(returned) => buffer = returned,
             }
         }
-        Err(buffer.expect("failed claim returns the external buffer"))
+        Err(buffer)
+    }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "documented panic of the claims: the index comes from this pool's own channels, so a foreign one is a driver defect"
+    )]
+    fn slot_of(&self, index: u8) -> &ExternalRxHandoffSlot {
+        self.slots
+            .get(usize::from(index))
+            .expect("external RX index belongs to its pool")
     }
 
     pub fn claim_network(&self, index: u8) -> ExternalRxNetworkLease<'_, FRAME_CAPACITY> {
-        let slot = self
-            .slots
-            .get(usize::from(index))
-            .expect("external RX index belongs to its pool");
+        let slot = self.slot_of(index);
         slot.claim_network();
         ExternalRxNetworkLease {
             slot,
@@ -456,10 +470,7 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
         reason = "an adopter returns the slot it took out of its affine lease"
     )]
     pub unsafe fn release_adopted(&self, index: u8) {
-        self.slots
-            .get(usize::from(index))
-            .expect("adopted external RX index belongs to its pool")
-            .release(SLOT_NETWORK);
+        self.slot_of(index).release(SLOT_NETWORK);
     }
 
     pub fn claimed_slots(&self) -> usize {
