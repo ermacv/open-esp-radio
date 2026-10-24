@@ -162,6 +162,19 @@ impl<M: SignalMetadata> RateSelection<M, port::Ack> for Rates {
         frame: FrameRates,
         completion: &SingleOutcome<port::Ack, D>,
     ) {
+        use core::sync::atomic::Ordering::Relaxed;
+        if matches!(
+            completion,
+            TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
+        ) {
+            super::observation::TIMEOUTS.fetch_add(1, Relaxed);
+        }
+        if super::observation::DEPARTING.load(Relaxed)
+            && frame == FrameRates::Control
+            && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
+        {
+            super::observation::DEAUTH.fetch_add(1, Relaxed);
+        }
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed(
             &mut self.0,
             now,
@@ -234,6 +247,9 @@ impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 
             ServiceOutput::CommandRefused(refused) => {
                 self.ready.set(Some(refused.request));
                 self.retry.set(true);
+            }
+            ServiceOutput::GroupKeyChanged { key_id, replaced } => {
+                super::observation::group(self.attempt, key_id.get(), replaced);
             }
             _ => {}
         }
@@ -433,6 +449,7 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         let (rx_send, rx_receive) = rx.split();
         let link = core::cell::Cell::new(false);
         let retry = core::cell::Cell::new(true);
+        let stopped = core::cell::Cell::new(None);
         let ready = core::cell::Cell::new(Some(machine::StaRequest::new(1, credits.connect)));
         let mut output = Output {
             link: &link,
@@ -448,10 +465,19 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
         };
         let completed_storage = COMPLETED.take().uninit();
         let mut running = core::pin::pin!(running(service, completed_storage, owner, &mut io,));
+        let mut controls = core::pin::pin!(reconnect(
+            command_send,
+            &retry,
+            &ready,
+            attempt,
+            credits.disconnect,
+            &stopped,
+            &link
+        ));
         let mut workload = core::pin::pin!(async {
             embassy_futures::join::join(
                 super::network::run(address, seed, tx_send, rx_receive, &link, attempt),
-                reconnect(command_send, &retry, &ready, attempt),
+                super::future::Boundary(controls.as_mut()),
             )
             .await
         });
@@ -464,16 +490,18 @@ impl<Id: SlotIdentity> rp::PortBody<Id, Backend<Id>> for Body {
             Either::First(completed) => completed,
             Either::Second(_) => unreachable!("permanent station network tasks"),
         };
-        attempt.publish(StationLinkState::Disconnected {
-            reason: StationDisconnectReason::RadioFailure,
-        });
         let (end, _retired) =
             oer_memory::unpack_placed!(completed, ServiceCompleted { end, retired });
         let ended = oer_memory::match_placed!(end, ServiceEnd {
-            Stopped(owner) => rp::Ended::uninstall(owner.read(), (), ()),
-            Failed { owner, fault, custody } => { drop((fault, custody)); owner.read().uninstall((), ()) },
-            Poisoned { owner, fault, custody } => { drop((fault, custody)); rp::Ended::fail_stop(owner.read().fail_stop(), ()) },
-            Quarantined { request, fault, custody } => { drop((fault, custody)); rp::Ended::fail_stop(request.read(), ()) },
+            Stopped(owner) => {
+                if let Some(request)=stopped.get() {
+                    super::emit(request,&oer_hil_protocol::wifi::StationStopped(super::observation::counters()));
+                }
+                rp::Ended::uninstall(owner.read(), (), ())
+            },
+            Failed { owner, fault, custody } => { attempt.publish(StationLinkState::Disconnected {reason: StationDisconnectReason::RadioFailure}); drop((fault, custody)); owner.read().uninstall((), ()) },
+            Poisoned { owner, fault, custody } => { attempt.publish(StationLinkState::Disconnected {reason: StationDisconnectReason::RadioFailure}); drop((fault, custody)); rp::Ended::fail_stop(owner.read().fail_stop(), ()) },
+            Quarantined { request, fault, custody } => { attempt.publish(StationLinkState::Disconnected {reason: StationDisconnectReason::RadioFailure}); drop((fault, custody)); rp::Ended::fail_stop(request.read(), ()) },
         });
         ended
     }
@@ -504,10 +532,35 @@ async fn reconnect<'a, 'id: 'a, Path: rp::PoolPath>(
     retry: &core::cell::Cell<bool>,
     ready: &core::cell::Cell<Option<machine::StaRequest<'id, Path>>>,
     attempt: Attempt,
+    disconnect: machine::StaCommandCredit<'id, Path, machine::DisconnectCommand>,
+    stopped: &core::cell::Cell<Option<oer_hil_protocol::RequestIdentity>>,
+    link: &core::cell::Cell<bool>,
 ) -> ! {
     use oer_time::Timer;
     let mut first = true;
+    let mut disconnect = Some(disconnect);
     loop {
+        if let Ok(request) = super::STOPS.try_receive()
+            && let Some(disconnect) = disconnect.take()
+        {
+            stopped.set(Some(request));
+            super::observation::DEPARTING.store(true, core::sync::atomic::Ordering::Relaxed);
+            retry.set(false);
+            commands
+                .ready()
+                .await
+                .send(ServiceCommand::Station(machine::StaRequest::new(
+                    0xffff, disconnect,
+                )));
+        }
+        if stopped.get().is_some() {
+            if !link.get() {
+                commands.ready().await.send(ServiceCommand::Stop);
+                core::future::pending::<()>().await;
+            }
+            let _ = EmbassyClock.wait_for(Duration::from_millis(10)).await;
+            continue;
+        }
         if retry.get()
             && let Some(request) = ready.take()
         {

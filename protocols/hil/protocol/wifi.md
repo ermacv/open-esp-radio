@@ -8,6 +8,14 @@ for admission, and `wifi/station/link` for `Associated`, `Authorized` and typed
 boot. `Authorized` means installed RSN keys and an open controlled port.
 `StationPowerSave` admits only `Off`.
 
+`ProbeStation` admits a 100-echo or ten-echo ICMP window. Its correlated
+`StationProbeReady` precedes traffic; `StationProbeFinished` contains distinct
+target-side request/reply counts. `StationGroupKey` reports a successful
+hardware installation's public KeyID/generation, never the GTK.
+`GetStationCounters` returns timeouts, collisions, decoded group ARPs and
+departure counts. `StopStation` is accepted before disconnect/stop; only a
+clean service stop publishes `StationStopped`. None carries a gate verdict.
+
 `NetworkCredentials` owns an SSID of 1..=32 bytes and a passphrase of 8..=63
 bytes. Construction and binary decoding both enforce these bounds. It has no
 `Clone` or `Copy`; drop erases its storage. `clear_passphrase` erases the entire

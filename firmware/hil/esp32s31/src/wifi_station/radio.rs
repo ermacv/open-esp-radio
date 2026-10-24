@@ -329,7 +329,23 @@ impl port::Device<TX> for Device {
         room: usize,
         cx: &mut Context<'_>,
     ) -> Poll<Result<DeviceEvent<Self::Receive>, Fault>> {
-        <Inner as port::Device<TX>>::poll_receive(&mut self.0, room, cx)
+        let result = <Inner as port::Device<TX>>::poll_receive(&mut self.0, room, cx);
+        if let Poll::Ready(Ok(DeviceEvent::Tx(
+            oer_esp32s31_ieee80211_driver::tx::WifiTxWake::Interrupt { .. },
+        ))) = &result
+        {
+            for queue in 0..4 {
+                if <Inner as port::Device<TX>>::hardware(&mut self.0)
+                    .wifi_mac_hal()
+                    .ordinary_tx_queue_snapshot(queue)
+                    .collision_pending
+                {
+                    super::observation::COLLISIONS
+                        .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        }
+        result
     }
 
     fn poll_rx_cut(

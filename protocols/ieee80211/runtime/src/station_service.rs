@@ -573,6 +573,12 @@ pub enum ServiceOutput<
     },
     /// The station's notice.
     Notice(StaNotice),
+    /// A correlated successful hardware group-key installation. This carries
+    /// the public CCMP KeyID only; it contains no key material.
+    GroupKeyChanged {
+        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        replaced: bool,
+    },
     /// A request refused synchronously, with its original correlation.
     CommandRefused(StaCommandRefused<'id, Path>),
     /// The unique terminal of one admitted station request.
@@ -1125,6 +1131,7 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     slot: <<B::Types<'id> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
+    key_id: Option<oer_ieee80211_wire::ccmp::GroupKeyId>,
     action: PendingGroupAction<'id, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
 }
 
@@ -2337,7 +2344,26 @@ impl<
             }
             LowerMacEvent::Tbtt(_) => Ok(None),
             LowerMacEvent::Terminal(terminal) => {
+                let group = match &terminal {
+                    LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { .. }) => self
+                        .pending
+                        .group
+                        .as_ref()
+                        .and_then(|pending| pending.key_id)
+                        .map(|id| (id, false)),
+                    LowerMacTerminal::GroupKeyReplaced { .. } => self
+                        .pending
+                        .group
+                        .as_ref()
+                        .and_then(|pending| pending.key_id)
+                        .map(|id| (id, true)),
+                    _ => None,
+                };
                 self.terminal(arbiter, now, terminal)?;
+                if let Some((key_id, replaced)) = group {
+                    io.output
+                        .emit(ServiceOutput::GroupKeyChanged { key_id, replaced });
+                }
                 Ok(None)
             }
         }
@@ -2578,6 +2604,7 @@ impl<
             (action, terminal) => {
                 self.pending.group = Some(PendingGroup {
                     slot: pending.slot,
+                    key_id: pending.key_id,
                     action,
                 });
                 return Err(ContractFault::sealed(
@@ -2962,6 +2989,7 @@ where
                 <B::Types<'id> as PhaseTypes<'id>>::StationKeys::vacant_group_slot_identity(&slot);
             pending_actions.group = Some(PendingGroup {
                 slot: identity,
+                key_id: Some(key_id),
                 action: PendingGroupAction::Install(pending),
             });
             pending_actions
@@ -2993,6 +3021,7 @@ where
             pending_actions.group = Some(PendingGroup {
                 slot,
                 action: PendingGroupAction::Replace(pending),
+                key_id: Some(key_id),
             });
             pending_actions
                 .admissions
@@ -3012,6 +3041,7 @@ where
             pending_actions.group = Some(PendingGroup {
                 slot,
                 action: PendingGroupAction::Select(pending),
+                key_id: None,
             });
             pending_actions
                 .admissions
@@ -3028,6 +3058,7 @@ where
             pending_actions.group = Some(PendingGroup {
                 slot,
                 action: PendingGroupAction::Remove(pending),
+                key_id: None,
             });
             pending_actions
                 .admissions
