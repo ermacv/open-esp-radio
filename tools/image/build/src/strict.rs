@@ -1,7 +1,9 @@
 //! Validate Cargo's cached runtime link against the linker's actual inputs.
 
 use crate::Result;
-use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec};
+use oer_image_checks::linker::strict::{
+    FRAGMENTS, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec,
+};
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -25,7 +27,9 @@ pub(crate) fn configure(
     // Only an image without an interrupt contract has known empty results
     // before Cargo runs. A reused strict link must keep its original record.
     if !interrupts {
-        std::fs::write(output.join(FRAGMENT), "")?;
+        for fragment in FRAGMENTS {
+            std::fs::write(output.join(fragment), "")?;
+        }
         std::fs::write(
             output.join(PLACEMENT),
             toml::to_string(&Placement::default())?,
@@ -61,7 +65,7 @@ pub(crate) fn restore_if_matching(
     linker: &Path,
 ) -> Result<bool> {
     // A linker invocation writes into staging. Cargo Fresh leaves it absent,
-    // so validate the published record and restore it with its exact fragment.
+    // so validate the published record and restore it with its exact fragments.
     let source = if output.join(PLACEMENT).is_file() {
         output
     } else {
@@ -80,16 +84,18 @@ pub(crate) fn restore_if_matching(
     if !fingerprint.matches(elf, specification, linker)? {
         return Ok(false);
     }
-    let fragment = match std::fs::read(source.join(FRAGMENT)) {
-        Ok(fragment) => fragment,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    if fragment != placement.fragment().as_bytes() {
-        return Ok(false);
+    for (file, text) in placement.fragments() {
+        let fragment = match std::fs::read(source.join(file)) {
+            Ok(fragment) => fragment,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error.into()),
+        };
+        if fragment != text.as_bytes() {
+            return Ok(false);
+        }
     }
     if source != output {
-        for file in [FRAGMENT, PLACEMENT] {
+        for file in FRAGMENTS.into_iter().chain([PLACEMENT]) {
             std::fs::copy(source.join(file), output.join(file))?;
         }
     }
@@ -114,26 +120,28 @@ mod tests {
         };
         let mut command = Command::new("not-executed");
         configure(&mut command, &spec, root, true).unwrap();
-        assert!(!root.join(FRAGMENT).exists());
-        assert!(!root.join(PLACEMENT).exists());
-        for file in [FRAGMENT, PLACEMENT] {
+        let files = || FRAGMENTS.into_iter().chain([PLACEMENT]);
+        assert!(files().all(|file| !root.join(file).exists()));
+        for file in files() {
             std::fs::write(root.join(file), "preserved").unwrap();
         }
         configure(&mut command, &spec, root, true).unwrap();
-        for file in [FRAGMENT, PLACEMENT] {
+        for file in files() {
             assert_eq!(
                 std::fs::read_to_string(root.join(file)).unwrap(),
                 "preserved"
             );
         }
         configure(&mut command, &spec, root, false).unwrap();
-        assert_eq!(std::fs::read(root.join(FRAGMENT)).unwrap(), b"");
+        for fragment in FRAGMENTS {
+            assert_eq!(std::fs::read(root.join(fragment)).unwrap(), b"");
+        }
         assert!(Placement::read(root).unwrap().functions.is_empty());
     }
 
     #[test]
     fn reused_elf_keeps_its_nonempty_selection_and_fragment_in_the_new_bundle() {
-        use oer_image_checks::linker::strict::{Fingerprint, PlacedFunction};
+        use oer_image_checks::linker::strict::{Fingerprint, PlacedData, PlacedFunction};
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
         let output = root.join("staging");
@@ -161,6 +169,17 @@ mod tests {
                 section_bytes: 8,
                 other_symbols: vec!["neighbour".into()],
             }],
+            data: vec![PlacedData {
+                name: "WRITER".into(),
+                symbol: "WRITER".into(),
+                file: "input.o".into(),
+                section: ".bss.WRITER".into(),
+                section_index: 2,
+                section_bytes: 4,
+                zeroed: true,
+                other_symbols: Vec::new(),
+            }],
+            unmoved: Vec::new(),
             fingerprint: Some(Fingerprint {
                 elf_sha256: digest.clone(),
                 linker_sha256: digest.clone(),
@@ -169,20 +188,25 @@ mod tests {
         };
         let text = toml::to_string(&placement).unwrap();
         std::fs::write(published.join(PLACEMENT), &text).unwrap();
-        std::fs::write(published.join(FRAGMENT), placement.fragment()).unwrap();
+        for (file, text) in placement.fragments() {
+            std::fs::write(published.join(file), text).unwrap();
+        }
         assert!(restore_if_matching(&output, &published, &elf, &specification, &linker).unwrap());
         assert_eq!(
             std::fs::read_to_string(output.join(PLACEMENT)).unwrap(),
             text
         );
-        assert_eq!(
-            std::fs::read_to_string(output.join(FRAGMENT)).unwrap(),
-            placement.fragment()
-        );
+        for (file, text) in placement.fragments() {
+            assert_eq!(std::fs::read_to_string(output.join(file)).unwrap(), text);
+        }
+        assert!(placement.fragments()[2].1.contains(".bss.WRITER"));
         assert_eq!(
             Placement::read(&output).unwrap().functions[0].other_symbols,
             ["neighbour"]
         );
+        // A data fragment that no longer matches its record is not reused.
+        std::fs::write(output.join(FRAGMENTS[2]), "").unwrap();
+        assert!(!restore_if_matching(&output, &published, &elf, &specification, &linker).unwrap());
         std::fs::write(&elf, b"another build").unwrap();
         assert!(!restore_if_matching(&output, &published, &elf, &specification, &linker).unwrap());
     }

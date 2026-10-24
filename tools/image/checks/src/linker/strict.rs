@@ -18,7 +18,17 @@ pub use fingerprint::Fingerprint;
 /// An analysis specification; only links using the runtime script consume it.
 pub const SPEC_ENV: &str = "OER_IMAGE_INTERRUPTS";
 pub const SPEC_FILE: &str = "image-linker.toml";
-pub const FRAGMENT: &str = "strict-text.x";
+/// Strict code, included inside `.isr.text`.
+pub const TEXT_FRAGMENT: &str = "strict-text.x";
+/// Initialized data and constants strict code references, included inside
+/// `.critical.data`.
+pub const DATA_FRAGMENT: &str = "strict-data.x";
+/// Zero-initialized data strict code references, included inside
+/// `.critical.bss`.
+pub const ZEROED_FRAGMENT: &str = "strict-bss.x";
+/// Every fragment the image linker generates, in [`Placement::fragments`]'
+/// order.
+pub const FRAGMENTS: [&str; 3] = [TEXT_FRAGMENT, DATA_FRAGMENT, ZEROED_FRAGMENT];
 pub const PLACEMENT: &str = "strict-placement.toml";
 
 /// The same chip, stack policy and pinned ROM/summaries as the image check.
@@ -59,7 +69,7 @@ impl Spec {
     }
 }
 
-/// An executable input section and the symbols its object actually defines.
+/// An allocated input section and the symbols its object actually defines.
 #[derive(Clone, Debug)]
 pub(super) struct InputSection {
     /// File, or `archive:member`, in LLD's input-file selector syntax.
@@ -67,7 +77,18 @@ pub(super) struct InputSection {
     pub index: usize,
     pub name: String,
     pub size: u64,
+    pub kind: InputKind,
     pub symbols: Vec<String>,
+}
+
+/// What an input section holds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum InputKind {
+    Code,
+    /// Bytes in the file: constants and initialized data.
+    Initialized,
+    /// `NOBITS`: data the boot zeroes.
+    Zeroed,
 }
 
 #[derive(Debug)]
@@ -75,6 +96,25 @@ struct Requested {
     name: String,
     symbols: Vec<String>,
     size: u64,
+}
+
+/// A data object of the image's own that strict code references in cached
+/// memory, and the symbols that define it.
+#[derive(Debug)]
+struct RequestedData {
+    name: String,
+    symbols: Vec<String>,
+}
+
+/// The input sections the image linker moves data from: the compiler's
+/// ordinary data, never a section its source placed by name.
+const MOVABLE_DATA: &[&str] = &[".rodata", ".srodata", ".data", ".sdata", ".bss", ".sbss"];
+
+fn movable_data(name: &str) -> bool {
+    MOVABLE_DATA.iter().any(|prefix| {
+        name.strip_prefix(prefix)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+    })
 }
 
 /// One strict function moved with its whole defining input section.
@@ -91,12 +131,34 @@ pub struct PlacedFunction {
     pub other_symbols: Vec<String>,
 }
 
-/// The linker selection, preserved beside the fragment in the image bundle.
+/// One data object strict code references, moved with its whole defining
+/// input section into `.critical.data` or `.critical.bss`.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlacedData {
+    pub name: String,
+    pub symbol: String,
+    pub file: String,
+    pub section: String,
+    pub section_index: usize,
+    pub section_bytes: u64,
+    /// `NOBITS`: placed in `.critical.bss`.
+    pub zeroed: bool,
+    pub other_symbols: Vec<String>,
+}
+
+/// The linker selection, preserved beside the fragments in the image bundle.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Placement {
     #[serde(default)]
     pub functions: Vec<PlacedFunction>,
+    #[serde(default)]
+    pub data: Vec<PlacedData>,
+    /// Own data strict code references that no movable input section
+    /// defines, with the reason: the interrupt gate reports it.
+    #[serde(default)]
+    pub unmoved: Vec<String>,
     #[serde(default)]
     pub irq_stacks: Vec<super::irq_stacks::Allocation>,
     /// The CPU0 task stack of an image that declares it proven.
@@ -116,7 +178,12 @@ impl Placement {
         }
     }
 
-    fn select(requested: &[Requested], sections: &[InputSection], free: u64) -> Result<Self> {
+    fn select(
+        requested: &[Requested],
+        data: &[RequestedData],
+        sections: &[InputSection],
+        free: u64,
+    ) -> Result<Self> {
         let mut functions = Vec::new();
         let mut moved = BTreeSet::new();
         let mut bytes = 0_u64;
@@ -126,6 +193,7 @@ impl Placement {
             }
             let candidates: Vec<_> = sections
                 .iter()
+                .filter(|section| section.kind == InputKind::Code)
                 .filter(|section| {
                     function
                         .symbols
@@ -183,40 +251,128 @@ impl Placement {
                     .collect(),
             });
         }
+        let mut placed = Vec::new();
+        let mut unmoved = Vec::new();
+        for object in data {
+            let candidates: Vec<_> = sections
+                .iter()
+                .filter(|section| section.kind != InputKind::Code)
+                .filter(|section| {
+                    object
+                        .symbols
+                        .iter()
+                        .any(|symbol| section.symbols.contains(symbol))
+                })
+                .collect();
+            let section = match candidates.as_slice() {
+                [section] => *section,
+                _ => {
+                    unmoved.push(format!(
+                        "{}: {} input sections define it; expected exactly one",
+                        object.name,
+                        candidates.len()
+                    ));
+                    continue;
+                }
+            };
+            if !movable_data(&section.name) {
+                unmoved.push(format!(
+                    "{}: its input section {} is placed by name",
+                    object.name, section.name
+                ));
+                continue;
+            }
+            script_name(&section.name, &object.name, false)?;
+            script_name(&section.file, &object.name, true)?;
+            let symbol = object
+                .symbols
+                .iter()
+                .find(|symbol| section.symbols.contains(symbol))
+                .ok_or("selected section has no defining symbol")?;
+            let group: Vec<_> = sections
+                .iter()
+                .filter(|candidate| {
+                    candidate.file == section.file && candidate.name == section.name
+                })
+                .collect();
+            let section_bytes = group.iter().try_fold(0_u64, |total, section| {
+                total
+                    .checked_add(section.size)
+                    .ok_or("strict input section size overflow")
+            })?;
+            if moved.insert((&section.file, &section.name)) {
+                bytes = bytes
+                    .checked_add(section_bytes)
+                    .ok_or("strict input section size overflow")?;
+            }
+            placed.push(PlacedData {
+                name: object.name.clone(),
+                symbol: symbol.clone(),
+                file: section.file.clone(),
+                section: section.name.clone(),
+                section_index: section.index,
+                section_bytes,
+                zeroed: section.kind == InputKind::Zeroed,
+                other_symbols: group
+                    .iter()
+                    .flat_map(|section| &section.symbols)
+                    .filter(|name| *name != symbol)
+                    .cloned()
+                    .collect(),
+            });
+        }
         if bytes > free {
             return Err(format!("strict input sections need {bytes} bytes; only {free} bytes of SRAM are free (short by {} bytes)", bytes - free).into());
         }
         Ok(Self {
             functions,
+            data: placed,
+            unmoved,
             irq_stacks: Vec::new(),
             task_stack: None,
             fingerprint: None,
         })
     }
 
-    /// Empty when the first link needs no relocation. Exact file and section
-    /// selectors cannot collect a similarly named section from another object.
-    pub fn fragment(&self) -> String {
-        let sections: BTreeSet<_> = self
+    /// The text of each of [`FRAGMENTS`]; each is empty when the first link
+    /// needs no relocation of its kind. Exact file and section selectors
+    /// cannot collect a similarly named section from another object.
+    pub fn fragments(&self) -> [(&'static str, String); 3] {
+        let text = self
             .functions
             .iter()
-            .map(|function| (&function.file, &function.section))
-            .collect();
-        let mut text = String::new();
-        for (file, section) in sections {
-            let _ = writeln!(text, "\"{file}\"(\"{section}\");");
-        }
-        text
+            .map(|function| (&function.file, &function.section));
+        let data = |zeroed: bool| {
+            self.data
+                .iter()
+                .filter(move |object| object.zeroed == zeroed)
+                .map(|object| (&object.file, &object.section))
+        };
+        [
+            (TEXT_FRAGMENT, selectors(text)),
+            (DATA_FRAGMENT, selectors(data(false))),
+            (ZEROED_FRAGMENT, selectors(data(true))),
+        ]
+    }
+
+    /// Whether the first link's layout stands: nothing to move.
+    pub fn moves_nothing(&self) -> bool {
+        self.functions.is_empty() && self.data.is_empty()
     }
 
     pub fn summary(&self) -> String {
+        let zeroed = self.data.iter().filter(|object| object.zeroed).count();
         format!(
-            "strict code placed by the image linker: {} functions, {} bytes\n",
+            "strict code placed by the image linker: {} functions, {} bytes\n\
+             strict data placed by the image linker: {} initialized and {zeroed} zeroed objects; \
+             {} own objects not moved\n",
             self.functions.len(),
             self.functions
                 .iter()
                 .map(|function| function.size)
-                .sum::<u64>()
+                .sum::<u64>(),
+            self.data.len() - zeroed,
+            self.unmoved.len()
         )
     }
 
@@ -234,6 +390,26 @@ impl Placement {
                 function.section_bytes,
                 function.other_symbols.join(", ")
             );
+        }
+        text.push_str("\nStrict data placed by the image linker (whole input sections)\nname\tinput file\tinput section\tsection bytes\toutput\tother symbols of the section\n");
+        for object in &self.data {
+            let _ = writeln!(
+                text,
+                "{}\t{}\t{}\t{}\t{}\t{}",
+                object.name,
+                object.file,
+                object.section,
+                object.section_bytes,
+                if object.zeroed {
+                    ".critical.bss"
+                } else {
+                    ".critical.data"
+                },
+                object.other_symbols.join(", ")
+            );
+        }
+        for unmoved in &self.unmoved {
+            let _ = writeln!(text, "not moved: {unmoved}");
         }
         text
     }
@@ -261,6 +437,16 @@ impl Placement {
     }
 }
 
+/// One `"file"("section");` line per distinct input section.
+fn selectors<'a>(sections: impl Iterator<Item = (&'a String, &'a String)>) -> String {
+    let sections: BTreeSet<_> = sections.collect();
+    let mut text = String::new();
+    for (file, section) in sections {
+        let _ = writeln!(text, "\"{file}\"(\"{section}\");");
+    }
+    text
+}
+
 fn script_name(name: &str, function: &str, file: bool) -> Result<()> {
     if name.is_empty()
         || !name.bytes().all(|byte| {
@@ -270,7 +456,7 @@ fn script_name(name: &str, function: &str, file: bool) -> Result<()> {
         })
     {
         return Err(format!(
-            "strict function {function}: `{name}` requires linker-script escaping"
+            "strict object {function}: `{name}` requires linker-script escaping"
         )
         .into());
     }
@@ -323,7 +509,21 @@ pub(super) fn analyze(
         })?;
         Ok(sum + u64::from(released))
     })?;
-    let mut placement = Placement::select(&requested, sections, placement.free_sram() + released)?;
+    let mut data: Vec<RequestedData> = Vec::new();
+    for (name, symbols) in stacks.strict_data.iter().flat_map(|data| &data.symbols) {
+        if !data.iter().any(|object| &object.name == name) {
+            data.push(RequestedData {
+                name: name.clone(),
+                symbols: symbols.clone(),
+            });
+        }
+    }
+    let mut placement = Placement::select(
+        &requested,
+        &data,
+        sections,
+        placement.free_sram() + released,
+    )?;
     placement.irq_stacks = irq_stacks;
     if spec.task_stack_proven {
         let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;

@@ -315,7 +315,7 @@ mod tests {
             SymbolScope,
             write::{Object, Symbol, SymbolSection},
         };
-        use oer_image_checks::linker::strict::{FRAGMENT, Fingerprint, PLACEMENT, Placement};
+        use oer_image_checks::linker::strict::{Fingerprint, PLACEMENT, Placement};
 
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
@@ -378,7 +378,9 @@ mod tests {
             ..Placement::default()
         };
         std::fs::write(root.join(PLACEMENT), toml::to_string(&placement).unwrap()).unwrap();
-        std::fs::write(root.join(FRAGMENT), placement.fragment()).unwrap();
+        for (file, text) in placement.fragments() {
+            std::fs::write(root.join(file), text).unwrap();
+        }
         for fresh in [false, true] {
             let messages = [
                 serde_json::json!({"reason":"compiler-artifact", "executable":null}),

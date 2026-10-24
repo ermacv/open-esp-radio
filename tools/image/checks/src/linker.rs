@@ -28,7 +28,7 @@ use std::{
 pub(crate) mod irq_stacks;
 pub mod strict;
 pub mod task_stack;
-use strict::InputSection;
+use strict::{InputKind, InputSection};
 
 /// An input section bound for a zeroed region that carries an initializer.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,8 +133,10 @@ fn link(
         .parent()
         .ok_or("image linker specification has no directory")?;
     let output = output_file(arguments).ok_or("runtime link has no -o output ELF")?;
-    // A previous build's fragment must never affect the first pass.
-    std::fs::write(directory.join(strict::FRAGMENT), "")?;
+    // A previous build's fragments must never affect the first pass.
+    for fragment in strict::FRAGMENTS {
+        std::fs::write(directory.join(fragment), "")?;
+    }
     arguments.push("-L".into());
     arguments.push(directory.into());
     let code = run_linker(arguments);
@@ -142,11 +144,13 @@ fn link(
         return Ok(code);
     }
     let placement = strict::analyze(&spec, &output, sections, &mut inputs)?;
-    if !placement.functions.is_empty()
+    if !placement.moves_nothing()
         || !placement.irq_stacks.is_empty()
         || placement.task_stack.is_some()
     {
-        std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
+        for (fragment, text) in placement.fragments() {
+            std::fs::write(directory.join(fragment), text)?;
+        }
         for allocation in &placement.irq_stacks {
             set_defsym(
                 arguments,
@@ -456,12 +460,19 @@ fn check_object(
         return;
     };
     for section in file.sections() {
-        if section.executable && section.size > 0 {
+        if section.allocated && section.size > 0 {
             sections.push(InputSection {
                 file: selector.to_owned(),
                 index: section.index,
                 name: section.name.to_owned(),
                 size: section.size,
+                kind: if section.executable {
+                    InputKind::Code
+                } else if section.nobits {
+                    InputKind::Zeroed
+                } else {
+                    InputKind::Initialized
+                },
                 symbols: file
                     .symbols()
                     .filter(|symbol| symbol.defined && symbol.section == Some(section.index))

@@ -122,6 +122,9 @@ SECTIONS
     KEEP(*(.data.critical .data.critical.*));
     KEEP(*(.critical.data .critical.data.*));
     KEEP(*(.flash.critical.data .flash.critical.data.*));
+    /* The image linker adds the constants and initialized data strict code
+       references through this generated fragment. */
+    INCLUDE strict-data.x
     . = ALIGN(4);
     __runtime_critical_data_end = ABSOLUTE(.);
   } > INTERNAL_LOW
@@ -134,6 +137,9 @@ SECTIONS
     __runtime_critical_bss_start = ABSOLUTE(.);
     KEEP(*(.critical.bss .critical.bss.*));
     KEEP(*(.flash.critical.bss .flash.critical.bss.*));
+    /* The image linker adds the zeroed data strict code references through
+       this generated fragment. */
+    INCLUDE strict-bss.x
     . = ALIGN(64);
     __runtime_critical_bss_end = ABSOLUTE(.);
   } > INTERNAL_LOW

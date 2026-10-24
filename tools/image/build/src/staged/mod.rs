@@ -130,8 +130,8 @@ pub(crate) fn build(
             files::RUNTIME_ELF,
         )?;
         {
-            use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, SPEC_FILE};
-            for file in [FRAGMENT, PLACEMENT, SPEC_FILE] {
+            use oer_image_checks::linker::strict::{FRAGMENTS, PLACEMENT, SPEC_FILE};
+            for file in FRAGMENTS.into_iter().chain([PLACEMENT, SPEC_FILE]) {
                 if !output.join(file).is_file() {
                     return Err(format!("the runtime linker did not produce {file}").into());
                 }

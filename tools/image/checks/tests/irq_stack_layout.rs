@@ -30,7 +30,7 @@ fn link_with_task_stack(
         include_str!("../../../../chips/espressif/staged-layout/linker/runtime/sections.x"),
     )
     .unwrap();
-    for fragment in ["strict-text.x", "dma-window.x"] {
+    for fragment in ["strict-text.x", "strict-data.x", "strict-bss.x", "dma-window.x"] {
         fs::write(path.join(fragment), "").unwrap();
     }
     fs::write(

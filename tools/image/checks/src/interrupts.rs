@@ -24,7 +24,7 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
 mod classes;
-pub use classes::{Breach, CachedData, Finding};
+pub use classes::{Breach, CachedData, Finding, PLATFORM_CRATES};
 mod code;
 pub use code::CodePlacement;
 pub(crate) mod allocation;
@@ -87,7 +87,7 @@ pub struct InterruptStacks {
     /// handler reaches, and which its named violation waives: reported.
     pub waived: Vec<Finding>,
     /// Cached data the strict code of each level and exempt entry
-    /// references: reported, not gated.
+    /// references. The image's own objects fail a product image.
     pub strict_data: Vec<CachedData>,
 }
 
@@ -222,6 +222,32 @@ impl InterruptStacks {
                         ));
                     }
                 }
+            }
+        }
+        for data in self.strict_data.iter().filter(|data| data.own() > 0) {
+            match required {
+                Required::Product => {
+                    return Err(format!(
+                        "strict code of {} references {} of its own objects in cached memory \
+                         ({}):\n{}",
+                        data.subject,
+                        data.own(),
+                        data.writable
+                            .iter()
+                            .chain(&data.read_only)
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        self.render()
+                    )
+                    .into());
+                }
+                Required::Diagnostic => warnings.push(format!(
+                    "{}: {} own objects in cached memory reached from strict code (diagnostic \
+                     image, reported only); see {INTERRUPT_REPORT}",
+                    data.subject,
+                    data.own()
+                )),
             }
         }
         for context in &self.code_placement.contexts {
@@ -440,14 +466,21 @@ impl InterruptStacks {
             }
             let _ = writeln!(
                 out,
-                "strict cached data of {} (reported only): {} references, {} writable objects, {} \
-                 read-only objects",
+                "strict cached data of {}: {} references; own: {} writable, {} read-only; \
+                 esp-hal fork (reported, #561): {}; panic arguments (reported): {}",
                 data.subject,
                 data.references,
                 data.writable.len(),
-                data.read_only.len()
+                data.read_only.len(),
+                data.platform.len(),
+                data.panic_arguments.len()
             );
-            for (kind, objects) in [("writable", &data.writable), ("read-only", &data.read_only)] {
+            for (kind, objects) in [
+                ("writable", &data.writable),
+                ("read-only", &data.read_only),
+                ("esp-hal fork", &data.platform),
+                ("panic arguments", &data.panic_arguments),
+            ] {
                 if !objects.is_empty() {
                     let _ = writeln!(
                         out,
@@ -840,7 +873,23 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
                         .any(|section| section.contains(*target))
                 })
                 .collect();
-        Ok(classes::cached_data(subject, &parsed, &references))
+        let use_of = |function: u32, site: u32, read_only: bool| {
+            if read_only
+                && classes::panic_argument(analysis, names, &parsed, function, site, panic_entry)
+            {
+                classes::Use::PanicArgument
+            } else if dwarf
+                .outer_file(site)
+                .ok()
+                .flatten()
+                .is_some_and(|file| classes::platform_file(&file))
+            {
+                classes::Use::Platform
+            } else {
+                classes::Use::Own
+            }
+        };
+        Ok(classes::cached_data(subject, &parsed, &references, use_of))
     };
     let mut hardware = Vec::new();
     let mut waived = Vec::new();

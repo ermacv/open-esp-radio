@@ -404,6 +404,18 @@ impl Dwarf {
             .collect())
     }
 
+    /// The source file of the outermost function at `address`: the
+    /// function the code there is part of, whatever is inlined into it;
+    /// `None` where the DWARF covers no code or names no file.
+    pub fn outer_file(&self, address: u32) -> Result<Option<String>> {
+        Ok(self
+            .symbolizer
+            .frames(u64::from(address))
+            .map_err(|error| invalid(error.to_string()))?
+            .pop()
+            .and_then(|frame| frame.file))
+    }
+
     /// The qualified name of the type the function entered at `function`
     /// returns, such as `core::task::wake::RawWaker`.
     pub fn return_type(&self, function: u32) -> Option<&str> {

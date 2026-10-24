@@ -265,7 +265,9 @@ fn a_runtime_link_without_a_specification_fails_naming_the_bin() {
         }
     }
     assert!(!output.exists());
-    assert!(!temporary.path().join(strict::FRAGMENT).exists());
+    for fragment in strict::FRAGMENTS {
+        assert!(!temporary.path().join(fragment).exists());
+    }
 }
 
 #[test]
@@ -332,7 +334,9 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
                 .address("_start"),
             Some(0x20000000)
         );
-        assert!(!directory.join(strict::FRAGMENT).exists());
+        for fragment in strict::FRAGMENTS {
+            assert!(!directory.join(fragment).exists());
+        }
         assert!(!directory.join(strict::PLACEMENT).exists());
     }
 }
