@@ -44,6 +44,15 @@ pub enum Assumption {
     ExecutorInvariant,
 }
 
+impl Assumption {
+    /// The assumption's short name, for a report's label.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ExecutorInvariant => "ExecutorInvariant",
+        }
+    }
+}
+
 impl std::fmt::Display for Assumption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {

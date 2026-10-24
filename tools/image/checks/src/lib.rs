@@ -338,6 +338,7 @@ impl Gates {
                     if frames_run {
                         self.frames_of(&image, input, CheckedElf::Runtime, &mut outcome);
                     }
+                    let mut sites = crate::stack::sites::Report::default();
                     if let Some(required) = self.interrupts.filter(|_| interrupts_run) {
                         let result = ran((|| -> Result<()> {
                             let stacks = crate::interrupts::interrupt_stacks_of(&image)?;
@@ -359,6 +360,20 @@ impl Gates {
                                     &format!("hart{}-exception", hart.core),
                                     &hart.exception.bound,
                                 ));
+                            }
+                            for hart in &stacks.harts {
+                                for level in &hart.levels {
+                                    sites.add(
+                                        &image,
+                                        &format!("hart{}-P{}", hart.core, level.level),
+                                        &level.bound,
+                                    );
+                                }
+                                sites.add(
+                                    &image,
+                                    &format!("hart{}-exception", hart.core),
+                                    &hart.exception.bound,
+                                );
                             }
                             std::fs::write(
                                 input
@@ -425,6 +440,9 @@ impl Gates {
                                         sizes.task(&image, stack)?;
                                     }
                                 }
+                                for (label, bound) in audit.roots(input.policy) {
+                                    sites.add(&image, &label, bound);
+                                }
                                 std::fs::write(
                                     input.output.join(crate::stack::RUNTIME_REPORT),
                                     audit.render(),
@@ -447,6 +465,20 @@ impl Gates {
                             Ok(())
                         })());
                         outcome.results.push((STACK.to_owned(), result));
+                    }
+                    if !sites.roots.is_empty() {
+                        sites.write(
+                            input.output,
+                            crate::stack::sites::RUNTIME_REPORT,
+                            crate::stack::sites::RUNTIME_JSON,
+                        )?;
+                        outcome.reports.extend(
+                            [
+                                crate::stack::sites::RUNTIME_REPORT,
+                                crate::stack::sites::RUNTIME_JSON,
+                            ]
+                            .map(str::to_owned),
+                        );
                     }
                 }
                 Err(error) => {
@@ -582,6 +614,15 @@ impl Gates {
                         sizes.task(&image, stack)?;
                     }
                 }
+                let mut sites = crate::stack::sites::Report::default();
+                for (label, bound) in audit.roots(input.policy) {
+                    sites.add(&image, &label, bound);
+                }
+                sites.write(
+                    input.output,
+                    crate::stack::sites::BOOTSTRAP_REPORT,
+                    crate::stack::sites::BOOTSTRAP_JSON,
+                )?;
                 std::fs::write(
                     input.output.join(crate::stack::BOOTSTRAP_REPORT),
                     audit.render(),
@@ -602,6 +643,13 @@ impl Gates {
                     outcome
                         .reports
                         .push(crate::stack::reachability::BOOTSTRAP_REPORT.to_owned());
+                    outcome.reports.extend(
+                        [
+                            crate::stack::sites::BOOTSTRAP_REPORT,
+                            crate::stack::sites::BOOTSTRAP_JSON,
+                        ]
+                        .map(str::to_owned),
+                    );
                     CheckResult::Passed
                 }
                 Ok(None) => CheckResult::MissingContract(

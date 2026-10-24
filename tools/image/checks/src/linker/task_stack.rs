@@ -104,8 +104,9 @@ fn verify_bound(planned: &Allocation, bound: u64) -> Result<()> {
 /// Where a task stack's size came from, for the report.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SizeSource {
-    /// The image declares the stack proven: its bound plus the reserve.
-    ProvenBound,
+    /// The image declares the stack sized from its bound: the bound plus
+    /// the reserve. The report states whether that bound is proven.
+    Bound,
     /// The policy's `allocation_bytes`.
     PolicyAllocation,
     /// The chip layout's default.
@@ -115,7 +116,7 @@ pub enum SizeSource {
 impl SizeSource {
     pub fn of(policy: &StackPolicy, linked: Option<&Allocation>) -> Self {
         if linked.is_some() {
-            Self::ProvenBound
+            Self::Bound
         } else if policy
             .cpu0_task_stack()
             .is_some_and(|stack: &TaskStack| stack.allocation_bytes.is_some())
@@ -130,7 +131,7 @@ impl SizeSource {
 impl std::fmt::Display for SizeSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::ProvenBound => "the proven bound plus the policy's minimum free bytes",
+            Self::Bound => "the bound plus the policy's minimum free bytes",
             Self::PolicyAllocation => "the policy's allocation_bytes",
             Self::ChipDefault => "the chip layout's default",
         })
@@ -169,10 +170,7 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let policy = StackPolicy::load(&root.join("chips/esp32s31/platform/stack.toml")).unwrap();
         assert_eq!(SizeSource::of(&policy, None), SizeSource::ChipDefault);
-        assert_eq!(
-            SizeSource::of(&policy, Some(&planned())),
-            SizeSource::ProvenBound
-        );
+        assert_eq!(SizeSource::of(&policy, Some(&planned())), SizeSource::Bound);
         let mut explicit = policy.clone();
         explicit.cpu0_task_stack_mut().unwrap().allocation_bytes = Some(1 << 20);
         assert_eq!(

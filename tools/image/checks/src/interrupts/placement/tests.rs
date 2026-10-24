@@ -23,6 +23,7 @@ pub(in crate::interrupts) fn facts(address: u32, size: u32) -> FunctionFacts {
         open_exit_target_loads: BTreeMap::new(),
         load_bases: BTreeMap::new(),
         transfers: Vec::new(),
+        code_facts: BTreeMap::new(),
         site_depths: BTreeMap::new(),
         call_arguments: BTreeMap::new(),
         table_bases: BTreeMap::new(),

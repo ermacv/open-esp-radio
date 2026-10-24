@@ -1,4 +1,5 @@
 use super::*;
+use oer_analysis_riscv_stack::{Assumption, Fact};
 
 #[path = "handoff_tests.rs"]
 mod handoff;
@@ -794,12 +795,126 @@ fn a_stack_declared_proven_fails_on_an_unresolved_path_and_otherwise_passes() {
     let mut full = audit_of(&policy, &image);
     full.declared_proven = true;
     assert_eq!(full.check().unwrap(), Vec::<String>::new());
-    assert!(full.render().contains("the image declares them proven"));
+    assert!(
+        full.render()
+            .contains("the image sizes them from their bound")
+    );
     assert!(
         !audit_of(&policy, &image)
             .render()
-            .contains("declares them proven")
+            .contains("sizes them from their bound")
     );
+}
+
+/// The `indirect` root of [`program`] with its stack-slot call resolved to
+/// `leaf` by `fact`.
+fn resolved_through(fact: Fact) -> (tempfile::TempDir, StackPolicy, Image) {
+    let source = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
+    let (directory, policy) = policy_with(&source, ASM_REVIEW);
+    let mut image = image_with_stack(1024);
+    let site = TEXT + 4 * (6 + 3 + 3);
+    image.resolutions.add(site, fact, [TEXT + 4 * 6]);
+    (directory, policy, image)
+}
+
+#[test]
+fn a_bound_is_proven_only_without_an_assumption() {
+    let (_directory, policy, image) = resolved_through(Fact::InterruptTable);
+    let mut audit = audit_of(&policy, &image);
+    audit.size_source = Some(crate::linker::task_stack::SizeSource::Bound);
+    let report = audit.render();
+    assert!(
+        report.contains("`indirect` needs 48 bytes, proven;"),
+        "{report}"
+    );
+    assert!(
+        report.contains("allocated from the proven bound plus"),
+        "{report}"
+    );
+    let (_directory, policy, image) = resolved_through(Fact::WakerVtables);
+    let mut audit = audit_of(&policy, &image);
+    audit.size_source = Some(crate::linker::task_stack::SizeSource::Bound);
+    let report = audit.render();
+    assert!(
+        report.contains("`indirect` needs 48 bytes, conditional (ExecutorInvariant);"),
+        "{report}"
+    );
+    assert!(
+        report.contains("allocated from the conditional (ExecutorInvariant) bound plus"),
+        "{report}"
+    );
+    assert!(!report.contains("proven"), "{report}");
+    // The gate is unchanged: the admitted assumption passes with a warning.
+    assert_eq!(audit.check().unwrap().len(), 1);
+}
+
+#[test]
+fn the_site_report_lists_each_taken_site_with_its_fact_and_assumption() {
+    let site = TEXT + 4 * (6 + 3 + 3);
+    for (fact, kind, assumptions) in [
+        (
+            Fact::WakerVtables,
+            sites::Kind::WakerVtables,
+            vec![Assumption::ExecutorInvariant],
+        ),
+        (Fact::InterruptTable, sites::Kind::InterruptTable, vec![]),
+    ] {
+        let (_directory, policy, image) = resolved_through(fact);
+        let audit = audit_of(&policy, &image);
+        let mut report = sites::Report::default();
+        for (label, bound) in audit.roots(&policy) {
+            report.add(&image, &label, bound);
+        }
+        let [root] = &report.roots[..] else {
+            panic!("one root: {report:?}");
+        };
+        assert_eq!(root.label, "CPU0");
+        assert_eq!(root.root, "indirect");
+        assert_eq!(
+            root.sites,
+            [sites::Site {
+                site,
+                function: "indirect".to_owned(),
+                offset: 0xc,
+                targets: 1,
+                facts: vec![kind],
+                assumptions: assumptions.clone(),
+            }]
+        );
+        assert_eq!(report.totals.sites, 1);
+        assert_eq!(report.totals.by_fact, BTreeMap::from([(kind, 1)]));
+        assert_eq!(report.totals.proven, usize::from(assumptions.is_empty()));
+        let text = report.render();
+        let assumption = if assumptions.is_empty() {
+            "none"
+        } else {
+            "ExecutorInvariant"
+        };
+        assert!(
+            text.contains(&format!(
+                "  {site:#010x}\t1\t{kind:?}\t{assumption}\tindirect+0xc\n"
+            )),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("totals: 1 distinct sites: {kind:?} 1\n")),
+            "{text}"
+        );
+        let json: serde_json::Value = serde_json::to_value(&report).unwrap();
+        assert_eq!(
+            json["roots"][0]["sites"][0]["facts"][0],
+            format!("{kind:?}")
+        );
+    }
+    // A site the machine code resolves by itself is not a fact's site.
+    let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
+    let image = image_with_stack(1024);
+    let audit = audit_of(&policy, &image);
+    let mut report = sites::Report::default();
+    for (label, bound) in audit.roots(&policy) {
+        report.add(&image, &label, bound);
+    }
+    assert!(report.roots[0].sites.is_empty(), "{report:?}");
 }
 
 fn image_with_stack(bytes: u32) -> Image {
