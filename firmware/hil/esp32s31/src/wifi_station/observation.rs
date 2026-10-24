@@ -42,3 +42,48 @@ pub fn counters() -> StationCounters {
         .expect("S31 interrupt stack fits u32"),
     }
 }
+
+#[inline(never)]
+pub fn arp(
+    attempt: super::Attempt,
+    frame: oer_ieee80211_runtime::station_service::ArpFrameObservation,
+) {
+    use owned_embassy_net::wire::{ArpHardware, ArpOperation, ArpPacket, EthernetProtocol};
+    let mut payload = frame.payload;
+    let Ok(packet) = ArpPacket::new_checked(&mut payload) else {
+        return;
+    };
+    if packet.hardware_type() != ArpHardware::Ethernet
+        || packet.protocol_type() != EthernetProtocol::Ipv4
+        || packet.hardware_len() != 6
+        || packet.protocol_len() != 4
+    {
+        return;
+    }
+    let operation = match packet.operation() {
+        ArpOperation::Request => 1,
+        ArpOperation::Reply => 2,
+        _ => return,
+    };
+    let (Ok(sender), Ok(target)) = (
+        packet.source_protocol_addr().try_into(),
+        packet.target_protocol_addr().try_into(),
+    ) else {
+        return;
+    };
+    super::emit(
+        attempt.request,
+        &oer_hil_protocol::wifi::StationArpFrame {
+            epoch: super::EPOCH.load(Relaxed),
+            generation: GENERATION.load(Relaxed),
+            transmitted: frame.transmitted,
+            group_addressed: frame.group_addressed,
+            operation,
+            sender,
+            target,
+            sequence: frame.sequence,
+            packet_number: frame.packet_number,
+            key_id: frame.key_id,
+        },
+    );
+}

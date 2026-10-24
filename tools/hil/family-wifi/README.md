@@ -18,11 +18,15 @@ OER_W4_KEY_CONFORMANCE_RUN=RUN_ID cargo hil run w4 --board s31-a --owner NAME
 ```
 
 The run holds the board, router, passive laptop monitor and exclusive air.
-The managed router must provide `arping` and `tcpdump`; admission checks these
+The managed router must provide native `ip neigh` and `tcpdump`; admission checks these
 before execution and never installs fixture software during qualification.
 It generates the SSID/passphrase, applies WPA2-PSK/CCMP HT20 without HE/PMF,
 then sends `StartStation` at run time. The 100-echo window spans GTK replacement;
-a broadcast ARP must be decoded on the new key. After router deauthentication,
+the tool deletes only the station's neighbor entry and the next measured
+router ping triggers a kernel broadcast ARP. Gate c requires the decoded request
+on the new GTK and the station's ARP reply, each matched to its protected air
+frame by public Sequence Number, PN and KeyID. Missing either frame fails.
+After router deauthentication,
 a fresh association/handshake and a ten-echo window precede final departure.
 Credentials and key material enter no scenario, environment, log or result.
 PTK rekey and SAE are outside this workload.

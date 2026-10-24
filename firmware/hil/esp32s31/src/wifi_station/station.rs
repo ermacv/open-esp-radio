@@ -232,6 +232,7 @@ struct Output<'a, 'id, Path: rp::PoolPath> {
 impl<'id, Path: rp::PoolPath> ServiceOutputSink<'id, Caps, Path> for Output<'_, 'id, Path> {
     fn emit(&mut self, event: ServiceOutput<'id, Caps, Path>) {
         match event {
+            ServiceOutput::ArpFrame(frame) => super::observation::arp(self.attempt, frame),
             ServiceOutput::Notice(machine::StaNotice::Connected { .. }) => {
                 self.link.set(true);
                 self.attempt.publish(StationLinkState::Authorized);

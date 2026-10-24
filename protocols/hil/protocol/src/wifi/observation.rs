@@ -46,6 +46,21 @@ pub struct StationCounters {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct GetStationCounters;
+/// Public correlation fields for an ARP observed before TX encryption or
+/// after validated RX decryption. No MAC address or key material is exported.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StationArpFrame {
+    pub epoch: u32,
+    pub generation: u32,
+    pub transmitted: bool,
+    pub group_addressed: bool,
+    pub operation: u16,
+    pub sender: [u8; 4],
+    pub target: [u8; 4],
+    pub sequence: u16,
+    pub packet_number: u64,
+    pub key_id: u8,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct StationGroupKey {
     pub epoch: u32,

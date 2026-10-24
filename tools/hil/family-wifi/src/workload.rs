@@ -372,7 +372,47 @@ fn traffic(
                     .received_at_micros(&message)
                     .ok_or("GTK observation has no timestamp")?;
                 let before = capture.request(0, GetStationCounters, SHORT)?;
-                w4::broadcast_arp(ssh, w3::network::BRIDGE, address)?;
+                let cursor = capture.event_cursor();
+                let triggered_us = now();
+                w4::refresh_neighbor(ssh, w3::network::BRIDGE, address)?;
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let observe = |transmitted: bool| -> Result<ArpObservation> {
+                    let (message, frame) = capture
+                        .wait_for_after::<StationArpFrame>(
+                            cursor,
+                            deadline.saturating_duration_since(Instant::now()),
+                            |message, frame| {
+                                station.correlates(message)
+                                    && frame.epoch == epoch
+                                    && frame.generation == key.generation
+                                    && frame.transmitted == transmitted
+                                    && frame.group_addressed != transmitted
+                                    && frame.operation == if transmitted { 2 } else { 1 }
+                                    && frame.sender
+                                        == if transmitted {
+                                            address.octets()
+                                        } else {
+                                            router.octets()
+                                        }
+                                    && frame.target
+                                        == if transmitted {
+                                            router.octets()
+                                        } else {
+                                            address.octets()
+                                        }
+                            },
+                        )?
+                        .ok_or("post-GTK broadcast ARP request/station reply missing")?;
+                    Ok(ArpObservation {
+                        received_us: capture
+                            .received_at_micros(&message)
+                            .ok_or("ARP observation has no timestamp")?,
+                        frame,
+                        air_us: None,
+                    })
+                };
+                let request = observe(false)?;
+                let reply = observe(true)?;
                 let after = capture.request(0, GetStationCounters, SHORT)?;
                 if before.group_generation != key.generation
                     || after.group_generation != key.generation
@@ -383,7 +423,12 @@ fn traffic(
                     completed_us,
                     old_key_id: initial.group_key_id,
                     new_key_id: key.key_id,
-                    arp_received_us: now(),
+                    epoch,
+                    previous_generation: initial.group_generation,
+                    generation: key.generation,
+                    triggered_us,
+                    request: Some(request),
+                    reply: Some(reply),
                     arp_frames: after
                         .group_arp_received
                         .saturating_sub(before.group_arp_received),
@@ -541,14 +586,26 @@ fn project(
         dropped_frames: drops,
     });
     if let Some(rekey) = &mut e.rekey {
-        if !frames.iter().any(|frame| {
-            frame.at_us >= rekey.completed_us
-                && frame.at_us <= rekey.arp_received_us
-                && frame.direction == Direction::GroupFromAp
-                && frame.protected
-                && frame.key_id == Some(rekey.new_key_id)
-        }) {
-            rekey.arp_frames = 0;
+        for (observation, direction) in [
+            (&mut rekey.request, Direction::GroupFromAp),
+            (&mut rekey.reply, Direction::FromStation),
+        ] {
+            if let Some(observation) = observation {
+                observation.air_us = frames
+                    .iter()
+                    .find(|frame| {
+                        frame.at_us >= rekey.triggered_us
+                            && frame.at_us.saturating_sub(rekey.triggered_us) <= 5_000_000
+                            && frame.direction == direction
+                            && frame.protected
+                            && !frame.eapol
+                            && (0x20..=0x2f).contains(&frame.subtype)
+                            && frame.key_id == Some(observation.frame.key_id)
+                            && frame.sequence == Some(observation.frame.sequence)
+                            && frame.packet_number == Some(observation.frame.packet_number)
+                    })
+                    .map(|frame| frame.at_us);
+            }
         }
     }
     Ok(())

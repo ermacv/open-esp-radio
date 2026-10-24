@@ -514,6 +514,7 @@ struct ObservedCommandTerminal {
     outcome: StaCommandOutcome,
 }
 enum ObservedOutput {
+    ArpFrame(ArpFrameObservation),
     RxFrameDropped(oer_ieee80211_sta::machine::StaRxError),
     MsduRefused {
         packet: TxMsdu,
@@ -615,6 +616,7 @@ impl<'id, Id: SlotIdentity + 'id> Application<'_, '_, 'id, Id> {
                 ObservedOutput::TxRefused { operation, reason }
             }
             ServiceOutput::Notice(notice) => ObservedOutput::Notice(notice),
+            ServiceOutput::ArpFrame(observation) => ObservedOutput::ArpFrame(observation),
             ServiceOutput::GroupKeyChanged { key_id, replaced } => {
                 ObservedOutput::GroupKeyChanged { key_id, replaced }
             }
@@ -2785,4 +2787,74 @@ fn placed_service_retires_its_banks_on_stop_drained_and_quarantined_ports() {
             true,
         );
     }
+}
+
+#[test]
+fn arp_transmit_observation_matches_the_admitted_mpdu_and_omits_refused_transmits() {
+    run(
+        StaSecurity::Personal {
+            password: oer_ieee80211_rsn::sae::SaePassword::new(b"password").expect("password"),
+            pmk: Pmk::from_bytes(PMK),
+        },
+        |world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate(&mut seen, true).await;
+                world.handshake(&mut seen).await;
+                let send = || {
+                    let frame =
+                        EthernetFrame::from_parts(oer_ieee80211_wire::data::EthernetFrameParts {
+                            destination: ACCESS_POINT_ADDRESS,
+                            source: LOCAL,
+                            ether_type: 0x0806,
+                            payload: &[0x55; 28],
+                        })
+                        .expect("ARP MSDU");
+                    assert!(
+                        world
+                            .stack
+                            .borrow()
+                            .try_send(TxMsdu {
+                                priority: WmmUserPriority::new(0).expect("priority"),
+                                frame,
+                            })
+                            .is_ok()
+                    );
+                };
+                world.refuse_rate.set(true);
+                send();
+                for _ in 0..50 {
+                    yield_now().await;
+                }
+                assert!(
+                    !world
+                        .outputs
+                        .borrow()
+                        .iter()
+                        .any(|event| matches!(event, ObservedOutput::ArpFrame(_)))
+                );
+                world.refuse_rate.set(false);
+                send();
+                let data = world.sent(&mut seen, DATA).await;
+                let header = oer_ieee80211_wire::frame::DecodedHeader::decode(&data.plaintext)
+                    .expect("MPDU header");
+                let sequence = oer_ieee80211_wire::sequence::SequenceNumber::from_sequence_control(
+                    header.sequence_control(),
+                )
+                .get();
+                let outputs = world.outputs.borrow();
+                let observations = outputs
+                    .iter()
+                    .filter_map(|event| match event {
+                        ObservedOutput::ArpFrame(frame) => Some(frame),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(observations.len(), 1);
+                assert!(observations[0].transmitted);
+                assert_eq!(observations[0].sequence, sequence);
+                assert_eq!(Some(observations[0].packet_number), data.packet_number);
+            })
+        },
+    );
 }

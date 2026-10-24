@@ -12,6 +12,8 @@ fn frame(at: u64, direction: Direction, subtype: u8) -> StationFrame {
         replay_counter: None,
         status: None,
         key_id: None,
+        sequence: None,
+        packet_number: None,
     }
 }
 fn handshake(at: u64) -> Vec<StationFrame> {
@@ -44,7 +46,15 @@ fn air() -> Vec<StationFrame> {
     let mut arp = frame(41_000_000, Direction::GroupFromAp, 0x28);
     arp.protected = true;
     arp.key_id = Some(2);
+    arp.sequence = Some(123);
+    arp.packet_number = Some(1);
     out.push(arp);
+    let mut reply = frame(41_002_000, Direction::FromStation, 0x28);
+    reply.protected = true;
+    reply.key_id = Some(0);
+    reply.sequence = Some(124);
+    reply.packet_number = Some(200);
+    out.push(reply);
     out.extend(handshake(121_000_000));
     out.push(frame(140_000_000, Direction::FromStation, 12));
     out
@@ -152,5 +162,40 @@ fn credentials_and_key_material_have_no_place_in_the_run_observation_or_errors()
         let error = serde_json::from_value::<Evidence>(injected)
             .expect_err("key material is not an observation");
         assert!(!error.to_string().contains(password));
+    }
+}
+
+#[test]
+fn unrelated_group_traffic_or_missing_station_reply_cannot_prove_arp() {
+    for mutation in 0..5 {
+        let mut frames = air();
+        match mutation {
+            0 => frames.retain(|f| f.at_us != 41_000_000),
+            1 => frames.retain(|f| f.at_us != 41_002_000),
+            2 => {
+                frames
+                    .iter_mut()
+                    .find(|f| f.at_us == 41_000_000)
+                    .expect("request")
+                    .packet_number = Some(2)
+            }
+            3 => {
+                frames
+                    .iter_mut()
+                    .find(|f| f.at_us == 41_002_000)
+                    .expect("reply")
+                    .sequence = Some(125)
+            }
+            _ => {
+                frames
+                    .iter_mut()
+                    .find(|f| f.at_us == 41_002_000)
+                    .expect("reply")
+                    .protected = false
+            }
+        }
+        let mut e = crate::evidence::test_evidence();
+        project(&mut e, &frames, 0, &connected(), 139_000_000).expect("projection");
+        assert!(!evaluate(&e)[2].passed());
     }
 }

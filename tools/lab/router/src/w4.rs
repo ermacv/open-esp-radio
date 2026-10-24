@@ -12,12 +12,14 @@ use zeroize::Zeroizing;
 /// is committed without restoration, just like the other station settings.
 pub const GROUP_REKEY_SECONDS: u32 = 30;
 
-/// Read-only admission check for the W4 observation tools. Fixture software
-/// installation is separate from a qualification run.
+/// Read-only admission check. Native neighbor operations trigger the kernel's
+/// ARP request on the next echo in the ongoing measured router ping series.
 pub fn verify_observation_tools(remote: &mut dyn Remote) -> Result<()> {
-    let _hidden=Zeroizing::new(remote.run(
-        "command -v arping >/dev/null 2>&1 && command -v tcpdump >/dev/null 2>&1")
-        .map_err(|_| "W4 requires arping and tcpdump on the managed router; fixture setup is outside this run")?);
+    let _hidden = Zeroizing::new(
+        remote
+            .run("ip -4 neigh show >/dev/null 2>&1 && command -v tcpdump >/dev/null 2>&1")
+            .map_err(|_| "W4 requires native ip neigh and tcpdump on the managed router")?,
+    );
     Ok(())
 }
 
@@ -51,10 +53,10 @@ pub fn verify_runtime(remote: &mut dyn Remote, radio: &str, interface: &str) -> 
     Ok(())
 }
 
-/// Broadcast an ARP request to the station after a completed GTK change.
-/// All remote diagnostics remain hidden; reception is proved by target and
-/// air observations, never the arping process's success alone.
-pub fn broadcast_arp(
+/// Remove only the station's neighbor entry. The already running 100-echo
+/// router series supplies the next ping, making the kernel broadcast ARP.
+/// Only observed request/reply frames establish success.
+pub fn refresh_neighbor(
     remote: &mut dyn Remote,
     interface: &str,
     address: std::net::Ipv4Addr,
@@ -63,10 +65,14 @@ pub fn broadcast_arp(
         return Err("invalid W4 ARP selection".to_owned());
     }
     let script = format!(
-        "set +x\narping -b -I {} -c 1 -w 3 {address} >/dev/null 2>&1",
+        "set +x\nip -4 neigh del {address} dev {} >/dev/null 2>&1",
         quote(interface)?
     );
-    let _hidden = Zeroizing::new(remote.run(&script).map_err(|_| "W4 broadcast ARP failed")?);
+    let _hidden = Zeroizing::new(
+        remote
+            .run(&script)
+            .map_err(|_| "W4 neighbor refresh failed")?,
+    );
     Ok(())
 }
 
@@ -130,7 +136,7 @@ mod tests {
                 .contains("secret-passphrase")
         );
         assert!(
-            !broadcast_arp(
+            !refresh_neighbor(
                 &mut remote,
                 "br-oer-w3",
                 "10.231.0.100".parse().expect("IP")
@@ -147,14 +153,39 @@ mod tests {
             scripts: Vec::new(),
         };
         let error = verify_observation_tools(&mut remote).expect_err("fixture tools required");
-        assert!(error.contains("arping"));
+        assert!(error.contains("ip neigh"));
         assert!(!error.contains("private-"));
         assert_eq!(
             remote.scripts,
-            ["command -v arping >/dev/null 2>&1 && command -v tcpdump >/dev/null 2>&1"]
+            ["ip -4 neigh show >/dev/null 2>&1 && command -v tcpdump >/dev/null 2>&1"]
         );
         remote.answer = Ok(String::new());
         verify_observation_tools(&mut remote).expect("read-only admission");
+    }
+
+    #[test]
+    fn neighbor_refresh_removes_only_the_selected_station_without_installing_software() {
+        let mut remote = Scripted {
+            answer: Ok(String::new()),
+            scripts: Vec::new(),
+        };
+        refresh_neighbor(
+            &mut remote,
+            "br-oer-w3",
+            "10.231.0.100".parse().expect("IP"),
+        )
+        .expect("refresh");
+        assert_eq!(
+            remote.scripts,
+            ["set +x\nip -4 neigh del 10.231.0.100 dev br-oer-w3 >/dev/null 2>&1"]
+        );
+        for interface in ["", "br-oer-w3;opkg", "-i"] {
+            assert!(
+                refresh_neighbor(&mut remote, interface, "10.231.0.100".parse().expect("IP"))
+                    .is_err()
+            );
+        }
+        assert_eq!(remote.scripts.len(), 1);
     }
 
     #[test]
