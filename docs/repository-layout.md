@@ -95,7 +95,7 @@ and reports decoded completion/RX values.
 Only the runtime awaits, and it binds to no executor: it takes time from
 `oer-time`'s `Timer` and interrupt signals from `portable/`, spawns nothing
 and returns futures that the composition in `firmware/` spawns. It does not
-depend on `embassy-executor`, `embassy-time`, `embassy-net` or a HAL;
+depend on an executor, `embassy-time`, `embassy-net` or a HAL;
 `embassy-sync` and `embassy-futures` are allowed as executor-independent
 utilities. Embassy itself is bound only in `portable/embassy`, the chip's
 executor and the firmware composition.

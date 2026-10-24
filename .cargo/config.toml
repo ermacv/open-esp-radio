@@ -29,7 +29,10 @@ git-fetch-with-cli = true
 [env]
 # The pinned compiler's public MIR API is shipped in rustc-dev. Only the
 # image reporter may import compiler crates; image builds set their own value.
-RUSTC_BOOTSTRAP = "oer_tool_image_large_values"
+# The firmware crates that declare executor tasks (`tasks!`), and the
+# executor's own tests of the macro, keep each task's future in a static of
+# its own type, `type_alias_impl_trait`.
+RUSTC_BOOTSTRAP = "oer_tool_image_large_values,oer_espressif_executor,oer_firmware_apps_w0,oer_firmware_apps_w1,oer_firmware_apps_w2,oer_firmware_apps_w3,oer_firmware_apps_b0,oer_firmware_hil_esp32s31,oer_firmware_hil_esp32s31_lower_mac,oer_firmware_hil_esp32s31_phy,oer_firmware_hil_esp32c5"
 # Cargo reads this file for every workspace below the repository root,
 # the firmware members included.
 # Staged images keep esp-hal's PMP region setup off: its single

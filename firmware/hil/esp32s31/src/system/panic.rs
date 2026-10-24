@@ -25,7 +25,6 @@ pub(crate) fn queue(request: RequestIdentity) {
 
 /// Acknowledges the request, then panics in thread context: the location
 /// is this file, which the host checks in the next boot's evidence.
-#[embassy_executor::task]
 pub(crate) async fn panic_on_request() {
     let request = PANICS.receive().await;
     let sequence = CONSOLE

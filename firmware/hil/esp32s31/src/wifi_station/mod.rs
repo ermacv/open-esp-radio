@@ -46,7 +46,21 @@ const CONFIG: RadioConfig = RadioConfig {
     cap_dbm: 10,
 };
 
-static RADIO: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    pub(crate) RadioTasks: InterruptExecutor<2> {
+        radio_actor(actor: &'static mut Actor) = radio_actor;
+        driver(boot: radio::Boot, channel: radio::DriverChannel) = radio::drive;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) = console;
+        station_task(work: oer_memory::PlacedFuture<'static, StationWork>) = station_task;
+    }
+}
 
 const LEVELS: LevelOrder<crate::WifiMacToken, crate::RadioToken, crate::ExecutorWake> =
     LevelOrder::new();
@@ -128,10 +142,7 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         SoftwareInterrupt::new(peripherals.FROM_CPU_INTR3),
         interrupts.doorbell,
     );
-    let radio = RADIO
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
+    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
     let mut rng = esp_hal::rng::TrngSource::new(peripherals.RNG);
     if !rng.status().is_healthy() {
@@ -151,10 +162,9 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let entropy = u32::from_le_bytes(tx_bytes);
     CONSOLE.start(boot);
     let (driver_channel, frontend_channel) = radio::channels();
-    if let Ok(task) = radio_actor(actor) {
-        radio.spawn(task);
-    }
-    if let Ok(task) = driver(
+    RadioTasks::radio_actor(&radio, actor).expect("the radio actor's first start");
+    RadioTasks::driver(
+        &radio,
         radio::Boot {
             cell: cells.wifi,
             wifi: partitions.wifi,
@@ -170,23 +180,21 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             entropy,
         },
         driver_channel,
-    ) {
-        radio.spawn(task);
-    }
-    let executor = crate::EXECUTOR.init(crate::Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    )
+    .expect("the driver's first start");
+    let executor = crate::Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     let (usb, _pads) = crate::transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
         let console_work = CONSOLE_WORK.take().future(|| console_future(usb, boot));
-        spawner.spawn(console(console_work).expect("station console task"));
-        spawner
-            .spawn(station_task(frontend_channel, station, seed, nonces).expect("station P1 task"));
+        AppTasks::console(spawner, console_work).expect("station console task");
+        let station_work = STATION_WORK
+            .take()
+            .future(|| station_work_future(frontend_channel, station, seed, nonces));
+        AppTasks::station_task(spawner, station_work).expect("station P1 task");
     })
 }
 
-#[embassy_executor::task]
 async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
@@ -274,19 +282,9 @@ static CONSOLE_WORK: ConstStaticCell<StaticPlace<ConsoleWork>> =
 fn console_future(usb: crate::transport::Usb, boot: u64) -> ConsoleWork {
     console_work(usb, boot)
 }
-type ConsoleTaskFuture = impl core::future::Future<Output = ()>;
-static CONSOLE_TASK: embassy_executor::raw::TaskStorage<ConsoleTaskFuture> =
-    embassy_executor::raw::TaskStorage::new();
-fn console(
-    work: oer_memory::PlacedFuture<'static, ConsoleWork>,
-) -> Result<embassy_executor::SpawnToken<impl Sized>, embassy_executor::SpawnError> {
-    CONSOLE_TASK.spawn(move || console_task_future(work))
-}
-#[define_opaque(ConsoleTaskFuture)]
-fn console_task_future(work: oer_memory::PlacedFuture<'static, ConsoleWork>) -> ConsoleTaskFuture {
-    async move {
-        work.await;
-    }
+/// The console's task: its work lives in its own static place.
+async fn console(work: oer_memory::PlacedFuture<'static, ConsoleWork>) {
+    work.await;
 }
 async fn console_work(usb: crate::transport::Usb, boot: u64) {
     use oer_hil_protocol::base::{Accepted, RejectReason, Rejected};
@@ -339,23 +337,9 @@ async fn console_work(usb: crate::transport::Usb, boot: u64) {
     .await
 }
 
-#[embassy_executor::task]
-async fn driver(boot: radio::Boot, channel: radio::DriverChannel) {
-    radio::drive(boot, channel).await;
-}
-type StationTaskFuture = impl core::future::Future<Output = ()>;
-static STATION_TASK: embassy_executor::raw::TaskStorage<StationTaskFuture> =
-    embassy_executor::raw::TaskStorage::new();
-fn station_task(
-    channel: radio::FrontendChannel,
-    address: [u8; 6],
-    seed: u64,
-    nonces: Placed<'static, SNonceSource>,
-) -> Result<embassy_executor::SpawnToken<impl Sized>, embassy_executor::SpawnError> {
-    let work = STATION_WORK
-        .take()
-        .future(|| station_work_future(channel, address, seed, nonces));
-    STATION_TASK.spawn(move || station_task_future(work))
+/// The station's task: its work lives in its own static place.
+async fn station_task(work: oer_memory::PlacedFuture<'static, StationWork>) {
+    work.await;
 }
 type StationWork = impl core::future::Future<Output = ()>;
 static STATION_WORK: ConstStaticCell<StaticPlace<StationWork>> =
@@ -368,12 +352,6 @@ fn station_work_future(
     nonces: Placed<'static, SNonceSource>,
 ) -> StationWork {
     station_work(channel, address, seed, nonces)
-}
-#[define_opaque(StationTaskFuture)]
-fn station_task_future(work: oer_memory::PlacedFuture<'static, StationWork>) -> StationTaskFuture {
-    async move {
-        work.await;
-    }
 }
 async fn station_work(
     channel: radio::FrontendChannel,

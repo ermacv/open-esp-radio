@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![forbid(unsafe_code)]
+#![feature(type_alias_impl_trait)]
 
 #[cfg(not(feature = "diagnostic-phy"))]
 compile_error!("build the diagnostic-phy image class through cargo hil");
@@ -35,7 +36,7 @@ use static_cell::StaticCell;
 
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<RadioTasks>, Priority2, ProCpu, Executor;
     mac: MacToken = MODEM_ZB_MAC => ieee802154::interrupt, Priority2, ProCpu, Exempt(ExecutorLevel, "the IEEE 802.15.4 engine stays on P2 until its port to P3");
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
@@ -44,8 +45,29 @@ oer_espressif_staged_runtime::interrupt_table! {
 }
 
 const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    RadioTasks: InterruptExecutor<2> {
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        serve_radio(radio: &'static mut radio::Radio) = serve_radio;
+        #[cfg(feature = "diagnostic-radio-health")]
+        serve_radio(radio: &'static mut radio::Radio) = health::startup::serve_radio;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        console(usb: transport::Usb, boot: u64) = console;
+        #[cfg(feature = "diagnostic-radio-health")]
+        console(usb: transport::Usb, boot: u64) = health::startup::console;
+        #[cfg(not(feature = "diagnostic-radio-health"))]
+        dispatch(poster: Poster<Request, Answer>) = dispatch;
+        #[cfg(feature = "diagnostic-radio-health")]
+        dispatch(poster: Poster<Request, Answer>) = health::startup::dispatch;
+    }
+}
 static RADIO: StaticCell<radio::Radio> = StaticCell::new();
 static DOORBELL: Doorbell = Doorbell::new();
 static SLOT: RequestSlot<Request, Answer> = RequestSlot::new(&DOORBELL, 1);
@@ -154,27 +176,23 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
     oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
-    let radio_spawner = RADIO_EXECUTOR
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
-        .start(interrupts.radio, LEVELS);
-    radio_spawner.spawn(serve_radio(radio).expect("radio diagnostic task"));
+    let radio_spawner =
+        InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
+            .start(interrupts.radio, LEVELS);
+    RadioTasks::serve_radio(&radio_spawner, radio).expect("radio diagnostic task");
     let poster = SLOT.claim().expect("one diagnostic requester");
     let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
-    EXECUTOR
-        .init(Executor::<0>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR0,
-        )))
-        .run(interrupts.wake, move |spawner| {
-            spawner.spawn(console(usb, boot).expect("diagnostic console task"));
-            spawner.spawn(dispatch(poster).expect("diagnostic dispatch task"));
-        });
+    Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
+        interrupts.wake,
+        move |spawner| {
+            AppTasks::console(spawner, usb, boot).expect("diagnostic console task");
+            AppTasks::dispatch(spawner, poster).expect("diagnostic dispatch task");
+        },
+    );
 }
 #[cfg(not(feature = "diagnostic-radio-health"))]
-#[embassy_executor::task]
 async fn console(usb: transport::Usb, boot: u64) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
@@ -197,7 +215,6 @@ async fn console(usb: transport::Usb, boot: u64) {
         .await;
 }
 #[cfg(not(feature = "diagnostic-radio-health"))]
-#[embassy_executor::task]
 async fn dispatch(mut poster: Poster<Request, Answer>) {
     loop {
         let (id, request) = REQUESTS.receive().await;
@@ -270,7 +287,6 @@ async fn dispatch(mut poster: Poster<Request, Answer>) {
     }
 }
 #[cfg(not(feature = "diagnostic-radio-health"))]
-#[embassy_executor::task]
 async fn serve_radio(radio: &'static mut radio::Radio) {
     // RX ring authority is core-local and is created only after the P2 spawn.
     let mut capture_rx = None;

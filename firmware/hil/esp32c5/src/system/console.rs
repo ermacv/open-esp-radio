@@ -74,7 +74,6 @@ impl Console {
 
 /// Serve the host until the chip resets. It routes the console's source
 /// before the driver turns async, which requires the route.
-#[embassy_executor::task]
 pub(crate) async fn run(mut console: Console) {
     oer_espressif_esp_hal_irq::enable(&console.route)
         .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));

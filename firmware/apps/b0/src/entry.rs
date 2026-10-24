@@ -17,7 +17,7 @@ mod radio;
 
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<radio::RadioTasks>, Priority2, ProCpu, Executor;
     radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu, Hardware;
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
     doorbell: DoorbellToken = FROM_CPU_INTR3 => irq::doorbell, Priority3, ProCpu, Hardware;
@@ -26,8 +26,6 @@ oer_espressif_staged_runtime::interrupt_table! {
     timer: TimerToken = MODEM_LP_TIMER => irq::timer, Priority3, ProCpu, Hardware;
 }
 type X = InterruptExecutor<2>;
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO_EXECUTOR: StaticCell<X> = StaticCell::new();
 const LEVELS: LevelOrder<PrimaryToken, RadioToken, WakeToken> = LevelOrder::new();
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {

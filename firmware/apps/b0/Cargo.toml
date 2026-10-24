@@ -14,7 +14,6 @@ nb = "1.1.0"
 oer-time = { path = "../../../portable/time" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-embassy-executor = { version = "0.10.0", default-features = false, features = ["nightly"] }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["bluetooth-engine"] }

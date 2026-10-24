@@ -1,47 +1,36 @@
 use core::{marker::PhantomData, task::Context};
 
-use embassy_executor::{SendSpawner, Spawner, raw};
-use esp_hal::{
-    interrupt::{
-        Priority,
-        software::{SoftwareInterrupt, SoftwareInterruptAcknowledger, SoftwareInterruptSender},
-    },
-    peripherals::Interrupt,
-    system::Cpu,
-};
 use oer_interrupt_table::{
     Entry,
     signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor, SignalList},
 };
-
-use crate::task_handle::{CurrentTask, EmbassyTask};
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
-pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = crate::ready::ExecutorIndex::COUNT;
+use crate::chip::{
+    Acknowledger, Cpu, Interrupt, Priority, SOFTWARE_INTERRUPT_COUNT, Sender, SoftwareInterrupt,
+    acknowledge_interrupt, current_core, install_line, raise_interrupt, software_interrupt_source,
+};
+use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
+
 const CORE_COUNT: usize = 2;
-const THREAD_MODE_CONTEXT: usize = 16;
-const INTERRUPT_MODE_CONTEXT: usize = 32;
 const UNASSIGNED_CORE: usize = usize::MAX;
 /// No executor's context runs on the core.
 pub(crate) const NO_EXECUTOR: u8 = u8::MAX;
 
-/// One packed ready-token count and wake flag per software interrupt.
+/// Each thread-mode executor's wake flag: work other than a ready task (an
+/// expired timer, a published deadline) for its next loop.
 #[repr(transparent)]
-struct WorkPending([crate::ready::ReadyState; SOFTWARE_INTERRUPT_COUNT]);
+struct WorkPending([AtomicU8; SOFTWARE_INTERRUPT_COUNT]);
 
-#[allow(
-    unsafe_code,
-    reason = "zero ready counts and wake flags are zero bytes"
-)]
-// SAFETY: ReadyState is transparent over AtomicU8, whose documented
-// representation is u8. Zero means zero ready tokens and a clear wake flag.
+#[allow(unsafe_code, reason = "zero wake flags are zero bytes")]
+// SAFETY: `portable_atomic::AtomicU8` has the in-memory representation of
+// `u8` (its documented guarantee). Zero means a clear wake flag.
 unsafe impl bytemuck::Zeroable for WorkPending {}
 
 oer_memory::zeroed_static! {
     /// Placement: the board linker owns this exported wake-state section.
     #[used]
-    static EMBASSY_WORK_PENDING: WorkPending =
-        zeroed in ".critical.bss.embassy_executor";
+    static WORK_PENDING: WorkPending = zeroed in ".critical.bss.executor";
 }
 
 /// The registered core in the low two bits, plus the current task poll
@@ -51,20 +40,19 @@ oer_memory::zeroed_static! {
     unsafe_code,
     reason = "board linker owns this exported executor core-state section"
 )]
-#[unsafe(link_section = ".critical.data.embassy_executor")]
-static EMBASSY_EXECUTOR_CORE: [AtomicUsize; SOFTWARE_INTERRUPT_COUNT] =
+#[unsafe(link_section = ".critical.data.executor")]
+static EXECUTOR_CORE: [AtomicUsize; SOFTWARE_INTERRUPT_COUNT] =
     [const { AtomicUsize::new(UNASSIGNED_CORE) }; SOFTWARE_INTERRUPT_COUNT];
 
-/// Each software interrupt's raw executor, once it runs: the `id` its tasks'
-/// wakers name, and the executor an interrupt-mode handler polls.
+/// Each executor's ready tasks, one bit each.
 #[used]
 #[allow(
     unsafe_code,
     reason = "board linker owns this exported executor core-state section"
 )]
-#[unsafe(link_section = ".critical.data.embassy_executor")]
-static EMBASSY_EXECUTORS: [AtomicUsize; SOFTWARE_INTERRUPT_COUNT] =
-    [const { AtomicUsize::new(0) }; SOFTWARE_INTERRUPT_COUNT];
+#[unsafe(link_section = ".critical.data.executor")]
+static READY: [Ready; SOFTWARE_INTERRUPT_COUNT] =
+    [const { Ready::new() }; SOFTWARE_INTERRUPT_COUNT];
 
 /// Which executor's context runs on each core now: the software interrupt of
 /// the executor that is polling, or [`NO_EXECUTOR`]. An interrupt-mode
@@ -74,23 +62,29 @@ static EMBASSY_EXECUTORS: [AtomicUsize; SOFTWARE_INTERRUPT_COUNT] =
     unsafe_code,
     reason = "board linker owns this exported executor core-state section"
 )]
-#[unsafe(link_section = ".critical.data.embassy_executor")]
-static EMBASSY_RUNNING: [AtomicU8; CORE_COUNT] = [const { AtomicU8::new(NO_EXECUTOR) }; CORE_COUNT];
+#[unsafe(link_section = ".critical.data.executor")]
+static RUNNING: [AtomicU8; CORE_COUNT] = [const { AtomicU8::new(NO_EXECUTOR) }; CORE_COUNT];
+
+/// The task each executor polls now; only that executor's context reads it,
+/// to name a polling task for its signals.
+static CURRENT: [Current; SOFTWARE_INTERRUPT_COUNT] =
+    [const { Current::new() }; SOFTWARE_INTERRUPT_COUNT];
+
+/// Whether each software interrupt serves a started interrupt-mode executor.
+static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
+    [const { AtomicBool::new(false) }; SOFTWARE_INTERRUPT_COUNT];
 
 /// The executor whose context runs on the current core now.
 pub(crate) fn running() -> u8 {
-    EMBASSY_RUNNING[Cpu::current() as usize].load(Ordering::Relaxed)
+    RUNNING[current_core()].load(Ordering::Relaxed)
 }
 
-/// The software interrupt of the executor whose raw executor has `id`.
-#[inline(never)]
-pub(crate) fn executor_of(id: usize) -> Option<crate::ready::ExecutorIndex> {
-    crate::ready::find_executor(id, |slot| {
-        EMBASSY_EXECUTORS[slot.index()].load(Ordering::Acquire)
-    })
+/// Executor `executor`'s ready mask.
+pub(crate) fn ready(executor: u8) -> Option<&'static Ready> {
+    READY.get(usize::from(executor))
 }
 
-/// Whether the current executor has another queued run token. A wake of the
+/// Whether the current executor has another ready task. A wake of the
 /// running task itself also counts until its next poll, conservatively.
 /// Signal/interrupt facts not yet translated into task wakes are additional
 /// reasons to yield and must be checked by their owner.
@@ -98,46 +92,19 @@ pub(crate) fn executor_of(id: usize) -> Option<crate::ready::ExecutorIndex> {
 /// # Panics
 /// Outside a started executor's polling context.
 pub fn ready_peers() -> bool {
-    let swi = running();
-    EMBASSY_WORK_PENDING
-        .0
-        .get(swi as usize)
+    READY
+        .get(usize::from(running()))
         .expect("ready peers requires a running executor")
-        .ready()
+        .any()
 }
 
-// Share registration validation between both trace hooks.
+// Keep the clock and timestamp publication out of the poll round.
 #[inline(never)]
-fn trace_executor(executor_id: u32) -> crate::ready::ExecutorIndex {
-    executor_of(executor_id as usize).expect("trace event requires a registered executor")
-}
-
-pub(crate) fn task_ready_begin(executor_id: u32) {
-    EMBASSY_WORK_PENDING.0[trace_executor(executor_id).index()].ready_begin();
-}
-pub(crate) fn task_exec_begin(executor_id: u32, task: u32) {
-    let swi = trace_executor(executor_id);
-    EMBASSY_WORK_PENDING.0[swi.index()].exec_begin();
-    CURRENT_TASKS[swi.index()].begin(task);
-    stamp_poll(swi);
-}
-pub(crate) fn task_exec_end(executor_id: u32) {
-    CURRENT_TASKS[trace_executor(executor_id).index()].end();
-}
-
-/// The task each executor polls now, from the trace hooks; only that
-/// executor's context reads it, to name a polling task for its signals.
-static CURRENT_TASKS: [CurrentTask; SOFTWARE_INTERRUPT_COUNT] =
-    [const { CurrentTask::new() }; SOFTWARE_INTERRUPT_COUNT];
-
-// Keep the clock and timestamp publication out of the ready-counter hook.
-// The tail call avoids keeping the hook's frame across the clock read.
-#[inline(never)]
-fn stamp_poll(swi: crate::ready::ExecutorIndex) {
-    let state = &EMBASSY_EXECUTOR_CORE[swi.index()];
-    let now = crate::time_driver::now();
+fn stamp_poll(swi: u8) {
+    let state = &EXECUTOR_CORE[usize::from(swi)];
+    let now = crate::chip::now();
     state.store(
-        crate::ready::poll_stamp(state.load(Ordering::Relaxed), now),
+        crate::poll_stamp::poll_stamp(state.load(Ordering::Relaxed), now),
         Ordering::Release,
     );
 }
@@ -146,28 +113,30 @@ fn stamp_poll(swi: crate::ready::ExecutorIndex) {
 #[inline(never)]
 pub(crate) fn should_yield() -> bool {
     let swi = usize::from(running());
-    let state = EMBASSY_EXECUTOR_CORE
+    let state = EXECUTOR_CORE
         .get(swi)
         .expect("cooperative admission requires a running executor");
-    EMBASSY_WORK_PENDING.0[swi].ready()
-        || esp_hal::interrupt::InterruptStatus::is_pending(software_interrupt_source(swi as u8))
-        || esp_hal::interrupt::InterruptStatus::is_pending(Interrupt::FROM_CPU_INTR3)
+    READY[swi].any()
+        || crate::chip::is_pending(software_interrupt_source(swi as u8))
+        || crate::chip::is_pending(Interrupt::FROM_CPU_INTR3)
         || signal_pending(swi)
         || {
-            let now = crate::time_driver::now();
-            crate::ready::poll_elapsed(state.load(Ordering::Acquire), now)
-                >= crate::ready::POLL_ADMISSION_MICROS
+            let now = crate::chip::now();
+            crate::poll_stamp::poll_elapsed(state.load(Ordering::Acquire), now)
+                >= crate::poll_stamp::POLL_ADMISSION_MICROS
         }
 }
 fn signal_pending(swi: usize) -> bool {
-    if !EMBASSY_EXECUTORS_MODE[swi].load(Ordering::Acquire) {
-        return false;
-    }
-    let pending = match swi {
-        0 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
-        1 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
-        2 => oer_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
-        _ => oer_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
+    let interrupt_mode = INTERRUPT_MODE[swi].load(Ordering::Acquire);
+    let pending = match (interrupt_mode, swi) {
+        (true, 0) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<0>>(),
+        (true, 1) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<1>>(),
+        (true, 2) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<2>>(),
+        (true, _) => oer_interrupt_table::signal::has_pending::<InterruptExecutor<3>>(),
+        (false, 0) => oer_interrupt_table::signal::has_pending::<Executor<0>>(),
+        (false, 1) => oer_interrupt_table::signal::has_pending::<Executor<1>>(),
+        (false, 2) => oer_interrupt_table::signal::has_pending::<Executor<2>>(),
+        (false, _) => oer_interrupt_table::signal::has_pending::<Executor<3>>(),
     };
     match pending {
         Ok(pending) => pending,
@@ -177,89 +146,34 @@ fn signal_pending(swi: usize) -> bool {
 
 /// Run `poll` as executor `swi`'s context and restore the preempted one.
 fn as_running(swi: u8, poll: impl FnOnce()) {
-    let running = &EMBASSY_RUNNING[Cpu::current() as usize];
+    let running = &RUNNING[current_core()];
     let preempted = running.swap(swi, Ordering::Relaxed);
     poll();
     running.store(preempted, Ordering::Relaxed);
 }
 
-// The sender is published once for wakers; only the line's ISR borrows
-// its acknowledger. Boot resets the line before either half is published.
-enum Sender {
-    Zero(SoftwareInterruptSender<'static, 0>),
-    One(SoftwareInterruptSender<'static, 1>),
-    Two(SoftwareInterruptSender<'static, 2>),
-    Three(SoftwareInterruptSender<'static, 3>),
-}
-enum Acknowledger {
-    Zero(SoftwareInterruptAcknowledger<'static, 0>),
-    One(SoftwareInterruptAcknowledger<'static, 1>),
-    Two(SoftwareInterruptAcknowledger<'static, 2>),
-    Three(SoftwareInterruptAcknowledger<'static, 3>),
-}
-static SENDERS: [oer_memory::zeroed::ZeroedOnce<Sender>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { oer_memory::zeroed::ZeroedOnce::new() }; SOFTWARE_INTERRUPT_COUNT];
-static ACK_STORAGE: [static_cell::StaticCell<Acknowledger>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { static_cell::StaticCell::new() }; SOFTWARE_INTERRUPT_COUNT];
-static ACKNOWLEDGERS: [oer_memory::HandlerCell<Acknowledger>; SOFTWARE_INTERRUPT_COUNT] =
-    [const { oer_memory::HandlerCell::new() }; SOFTWARE_INTERRUPT_COUNT];
-
-impl Acknowledger {
-    fn reset(&mut self) {
-        match self {
-            Self::Zero(ack) => ack.reset(),
-            Self::One(ack) => ack.reset(),
-            Self::Two(ack) => ack.reset(),
-            Self::Three(ack) => ack.reset(),
-        }
-    }
+/// One poll round of executor `T::EXECUTOR`, in its context: whether a task
+/// is ready again.
+fn poll_tasks<T: Tasks>() -> bool {
+    let swi = T::EXECUTOR;
+    crate::task::poll_round::<T>(&READY[usize::from(swi)], &CURRENT[usize::from(swi)], || {
+        stamp_poll(swi)
+    })
 }
 
-fn install_line(
-    senders: &'static oer_memory::zeroed::ZeroedOnce<Sender>,
-    acknowledger: &'static oer_memory::HandlerCell<Acknowledger>,
-    storage: &'static static_cell::StaticCell<Acknowledger>,
-    sender: Sender,
-    mut ack: Acknowledger,
-) {
-    ack.reset();
-    assert!(
-        senders.get().is_none(),
-        "software interrupt owner is already installed"
-    );
-    let _sender = senders.get_or_init(|| sender);
-    assert!(
-        acknowledger.install(storage.init(ack)).is_ok(),
-        "software interrupt acknowledger is already installed"
-    );
-}
-
-#[inline(always)]
-fn raise_interrupt(swi: u8) {
-    let raised = SENDERS
-        .get(usize::from(swi))
-        .and_then(oer_memory::zeroed::ZeroedOnce::get)
-        .map(|sender| match sender {
-            Sender::Zero(sender) => sender.raise(),
-            Sender::One(sender) => sender.raise(),
-            Sender::Two(sender) => sender.raise(),
-            Sender::Three(sender) => sender.raise(),
-        });
-    assert!(
-        raised.is_some(),
-        "software interrupt sender is installed before use"
-    );
-}
-
-#[inline(always)]
-fn acknowledge_interrupt(swi: u8) {
-    assert!(
-        ACKNOWLEDGERS
-            .get(usize::from(swi))
-            .and_then(|ack| ack.with(Acknowledger::reset))
-            .is_some(),
-        "only the installed software interrupt handler acknowledges its line"
-    );
+/// Claim executor `swi` for the current core.
+///
+/// # Panics
+/// When another executor uses the software interrupt.
+fn claim_core(swi: u8) {
+    EXECUTOR_CORE[usize::from(swi)]
+        .compare_exchange(
+            UNASSIGNED_CORE,
+            current_core(),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .unwrap_or_else(|_| panic!("software interrupt {swi} is already used by an executor"));
 }
 
 /// The level of the image's three execution contexts, checked when the image
@@ -402,72 +316,58 @@ impl<Radio, Bell> Clone for SameLevel<Radio, Bell> {
 
 impl<Radio, Bell> Copy for SameLevel<Radio, Bell> {}
 
-/// Scheduler-free thread-mode Embassy executor.
+/// Scheduler-free thread-mode executor.
 ///
 /// One software interrupt is reserved per executor so a waker on another CPU
 /// can wake the sleeping owner without introducing a scheduler or RTOS.
 pub struct Executor<const SWI: u8> {
-    inner: raw::Executor,
     not_send: PhantomData<*mut ()>,
 }
 
 impl<const SWI: u8> Executor<SWI> {
-    /// Run the executor on the calling core, woken through its software
-    /// interrupt: `wake` is that source's token of the image's interrupt table,
-    /// whose entry names [`wake_handler::<SWI>`](wake_handler) on this core.
+    /// Run the tasks `T` on the calling core, woken through the executor's
+    /// software interrupt: `wake` is that source's token of the image's
+    /// interrupt table, whose entry names [`wake_handler::<SWI>`](wake_handler)
+    /// on this core. `init` starts the first tasks.
     ///
     /// # Panics
     ///
     /// When the table routes the source to another core.
-    pub fn run<W>(&'static mut self, wake: W, init: impl FnOnce(Spawner)) -> !
+    pub fn run<T, W>(self, wake: W, init: impl FnOnce(&Spawner<T>)) -> !
     where
+        T: Tasks<Mode = Thread>,
         W: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
     {
         const {
             assert!(
                 W::SOURCE as u16 == software_interrupt_source(SWI) as u16,
                 "the token is not this executor's software interrupt"
-            )
+            );
+            assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
         };
-        let current_core = Cpu::current() as usize;
+        let _ = self.not_send;
         if let Err(error) = oer_espressif_esp_hal_irq::enable(&wake) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
-        EMBASSY_EXECUTOR_CORE[SWI as usize]
-            .compare_exchange(
-                UNASSIGNED_CORE,
-                current_core,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .unwrap_or_else(|_| panic!("software interrupt {SWI} is already used by an executor"));
-        let inner: &'static raw::Executor = &self.inner;
-        EMBASSY_EXECUTORS[SWI as usize].store(inner.id(), Ordering::Release);
-        init(inner.spawner());
+        claim_core(SWI);
+        init(&Spawner::new());
         loop {
-            EMBASSY_WORK_PENDING.0[SWI as usize].clear_work();
+            WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
             as_running(SWI, || {
                 crate::time_driver::service(SWI);
-                #[allow(
-                    unsafe_code,
-                    reason = "the static executor owner is polled only by its run loop"
-                )]
-                // SAFETY: only this non-returning run loop polls `inner`, and
-                // the pender merely marks work and wakes the software
-                // interrupt whose handler only resets it, so `poll` is never
-                // entered reentrantly.
-                unsafe {
-                    inner.poll()
-                };
+                // Raised signals wake their tasks before the round; a signal
+                // raised meanwhile marks the work flag again.
+                oer_interrupt_table::signal::service::<Self>();
+                let _ = poll_tasks::<T>();
             });
             wait_for_work::<SWI>();
         }
     }
 }
 
-/// The signals each interrupt-mode executor's handler services before it
-/// polls; only that executor's context touches its list.
-static SIGNAL_LISTS: [SignalList<EmbassyTask>; SOFTWARE_INTERRUPT_COUNT] =
+/// The signals each executor services before its poll round; only that
+/// executor's context touches its list.
+static SIGNAL_LISTS: [SignalList<TaskId>; SOFTWARE_INTERRUPT_COUNT] =
     [const { SignalList::new() }; SOFTWARE_INTERRUPT_COUNT];
 
 /// Pend the interrupt-mode executor `SWI` for a raised signal: raise its
@@ -481,19 +381,19 @@ fn pend_signal<const SWI: u8>(_: &'static IrqSignal<InterruptExecutor<SWI>>) {
 /// its handler's poll on this core.
 fn signal_context<const SWI: u8>() -> bool {
     running() == SWI
-        && EMBASSY_EXECUTORS_MODE
-            .get(SWI as usize)
+        && INTERRUPT_MODE
+            .get(usize::from(SWI))
             .is_some_and(|interrupt_mode| interrupt_mode.load(Ordering::Acquire))
 }
 
-/// Embassy executor polled in its software interrupt's handler, at that
-/// interrupt's level: the radio executor (P2) on `FROM_CPU` line 2.
+/// Executor polled in its software interrupt's handler, at that interrupt's
+/// level: the radio executor (P2) on `FROM_CPU` line 2.
 ///
-/// Its handler preempts lower levels; a higher level preempts it. A task
-/// spawned on it must be `Send`, since it is created in another context than
-/// the one that polls it.
+/// Its handler preempts lower levels; a higher level preempts it. Its tasks
+/// may start from another context than the one that polls them, so their
+/// futures are `Send`.
 pub struct InterruptExecutor<const SWI: u8> {
-    inner: raw::Executor,
+    _line: (),
 }
 
 #[allow(unsafe_code, reason = "the executor's signal context contract")]
@@ -502,45 +402,80 @@ pub struct InterruptExecutor<const SWI: u8> {
 // `pend_signal::<SWI>` raises that handler's interrupt, which services
 // `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`). `current`
 // names a task only for the waker of the task this executor polls now
-// (`CURRENT_TASKS[SWI]`, set by the trace hooks around each poll); `wake`
-// enqueues the task and pends its executor, never polling it in place.
+// (`CURRENT[SWI]`, set around each poll); `wake` marks the task ready in
+// this executor's mask, which the poll that follows takes, never polling it
+// in place.
 unsafe impl<const SWI: u8> SignalExecutor for InterruptExecutor<SWI> {
-    type Task = EmbassyTask;
+    type Task = TaskId;
     fn pend(signal: &'static IrqSignal<Self>) {
         pend_signal::<SWI>(signal);
     }
     fn running() -> bool {
         signal_context::<SWI>()
     }
-    fn list() -> &'static SignalList<EmbassyTask> {
-        &SIGNAL_LISTS[SWI as usize]
+    fn list() -> &'static SignalList<TaskId> {
+        &SIGNAL_LISTS[usize::from(SWI)]
     }
-    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<EmbassyTask, ForeignTask> {
-        CURRENT_TASKS[SWI as usize]
-            .matching(cx.waker())
-            .ok_or(ForeignTask)
+    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<TaskId, ForeignTask> {
+        crate::task::signal_current(&CURRENT[usize::from(SWI)], SWI, cx)
     }
-    fn wake(task: EmbassyTask, _: &ContextToken) {
-        task.wake();
+    fn wake(task: TaskId, _: &ContextToken) {
+        crate::task::signal_wake(task);
+    }
+}
+
+/// Whether the caller runs in the thread-mode executor `SWI`'s context: its
+/// run loop on its core, not preempted by another executor.
+fn thread_context<const SWI: u8>() -> bool {
+    running() == SWI
+        && INTERRUPT_MODE
+            .get(usize::from(SWI))
+            .is_some_and(|interrupt_mode| !interrupt_mode.load(Ordering::Acquire))
+}
+
+#[allow(unsafe_code, reason = "the executor's signal context contract")]
+// SAFETY: `thread_context::<SWI>` is true only while this executor's run
+// loop runs as its context (`as_running`): one context on one core, which
+// an interrupt preempts but never reenters; a preempting executor sets its
+// own context first. `pend` marks the executor's work and wakes its core,
+// and the loop services `SIGNAL_LISTS[SWI]` before each poll round. A
+// software interrupt serves one executor, so this list is no interrupt
+// executor's. `current` names a task only for the waker of the task this
+// executor polls now; `wake` marks the task ready in this executor's mask,
+// which the round that follows takes, never polling it in place.
+unsafe impl<const SWI: u8> SignalExecutor for Executor<SWI> {
+    type Task = TaskId;
+    fn pend(_: &'static IrqSignal<Self>) {
+        pend(SWI);
+    }
+    fn running() -> bool {
+        thread_context::<SWI>()
+    }
+    fn list() -> &'static SignalList<TaskId> {
+        &SIGNAL_LISTS[usize::from(SWI)]
+    }
+    fn current(cx: &Context<'_>, _: &ContextToken) -> Result<TaskId, ForeignTask> {
+        crate::task::signal_current(&CURRENT[usize::from(SWI)], SWI, cx)
+    }
+    fn wake(task: TaskId, _: &ContextToken) {
+        crate::task::signal_wake(task);
     }
 }
 
 impl<const SWI: u8> InterruptExecutor<SWI> {
-    /// Start polling in the handler of `wake`'s source, whose table entry
-    /// names [`interrupt_handler::<SWI>`](interrupt_handler) on this core.
-    /// `order` proves that this executor's level lies between the radio
-    /// interrupts' and the application's.
+    /// Start polling the tasks `T` in the handler of `wake`'s source, whose
+    /// table entry names [`interrupt_handler::<T>`](interrupt_handler) on
+    /// this core. `order` proves that this executor's level lies between the
+    /// radio interrupts' and the application's. The spawner starts `T`'s
+    /// tasks.
     ///
     /// # Panics
     ///
     /// When the table routes the source to another core, or the software
     /// interrupt already serves an executor.
-    pub fn start<W, High, Low>(
-        &'static mut self,
-        wake: W,
-        order: LevelOrder<High, W, Low>,
-    ) -> SendSpawner
+    pub fn start<T, W, High, Low>(self, wake: W, order: LevelOrder<High, W, Low>) -> Spawner<T>
     where
+        T: Tasks<Mode = InterruptMode>,
         W: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
         High: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
         Low: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
@@ -549,26 +484,18 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
             assert!(
                 W::SOURCE as u16 == software_interrupt_source(SWI) as u16,
                 "the token is not this executor's software interrupt"
-            )
+            );
+            assert!(T::EXECUTOR == SWI, "the tasks are another executor's");
         };
-        let _ = order;
-        EMBASSY_EXECUTOR_CORE[SWI as usize]
-            .compare_exchange(
-                UNASSIGNED_CORE,
-                Cpu::current() as usize,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .unwrap_or_else(|_| panic!("software interrupt {SWI} is already used by an executor"));
-        let inner: &'static raw::Executor = &self.inner;
-        // Published before the source is enabled, so the first handler finds
-        // the executor and a pend raises its interrupt.
-        EMBASSY_EXECUTORS_MODE[SWI as usize].store(true, Ordering::Release);
-        EMBASSY_EXECUTORS[SWI as usize].store(inner.id(), Ordering::Release);
+        let _ = (order, self._line);
+        claim_core(SWI);
+        // Published before the source is enabled, so the first handler polls
+        // and a pend raises its interrupt.
+        INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
         if let Err(error) = oer_espressif_esp_hal_irq::enable(&wake) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
-        inner.spawner().make_send()
+        Spawner::new()
     }
 }
 
@@ -578,14 +505,11 @@ macro_rules! impl_executor_constructors {
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
                 let (sender, ack) = interrupt.split();
                 install_line(
-                    &SENDERS[$number],
-                    &ACKNOWLEDGERS[$number],
-                    &ACK_STORAGE[$number],
+                    $number,
                     Sender::$variant(sender),
                     Acknowledger::$variant(ack),
                 );
                 Self {
-                    inner: raw::Executor::new((THREAD_MODE_CONTEXT + $number) as *mut ()),
                     not_send: PhantomData,
                 }
             }
@@ -595,15 +519,11 @@ macro_rules! impl_executor_constructors {
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
                 let (sender, ack) = interrupt.split();
                 install_line(
-                    &SENDERS[$number],
-                    &ACKNOWLEDGERS[$number],
-                    &ACK_STORAGE[$number],
+                    $number,
                     Sender::$variant(sender),
                     Acknowledger::$variant(ack),
                 );
-                Self {
-                    inner: raw::Executor::new((INTERRUPT_MODE_CONTEXT + $number) as *mut ()),
-                }
+                Self { _line: () }
             }
         }
     };
@@ -614,87 +534,76 @@ impl_executor_constructors!(1, One);
 impl_executor_constructors!(2, Two);
 impl_executor_constructors!(3, Three);
 
-/// The peripheral interrupt source of software interrupt `SWI`.
-pub(crate) const fn software_interrupt_source(swi: u8) -> Interrupt {
-    match swi {
-        0 => Interrupt::FROM_CPU_INTR0,
-        1 => Interrupt::FROM_CPU_INTR1,
-        2 => Interrupt::FROM_CPU_INTR2,
-        _ => Interrupt::FROM_CPU_INTR3,
-    }
-}
-
 /// The interrupt-table handler of a thread-mode executor's software interrupt
 /// (`FROM_CPU_INTR<SWI>`): it wakes the executor.
 pub fn wake_handler<const SWI: u8>() {
     acknowledge_interrupt(SWI);
 }
 
-/// The interrupt-table handler of an interrupt-mode executor's software
-/// interrupt (`FROM_CPU_INTR<SWI>`): it serves the executor's timers and polls
-/// it.
-pub fn interrupt_handler<const SWI: u8>() {
-    acknowledge_interrupt(SWI);
-    let id = EMBASSY_EXECUTORS[SWI as usize].load(Ordering::Acquire);
-    if id == 0 {
+/// The interrupt-table handler of the interrupt-mode executor of the tasks
+/// `T` (its software interrupt, `FROM_CPU_INTR<N>`): it serves the
+/// executor's timers and signals and polls one round of its ready tasks.
+pub fn interrupt_handler<T: Tasks<Mode = InterruptMode>>() {
+    let swi = T::EXECUTOR;
+    acknowledge_interrupt(swi);
+    if !INTERRUPT_MODE[usize::from(swi)].load(Ordering::Acquire) {
         return;
     }
-    #[allow(
-        unsafe_code,
-        reason = "the published id is the address of the started 'static executor"
-    )]
-    // SAFETY: `start` published the address of its `&'static raw::Executor`
-    // before it enabled this source; `raw::Executor::id` is that address.
-    let executor = unsafe { &*(id as *const raw::Executor) };
-    as_running(SWI, || {
-        crate::time_driver::service(SWI);
+    as_running(swi, || {
+        crate::time_driver::service(swi);
         // Raised signals wake their tasks here, in this context, before
         // the poll; a signal raised meanwhile raises this interrupt again.
-        oer_interrupt_table::signal::service::<InterruptExecutor<SWI>>();
-        #[allow(
-            unsafe_code,
-            reason = "only this software interrupt's handler polls the executor"
-        )]
-        // SAFETY: only this handler polls the executor, and the handler does
-        // not reenter itself: a raise during the poll is taken after it
-        // returns.
-        unsafe {
-            executor.poll()
-        };
+        match swi {
+            0 => oer_interrupt_table::signal::service::<InterruptExecutor<0>>(),
+            1 => oer_interrupt_table::signal::service::<InterruptExecutor<1>>(),
+            2 => oer_interrupt_table::signal::service::<InterruptExecutor<2>>(),
+            _ => oer_interrupt_table::signal::service::<InterruptExecutor<3>>(),
+        }
+        // A task woken during the round is polled in the next run of this
+        // handler, after the timers and signals.
+        if poll_tasks::<T>() {
+            raise_interrupt(swi);
+        }
     });
 }
 
 #[inline(always)]
 pub(crate) fn mark_work(swi: u8) {
-    EMBASSY_WORK_PENDING.0[swi as usize].mark_work();
+    WORK_PENDING.0[usize::from(swi)].store(1, Ordering::Release);
 }
 
-/// Make executor `swi` poll again: a thread-mode executor sees its work flag
+/// Make executor `swi` run again: a thread-mode executor sees its work flag
 /// at its next wake, an interrupt-mode executor's handler runs.
 pub(crate) fn pend(swi: u8) {
-    if EMBASSY_EXECUTORS_MODE[swi as usize].load(Ordering::Acquire) {
+    if INTERRUPT_MODE[usize::from(swi)].load(Ordering::Acquire) {
         raise_interrupt(swi);
         return;
     }
     mark_work(swi);
     let target_core =
-        crate::ready::assigned_core(EMBASSY_EXECUTOR_CORE[swi as usize].load(Ordering::Acquire));
-    if target_core.is_some_and(|core| core != Cpu::current() as usize) {
+        crate::poll_stamp::assigned_core(EXECUTOR_CORE[usize::from(swi)].load(Ordering::Acquire));
+    if target_core.is_some_and(|core| core != current_core()) {
         raise_interrupt(swi);
     }
 }
 
-/// Whether each software interrupt serves an interrupt-mode executor.
-static EMBASSY_EXECUTORS_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
-    [const { AtomicBool::new(false) }; SOFTWARE_INTERRUPT_COUNT];
+/// Pend executor `swi` for a task its ready mask holds. In the executor's
+/// own context the round's end sees the mask and needs no pend.
+pub(crate) fn pend_task(swi: u8) {
+    if running() != swi {
+        pend(swi);
+    }
+}
 
 fn wait_for_work<const SWI: u8>() {
     riscv::interrupt::free(|| {
-        if !EMBASSY_WORK_PENDING.0[SWI as usize].work() {
+        if WORK_PENDING.0[usize::from(SWI)].load(Ordering::Acquire) == 0
+            && !READY[usize::from(SWI)].any()
+        {
             #[cfg(oer_profile)]
-            crate::idle_accounting::add_wait(SWI as usize);
+            crate::idle_accounting::add_wait(usize::from(SWI));
             #[cfg(not(oer_profile))]
-            esp_hal::interrupt::wait_for_interrupt();
+            crate::chip::wait_for_interrupt();
         }
     });
 }
@@ -702,8 +611,8 @@ fn wait_for_work<const SWI: u8>() {
 /// The core executor `executor` runs on, once it runs.
 #[cfg(oer_profile)]
 pub(crate) fn executor_core(executor: usize) -> Option<usize> {
-    let core = EMBASSY_EXECUTOR_CORE[executor].load(Ordering::Acquire);
-    crate::ready::assigned_core(core)
+    let core = EXECUTOR_CORE[executor].load(Ordering::Acquire);
+    crate::poll_stamp::assigned_core(core)
 }
 
 /// Raise the software interrupt of the running executor `executor`, waking
@@ -712,19 +621,5 @@ pub(crate) fn executor_core(executor: usize) -> Option<usize> {
 pub(crate) fn raise(executor: usize) {
     if executor_core(executor).is_some() {
         raise_interrupt(executor as u8);
-    }
-}
-
-#[allow(
-    unsafe_code,
-    reason = "Embassy requires this unique global pender ABI symbol"
-)]
-#[unsafe(export_name = "__pender")]
-fn embassy_pender(context: *mut ()) {
-    let context = context as usize;
-    let swi = (context % THREAD_MODE_CONTEXT) as u8;
-    match context {
-        16..=19 | 32..=35 => pend(swi),
-        _ => unreachable!("invalid Embassy executor context"),
     }
 }

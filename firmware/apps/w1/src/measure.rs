@@ -439,7 +439,6 @@ pub const P1_STRESS_PERIOD: Duration = Duration::from_micros(113);
 /// The radio executor's timer windows: the window phase as the baseline,
 /// then the stress phase with a timer every 37 µs. Each window's report is
 /// sent to the application.
-#[embassy_executor::task]
 pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
     if reached(Phase::Window).await == Phase::Window {
         let window = Window::begin();

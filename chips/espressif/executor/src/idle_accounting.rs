@@ -124,7 +124,7 @@ mod chip {
         /// Placement: the board linker owns this exported executor-state
         /// section.
         #[used]
-        static IDLE: Counters = zeroed in ".critical.bss.embassy_executor";
+        static IDLE: Counters = zeroed in ".critical.bss.executor";
     }
 
     impl Counter {
@@ -176,7 +176,7 @@ mod chip {
         let counter = &IDLE.0[executor];
         counter.waiting.store(true, Ordering::Release);
         let before = riscv::register::mcycle::read64();
-        esp_hal::interrupt::wait_for_interrupt();
+        crate::chip::wait_for_interrupt();
         let after = riscv::register::mcycle::read64();
         // Cleared before the update, so a sampler that sees the wait
         // always sees the update that ends it.

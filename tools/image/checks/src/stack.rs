@@ -559,7 +559,7 @@ impl StackAudit {
             let mut task_bounds = Vec::new();
             if stacks.iter().any(|(name, _)| *name == "CPU0 task stack") {
                 for (&address, name) in &image.names {
-                    if name.contains("TaskStorage<") && name.ends_with("::poll") {
+                    if oer_analysis_riscv_stack::is_task_poll(name) {
                         task_bounds.push(image.analysis.bound_with(
                             address,
                             &image.resolutions,

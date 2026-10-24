@@ -61,27 +61,23 @@ pub(crate) fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     radio.set_health_boot(boot);
     oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
     oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
-    let radio_spawner = RADIO_EXECUTOR
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
-        .start(interrupts.radio, LEVELS);
-    radio_spawner.spawn(serve_radio(radio).expect("radio diagnostic task"));
+    let radio_spawner =
+        InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
+            .start(interrupts.radio, LEVELS);
+    RadioTasks::serve_radio(&radio_spawner, radio).expect("radio diagnostic task");
     let poster = SLOT.claim().expect("one diagnostic requester");
     let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
-    EXECUTOR
-        .init(Executor::<0>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR0,
-        )))
-        .run(interrupts.wake, move |spawner| {
-            spawner.spawn(console(usb, boot).expect("diagnostic console task"));
-            spawner.spawn(dispatch(poster).expect("diagnostic dispatch task"));
-        });
+    Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
+        interrupts.wake,
+        move |spawner| {
+            AppTasks::console(spawner, usb, boot).expect("diagnostic console task");
+            AppTasks::dispatch(spawner, poster).expect("diagnostic dispatch task");
+        },
+    );
 }
 
-#[embassy_executor::task]
 pub(crate) async fn console(usb: transport::Usb, boot: u64) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| {
         feature == "diagnostic-phy" || feature == "diagnostic-radio-health"
@@ -114,7 +110,6 @@ pub(crate) async fn console(usb: transport::Usb, boot: u64) {
         .await;
 }
 
-#[embassy_executor::task]
 pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
     let mut health_poster = HEALTH_SLOT.claim().expect("one health requester");
     loop {
@@ -198,7 +193,6 @@ pub(crate) async fn dispatch(mut poster: Poster<Request, Answer>) {
     }
 }
 
-#[embassy_executor::task]
 pub(crate) async fn serve_radio(radio: &'static mut radio::Radio) {
     // RX ring authority is core-local and is created only after the P2 spawn.
     let mut capture_rx = None;

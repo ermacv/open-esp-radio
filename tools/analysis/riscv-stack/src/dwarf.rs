@@ -556,22 +556,6 @@ impl Dwarf {
         }
         found
     }
-
-    /// Whether any concrete copy, out-of-line or inlined as in
-    /// [`Self::instances`], has a demangled path matching `matches`.
-    pub(crate) fn has_instance(
-        &self,
-        matches: impl Fn(&str) -> bool,
-        control: &mut dyn RunControl,
-    ) -> Result<bool> {
-        for &(_, origin) in &self.copies {
-            control.checkpoint(1)?;
-            if self.paths.get(&origin).is_some_and(|name| matches(name)) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
 }
 
 #[cfg(test)]

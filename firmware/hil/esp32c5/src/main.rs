@@ -2,7 +2,7 @@
 //!
 //! The platform bootstrap stages this runtime into PSRAM and enters it at
 //! `_runtime_start` (`oer-espressif-staged-runtime`), which calls
-//! [`runtime_main`]. It runs the scheduler-free Embassy executor of
+//! [`runtime_main`]. It runs the scheduler-free static executor of
 //! `oer-espressif-executor` on the image's interrupt table. Each image
 //! selects one feature: `boot-smoke` proves the boot path with text lines,
 //! `system-watchdog` serves the HIL protocol with the SoC deadline watchdog
@@ -11,6 +11,7 @@
 #![no_std]
 #![no_main]
 #![forbid(unsafe_code)]
+#![feature(type_alias_impl_trait)]
 
 #[cfg(not(any(feature = "boot-smoke", feature = "system-watchdog")))]
 compile_error!("select the boot-smoke or system-watchdog image");
@@ -19,7 +20,6 @@ compile_error!("boot-smoke and system-watchdog are separate images");
 
 use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_espressif_executor::Executor;
-use static_cell::StaticCell;
 
 #[cfg(feature = "boot-smoke")]
 mod boot_smoke;
@@ -29,7 +29,7 @@ mod boot_smoke_rearm;
 mod system;
 
 oer_espressif_staged_runtime::interrupt_table! {
-    /// Wakes the Embassy executor.
+    /// Wakes the executor.
     wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
     /// The Embassy time driver's alarm (system timer comparator 0).
     alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu, Hardware;
@@ -39,7 +39,15 @@ oer_espressif_staged_runtime::interrupt_table! {
         Exempt(WakerCall, "esp-hal async USB console wakes its task waker; removed by #441");
 }
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
+oer_espressif_executor::tasks! {
+    /// The image's one task.
+    AppTasks: Executor<0> {
+        #[cfg(feature = "boot-smoke")]
+        smoke(console: boot_smoke::Console) = boot_smoke::run;
+        #[cfg(feature = "system-watchdog")]
+        serve(console: system::console::Console) = system::console::run;
+    }
+}
 
 // The image's record of a panic, which the platform's panic entry calls
 // after its own record and before it resets the chip: the post-mortem's
@@ -66,9 +74,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
     oer_espressif_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
-    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     #[cfg(feature = "boot-smoke")]
     let console = boot_smoke::start(peripherals.USB_DEVICE);
     #[cfg(feature = "system-watchdog")]
@@ -81,9 +87,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
         #[cfg(feature = "boot-smoke")]
-        spawner.spawn(boot_smoke::run(console).expect("the smoke task's storage is free once"));
+        AppTasks::smoke(spawner, console).expect("the smoke task's first start");
         #[cfg(feature = "system-watchdog")]
-        spawner
-            .spawn(system::console::run(console).expect("the console task's storage is free once"));
+        AppTasks::serve(spawner, console).expect("the console task's first start");
     })
 }

@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 #![forbid(unsafe_code)]
+#![feature(type_alias_impl_trait)]
 
 mod irq;
 mod report;
@@ -35,7 +36,7 @@ include!(concat!(env!("OUT_DIR"), "/w2_config.rs"));
 
 oer_espressif_staged_runtime::interrupt_table! {
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu, Hardware;
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu, Executor;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<RadioTasks>, Priority2, ProCpu, Executor;
     doorbell: DoorbellToken = FROM_CPU_INTR3 => crate::irq::doorbell, Priority3, ProCpu, Hardware;
     wifi_mac: WifiMacToken = MODEM_WIFI_MAC => crate::irq::wifi_mac, Priority3, ProCpu, Hardware;
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu, Hardware;
@@ -43,8 +44,26 @@ oer_espressif_staged_runtime::interrupt_table! {
     app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu, Hardware;
 }
 
-static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static RADIO: StaticCell<InterruptExecutor<2>> = StaticCell::new();
+/// The application's console.
+type Console = UsbSerialJtag<'static, esp_hal::Blocking>;
+
+oer_espressif_executor::tasks! {
+    /// The radio executor's tasks (P2).
+    RadioTasks: InterruptExecutor<2> {
+        radio_actor(actor: &'static mut Actor) = radio_actor;
+        scanner(boot: scan::Boot) = scan::scanner;
+    }
+}
+
+oer_espressif_executor::tasks! {
+    /// The application executor's tasks.
+    AppTasks: Executor<0> {
+        reporting(
+            console: Console,
+            receiver: AffineSpscReceiver<'static, report::Report, 1>,
+        ) = reporting;
+    }
+}
 static REPORT: StaticCell<AffineSpscQueue<report::Report, 1>> = StaticCell::new();
 const LEVELS: LevelOrder<WifiMacToken, RadioToken, WakeToken> = LevelOrder::new();
 static ACTOR: StaticCell<Actor> = StaticCell::new();
@@ -130,51 +149,39 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         SoftwareInterrupt::new(peripherals.FROM_CPU_INTR3),
         interrupts.doorbell,
     );
-    let radio = RADIO
-        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
-            peripherals.FROM_CPU_INTR2,
-        )))
+    let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
     let (sender, receiver) = REPORT.init(AffineSpscQueue::new()).split();
-    if let Ok(task) = radio_actor(actor) {
-        radio.spawn(task);
-    }
-    if let Ok(task) = scan::scanner(scan::Boot {
-        cell: cells.wifi,
-        wifi: partitions.wifi,
-        rng: RngOwner::new(peripherals.RNG),
-        station,
-        ap,
-        config,
-        routes: irq::ImageRoutes {
-            mac: interrupts.wifi_mac,
-            power: interrupts.wifi_pwr,
+    RadioTasks::radio_actor(&radio, actor).expect("the radio actor's first start");
+    RadioTasks::scanner(
+        &radio,
+        scan::Boot {
+            cell: cells.wifi,
+            wifi: partitions.wifi,
+            rng: RngOwner::new(peripherals.RNG),
+            station,
+            ap,
+            config,
+            routes: irq::ImageRoutes {
+                mac: interrupts.wifi_mac,
+                power: interrupts.wifi_pwr,
+            },
+            bell,
+            sender,
         },
-        bell,
-        sender,
-    }) {
-        radio.spawn(task);
-    }
-    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
+    )
+    .expect("the scanner's first start");
+    let executor = Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0));
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
-        if let Ok(task) = reporting(console, receiver) {
-            spawner.spawn(task);
-        }
+        AppTasks::reporting(spawner, console, receiver).expect("the report's first start");
     })
 }
 
-#[embassy_executor::task]
 async fn radio_actor(actor: &'static mut Actor) {
     match actor.run().await {}
 }
-#[embassy_executor::task]
-async fn reporting(
-    mut console: UsbSerialJtag<'static, esp_hal::Blocking>,
-    receiver: AffineSpscReceiver<'static, report::Report, 1>,
-) {
+async fn reporting(mut console: Console, receiver: AffineSpscReceiver<'static, report::Report, 1>) {
     let mut result = loop {
         if let Ok(report) = receiver.try_receive() {
             break report;

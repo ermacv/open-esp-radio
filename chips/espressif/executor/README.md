@@ -56,6 +56,24 @@ static resources and owns the protocol lifecycles within the [documented
 capability boundaries](../../esp32s31/FEATURES.md). No firmware depends on a
 second runtime owner hidden in a task or network handle.
 
+## Tasks
+
+Each executor's tasks are declared once in the image, by `tasks!`, as a set
+bound to that executor by type (`InterruptExecutor<N>` or `Executor<N>`).
+Each task's future lives in a static slot of its own type; a start writes it
+in place, once: a second start is refused (`AlreadyStarted`). The executor
+keeps one ready bit per task (at most `MAX_TASKS`), polls each task ready
+when a round starts once, by a direct call per task, and drops a finished
+task's future in place. A task woken during a round waits for the next one,
+after the executor's timers and signals. An interrupt-mode executor's tasks
+may start from a lower context: the start claims the slot, writes the future
+and only then sets its bit, and its arguments are `Send`. Every waker has one
+vtable, whose data is the executor and the task's index, never a pointer; the
+timer queue keeps one deadline per task by that index. Both executors
+implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
+`TaskId`. The executor's calls into the chip (software interrupts, the wait
+for an interrupt, the core, the system timer's counter) sit in `chip.rs`.
+
 ## Radio interrupt levels
 
 [`executor`](src/lib.rs) (`oer-espressif-executor`) places

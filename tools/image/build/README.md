@@ -275,7 +275,7 @@ from executor task code in PSRAM and name the task roots. A level's class is
 its table entries' (`oer_interrupt_table::Class`): the level of an `Executor`
 entry is the executor's, every other level is hardware. Only an executor's
 level has a task boundary; it comes from
-`TaskPolls`/`NoTasks` resolution facts through `Analysis::reached_cut`; each level
+the executor's task poll sites (`task_poll_sites`) through `Analysis::reached_cut`; each level
 uses the same interrupt routes as its stack bound. Strict code, including the
 exception and panic paths, must lie in SRAM/ROM; executor tasks may also use PSRAM,
 while cached flash fails on both sides under `Required::Product`.

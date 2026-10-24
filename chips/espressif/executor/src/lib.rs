@@ -1,10 +1,12 @@
 #![no_std]
+#![cfg_attr(test, feature(type_alias_impl_trait))]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
-//! Scheduler-free Embassy platform runtime for Espressif staged-boot
-//! applications; a chip feature selects the chip of esp-hal.
+//! Scheduler-free static task executor and time driver for Espressif
+//! staged-boot applications; a chip feature selects the chip of esp-hal.
 //!
-//! This crate owns only executor wake-up and timer-queue integration. It does
+//! This crate owns only task execution, executor wake-up and timer-queue
+//! integration. It does
 //! not own radio policy, board electrical parameters, credentials, sockets or
 //! a host protocol. Timer observations, idle accounting and poll timing,
 //! compiled for an image that declares the profile class (`cfg(oer_profile)`),
@@ -12,11 +14,14 @@
 //! software interrupt capabilities and the system timer explicitly, with the
 //! tokens of their sources in the image's interrupt table.
 //!
-//! - `Executor<SWI>` runs in thread mode, woken by its software interrupt,
-//!   whose entry names `wake_handler::<SWI>`.
-//! - `InterruptExecutor<SWI>` polls in its software interrupt's handler
-//!   (`interrupt_handler::<SWI>`), at that interrupt's level: the radio
-//!   executor (P2). Starting it takes a `LevelOrder`, which checks when the
+//! - Each executor's tasks are declared by [`tasks!`] into static slots and
+//!   polled by a direct call per task; [`task`] describes the slots, the
+//!   ready mask and the one waker.
+//! - `Executor<SWI>` runs its tasks in thread mode, woken by its software
+//!   interrupt, whose entry names `wake_handler::<SWI>`.
+//! - `InterruptExecutor<SWI>` polls its tasks in its software interrupt's
+//!   handler (`interrupt_handler::<Tasks>`), at that interrupt's level: the
+//!   radio executor (P2). Starting it takes a `LevelOrder`, which checks when the
 //!   image compiles that the radio interrupts preempt it and it preempts the
 //!   application.
 //! - `Doorbell<SWI>` is a software interrupt at the radio interrupts' level
@@ -31,6 +36,8 @@
 //!   `time_driver` has the details.
 
 #[cfg(feature = "chip")]
+mod chip;
+#[cfg(feature = "chip")]
 mod cooperative;
 #[cfg(any(feature = "chip", test))]
 mod deadline_cell;
@@ -40,10 +47,10 @@ mod doorbell;
 mod executor;
 #[cfg(any(feature = "chip", test))]
 mod level;
+#[cfg(any(feature = "chip", test))]
+mod poll_stamp;
 #[cfg(feature = "port-slots")]
 pub mod port_slot;
-#[cfg(any(feature = "chip", test))]
-mod ready;
 #[cfg(feature = "chip")]
 pub use cooperative::Cooperative;
 #[cfg(feature = "chip")]
@@ -54,14 +61,12 @@ pub use cooperative::Cooperative;
 pub mod systimer;
 #[cfg(any(feature = "chip", test))]
 mod systimer_ack;
-#[cfg(any(feature = "chip", all(test, feature = "trace-tests")))]
-mod task_handle;
+#[cfg(any(feature = "chip", test))]
+pub mod task;
 #[cfg(feature = "chip")]
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;
-#[cfg(any(feature = "chip", all(test, feature = "trace-tests")))]
-mod trace;
 
 #[cfg(feature = "chip")]
 pub use doorbell::{Doorbell, DoorbellAcknowledger};
@@ -70,8 +75,8 @@ pub use executor::{
     Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, ready_peers,
     wake_handler,
 };
-#[cfg(feature = "chip")]
-pub use task_handle::EmbassyTask;
+#[cfg(any(feature = "chip", test))]
+pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};
 

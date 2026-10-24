@@ -5,8 +5,16 @@ use oer_hil_protocol::system::InjectPanic;
 
 use crate::transport::CONSOLE;
 
+oer_espressif_executor::tasks! {
+    /// The panic-reset image's tasks.
+    PanicResetTasks: Executor<0> {
+        panic_on_request() = super::panic::panic_on_request;
+        run(usb: crate::transport::Usb, boot: u64) = run;
+    }
+}
+
 pub(crate) fn start(
-    executor: &'static mut crate::Executor<0>,
+    executor: crate::Executor<0>,
     wake: crate::ExecutorWake,
     (usb, _pads): (
         crate::transport::Usb,
@@ -18,12 +26,11 @@ pub(crate) fn start(
     let boot = u64::from_le_bytes(entropy.random_bytes().expect("HIL boot entropy")).max(1);
     CONSOLE.start(boot);
     executor.run(wake, |spawner| {
-        spawner.spawn(super::panic::panic_on_request().expect("panic-reset task"));
-        spawner.spawn(run(usb, boot).expect("system console task"));
+        PanicResetTasks::panic_on_request(spawner).expect("panic-reset task");
+        PanicResetTasks::run(spawner, usb, boot).expect("system console task");
     });
 }
 
-#[embassy_executor::task]
 async fn run(usb: crate::transport::Usb, boot: u64) {
     crate::transport::serve(
         usb,

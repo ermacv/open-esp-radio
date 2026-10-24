@@ -35,7 +35,6 @@ mod relocations;
 mod resolutions;
 mod summaries;
 mod sweep;
-mod task_spawns;
 mod tasks;
 mod trap;
 mod trap_semantics;
@@ -68,7 +67,7 @@ pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
-pub use tasks::task_poll_resolutions;
+pub use tasks::{is_task_poll, task_poll_resolutions};
 pub use trap::{TrapEntry, trap_entry, vector_table};
 pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
 pub use wakers::{waker_resolutions, waker_vtable};
@@ -89,9 +88,7 @@ pub fn image_resolutions<'a>(
     let mut resolutions = waker_resolutions(analysis, dwarf, vtable.as_ref(), keep, control)?;
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;
-    resolutions.extend(task_poll_resolutions(
-        image, analysis, dwarf, types, names, keep, control,
-    )?);
+    resolutions.extend(task_poll_resolutions(analysis, names, keep, control)?);
     resolutions.extend(pointers);
     Ok(resolutions)
 }

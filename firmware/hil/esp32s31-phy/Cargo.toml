@@ -24,7 +24,6 @@ embassy-sync = "0.8.0"
 oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false, features = ["phy", "async-io"] }
 oer-hil-agent = { path = "../../../portable/hil-agent" }
 oer-espressif-esp-hal-irq = { path = "../../../chips/espressif/esp-hal-irq" }
-embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }

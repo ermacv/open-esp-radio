@@ -239,22 +239,15 @@ set of found facts (the waker vtable, field types) is a hole,
   function; otherwise the tail could add missing local predecessors.
 - `Analysis::constant_arguments` reads an argument register's exact value at
   every direct call of a function, complete when `taken_addresses` holds no
-  relocation that takes the function's address other than a transfer: how
-  the task spawn facts read a spawner's constant arguments.
+  relocation that takes the function's address other than a transfer.
 
-`task_poll_resolutions` narrows each executor's poll targets when all uses
-of a task's poll address prove its storage initialization and executor
-assignment. The executor's publication must dominate the initialization.
-Unknown spawn paths keep the task among every executor's candidates, and
-the completed-task poll remains a candidate for all executors. These facts
-retain the executor invariant assumption described below. When no image
-function is a `TaskStorage<…>::poll` or `poll_exited`, the analysis also checks
-the concrete DWARF instances, out-of-line and inlined, for either kind of
-poll. Only when both catalogs contain none does `Fact::NoTasks` give each
-unresolved dequeue call a proven empty target set: a task header's `poll_fn`
-is set only by its storage's spawn, so no task can enter the queue. The
-resulting numerical bound is conditional on the same executor invariant.
-A DWARF instance without a recognized function keeps the call unresolved.
+`task_poll_resolutions` finds the executor's task polls: the executor
+(`oer-espressif-executor`) polls each declared task by a direct call of
+`oer_espressif_executor::task::poll_task::<F>`, its boundary with the task's
+code, so every direct call of an instance is a task poll site
+(`Resolutions::task_polls`) and the instance is the task's root. The calls
+are direct: a task poll assumes nothing, and an executor's bound reaches only
+its own tasks.
 
 A direct recursive function can be unfolded once when path-sensitive
 instruction facts prove that every self-call passes a payload for which
@@ -332,12 +325,12 @@ the nesting rule checked; one with any is conditional on the rule those
 sites may break.
 
 A bound also names what it assumes (`Bound::assumptions`, `Assumption`): the
-facts found from the image's types but not enumerated whole (field types,
-task polls) rest on the executor invariant, that a task header's `poll_fn` matches its
-storage and an erased pointer is read back as its own type; the interrupt
-table names no assumption, nor does the waker vtable census, which rests
-only on the completeness of the DWARF and relocations and on memory safety
-(above). `HartStack::assumptions` gathers a hart's. A hart with
+facts found from the image's types but not enumerated whole (field types)
+rest on the executor invariant, that an erased pointer is read back as its
+own type; the interrupt table and the executor's direct task polls name no
+assumption, nor does the waker vtable census, which rests only on the
+completeness of the DWARF and relocations and on memory safety (above).
+`HartStack::assumptions` gathers a hart's. A hart with
 a bound and no assumption is proven; with some, conditional on them. The
 firmware gate admits exactly the named ones, each until a change proves it.
 
@@ -368,8 +361,7 @@ predecessor map.
 `Analysis::reached_cut(root, resolutions, cut, keep, control)` uses the same walk as
 `Bound::reached`, stopping at transfers whose instruction sites are in `cut`.
 The function owning a cut site remains reached. `task_poll_sites` obtains the
-dequeue call sites from `Fact::TaskPolls` and `Fact::NoTasks` in `Resolutions`,
-without name or address rules; their resolved targets are task roots. The
+task poll sites from `Resolutions`; their direct targets are task roots. The
 image gate uses each hart/level's own `Stacks::resolutions_for`, including
 its interrupt routes, for both the bound and the cut. A function reachable
 without crossing a task poll remains strict even if a task also calls it.

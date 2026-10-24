@@ -1,6 +1,6 @@
 //! The executor's comparator ownership, independent of esp-hal's UNIT0 latch.
 
-use esp_hal::peripherals::SYSTIMER;
+use crate::chip::SYSTIMER;
 
 /// A hardware comparator; every value names an existing target.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

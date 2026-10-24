@@ -4,7 +4,7 @@ use crate::interrupts::{
     placement::tests::facts,
     tests::{ledger, partial},
 };
-use oer_analysis_riscv_stack::{Fact, TableEntry, Transfer, TransferKind, TrapEntry};
+use oer_analysis_riscv_stack::{TableEntry, Transfer, TransferKind, TrapEntry};
 
 fn transfer(site: u32, target: Option<u32>) -> Transfer {
     Transfer {
@@ -47,7 +47,7 @@ pub(in crate::interrupts) fn fixture(
         transfer(root + 4, Some(shared)),
     ];
     let mut dequeue_facts = facts(dequeue, 32);
-    dequeue_facts.transfers = vec![transfer(dequeue, None)];
+    dequeue_facts.transfers = vec![transfer(dequeue, Some(task))];
     let mut task_facts = facts(task, 32);
     task_facts.transfers = vec![transfer(task, Some(shared))];
     let analysis = Analysis {
@@ -63,7 +63,7 @@ pub(in crate::interrupts) fn fixture(
         summaries: BTreeSet::new(),
     };
     let mut resolutions = Resolutions::new();
-    resolutions.add(dequeue, Fact::TaskPolls, [task]);
+    resolutions.add_task_poll(dequeue);
     let mut level = stacks.harts[0].exception.clone();
     level.level = priority;
     level.bound = analysis
@@ -157,9 +157,9 @@ fn p2_task_psram_and_strict_rom_are_allowed_but_task_flash_is_not() {
         let (stacks, shared, task) = fixture(strict, Location::Psram, 2, Class::Executor);
         assert_eq!(stacks.code_placement.functions[&shared].location, strict);
         assert_eq!(stacks.code_placement.functions[&task].role, Role::Task);
+        // A direct task poll assumes nothing.
         let warnings = stacks.check(Required::Product).unwrap();
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("executor invariant"));
+        assert!(warnings.is_empty(), "{warnings:?}");
         let report = stacks.render();
         assert!(report.contains("strict handler code in cached memory: 0 functions, 0 bytes"));
         assert!(
