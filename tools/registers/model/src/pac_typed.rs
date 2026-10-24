@@ -1366,11 +1366,9 @@ fn render_enumeration(output: &mut String, field: &TypedField<'_>, enumeration: 
         "/// The value's field bits.\n#[inline]\npub const fn bits(self) -> u32 {{\nself as u32\n}}\n"
     );
     let mask = u32::MAX >> (32 - field.width);
-    if enumeration.complete {
-        let (last, rest) = enumeration
-            .variants
-            .split_last()
-            .expect("a complete enumeration has values");
+    if enumeration.complete
+        && let Some((last, rest)) = enumeration.variants.split_last()
+    {
         let arms = rest
             .iter()
             .map(|(variant, value, _)| format!("0x{value:x} => Self::{variant},"))
