@@ -39,7 +39,7 @@ and invariants in `tools/registers/model`. Reviewed model, ownership policy and 
 | --- | --- |
 | [Radio SVD](../registers/published/radio.svd) | Published from the reviewed chip register model and project policy |
 | [raw/src/lib.rs](../pac-raw/src/lib.rs) | Generated svd2rust register accessors from that SVD |
-| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../registers/policy/api.toml), and the `layouts` module of the model's memory layouts (`chips/esp32s31/registers/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts` |
+| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../registers/policy/api.toml), the `layouts` module of the model's memory layouts (`chips/esp32s31/registers/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts`, and the policy's typed register blocks over `oer-mmio` with their partitions and `Claims`, which `RadioPartitions::take` claims once; `WIFI_MAC_INTERFACE_ADDRESS` is the [shared library's block](../../espressif/ieee80211-pac/README.md) at this chip's address |
 | [Radio bindings](../registers/published/radio.bindings.toml) | Published register-to-raw-PAC binding metadata |
 | [src/ownership.rs](src/ownership.rs) and domain modules | Handwritten authority, register-local operations and restricted access |
 

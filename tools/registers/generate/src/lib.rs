@@ -14,7 +14,6 @@ pub mod checks;
 mod drafts;
 mod host;
 mod library;
-mod shared_blocks;
 pub mod signatures;
 pub use drafts::{import_svd, initialize_model};
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -452,7 +451,7 @@ impl ChipPublication {
         let mut api = String::from("#![forbid(unsafe_code)]\n");
         api.push_str(&policy.without_typed_operations().render_facade_rust()?);
         api.push_str(&self.model.render_layouts_rust(&self.memory)?);
-        api.push_str(&policy.render_typed_rust(svd)?);
+        api.push_str(&policy.render_typed_rust(svd, self.model.shared_peripherals())?);
         let api = host::format(&api, &pac.edition)?;
         Ok((raw, api))
     }
@@ -488,8 +487,6 @@ impl ChipPublication {
         if policy.options.allow_clippy_empty_docs {
             raw.insert_str(0, "#![allow(clippy::empty_docs)]\n");
         }
-        let mut raw =
-            shared_blocks::reexport_library_blocks(&raw, self.model.shared_peripherals())?;
         raw.push_str(&policy.without_typed().render_rust(&raw_svd)?);
         host::format(&raw, &pac.edition)
     }

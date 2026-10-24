@@ -59,7 +59,7 @@ fn block() -> String {
 #[test]
 fn a_typed_block_renders_without_unsafe_or_raw_writes() {
     let rust = typed_pack()
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     for unsafe_item in [
         "unsafe {",
@@ -99,7 +99,7 @@ fn a_register_mixing_write_one_to_clear_and_ordinary_fields_is_refused() {
         ) + &field("ENABLE", 1, 1, "")),
     );
     let error = typed_pack()
-        .render_typed_rust(&svd(&mixed))
+        .render_typed_rust(&svd(&mixed), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error.to_string().contains("mixes write-one-to-clear"),
@@ -118,7 +118,7 @@ fn a_transaction_the_typed_backend_does_not_render_is_refused() {
             sources: vec!["SOURCE".to_owned()],
         });
     let error = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error
@@ -140,7 +140,7 @@ fn a_fixed_image_becomes_a_method_with_its_mask_asserted() {
         sources: vec!["SOURCE".to_owned()],
     });
     let rust = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     assert!(rust.contains("pub fn issue_start(&mut self"), "{rust}");
     assert!(
@@ -167,7 +167,7 @@ fn a_split_observing_a_register_its_read_changes_is_refused() {
         sources: vec!["SOURCE".to_owned()],
     });
     let error = pack
-        .render_typed_rust(&svd(&clearing))
+        .render_typed_rust(&svd(&clearing), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error.to_string().contains("no side-effect-free read"),
@@ -210,7 +210,7 @@ fn the_svd2rust_policy_loses_everything_bound_to_a_typed_peripheral() {
 #[test]
 fn a_field_reads_back_as_the_type_its_writer_takes() {
     let rust = typed_pack()
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     assert!(
         rust.contains("pub const fn level(&self) -> oer_mmio::Bits<3>"),
@@ -233,7 +233,7 @@ fn a_write_only_clear_register_is_written_from_zero() {
         &(field("DONE", 0, 1, "") + &field("ERROR", 1, 1, "")),
     );
     let rust = typed_pack()
-        .render_typed_rust(&svd(&clear))
+        .render_typed_rust(&svd(&clear), &Default::default())
         .expect("the typed block renders");
     assert!(rust.contains("pub fn write_clear("), "{rust}");
     assert!(!rust.contains("pub fn sample_clear("), "{rust}");
@@ -253,7 +253,7 @@ fn only_a_whole_word_vendor_image_skips_the_declared_field_assertion() {
         });
     }
     let rust = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     assert!(
         rust.contains("\"set_declared writes declared fields only\""),
@@ -319,7 +319,7 @@ fn a_fixed_sequence_writes_its_images_in_order() {
             sources: vec!["SOURCE".to_owned()],
         });
     let rendered = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the sequence renders");
     let directory = tempfile::tempdir().expect("a temporary directory");
     let output = run_rendered(
@@ -371,7 +371,7 @@ fn partitioned_pack() -> PacApiPack {
 #[test]
 fn the_root_claims_every_typed_block_at_once_and_checks_their_words() {
     let rust = partitioned_pack()
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     for item in [
         "pub type Claims = (super::radio::Claim, super::other::Claim,);",
@@ -394,7 +394,7 @@ fn a_partition_mixing_typed_and_untyped_peripherals_is_refused() {
         .push("OTHER".to_owned());
     pack.ownership_partitions.truncate(1);
     let error = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect_err("the typed block is refused");
     assert!(
         error.to_string().contains("mixes typed peripherals"),
@@ -407,7 +407,7 @@ fn an_unexposed_peripheral_must_exist() {
     let mut pack = typed_pack();
     pack.options.unexposed_peripherals = vec!["MISSING".to_owned()];
     let error = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect_err("the typed block is refused");
     assert!(error.to_string().contains("is not in the SVD"), "{error}");
 }
@@ -428,7 +428,7 @@ fn the_two_sides_are_owners_whose_words_cover_the_block() {
         sources: vec!["SOURCE".to_owned()],
     });
     let rust = pack
-        .render_typed_rust(&svd(&block()))
+        .render_typed_rust(&svd(&block()), &Default::default())
         .expect("the typed block renders");
     for item in [
         "pub struct RadioIrq<",
@@ -472,7 +472,7 @@ fn triggered() -> String {
 #[test]
 fn an_undeclared_write_only_field_in_a_readable_register_is_still_refused() {
     let error = typed_pack()
-        .render_typed_rust(&svd(&triggered()))
+        .render_typed_rust(&svd(&triggered()), &Default::default())
         .unwrap_err();
     assert!(
         error
@@ -486,7 +486,9 @@ fn an_undeclared_write_only_field_in_a_readable_register_is_still_refused() {
 fn a_write_trigger_field_has_only_its_explicit_trigger() {
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
-    let rust = pack.render_typed_rust(&svd(&triggered())).unwrap();
+    let rust = pack
+        .render_typed_rust(&svd(&triggered()), &Default::default())
+        .unwrap();
     for item in [
         "pub fn trigger_config_update(",
         "pub const TRIGGERS: u32",
@@ -511,7 +513,9 @@ fn a_write_trigger_field_wider_than_one_bit_is_refused() {
     );
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
-    let error = pack.render_typed_rust(&svd(&wide)).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&wide), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("one writable bit"), "{error}");
 }
 
@@ -520,7 +524,9 @@ fn a_write_trigger_field_the_block_lacks_is_refused() {
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
     pack.write_trigger_fields.push(trigger("CONFIG", "MISSING"));
-    let error = pack.render_typed_rust(&svd(&triggered())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&triggered()), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("is not a field"), "{error}");
 }
 
@@ -534,7 +540,9 @@ fn port() -> String {
 fn a_fifo_port_is_only_popped_and_pushed() {
     let mut pack = typed_pack();
     pack.fifo_ports.push(fifo("DATA"));
-    let rust = pack.render_typed_rust(&svd(&port())).unwrap();
+    let rust = pack
+        .render_typed_rust(&svd(&port()), &Default::default())
+        .unwrap();
     assert!(rust.contains("pub fn pop_data(&mut self) -> u8"), "{rust}");
     assert!(
         rust.contains("pub fn push_data(&mut self, value: u8)"),
@@ -558,11 +566,15 @@ fn a_fifo_port_its_read_declares_changing_is_still_pushed() {
         "<readAction>clear</readAction>",
         &field("BYTE", 0, 8, ""),
     );
-    let error = typed_pack().render_typed_rust(&svd(&clearing)).unwrap_err();
+    let error = typed_pack()
+        .render_typed_rust(&svd(&clearing), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("changes when read"), "{error}");
     let mut pack = typed_pack();
     pack.fifo_ports.push(fifo("DATA"));
-    let rust = pack.render_typed_rust(&svd(&clearing)).unwrap();
+    let rust = pack
+        .render_typed_rust(&svd(&clearing), &Default::default())
+        .unwrap();
     assert!(rust.contains("pub fn push_data("), "{rust}");
 }
 
@@ -577,7 +589,9 @@ fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
         description: "test".to_owned(),
         sources: vec!["SOURCE".to_owned()],
     });
-    let error = pack.render_typed_rust(&svd(&port())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&port()), &Default::default())
+        .unwrap_err();
     assert!(
         error.to_string().contains("no side-effect-free read"),
         "{error}"
@@ -592,7 +606,9 @@ fn a_fifo_port_is_never_observed_or_named_by_a_transaction() {
         value: 0x41,
         sources: vec!["SOURCE".to_owned()],
     });
-    let error = pack.render_typed_rust(&svd(&port())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&port()), &Default::default())
+        .unwrap_err();
     assert!(
         error.to_string().contains("only popped and pushed"),
         "{error}"
@@ -606,7 +622,9 @@ fn a_register_narrower_than_a_word_is_refused() {
         .to_owned()
         + &field("LEVEL", 0, 8, "")
         + "</fields></register>";
-    let error = typed_pack().render_typed_rust(&svd(&byte)).unwrap_err();
+    let error = typed_pack()
+        .render_typed_rust(&svd(&byte), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("not 32 bits wide"), "{error}");
 }
 
@@ -617,11 +635,152 @@ fn trigger_and_fifo_declarations_need_a_typed_peripheral() {
         peripheral: "OTHER".to_owned(),
         ..fifo("WORD")
     });
-    let error = pack.render_typed_rust(&svd(&block())).unwrap_err();
+    let error = pack
+        .render_typed_rust(&svd(&block()), &Default::default())
+        .unwrap_err();
     assert!(error.to_string().contains("is not typed"), "{error}");
     let mut pack = typed_pack();
     pack.write_trigger_fields.push(trigger("CONFIG", "UPDATE"));
     pack.fifo_ports.push(fifo("DATA"));
     let legacy = pack.without_typed();
     assert!(legacy.write_trigger_fields.is_empty() && legacy.fifo_ports.is_empty());
+}
+
+/// A register library's API: one fixed image on `RADIO.CONTROL`.
+fn library_pack() -> PacApiPack {
+    let mut pack = empty_pack();
+    pack.fixed_register_images.push(FixedRegisterImage {
+        whole_word: false,
+        name: "enable_level_two".to_owned(),
+        peripheral: "RADIO".to_owned(),
+        register: "CONTROL".to_owned(),
+        value: 0x21,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    pack
+}
+
+/// `RADIO` placed from the library whose module is `crate::library`.
+fn placed_radio() -> std::collections::BTreeMap<String, crate::SharedPeripheral> {
+    std::collections::BTreeMap::from([(
+        "RADIO".to_owned(),
+        crate::SharedPeripheral {
+            library: "fixture".to_owned(),
+            crate_name: "crate::library".to_owned(),
+        },
+    )])
+}
+
+#[test]
+fn a_library_block_has_no_address_and_a_chip_places_it() {
+    let library = library_pack()
+        .render_library_typed_rust(&svd(&block()))
+        .expect("the library renders");
+    for item in [
+        "pub mod radio {",
+        "pub mod other {",
+        "pub struct Radio<P: oer_mmio::Placement>(",
+        "impl<const BASE: usize> Radio<oer_mmio::Fixed<BASE>> {",
+        "pub fn enable_level_two(",
+    ] {
+        assert!(library.contains(item), "{item}\n{library}");
+    }
+    for chip_only in ["pub const BASE", "pub type Claim", "0x60000000", "Claims"] {
+        assert!(!library.contains(chip_only), "{chip_only}\n{library}");
+    }
+    let chip = partitioned_pack()
+        .render_typed_rust(&svd(&block()), &placed_radio())
+        .expect("the chip places the library block");
+    for item in [
+        "pub use crate::library::radio::*;",
+        "pub const BASE: usize = 0x60000000;",
+        "pub type Radio<P = oer_mmio::Fixed<0x60000000>> = crate::library::radio::Radio<P>;",
+        "pub type Claims = (super::radio::Claim, super::other::Claim,);",
+    ] {
+        assert!(chip.contains(item), "{item}\n{chip}");
+    }
+    assert!(!chip.contains("pub fn modify_control("), "{chip}");
+}
+
+#[test]
+fn a_placed_library_block_runs_through_the_chip_names() {
+    let library = library_pack()
+        .render_library_typed_rust(&svd(&block()))
+        .expect("the library renders");
+    let chip = partitioned_pack()
+        .render_typed_rust(&svd(&block()), &placed_radio())
+        .expect("the chip places the library block");
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let output = run_rendered(
+        directory.path(),
+        &format!("mod library {{\n{library}\n}}\n{chip}"),
+        r#"
+/// The chip's owner of its claimed block is the library's at the chip's base.
+fn owner(claim: radio::Claim) -> radio::Radio {
+    radio::Radio::new(claim)
+}
+
+fn main() {
+    let mut memory = [0_u32; radio::SIZE / 4];
+    let mut block = radio::Radio::host(&mut memory).expect("memory holds the block");
+    block.enable_level_two();
+    let control = block.read_control();
+    println!("enable={} level={}", control.enable(), control.level().get());
+    drop(block);
+    println!("control={:#x}", memory[1]);
+}
+"#,
+    );
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        ["enable=true level=2", "control=0x21"]
+    );
+}
+
+#[test]
+fn a_chip_types_every_library_block_and_changes_none() {
+    let error = typed_pack()
+        .render_typed_rust(
+            &svd(&block()),
+            &std::collections::BTreeMap::from([(
+                "OTHER".to_owned(),
+                placed_radio()["RADIO"].clone(),
+            )]),
+        )
+        .expect_err("an untyped library block is refused");
+    assert!(
+        error.to_string().contains("list it in typed-peripherals"),
+        "{error}"
+    );
+    let mut pack = typed_pack();
+    pack.fifo_ports.push(fifo("STATUS"));
+    let error = pack
+        .render_typed_rust(&svd(&block()), &placed_radio())
+        .expect_err("a chip FIFO port on a library block is refused");
+    assert!(
+        error
+            .to_string()
+            .contains("declare it in the library's API"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_library_declares_nothing_a_chip_owns() {
+    let mut pack = library_pack();
+    pack.interrupt_sources.push(crate::InterruptSource {
+        peripheral: "RADIO".to_owned(),
+        source: 12,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let error = pack
+        .render_library_typed_rust(&svd(&block()))
+        .expect_err("a library interrupt source is refused");
+    assert!(error.to_string().contains("belong to a chip"), "{error}");
+    let mut pack = library_pack();
+    pack.options.typed_peripherals = vec!["RADIO".to_owned()];
+    let error = pack
+        .render_library_typed_rust(&svd(&block()))
+        .expect_err("a library typed list is refused");
+    assert!(error.to_string().contains("types every layout"), "{error}");
 }

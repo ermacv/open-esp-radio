@@ -5,10 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Closed typed Wi-Fi MAC register transactions shared between chips"
+description = "Typed Wi-Fi MAC register blocks and transactions shared between chips, without addresses"
 
 [dependencies]
-oer-espressif-ieee80211-pac-raw = { path = "../ieee80211-pac-raw" }
+oer-mmio = { path = "../../../portable/mmio" }
 
 [lints]
 workspace = true

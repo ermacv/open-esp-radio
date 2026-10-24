@@ -151,12 +151,10 @@ impl WifiRadioRegisters {
             interface_is_soft_ap: bssid_high.interface_is_soft_ap().bit_is_set(),
             interface_rx_policy_enabled: self
                 .peripherals
-                .wifi_mac
+                .wifi_mac_interface
                 .wifi_mac_interface_address
-                .address_high(1)
-                .read()
-                .rx_policy_enable()
-                .bit_is_set(),
+                .read_address_high(MacInterface::AccessPoint.index())
+                .rx_policy_enable(),
         }
     }
 
@@ -168,10 +166,9 @@ impl WifiRadioRegisters {
         let bssid_high = bssids.bssid_high(0).read();
         let interface = self
             .peripherals
-            .wifi_mac
+            .wifi_mac_interface
             .wifi_mac_interface_address
-            .address_high(0)
-            .read();
+            .read_address_high(MacInterface::Station.index());
         let low = bssid_low.to_le_bytes();
         let high = bssid_high.bssid_high().bits().to_le_bytes();
 
@@ -181,7 +178,7 @@ impl WifiRadioRegisters {
             minimum_mpdu_start_spacing: bssid_high.minimum_mpdu_start_spacing().bits(),
             bssid_address_check_enabled: bssid_high.address_check_enable().bit_is_set(),
             interface_is_soft_ap: bssid_high.interface_is_soft_ap().bit_is_set(),
-            interface_rx_policy_enabled: interface.rx_policy_enable().bit_is_set(),
+            interface_rx_policy_enabled: interface.rx_policy_enable(),
             beacon_filter_control: self
                 .peripherals
                 .wifi_mac
@@ -201,9 +198,20 @@ impl WifiRadioRegisters {
     pub fn initialize_cold_receive_policy(&mut self) {
         let filters = &self.peripherals.wifi_mac.wifi_mac_rx_filter;
         let bssids = &self.peripherals.wifi_mac.wifi_mac_bssid_policy;
-        let interfaces = &self.peripherals.wifi_mac.wifi_mac_interface_address;
+        let interfaces = &mut self
+            .peripherals
+            .wifi_mac_interface
+            .wifi_mac_interface_address;
 
-        for queue in 0..4 {
+        // Queues zero to two are also the first three interface contexts;
+        // queue three has none.
+        let contexts = [
+            Some(MacInterface::Station),
+            Some(MacInterface::AccessPoint),
+            Some(MacInterface::Context2),
+            None,
+        ];
+        for (queue, context) in contexts.into_iter().enumerate() {
             let filter = filters.policy(queue);
 
             filter.modify(|_, w| {
@@ -226,7 +234,7 @@ impl WifiRadioRegisters {
                     .clear_bit()
             });
 
-            if queue < 3 {
+            if let Some(interface) = context {
                 let bssid = bssids.bssid_high(queue);
                 filter.modify(|_, w| {
                     w.receive_management_not_check_bssid()
@@ -248,9 +256,9 @@ impl WifiRadioRegisters {
                 bssid.modify(|_, w| w.address_check_enable().clear_bit());
                 // Zero is the complete low-half replacement performed by the
                 // mode-zero cold leaf; high policy bits are preserved.
-                interfaces
-                    .address_high(queue)
-                    .modify(|_, w| w.bytes_4_5().set(0));
+                interfaces.modify_address_high(interface.index(), |w| {
+                    w.set_bytes_4_5(0);
+                });
             }
         }
     }
@@ -306,11 +314,10 @@ impl WifiRadioRegisters {
         let filter = self.peripherals.wifi_mac.wifi_mac_rx_filter.policy(0);
         let bssids = &self.peripherals.wifi_mac.wifi_mac_bssid_policy;
         let bssid = bssids.bssid_high(0);
-        let interface = self
+        let interface = &mut self
             .peripherals
-            .wifi_mac
-            .wifi_mac_interface_address
-            .address_high(0);
+            .wifi_mac_interface
+            .wifi_mac_interface_address;
 
         // `ic_set_bssid(0, bssid)` delegates to the complete
         // `hal_mac_set_bssid` leaf. Keep its four hardware edges ordered:
@@ -353,7 +360,9 @@ impl WifiRadioRegisters {
         bssid.modify(|_, w| w.interface_is_soft_ap().clear_bit());
         filter.modify(|_, w| w.dump_management_not_check_bssid().clear_bit());
         bssid.modify(|_, w| w.address_check_enable().set_bit());
-        interface.modify(|_, w| w.rx_policy_enable().set_bit());
+        interface.modify_address_high(MacInterface::Station.index(), |w| {
+            w.set_rx_policy_enable(true);
+        });
 
         // Station policy six finishes with receive-unicast BSSID checking,
         // then dump-unicast BSSID checking, as two ordered RMWs. The complete
@@ -384,11 +393,10 @@ impl WifiRadioRegisters {
         let filter = self.peripherals.wifi_mac.wifi_mac_rx_filter.policy(1);
         let bssids = &self.peripherals.wifi_mac.wifi_mac_bssid_policy;
         let bssid = bssids.bssid_high(1);
-        let interface = self
+        let interface = &mut self
             .peripherals
-            .wifi_mac
-            .wifi_mac_interface_address
-            .address_high(1);
+            .wifi_mac_interface
+            .wifi_mac_interface_address;
 
         // `ic_set_rx_policy(interface=1, mode=0, control=1, management=1)`.
         filter.modify(|_, w| {
@@ -400,7 +408,9 @@ impl WifiRadioRegisters {
         bssid.modify(|_, w| w.interface_is_soft_ap().set_bit());
         filter.modify(|_, w| w.dump_management_not_check_bssid().clear_bit());
         bssid.modify(|_, w| w.address_check_enable().set_bit());
-        interface.modify(|_, w| w.rx_policy_enable().set_bit());
+        interface.modify_address_high(MacInterface::AccessPoint.index(), |w| {
+            w.set_rx_policy_enable(true);
+        });
     }
 
     /// Disable only the first SoftAP receive context.
@@ -413,11 +423,10 @@ impl WifiRadioRegisters {
         let filter = self.peripherals.wifi_mac.wifi_mac_rx_filter.policy(1);
         let bssids = &self.peripherals.wifi_mac.wifi_mac_bssid_policy;
         let bssid = bssids.bssid_high(1);
-        let interface = self
+        let interface = &mut self
             .peripherals
-            .wifi_mac
-            .wifi_mac_interface_address
-            .address_high(1);
+            .wifi_mac_interface
+            .wifi_mac_interface_address;
 
         filter.modify(|_, w| {
             w.receive_management_not_check_bssid()
@@ -428,7 +437,9 @@ impl WifiRadioRegisters {
         bssid.modify(|_, w| w.interface_is_soft_ap().set_bit());
         filter.modify(|_, w| w.dump_management_not_check_bssid().clear_bit());
         bssid.modify(|_, w| w.address_check_enable().clear_bit());
-        interface.modify(|_, w| w.rx_policy_enable().clear_bit());
+        interface.modify_address_high(MacInterface::AccessPoint.index(), |w| {
+            w.set_rx_policy_enable(false);
+        });
     }
 
     /// Disable only the infrastructure-station receive context.
@@ -460,11 +471,10 @@ impl WifiRadioRegisters {
         let filter = self.peripherals.wifi_mac.wifi_mac_rx_filter.policy(0);
         let bssids = &self.peripherals.wifi_mac.wifi_mac_bssid_policy;
         let bssid = bssids.bssid_high(0);
-        let interface = self
+        let interface = &mut self
             .peripherals
-            .wifi_mac
-            .wifi_mac_interface_address
-            .address_high(0);
+            .wifi_mac_interface
+            .wifi_mac_interface_address;
 
         filter.modify(|_, w| {
             w.receive_management_not_check_bssid()
@@ -475,7 +485,9 @@ impl WifiRadioRegisters {
         bssid.modify(|_, w| w.interface_is_soft_ap().clear_bit());
         filter.modify(|_, w| w.dump_management_not_check_bssid().clear_bit());
         bssid.modify(|_, w| w.address_check_enable().clear_bit());
-        interface.modify(|_, w| w.rx_policy_enable().clear_bit());
+        interface.modify_address_high(MacInterface::Station.index(), |w| {
+            w.set_rx_policy_enable(false);
+        });
     }
 
     /// `ic_set_rx_policy_ubssid_check(0, false)`.

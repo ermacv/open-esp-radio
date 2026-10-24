@@ -22935,3 +22935,63 @@ pub mod layouts {
         }
     }
 }
+// Typed register blocks over `oer-mmio`, rendered by `cargo registers`
+// from the published SVD and the API policy; no `unsafe`, no raw write.
+
+/// The `WIFI_MAC_INTERFACE_ADDRESS` register block at this chip's address: its layout,
+/// accessors and transactions are the `ieee80211` register library's
+/// [`oer_espressif_ieee80211_pac::wifi_mac_interface_address`].
+pub mod wifi_mac_interface_address {
+    pub use oer_espressif_ieee80211_pac::wifi_mac_interface_address::*;
+
+    /// The block's base address.
+    pub const BASE: usize = 0x2010405c;
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x2010405c>, BlockWords>;
+
+    /// The exclusive owner of the `WIFI_MAC_INTERFACE_ADDRESS` registers, at this chip's address
+    /// unless placed in host memory.
+    pub type WifiMacInterfaceAddress<P = oer_mmio::Fixed<0x2010405c>> =
+        oer_espressif_ieee80211_pac::wifi_mac_interface_address::WifiMacInterfaceAddress<P>;
+}
+
+/// The ownership partitions of the typed register blocks.
+pub mod peripheral_ownership {
+    /// The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views.
+    pub struct WifiMacInterfacePeripherals {
+        pub wifi_mac_interface_address: super::wifi_mac_interface_address::WifiMacInterfaceAddress,
+    }
+
+    /// Every typed partition.
+    pub struct PeripheralPartitions {
+        /// The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views.
+        pub wifi_mac_interface: WifiMacInterfacePeripherals,
+    }
+
+    /// The device registers of every typed block, which the PAC root
+    /// takes with one `oer_mmio::assume_owned`.
+    pub type Claims = super::wifi_mac_interface_address::Claim;
+
+    /// Give each claimed block to its owner in its partition.
+    #[inline]
+    pub fn partition(claims: Claims) -> PeripheralPartitions {
+        let wifi_mac_interface_address = claims;
+        PeripheralPartitions {
+            wifi_mac_interface: WifiMacInterfacePeripherals {
+                wifi_mac_interface_address:
+                    super::wifi_mac_interface_address::WifiMacInterfaceAddress::new(
+                        wifi_mac_interface_address,
+                    ),
+            },
+        }
+    }
+}
+
+const _: () = assert!(
+    oer_mmio::check::disjoint_blocks(&[(
+        wifi_mac_interface_address::BASE,
+        <wifi_mac_interface_address::BlockWords as oer_mmio::Registers>::WORDS
+    )]),
+    "no two typed blocks list the same word"
+);

@@ -8,7 +8,5 @@ evidence = [
 ]
 
 [outputs]
-pac-raw = "../../../ieee80211-pac-raw/src/lib.rs"
 pac-api = "../../../ieee80211-pac/src/generated.rs"
-target = "none"
 edition = "2024"

@@ -40,7 +40,7 @@ Below it are, by directory (`/` ends a domain):
 
 | Kind | Directories |
 | --- | --- |
-| Generated register access | `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
+| Generated register access | `chips/esp32s31/pac-raw` |
 | The volatile register-access core | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32c5/hal`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
@@ -55,7 +55,10 @@ Typed register blocks are generated without `unsafe`. The register
 generator renders the peripherals a chip's API policy lists in
 `typed-peripherals` into the chip PAC's `generated.rs`, which starts with
 `#![forbid(unsafe_code)]`; svd2rust renders a chip's other peripherals into
-its `pac-raw` package. On the ESP32-C5 every exposed peripheral is typed and
+its `pac-raw` package. A register library's layouts are typed blocks without
+an address in the library crate's `generated.rs`, likewise forbidding unsafe
+code; a chip that places one names its address and claims it like its own
+typed blocks. On the ESP32-C5 every exposed peripheral is typed and
 the chip has no `pac-raw`; the policy's `unexposed-peripherals` (observation
 views kept for bit-use coverage) have no owner. The unsafe code under a
 typed block is `oer-mmio` (`portable/mmio`) alone:
@@ -96,13 +99,10 @@ transaction asserts its masks against the register's declared fields in a
 `whole-word`: the vendor's store of a whole word, with its evidence
 sources, which also writes the bits the model leaves undeclared.
 
-`esp32s31/pac-raw/` is the `oer-esp32s31-pac-raw` package and
-`espressif/ieee80211-pac-raw/` the `oer-espressif-ieee80211-pac-raw` package of the
-Wi-Fi MAC register blocks a chip places at its own addresses. Each
-contains only SVD-generated register access, checked through the
-generator/publisher pipeline; the shared package contains no address. The
-publisher has no declaration for
-handwritten modules in this package.
+`esp32s31/pac-raw/` is the `oer-esp32s31-pac-raw` package. It contains only
+SVD-generated register access, checked through the generator/publisher
+pipeline. The publisher has no declaration for handwritten modules in this
+package.
 
 `esp32s31/pac/` contains the handwritten semantic radio PAC and its
 generated capability catalog in `src/generated.rs`. The
@@ -395,7 +395,7 @@ each unsafe attribute in them carries its `// SAFETY:` comment as well.
 Direct dependencies on the semantic radio PAC are restricted independently
 of unsafe syntax. The only allowed consumers are the chip's `pac-raw`, `pac`
 and `hal` under `esp32s31/`, and the chip-neutral Wi-Fi MAC register
-crates under `espressif/ieee80211-pac*/` that those PACs place: drivers and
+crate `espressif/ieee80211-pac/` whose blocks those PACs place: drivers and
 adapters reach registers through HAL owners. Check the executable list when changing this boundary.
 
 Upper layers use opaque, finite capabilities rather than raw pointers,

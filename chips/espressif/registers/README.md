@@ -2,9 +2,8 @@
 
 Register layouts that Espressif chips share and each chip places at its own
 base addresses. The [Wi-Fi MAC register library](ieee80211/README.md) is the
-one such library; its outputs are
-[`chips/espressif/ieee80211-pac`](../ieee80211-pac/README.md) and
-[`chips/espressif/ieee80211-pac-raw`](../ieee80211-pac-raw/).
+one such library; its output is the typed register blocks of
+[`chips/espressif/ieee80211-pac`](../ieee80211-pac/README.md).
 
 Each chip's own register model is in `chips/<chip>/registers/`: the
 [ESP32-S31 model](../../esp32s31/registers/README.md) and the

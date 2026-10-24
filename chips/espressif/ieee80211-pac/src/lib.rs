@@ -1,18 +1,17 @@
-//! Closed typed Wi-Fi MAC register transactions shared between chips.
+//! Typed Wi-Fi MAC register blocks and transactions shared between chips.
 //!
-//! Chips whose Wi-Fi MAC peripherals have identical layouts place the register
-//! blocks of [`oer_espressif_ieee80211_pac_raw`] at their own base addresses. This
-//! crate composes the reviewed transactions over those blocks once. Every
-//! function takes the register block by reference, so a chip PAC passes its
-//! addressed peripheral and the compiler resolves the address statically; no
-//! chip is selected here and nothing is dispatched at run time.
+//! Chips whose Wi-Fi MAC peripherals have identical layouts place this
+//! crate's register blocks at their own base addresses. The generated
+//! modules hold each block's owner, generic over its placement, with its
+//! typed accessors and reviewed transactions; a chip PAC's generated module
+//! names the chip's address, claim and owner over them, so the compiler
+//! resolves the address statically. No chip is selected here and nothing is
+//! dispatched at run time.
 #![no_std]
 #![forbid(unsafe_code)]
-
-use oer_espressif_ieee80211_pac_raw as svd;
 
 mod generated;
 
 pub mod interface_address;
 
-pub use generated::MacInterface;
+pub use generated::*;

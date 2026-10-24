@@ -13945,214 +13945,22 @@ pub mod wifi_mac_ersu_ack_rate {
     }
 }
 
-/// The `WIFI_MAC_INTERFACE_ADDRESS` register block.
-///
-/// Four interface-address pairs consumed by MAC receive filtering.
+/// The `WIFI_MAC_INTERFACE_ADDRESS` register block at this chip's address: its layout,
+/// accessors and transactions are the `ieee80211` register library's
+/// [`oer_espressif_ieee80211_pac::wifi_mac_interface_address`].
 pub mod wifi_mac_interface_address {
+    pub use oer_espressif_ieee80211_pac::wifi_mac_interface_address::*;
+
     /// The block's base address.
     pub const BASE: usize = 0x600a405c;
-    /// The bytes from [`BASE`] to the end of the block's last word: the
-    /// host memory a test block needs.
-    pub const SIZE: usize = 0x20;
-
-    /// The block's declared words, as byte offsets from [`BASE`]: its
-    /// whole register authority.
-    pub struct BlockWords;
-
-    impl oer_mmio::Registers for BlockWords {
-        const WORDS: &'static [usize] = &[0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c];
-    }
 
     /// The block's device registers, as the PAC root claims them.
     pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600a405c>, BlockWords>;
 
-    /// The exclusive owner of the `WIFI_MAC_INTERFACE_ADDRESS` registers.
-    #[must_use = "dropping a register owner permanently loses its register authority"]
-    pub struct WifiMacInterfaceAddress<P: oer_mmio::Placement = oer_mmio::Fixed<0x600a405c>>(
-        oer_mmio::Block<P, BlockWords>,
-    );
-
-    impl WifiMacInterfaceAddress {
-        /// The owner of the block's device registers.
-        pub const fn new(block: Claim) -> Self {
-            Self(block)
-        }
-    }
-
-    impl<'a> WifiMacInterfaceAddress<oer_mmio::Host<'a>> {
-        /// The block over host memory, for tests of its accessors.
-        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-            oer_mmio::Block::host(words).map(Self)
-        }
-    }
-
-    impl<P: oer_mmio::Placement> WifiMacInterfaceAddress<P> {
-        /// Read `ADDRESS_LOW%s`.
-        #[inline]
-        pub fn read_address_low(&self, index: oer_mmio::Index<4>) -> address_low::R {
-            address_low::R(self.0.read_indexed::<0x0, 0x8, 4>(index))
-        }
-
-        /// Read `ADDRESS_LOW%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_address_low(
-            &mut self,
-            index: oer_mmio::Index<4>,
-            change: impl FnOnce(&mut address_low::W),
-        ) {
-            let mut value = address_low::W(self.0.read_indexed::<0x0, 0x8, 4>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x0, 0x8, 4>(index, value.0);
-        }
-
-        /// Read `ADDRESS_HIGH%s`.
-        #[inline]
-        pub fn read_address_high(&self, index: oer_mmio::Index<4>) -> address_high::R {
-            address_high::R(self.0.read_indexed::<0x4, 0x8, 4>(index))
-        }
-
-        /// Read `ADDRESS_HIGH%s`, change fields and write it back; every other bit keeps
-        /// the value read.
-        #[inline]
-        pub fn modify_address_high(
-            &mut self,
-            index: oer_mmio::Index<4>,
-            change: impl FnOnce(&mut address_high::W),
-        ) {
-            let mut value = address_high::W(self.0.read_indexed::<0x4, 0x8, 4>(index));
-            change(&mut value);
-            self.0.write_indexed::<0x4, 0x8, 4>(index, value.0);
-        }
-    }
-
-    /// The `ADDRESS_LOW%s` register.
-    ///
-    /// Project-assigned name. Interface MAC bytes 0..3 in little-endian order, published by the first full-word store.
-    pub mod address_low {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xffffffff;
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x0;
-
-        /// The byte distance between two elements of the array.
-        pub const STRIDE: usize = 0x8;
-        /// The array's element count.
-        pub const COUNT: usize = 4;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Project-assigned name.
-            #[inline]
-            pub const fn bytes_0_3(self) -> u32 {
-                self.0
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name.
-            #[inline]
-            pub const fn bytes_0_3(&self) -> u32 {
-                self.0
-            }
-
-            /// Set `BYTES_0_3`.
-            #[inline]
-            pub fn set_bytes_0_3(&mut self, value: u32) -> &mut Self {
-                self.0 = value;
-                self
-            }
-        }
-    }
-
-    /// The `ADDRESS_HIGH%s` register.
-    ///
-    /// Project-assigned name. Interface MAC bytes 4..5 are published as a full-word store before a separate fresh-read RMW sets receive-policy enable bit 16.
-    pub mod address_high {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xffffffff;
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x4;
-
-        /// The byte distance between two elements of the array.
-        pub const STRIDE: usize = 0x8;
-        /// The array's element count.
-        pub const COUNT: usize = 4;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Project-assigned name.
-            #[inline]
-            pub const fn bytes_4_5(self) -> u16 {
-                (self.0) as u16
-            }
-
-            /// Project-assigned name. Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
-            #[inline]
-            pub const fn rx_policy_enable(self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// Opaque: meaning not established.
-            #[inline]
-            pub const fn bits_17_31_opaque(self) -> oer_mmio::Bits<15> {
-                oer_mmio::Bits::truncate(self.0 >> 17)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Project-assigned name.
-            #[inline]
-            pub const fn bytes_4_5(&self) -> u16 {
-                (self.0) as u16
-            }
-
-            /// Project-assigned name. Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
-            #[inline]
-            pub const fn rx_policy_enable(&self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// Opaque: meaning not established.
-            #[inline]
-            pub const fn bits_17_31_opaque(&self) -> oer_mmio::Bits<15> {
-                oer_mmio::Bits::truncate(self.0 >> 17)
-            }
-
-            /// Set `BYTES_4_5`.
-            #[inline]
-            pub fn set_bytes_4_5(&mut self, value: u16) -> &mut Self {
-                self.0 = (self.0 & !0x0000ffff) | u32::from(value);
-                self
-            }
-
-            /// Set `RX_POLICY_ENABLE`.
-            #[inline]
-            pub fn set_rx_policy_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & !0x00010000) | (u32::from(value) << 16);
-                self
-            }
-
-            /// Set `BITS_17_31_OPAQUE`.
-            #[inline]
-            pub fn set_bits_17_31_opaque(&mut self, value: oer_mmio::Bits<15>) -> &mut Self {
-                self.0 = (self.0 & !0xfffe0000) | (value.get() << 17);
-                self
-            }
-        }
-    }
+    /// The exclusive owner of the `WIFI_MAC_INTERFACE_ADDRESS` registers, at this chip's address
+    /// unless placed in host memory.
+    pub type WifiMacInterfaceAddress<P = oer_mmio::Fixed<0x600a405c>> =
+        oer_espressif_ieee80211_pac::wifi_mac_interface_address::WifiMacInterfaceAddress<P>;
 }
 
 /// The `WIFI_MAC_INTERRUPT` register block.

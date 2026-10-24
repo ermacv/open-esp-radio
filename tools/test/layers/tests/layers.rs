@@ -75,7 +75,6 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
 /// unsafe code.
 const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/esp32s31/pac-raw",
-    "chips/espressif/ieee80211-pac-raw",
     "chips/esp32c5/pac",
     "chips/esp32s31/pac",
     "chips/esp32c5/hal",

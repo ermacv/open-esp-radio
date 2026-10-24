@@ -105,7 +105,7 @@ fn write_trigger_fields_and_fifo_ports_behave_over_host_memory() {
     let path = |name| directory.path().join(name);
     fs::write(path("api.toml"), POLICY).unwrap();
     let policy = oer_registers_model::PacApiPack::load(&path("api.toml")).unwrap();
-    let block = policy.render_typed_rust(SVD).unwrap();
+    let block = policy.render_typed_rust(SVD, &Default::default()).unwrap();
     let mmio = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../portable/mmio");
     fs::write(
         path("Cargo.toml"),

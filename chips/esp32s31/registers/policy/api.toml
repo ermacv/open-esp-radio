@@ -4,6 +4,9 @@ schema = 5
 [options]
 device-access = true
 allow-clippy-empty-docs = true
+# Typed register blocks over `oer-mmio`; svd2rust renders every other
+# exposed peripheral.
+typed-peripherals = ["WIFI_MAC_INTERFACE_ADDRESS"]
 
 
 [[ownership-partitions]]
@@ -42,7 +45,6 @@ peripherals = [
     "WIFI_MAC_HE_TB_DIAGNOSTICS",
     "WIFI_MAC_HE_TB_STATISTICS",
     "WIFI_MAC_HE_TRIGGER_RX_DIAGNOSTICS",
-    "WIFI_MAC_INTERFACE_ADDRESS",
     "WIFI_MAC_INTERNAL_TX_BLOCK_ACK",
     "WIFI_MAC_KEY_TABLE",
     "WIFI_MAC_LAST_RX_BUFFER",
@@ -72,6 +74,12 @@ peripherals = [
     "WIFI_MAC_TX_QUEUE_VECTOR",
     "WIFI_MAC_TX_STATISTICS",
 ]
+
+[[ownership-partitions]]
+name = "WifiMacInterfacePeripherals"
+member = "wifi_mac_interface"
+description = "The Wi-Fi MAC receive-interface address pairs, the shared register library's typed block, owned by the Wi-Fi hardware lifecycle with the other Wi-Fi MAC views."
+peripherals = ["WIFI_MAC_INTERFACE_ADDRESS"]
 
 [[ownership-partitions]]
 name = "WifiRxDmaPeripherals"

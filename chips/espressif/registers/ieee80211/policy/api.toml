@@ -2,9 +2,6 @@
 # transaction cites the evidence of every chip that places the layout.
 schema = 5
 
-[options]
-allow-clippy-empty-docs = true
-
 [[enum-domains]]
 name = "MacInterface"
 description = "Reviewed Wi-Fi MAC interface selector shared by address, BSSID, crypto, TX and ordinary receive-BlockAck transactions."
