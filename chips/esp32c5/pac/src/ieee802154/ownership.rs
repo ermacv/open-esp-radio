@@ -85,11 +85,9 @@ fn execute_transmit_security_configuration<Port: TransmitSecurityProgrammingPort
     port.write_address_high(u32::from_le_bytes([
         address[4], address[5], address[6], address[7],
     ]));
-    for (index, word) in KEY_WORDS.into_iter().zip(key.chunks_exact(4)) {
-        port.write_key_word(
-            index,
-            u32::from_le_bytes([word[0], word[1], word[2], word[3]]),
-        );
+    let (words, _) = key.as_chunks::<4>();
+    for (index, word) in KEY_WORDS.into_iter().zip(words) {
+        port.write_key_word(index, u32::from_le_bytes(*word));
     }
     port.write_payload_offset(payload_offset);
     port.set_enabled(true);

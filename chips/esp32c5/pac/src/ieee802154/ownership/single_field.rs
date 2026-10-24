@@ -355,11 +355,10 @@ impl TaskRegisters {
     /// `ieee802154_ll_set_security_key`: four little-endian words in order.
     #[doc(hidden)]
     pub fn set_security_key(&mut self, key: &[u8; 16]) {
-        for (index, word) in KEY_WORDS.into_iter().zip(key.chunks_exact(4)) {
-            self.registers.write_key_word(
-                index,
-                u32::from_le_bytes([word[0], word[1], word[2], word[3]]),
-            );
+        let (words, _) = key.as_chunks::<4>();
+        for (index, word) in KEY_WORDS.into_iter().zip(words) {
+            self.registers
+                .write_key_word(index, u32::from_le_bytes(*word));
         }
     }
 
