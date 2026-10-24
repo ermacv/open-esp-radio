@@ -5,9 +5,9 @@
 //! defined by [`crate::ieee80211::dma::rx_dma::RxDma`].
 
 use crate::dma_address;
-use crate::settle::Settle;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
+use oer_time::settle::Settle;
 
 use crate::ieee80211::dma::ring_index::RingIndex;
 
@@ -2491,12 +2491,12 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     ) -> Result<(), RxRingError> {
         while self.pending_tail().is_some() {
             let mut attempts = 0_u32;
-            let settled = crate::settle::settle(settle, || {
+            let settled = oer_time::settle::settle(settle, || {
                 attempts = attempts.saturating_add(1);
                 mmio.try_with_reload_settled(|_settled| ())
             });
             record_maximum(&self.arena.max_reload_attempts, attempts);
-            settled.map_err(|crate::settle::Unsettled| RxRingError::ReloadPending)?;
+            settled.map_err(|oer_time::settle::Unsettled| RxRingError::ReloadPending)?;
             self.settle_reload(mmio)?;
         }
         Ok(())

@@ -2,7 +2,7 @@ extern crate std;
 
 use self::std::boxed::Box;
 use super::*;
-use crate::settle::{Settle, SettleLimit};
+use oer_time::settle::{Settle, SettleLimit};
 use oer_time::{Clock, Duration, Instant};
 
 #[test]

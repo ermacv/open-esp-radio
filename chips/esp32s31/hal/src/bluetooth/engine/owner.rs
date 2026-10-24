@@ -282,7 +282,7 @@ impl<M: ControllerMemory> Engine<M> {
     pub fn release_controller_output<C: oer_time::Clock>(
         &mut self,
         output: bluetooth::InterruptOutputAfterRoutesOwner,
-        settle: crate::settle::Settle<'_, C>,
+        settle: oer_time::settle::Settle<'_, C>,
     ) -> Result<
         bluetooth::InterruptOutputReleasedOwner,
         (

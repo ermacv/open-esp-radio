@@ -1,8 +1,8 @@
 schema = 2
 
 [[peripherals]]
-name = "LP_CLKRST"
-description = "Low-power clock/reset registers: the reset cause of the HP core, which the stand reads after a power cycle."
+name = "LP_CLKRST_RESET_CAUSE"
+description = "Low-power clock/reset registers: the reset cause of the HP core. Firmware reads it after boot; the host reads it through JTAG after a power cycle."
 baseAddress = 0x600B0400
 
 [[peripherals.registers]]
@@ -27,14 +27,14 @@ bitOffset = 5
 bitWidth = 1
 
 [[review]]
-entity = "LP_CLKRST"
+entity = "LP_CLKRST_RESET_CAUSE"
 sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "LP_CLKRST.RESET_CAUSE"
+entity = "LP_CLKRST_RESET_CAUSE.RESET_CAUSE"
 naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
 provenance = "observed"
@@ -42,7 +42,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [[review]]
-entity = "LP_CLKRST.RESET_CAUSE.RESET_CAUSE"
+entity = "LP_CLKRST_RESET_CAUSE.RESET_CAUSE.RESET_CAUSE"
 naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
 provenance = "observed"
@@ -50,7 +50,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [[review]]
-entity = "LP_CLKRST.RESET_CAUSE.CORE0_RESET_FLAG"
+entity = "LP_CLKRST_RESET_CAUSE.RESET_CAUSE.CORE0_RESET_FLAG"
 naming = "vendor"
 sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
 provenance = "observed"

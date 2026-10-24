@@ -4,26 +4,31 @@ mod panic;
 pub(crate) mod postmortem;
 mod watchdog;
 
-pub(crate) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
-    use esp_hal::rtc_cntl::SocResetReason as Soc;
+pub(crate) fn boot_evidence(
+    causes: oer_esp32c5_hal::platform::ResetCauses,
+) -> oer_hil_protocol::base::BootEvidence {
+    use oer_esp32c5_hal::platform::ResetCause as Cause;
     use oer_hil_protocol::base::{BootEvidence, ResetReason};
-    let raw = esp_hal::system::reset_reason();
+    let cause = causes.core();
     BootEvidence {
         // Only reasons that mean the same as on the other chips are named;
         // the raw code keeps the rest, such as a TIMG1 reset of CPU 0 alone.
-        reset_reason: match raw {
-            Some(Soc::CoreSw) => ResetReason::Software,
-            Some(Soc::CoreMwdt1) => ResetReason::MainWatchdog1,
-            Some(Soc::ChipPowerOn) => ResetReason::PowerOn,
-            Some(Soc::SysBrownOut) => ResetReason::Brownout,
-            Some(Soc::CoreMwdt0) => ResetReason::MainWatchdog0,
-            Some(Soc::CoreRtcWdt | Soc::Cpu0RtcWdt | Soc::SysRtcWdt) => ResetReason::RtcWatchdog,
-            Some(Soc::SysSuperWdt) => ResetReason::SuperWatchdog,
-            Some(Soc::CoreUsbJtag | Soc::CoreUsbUart) => ResetReason::UsbSerialJtag,
-            Some(Soc::Cpu0JtagCpu) => ResetReason::Jtag,
+        reset_reason: match cause {
+            Cause::CoreSoftware => ResetReason::Software,
+            Cause::CoreMainWatchdog1 => ResetReason::MainWatchdog1,
+            Cause::ChipPowerOn => ResetReason::PowerOn,
+            Cause::SystemBrownOut => ResetReason::Brownout,
+            Cause::CoreMainWatchdog0 => ResetReason::MainWatchdog0,
+            Cause::CoreRtcWatchdog | Cause::CpuRtcWatchdog | Cause::SystemRtcWatchdog => {
+                ResetReason::RtcWatchdog
+            }
+            Cause::SystemSuperWatchdog => ResetReason::SuperWatchdog,
+            Cause::CoreUsbJtag | Cause::CoreUsbUart => ResetReason::UsbSerialJtag,
+            Cause::CpuJtag => ResetReason::Jtag,
+            Cause::CpuLockup => ResetReason::CpuLockup,
             _ => ResetReason::Other,
         },
-        raw_reset_reason: raw.map_or(0, |reason| reason as u8),
+        raw_reset_reason: cause.code(),
         post_mortem: postmortem::previous(|previous| previous.map(|previous| previous.summary())),
         platform_panic: PLATFORM_PANIC.try_get().copied().flatten().map(|record| {
             oer_hil_protocol::base::PlatformPanic {

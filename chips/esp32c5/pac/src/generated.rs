@@ -7801,6 +7801,257 @@ pub mod ieee802154_mac {
     );
 }
 
+/// The `LPPERI_RNG` register block.
+///
+/// Low-power peripheral registers: the random number generator's clock gate, its sampling and timer configuration and its synchronized output.
+pub mod lpperi_rng {
+    /// The block's base address.
+    pub const BASE: usize = 0x600b2800;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x2c;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x0, 0x24, 0x28];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600b2800>, BlockWords>;
+
+    /// The exclusive owner of the `LPPERI_RNG` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpperiRng<P: oer_mmio::Placement = oer_mmio::Fixed<0x600b2800>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpperiRng {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpperiRng<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpperiRng<P> {
+        /// Read `CLK_EN`.
+        #[inline]
+        pub fn read_clk_en(&self) -> clk_en::R {
+            clk_en::R(self.0.read::<0x0>())
+        }
+
+        /// Read `CLK_EN`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_clk_en(&mut self, change: impl FnOnce(&mut clk_en::W)) {
+            let mut value = clk_en::W(self.0.read::<0x0>());
+            change(&mut value);
+            self.0.write::<0x0>(value.0);
+        }
+
+        /// Read `RNG_CFG`.
+        #[inline]
+        pub fn read_rng_cfg(&self) -> rng_cfg::R {
+            rng_cfg::R(self.0.read::<0x24>())
+        }
+
+        /// Read `RNG_CFG`, change fields and write it back; every other bit keeps
+        /// the value read.
+        #[inline]
+        pub fn modify_rng_cfg(&mut self, change: impl FnOnce(&mut rng_cfg::W)) {
+            let mut value = rng_cfg::W(self.0.read::<0x24>());
+            change(&mut value);
+            self.0.write::<0x24>(value.0);
+        }
+
+        /// Read `RNG_DATA_SYNC`.
+        #[inline]
+        pub fn read_rng_data_sync(&self) -> rng_data_sync::R {
+            rng_data_sync::R(self.0.read::<0x28>())
+        }
+    }
+
+    /// The `CLK_EN` register.
+    ///
+    /// Clock gates of the low-power peripherals. The word is shared with the LP UART, LP IO, LP I2C, eFuse and LP CPU gates; only the generator's gate is described, and every change keeps the other bits.
+    pub mod clk_en {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x01000000;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Random number generator clock enable; set after reset.
+            #[inline]
+            pub const fn rng_ck_en(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Random number generator clock enable; set after reset.
+            #[inline]
+            pub const fn rng_ck_en(&self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Set `RNG_CK_EN`.
+            #[inline]
+            pub fn set_rng_ck_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                self
+            }
+        }
+    }
+
+    /// The `RNG_CFG` register.
+    ///
+    /// Random number generator sampling and timer configuration.
+    pub mod rng_cfg {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xff000fff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x24;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Enables sampling of the ring oscillator; clear after reset.
+            #[inline]
+            pub const fn rng_sample_enable(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Clock divider of the generator's timer.
+            #[inline]
+            pub const fn rng_timer_pscale(self) -> u8 {
+                (self.0 >> 1) as u8
+            }
+
+            /// XORs the asynchronous generator timer into the output.
+            #[inline]
+            pub const fn rng_timer_en(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// XORs the RTC timer into the output: bit 0 before the CRC, bit 1 after it.
+            #[inline]
+            pub const fn rtc_timer_en(self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Count of ring-oscillator samples.
+            #[inline]
+            pub const fn rng_sample_cnt(self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Enables sampling of the ring oscillator; clear after reset.
+            #[inline]
+            pub const fn rng_sample_enable(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// Clock divider of the generator's timer.
+            #[inline]
+            pub const fn rng_timer_pscale(&self) -> u8 {
+                (self.0 >> 1) as u8
+            }
+
+            /// XORs the asynchronous generator timer into the output.
+            #[inline]
+            pub const fn rng_timer_en(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// XORs the RTC timer into the output: bit 0 before the CRC, bit 1 after it.
+            #[inline]
+            pub const fn rtc_timer_en(&self) -> oer_mmio::Bits<2> {
+                oer_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Count of ring-oscillator samples.
+            #[inline]
+            pub const fn rng_sample_cnt(&self) -> u8 {
+                (self.0 >> 24) as u8
+            }
+
+            /// Set `RNG_SAMPLE_ENABLE`.
+            #[inline]
+            pub fn set_rng_sample_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000001) | u32::from(value);
+                self
+            }
+
+            /// Set `RNG_TIMER_PSCALE`.
+            #[inline]
+            pub fn set_rng_timer_pscale(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & !0x000001fe) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `RNG_TIMER_EN`.
+            #[inline]
+            pub fn set_rng_timer_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `RTC_TIMER_EN`.
+            #[inline]
+            pub fn set_rtc_timer_en(&mut self, value: oer_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & !0x00000c00) | (value.get() << 10);
+                self
+            }
+        }
+    }
+
+    /// The `RNG_DATA_SYNC` register.
+    ///
+    /// The generator's output, synchronized to the bus clock.
+    pub mod rng_data_sync {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x28;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// One 32-bit word of random data.
+            #[inline]
+            pub const fn rnd_sync_data(self) -> u32 {
+                self.0
+            }
+        }
+    }
+}
+
 /// The `LP_AON_RADIO` register block.
 ///
 /// ESP32-C5 LP_AON field the PHY's power-detector SAR initialization drives. Other fields remain absent and are preserved by every field transaction.
@@ -7909,6 +8160,84 @@ pub mod lp_aon_radio {
             pub fn set_sar2_pwdet_cct(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
                 self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
                 self
+            }
+        }
+    }
+}
+
+/// The `LP_CLKRST_RESET_CAUSE` register block.
+///
+/// Low-power clock/reset registers: the reset cause of the HP core. Firmware reads it after boot; the host reads it through JTAG after a power cycle.
+pub mod lp_clkrst_reset_cause {
+    /// The block's base address.
+    pub const BASE: usize = 0x600b0400;
+    /// The bytes from [`BASE`] to the end of the block's last word: the
+    /// host memory a test block needs.
+    pub const SIZE: usize = 0x14;
+
+    /// The block's declared words, as byte offsets from [`BASE`]: its
+    /// whole register authority.
+    pub struct BlockWords;
+
+    impl oer_mmio::Registers for BlockWords {
+        const WORDS: &'static [usize] = &[0x10];
+    }
+
+    /// The block's device registers, as the PAC root claims them.
+    pub type Claim = oer_mmio::Block<oer_mmio::Fixed<0x600b0400>, BlockWords>;
+
+    /// The exclusive owner of the `LP_CLKRST_RESET_CAUSE` registers.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct LpClkrstResetCause<P: oer_mmio::Placement = oer_mmio::Fixed<0x600b0400>>(
+        oer_mmio::Block<P, BlockWords>,
+    );
+
+    impl LpClkrstResetCause {
+        /// The owner of the block's device registers.
+        pub const fn new(block: Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> LpClkrstResetCause<oer_mmio::Host<'a>> {
+        /// The block over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> LpClkrstResetCause<P> {
+        /// Read `RESET_CAUSE`.
+        #[inline]
+        pub fn read_reset_cause(&self) -> reset_cause::R {
+            reset_cause::R(self.0.read::<0x10>())
+        }
+    }
+
+    /// The `RESET_CAUSE` register.
+    ///
+    /// Why the HP core last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned.
+    pub mod reset_cause {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000003f;
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets.
+            #[inline]
+            pub const fn reset_cause(self) -> oer_mmio::Bits<5> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// Set when the HP core left reset.
+            #[inline]
+            pub const fn core0_reset_flag(self) -> bool {
+                (self.0 & 0x00000020) != 0
             }
         }
     }
@@ -17661,6 +17990,50 @@ pub mod wifi_mac_tx_common {
 
 /// The ownership partitions of the typed register blocks.
 pub mod peripheral_ownership {
+    /// The random number generator's clock gate, configuration and output, enabled and read by the entropy owner.
+    pub struct EntropyPeripherals {
+        pub lpperi_rng: super::lpperi_rng::LpperiRng,
+    }
+
+    /// The device registers of [`EntropyPeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type EntropyPeripheralsClaims = super::lpperi_rng::Claim;
+
+    impl EntropyPeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: EntropyPeripheralsClaims) -> Self {
+            let lpperi_rng = claims;
+            Self {
+                lpperi_rng: super::lpperi_rng::LpperiRng::new(lpperi_rng),
+            }
+        }
+    }
+
+    /// The HP core's reset-cause word, read by the reset-cause owner.
+    pub struct ResetCausePeripherals {
+        pub lp_clkrst_reset_cause: super::lp_clkrst_reset_cause::LpClkrstResetCause,
+    }
+
+    /// The device registers of [`ResetCausePeripherals`]'s blocks, which its platform
+    /// handoff claims with one `oer_mmio::assume_owned`; the PAC root
+    /// does not claim them.
+    pub type ResetCausePeripheralsClaims = super::lp_clkrst_reset_cause::Claim;
+
+    impl ResetCausePeripherals {
+        /// Give each claimed block to its owner.
+        #[inline]
+        pub fn from_claims(claims: ResetCausePeripheralsClaims) -> Self {
+            let lp_clkrst_reset_cause = claims;
+            Self {
+                lp_clkrst_reset_cause: super::lp_clkrst_reset_cause::LpClkrstResetCause::new(
+                    lp_clkrst_reset_cause,
+                ),
+            }
+        }
+    }
+
     /// IEEE 802.15.4 MAC and source-specific interrupt-route registers owned by the IEEE 802.15.4 hardware lifecycle.
     pub struct Ieee802154Peripherals {
         pub ieee802154_mac: super::ieee802154_mac::Ieee802154Mac,
@@ -17874,8 +18247,16 @@ const _: () = assert!(
             <ieee802154_mac::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
+            lpperi_rng::BASE,
+            <lpperi_rng::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
             lp_aon_radio::BASE,
             <lp_aon_radio::BlockWords as oer_mmio::Registers>::WORDS
+        ),
+        (
+            lp_clkrst_reset_cause::BASE,
+            <lp_clkrst_reset_cause::BlockWords as oer_mmio::Registers>::WORDS
         ),
         (
             modem_etm::BASE,

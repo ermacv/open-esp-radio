@@ -54,7 +54,6 @@ pub mod dma_address;
 pub mod dma_static;
 pub mod phy;
 pub mod platform;
-pub mod settle;
 /// Bridges of isolated probe images (`cfg(oer_probe)`).
 #[cfg(oer_probe)]
 #[doc(hidden)]

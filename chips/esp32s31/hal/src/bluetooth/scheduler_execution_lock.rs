@@ -19,7 +19,7 @@ use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
 #[cfg(test)]
-use crate::settle::Unsettled;
+use oer_time::settle::Unsettled;
 
 /// One execution-lock request and its progress.
 #[must_use = "an admitted execution lock must be stepped and its START cleared"]

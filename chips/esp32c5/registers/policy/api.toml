@@ -3,7 +3,9 @@ schema = 5
 
 [options]
 allow-clippy-empty-docs = true
-# Every exposed peripheral is a typed register block over `oer-mmio`.
+# Every exposed peripheral is a typed register block over `oer-mmio`. The
+# platform blocks (the generator, the reset cause) are claimed by their own
+# platform handoffs.
 typed-peripherals = [
     "IEEE802154_MAC",
     "IEEE802154_INTERRUPT_ROUTE",
@@ -26,10 +28,26 @@ typed-peripherals = [
     "WIFI_MAC_ERSU_ACK_RATE",
     "WIFI_MAC_INTERRUPT",
     "WIFI_MAC_POWER_INTERRUPT",
+    "LPPERI_RNG",
+    "LP_CLKRST_RESET_CAUSE",
 ]
 # Source-qualified MMIO views retained for bit-use coverage; no owner reaches
 # them (their words lie in the typed blocks above or are not used).
 unexposed-peripherals = ["MODEM_IEEE802154_OBSERVED", "MODEM_WIFI_MAC_OBSERVED", "MODEM_WIFI_MAC_POWER_OBSERVED"]
+
+[[ownership-partitions]]
+name = "EntropyPeripherals"
+member = "entropy"
+description = "The random number generator's clock gate, configuration and output, enabled and read by the entropy owner."
+peripherals = ["LPPERI_RNG"]
+handoff = true
+
+[[ownership-partitions]]
+name = "ResetCausePeripherals"
+member = "reset_cause"
+description = "The HP core's reset-cause word, read by the reset-cause owner."
+peripherals = ["LP_CLKRST_RESET_CAUSE"]
+handoff = true
 
 [[ownership-partitions]]
 name = "Ieee802154Peripherals"

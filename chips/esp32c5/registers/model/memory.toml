@@ -368,3 +368,19 @@ kind = "mmio"
 start = 0x600B0410
 end-exclusive = 0x600B0414
 permissions = "rw"
+
+[[regions]]
+name = "lpperi-clk-en"
+address-space = "cpu"
+kind = "mmio"
+start = 0x600B2800
+end-exclusive = 0x600B2804
+permissions = "rw"
+
+[[regions]]
+name = "lpperi-rng"
+address-space = "cpu"
+kind = "mmio"
+start = 0x600B2824
+end-exclusive = 0x600B282C
+permissions = "rw"

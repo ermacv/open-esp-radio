@@ -35,10 +35,8 @@ pub mod interrupt;
 pub mod port;
 
 /// The named settle of a scheduler diagnostic sample on `clock`.
-pub(crate) fn diagnostic_settle<C: oer_time::Clock>(
-    clock: &C,
-) -> oer_esp32s31_hal::settle::Settle<'_, C> {
-    oer_esp32s31_hal::settle::Settle::new(
+pub(crate) fn diagnostic_settle<C: oer_time::Clock>(clock: &C) -> oer_time::settle::Settle<'_, C> {
+    oer_time::settle::Settle::new(
         oer_esp32s31_hal::bluetooth::engine::scheduler::DIAGNOSTIC_SETTLE,
         clock,
     )

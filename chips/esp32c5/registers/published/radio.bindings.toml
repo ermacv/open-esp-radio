@@ -12250,6 +12250,31 @@ bit-width = 1
 access = "read-write"
 
 [[registers]]
+address = 1611334672
+width = 32
+access = "read-only"
+identity = "LP_CLKRST_RESET_CAUSE.RESET_CAUSE"
+peripheral = "LP_CLKRST_RESET_CAUSE"
+peripheral-type = "LpClkrstResetCause"
+peripheral-module = "lp_clkrst_reset_cause"
+scope = []
+register-method = "reset_cause"
+
+[[registers.fields]]
+svd-name = "RESET_CAUSE"
+method = "reset_cause"
+bit-offset = 0
+bit-width = 5
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "CORE0_RESET_FLAG"
+method = "core0_reset_flag"
+bit-offset = 5
+bit-width = 1
+access = "read-only"
+
+[[registers]]
 address = 1611337812
 width = 32
 access = "read-write"
@@ -12266,3 +12291,85 @@ method = "sar2_pwdet_cct"
 bit-offset = 29
 bit-width = 3
 access = "read-write"
+
+[[registers]]
+address = 1611343872
+width = 32
+access = "read-write"
+identity = "LPPERI_RNG.CLK_EN"
+peripheral = "LPPERI_RNG"
+peripheral-type = "LpperiRng"
+peripheral-module = "lpperi_rng"
+scope = []
+register-method = "clk_en"
+
+[[registers.fields]]
+svd-name = "RNG_CK_EN"
+method = "rng_ck_en"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 1611343908
+width = 32
+access = "read-write"
+identity = "LPPERI_RNG.RNG_CFG"
+peripheral = "LPPERI_RNG"
+peripheral-type = "LpperiRng"
+peripheral-module = "lpperi_rng"
+scope = []
+register-method = "rng_cfg"
+
+[[registers.fields]]
+svd-name = "RNG_SAMPLE_ENABLE"
+method = "rng_sample_enable"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RNG_TIMER_PSCALE"
+method = "rng_timer_pscale"
+bit-offset = 1
+bit-width = 8
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RNG_TIMER_EN"
+method = "rng_timer_en"
+bit-offset = 9
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RTC_TIMER_EN"
+method = "rtc_timer_en"
+bit-offset = 10
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RNG_SAMPLE_CNT"
+method = "rng_sample_cnt"
+bit-offset = 24
+bit-width = 8
+access = "read-only"
+
+[[registers]]
+address = 1611343912
+width = 32
+access = "read-only"
+identity = "LPPERI_RNG.RNG_DATA_SYNC"
+peripheral = "LPPERI_RNG"
+peripheral-type = "LpperiRng"
+peripheral-module = "lpperi_rng"
+scope = []
+register-method = "rng_data_sync"
+
+[[registers.fields]]
+svd-name = "RND_SYNC_DATA"
+method = "rnd_sync_data"
+bit-offset = 0
+bit-width = 32
+access = "read-only"

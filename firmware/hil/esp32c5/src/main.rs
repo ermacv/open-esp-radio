@@ -82,7 +82,13 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         peripherals.USB_DEVICE,
         interrupts.console_usb,
         peripherals.TIMG1,
-        peripherals.RNG,
+        oer_esp32c5_hal::platform::Entropy::new(
+            oer_esp32c5_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+            oer_embassy_time::EmbassyClock,
+        ),
+        oer_esp32c5_hal::platform::ResetCauses::read(
+            oer_esp32c5_esp_hal_soc::handoff::take_reset_cause(peripherals.LP_CLKRST),
+        ),
     );
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {

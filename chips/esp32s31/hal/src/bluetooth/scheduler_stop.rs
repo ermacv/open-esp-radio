@@ -8,13 +8,13 @@
 use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
-#[cfg(test)]
-use crate::settle::Unsettled;
 use core::task::{Context, Poll, ready};
 #[cfg(feature = "bluetooth-engine")]
 use oer_esp32s31_pac::{
     BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped, BluetoothTaskRegisters,
 };
+#[cfg(test)]
+use oer_time::settle::Unsettled;
 
 #[derive(Debug)]
 enum Phase {

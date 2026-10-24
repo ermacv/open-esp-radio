@@ -8825,6 +8825,115 @@ documentation establishes their electrical meaning.</description>
       </registers>
     </peripheral>
     <peripheral>
+      <name>LPPERI_RNG</name>
+      <description>Low-power peripheral registers: the random number generator's clock gate, its sampling and timer configuration and its synchronized output.</description>
+      <baseAddress>0x600B2800</baseAddress>
+      <registers>
+        <register>
+          <name>CLK_EN</name>
+          <description>Clock gates of the low-power peripherals. The word is shared with the LP UART, LP IO, LP I2C, eFuse and LP CPU gates; only the generator's gate is described, and every change keeps the other bits.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x7F000000</resetValue>
+          <fields>
+            <field>
+              <name>RNG_CK_EN</name>
+              <description>Random number generator clock enable; set after reset.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RNG_CFG</name>
+          <description>Random number generator sampling and timer configuration.</description>
+          <addressOffset>0x24</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000FFE</resetValue>
+          <fields>
+            <field>
+              <name>RNG_SAMPLE_ENABLE</name>
+              <description>Enables sampling of the ring oscillator; clear after reset.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RNG_TIMER_PSCALE</name>
+              <description>Clock divider of the generator's timer.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>RNG_TIMER_EN</name>
+              <description>XORs the asynchronous generator timer into the output.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RTC_TIMER_EN</name>
+              <description>XORs the RTC timer into the output: bit 0 before the CRC, bit 1 after it.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>RNG_SAMPLE_CNT</name>
+              <description>Count of ring-oscillator samples.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+              <access>read-only</access>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RNG_DATA_SYNC</name>
+          <description>The generator's output, synchronized to the bus clock.</description>
+          <addressOffset>0x28</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RND_SYNC_DATA</name>
+              <description>One 32-bit word of random data.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_CLKRST_RESET_CAUSE</name>
+      <description>Low-power clock/reset registers: the reset cause of the HP core. Firmware reads it after boot; the host reads it through JTAG after a power cycle.</description>
+      <baseAddress>0x600B0400</baseAddress>
+      <registers>
+        <register>
+          <name>RESET_CAUSE</name>
+          <description>Why the HP core last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RESET_CAUSE</name>
+              <description>The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+            <field>
+              <name>CORE0_RESET_FLAG</name>
+              <description>Set when the HP core left reset.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
       <name>WIFI_MAC_AUX_TSF_CONTROL</name>
       <description>SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.</description>
       <baseAddress>0x600AD860</baseAddress>

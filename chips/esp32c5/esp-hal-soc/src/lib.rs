@@ -5,8 +5,11 @@
 //!
 //! Radio registers belong to `oer-esp32c5-pac`. This crate owns esp-hal
 //! singleton witnesses for non-radio platform blocks, separate from radio
-//! protocol policy.
+//! protocol policy. [`handoff`] transfers the entropy and reset-cause blocks
+//! to the chip PAC.
 
+#[cfg(feature = "esp32c5")]
+pub mod handoff;
 pub mod watchdog;
 
 #[cfg(feature = "esp32c5")]

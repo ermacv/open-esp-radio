@@ -10,7 +10,7 @@ use oer_esp32s31_hal::bluetooth::{
     BluetoothPrimaryInterruptEpoch, BluetoothSchedulerReferenceGateObservation,
     BluetoothSchedulerWorkObservation, InterruptRegistersOwner,
 };
-use oer_esp32s31_hal::settle::Unsettled;
+use oer_time::settle::Unsettled;
 
 /// Captured primary inputs, before P2 classification.
 /// Empty epochs carry no work. Fault-source presence and a failed diagnostic

@@ -7,10 +7,10 @@ schema = 2
 address = 1611334672
 width = 32
 access = "read-only"
-identity = "LP_CLKRST.RESET_CAUSE"
-peripheral = "LP_CLKRST"
-peripheral-type = "LpClkrst"
-peripheral-module = "lp_clkrst"
+identity = "LP_CLKRST_RESET_CAUSE.RESET_CAUSE"
+peripheral = "LP_CLKRST_RESET_CAUSE"
+peripheral-type = "LpClkrstResetCause"
+peripheral-module = "lp_clkrst_reset_cause"
 scope = []
 register-method = "reset_cause"
 

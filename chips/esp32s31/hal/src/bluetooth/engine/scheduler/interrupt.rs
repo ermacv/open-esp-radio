@@ -183,7 +183,7 @@ impl SchedulerInterruptHalf {
     ) -> bool {
         let clock = SchedulerInterruptClock::new(clock);
         self.service_with(|command| {
-            let settle = crate::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
+            let settle = oer_time::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
             let unsettled = |_| SchedulerInterruptError::DiagnosticUnsettled;
             Ok(match command {
                 Command::Busy => Reply::Busy(

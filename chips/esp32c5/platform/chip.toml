@@ -193,7 +193,7 @@ package = "oer-firmware-probes-esp32c5-radio"
 # its evidence; cause 1 is the power-on reset of ESP-IDF 4d59230d's
 # `components/soc/esp32c5/register/soc/lp_clkrst_reg.h`.
 [reset-cause]
-field = "LP_CLKRST.RESET_CAUSE.RESET_CAUSE"
+field = "LP_CLKRST_RESET_CAUSE.RESET_CAUSE.RESET_CAUSE"
 power-on = 1
 
 [hil.images.system-watchdog]
