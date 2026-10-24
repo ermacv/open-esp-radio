@@ -41,6 +41,11 @@ use core::{
 mod guard;
 #[cfg_attr(
     not(target_arch = "riscv32"),
+    allow(dead_code, reason = "the hart's vectors alone take the shift")
+)]
+mod tcontrol;
+#[cfg_attr(
+    not(target_arch = "riscv32"),
     allow(dead_code, reason = "the hart's code alone paints")
 )]
 mod watermark;
@@ -270,8 +275,10 @@ fn foreign_vectors_installed() -> ! {
 }
 
 /// Make every store into the aligned guard of this hart's interrupt
-/// stack raise a breakpoint exception. The exception entry clears
-/// `tcontrol.mte`, so its own frame below the guard does not retrigger.
+/// stack raise a breakpoint exception. Interrupt handlers run with the
+/// triggers of the context they interrupted (`vectors.s`); the trap into
+/// the exception entry clears `tcontrol.mte` and the entry leaves it clear,
+/// so its own frame below the guard does not retrigger.
 ///
 /// # Safety
 ///
@@ -387,4 +394,7 @@ core::arch::global_asm!(
     mintthresh = const clic::MINTTHRESH,
     harts = const HARTS,
     raise_threshold = const RAISE_THRESHOLD as u8,
+    tcontrol = const trigger::TCONTROL,
+    mte = const trigger::TCONTROL_MTE,
+    mpte_shift = const tcontrol::MPTE_SHIFT,
 );

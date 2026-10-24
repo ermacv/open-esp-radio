@@ -6,20 +6,27 @@
     //   {mintthresh}       the CLIC threshold CSR
     //   {harts}            the harts with an interrupt stack (1 or 2)
     //   {raise_threshold}  1 when clearing MIE alone does not mask the CLIC
+    //   {tcontrol}         the trigger control CSR
+    //   {mte}              tcontrol.MTE
+    //   {mpte_shift}       the bits from tcontrol.MPTE down to tcontrol.MTE
     //
     // Every entry swaps `sp` with `mscratch` before its first memory access
     // and saves the interrupted caller registers, `mstatus`, `mepc`,
-    // `mcause` and the threshold in a 96-byte frame on the hart's SRAM
-    // interrupt stack before it admits a nested interrupt; it turns the FPU
-    // off, since no trap saves the floating-point registers, and calls its
-    // one handler directly. The exit closes nesting first, restores `mcause`
-    // (its `mpil` is the level `mret` returns to), `mepc`, `mstatus` and the
-    // threshold from that frame, then the registers and the stack, and
-    // returns.
+    // `mcause`, the threshold and `tcontrol` in a 96-byte frame on the
+    // hart's SRAM interrupt stack before it admits a nested interrupt; it
+    // turns the FPU off, since no trap saves the floating-point registers,
+    // and calls its one handler directly. An interrupt's entry gives its
+    // handler the triggers of the context it interrupted, which the trap
+    // moved to `tcontrol.MPTE`, so the interrupt stack's guard fires in
+    // handlers. The exit closes nesting first, restores `mcause` (its `mpil`
+    // is the level `mret` returns to), `mepc`, `tcontrol` (its MPTE is the
+    // MTE `mret` returns to), `mstatus` and the threshold from that frame,
+    // then the registers and the stack, and returns. Nested traps thus keep
+    // each level's trigger state: a trap overwrites MPTE, the frame does not.
     //
     // Frame: ra, t0..t6, a0..a7 at 0..60, the outermost flag at 64,
     // mstatus at 68, the interrupted sp at 72, mepc at 76, mcause at 80,
-    // the threshold at 84; 88..96 unused.
+    // the threshold at 84, tcontrol at 88; 92..96 unused.
     .section .trap.runtime, "ax", @progbits
     .option push
     .option norelax
@@ -105,6 +112,8 @@ _runtime_stack_bootstrap:
     sw t1, 80(sp)
     csrr t1, {mintthresh}
     sw t1, 84(sp)
+    csrr t1, {tcontrol}
+    sw t1, 88(sp)
     li t1, {fs}
     csrc mstatus, t1
     csrw mscratch, t0
@@ -143,14 +152,21 @@ _start_trap:
     j 3b
     .size _start_trap, . - _start_trap
 
-    // One hardware-vector entry: enter, admit nesting (the CLIC lets only a
-    // higher level in), call the line's handler, exit.
+    // One hardware-vector entry: enter, turn the triggers on when they were
+    // on in what the trap interrupted (MTE = MPTE), admit nesting (the CLIC
+    // lets only a higher level in), call the line's handler, exit. The
+    // exception entry leaves them off: a store into the interrupt stack's
+    // guard trapped to it, and its own frame lies below that guard.
     .macro IRQ_ENTRY hart, line
     .balign 4
     .global _runtime_irq_h\hart\()_l\line
     .type _runtime_irq_h\hart\()_l\line, @function
 _runtime_irq_h\hart\()_l\line:
     TRAP_ENTER
+    csrr t1, {tcontrol}
+    srli t1, t1, {mpte_shift}
+    andi t1, t1, {mte}
+    csrs {tcontrol}, t1
     csrsi mstatus, {mie}
     call __oer_interrupt_h\hart\()_l\line
     j _runtime_irq_exit
@@ -183,6 +199,8 @@ _runtime_irq_exit:
     csrw mcause, t0
     lw t0, 76(sp)
     csrw mepc, t0
+    lw t0, 88(sp)
+    csrw {tcontrol}, t0
     lw t0, 68(sp)
     csrw mstatus, t0
     lw t0, 84(sp)

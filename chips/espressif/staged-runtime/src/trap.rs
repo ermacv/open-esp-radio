@@ -42,7 +42,10 @@ pub struct TrapFrame {
     pub mcause: u32,
     /// The CLIC threshold (`mintthresh`) at the trap.
     pub mintthresh: u32,
-    _unused: [u32; 2],
+    /// `tcontrol` as the trap left it: its MPTE is the interrupted
+    /// context's MTE.
+    pub tcontrol: u32,
+    _unused: u32,
 }
 
 /// The bytes of a [`TrapFrame`], a multiple of the stack's 16-byte alignment.
@@ -59,6 +62,7 @@ const _: () = {
     assert!(offset_of!(TrapFrame, mepc) == 76);
     assert!(offset_of!(TrapFrame, mcause) == 80);
     assert!(offset_of!(TrapFrame, mintthresh) == 84);
+    assert!(offset_of!(TrapFrame, tcontrol) == 88);
 };
 
 /// Vectors of a hart's CLIC vector table (MTVT) that hold an entry.

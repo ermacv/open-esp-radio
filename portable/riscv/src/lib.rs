@@ -150,6 +150,13 @@ pub mod trigger {
     /// (tcontrol, at 0x7a5)", field `mte`.
     pub const TCONTROL_MTE: usize = 1 << 3;
 
+    /// `tcontrol.mpte`, bit 7: `mte` before the last trap into machine
+    /// mode, which a trap sets from `mte` and `mret` copies back.
+    ///
+    /// SOURCE: RISC-V Debug Specification (Sdtrig), "Trigger Control
+    /// (tcontrol, at 0x7a5)", field `mpte`.
+    pub const TCONTROL_MPTE: usize = 1 << 7;
+
     /// Fields of `tdata1` for an address/data match trigger (`mcontrol`).
     pub mod mcontrol {
         /// `mcontrol.m`, bit 6: the trigger fires in machine mode.
