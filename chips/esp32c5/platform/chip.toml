@@ -66,8 +66,9 @@ task-stacks = "psram"
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
 # (chips/espressif/staged-runtime) installs these vectors and the stack;
-# the chip-neutral symbols are chips/espressif/staged-layout
-# (interrupts.rs). One hart, no inter-processor call.
+# the symbols are the interrupt table's (portable/interrupt-table) and the
+# staged runtime's (chips/espressif/staged-runtime stacks.rs). One hart, no
+# inter-processor call.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
 # `Binding<Interrupt, Priority, Cpu>`: source u16 at 0, level u8 at 2, class
