@@ -33,7 +33,7 @@ instruction-pattern proofs remain in their consumers. The callback audit is shar
 marks the function partial and retains `FunctionFacts::expression_limited`.
 `Analysis::expression_limited_functions` counts these functions; image stack
 reports print the count when nonzero. The queries over an image's facts
-(`stack_sizes`, `taken_addresses`, `waker_vtables`, `interrupt_table`,
+(`stack_sizes`, `taken_addresses`, `waker_vtable`, `interrupt_table`,
 `vector_table`, `trap_entry`) charge the same control for each relocation,
 word, entry or step they read. The caller decides both; the image
 checks' budget is `oer_image_checks::stack::budget`. Every structure that
@@ -182,27 +182,30 @@ analysis left a target unresolved. Each site's targets carry the `Fact`s that
 gave them; the facts of one site unite, each being a superset of what the
 site reaches. An empty set resolves a site only where its fact is complete
 for it (`Fact::proves_empty`: the interrupt table, no tasks); an empty
-set of found facts (waker vtables, field types) is a hole,
+set of found facts (the waker vtable, field types) is a hole,
 `Reason::NoCandidate`, never a site that reaches nothing:
 
 - `interrupt_table` reads an image's interrupt table (the slice an exported
   symbol holds, its pointer word and every non-zero handler word carrying the
   relocation that names it) in the chip's `TableLayout`.
 - `Dwarf` reads the chain of functions inlined at an address and the
-  qualified type each function returns. `waker_vtables` finds every
+  qualified type each function returns. `waker_vtable` finds the image's
   `RawWakerVTable`: four relocated function pointers in data neither writable
   nor executable whose first function returns `core::task::wake::RawWaker`.
   A `&'static RawWakerVTable` points at immutable data, so every vtable a
   `const` or `static` builds is found; one built at run time in writable
-  memory (a leaked allocation) is not. `waker_resolutions` sends an
+  memory (a leaked allocation) is not. An image holds at most one, the
+  executor's: a second fails the analysis with `Integrity`, naming both, so
+  every waker the image builds carries that vtable. `waker_resolutions` sends an
   unresolved call inside `Waker::wake`, `wake_by_ref`, `drop` or `clone` to
-  that slot of every vtable. When the inline scope ends before the call,
+  that slot of the vtable; without one the site keeps an empty set, a hole.
+  When the inline scope ends before the call,
   every reaching target load in a closed local control-flow graph must
   identify a method and its matching slot. A merge of methods keeps the
   union of their slots; an unknown producer leaves the call unresolved.
   An unresolved indirect tail can also use these loads when its own exit
   is the graph's only open site. The resolution is accepted only when every
-  selected slot of every vtable targets an address outside the containing
+  selected slot of the vtable targets an address outside the containing
   function; otherwise the tail could add missing local predecessors.
 - `Analysis::constant_arguments` reads an argument register's exact value at
   every direct call of a function, complete when `taken_addresses` holds no
@@ -299,7 +302,7 @@ the nesting rule checked; one with any is conditional on the rule those
 sites may break.
 
 A bound also names what it assumes (`Bound::assumptions`, `Assumption`): the
-facts found from the image's types (waker vtables, field types)
+facts found from the image's types (the waker vtable, field types)
 rest on the executor invariant, that a task header's `poll_fn` matches its
 storage and an erased pointer is read back as its own type; the interrupt
 table assumes nothing. `HartStack::assumptions` gathers a hart's. A hart with

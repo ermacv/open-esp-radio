@@ -165,8 +165,14 @@ fn a_waker_scope_ending_before_jalr_is_proved_by_its_exclusive_load() {
         Some("<core::task::wake::Waker>::wake")
     );
     assert_eq!(dwarf.inline_chain(TEXT + 4).unwrap(), ["root"]);
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert_eq!(
         resolutions.get(TEXT + 4).unwrap().targets,
         BTreeSet::from([targets[1]])
@@ -190,8 +196,14 @@ fn a_branch_bypassing_the_load_cannot_borrow_its_waker_scope() {
         TEXT + 4,
         TEXT + 8,
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 8).is_none());
     assert!(
         analysis
@@ -207,16 +219,28 @@ fn a_branch_bypassing_the_load_cannot_borrow_its_waker_scope() {
 #[test]
 fn a_different_vtable_slot_is_not_the_waker_method_the_scope_names() {
     let (analysis, dwarf, targets) = fixture(vec![0x0085_2783, CALL_A5, RET], TEXT, TEXT + 4);
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.is_empty());
 }
 
 #[test]
 fn an_adjusted_function_pointer_does_not_inherit_the_producers_scope() {
     let (analysis, dwarf, targets) = fixture(vec![LOAD_WAKE, 0x0027_80e7, RET], TEXT, TEXT + 4);
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.is_empty());
 }
 
@@ -236,7 +260,7 @@ fn merged_tail() -> (Analysis, Dwarf, [u32; 4]) {
 }
 
 #[test]
-fn a_merged_tail_uses_both_slots_of_every_vtable_without_exposing_ordinary_loads() {
+fn a_merged_tail_uses_both_slots_of_the_vtable_without_exposing_ordinary_loads() {
     let (analysis, dwarf, first) = merged_tail();
     let facts = &analysis.functions[&TEXT];
     let site = TEXT + 16;
@@ -250,21 +274,14 @@ fn a_merged_tail_uses_both_slots_of_every_vtable_without_exposing_ordinary_loads
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([4, 8])
     );
-    let second = [first[0], first[3], first[3] + 4, first[0]];
-    let resolutions = waker_resolutions(
-        &analysis,
-        &dwarf,
-        &[first, second],
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, Some(&first), &mut ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     let resolved = resolutions.get(site).unwrap();
     assert_eq!(resolved.facts, BTreeSet::from([Fact::WakerVtables]));
-    assert_eq!(
-        resolved.targets,
-        BTreeSet::from([first[1], first[2], second[1], second[2]])
-    );
+    assert_eq!(resolved.targets, BTreeSet::from([first[1], first[2]]));
     assert_eq!(
         analysis
             .bound_with(TEXT, &resolutions, &mut crate::tests::ledger(), &mut || Ok(
@@ -272,7 +289,7 @@ fn a_merged_tail_uses_both_slots_of_every_vtable_without_exposing_ordinary_loads
             ))
             .unwrap()
             .bytes,
-        Some(64)
+        Some(32)
     );
 }
 
@@ -297,8 +314,14 @@ fn another_unresolved_jump_blocks_the_merged_tail_loads() {
     let facts = &analysis.functions[&TEXT];
     assert!(facts.target_loads.is_empty());
     assert!(facts.open_exit_target_loads.is_empty());
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.is_empty());
 }
 
@@ -321,8 +344,14 @@ fn an_unresolved_call_still_requires_a_closed_graph() {
     assert!(facts.target_loads.is_empty());
     assert!(facts.open_exit_target_loads.contains_key(&(TEXT + 8)));
     assert!(!facts.open_exit_target_loads.contains_key(&(TEXT + 20)));
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 8).is_some());
     assert!(resolutions.get(TEXT + 20).is_none());
 }
@@ -340,8 +369,14 @@ fn a_compressed_tail_uses_the_same_target_load_proof() {
             .open_exit_target_loads
             .contains_key(&(TEXT + 4))
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert_eq!(
         resolutions.get(TEXT + 4).unwrap().targets,
         BTreeSet::from([targets[1]])
@@ -349,32 +384,31 @@ fn a_compressed_tail_uses_the_same_target_load_proof() {
 }
 
 #[test]
-fn any_selected_slot_in_any_vtable_inside_the_function_blocks_the_tail() {
+fn any_selected_slot_inside_the_function_blocks_the_tail() {
     let (analysis, dwarf, targets) = merged_tail();
     let end = TEXT + analysis.functions[&TEXT].function.size;
-    for table in 0..2 {
-        for slot in [1, 2] {
-            for local in [TEXT, TEXT + 4, end - 2] {
-                let mut tables = [targets; 2];
-                tables[table][slot] = local;
-                let resolutions =
-                    waker_resolutions(&analysis, &dwarf, &tables, &mut ledger(), &mut || Ok(()))
-                        .unwrap();
-                assert!(resolutions.get(TEXT + 16).is_none(), "{tables:?}");
-            }
+    for slot in [1, 2] {
+        for local in [TEXT, TEXT + 4, end - 2] {
+            let mut table = targets;
+            table[slot] = local;
+            let resolutions =
+                waker_resolutions(&analysis, &dwarf, Some(&table), &mut ledger(), &mut || {
+                    Ok(())
+                })
+                .unwrap();
+            assert!(resolutions.get(TEXT + 16).is_none(), "{table:?}");
         }
     }
     let mut boundary = targets;
     boundary[1] = end;
-    let resolutions =
-        waker_resolutions(
-            &analysis,
-            &dwarf,
-            &[boundary],
-            &mut ledger(),
-            &mut || Ok(()),
-        )
-        .unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&boundary),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 16).unwrap().targets.contains(&end));
 }
 
@@ -396,8 +430,14 @@ fn an_unknown_incoming_producer_keeps_a_tail_unresolved() {
         &[],
     );
     assert!(analysis.functions[&TEXT].open_exit_target_loads.is_empty());
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.is_empty());
 }
 
@@ -535,8 +575,14 @@ fn a_noreturn_panic_branch_preserves_the_waker_proof_and_the_callees_stack() {
             .iter()
             .any(|transfer| { transfer.site == TEXT + 16 && transfer.target == Some(TEXT + 56) })
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert_eq!(
         resolutions.get(TEXT + 8).unwrap().targets,
         BTreeSet::from([targets[1]])
@@ -575,9 +621,14 @@ fn missing_false_or_ambiguous_noreturn_facts_keep_the_continuation() {
             analysis.functions[&TEXT].target_loads.is_empty(),
             "{proof:?}"
         );
-        let resolutions =
-            waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(()))
-                .unwrap();
+        let resolutions = waker_resolutions(
+            &analysis,
+            &dwarf,
+            Some(&targets),
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
         assert!(resolutions.get(TEXT + 8).is_none(), "{proof:?}");
     }
 }
@@ -598,8 +649,14 @@ fn unimp_reachable_around_a_noreturn_call_still_blocks_the_waker_proof() {
         &[Some(true)],
     );
     assert!(analysis.functions[&TEXT].target_loads.is_empty());
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 12).is_none());
 }
 
@@ -624,8 +681,14 @@ fn merging_wake_and_wake_by_ref_preserves_both_targets() {
         analysis.functions[&TEXT].target_loads[&(TEXT + 16)].len(),
         2
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert_eq!(
         resolutions.get(TEXT + 16).unwrap().targets,
         BTreeSet::from([targets[1], targets[2]])
@@ -633,7 +696,7 @@ fn merging_wake_and_wake_by_ref_preserves_both_targets() {
 }
 
 #[test]
-fn merged_waker_loads_outside_the_call_scope_use_both_slots_of_every_vtable() {
+fn merged_waker_loads_outside_the_call_scope_use_both_slots_of_the_vtable() {
     let (analysis, dwarf, first) = fixture_with(
         vec![
             0x0005_0663, // beq a0, zero, +12.
@@ -660,23 +723,15 @@ fn merged_waker_loads_outside_the_call_scope_use_both_slots_of_every_vtable() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([4, 8])
     );
-    // Four distinct real functions occupy slots 1/2 across the two tables;
-    // clone (slot 0) is deliberately shared and must never be selected.
-    let second = [first[0], first[3], first[3] + 4, first[0]];
-    let resolutions = waker_resolutions(
-        &analysis,
-        &dwarf,
-        &[first, second],
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    // Clone (slot 0) and drop (slot 3) are never selected.
+    let resolutions =
+        waker_resolutions(&analysis, &dwarf, Some(&first), &mut ledger(), &mut || {
+            Ok(())
+        })
+        .unwrap();
     let resolution = resolutions.get(site).unwrap();
     assert_eq!(resolution.facts, BTreeSet::from([Fact::WakerVtables]));
-    assert_eq!(
-        resolution.targets,
-        BTreeSet::from([first[1], first[2], second[1], second[2]])
-    );
+    assert_eq!(resolution.targets, BTreeSet::from([first[1], first[2]]));
 }
 
 #[test]
@@ -699,8 +754,14 @@ fn an_unknown_producer_at_a_waker_merge_keeps_the_call_unresolved() {
         &[],
     );
     assert!(analysis.functions[&TEXT].target_loads.is_empty());
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 24).is_none());
 }
 
@@ -719,8 +780,14 @@ fn a_proven_auipc_jalr_target_uses_its_noreturn_fact() {
         &[(TEXT + 4, TEXT + 8, "wake")],
         &[Some(true)],
     );
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert_eq!(
         resolutions.get(TEXT + 8).unwrap().targets,
         BTreeSet::from([targets[1]])
@@ -753,8 +820,14 @@ fn a_path_bypassing_auipc_does_not_prove_the_jalr_target_noreturn() {
         &[Some(true)],
     );
     assert!(analysis.functions[&TEXT].target_loads.is_empty());
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[targets], &mut ledger(), &mut || Ok(())).unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&targets),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 12).is_none());
 }
 
@@ -796,11 +869,14 @@ fn a_jump_table_edge_to_unimp_survives_noreturn_pruning() {
     let analysis = analyze(&elf, &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].target_loads.is_empty());
     let (dwarf, _) = debug(&elf);
-    let resolutions =
-        waker_resolutions(&analysis, &dwarf, &[[TEXT; 4]], &mut ledger(), &mut || {
-            Ok(())
-        })
-        .unwrap();
+    let resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        Some(&[TEXT; 4]),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(resolutions.get(TEXT + 8).is_none());
 }
 
@@ -913,10 +989,7 @@ fn terminal_table_trap_allows_merged_waker_slots_one_and_two() {
         &[],
     );
     let (dwarf, _) = debug(&elf);
-    let tables = [
-        [TEXT + 52, TEXT + 56, TEXT + 60, TEXT + 52],
-        [TEXT + 52, TEXT + 64, TEXT + 68, TEXT + 52],
-    ];
+    let table = [TEXT + 52, TEXT + 56, TEXT + 60, TEXT + 52];
     with_facts(&elf, |image| {
         for traps in [TrapSemantics::Unknown, TrapSemantics::Terminal] {
             let analysis = crate::analyze_with_traps(
@@ -930,7 +1003,9 @@ fn terminal_table_trap_allows_merged_waker_slots_one_and_two() {
             )?;
             let site = TEXT + 20;
             let resolutions =
-                waker_resolutions(&analysis, &dwarf, &tables, &mut ledger(), &mut || Ok(()))?;
+                waker_resolutions(&analysis, &dwarf, Some(&table), &mut ledger(), &mut || {
+                    Ok(())
+                })?;
             if traps == TrapSemantics::Terminal {
                 assert_eq!(
                     analysis.functions[&TEXT].target_loads[&site]
@@ -941,7 +1016,7 @@ fn terminal_table_trap_allows_merged_waker_slots_one_and_two() {
                 );
                 assert_eq!(
                     resolutions.get(site).unwrap().targets,
-                    BTreeSet::from([TEXT + 56, TEXT + 60, TEXT + 64, TEXT + 68])
+                    BTreeSet::from([TEXT + 56, TEXT + 60])
                 );
             } else {
                 assert!(analysis.functions[&TEXT].target_loads.is_empty());

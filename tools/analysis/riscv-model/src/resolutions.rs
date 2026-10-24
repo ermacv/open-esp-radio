@@ -14,7 +14,7 @@ pub enum Fact {
     /// The image's static interrupt table: a dispatcher reaches the
     /// handlers of its level and core.
     InterruptTable,
-    /// The waker vtables of the image.
+    /// The image's one waker vtable, the executor's.
     WakerVtables,
     /// The functions whose type can be a static field's function pointer.
     FieldType,

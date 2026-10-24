@@ -1,14 +1,15 @@
 //! Waker calls. A call the analysis leaves unresolved where the DWARF says
 //! `Waker::wake` (or `wake_by_ref`, `drop`, `clone`) is inlined reaches the
-//! matching slot of every `RawWakerVTable` of the image. A vtable is four
+//! matching slot of the image's one `RawWakerVTable`. A vtable is four
 //! relocated function pointers in data neither writable nor executable whose
 //! first function, by the DWARF, returns `core::task::wake::RawWaker`: a
 //! `&'static RawWakerVTable` points at immutable data, so every waker the
-//! image builds from a `const` or `static` vtable is among them. A vtable
-//! built at run time in writable memory (a leaked allocation) is not.
+//! image builds from a `const` or `static` vtable carries one of them. An
+//! image with a second such vtable fails the analysis. A vtable built at run
+//! time in writable memory (a leaked allocation) is not found.
 use crate::dwarf::Dwarf;
 use crate::{Analysis, Fact, Resolutions, TransferKind};
-use oer_analysis_riscv_model::{Ledger, Result, RunControl};
+use oer_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeSet;
 
@@ -29,20 +30,22 @@ fn slot(function: &str) -> Option<usize> {
     }
 }
 
-/// Each `RawWakerVTable` of `image`: its four functions, by slot.
-pub fn waker_vtables(
+/// The one `RawWakerVTable` of `image`, its four functions by slot, or
+/// `None` when the image has none. A second vtable is an
+/// [`ErrorCode::Integrity`] error naming both: every waker must carry the
+/// executor's vtable.
+pub fn waker_vtable(
     image: &ImageFacts<'_>,
     dwarf: &Dwarf,
     analysis: &Analysis,
-    keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
-) -> Result<Vec<[u32; 4]>> {
+) -> Result<Option<[u32; 4]>> {
     let function = |address: u32| {
         let target = image.word(address)? & !1;
         image.read_only_word(address)?;
         analysis.functions.contains_key(&target).then_some(target)
     };
-    let mut vtables = Vec::new();
+    let mut found: Option<(u32, [u32; 4])> = None;
     for &(address, _) in image.words() {
         control.checkpoint(1)?;
         if address % 4 != 0 {
@@ -52,22 +55,34 @@ pub fn waker_vtables(
         let [Some(clone), Some(wake), Some(wake_by_ref), Some(drop)] = slots else {
             continue;
         };
-        if dwarf.return_type(clone) == Some(RAW_WAKER) {
-            keep.push(&mut vtables, [clone, wake, wake_by_ref, drop], control)?;
+        if dwarf.return_type(clone) != Some(RAW_WAKER) {
+            continue;
         }
+        if let Some((first, _)) = found {
+            return Err(Error::new(
+                ErrorCode::Integrity,
+                format!(
+                    "the image has a second waker vtable at {address:#010x} (clone {clone:#010x}) \
+                     beside the one at {first:#010x}: every waker must carry the executor's vtable"
+                ),
+            ));
+        }
+        found = Some((address, [clone, wake, wake_by_ref, drop]));
     }
-    Ok(vtables)
+    Ok(found.map(|(_, vtable)| vtable))
 }
 
 /// The targets of every unresolved call or jump inside a waker method:
-/// that method's slot of each of `vtables`.
+/// that method's slot of `vtable`. Without a vtable each such site gets an
+/// empty set, a hole.
 pub fn waker_resolutions(
     analysis: &Analysis,
     dwarf: &Dwarf,
-    vtables: &[[u32; 4]],
+    vtable: Option<&[u32; 4]>,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
+    let vtables = vtable.as_slice();
     let mut resolutions = Resolutions::new();
     for facts in analysis.functions.values() {
         for transfer in &facts.transfers {

@@ -71,7 +71,7 @@ pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind
 pub use tasks::task_poll_resolutions;
 pub use trap::{TrapEntry, trap_entry, vector_table};
 pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
-pub use wakers::{waker_resolutions, waker_vtables};
+pub use wakers::{waker_resolutions, waker_vtable};
 
 /// The common image-derived resolutions. Reuses the already captured ELF,
 /// analysis and typed DWARF; callers add platform interrupt routing facts.
@@ -85,8 +85,8 @@ pub fn image_resolutions<'a>(
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
-    let vtables = waker_vtables(image, dwarf, analysis, keep, control)?;
-    let mut resolutions = waker_resolutions(analysis, dwarf, &vtables, keep, control)?;
+    let vtable = waker_vtable(image, dwarf, analysis, control)?;
+    let mut resolutions = waker_resolutions(analysis, dwarf, vtable.as_ref(), keep, control)?;
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;
     resolutions.extend(task_poll_resolutions(
