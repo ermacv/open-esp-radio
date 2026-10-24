@@ -224,3 +224,108 @@ radio = "FROM_CPU_0.LINE to FROM_CPU_3.LINE"
 esp_hal = "INTPRI.cpu_intr_from_cpu in raise and reset (interrupt/software.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal raises and resets a line only through SoftwareInterrupt<N> and the sender and acknowledger split from it (esp-hal 1f646c5 interrupt/software.rs), which SoftwareInterrupt::new makes from the FROM_CPU_INTRn singleton; the executor's and doorbell's line handoff consumes that owner for good before it claims the line's block. The RTOS context-switch path (interrupt/__rtos_implementation.rs: trigger steals FROM_CPU_INTR0, install takes the clear register's address) runs only from set_context_switch_handler and request_context_switch, which no image calls."
+
+[[word]]
+address = 0x60008048
+radio = "TIMG0_WDT.WDTCONFIG0 (typed block)"
+esp_hal = "TIMG0.wdtconfig0 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x6000804c
+radio = "TIMG0_WDT.WDTCONFIG1 (typed block)"
+esp_hal = "TIMG0.wdtconfig1 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60008050
+radio = "TIMG0_WDT.WDTCONFIG2 (typed block)"
+esp_hal = "TIMG0.wdtconfig2 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60008060
+radio = "TIMG0_WDT.WDTFEED (typed block)"
+esp_hal = "TIMG0.wdtfeed (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60008064
+radio = "TIMG0_WDT.WDTWPROTECT (typed block)"
+esp_hal = "TIMG0.wdtwprotect (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009048
+radio = "TIMG1_WDT.WDTCONFIG0 (typed block)"
+esp_hal = "TIMG1.wdtconfig0 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x6000904c
+radio = "TIMG1_WDT.WDTCONFIG1 (typed block)"
+esp_hal = "TIMG1.wdtconfig1 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009050
+radio = "TIMG1_WDT.WDTCONFIG2 (typed block)"
+esp_hal = "TIMG1.wdtconfig2 (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009060
+radio = "TIMG1_WDT.WDTFEED (typed block)"
+esp_hal = "TIMG1.wdtfeed (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60009064
+radio = "TIMG1_WDT.WDTWPROTECT (typed block)"
+esp_hal = "TIMG1.wdtwprotect (timer/timg.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60096060
+radio = "PCR_TIMG1.TIMERGROUP1_CONF (typed block)"
+esp_hal = "SYSTEM.timergroup.conf (esp-metadata-generated/_generated_esp32c5.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x60096068
+radio = "PCR_TIMG1.TIMERGROUP1_WDT_CLK_CONF (typed block)"
+esp_hal = "PCR.timergroup.wdt_clk_conf (soc/esp32c5/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x600b1c00
+radio = "LP_WDT.CONFIG0 (typed block)"
+esp_hal = "LP_WDT.wdtconfig0 (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x600b1c18
+radio = "LP_WDT.WPROTECT (typed block)"
+esp_hal = "LP_WDT.wdtwprotect (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
+
+[[word]]
+address = 0x600b1c1c
+radio = "LP_WDT_SWD.SWD_CONFIG (typed block)"
+esp_hal = "LP_WDT.swd_conf (rtc_cntl/mod.rs)"
+coordination = "disjoint-lifecycle"
+reason = "Bridge, removed with esp-hal in the integration PR: esp-hal 1f646c5 stores the watchdog words inside esp_hal::init and through the timer-group and RTC drivers of singletons the watchdog handoff consumes after esp_hal::init."
