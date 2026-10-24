@@ -1733,6 +1733,25 @@ impl<'a> TypedBlock<'a> {
                 view.name
             );
         }
+        if let Some(source) = policy
+            .interrupt_sources
+            .iter()
+            .find(|source| source.peripheral == self.peripheral.name)
+        {
+            // The handler holds the interrupt side of a divided block, or
+            // the whole block.
+            let holder = match self.split {
+                Some(_) => format!("{owner}{IRQ_SIDE}"),
+                None => owner.clone(),
+            };
+            let _ = writeln!(
+                output,
+                "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {holder}<P> {{\n\
+                 const SOURCE: u16 = {};\n\
+                 }}\n",
+                source.source
+            );
+        }
         if let Some(split) = self.split {
             for view in views.iter().skip(1) {
                 let suffix = view.name.strip_prefix(owner.as_str()).unwrap_or_default();

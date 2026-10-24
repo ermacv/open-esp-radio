@@ -441,9 +441,30 @@ fn the_two_sides_are_owners_whose_words_cover_the_block() {
         "pub fn split(self) -> (RadioTask<P>, RadioIrq<P>)",
         "oer_mmio::check::sides_cover(",
         "pub const SOURCE: u16 = 12;",
+        // The handler's side names the source an interrupt table binds.
+        "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for RadioIrq<P> {\nconst SOURCE: u16 = 12;",
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
     }
+}
+
+#[test]
+fn an_undivided_block_with_an_interrupt_names_its_source_on_its_owner() {
+    let mut pack = typed_pack();
+    pack.interrupt_sources.push(crate::InterruptSource {
+        peripheral: "RADIO".to_owned(),
+        source: 7,
+        sources: vec!["SOURCE".to_owned()],
+    });
+    let rust = pack
+        .render_typed_rust(&svd(&block()), &Default::default())
+        .expect("the typed block renders");
+    assert!(
+        rust.contains(
+            "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for Radio<P> {\nconst SOURCE: u16 = 7;"
+        ),
+        "{rust}"
+    );
 }
 
 fn trigger(register: &str, field: &str) -> crate::WriteTriggerField {
