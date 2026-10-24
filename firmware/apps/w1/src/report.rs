@@ -114,7 +114,7 @@ pub fn lag_fit(units: &[Lag]) -> Option<LagFit> {
     for lag in units {
         let _full = delays.push(delay(lag));
     }
-    delays.sort_unstable();
+    oer_sort::sort(&mut delays);
     let narrow = |value: i64| u32::try_from(value).unwrap_or(u32::MAX);
     let median_us = narrow(*delays.get((delays.len() - 1) / 2)?);
     let max_us = narrow(*delays.last()?);
@@ -253,7 +253,7 @@ pub fn tsf_fit(pairs: &[TsfPair]) -> Option<TsfFit> {
     for residual in &residuals {
         let _full = spread.push(u32::try_from(residual - floor).unwrap_or(u32::MAX));
     }
-    spread.sort_unstable();
+    oer_sort::sort(&mut spread);
     let count = spread.len();
     let p90_rank = (count * 9).div_ceil(10);
     let slope_ppm = ((dxy - dxx) * 1_000_000).div_euclid(dxx);

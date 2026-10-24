@@ -11,6 +11,7 @@ build = "build.rs"
 
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-sort = { path = "../../../portable/sort" }
 oer-sync = { path = "../../../portable/sync" }
 crc = { version = "=3.4.0", default-features = false }
 oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }

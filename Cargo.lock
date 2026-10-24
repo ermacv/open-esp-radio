@@ -3265,6 +3265,7 @@ dependencies = [
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-regulatory",
+ "oer-sort",
  "oer-sync",
  "oer-time",
  "static_cell",
@@ -4393,6 +4394,10 @@ dependencies = [
  "thiserror 2.0.19",
  "toml_edit",
 ]
+
+[[package]]
+name = "oer-sort"
+version = "0.1.0"
 
 [[package]]
 name = "oer-sync"
