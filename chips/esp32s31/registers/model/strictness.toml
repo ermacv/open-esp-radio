@@ -931,6 +931,78 @@ sources = ["esp-idf:components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:445
 
 # LP_AON_CLKRST: components/soc/esp32s31/register/soc/lp_clkrst_reg.h and lp_clkrst_struct.h.
 
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_ROOT_CLK_CONF"
+reserved = 0x007fffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:16", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:46"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_LP_CLK_PO_EN"
+reserved = 0xfffffc00
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:63", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:97"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_MISC"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:139", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:111"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_TIMER"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:151", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:125"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_WDT"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:163", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:139"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_CLOCKCALI"
+reserved = 0x1fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:175", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:161"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_ANAPERI"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:201", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:175"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HUK"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:213", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:189"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_FOSC_DFREQ"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:225", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:203"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_SOSC_DFREQ"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:249", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:230"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_XTAL32K"
+reserved = 0x003fffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:261", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:256"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
+reserved = 0x3fffff80
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:294", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:299"]
+
 [[fields]]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
@@ -946,6 +1018,12 @@ field = "LP_AONCLKRST_HPCORE0_RESET_FLAG_CLR"
 kind = "write-trigger"
 access = "read-write"
 sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:333"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HPCORE1_RESET_CAUSE"
+reserved = 0x3fffff80
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:344", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:342"]
 
 [[fields]]
 peripheral = "LP_AON_CLKRST"
@@ -963,6 +1041,12 @@ kind = "write-trigger"
 access = "read-write"
 sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:383"]
 
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_LPCORE_RESET_CAUSE"
+reserved = 0x1fffff80
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:394", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:380"]
+
 [[fields]]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_LPCORE_RESET_CAUSE"
@@ -979,6 +1063,12 @@ kind = "write-trigger"
 access = "read-write"
 sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:431"]
 
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
+reserved = 0x1fe00000
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:442", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:429"]
+
 [[fields]]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
@@ -987,6 +1077,12 @@ kind = "write-trigger"
 access = "read-write"
 sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:479"]
 
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
+reserved = 0x1fe00000
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:513", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:478"]
+
 [[fields]]
 peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
@@ -994,6 +1090,66 @@ field = "LP_AONCLKRST_HPCORE1_SW_RESET"
 kind = "write-trigger"
 access = "read-write"
 sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:550"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_TOUCH_AON"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:584", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:492"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_HP_CLK_CTRL"
+reserved = 0xffffff80
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:596", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:506"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_CPLL_DIV"
+reserved = 0xfffff000
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:608", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:524"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_APLL_DIV"
+reserved = 0xffffff00
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:627", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:542"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_MSPI_DIV"
+reserved = 0xfffffc00
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:646", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:568"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_LP_ADI"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:679", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:582"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_LPROOT_CLK_DIV"
+reserved = 0xffffff88
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:691", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:601"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_CPLL_CFG"
+reserved = 0xfffff000
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:710", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:627"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_APLL_SDM"
+reserved = 0xffc00000
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:743", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:641"]
+
+[[registers]]
+peripheral = "LP_AON_CLKRST"
+register = "LP_AONCLKRST_RTC_SAR2_PWDET_CCT"
+reserved = 0xfffffff8
+sources = ["esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_reg.h:755", "esp-idf:components/soc/esp32s31/register/soc/lp_clkrst_struct.h:655"]
 
 
 # LP_PERICLKRST: components/soc/esp32s31/register/soc/lp_peri_clkrst_reg.h and lp_peri_clkrst_struct.h.

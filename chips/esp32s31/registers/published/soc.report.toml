@@ -8,8 +8,8 @@ schema = 1
 peripherals = 103
 skipped-peripherals = 0
 registers = 4724
-full = 1300
-read = 3030
+full = 1321
+read = 3009
 none = 394
 
 [[register]]
@@ -10142,66 +10142,6 @@ reasons = ["the curated model's LP_AON_CLKRST describes its word"]
 
 [[register]]
 peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_LP_CLK_PO_EN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_MISC"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_TIMER"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_WDT"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_CLOCKCALI"
-api = "read"
-reasons = ["undeclared bits 0x1fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_ANAPERI"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HUK"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_FOSC_DFREQ"
-api = "read"
-reasons = ["undeclared bits 0x003fffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_SOSC_DFREQ"
-api = "read"
-reasons = ["undeclared bits 0x003fffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_XTAL32K"
-api = "read"
-reasons = ["undeclared bits 0x003fffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HPCORE0_RESET_CAUSE"
 api = "none"
 reasons = ["the curated model's LP_AON_RESET_CAUSE describes its word"]
@@ -10214,75 +10154,9 @@ reasons = ["the curated model's LP_AON_RESET_CAUSE describes its word"]
 
 [[register]]
 peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_LPCORE_RESET_CAUSE"
-api = "read"
-reasons = ["undeclared bits 0x1fffff80"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HPCORE0_RESET_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x1fe00000"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_HPCORE1_RESET_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x1fe00000"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_TOUCH_AON"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
 register = "LP_AONCLKRST_HP_CLK_CTRL"
 api = "read"
-reasons = ["undeclared bits 0xffffff80"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_CPLL_DIV"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_APLL_DIV"
-api = "read"
-reasons = ["undeclared bits 0xffffff00"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_MSPI_DIV"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_LP_ADI"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_LPROOT_CLK_DIV"
-api = "read"
-reasons = ["undeclared bits 0xffffff88"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_CPLL_CFG"
-api = "read"
-reasons = ["undeclared bits 0xfffff000"]
-
-[[register]]
-peripheral = "LP_AON_CLKRST"
-register = "LP_AONCLKRST_APLL_SDM"
-api = "read"
-reasons = ["undeclared bits 0xffc00000"]
+reasons = []
 
 [[register]]
 peripheral = "LP_AON_CLKRST"

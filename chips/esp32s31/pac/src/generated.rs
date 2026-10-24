@@ -165546,10 +165546,34 @@ pub mod soc {
                 lp_aonclkrst_lp_clk_po_en::R(self.0.read::<0x4>())
             }
 
+            /// Read `LP_AONCLKRST_LP_CLK_PO_EN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_lp_clk_po_en(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_lp_clk_po_en::W),
+            ) {
+                let mut value = lp_aonclkrst_lp_clk_po_en::W(self.0.read::<0x4>());
+                change(&mut value);
+                self.0.write::<0x4>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_MISC`.
             #[inline]
             pub fn read_lp_aonclkrst_misc(&self) -> lp_aonclkrst_misc::R {
                 lp_aonclkrst_misc::R(self.0.read::<0x8>())
+            }
+
+            /// Read `LP_AONCLKRST_MISC`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_misc(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_misc::W),
+            ) {
+                let mut value = lp_aonclkrst_misc::W(self.0.read::<0x8>());
+                change(&mut value);
+                self.0.write::<0x8>(value.0);
             }
 
             /// Read `LP_AONCLKRST_TIMER`.
@@ -165558,10 +165582,34 @@ pub mod soc {
                 lp_aonclkrst_timer::R(self.0.read::<0xc>())
             }
 
+            /// Read `LP_AONCLKRST_TIMER`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_timer(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_timer::W),
+            ) {
+                let mut value = lp_aonclkrst_timer::W(self.0.read::<0xc>());
+                change(&mut value);
+                self.0.write::<0xc>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_WDT`.
             #[inline]
             pub fn read_lp_aonclkrst_wdt(&self) -> lp_aonclkrst_wdt::R {
                 lp_aonclkrst_wdt::R(self.0.read::<0x10>())
+            }
+
+            /// Read `LP_AONCLKRST_WDT`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_wdt(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_wdt::W),
+            ) {
+                let mut value = lp_aonclkrst_wdt::W(self.0.read::<0x10>());
+                change(&mut value);
+                self.0.write::<0x10>(value.0);
             }
 
             /// Read `LP_AONCLKRST_CLOCKCALI`.
@@ -165570,10 +165618,34 @@ pub mod soc {
                 lp_aonclkrst_clockcali::R(self.0.read::<0x14>())
             }
 
+            /// Read `LP_AONCLKRST_CLOCKCALI`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_clockcali(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_clockcali::W),
+            ) {
+                let mut value = lp_aonclkrst_clockcali::W(self.0.read::<0x14>());
+                change(&mut value);
+                self.0.write::<0x14>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_ANAPERI`.
             #[inline]
             pub fn read_lp_aonclkrst_anaperi(&self) -> lp_aonclkrst_anaperi::R {
                 lp_aonclkrst_anaperi::R(self.0.read::<0x18>())
+            }
+
+            /// Read `LP_AONCLKRST_ANAPERI`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_anaperi(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_anaperi::W),
+            ) {
+                let mut value = lp_aonclkrst_anaperi::W(self.0.read::<0x18>());
+                change(&mut value);
+                self.0.write::<0x18>(value.0);
             }
 
             /// Read `LP_AONCLKRST_HUK`.
@@ -165582,10 +165654,34 @@ pub mod soc {
                 lp_aonclkrst_huk::R(self.0.read::<0x1c>())
             }
 
+            /// Read `LP_AONCLKRST_HUK`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_huk(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_huk::W),
+            ) {
+                let mut value = lp_aonclkrst_huk::W(self.0.read::<0x1c>());
+                change(&mut value);
+                self.0.write::<0x1c>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_FOSC_DFREQ`.
             #[inline]
             pub fn read_lp_aonclkrst_fosc_dfreq(&self) -> lp_aonclkrst_fosc_dfreq::R {
                 lp_aonclkrst_fosc_dfreq::R(self.0.read::<0x20>())
+            }
+
+            /// Read `LP_AONCLKRST_FOSC_DFREQ`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_fosc_dfreq(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_fosc_dfreq::W),
+            ) {
+                let mut value = lp_aonclkrst_fosc_dfreq::W(self.0.read::<0x20>());
+                change(&mut value);
+                self.0.write::<0x20>(value.0);
             }
 
             /// Read `LP_AONCLKRST_RC32K_DFREQ`.
@@ -165612,10 +165708,34 @@ pub mod soc {
                 lp_aonclkrst_sosc_dfreq::R(self.0.read::<0x28>())
             }
 
+            /// Read `LP_AONCLKRST_SOSC_DFREQ`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_sosc_dfreq(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_sosc_dfreq::W),
+            ) {
+                let mut value = lp_aonclkrst_sosc_dfreq::W(self.0.read::<0x28>());
+                change(&mut value);
+                self.0.write::<0x28>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_XTAL32K`.
             #[inline]
             pub fn read_lp_aonclkrst_xtal32k(&self) -> lp_aonclkrst_xtal32k::R {
                 lp_aonclkrst_xtal32k::R(self.0.read::<0x2c>())
+            }
+
+            /// Read `LP_AONCLKRST_XTAL32K`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_xtal32k(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_xtal32k::W),
+            ) {
+                let mut value = lp_aonclkrst_xtal32k::W(self.0.read::<0x2c>());
+                change(&mut value);
+                self.0.write::<0x2c>(value.0);
             }
 
             /// Read `LP_AONCLKRST_LPCORE_RESET_CAUSE`.
@@ -165626,12 +165746,74 @@ pub mod soc {
                 lp_aonclkrst_lpcore_reset_cause::R(self.0.read::<0x38>())
             }
 
+            /// Write one to the write-trigger field `CLR` of `LP_AONCLKRST_LPCORE_RESET_CAUSE`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_aonclkrst_lpcore_reset_cause_clr(&mut self) {
+                self.0.write::<0x38>(
+                    (self.0.read::<0x38>() & !lp_aonclkrst_lpcore_reset_cause::TRIGGERS)
+                        | 0x40000000,
+                );
+            }
+
+            /// Write one to the write-trigger field `LP_AONCLKRST_LPCORE_RESET_FLAG_CLR` of `LP_AONCLKRST_LPCORE_RESET_CAUSE`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_aonclkrst_lpcore_reset_cause_lp_aonclkrst_lpcore_reset_flag_clr(
+                &mut self,
+            ) {
+                self.0.write::<0x38>(
+                    (self.0.read::<0x38>() & !lp_aonclkrst_lpcore_reset_cause::TRIGGERS)
+                        | 0x80000000,
+                );
+            }
+
+            /// Read `LP_AONCLKRST_LPCORE_RESET_CAUSE`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_lp_aonclkrst_lpcore_reset_cause(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_lpcore_reset_cause::W),
+            ) {
+                let mut value = lp_aonclkrst_lpcore_reset_cause::W(
+                    self.0.read::<0x38>() & !lp_aonclkrst_lpcore_reset_cause::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0x38>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_HPCORE0_RESET_CTRL`.
             #[inline]
             pub fn read_lp_aonclkrst_hpcore0_reset_ctrl(
                 &self,
             ) -> lp_aonclkrst_hpcore0_reset_ctrl::R {
                 lp_aonclkrst_hpcore0_reset_ctrl::R(self.0.read::<0x3c>())
+            }
+
+            /// Write one to the write-trigger field `LP_AONCLKRST_HPCORE0_SW_RESET` of `LP_AONCLKRST_HPCORE0_RESET_CTRL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_aonclkrst_hpcore0_reset_ctrl_lp_aonclkrst_hpcore0_sw_reset(
+                &mut self,
+            ) {
+                self.0.write::<0x3c>(
+                    (self.0.read::<0x3c>() & !lp_aonclkrst_hpcore0_reset_ctrl::TRIGGERS)
+                        | 0x00100000,
+                );
+            }
+
+            /// Read `LP_AONCLKRST_HPCORE0_RESET_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_lp_aonclkrst_hpcore0_reset_ctrl(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_hpcore0_reset_ctrl::W),
+            ) {
+                let mut value = lp_aonclkrst_hpcore0_reset_ctrl::W(
+                    self.0.read::<0x3c>() & !lp_aonclkrst_hpcore0_reset_ctrl::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0x3c>(value.0);
             }
 
             /// Read `LP_AONCLKRST_HPCORE1_RESET_CTRL`.
@@ -165642,10 +165824,48 @@ pub mod soc {
                 lp_aonclkrst_hpcore1_reset_ctrl::R(self.0.read::<0x40>())
             }
 
+            /// Write one to the write-trigger field `LP_AONCLKRST_HPCORE1_SW_RESET` of `LP_AONCLKRST_HPCORE1_RESET_CTRL`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_lp_aonclkrst_hpcore1_reset_ctrl_lp_aonclkrst_hpcore1_sw_reset(
+                &mut self,
+            ) {
+                self.0.write::<0x40>(
+                    (self.0.read::<0x40>() & !lp_aonclkrst_hpcore1_reset_ctrl::TRIGGERS)
+                        | 0x00100000,
+                );
+            }
+
+            /// Read `LP_AONCLKRST_HPCORE1_RESET_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read and every write-trigger field is zero.
+            #[inline]
+            pub fn modify_lp_aonclkrst_hpcore1_reset_ctrl(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_hpcore1_reset_ctrl::W),
+            ) {
+                let mut value = lp_aonclkrst_hpcore1_reset_ctrl::W(
+                    self.0.read::<0x40>() & !lp_aonclkrst_hpcore1_reset_ctrl::TRIGGERS,
+                );
+                change(&mut value);
+                self.0.write::<0x40>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_TOUCH_AON`.
             #[inline]
             pub fn read_lp_aonclkrst_touch_aon(&self) -> lp_aonclkrst_touch_aon::R {
                 lp_aonclkrst_touch_aon::R(self.0.read::<0x44>())
+            }
+
+            /// Read `LP_AONCLKRST_TOUCH_AON`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_touch_aon(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_touch_aon::W),
+            ) {
+                let mut value = lp_aonclkrst_touch_aon::W(self.0.read::<0x44>());
+                change(&mut value);
+                self.0.write::<0x44>(value.0);
             }
 
             /// Read `LP_AONCLKRST_HP_CLK_CTRL`.
@@ -165660,10 +165880,34 @@ pub mod soc {
                 lp_aonclkrst_cpll_div::R(self.0.read::<0x4c>())
             }
 
+            /// Read `LP_AONCLKRST_CPLL_DIV`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_cpll_div(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_cpll_div::W),
+            ) {
+                let mut value = lp_aonclkrst_cpll_div::W(self.0.read::<0x4c>());
+                change(&mut value);
+                self.0.write::<0x4c>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_APLL_DIV`.
             #[inline]
             pub fn read_lp_aonclkrst_apll_div(&self) -> lp_aonclkrst_apll_div::R {
                 lp_aonclkrst_apll_div::R(self.0.read::<0x50>())
+            }
+
+            /// Read `LP_AONCLKRST_APLL_DIV`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_apll_div(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_apll_div::W),
+            ) {
+                let mut value = lp_aonclkrst_apll_div::W(self.0.read::<0x50>());
+                change(&mut value);
+                self.0.write::<0x50>(value.0);
             }
 
             /// Read `LP_AONCLKRST_MSPI_DIV`.
@@ -165672,10 +165916,34 @@ pub mod soc {
                 lp_aonclkrst_mspi_div::R(self.0.read::<0x54>())
             }
 
+            /// Read `LP_AONCLKRST_MSPI_DIV`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_mspi_div(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_mspi_div::W),
+            ) {
+                let mut value = lp_aonclkrst_mspi_div::W(self.0.read::<0x54>());
+                change(&mut value);
+                self.0.write::<0x54>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_LP_ADI`.
             #[inline]
             pub fn read_lp_aonclkrst_lp_adi(&self) -> lp_aonclkrst_lp_adi::R {
                 lp_aonclkrst_lp_adi::R(self.0.read::<0x58>())
+            }
+
+            /// Read `LP_AONCLKRST_LP_ADI`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_lp_adi(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_lp_adi::W),
+            ) {
+                let mut value = lp_aonclkrst_lp_adi::W(self.0.read::<0x58>());
+                change(&mut value);
+                self.0.write::<0x58>(value.0);
             }
 
             /// Read `LP_AONCLKRST_LPROOT_CLK_DIV`.
@@ -165684,16 +165952,52 @@ pub mod soc {
                 lp_aonclkrst_lproot_clk_div::R(self.0.read::<0x5c>())
             }
 
+            /// Read `LP_AONCLKRST_LPROOT_CLK_DIV`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_lproot_clk_div(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_lproot_clk_div::W),
+            ) {
+                let mut value = lp_aonclkrst_lproot_clk_div::W(self.0.read::<0x5c>());
+                change(&mut value);
+                self.0.write::<0x5c>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_CPLL_CFG`.
             #[inline]
             pub fn read_lp_aonclkrst_cpll_cfg(&self) -> lp_aonclkrst_cpll_cfg::R {
                 lp_aonclkrst_cpll_cfg::R(self.0.read::<0x60>())
             }
 
+            /// Read `LP_AONCLKRST_CPLL_CFG`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_cpll_cfg(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_cpll_cfg::W),
+            ) {
+                let mut value = lp_aonclkrst_cpll_cfg::W(self.0.read::<0x60>());
+                change(&mut value);
+                self.0.write::<0x60>(value.0);
+            }
+
             /// Read `LP_AONCLKRST_APLL_SDM`.
             #[inline]
             pub fn read_lp_aonclkrst_apll_sdm(&self) -> lp_aonclkrst_apll_sdm::R {
                 lp_aonclkrst_apll_sdm::R(self.0.read::<0x64>())
+            }
+
+            /// Read `LP_AONCLKRST_APLL_SDM`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_lp_aonclkrst_apll_sdm(
+                &mut self,
+                change: impl FnOnce(&mut lp_aonclkrst_apll_sdm::W),
+            ) {
+                let mut value = lp_aonclkrst_apll_sdm::W(self.0.read::<0x64>());
+                change(&mut value);
+                self.0.write::<0x64>(value.0);
             }
 
             /// Read `LP_AONCLKRST_DATE`.
@@ -165789,6 +166093,141 @@ pub mod soc {
                     (self.0 & 0x00000200) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_core_efuse_oen(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_lp_bus_oen(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_aon_slow_oen(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_aon_fast_oen(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_slow_oen(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_fast_oen(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_fosc_oen(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_rc32k_oen(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_clk_sxtal_oen(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// 1'b1: probe sosc clk on 1'b0: probe sosc clk off
+                #[inline]
+                pub const fn lp_aonclkrst_clk_sosc_oen(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// Set `LP_AONCLKRST_CLK_CORE_EFUSE_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_core_efuse_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_LP_BUS_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_lp_bus_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_AON_SLOW_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_aon_slow_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_AON_FAST_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_aon_fast_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_SLOW_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_slow_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_FAST_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_fast_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_FOSC_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_fosc_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_RC32K_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_rc32k_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_SXTAL_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_sxtal_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CLK_SOSC_OEN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_clk_sosc_oen(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_MISC` register.
@@ -165809,6 +166248,24 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_etm_event_tick_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_etm_event_tick_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_ETM_EVENT_TICK_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_etm_event_tick_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -165833,6 +166290,24 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_timer_rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_LP_TIMER_RST_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_timer_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_WDT` register.
@@ -165853,6 +166328,24 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_lp_wdt_rst_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_wdt_rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_LP_WDT_RST_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_wdt_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -165889,6 +166382,59 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_clk_cali_xtal_force_on(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_clk_cali_fosc_rst_en(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_clk_cali_sosc_rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_LP_CLK_CALI_XTAL_FORCE_ON`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_clk_cali_xtal_force_on(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_LP_CLK_CALI_FOSC_RST_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_clk_cali_fosc_rst_en(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_LP_CLK_CALI_SOSC_RST_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_clk_cali_sosc_rst_en(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_ANAPERI` register.
@@ -165909,6 +166455,24 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_lp_anaperi_rst_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_anaperi_rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_LP_ANAPERI_RST_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_anaperi_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -165933,6 +166497,24 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_lp_huk_rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_LP_HUK_RST_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lp_huk_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_FOSC_DFREQ` register.
@@ -165953,6 +166535,27 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_fosc_dfreq(self) -> oer_mmio::Bits<10> {
                     oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_fosc_dfreq(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Set `LP_AONCLKRST_FOSC_DFREQ`.
+                #[inline]
+                pub fn set_lp_aonclkrst_fosc_dfreq(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xffc00000) | (value.get() << 22);
+                    self
                 }
             }
         }
@@ -166017,6 +166620,27 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 22)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_sosc_dfreq(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// Set `LP_AONCLKRST_SOSC_DFREQ`.
+                #[inline]
+                pub fn set_lp_aonclkrst_sosc_dfreq(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xffc00000) | (value.get() << 22);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_XTAL32K` register.
@@ -166057,6 +166681,72 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 29)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_dres_xtal32k(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 22)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_dgm_xtal32k(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 25)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_dbuf_xtal32k(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_dac_xtal32k(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 29)
+                }
+
+                /// Set `LP_AONCLKRST_DRES_XTAL32K`.
+                #[inline]
+                pub fn set_lp_aonclkrst_dres_xtal32k(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x01c00000) | (value.get() << 22);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_DGM_XTAL32K`.
+                #[inline]
+                pub fn set_lp_aonclkrst_dgm_xtal32k(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0e000000) | (value.get() << 25);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_DBUF_XTAL32K`.
+                #[inline]
+                pub fn set_lp_aonclkrst_dbuf_xtal32k(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_DAC_XTAL32K`.
+                #[inline]
+                pub fn set_lp_aonclkrst_dac_xtal32k(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xe0000000) | (value.get() << 29);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_LPCORE_RESET_CAUSE` register.
@@ -166067,6 +166757,10 @@ pub mod soc {
             pub const FIELDS: u32 = 0xe000007f;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x38;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0xc0000000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166090,17 +166784,35 @@ pub mod soc {
                 pub const fn pmu_lp_cpu_mask(self) -> bool {
                     (self.0 & 0x20000000) != 0
                 }
+            }
 
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
                 /// need_des
                 #[inline]
-                pub const fn clr(self) -> bool {
-                    (self.0 & 0x40000000) != 0
+                pub const fn lp_aonclkrst_lpcore_reset_flag(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
                 }
 
-                /// need_des
+                /// 6'h1: POR reset 6'h9: PMU LP PERI power down reset 6'ha: PMU LP CPU reset 6'hf: brown out reset 6'h10: LP watchdog chip reset 6'h12: super watch dog reset 6'h13: glitch reset 6'h14: software reset
                 #[inline]
-                pub const fn lp_aonclkrst_lpcore_reset_flag_clr(self) -> bool {
-                    (self.0 & 0x80000000) != 0
+                pub const fn lp_aonclkrst_lpcore_reset_cause(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 1)
+                }
+
+                /// 1'b0: enable lpcore pmu_lp_cpu_reset reset_cause, 1'b1: disable lpcore pmu_lp_cpu_reset reset_cause
+                #[inline]
+                pub const fn pmu_lp_cpu_mask(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// Set `PMU_LP_CPU_MASK`.
+                #[inline]
+                pub fn set_pmu_lp_cpu_mask(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
                 }
             }
         }
@@ -166113,6 +166825,10 @@ pub mod soc {
             pub const FIELDS: u32 = 0xe01fffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x3c;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00100000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166151,12 +166867,6 @@ pub mod soc {
 
                 /// need_des
                 #[inline]
-                pub const fn lp_aonclkrst_hpcore0_sw_reset(self) -> bool {
-                    (self.0 & 0x00100000) != 0
-                }
-
-                /// need_des
-                #[inline]
                 pub const fn lp_aonclkrst_hpcore0_ocd_halt_on_reset(self) -> bool {
                     (self.0 & 0x20000000) != 0
                 }
@@ -166173,6 +166883,133 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// reserved
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_sw_stall_code(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_stall_wait(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 8)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_stall_en(&self) -> bool {
+                    (self.0 & 0x00008000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_reset_length(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// write 1 to enable lp_wdt reset hpcore0 feature, write 0 to disable lp_wdt reset hpcore0 feature
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_enable_lp_wdt_reset(&self) -> bool {
+                    (self.0 & 0x00080000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_ocd_halt_on_reset(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// 1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_stat_vector_sel(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// write 1 to enable hpcore0 lockup reset feature, write 0 to disable hpcore0 lockup reset feature
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore0_lockup_reset_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_SW_STALL_CODE`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_sw_stall_code(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_STALL_WAIT`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_stall_wait(
+                    &mut self,
+                    value: oer_mmio::Bits<7>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00007f00) | (value.get() << 8);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_STALL_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_stall_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_RESET_LENGTH`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_reset_length(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00070000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_ENABLE_LP_WDT_RESET`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_enable_lp_wdt_reset(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_OCD_HALT_ON_RESET`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_ocd_halt_on_reset(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_STAT_VECTOR_SEL`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_stat_vector_sel(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE0_LOCKUP_RESET_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore0_lockup_reset_en(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_HPCORE1_RESET_CTRL` register.
@@ -166183,6 +167020,10 @@ pub mod soc {
             pub const FIELDS: u32 = 0xe01fffff;
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x40;
+
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x00100000;
 
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166221,12 +167062,6 @@ pub mod soc {
 
                 /// need_des
                 #[inline]
-                pub const fn lp_aonclkrst_hpcore1_sw_reset(self) -> bool {
-                    (self.0 & 0x00100000) != 0
-                }
-
-                /// need_des
-                #[inline]
                 pub const fn lp_aonclkrst_hpcore1_ocd_halt_on_reset(self) -> bool {
                     (self.0 & 0x20000000) != 0
                 }
@@ -166241,6 +167076,133 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_hpcore1_lockup_reset_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// reserved
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_sw_stall_code(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_stall_wait(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 8)
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_stall_en(&self) -> bool {
+                    (self.0 & 0x00008000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_reset_length(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 16)
+                }
+
+                /// write 1 to enable lp_wdt reset hpcore1 feature, write 0 to disable lp_wdt reset hpcore1 feature
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_enable_lp_wdt_reset(&self) -> bool {
+                    (self.0 & 0x00080000) != 0
+                }
+
+                /// need_des
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_ocd_halt_on_reset(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// 1'b1: boot from HP TCM ROM: 0x4FC00000 1'b0: boot from LP TCM RAM: 0x50108000
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_stat_vector_sel(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// write 1 to enable hpcore1 lockup reset feature, write 0 to disable hpcore1 lockup reset feature
+                #[inline]
+                pub const fn lp_aonclkrst_hpcore1_lockup_reset_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_SW_STALL_CODE`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_sw_stall_code(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_STALL_WAIT`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_stall_wait(
+                    &mut self,
+                    value: oer_mmio::Bits<7>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00007f00) | (value.get() << 8);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_STALL_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_stall_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_RESET_LENGTH`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_reset_length(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00070000) | (value.get() << 16);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_ENABLE_LP_WDT_RESET`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_enable_lp_wdt_reset(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00080000) | (u32::from(value) << 19);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_OCD_HALT_ON_RESET`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_ocd_halt_on_reset(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_STAT_VECTOR_SEL`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_stat_vector_sel(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_HPCORE1_LOCKUP_RESET_EN`.
+                #[inline]
+                pub fn set_lp_aonclkrst_hpcore1_lockup_reset_en(
+                    &mut self,
+                    value: bool,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -166263,6 +167225,24 @@ pub mod soc {
                 #[inline]
                 pub const fn rst_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `RST_EN`.
+                #[inline]
+                pub fn set_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -166315,6 +167295,40 @@ pub mod soc {
                     (self.0 >> 4) as u8
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// cpll ref div value
+                #[inline]
+                pub const fn lp_aonclkrst_cpll_ref_div(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// cpll fb div value
+                #[inline]
+                pub const fn lp_aonclkrst_cpll_fb_div(&self) -> u8 {
+                    (self.0 >> 4) as u8
+                }
+
+                /// Set `LP_AONCLKRST_CPLL_REF_DIV`.
+                #[inline]
+                pub fn set_lp_aonclkrst_cpll_ref_div(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0000000f) | value.get();
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CPLL_FB_DIV`.
+                #[inline]
+                pub fn set_lp_aonclkrst_cpll_fb_div(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x00000ff0) | (u32::from(value) << 4);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_APLL_DIV` register.
@@ -166341,6 +167355,43 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_apll_out_div(self) -> oer_mmio::Bits<5> {
                     oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// apll ref div value
+                #[inline]
+                pub const fn lp_aonclkrst_apll_ref_div(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// apll out div value
+                #[inline]
+                pub const fn lp_aonclkrst_apll_out_div(&self) -> oer_mmio::Bits<5> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// Set `LP_AONCLKRST_APLL_REF_DIV`.
+                #[inline]
+                pub fn set_lp_aonclkrst_apll_ref_div(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000007) | value.get();
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_APLL_OUT_DIV`.
+                #[inline]
+                pub fn set_lp_aonclkrst_apll_out_div(
+                    &mut self,
+                    value: oer_mmio::Bits<5>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000000f8) | (value.get() << 3);
+                    self
                 }
             }
         }
@@ -166383,6 +167434,69 @@ pub mod soc {
                     (self.0 & 0x00000200) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// MSPI ref div value
+                #[inline]
+                pub const fn lp_aonclkrst_mspi_ref_div(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// MSPI fb div value
+                #[inline]
+                pub const fn lp_aonclkrst_mspi_fb_div(&self) -> oer_mmio::Bits<5> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// MSPI chgp_dcur value
+                #[inline]
+                pub const fn lp_aonclkrst_mspi_chgp_dcur(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// MSPI lf_res value
+                #[inline]
+                pub const fn lp_aonclkrst_mspi_lf_res(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// Set `LP_AONCLKRST_MSPI_REF_DIV`.
+                #[inline]
+                pub fn set_lp_aonclkrst_mspi_ref_div(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000007) | value.get();
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_MSPI_FB_DIV`.
+                #[inline]
+                pub fn set_lp_aonclkrst_mspi_fb_div(
+                    &mut self,
+                    value: oer_mmio::Bits<5>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000000f8) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_MSPI_CHGP_DCUR`.
+                #[inline]
+                pub fn set_lp_aonclkrst_mspi_chgp_dcur(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_MSPI_LF_RES`.
+                #[inline]
+                pub fn set_lp_aonclkrst_mspi_lf_res(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_LP_ADI` register.
@@ -166403,6 +167517,24 @@ pub mod soc {
                 #[inline]
                 pub const fn rst_en(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// need_des
+                #[inline]
+                pub const fn rst_en(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `RST_EN`.
+                #[inline]
+                pub fn set_rst_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -166431,6 +167563,43 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_lpperi_clk_div_num(self) -> oer_mmio::Bits<3> {
                     oer_mmio::Bits::truncate(self.0 >> 4)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// lp aon clock divide num
+                #[inline]
+                pub const fn lp_aonclkrst_lpaon_clk_div_num(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// lp peri clock divide num
+                #[inline]
+                pub const fn lp_aonclkrst_lpperi_clk_div_num(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 4)
+                }
+
+                /// Set `LP_AONCLKRST_LPAON_CLK_DIV_NUM`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lpaon_clk_div_num(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000007) | value.get();
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_LPPERI_CLK_DIV_NUM`.
+                #[inline]
+                pub fn set_lp_aonclkrst_lpperi_clk_div_num(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000070) | (value.get() << 4);
+                    self
                 }
             }
         }
@@ -166473,6 +167642,69 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 9)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// cpll dbias value
+                #[inline]
+                pub const fn lp_aonclkrst_cpll_dbias(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// cpll dchgp value
+                #[inline]
+                pub const fn lp_aonclkrst_cpll_dchgp(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// cpll dr1 value
+                #[inline]
+                pub const fn lp_aonclkrst_cpll_dr1(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 6)
+                }
+
+                /// cpll dr3 value
+                #[inline]
+                pub const fn lp_aonclkrst_cpll_dr3(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 9)
+                }
+
+                /// Set `LP_AONCLKRST_CPLL_DBIAS`.
+                #[inline]
+                pub fn set_lp_aonclkrst_cpll_dbias(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000007) | value.get();
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CPLL_DCHGP`.
+                #[inline]
+                pub fn set_lp_aonclkrst_cpll_dchgp(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000038) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CPLL_DR1`.
+                #[inline]
+                pub fn set_lp_aonclkrst_cpll_dr1(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x000001c0) | (value.get() << 6);
+                    self
+                }
+
+                /// Set `LP_AONCLKRST_CPLL_DR3`.
+                #[inline]
+                pub fn set_lp_aonclkrst_cpll_dr3(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                    self.0 = (self.0 & !0x00000e00) | (value.get() << 9);
+                    self
+                }
+            }
         }
 
         /// The `LP_AONCLKRST_APLL_SDM` register.
@@ -166493,6 +167725,27 @@ pub mod soc {
                 #[inline]
                 pub const fn lp_aonclkrst_apll_sdm(self) -> oer_mmio::Bits<22> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// apll sdm value
+                #[inline]
+                pub const fn lp_aonclkrst_apll_sdm(&self) -> oer_mmio::Bits<22> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `LP_AONCLKRST_APLL_SDM`.
+                #[inline]
+                pub fn set_lp_aonclkrst_apll_sdm(
+                    &mut self,
+                    value: oer_mmio::Bits<22>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x003fffff) | value.get();
+                    self
                 }
             }
         }

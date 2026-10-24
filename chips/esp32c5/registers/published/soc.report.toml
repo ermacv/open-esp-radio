@@ -8,8 +8,8 @@ schema = 1
 peripherals = 61
 skipped-peripherals = 1
 registers = 2002
-full = 410
-read = 1268
+full = 428
+read = 1250
 none = 324
 
 [[skipped]]
@@ -7446,69 +7446,15 @@ reasons = ["undeclared bits 0xfffff000"]
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_CTRL2"
-api = "read"
-reasons = ["undeclared bits 0x7fffffff"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CLOCK"
-api = "read"
-reasons = ["undeclared bits 0x7f000000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_USER"
-api = "read"
-reasons = ["undeclared bits 0x00ff0dff"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_USER1"
-api = "read"
-reasons = ["undeclared bits 0x03ffffc0"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_USER2"
-api = "read"
-reasons = ["undeclared bits 0x0fff0000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_MOSI_DLEN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_MISO_DLEN"
-api = "read"
-reasons = ["undeclared bits 0xfffffc00"]
-
-[[register]]
-peripheral = "SPI1"
 register = "SPI_MEM_RD_STATUS"
 api = "read"
 reasons = []
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_MISC"
-api = "read"
-reasons = ["undeclared bits 0xfffff9fc"]
-
-[[register]]
-peripheral = "SPI1"
 register = "SPI_MEM_TX_CRC"
 api = "read"
 reasons = []
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CACHE_FCTRL"
-api = "read"
-reasons = ["undeclared bits 0xfffffe05"]
 
 [[register]]
 peripheral = "SPI1"
@@ -7608,12 +7554,6 @@ reasons = []
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_FLASH_WAITI_CTRL"
-api = "read"
-reasons = ["undeclared bits 0x000001e0"]
-
-[[register]]
-peripheral = "SPI1"
 register = "SPI_MEM_FLASH_SUS_CTRL"
 api = "read"
 reasons = []
@@ -7626,57 +7566,9 @@ reasons = []
 
 [[register]]
 peripheral = "SPI1"
-register = "SPI_MEM_FLASH_WAITI_CTRL1"
-api = "read"
-reasons = ["undeclared bits 0xfffff800"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_INT_ENA"
-api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_INT_CLR"
-api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_INT_RAW"
-api = "read"
-reasons = ["undeclared bits 0xfffffbe0", "a raw interrupt status: what a write does is not stated"]
-
-[[register]]
-peripheral = "SPI1"
 register = "SPI_MEM_INT_ST"
 api = "read"
-reasons = ["undeclared bits 0xfffffbe0"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_DDR"
-api = "read"
-reasons = ["undeclared bits 0x82c03000"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_TIMING_CALI"
-api = "read"
-reasons = ["undeclared bits 0xffffffe1"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_CLOCK_GATE"
-api = "read"
-reasons = ["undeclared bits 0xfffffffe"]
-
-[[register]]
-peripheral = "SPI1"
-register = "SPI_MEM_DATE"
-api = "read"
-reasons = ["undeclared bits 0xf0000000"]
+reasons = []
 
 [[register]]
 peripheral = "SPI2"

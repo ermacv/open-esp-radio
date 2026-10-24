@@ -97383,10 +97383,27 @@ pub mod soc {
                 spi_mem_ctrl2::R(self.0.read::<0x10>())
             }
 
+            /// Write one to the write-trigger field `SPI_MEM_SYNC_RESET` of `SPI_MEM_CTRL2`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_ctrl2_spi_mem_sync_reset(&mut self) {
+                self.0
+                    .write::<0x10>((self.0.read::<0x10>() & !spi_mem_ctrl2::TRIGGERS) | 0x80000000);
+            }
+
             /// Read `SPI_MEM_CLOCK`.
             #[inline]
             pub fn read_spi_mem_clock(&self) -> spi_mem_clock::R {
                 spi_mem_clock::R(self.0.read::<0x14>())
+            }
+
+            /// Read `SPI_MEM_CLOCK`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_clock(&mut self, change: impl FnOnce(&mut spi_mem_clock::W)) {
+                let mut value = spi_mem_clock::W(self.0.read::<0x14>());
+                change(&mut value);
+                self.0.write::<0x14>(value.0);
             }
 
             /// Read `SPI_MEM_USER`.
@@ -97395,10 +97412,28 @@ pub mod soc {
                 spi_mem_user::R(self.0.read::<0x18>())
             }
 
+            /// Read `SPI_MEM_USER`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_user(&mut self, change: impl FnOnce(&mut spi_mem_user::W)) {
+                let mut value = spi_mem_user::W(self.0.read::<0x18>());
+                change(&mut value);
+                self.0.write::<0x18>(value.0);
+            }
+
             /// Read `SPI_MEM_USER1`.
             #[inline]
             pub fn read_spi_mem_user1(&self) -> spi_mem_user1::R {
                 spi_mem_user1::R(self.0.read::<0x1c>())
+            }
+
+            /// Read `SPI_MEM_USER1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_user1(&mut self, change: impl FnOnce(&mut spi_mem_user1::W)) {
+                let mut value = spi_mem_user1::W(self.0.read::<0x1c>());
+                change(&mut value);
+                self.0.write::<0x1c>(value.0);
             }
 
             /// Read `SPI_MEM_USER2`.
@@ -97407,16 +97442,49 @@ pub mod soc {
                 spi_mem_user2::R(self.0.read::<0x20>())
             }
 
+            /// Read `SPI_MEM_USER2`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_user2(&mut self, change: impl FnOnce(&mut spi_mem_user2::W)) {
+                let mut value = spi_mem_user2::W(self.0.read::<0x20>());
+                change(&mut value);
+                self.0.write::<0x20>(value.0);
+            }
+
             /// Read `SPI_MEM_MOSI_DLEN`.
             #[inline]
             pub fn read_spi_mem_mosi_dlen(&self) -> spi_mem_mosi_dlen::R {
                 spi_mem_mosi_dlen::R(self.0.read::<0x24>())
             }
 
+            /// Read `SPI_MEM_MOSI_DLEN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_mosi_dlen(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_mosi_dlen::W),
+            ) {
+                let mut value = spi_mem_mosi_dlen::W(self.0.read::<0x24>());
+                change(&mut value);
+                self.0.write::<0x24>(value.0);
+            }
+
             /// Read `SPI_MEM_MISO_DLEN`.
             #[inline]
             pub fn read_spi_mem_miso_dlen(&self) -> spi_mem_miso_dlen::R {
                 spi_mem_miso_dlen::R(self.0.read::<0x28>())
+            }
+
+            /// Read `SPI_MEM_MISO_DLEN`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_miso_dlen(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_miso_dlen::W),
+            ) {
+                let mut value = spi_mem_miso_dlen::W(self.0.read::<0x28>());
+                change(&mut value);
+                self.0.write::<0x28>(value.0);
             }
 
             /// Read `SPI_MEM_RD_STATUS`.
@@ -97431,6 +97499,15 @@ pub mod soc {
                 spi_mem_misc::R(self.0.read::<0x34>())
             }
 
+            /// Read `SPI_MEM_MISC`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_misc(&mut self, change: impl FnOnce(&mut spi_mem_misc::W)) {
+                let mut value = spi_mem_misc::W(self.0.read::<0x34>());
+                change(&mut value);
+                self.0.write::<0x34>(value.0);
+            }
+
             /// Read `SPI_MEM_TX_CRC`.
             #[inline]
             pub fn read_spi_mem_tx_crc(&self) -> spi_mem_tx_crc::R {
@@ -97441,6 +97518,18 @@ pub mod soc {
             #[inline]
             pub fn read_spi_mem_cache_fctrl(&self) -> spi_mem_cache_fctrl::R {
                 spi_mem_cache_fctrl::R(self.0.read::<0x3c>())
+            }
+
+            /// Read `SPI_MEM_CACHE_FCTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_cache_fctrl(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_cache_fctrl::W),
+            ) {
+                let mut value = spi_mem_cache_fctrl::W(self.0.read::<0x3c>());
+                change(&mut value);
+                self.0.write::<0x3c>(value.0);
             }
 
             /// Read `SPI_MEM_W0`.
@@ -97545,6 +97634,18 @@ pub mod soc {
                 spi_mem_flash_waiti_ctrl::R(self.0.read::<0x98>())
             }
 
+            /// Read `SPI_MEM_FLASH_WAITI_CTRL`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_flash_waiti_ctrl(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_flash_waiti_ctrl::W),
+            ) {
+                let mut value = spi_mem_flash_waiti_ctrl::W(self.0.read::<0x98>());
+                change(&mut value);
+                self.0.write::<0x98>(value.0);
+            }
+
             /// Read `SPI_MEM_FLASH_SUS_CTRL`.
             #[inline]
             pub fn read_spi_mem_flash_sus_ctrl(&self) -> spi_mem_flash_sus_ctrl::R {
@@ -97581,10 +97682,31 @@ pub mod soc {
                 spi_mem_flash_waiti_ctrl1::R(self.0.read::<0xac>())
             }
 
+            /// Read `SPI_MEM_FLASH_WAITI_CTRL1`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_flash_waiti_ctrl1(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_flash_waiti_ctrl1::W),
+            ) {
+                let mut value = spi_mem_flash_waiti_ctrl1::W(self.0.read::<0xac>());
+                change(&mut value);
+                self.0.write::<0xac>(value.0);
+            }
+
             /// Read `SPI_MEM_INT_ENA`.
             #[inline]
             pub fn read_spi_mem_int_ena(&self) -> spi_mem_int_ena::R {
                 spi_mem_int_ena::R(self.0.read::<0xc0>())
+            }
+
+            /// Read `SPI_MEM_INT_ENA`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_int_ena(&mut self, change: impl FnOnce(&mut spi_mem_int_ena::W)) {
+                let mut value = spi_mem_int_ena::W(self.0.read::<0xc0>());
+                change(&mut value);
+                self.0.write::<0xc0>(value.0);
             }
 
             /// Read `SPI_MEM_INT_CLR`.
@@ -97593,10 +97715,77 @@ pub mod soc {
                 spi_mem_int_clr::R(self.0.read::<0xc4>())
             }
 
+            /// Write one to the write-trigger field `SPI_MEM_PER_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_int_clr_spi_mem_per_end_int_clr(&mut self) {
+                self.0.write::<0xc4>(
+                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000001,
+                );
+            }
+
+            /// Write one to the write-trigger field `SPI_MEM_PES_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_int_clr_spi_mem_pes_end_int_clr(&mut self) {
+                self.0.write::<0xc4>(
+                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000002,
+                );
+            }
+
+            /// Write one to the write-trigger field `SPI_MEM_WPE_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_int_clr_spi_mem_wpe_end_int_clr(&mut self) {
+                self.0.write::<0xc4>(
+                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000004,
+                );
+            }
+
+            /// Write one to the write-trigger field `SPI_MEM_SLV_ST_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_int_clr_spi_mem_slv_st_end_int_clr(&mut self) {
+                self.0.write::<0xc4>(
+                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000008,
+                );
+            }
+
+            /// Write one to the write-trigger field `SPI_MEM_MST_ST_END_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_int_clr_spi_mem_mst_st_end_int_clr(&mut self) {
+                self.0.write::<0xc4>(
+                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000010,
+                );
+            }
+
+            /// Write one to the write-trigger field `SPI_MEM_BROWN_OUT_INT_CLR` of `SPI_MEM_INT_CLR`, starting its
+            /// hardware action once; every other field keeps the value read, every other trigger is zero.
+            #[inline]
+            pub fn trigger_spi_mem_int_clr_spi_mem_brown_out_int_clr(&mut self) {
+                self.0.write::<0xc4>(
+                    (self.0.read::<0xc4>() & !spi_mem_int_clr::TRIGGERS) | 0x00000400,
+                );
+            }
+
             /// Read `SPI_MEM_INT_RAW`.
             #[inline]
             pub fn read_spi_mem_int_raw(&self) -> spi_mem_int_raw::R {
                 spi_mem_int_raw::R(self.0.read::<0xc8>())
+            }
+
+            /// Sample `SPI_MEM_INT_RAW` once, keeping its declared fields, to acknowledge.
+            #[inline]
+            pub fn sample_spi_mem_int_raw(&self) -> spi_mem_int_raw::Snapshot {
+                spi_mem_int_raw::Snapshot(self.0.read::<0xc8>() & spi_mem_int_raw::FIELDS)
+            }
+
+            /// Acknowledge exactly the sampled set: write one to each bit the
+            /// snapshot holds and zero to every other bit.
+            #[inline]
+            pub fn acknowledge_spi_mem_int_raw(&mut self, snapshot: spi_mem_int_raw::Snapshot) {
+                self.0.write::<0xc8>(snapshot.0);
             }
 
             /// Read `SPI_MEM_INT_ST`.
@@ -97611,10 +97800,31 @@ pub mod soc {
                 spi_mem_ddr::R(self.0.read::<0xd4>())
             }
 
+            /// Read `SPI_MEM_DDR`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_ddr(&mut self, change: impl FnOnce(&mut spi_mem_ddr::W)) {
+                let mut value = spi_mem_ddr::W(self.0.read::<0xd4>());
+                change(&mut value);
+                self.0.write::<0xd4>(value.0);
+            }
+
             /// Read `SPI_MEM_TIMING_CALI`.
             #[inline]
             pub fn read_spi_mem_timing_cali(&self) -> spi_mem_timing_cali::R {
                 spi_mem_timing_cali::R(self.0.read::<0x180>())
+            }
+
+            /// Read `SPI_MEM_TIMING_CALI`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_timing_cali(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_timing_cali::W),
+            ) {
+                let mut value = spi_mem_timing_cali::W(self.0.read::<0x180>());
+                change(&mut value);
+                self.0.write::<0x180>(value.0);
             }
 
             /// Read `SPI_MEM_CLOCK_GATE`.
@@ -97623,10 +97833,31 @@ pub mod soc {
                 spi_mem_clock_gate::R(self.0.read::<0x200>())
             }
 
+            /// Read `SPI_MEM_CLOCK_GATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_clock_gate(
+                &mut self,
+                change: impl FnOnce(&mut spi_mem_clock_gate::W),
+            ) {
+                let mut value = spi_mem_clock_gate::W(self.0.read::<0x200>());
+                change(&mut value);
+                self.0.write::<0x200>(value.0);
+            }
+
             /// Read `SPI_MEM_DATE`.
             #[inline]
             pub fn read_spi_mem_date(&self) -> spi_mem_date::R {
                 spi_mem_date::R(self.0.read::<0x3fc>())
+            }
+
+            /// Read `SPI_MEM_DATE`, change fields and write it back; every other bit keeps
+            /// the value read.
+            #[inline]
+            pub fn modify_spi_mem_date(&mut self, change: impl FnOnce(&mut spi_mem_date::W)) {
+                let mut value = spi_mem_date::W(self.0.read::<0x3fc>());
+                change(&mut value);
+                self.0.write::<0x3fc>(value.0);
             }
         }
 
@@ -97955,17 +98186,15 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0x10;
 
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x80000000;
+
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
             pub struct R(pub(super) u32);
 
-            impl R {
-                /// The FSM will be reset.
-                #[inline]
-                pub const fn spi_mem_sync_reset(self) -> bool {
-                    (self.0 & 0x80000000) != 0
-                }
-            }
+            impl R {}
         }
 
         /// The `SPI_MEM_CLOCK` register.
@@ -98004,6 +98233,63 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_clk_equ_sysclk(self) -> bool {
                     (self.0 & 0x80000000) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// In the master mode it must be equal to spi_mem_clkcnt_N.
+                #[inline]
+                pub const fn spi_mem_clkcnt_l(&self) -> u8 {
+                    (self.0) as u8
+                }
+
+                /// In the master mode it must be floor((spi_mem_clkcnt_N+1)/2-1).
+                #[inline]
+                pub const fn spi_mem_clkcnt_h(&self) -> u8 {
+                    (self.0 >> 8) as u8
+                }
+
+                /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(spi_mem_clkcnt_N+1)
+                #[inline]
+                pub const fn spi_mem_clkcnt_n(&self) -> u8 {
+                    (self.0 >> 16) as u8
+                }
+
+                /// reserved
+                #[inline]
+                pub const fn spi_mem_clk_equ_sysclk(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `SPI_MEM_CLKCNT_L`.
+                #[inline]
+                pub fn set_spi_mem_clkcnt_l(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x000000ff) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI_MEM_CLKCNT_H`.
+                #[inline]
+                pub fn set_spi_mem_clkcnt_h(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ff00) | (u32::from(value) << 8);
+                    self
+                }
+
+                /// Set `SPI_MEM_CLKCNT_N`.
+                #[inline]
+                pub fn set_spi_mem_clkcnt_n(&mut self, value: u8) -> &mut Self {
+                    self.0 = (self.0 & !0x00ff0000) | (u32::from(value) << 16);
+                    self
+                }
+
+                /// Set `SPI_MEM_CLK_EQU_SYSCLK`.
+                #[inline]
+                pub fn set_spi_mem_clk_equ_sysclk(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
                 }
             }
         }
@@ -98100,6 +98386,180 @@ pub mod soc {
                     (self.0 & 0x80000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// the bit combined with spi_mem_mosi_delay_mode bits to set mosi signal delay mode.
+                #[inline]
+                pub const fn spi_mem_ck_out_edge(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// In the write operations read-data phase apply 2 signals
+                #[inline]
+                pub const fn spi_mem_fwrite_dual(&self) -> bool {
+                    (self.0 & 0x00001000) != 0
+                }
+
+                /// In the write operations read-data phase apply 4 signals
+                #[inline]
+                pub const fn spi_mem_fwrite_quad(&self) -> bool {
+                    (self.0 & 0x00002000) != 0
+                }
+
+                /// In the write operations address phase and read-data phase apply 2 signals.
+                #[inline]
+                pub const fn spi_mem_fwrite_dio(&self) -> bool {
+                    (self.0 & 0x00004000) != 0
+                }
+
+                /// In the write operations address phase and read-data phase apply 4 signals.
+                #[inline]
+                pub const fn spi_mem_fwrite_qio(&self) -> bool {
+                    (self.0 & 0x00008000) != 0
+                }
+
+                /// read-data phase only access to high-part of the buffer spi_mem_w8~spi_mem_w15. 1: enable 0: disable.
+                #[inline]
+                pub const fn spi_mem_usr_miso_highpart(&self) -> bool {
+                    (self.0 & 0x01000000) != 0
+                }
+
+                /// write-data phase only access to high-part of the buffer spi_mem_w8~spi_mem_w15. 1: enable 0: disable.
+                #[inline]
+                pub const fn spi_mem_usr_mosi_highpart(&self) -> bool {
+                    (self.0 & 0x02000000) != 0
+                }
+
+                /// SPI clock is disable in dummy phase when the bit is enable.
+                #[inline]
+                pub const fn spi_mem_usr_dummy_idle(&self) -> bool {
+                    (self.0 & 0x04000000) != 0
+                }
+
+                /// This bit enable the write-data phase of an operation.
+                #[inline]
+                pub const fn spi_mem_usr_mosi(&self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// This bit enable the read-data phase of an operation.
+                #[inline]
+                pub const fn spi_mem_usr_miso(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// This bit enable the dummy phase of an operation.
+                #[inline]
+                pub const fn spi_mem_usr_dummy(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// This bit enable the address phase of an operation.
+                #[inline]
+                pub const fn spi_mem_usr_addr(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// This bit enable the command phase of an operation.
+                #[inline]
+                pub const fn spi_mem_usr_command(&self) -> bool {
+                    (self.0 & 0x80000000) != 0
+                }
+
+                /// Set `SPI_MEM_CK_OUT_EDGE`.
+                #[inline]
+                pub fn set_spi_mem_ck_out_edge(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `SPI_MEM_FWRITE_DUAL`.
+                #[inline]
+                pub fn set_spi_mem_fwrite_dual(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00001000) | (u32::from(value) << 12);
+                    self
+                }
+
+                /// Set `SPI_MEM_FWRITE_QUAD`.
+                #[inline]
+                pub fn set_spi_mem_fwrite_quad(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00002000) | (u32::from(value) << 13);
+                    self
+                }
+
+                /// Set `SPI_MEM_FWRITE_DIO`.
+                #[inline]
+                pub fn set_spi_mem_fwrite_dio(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00004000) | (u32::from(value) << 14);
+                    self
+                }
+
+                /// Set `SPI_MEM_FWRITE_QIO`.
+                #[inline]
+                pub fn set_spi_mem_fwrite_qio(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00008000) | (u32::from(value) << 15);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_MISO_HIGHPART`.
+                #[inline]
+                pub fn set_spi_mem_usr_miso_highpart(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_MOSI_HIGHPART`.
+                #[inline]
+                pub fn set_spi_mem_usr_mosi_highpart(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x02000000) | (u32::from(value) << 25);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_DUMMY_IDLE`.
+                #[inline]
+                pub fn set_spi_mem_usr_dummy_idle(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_MOSI`.
+                #[inline]
+                pub fn set_spi_mem_usr_mosi(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_MISO`.
+                #[inline]
+                pub fn set_spi_mem_usr_miso(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_DUMMY`.
+                #[inline]
+                pub fn set_spi_mem_usr_dummy(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_ADDR`.
+                #[inline]
+                pub fn set_spi_mem_usr_addr(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_COMMAND`.
+                #[inline]
+                pub fn set_spi_mem_usr_command(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x80000000) | (u32::from(value) << 31);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_USER1` register.
@@ -98126,6 +98586,43 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_usr_addr_bitlen(self) -> oer_mmio::Bits<6> {
                     oer_mmio::Bits::truncate(self.0 >> 26)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The length in spi_mem_clk cycles of dummy phase. The register value shall be (cycle_num-1).
+                #[inline]
+                pub const fn spi_mem_usr_dummy_cyclelen(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// The length in bits of address phase. The register value shall be (bit_num-1).
+                #[inline]
+                pub const fn spi_mem_usr_addr_bitlen(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 26)
+                }
+
+                /// Set `SPI_MEM_USR_DUMMY_CYCLELEN`.
+                #[inline]
+                pub fn set_spi_mem_usr_dummy_cyclelen(
+                    &mut self,
+                    value: oer_mmio::Bits<6>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0000003f) | value.get();
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_ADDR_BITLEN`.
+                #[inline]
+                pub fn set_spi_mem_usr_addr_bitlen(
+                    &mut self,
+                    value: oer_mmio::Bits<6>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xfc000000) | (value.get() << 26);
+                    self
                 }
             }
         }
@@ -98156,6 +98653,40 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 28)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The value of command.
+                #[inline]
+                pub const fn spi_mem_usr_command_value(&self) -> u16 {
+                    (self.0) as u16
+                }
+
+                /// The length in bits of command phase. The register value shall be (bit_num-1)
+                #[inline]
+                pub const fn spi_mem_usr_command_bitlen(&self) -> oer_mmio::Bits<4> {
+                    oer_mmio::Bits::truncate(self.0 >> 28)
+                }
+
+                /// Set `SPI_MEM_USR_COMMAND_VALUE`.
+                #[inline]
+                pub fn set_spi_mem_usr_command_value(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0x0000ffff) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI_MEM_USR_COMMAND_BITLEN`.
+                #[inline]
+                pub fn set_spi_mem_usr_command_bitlen(
+                    &mut self,
+                    value: oer_mmio::Bits<4>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0xf0000000) | (value.get() << 28);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_MOSI_DLEN` register.
@@ -98178,6 +98709,27 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The length in bits of write-data. The register value shall be (bit_num-1).
+                #[inline]
+                pub const fn spi_mem_usr_mosi_dbitlen(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `SPI_MEM_USR_MOSI_DBITLEN`.
+                #[inline]
+                pub fn set_spi_mem_usr_mosi_dbitlen(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000003ff) | value.get();
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_MISO_DLEN` register.
@@ -98198,6 +98750,27 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_usr_miso_dbitlen(self) -> oer_mmio::Bits<10> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The length in bits of read-data. The register value shall be (bit_num-1).
+                #[inline]
+                pub const fn spi_mem_usr_miso_dbitlen(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `SPI_MEM_USR_MISO_DBITLEN`.
+                #[inline]
+                pub fn set_spi_mem_usr_miso_dbitlen(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000003ff) | value.get();
+                    self
                 }
             }
         }
@@ -98280,6 +98853,63 @@ pub mod soc {
                     (self.0 & 0x00000400) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// SPI_CS0 pin enable, 1: disable SPI_CS0, 0: SPI_CS0 pin is active to select SPI device, such as flash, external RAM and so on.
+                #[inline]
+                pub const fn spi_mem_cs0_dis(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// SPI_CS1 pin enable, 1: disable SPI_CS1, 0: SPI_CS1 pin is active to select SPI device, such as flash, external RAM and so on.
+                #[inline]
+                pub const fn spi_mem_cs1_dis(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// 1: spi clk line is high when idle 0: spi clk line is low when idle
+                #[inline]
+                pub const fn spi_mem_ck_idle_edge(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// spi cs line keep low when the bit is set.
+                #[inline]
+                pub const fn spi_mem_cs_keep_active(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set `SPI_MEM_CS0_DIS`.
+                #[inline]
+                pub fn set_spi_mem_cs0_dis(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI_MEM_CS1_DIS`.
+                #[inline]
+                pub fn set_spi_mem_cs1_dis(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SPI_MEM_CK_IDLE_EDGE`.
+                #[inline]
+                pub fn set_spi_mem_ck_idle_edge(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `SPI_MEM_CS_KEEP_ACTIVE`.
+                #[inline]
+                pub fn set_spi_mem_cs_keep_active(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_TX_CRC` register.
@@ -98358,6 +98988,102 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_faddr_quad(self) -> bool {
                     (self.0 & 0x00000100) != 0
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// For SPI1, cache read flash with 4 bytes address, 1: enable, 0:disable.
+                #[inline]
+                pub const fn spi_mem_cache_usr_addr_4byte(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// For SPI1, din phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_fread_dio.
+                #[inline]
+                pub const fn spi_mem_fdin_dual(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// For SPI1, dout phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_fread_dio.
+                #[inline]
+                pub const fn spi_mem_fdout_dual(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// For SPI1, address phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_fread_dio.
+                #[inline]
+                pub const fn spi_mem_faddr_dual(&self) -> bool {
+                    (self.0 & 0x00000020) != 0
+                }
+
+                /// For SPI1, din phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_fread_qio.
+                #[inline]
+                pub const fn spi_mem_fdin_quad(&self) -> bool {
+                    (self.0 & 0x00000040) != 0
+                }
+
+                /// For SPI1, dout phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_fread_qio.
+                #[inline]
+                pub const fn spi_mem_fdout_quad(&self) -> bool {
+                    (self.0 & 0x00000080) != 0
+                }
+
+                /// For SPI1, address phase apply 4 signals. 1: enable 0: disable. The bit is the same with spi_mem_fread_qio.
+                #[inline]
+                pub const fn spi_mem_faddr_quad(&self) -> bool {
+                    (self.0 & 0x00000100) != 0
+                }
+
+                /// Set `SPI_MEM_CACHE_USR_ADDR_4BYTE`.
+                #[inline]
+                pub fn set_spi_mem_cache_usr_addr_4byte(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SPI_MEM_FDIN_DUAL`.
+                #[inline]
+                pub fn set_spi_mem_fdin_dual(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `SPI_MEM_FDOUT_DUAL`.
+                #[inline]
+                pub fn set_spi_mem_fdout_dual(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `SPI_MEM_FADDR_DUAL`.
+                #[inline]
+                pub fn set_spi_mem_faddr_dual(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000020) | (u32::from(value) << 5);
+                    self
+                }
+
+                /// Set `SPI_MEM_FDIN_QUAD`.
+                #[inline]
+                pub fn set_spi_mem_fdin_quad(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000040) | (u32::from(value) << 6);
+                    self
+                }
+
+                /// Set `SPI_MEM_FDOUT_QUAD`.
+                #[inline]
+                pub fn set_spi_mem_fdout_quad(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000080) | (u32::from(value) << 7);
+                    self
+                }
+
+                /// Set `SPI_MEM_FADDR_QUAD`.
+                #[inline]
+                pub fn set_spi_mem_faddr_quad(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000100) | (u32::from(value) << 8);
+                    self
                 }
             }
         }
@@ -98770,6 +99496,108 @@ pub mod soc {
                     (self.0 >> 16) as u16
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// 1: The hardware will wait idle after SE/PP/WRSR automatically, and hardware auto Suspend/Resume can be enabled. 0: The functions of hardware wait idle and auto Suspend/Resume are not supported.
+                #[inline]
+                pub const fn spi_mem_waiti_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The dummy phase enable when wait flash idle (RDSR)
+                #[inline]
+                pub const fn spi_mem_waiti_dummy(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// 1: Output address 0 in RDSR or read SUS command transfer. 0: Do not send out address in RDSR or read SUS command transfer.
+                #[inline]
+                pub const fn spi_mem_waiti_addr_en(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// When SPI_MEM_WAITI_ADDR_EN is set, the cycle length of sent out address is (SPI_MEM_WAITI_ADDR_CYCLELEN\[1:0\] + 1) SPI bus clock cycles. It is not active when SPI_MEM_WAITI_ADDR_EN is cleared.
+                #[inline]
+                pub const fn spi_mem_waiti_addr_cyclelen(&self) -> oer_mmio::Bits<2> {
+                    oer_mmio::Bits::truncate(self.0 >> 3)
+                }
+
+                /// 1:The wait idle command bit length is 16. 0: The wait idle command bit length is 8.
+                #[inline]
+                pub const fn spi_mem_waiti_cmd_2b(&self) -> bool {
+                    (self.0 & 0x00000200) != 0
+                }
+
+                /// The dummy cycle length when wait flash idle(RDSR).
+                #[inline]
+                pub const fn spi_mem_waiti_dummy_cyclelen(&self) -> oer_mmio::Bits<6> {
+                    oer_mmio::Bits::truncate(self.0 >> 10)
+                }
+
+                /// The command value to wait flash idle(RDSR).
+                #[inline]
+                pub const fn spi_mem_waiti_cmd(&self) -> u16 {
+                    (self.0 >> 16) as u16
+                }
+
+                /// Set `SPI_MEM_WAITI_EN`.
+                #[inline]
+                pub fn set_spi_mem_waiti_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_DUMMY`.
+                #[inline]
+                pub fn set_spi_mem_waiti_dummy(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_ADDR_EN`.
+                #[inline]
+                pub fn set_spi_mem_waiti_addr_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_ADDR_CYCLELEN`.
+                #[inline]
+                pub fn set_spi_mem_waiti_addr_cyclelen(
+                    &mut self,
+                    value: oer_mmio::Bits<2>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000018) | (value.get() << 3);
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_CMD_2B`.
+                #[inline]
+                pub fn set_spi_mem_waiti_cmd_2b(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000200) | (u32::from(value) << 9);
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_DUMMY_CYCLELEN`.
+                #[inline]
+                pub fn set_spi_mem_waiti_dummy_cyclelen(
+                    &mut self,
+                    value: oer_mmio::Bits<6>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0000fc00) | (value.get() << 10);
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_CMD`.
+                #[inline]
+                pub fn set_spi_mem_waiti_cmd(&mut self, value: u16) -> &mut Self {
+                    self.0 = (self.0 & !0xffff0000) | (u32::from(value) << 16);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_FLASH_SUS_CTRL` register.
@@ -99015,6 +99843,40 @@ pub mod soc {
                     (self.0 & 0x00000400) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// SPI1 wait idle gap time configuration. SPI1 slv fsm will count during SPI1 IDLE.
+                #[inline]
+                pub const fn spi_mem_waiti_idle_delay_time(&self) -> oer_mmio::Bits<10> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Enable SPI1 wait idle gap time count functon. 1: Enable. 0: Disable.
+                #[inline]
+                pub const fn spi_mem_waiti_idle_delay_time_en(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set `SPI_MEM_WAITI_IDLE_DELAY_TIME`.
+                #[inline]
+                pub fn set_spi_mem_waiti_idle_delay_time(
+                    &mut self,
+                    value: oer_mmio::Bits<10>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x000003ff) | value.get();
+                    self
+                }
+
+                /// Set `SPI_MEM_WAITI_IDLE_DELAY_TIME_EN`.
+                #[inline]
+                pub fn set_spi_mem_waiti_idle_delay_time_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_INT_ENA` register.
@@ -99067,6 +99929,89 @@ pub mod soc {
                     (self.0 & 0x00000400) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The enable bit for SPI_MEM_PER_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_per_end_int_ena(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The enable bit for SPI_MEM_PES_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_pes_end_int_ena(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The enable bit for SPI_MEM_WPE_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_wpe_end_int_ena(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The enable bit for SPI_MEM_SLV_ST_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_slv_st_end_int_ena(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The enable bit for SPI_MEM_MST_ST_END_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_mst_st_end_int_ena(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The enable bit for SPI_MEM_BROWN_OUT_INT interrupt.
+                #[inline]
+                pub const fn spi_mem_brown_out_int_ena(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// Set `SPI_MEM_PER_END_INT_ENA`.
+                #[inline]
+                pub fn set_spi_mem_per_end_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI_MEM_PES_END_INT_ENA`.
+                #[inline]
+                pub fn set_spi_mem_pes_end_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SPI_MEM_WPE_END_INT_ENA`.
+                #[inline]
+                pub fn set_spi_mem_wpe_end_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `SPI_MEM_SLV_ST_END_INT_ENA`.
+                #[inline]
+                pub fn set_spi_mem_slv_st_end_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `SPI_MEM_MST_ST_END_INT_ENA`.
+                #[inline]
+                pub fn set_spi_mem_mst_st_end_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `SPI_MEM_BROWN_OUT_INT_ENA`.
+                #[inline]
+                pub fn set_spi_mem_brown_out_int_ena(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000400) | (u32::from(value) << 10);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_INT_CLR` register.
@@ -99078,47 +100023,15 @@ pub mod soc {
             /// The register's byte offset in its block.
             pub const OFFSET: usize = 0xc4;
 
+            /// The bits of the write-trigger fields: zero in every
+            /// read-modify-write, one only in a field's explicit trigger.
+            pub const TRIGGERS: u32 = 0x0000041f;
+
             /// One observation of the register.
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
             pub struct R(pub(super) u32);
 
-            impl R {
-                /// The clear bit for SPI_MEM_PER_END_INT interrupt.
-                #[inline]
-                pub const fn spi_mem_per_end_int_clr(self) -> bool {
-                    (self.0 & 0x00000001) != 0
-                }
-
-                /// The clear bit for SPI_MEM_PES_END_INT interrupt.
-                #[inline]
-                pub const fn spi_mem_pes_end_int_clr(self) -> bool {
-                    (self.0 & 0x00000002) != 0
-                }
-
-                /// The clear bit for SPI_MEM_WPE_END_INT interrupt.
-                #[inline]
-                pub const fn spi_mem_wpe_end_int_clr(self) -> bool {
-                    (self.0 & 0x00000004) != 0
-                }
-
-                /// The clear bit for SPI_MEM_SLV_ST_END_INT interrupt.
-                #[inline]
-                pub const fn spi_mem_slv_st_end_int_clr(self) -> bool {
-                    (self.0 & 0x00000008) != 0
-                }
-
-                /// The clear bit for SPI_MEM_MST_ST_END_INT interrupt.
-                #[inline]
-                pub const fn spi_mem_mst_st_end_int_clr(self) -> bool {
-                    (self.0 & 0x00000010) != 0
-                }
-
-                /// The status bit for SPI_MEM_BROWN_OUT_INT interrupt.
-                #[inline]
-                pub const fn spi_mem_brown_out_int_clr(self) -> bool {
-                    (self.0 & 0x00000400) != 0
-                }
-            }
+            impl R {}
         }
 
         /// The `SPI_MEM_INT_RAW` register.
@@ -99169,6 +100082,108 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_brown_out_int_raw(self) -> bool {
                     (self.0 & 0x00000400) != 0
+                }
+            }
+
+            /// One sample of the register's asserted fields, to acknowledge once.
+            #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+            #[derive(Debug, Eq, PartialEq)]
+            pub struct Snapshot(pub(super) u32);
+
+            impl Snapshot {
+                /// Whether no declared field was asserted.
+                pub const fn is_clear(&self) -> bool {
+                    self.0 == 0
+                }
+
+                /// The raw bit for SPI_MEM_PER_END_INT interrupt. 1: Triggered when Auto Resume command (0x7A) is sent and flash is resumed successfully. 0: Others.
+                #[inline]
+                pub const fn spi_mem_per_end_int_raw(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// The snapshot without `SPI_MEM_PER_END_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_spi_mem_per_end_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000001)
+                    }
+                }
+
+                /// The raw bit for SPI_MEM_PES_END_INT interrupt.1: Triggered when Auto Suspend command (0x75) is sent and flash is suspended successfully. 0: Others.
+                #[inline]
+                pub const fn spi_mem_pes_end_int_raw(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// The snapshot without `SPI_MEM_PES_END_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_spi_mem_pes_end_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000002)
+                    }
+                }
+
+                /// The raw bit for SPI_MEM_WPE_END_INT interrupt. 1: Triggered when WRSR/PP/SE/BE/CE is sent and flash is already idle. 0: Others.
+                #[inline]
+                pub const fn spi_mem_wpe_end_int_raw(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// The snapshot without `SPI_MEM_WPE_END_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_spi_mem_wpe_end_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000004)
+                    }
+                }
+
+                /// The raw bit for SPI_MEM_SLV_ST_END_INT interrupt. 1: Triggered when spi1_slv_st is changed from non idle state to idle state. It means that SPI_CS raises high. 0: Others
+                #[inline]
+                pub const fn spi_mem_slv_st_end_int_raw(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// The snapshot without `SPI_MEM_SLV_ST_END_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_spi_mem_slv_st_end_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000008)
+                    }
+                }
+
+                /// The raw bit for SPI_MEM_MST_ST_END_INT interrupt. 1: Triggered when spi1_mst_st is changed from non idle state to idle state. 0: Others.
+                #[inline]
+                pub const fn spi_mem_mst_st_end_int_raw(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// The snapshot without `SPI_MEM_MST_ST_END_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_spi_mem_mst_st_end_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000010)
+                    }
+                }
+
+                /// The raw bit for SPI_MEM_BROWN_OUT_INT interrupt. 1: Triggered condition is that chip is loosing power and RTC module sends out brown out close flash request to SPI1. After SPI1 sends out suspend command to flash, this interrupt is triggered and MSPI returns to idle state. 0: Others.
+                #[inline]
+                pub const fn spi_mem_brown_out_int_raw(&self) -> bool {
+                    (self.0 & 0x00000400) != 0
+                }
+
+                /// The snapshot without `SPI_MEM_BROWN_OUT_INT_RAW` unless `keep`: it is then not acknowledged.
+                pub const fn retain_spi_mem_brown_out_int_raw(self, keep: bool) -> Self {
+                    if keep {
+                        self
+                    } else {
+                        Self(self.0 & !0x00000400)
+                    }
                 }
             }
         }
@@ -99323,6 +100338,199 @@ pub mod soc {
                     (self.0 & 0x40000000) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// 1: in ddr mode, 0 in sdr mode
+                #[inline]
+                pub const fn spi_mem_fmem_ddr_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set the bit to enable variable dummy cycle in spi ddr mode.
+                #[inline]
+                pub const fn spi_mem_fmem_var_dummy(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// Set the bit to reorder rx data of the word in spi ddr mode.
+                #[inline]
+                pub const fn spi_mem_fmem_ddr_rdat_swp(&self) -> bool {
+                    (self.0 & 0x00000004) != 0
+                }
+
+                /// Set the bit to reorder tx data of the word in spi ddr mode.
+                #[inline]
+                pub const fn spi_mem_fmem_ddr_wdat_swp(&self) -> bool {
+                    (self.0 & 0x00000008) != 0
+                }
+
+                /// the bit is used to disable dual edge in command phase when ddr mode.
+                #[inline]
+                pub const fn spi_mem_fmem_ddr_cmd_dis(&self) -> bool {
+                    (self.0 & 0x00000010) != 0
+                }
+
+                /// It is the minimum output data length in the panda device.
+                #[inline]
+                pub const fn spi_mem_fmem_outminbytelen(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 5)
+                }
+
+                /// The delay number of data strobe which from memory based on SPI clock.
+                #[inline]
+                pub const fn spi_mem_fmem_usr_ddr_dqs_thd(&self) -> oer_mmio::Bits<7> {
+                    oer_mmio::Bits::truncate(self.0 >> 14)
+                }
+
+                /// 1: Do not need the input of SPI_DQS signal, SPI0 starts to receive data when spi0_slv_st is in SPI_MEM_DIN state. It is used when there is no SPI_DQS signal or SPI_DQS signal is not stable. 0: SPI0 starts to store data at the positive and negative edge of SPI_DQS.
+                #[inline]
+                pub const fn spi_mem_fmem_ddr_dqs_loop(&self) -> bool {
+                    (self.0 & 0x00200000) != 0
+                }
+
+                /// Set this bit to enable the differential SPI_CLK#.
+                #[inline]
+                pub const fn spi_mem_fmem_clk_diff_en(&self) -> bool {
+                    (self.0 & 0x01000000) != 0
+                }
+
+                /// Set this bit to enable the input of SPI_DQS signal in SPI phases of CMD and ADDR.
+                #[inline]
+                pub const fn spi_mem_fmem_dqs_ca_in(&self) -> bool {
+                    (self.0 & 0x04000000) != 0
+                }
+
+                /// Set this bit to enable the vary dummy function in SPI HyperBus mode, when SPI0 accesses flash or SPI1 accesses flash or sram.
+                #[inline]
+                pub const fn spi_mem_fmem_hyperbus_dummy_2x(&self) -> bool {
+                    (self.0 & 0x08000000) != 0
+                }
+
+                /// Set this bit to invert SPI_DIFF when accesses to flash. .
+                #[inline]
+                pub const fn spi_mem_fmem_clk_diff_inv(&self) -> bool {
+                    (self.0 & 0x10000000) != 0
+                }
+
+                /// Set this bit to enable octa_ram address out when accesses to flash, which means ADDR_OUT\[31:0\] = {spi_usr_addr_value\[25:4\], 6'd0, spi_usr_addr_value\[3:1\], 1'b0}.
+                #[inline]
+                pub const fn spi_mem_fmem_octa_ram_addr(&self) -> bool {
+                    (self.0 & 0x20000000) != 0
+                }
+
+                /// Set this bit to enable HyperRAM address out when accesses to flash, which means ADDR_OUT\[31:0\] = {spi_usr_addr_value\[19:4\], 13'd0, spi_usr_addr_value\[3:1\]}.
+                #[inline]
+                pub const fn spi_mem_fmem_hyperbus_ca(&self) -> bool {
+                    (self.0 & 0x40000000) != 0
+                }
+
+                /// Set `SPI_MEM_FMEM_DDR_EN`.
+                #[inline]
+                pub fn set_spi_mem_fmem_ddr_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_VAR_DUMMY`.
+                #[inline]
+                pub fn set_spi_mem_fmem_var_dummy(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_DDR_RDAT_SWP`.
+                #[inline]
+                pub fn set_spi_mem_fmem_ddr_rdat_swp(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000004) | (u32::from(value) << 2);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_DDR_WDAT_SWP`.
+                #[inline]
+                pub fn set_spi_mem_fmem_ddr_wdat_swp(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000008) | (u32::from(value) << 3);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_DDR_CMD_DIS`.
+                #[inline]
+                pub fn set_spi_mem_fmem_ddr_cmd_dis(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000010) | (u32::from(value) << 4);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_OUTMINBYTELEN`.
+                #[inline]
+                pub fn set_spi_mem_fmem_outminbytelen(
+                    &mut self,
+                    value: oer_mmio::Bits<7>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x00000fe0) | (value.get() << 5);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_USR_DDR_DQS_THD`.
+                #[inline]
+                pub fn set_spi_mem_fmem_usr_ddr_dqs_thd(
+                    &mut self,
+                    value: oer_mmio::Bits<7>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x001fc000) | (value.get() << 14);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_DDR_DQS_LOOP`.
+                #[inline]
+                pub fn set_spi_mem_fmem_ddr_dqs_loop(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00200000) | (u32::from(value) << 21);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_CLK_DIFF_EN`.
+                #[inline]
+                pub fn set_spi_mem_fmem_clk_diff_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x01000000) | (u32::from(value) << 24);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_DQS_CA_IN`.
+                #[inline]
+                pub fn set_spi_mem_fmem_dqs_ca_in(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x04000000) | (u32::from(value) << 26);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_HYPERBUS_DUMMY_2X`.
+                #[inline]
+                pub fn set_spi_mem_fmem_hyperbus_dummy_2x(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x08000000) | (u32::from(value) << 27);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_CLK_DIFF_INV`.
+                #[inline]
+                pub fn set_spi_mem_fmem_clk_diff_inv(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x10000000) | (u32::from(value) << 28);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_OCTA_RAM_ADDR`.
+                #[inline]
+                pub fn set_spi_mem_fmem_octa_ram_addr(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x20000000) | (u32::from(value) << 29);
+                    self
+                }
+
+                /// Set `SPI_MEM_FMEM_HYPERBUS_CA`.
+                #[inline]
+                pub fn set_spi_mem_fmem_hyperbus_ca(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x40000000) | (u32::from(value) << 30);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_TIMING_CALI` register.
@@ -99351,6 +100559,40 @@ pub mod soc {
                     oer_mmio::Bits::truncate(self.0 >> 2)
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// The bit is used to enable timing auto-calibration for all reading operations.
+                #[inline]
+                pub const fn spi_mem_timing_cali(&self) -> bool {
+                    (self.0 & 0x00000002) != 0
+                }
+
+                /// add extra dummy spi clock cycle length for spi clock calibration.
+                #[inline]
+                pub const fn spi_mem_extra_dummy_cyclelen(&self) -> oer_mmio::Bits<3> {
+                    oer_mmio::Bits::truncate(self.0 >> 2)
+                }
+
+                /// Set `SPI_MEM_TIMING_CALI`.
+                #[inline]
+                pub fn set_spi_mem_timing_cali(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000002) | (u32::from(value) << 1);
+                    self
+                }
+
+                /// Set `SPI_MEM_EXTRA_DUMMY_CYCLELEN`.
+                #[inline]
+                pub fn set_spi_mem_extra_dummy_cyclelen(
+                    &mut self,
+                    value: oer_mmio::Bits<3>,
+                ) -> &mut Self {
+                    self.0 = (self.0 & !0x0000001c) | (value.get() << 2);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_CLOCK_GATE` register.
@@ -99373,6 +100615,24 @@ pub mod soc {
                     (self.0 & 0x00000001) != 0
                 }
             }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Register clock gate enable signal. 1: Enable. 0: Disable.
+                #[inline]
+                pub const fn spi_mem_clk_en(&self) -> bool {
+                    (self.0 & 0x00000001) != 0
+                }
+
+                /// Set `SPI_MEM_CLK_EN`.
+                #[inline]
+                pub fn set_spi_mem_clk_en(&mut self, value: bool) -> &mut Self {
+                    self.0 = (self.0 & !0x00000001) | u32::from(value);
+                    self
+                }
+            }
         }
 
         /// The `SPI_MEM_DATE` register.
@@ -99393,6 +100653,24 @@ pub mod soc {
                 #[inline]
                 pub const fn spi_mem_date(self) -> oer_mmio::Bits<28> {
                     oer_mmio::Bits::truncate(self.0)
+                }
+            }
+
+            /// The register's value while it is changed.
+            pub struct W(pub(super) u32);
+
+            impl W {
+                /// Version control register
+                #[inline]
+                pub const fn spi_mem_date(&self) -> oer_mmio::Bits<28> {
+                    oer_mmio::Bits::truncate(self.0)
+                }
+
+                /// Set `SPI_MEM_DATE`.
+                #[inline]
+                pub fn set_spi_mem_date(&mut self, value: oer_mmio::Bits<28>) -> &mut Self {
+                    self.0 = (self.0 & !0x0fffffff) | value.get();
+                    self
                 }
             }
         }

@@ -1820,6 +1820,12 @@ register = "SPI_MEM_CMD"
 access = "read-only"
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:16"]
 
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_CTRL2"
+reserved = 0x7fffffff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:349", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:367"]
+
 [[fields]]
 peripheral = "SPI1"
 register = "SPI_MEM_CTRL2"
@@ -1830,9 +1836,57 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:350"]
 
 [[registers]]
 peripheral = "SPI1"
+register = "SPI_MEM_CLOCK"
+reserved = 0x7f000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:361", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:394"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_USER"
+reserved = 0x00ff0dff
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:395", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:190"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_USER1"
+reserved = 0x03ffffc0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:493", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:209"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_USER2"
+reserved = 0x0fff0000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:513", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:227"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_MOSI_DLEN"
+reserved = 0xfffffc00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:532", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:408"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_MISO_DLEN"
+reserved = 0xfffffc00
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:544", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:422"]
+
+[[registers]]
+peripheral = "SPI1"
 register = "SPI_MEM_RD_STATUS"
 access = "read-only"
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:556"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_MISC"
+reserved = 0xfffff9fc
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:589", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:477"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_CACHE_FCTRL"
+reserved = 0xfffffe05
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:636", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:523"]
 
 [[registers]]
 peripheral = "SPI1"
@@ -1932,6 +1986,12 @@ sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:876"]
 
 [[registers]]
 peripheral = "SPI1"
+register = "SPI_MEM_FLASH_WAITI_CTRL"
+reserved = 0x000001e0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:888", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:566"]
+
+[[registers]]
+peripheral = "SPI1"
 register = "SPI_MEM_FLASH_SUS_CTRL"
 access = "read-only"
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:947"]
@@ -1941,6 +2001,24 @@ peripheral = "SPI1"
 register = "SPI_MEM_SUS_STATUS"
 access = "read-only"
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1065"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_FLASH_WAITI_CTRL1"
+reserved = 0xfffff800
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1154", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:735"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_ENA"
+reserved = 0xfffffbe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1173", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:1086"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_CLR"
+reserved = 0xfffffbe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1220", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:1121"]
 
 [[fields]]
 peripheral = "SPI1"
@@ -1989,6 +2067,44 @@ field = "SPI_MEM_BROWN_OUT_INT_CLR"
 kind = "write-trigger"
 access = "read-write"
 sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1256"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_RAW"
+write-one-to-clear = true
+raw-status-writable = true
+reserved = 0xfffffbe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1267", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:1165"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_INT_ST"
+reserved = 0xfffffbe0
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1323", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:1200"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_DDR"
+reserved = 0x82c03000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1370", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:810"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_TIMING_CALI"
+reserved = 0xffffffe1
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1479", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:1221"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_CLOCK_GATE"
+reserved = 0xfffffffe
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1498", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:824"]
+
+[[registers]]
+peripheral = "SPI1"
+register = "SPI_MEM_DATE"
+reserved = 0xf0000000
+sources = ["esp-idf:components/soc/esp32c5/register/soc/spi1_mem_reg.h:1510", "esp-idf:components/soc/esp32c5/register/soc/spi1_mem_struct.h:1237"]
 
 
 # IO_MUX: components/soc/esp32c5/register/soc/io_mux_reg.h and io_mux_struct.h.
