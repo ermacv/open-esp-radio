@@ -39,6 +39,7 @@ owned-ranges = [
     "hp-sys-clkrst-timg1",
     "lp-wdt",
     "systimer",
+    "clic-config",
     "clic-lines",
     "interrupt-core0-routes-low",
     "interrupt-core0-routes-high",

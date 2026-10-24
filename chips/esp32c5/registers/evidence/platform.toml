@@ -95,7 +95,7 @@ description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7:
 
 [[sources]]
 id = "ESP_IDF_4D59230D_C5_CLIC"
-description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32c5/include/soc/clic_reg.h sha256 f91719a3abd9524fb34378583fbc36716a1ab99ed055189caa21a948b14fe007. DR_REG_CLIC_BASE 0x20800000; NLBITS 3; CLIC_INT_CTRL_REG(i) at 0x20801000 + 4i holds IP bit 0, IE bit 8, ATTR_SHV bit 16, ATTR_TRIG bits 18:17, ATTR_MODE bits 23:22 and CTL bits 31:24."
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32c5/include/soc/clic_reg.h sha256 f91719a3abd9524fb34378583fbc36716a1ab99ed055189caa21a948b14fe007. DR_REG_CLIC_BASE 0x20800000; NLBITS 3; CLIC_INT_CTRL_REG(i) at 0x20801000 + 4i holds IP bit 0, IE bit 8, ATTR_SHV bit 16, ATTR_TRIG bits 18:17, ATTR_MODE bits 23:22 and CTL bits 31:24. CLIC_INT_CONFIG_REG at DR_REG_CLIC_BASE + 0x0 (lines 19-43): MNLBITS R/W bits 3:0, NMBITS R/W bits 5:4, SNLBITS R/W bits 19:16, UNLBITS R/W bits 27:24."
 
 [[sources]]
 id = "ESP_IDF_4D59230D_C5_FROM_CPU"

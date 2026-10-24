@@ -34654,11 +34654,39 @@ register is stored whole.</description>
 words: each line's word holds its pending, enable, attribute and control
 bytes. Invariant: every vectored line is level-triggered, so a write of the
 word that changes its enable or control writes back the pending bit read
-without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). The read-only
-access states our access: the hardware words are read-write, and
-esp-hal's vectoring is their only writer until the table writes the lines.</description>
+without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG
+holds the number of level bits of each line's control byte.</description>
       <baseAddress>0x10800000</baseAddress>
       <registers>
+        <register>
+          <name>INT_CONFIG</name>
+          <description>Project-assigned name. The controller's configuration: how many bits of a line's control byte are its level.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>NVBITS</name>
+              <description>Project-assigned name. Set: the controller implements hardware vectoring.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>MNLBITS</name>
+              <description>Project-assigned name. Machine mode: the number of high bits of a line's control byte that are its level, at most 8.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>NMBITS</name>
+              <description>Project-assigned name. The number of privilege-mode bits of a line's attribute.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>2</bitWidth>
+              <access>read-only</access>
+            </field>
+          </fields>
+        </register>
         <register>
           <dim>48</dim>
           <dimIncrement>0x4</dimIncrement>
@@ -34667,7 +34695,7 @@ esp-hal's vectoring is their only writer until the table writes the lines.</desc
           <description>Project-assigned name. Line %s: pending, enable, attribute and level control.</description>
           <addressOffset>0x1000</addressOffset>
           <size>0x20</size>
-          <access>read-only</access>
+          <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34715,9 +34743,7 @@ esp-hal's vectoring is their only writer until the table writes the lines.</desc
       <description>The interrupt-matrix route words of core 0, one per peripheral source, by source
 number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it. Their read-only access states our access: the hardware words
-are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
-only writer until the table writes the routes.</description>
+around it.</description>
       <baseAddress>0x20585000</baseAddress>
       <registers>
         <register>
@@ -34728,7 +34754,7 @@ only writer until the table writes the routes.</description>
           <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
-          <access>read-only</access>
+          <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34753,7 +34779,7 @@ only writer until the table writes the routes.</description>
           <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
           <addressOffset>0x214</addressOffset>
           <size>0x20</size>
-          <access>read-only</access>
+          <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34881,9 +34907,7 @@ Every context polls it, so it is a shared block of side-effect-free reads.</desc
       <description>The interrupt-matrix route words of core 1, one per peripheral source, by source
 number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it. Their read-only access states our access: the hardware words
-are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
-only writer until the table writes the routes.</description>
+around it.</description>
       <baseAddress>0x20585800</baseAddress>
       <registers>
         <register>
@@ -34894,7 +34918,7 @@ only writer until the table writes the routes.</description>
           <description>Project-assigned name. Route of source %s (sources 0 to 131).</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
-          <access>read-only</access>
+          <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>
@@ -34919,7 +34943,7 @@ only writer until the table writes the routes.</description>
           <description>Project-assigned name. Route of source 133 + %s (sources 133 to 168).</description>
           <addressOffset>0x214</addressOffset>
           <size>0x20</size>
-          <access>read-only</access>
+          <access>read-write</access>
           <resetValue>0x00000000</resetValue>
           <fields>
             <field>

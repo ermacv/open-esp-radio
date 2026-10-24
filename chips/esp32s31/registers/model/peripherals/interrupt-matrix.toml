@@ -6,9 +6,7 @@ description = """
 The interrupt-matrix route words of core 0, one per peripheral source, by source
 number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it. Their read-only access states our access: the hardware words
-are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
-only writer until the table writes the routes."""
+around it."""
 baseAddress = 0x20585000
 
 [[peripherals.registers]]
@@ -21,7 +19,7 @@ name = "MAP_LOW%s"
 description = "Route of source %s (sources 0 to 131)."
 addressOffset = 0x0
 size = 32
-access = "read-only"
+access = "read-write"
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
 resetValue = 0x0
 
@@ -47,7 +45,7 @@ name = "MAP_HIGH%s"
 description = "Route of source 133 + %s (sources 133 to 168)."
 addressOffset = 0x214
 size = 32
-access = "read-only"
+access = "read-write"
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
 resetValue = 0x0
 
@@ -172,9 +170,7 @@ description = """
 The interrupt-matrix route words of core 1, one per peripheral source, by source
 number. Source 132 (ZB_MAC) is left out: its route word belongs to the
 IEEE 802.15.4 view IEEE802154_INTERRUPT_ROUTE, so the routes are two arrays
-around it. Their read-only access states our access: the hardware words
-are read-write, and esp-hal's interrupt table (InterruptRoutes) is their
-only writer until the table writes the routes."""
+around it."""
 baseAddress = 0x20585800
 
 [[peripherals.registers]]
@@ -187,7 +183,7 @@ name = "MAP_LOW%s"
 description = "Route of source %s (sources 0 to 131)."
 addressOffset = 0x0
 size = 32
-access = "read-only"
+access = "read-write"
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
 resetValue = 0x0
 
@@ -213,7 +209,7 @@ name = "MAP_HIGH%s"
 description = "Route of source 133 + %s (sources 133 to 168)."
 addressOffset = 0x214
 size = 32
-access = "read-only"
+access = "read-write"
 reserved = { mask = 0xfffffcc0, sources = ["ESP_IDF_4D59230D_S31_INTERRUPT_MATRIX"] }
 resetValue = 0x0
 

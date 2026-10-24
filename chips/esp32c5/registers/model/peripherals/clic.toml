@@ -7,10 +7,42 @@ The core-local interrupt controller of the hart that accesses it, as 32-bit
 words: each line's word holds its pending, enable, attribute and control
 bytes. Invariant: every vectored line is level-triggered, so a write of the
 word that changes its enable or control writes back the pending bit read
-without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). The read-only
-access states our access: the hardware words are read-write, and
-esp-hal's vectoring is their only writer until the table writes the lines."""
+without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG
+holds the number of level bits of each line's control byte."""
 baseAddress = 0x20800000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INT_CONFIG"
+description = "The controller's configuration: how many bits of a line's control byte are its level."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "MNLBITS"
+description = "Machine mode: the number of high bits of a line's control byte that are its level, at most 8."
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "NMBITS"
+description = "The number of privilege-mode bits of a line's attribute."
+bitOffset = 4
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "SNLBITS"
+description = "Supervisor mode: the number of level bits of a line's control byte, at most 8."
+bitOffset = 16
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "UNLBITS"
+description = "User mode: the number of level bits of a line's control byte, at most 8."
+bitOffset = 24
+bitWidth = 4
 
 [[peripherals.registers]]
 
@@ -22,7 +54,7 @@ name = "CTRL%s"
 description = "Line %s: pending, enable, attribute and level control."
 addressOffset = 0x1000
 size = 32
-access = "read-only"
+access = "read-write"
 resetValue = 0x0
 
 [[peripherals.registers.register.fields]]

@@ -41,6 +41,10 @@ pub enum Coordination {
     /// or its clock-tree node is not configured); the reason names it, and a
     /// merge that starts calling it must revisit the entry.
     UnreachedEspHalPath,
+    /// The radio PAC's writer of the word exists but nothing calls it, so
+    /// esp-hal is the only runtime writer; the reason names the owner, and
+    /// a change that calls the writer must make one side the only writer.
+    UnreachedRadioWriter,
     /// Both sides store whole words (trigger strobes); neither reads,
     /// modifies and writes back, so neither undoes the other.
     WholeWordStores,
