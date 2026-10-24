@@ -49,10 +49,12 @@ mod review_defaults;
 pub use review_defaults::ReviewMetadata;
 mod shared;
 mod soc;
+mod soc_overlay;
 pub use soc::{
     FieldKind, FieldRule, InterruptRule, OverlayAccess, RegisterApi, RegisterRule, RegisterVerdict,
     SocInputs, SocRender, StrictnessOverlay, ValueRule, render_soc,
 };
+pub use soc_overlay::{HeaderTree, OverlayCheck, check_overlay, import_overlay};
 
 pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,

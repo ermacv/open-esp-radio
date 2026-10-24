@@ -337,7 +337,7 @@ const TRIGGER_NAMES: &[&str] = &[
     "CLR", "CLEAR", "START", "STOP", "UPDATE", "UPD", "TRIG", "TRIGGER", "LOAD",
 ];
 
-fn trigger_candidate(name: &str) -> bool {
+pub(crate) fn trigger_candidate(name: &str) -> bool {
     TRIGGER_NAMES.contains(&name) || TRIGGER_SUFFIXES.iter().any(|suffix| name.ends_with(suffix))
 }
 
@@ -355,7 +355,7 @@ fn read_candidate(register: &str, fields: &[&str]) -> bool {
         || fields.iter().any(|field| port(field))
 }
 
-fn raw_status(register: &str) -> bool {
+pub(crate) fn raw_status(register: &str) -> bool {
     let register = register.replace("%s", "");
     register.ends_with("_RAW") || register.contains("INT_RAW")
 }
@@ -387,7 +387,7 @@ fn valid_module(module: &str) -> bool {
 }
 
 /// Resolve `derivedFrom` peripherals: each takes its base's registers.
-fn derive(device: &mut Device) -> Result<()> {
+pub(crate) fn derive(device: &mut Device) -> Result<()> {
     let bases = device
         .peripherals
         .iter()
