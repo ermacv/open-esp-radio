@@ -139,29 +139,42 @@ pub fn refresh_neighbor(
     Ok(NeighborRefresh { before, after })
 }
 
-/// Ask the selected AP to deauthenticate one station for the reconnect gate.
-/// The caller holds router and air ownership for the complete run. The full
-/// MAC is used only in the stdin script and redacted in command evidence.
-pub fn deauthenticate(remote: &mut dyn Remote, interface: &str, station: Mac) -> Result<()> {
+/// IEEE 802.11 reason 2, previous authentication no longer valid: the reason
+/// a hostapd control-interface deauthentication carries.
+const DEAUTH_REASON: u16 = 2;
+
+/// Ask the selected AP to deauthenticate one station for the reconnect gate,
+/// through the router's own hostapd ubus object (`hostapd.<interface>`,
+/// `del_client` with `deauth` and no ban). The caller holds router and air
+/// ownership for the complete run. The full MAC is used only in the stdin
+/// script and redacted in command evidence. A missing `ubus` or a nonzero exit
+/// is an error carrying the exit status and stderr.
+pub fn deauthenticate(
+    mut execute: impl FnMut(&str) -> Result<std::process::Output>,
+    interface: &str,
+    station: Mac,
+) -> Result<()> {
     if !token(interface) {
         return Err("invalid router AP interface".to_owned());
     }
     let address = station.octets().map(|byte| format!("{byte:02x}")).join(":");
-    let script = format!(
-        "set +x\nreply=$(hostapd_cli -i {} deauthenticate {}) && test \"$reply\" = OK",
-        quote(interface)?,
-        quote(&address)?,
+    let object = format!("hostapd.{interface}");
+    let arguments = format!(
+        "{{\"addr\":\"{address}\",\"reason\":{DEAUTH_REASON},\"deauth\":true,\"ban_time\":0}}"
     );
-    match remote.run(&script) {
-        Ok(output) => {
-            let _hidden = Zeroizing::new(output);
-            Ok(())
-        }
-        Err(error) => {
-            let _hidden = Zeroizing::new(error);
-            Err("router station deauthentication failed".to_owned())
-        }
+    let output = execute(&format!(
+        "set +x\nubus call {} del_client {}",
+        quote(&object)?,
+        quote(&arguments)?,
+    ))?;
+    if !output.status.success() {
+        return Err(format!(
+            "router station deauthentication failed ({}): {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -356,40 +369,77 @@ mod tests {
         }
     }
 
-    #[test]
-    fn deauthentication_selects_the_ap_and_the_exact_station_and_requires_ok() {
-        let mut remote = Scripted {
-            answer: Ok(String::new()),
-            scripts: Vec::new(),
-        };
-        let station = Mac::new([0x02, 0xab, 0xcd, 0xef, 0xf6, 0xd0]).unwrap();
-        deauthenticate(&mut remote, "phy7-ap3", station).unwrap();
-        assert_eq!(remote.scripts.len(), 1);
-        let script = &remote.scripts[0];
-        assert!(script.contains("hostapd_cli -i phy7-ap3 deauthenticate 02:ab:cd:ef:f6:d0"));
-        assert!(script.contains("&& test \"$reply\" = OK"));
-        assert!(script.starts_with("set +x\n"));
-        assert!(!script.contains("/dev/null"));
-        assert!(!script.contains("disassociate"));
+    fn output(code: i32, stderr: &str) -> std::process::Output {
+        use std::os::unix::process::ExitStatusExt as _;
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
     }
 
     #[test]
-    fn remote_errors_and_bad_interfaces_never_repeat_identities_or_credentials() {
-        let mut remote = Scripted {
-            answer: Err("secret-passphrase phy7-ap3 02:ab:cd:ef:f6:d0".to_owned()),
-            scripts: Vec::new(),
-        };
+    fn deauthentication_calls_the_ap_ubus_object_for_the_exact_station() {
+        let mut scripts = Vec::new();
         let station = Mac::new([0x02, 0xab, 0xcd, 0xef, 0xf6, 0xd0]).unwrap();
+        deauthenticate(
+            |script| {
+                scripts.push(script.to_owned());
+                Ok(output(0, ""))
+            },
+            "phy7-ap3",
+            station,
+        )
+        .unwrap();
+        assert_eq!(scripts.len(), 1);
+        let script = &scripts[0];
+        assert!(script.starts_with("set +x\n"));
+        assert!(script.contains("ubus call hostapd.phy7-ap3 del_client"));
+        assert!(script.contains("\"addr\":\"02:ab:cd:ef:f6:d0\""));
+        assert!(script.contains("\"deauth\":true"));
+        assert!(script.contains("\"ban_time\":0"));
+        assert!(!script.contains("hostapd_cli"));
+    }
+
+    #[test]
+    fn deauthentication_failure_carries_exit_status_and_stderr() {
+        let station = Mac::new([0x02, 0xab, 0xcd, 0xef, 0xf6, 0xd0]).unwrap();
+        let error = deauthenticate(
+            |_| Ok(output(4, "Command failed: Not found\n")),
+            "phy7-ap3",
+            station,
+        )
+        .unwrap_err();
+        assert!(error.contains("Command failed: Not found"), "{error}");
+        assert!(error.contains("exit status: 4"), "{error}");
+        // A missing command is a nonzero exit with the shell's diagnostic.
+        let error = deauthenticate(
+            |_| Ok(output(127, "sh: ubus: not found\n")),
+            "phy7-ap3",
+            station,
+        )
+        .unwrap_err();
+        assert!(error.contains("ubus: not found"), "{error}");
+        // A transport error passes through.
         assert_eq!(
-            deauthenticate(&mut remote, "phy7-ap3", station).unwrap_err(),
-            "router station deauthentication failed"
+            deauthenticate(|_| Err("no answer".to_owned()), "phy7-ap3", station).unwrap_err(),
+            "no answer"
         );
+    }
+
+    #[test]
+    fn deauthentication_rejects_bad_interfaces_without_running() {
+        let station = Mac::new([0x02, 0xab, 0xcd, 0xef, 0xf6, 0xd0]).unwrap();
         for interface in ["phy7-ap3; secret-passphrase", "-i", ""] {
             assert_eq!(
-                deauthenticate(&mut remote, interface, station).unwrap_err(),
+                deauthenticate(
+                    |_| panic!("invalid input never executes"),
+                    interface,
+                    station
+                )
+                .unwrap_err(),
                 "invalid router AP interface"
             );
         }
-        assert_eq!(remote.scripts.len(), 1);
     }
 }

@@ -246,7 +246,11 @@ pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
             let departure = Departure::start(&ssh, target)?;
             let cursor = capture.event_cursor();
             let forced = now();
-            w4::deauthenticate(&mut ssh, &config.wireless_interface, target)?;
+            w4::deauthenticate(
+                |script| ssh.output(script, COMMAND_TIMEOUT),
+                &config.wireless_interface,
+                target,
+            )?;
             capture
                 .wait_for_after::<StationLink>(cursor, SHORT, |message, link| {
                     start.correlates(message)
