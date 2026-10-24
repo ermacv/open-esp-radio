@@ -190,7 +190,7 @@ The separate frame reports list counts, current frames, ceilings, spare bytes
 and reasons, including warnings or failures. This gate changes no compiler
 flags, frame coverage, IRQ guards, stack allocations or stack bounds.
 
-The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 5), extended
+The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 6), extended
 by the HIL target's policy. Every image runs its tasks on CPU0; none starts
 the second S31 core, and C5 has one hart. Each stack names the function that
 runs on it from its top (its root, by symbol), its storage (a sized symbol, or a

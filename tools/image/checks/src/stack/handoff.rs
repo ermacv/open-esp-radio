@@ -330,6 +330,17 @@ pub(super) fn installs_stack_pointer(
             }
             _ => None,
         };
+        // A CSR access (`csrr t0, mhartid`) touches no memory: it may not
+        // write `sp`, and the `reads_register` check below covers its reads.
+        if let Instruction::Extension(oer_analysis_riscv_decode::Extension::Csr { .. }) =
+            instruction
+        {
+            if matches!(operation, SemanticOp::Opaque { dest: 2 }) {
+                return Err(format!("sp is written at {pc:#010x} by a CSR access"));
+            }
+            pending.push((next, None));
+            continue;
+        }
         match operation {
             SemanticOp::Integer { dest, .. } | SemanticOp::Upper { dest, .. } if dest == 2 => {
                 return Err(format!(

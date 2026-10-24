@@ -401,6 +401,15 @@ impl Gates {
                     if stack_runs {
                         let result = ran((|| -> Result<()> {
                             let warnings = (|| -> Result<Vec<String>> {
+                                std::fs::write(
+                                    input.output.join(crate::stack::cores::REPORT),
+                                    crate::stack::cores::audit_runtime(
+                                        &image,
+                                        input.policy,
+                                        input.profile,
+                                    )?,
+                                )?;
+                                outcome.reports.push(crate::stack::cores::REPORT.to_owned());
                                 let mut audit = crate::stack::StackAudit::of(
                                     &image,
                                     input.policy,
@@ -545,6 +554,7 @@ impl Gates {
                 let Some(stack) = input.policy.stacks()?.bootstrap_stack else {
                     return Ok(None);
                 };
+                crate::stack::cores::audit_bootstrap(&image, input.profile)?;
                 let handoff = match &stack.handoff {
                     Some(symbol) => {
                         let stage_two = input.stage_two_elf.ok_or(

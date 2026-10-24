@@ -300,7 +300,9 @@ fn compiler_flags(
                     .filter(|(key, _)| {
                         !matches!(
                             key.as_str(),
-                            "OPEN_RADIO_CPU0_TASK_STACK_BYTES" | "OPEN_RADIO_IRQ_STACK_BYTES"
+                            "OPEN_RADIO_CPU0_TASK_STACK_BYTES"
+                                | "OPEN_RADIO_IRQ_STACK_BYTES"
+                                | "OPEN_RADIO_UNUSED_IRQ_STACK_HARTS"
                         )
                     })
                     .map(|(key, value)| (key.as_str(), value.as_str()))

@@ -10,12 +10,13 @@
 //! and the host image packer share these definitions; each chip's platform
 //! (`platform/<chip>/layout`) states its address map as a [`Layout`].
 //!
-//! [`memory`] owns the address map type; [`interrupts`] the chip-neutral part
+//! [`boot`] names the one hart that boots; [`memory`] owns the address map type; [`interrupts`] the chip-neutral part
 //! of the interrupt contract the interrupt-stack gate checks; [`stage_two`]
 //! the image header and payload checksum that the bootstrap validates before
 //! handoff; [`zeroed`] the input sections the boot zeroes. With the `build`
 //! feature, [`build`] binds a chip's layout to the linker scripts.
 
+pub mod boot;
 pub mod handoff;
 pub mod interrupts;
 pub mod memory;

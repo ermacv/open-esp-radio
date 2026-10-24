@@ -85,7 +85,7 @@ pub struct Report<'a> {
     unmatched: Vec<&'a str>,
 }
 
-fn matches(pattern: &str, name: &str) -> bool {
+pub(crate) fn matches(pattern: &str, name: &str) -> bool {
     let mut parts = pattern.split('*');
     let first = parts.next().expect("split always has one item");
     let Some(mut remaining) = name.strip_prefix(first) else {

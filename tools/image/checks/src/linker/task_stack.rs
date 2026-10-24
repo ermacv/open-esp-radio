@@ -49,7 +49,12 @@ pub(super) fn verify(audit: &StackAudit, planned: &Allocation) -> Result<()> {
 }
 
 fn proven_bound(audit: &StackAudit, which: &str) -> Result<u64> {
-    let [stack] = audit.stacks.as_slice() else {
+    let [stack] = audit
+        .stacks
+        .iter()
+        .filter(|stack| stack.name == "CPU0 task stack")
+        .collect::<Vec<_>>()[..]
+    else {
         return Err("the image declares one task stack proven".into());
     };
     let bound = &stack.linked.1;
@@ -112,8 +117,7 @@ impl SizeSource {
         if linked.is_some() {
             Self::ProvenBound
         } else if policy
-            .cpu0_task_stack
-            .as_ref()
+            .cpu0_task_stack()
             .is_some_and(|stack: &TaskStack| stack.allocation_bytes.is_some())
         {
             Self::PolicyAllocation
@@ -170,7 +174,7 @@ mod tests {
             SizeSource::ProvenBound
         );
         let mut explicit = policy.clone();
-        explicit.cpu0_task_stack.as_mut().unwrap().allocation_bytes = Some(1 << 20);
+        explicit.cpu0_task_stack_mut().unwrap().allocation_bytes = Some(1 << 20);
         assert_eq!(
             SizeSource::of(&explicit, None),
             SizeSource::PolicyAllocation

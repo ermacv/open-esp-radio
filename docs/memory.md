@@ -45,18 +45,29 @@ contracts: [Hardware memory](hardware-memory.md).
 
 ## Stacks
 
-- CPU0's task stack is in PSRAM; each hart has an SRAM interrupt stack
+- **Every image accounts for every core of the chip** (`cores` in
+  `chips/<chip>/platform/chip.toml`: S31 two, C5 one), and each core has both
+  stacks, the task stack and the interrupt stack. The stack policy
+  (`[core.N.task_stack]`, `[core.N.interrupt_stack]`) names every one: a used
+  stack has a proven bound from its root; an unused stack is `unused = true`,
+  an explicit 0 bytes, which the image gate proves from the linked image.
+  Starting code on a core without a declared and proven root is a build
+  error. On S31 core 1 is unused in every image: the esp-hal fork holds it in
+  reset ([how core 1 starts](../chips/esp32s31/notes/core1-boot.md)), the
+  staged boot stops any hart but 0, no image links a core starter
+  (`[core-start]` of `chip.toml`, also forbidden in `clippy.toml`) and no
+  interrupt-table entry routes to it.
+- CPU0's task stack is in PSRAM; each used hart has an SRAM interrupt stack
   with a guard region, a debug trigger and stack painting:
   [stacks rustdoc](../chips/espressif/staged-runtime/src/stacks.rs).
 - An image that declares `task-stack = "proven"` gets a CPU0 task stack of
   `align16(bound + minimum_free_bytes)`, sized by the image linker; other
   images use the chip layout's 192 KiB or their policy's `allocation_bytes`.
   See the [image linker](../tools/image/linker/README.md).
-- The image linker sizes each hart's IRQ stack to
+- The image linker sizes each used hart's IRQ stack to
   `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
   is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and
-  for diagnostic images. Hart 0 on S31 is also rounded to hart 1's guard
-  alignment. The second link is final: its bound plus margin must fit the
+  for diagnostic images. The second link is final: its bound plus margin must fit the
   allocation minus guard, and its guard and bottom alignment are checked.
   A bound change above 64 bytes fails the build. See the
   [image linker](../tools/image/linker/README.md).

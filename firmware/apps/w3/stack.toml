@@ -1,16 +1,25 @@
-schema = 5
+schema = 6
 coverage_policy = "../../../chips/espressif/staged-layout/stack-coverage.toml"
 max_move_bytes = 4096
 
 # W3's portable station and IP call chain runs on P1 in PSRAM. The task
 # stack is sized by the linker from its proven bound; IRQ stacks likewise.
-[cpu0_task_stack]
+[core.0.task_stack]
 root = "runtime_main"
 bottom_symbol = "__runtime_cpu0_task_stack_bottom"
 top_symbol = "__runtime_cpu0_task_stack_top"
 minimum_free_bytes = 16384
 
-[interrupt_stacks]
+[core.0.interrupt_stack]
+
+# Core 1 runs nothing: the esp-hal fork holds it in reset
+# (chips/esp32s31/notes/core1-boot.md) and the image gate proves that no
+# image starts it, routes an interrupt to it or allocates it a stack.
+[core.1.task_stack]
+unused = true
+
+[core.1.interrupt_stack]
+unused = true
 
 [bootstrap_stack]
 root = "_start_rust"

@@ -409,16 +409,16 @@ mod frame_limits {
 }
 
 const BASE: &str = r#"
-schema = 5
+schema = 6
 coverage_policy = "coverage.toml"
 max_move_bytes = 4096
 
-[cpu0_task_stack]
+[core.0.task_stack]
 root = "runtime_main"
 storage_symbol = "cpu0_stack"
 minimum_free_bytes = 512
 
-[interrupt_stacks]
+[core.0.interrupt_stack]
 
 [bootstrap_stack]
 root = "runtime_main"
@@ -564,7 +564,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
         Some(directory.path().join("coverage.toml").as_path())
     );
     assert_eq!(
-        base.cpu0_task_stack.as_ref().unwrap().storage(),
+        base.cpu0_task_stack().unwrap().storage(),
         Storage::Symbol("cpu0_stack")
     );
     assert_eq!(
@@ -583,7 +583,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
     std::fs::create_dir(&nested).unwrap();
     std::fs::write(
         nested.join("stack.toml"),
-        "schema = 5\nextends = \"../stack.toml\"\n",
+        "schema = 6\nextends = \"../stack.toml\"\n",
     )
     .unwrap();
     let extended = StackPolicy::load(&nested.join("stack.toml")).unwrap();
@@ -605,7 +605,7 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
     // An extension adds nothing of its own.
     std::fs::write(
         nested.join("stack.toml"),
-        "schema = 5\nextends = \"../stack.toml\"\nmax_move_bytes = 1\n",
+        "schema = 6\nextends = \"../stack.toml\"\nmax_move_bytes = 1\n",
     )
     .unwrap();
     assert!(StackPolicy::load(&nested.join("stack.toml")).is_err());
@@ -627,7 +627,7 @@ fn a_policy_out_of_its_schema_fails() {
         ))
         .is_err()
     );
-    assert!(load(BASE.replace("schema = 5", "schema = 4")).is_err());
+    assert!(load(BASE.replace("schema = 6", "schema = 4")).is_err());
     // One storage form per stack.
     assert!(
         load(BASE.replace(
@@ -652,19 +652,19 @@ fn a_policy_out_of_its_schema_fails() {
     // A policy of the move limit alone names no stacks; one that names
     // some names all of them.
     let compiler = StackPolicy::load({
-        std::fs::write(&path, "schema = 5\nmax_move_bytes = 4096\n").unwrap();
+        std::fs::write(&path, "schema = 6\nmax_move_bytes = 4096\n").unwrap();
         &path
     })
     .unwrap();
     assert!(compiler.stacks().is_err());
     assert!(compiler.runtime_environment().is_empty());
     assert!(
-        load("schema = 5\nmax_move_bytes = 4096\ncoverage_policy = \"c.toml\"\n".into()).is_err()
+        load("schema = 6\nmax_move_bytes = 4096\ncoverage_policy = \"c.toml\"\n".into()).is_err()
     );
     // An extension may not extend an extension.
     let base = directory.path().join("base.toml");
-    std::fs::write(&base, "schema = 5\nextends = \"stack.toml\"\n").unwrap();
-    assert!(load("schema = 5\nextends = \"base.toml\"\n".to_owned()).is_err());
+    std::fs::write(&base, "schema = 6\nextends = \"stack.toml\"\n").unwrap();
+    assert!(load("schema = 6\nextends = \"base.toml\"\n".to_owned()).is_err());
 }
 
 #[test]
@@ -672,10 +672,7 @@ fn a_bound_within_its_budget_passes_with_its_headroom_reported() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     // 1024 bytes less 512 free: a 512-byte budget for a 48-byte bound.
     let image = image(&program(false), &[("cpu0_stack", 0, 1024)]);
-    let audit = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap();
+    let audit = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap()).unwrap();
     assert_eq!(audit.check().unwrap(), Vec::<String>::new());
     let report = audit.render();
     let usage = budget::header(&image.resources, image.resources.usage.peak_admitted_bytes);
@@ -697,32 +694,25 @@ fn a_bound_within_its_budget_passes_with_its_headroom_reported() {
 fn a_bound_over_its_budget_fails() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     let fits = image(&program(false), &[("cpu0_stack", 0, 512 + 48)]);
-    audit(&policy, &fits, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap()
-    .check()
-    .unwrap();
+    audit(&policy, &fits, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap()
+        .check()
+        .unwrap();
     let over = image(&program(false), &[("cpu0_stack", 0, 512 + 47)]);
-    let error = audit(&policy, &over, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap()
-    .check()
-    .unwrap_err()
-    .to_string();
+    let error = audit(&policy, &over, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap()
+        .check()
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("needs 48 bytes"), "{error}");
     assert!(error.contains("47-byte budget"), "{error}");
     // Storage that cannot keep its reserve fails whatever the bound.
     let small = image(&program(false), &[("cpu0_stack", 0, 512)]);
     assert!(
-        audit(&policy, &small, |policy| policy
-            .cpu0_task_stack
-            .as_ref()
-            .unwrap())
-        .unwrap()
-        .check()
-        .is_err()
+        audit(&policy, &small, |policy| policy.cpu0_task_stack().unwrap())
+            .unwrap()
+            .check()
+            .is_err()
     );
 }
 
@@ -733,11 +723,9 @@ fn a_root_the_image_lacks_fails() {
         ASM_REVIEW,
     );
     let image = image(&program(false), &[("cpu0_stack", 0, 1024)]);
-    let error = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap_err()
-    .to_string();
+    let error = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("has no `absent`"), "{error}");
 }
 
@@ -746,7 +734,7 @@ fn a_stack_the_image_does_not_link_fails() {
     let (_directory, policy) = policy_with(BASE, ASM_REVIEW);
     let unlinked = image_without_storage();
     let error = audit(&policy, &unlinked, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
+        policy.cpu0_task_stack().unwrap()
     })
     .unwrap_err()
     .to_string();
@@ -762,10 +750,7 @@ fn a_partial_bound_passes_with_its_unresolved_sites_reported() {
     let policy_source = BASE.replace("\"runtime_main\"\nstorage", "\"indirect\"\nstorage");
     let (_directory, policy) = policy_with(&policy_source, ASM_REVIEW);
     let image = image(&program(false), &[("cpu0_stack", 0, 1024)]);
-    let audit = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap();
+    let audit = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap()).unwrap();
     let warnings = audit.check().unwrap();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].contains("16 + ? bytes"), "{warnings:?}");
@@ -822,10 +807,7 @@ fn image_with_stack(bytes: u32) -> Image {
 }
 
 fn audit_of(policy: &StackPolicy, image: &Image) -> StackAudit {
-    audit(policy, image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap()
+    audit(policy, image, |policy| policy.cpu0_task_stack().unwrap()).unwrap()
 }
 
 #[test]
@@ -893,11 +875,9 @@ fn an_image_without_frame_records_fails() {
         symbol.frame = None;
     }
     let image = image(&code, &[("cpu0_stack", 0, 1024)]);
-    let error = audit(&policy, &image, |policy| {
-        policy.cpu0_task_stack.as_ref().unwrap()
-    })
-    .unwrap_err()
-    .to_string();
+    let error = audit(&policy, &image, |policy| policy.cpu0_task_stack().unwrap())
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("-Z emit-stack-sizes"), "{error}");
 }
 
@@ -1001,6 +981,183 @@ fn the_repository_policies_load() {
         let policy = StackPolicy::load(&root.join(chip.stack_policy())).unwrap();
         if let Some(coverage) = &policy.coverage_policy {
             CoveragePolicy::load(coverage).unwrap();
+        }
+    }
+}
+
+mod cores {
+    use super::*;
+    use crate::stack::cores;
+
+    const POLICY: &str = r#"
+schema = 6
+coverage_policy = "coverage.toml"
+max_move_bytes = 4096
+
+[core.0.task_stack]
+root = "runtime_main"
+storage_symbol = "cpu0_stack"
+minimum_free_bytes = 16
+
+[core.0.interrupt_stack]
+
+[core.1.task_stack]
+unused = true
+
+[core.1.interrupt_stack]
+unused = true
+"#;
+
+    const USED: &str = r#"
+schema = 6
+coverage_policy = "coverage.toml"
+max_move_bytes = 4096
+
+[core.0.task_stack]
+root = "runtime_main"
+storage_symbol = "cpu0_stack"
+minimum_free_bytes = 16
+
+[core.0.interrupt_stack]
+
+[core.1.task_stack]
+root = "ROOT"
+storage_symbol = "cpu1_stack"
+minimum_free_bytes = 16
+
+[core.1.interrupt_stack]
+"#;
+
+    fn chip() -> oer_chip_profile::Profile {
+        oer_chip_profile::Profile::load(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
+            "esp32s31",
+        )
+        .unwrap()
+    }
+
+    fn starter(name: &'static str) -> Code {
+        Code {
+            name,
+            words: vec![RET],
+            frame: Some(0),
+        }
+    }
+
+    fn with(extra: Option<Code>) -> Vec<Code> {
+        let mut code = program(true);
+        code.extend(extra);
+        code
+    }
+
+    #[test]
+    fn an_image_that_links_no_starter_proves_core_one_unused() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        let image = image(&with(None), &[("cpu0_stack", 0, 1024)]);
+        let report = cores::audit_runtime(&image, &policy, &chip()).unwrap();
+        assert!(report.contains("1\tunused"), "{report}");
+        // An empty linked range is an explicit 0.
+        let empty = self::image(
+            &with(None),
+            &[
+                ("cpu0_stack", 0, 1024),
+                ("__runtime_cpu1_irq_stack_bottom", 0x800, 0),
+                ("__runtime_cpu1_irq_stack_top", 0x800, 0),
+            ],
+        );
+        cores::audit_runtime(&empty, &policy, &chip()).unwrap();
+        cores::audit_bootstrap(&empty, &chip()).unwrap();
+    }
+
+    #[test]
+    fn a_linked_starter_with_core_one_unused_fails() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        for name in [
+            "esp_hal::system::CpuControl::start_app_core::<closure>",
+            "esp_hal::system::CpuControl::unpark_core",
+            "esp_hal::soc::cpu_control::start_core1",
+        ] {
+            let image = image(&with(Some(starter(name))), &[("cpu0_stack", 0, 1024)]);
+            let error = cores::audit_runtime(&image, &policy, &chip())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("declares the task stack of core 1 unused"),
+                "{name}: {error}"
+            );
+            assert!(error.contains(name), "{error}");
+            assert!(cores::audit_bootstrap(&image, &chip()).is_err());
+        }
+        // A function that only resembles a starter is none.
+        let image = image(
+            &with(Some(starter("esp_hal::system::park_core"))),
+            &[("cpu0_stack", 0, 1024)],
+        );
+        cores::audit_runtime(&image, &policy, &chip()).unwrap();
+    }
+
+    #[test]
+    fn storage_linked_for_an_unused_stack_fails() {
+        let (_directory, policy) = policy_with(POLICY, "");
+        for (bottom, top) in [
+            (
+                "__runtime_cpu1_irq_stack_bottom",
+                "__runtime_cpu1_irq_stack_top",
+            ),
+            (
+                "__runtime_cpu1_task_stack_bottom",
+                "__runtime_cpu1_task_stack_top",
+            ),
+        ] {
+            let image = image(
+                &with(None),
+                &[("cpu0_stack", 0, 1024), (bottom, 0x800, 0), (top, 0x900, 0)],
+            );
+            let error = cores::audit_runtime(&image, &policy, &chip())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("unused") && error.contains("256 bytes"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_policy_that_omits_a_core_of_the_chip_fails() {
+        let one_core = POLICY.split("[core.1").next().unwrap();
+        let (_directory, policy) = policy_with(one_core, "");
+        let image = image(&with(None), &[("cpu0_stack", 0, 1024)]);
+        let error = cores::audit_runtime(&image, &policy, &chip())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("names 1 cores but the chip has 2"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_used_core_runs_only_with_a_proven_bound() {
+        // `leaf`-rooted core 1 is proven; `indirect`-rooted is `+ ?`.
+        for (root, proven) in [("leaf", true), ("indirect", false)] {
+            let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
+            let image = image(
+                &with(Some(starter("esp_hal::system::CpuControl::start_app_core"))),
+                &[("cpu0_stack", 0, 1024), ("cpu1_stack", 0x400, 1024)],
+            );
+            cores::audit_runtime(&image, &policy, &chip()).unwrap();
+            let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks()).unwrap();
+            assert_eq!(audit.stacks.len(), 2);
+            let result = audit.check();
+            assert_eq!(result.is_ok(), proven, "{root}: {result:?}");
+            if !proven {
+                let error = result.unwrap_err().to_string();
+                assert!(
+                    error.contains("a core other than core 0 runs only with a proven bound"),
+                    "{error}"
+                );
+            }
         }
     }
 }

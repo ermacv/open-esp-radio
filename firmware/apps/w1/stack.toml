@@ -1,4 +1,4 @@
-schema = 5
+schema = 6
 extends = "../../../chips/esp32s31/platform/stack.toml"
 
 # The ceiling is the measured frame plus 64 bytes; it only decreases.

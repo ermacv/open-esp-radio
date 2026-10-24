@@ -7,13 +7,15 @@ by `cargo fw` or `cargo hil`; ordinary and bootstrap links are unaffected.
 
 The first link uses the contract maximum. A proven product bound selects
 `align16(ceil(bound * (100 + margin) / 100)) + guard`, with the 10% margin
-from `chip.toml`. On S31, hart 0 is additionally rounded to hart 1's guard
-alignment, because its top is hart 1's bottom. Partial bounds, diagnostic
-and probe images retain the maximum. Existing image-policy maximum overrides
-remain effective, including diagnostic-lower-mac's 65536 bytes per hart.
+from `chip.toml`. A hart whose interrupt stack the image policy declares
+unused (`[core.N.interrupt_stack] unused = true`, S31 hart 1 in every image)
+gets 0 bytes in both links and takes no part in the sizing. Partial bounds,
+diagnostic and probe images retain the maximum for each used hart. Existing
+image-policy maximum overrides remain effective, including
+diagnostic-lower-mac's 65536 bytes.
 
-One second link supplies `IRQ_STACK_HART0_BYTES` and `IRQ_STACK_HART1_BYTES`
-alongside `strict-text.x`. Analysis of that final ELF must fit the bound plus
+One second link supplies `IRQ_STACK_HART0_BYTES` (and `IRQ_STACK_HART1_BYTES`
+for a used hart 1) alongside `strict-text.x`. Analysis of that final ELF must fit the bound plus
 the rounded-up margin inside its actual allocation minus guard. A lost proof,
 a bound change above 64 bytes, insufficient capacity, or a guard violation
 fails with figures; there is no third link or fallback to the maximum.
@@ -24,7 +26,7 @@ included in either section.
 
 An image that declares `task-stack = "proven"` also gets its CPU0 task stack
 sized by the same second link: `align16(bound + minimum_free_bytes)` of the
-policy's `cpu0_task_stack`, passed as `CPU0_PSRAM_TASK_STACK_BYTES`. The bottom
+policy's `core.0.task_stack`, passed as `CPU0_PSRAM_TASK_STACK_BYTES`. The bottom
 is the 64-byte aligned start of `.psram.task_stacks` and carries esp-hal's
 stack watchpoint, so the size has no other constraint; the 16 bytes keep the
 stack pointer aligned. The first-pass bound must be complete and rest only on

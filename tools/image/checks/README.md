@@ -18,7 +18,14 @@ Both runtime and bootstrap outcomes export the ROM summaries their analyses
 applied. The image bundle records their union so the catalog's stale-summary
 audit includes summaries used only during bootstrap.
 
-An image's `stack.toml` (schema 5) may name exact exceptions:
+The stack check also proves each core of the chip: `cores.txt` lists every
+core's task stack and interrupt stack, used with its linked bytes or `unused`
+(0 bytes). An unused stack fails the build when the image links a core starter
+(`[core-start]` of `chip.toml`), links storage for it, or routes an interrupt
+to its core; a used secondary core runs only with a proven bound. The
+bootstrap links no starter.
+
+An image's `stack.toml` (schema 6) may name exact exceptions:
 
 ```toml
 [[frame_exceptions.runtime]] # or frame_exceptions.bootstrap
