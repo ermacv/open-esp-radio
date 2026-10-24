@@ -193,11 +193,31 @@ fn owners_of_two_blocks_do_not_join() {
 
 #[test]
 fn an_etm_route_writes_its_channel_event_and_task_words_only() {
-    use crate::generated::modem_etm::{self, ModemEtm};
+    use crate::generated::modem_etm::{self, ModemEtm, ch_event, ch_task};
     let before = vec![0_u32; modem_etm::SIZE / 4];
     let mut after = before.clone();
     let mut etm = ModemEtm::host(&mut after).expect("memory holds the block");
     etm.route_ieee802154_etm_timer1_to_rx_start();
+    let routed = Index::<2>::constant::<1>();
+    let other = Index::<2>::constant::<0>();
+    assert_eq!(
+        etm.read_ch_event(routed).id_variant(),
+        Some(ch_event::Id::Ieee802154Timer1Overflow),
+        "the routed channel's event"
+    );
+    assert_eq!(
+        etm.read_ch_task(routed).id_variant(),
+        Some(ch_task::Id::Ieee802154RxStart),
+        "the routed channel's task"
+    );
+    assert_eq!(
+        etm.read_ch_event(other).id(),
+        0,
+        "the other channel's event"
+    );
+    assert_eq!(etm.read_ch_task(other).id(), 0, "the other channel's task");
+    let enabled = etm.read_channel_enable();
+    assert!(!enabled.ch0() && !enabled.ch1(), "no channel enabled");
     drop(etm);
     assert_eq!(
         changed(&before, &after).len(),

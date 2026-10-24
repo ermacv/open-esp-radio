@@ -208,8 +208,12 @@ edition = "2024"
         .replace("raw = \"raw.rs\"\n", "")
         .replace("crate-name = \"fixture_pac\"\n", "");
     write(root, "typed.toml", &typed_only);
-    let typed = oer_registers_generate::Publication::load(&root.join("typed.toml")).unwrap();
-    let refused = typed.generate(false).unwrap_err().to_string();
+    let typed = oer_registers_generate::Publication::load(&root.join("typed.toml"))
+        .expect("a typed-only publication loads");
+    let refused = typed
+        .generate(false)
+        .expect_err("a peripheral neither typed nor unexposed is refused")
+        .to_string();
     assert!(refused.contains("neither typed nor unexposed"), "{refused}");
     write(
         root,
