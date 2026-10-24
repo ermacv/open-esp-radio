@@ -96,7 +96,14 @@ impl RadioPartitions {
             reason = "the radio root takes the typed blocks' registers once, from the handoff"
         )]
         // SAFETY: as above; the IEEE 802.15.4 MAC block is one of the
-        // partitions the handoff transferred and nothing else takes its span.
+        // partitions the handoff transferred. One raw view overlaps its span:
+        // `svd::Peripherals` holds `MODEM_IEEE802154_OBSERVED`, whose only
+        // register is the span's word at +0x98. `from_peripherals` moves that
+        // token into `unexposed` and drops it without an access (it is a
+        // zero-sized handle without `Drop`). No second token exists: the
+        // single `steal` above made the only one and set the singleton flag,
+        // so `Peripherals::take` returns `None`. Only the typed block reaches
+        // the span's words.
         let ieee802154_mac = unsafe { crate::generated::ieee802154_mac::Span::assume_owned() };
         Self::from_peripherals(peripherals, ieee802154_mac)
     }
@@ -115,7 +122,9 @@ impl RadioPartitions {
             phy_radio,
             wifi_mac,
             wifi_interrupts,
-            // Inventory-only word views have no safe runtime owner.
+            // Inventory-only word views have no runtime owner: dropped here
+            // without an access. `MODEM_IEEE802154_OBSERVED` among them lies
+            // inside the typed MAC block's span, which alone reaches it.
             unexposed: _,
         } = svd::peripheral_ownership::partition(peripherals);
         Self {
@@ -148,7 +157,9 @@ impl RadioPartitions {
             clippy::disallowed_methods,
             reason = "a validation root takes the typed blocks' registers once"
         )]
-        // SAFETY: as above, for the typed IEEE 802.15.4 MAC block.
+        // SAFETY: as above, for the typed IEEE 802.15.4 MAC block; the
+        // `MODEM_IEEE802154_OBSERVED` token over its word at +0x98 is dropped
+        // unused in `from_peripherals`, as in `from_handoff`.
         let ieee802154_mac = unsafe { crate::generated::ieee802154_mac::Span::assume_owned() };
         Self::from_peripherals(peripherals, ieee802154_mac)
     }
