@@ -21,8 +21,8 @@ analysis read this model; neither owns a second copy.
 | `published/radio.svd` | Generated portable CMSIS-SVD representation |
 | `published/radio.bindings.toml` | Generated binding index |
 | `publication/registers.toml` | Source-only publication manifest |
-| `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause register the host reads through JTAG after a power cycle; SVD and `published/platform.bindings.toml` only, no PAC (ESP-HAL owns the block at runtime) |
-| `model/peripherals/{efuse,trng,lp-periclkrst-rng}.toml`, `model/platform/lp-aon-hpcore1-reset-cause.toml` | Reviewed fragments of the eFuse MAC words, the TRNG read side, the TRNG clock and reset, and HP core 1's reset cause; no device model lists them yet, so no publication renders them |
+| `model/platform-device.toml`, `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause words the host reads through JTAG after a power cycle, from the same `peripherals/lp-aon-reset-cause.toml` fragment the firmware PAC renders; SVD and `published/platform.bindings.toml` only |
+| `model/peripherals/{efuse,trng,lp-periclkrst-rng,lp-aon-reset-cause}.toml` | Platform blocks rendered as typed register blocks (`typed-peripherals` in `policy/api.toml`): the eFuse MAC words, the TRNG, its clock and reset word, and both HP cores' reset causes. Each partition is claimed by its own platform handoff |
 
 The generic generator is
 [`tools/registers/model`](../../../tools/registers/model/README.md).

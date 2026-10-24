@@ -16,7 +16,7 @@ use oer_hil_protocol::{
 use oer_ieee80211_rsn::{PmkDerivation, nonce::SNonceSource, sae::SaePassword};
 use oer_time::Clock;
 
-use esp_hal::{efuse, interrupt::software::SoftwareInterrupt};
+use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_phy::{
@@ -91,20 +91,19 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     crate::exception::report_stack_guard();
     let config = CONFIG;
     let interrupts = crate::Interrupts::take().expect("station interrupt tokens taken once");
-    let mut base = [0; 6];
-    base.copy_from_slice(efuse::base_mac_address().as_bytes());
-    let mut station = [0; 6];
-    station.copy_from_slice(
-        efuse::interface_mac_address(efuse::InterfaceMacAddress::Station).as_bytes(),
+    crate::system::read_reset_causes(oer_espressif_esp_hal_soc::handoff::take_reset_causes(
+        peripherals.LP_AON_CLK_RST,
+    ));
+    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(
+        oer_espressif_esp_hal_soc::handoff::take_efuse()
+            .expect("the image takes the eFuse words once"),
     );
-    let mut ap = [0; 6];
-    ap.copy_from_slice(
-        efuse::interface_mac_address(efuse::InterfaceMacAddress::AccessPoint).as_bytes(),
-    );
+    let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
+    let ap = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address: base,
-        mac_extension: efuse::read_field_le::<u16>(efuse::MAC_EXT),
+        base_mac_address: factory.base_mac(),
+        mac_extension: factory.mac_extension(),
     };
     let singletons = RadioSingletons {
         i2c_ana_mst: peripherals.I2C_ANA_MST,
@@ -144,21 +143,22 @@ pub(crate) fn start(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
-    let mut rng = esp_hal::rng::TrngSource::new(peripherals.RNG);
+    let mut rng = crate::Rng::new(
+        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+        EmbassyClock,
+    );
     if !rng.status().is_healthy() {
         crate::fail("entropy-source");
     }
     let nonces = Placed::init(NONCES.take().uninit(), |place| {
-        place.write(SNonceSource::from_entropy(|seed| {
-            rng.read(seed).expect("station LP TRNG seed")
-        }))
+        place.write(SNonceSource::from_entropy(|seed| rng.fill(seed)))
     });
     let mut boot_bytes = [0; 8];
-    rng.read(&mut boot_bytes).expect("station boot entropy");
+    rng.fill(&mut boot_bytes);
     let seed = u64::from_le_bytes(boot_bytes);
     let boot = seed.max(1);
     let mut tx_bytes = [0; 4];
-    rng.read(&mut tx_bytes).expect("station TX entropy");
+    rng.fill(&mut tx_bytes);
     let entropy = u32::from_le_bytes(tx_bytes);
     CONSOLE.start(boot);
     let (driver_channel, frontend_channel) = radio::channels();

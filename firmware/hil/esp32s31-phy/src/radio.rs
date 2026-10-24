@@ -1,5 +1,5 @@
+use crate::Rng;
 use crate::{Answer, WireRequest as Request, projection};
-use esp_hal::rng::RngOwner;
 use oer_diagnostics::{DiagPath, Note};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
@@ -39,7 +39,7 @@ pub struct Radio {
     station: [u8; 6],
     access_point: [u8; 6],
     ieee802154: crate::ieee802154::Rx,
-    rng: RngOwner<'static>,
+    rng: Rng,
     ready: Option<CaptureReady>,
     projection: [u16; projection::WORDS],
     poisoned: bool,
@@ -63,7 +63,7 @@ impl Radio {
         identity: PhyCalibrationIdentity,
         station: [u8; 6],
         access_point: [u8; 6],
-        rng: RngOwner<'static>,
+        rng: Rng,
     ) -> &'storage mut Self {
         crate::place_diagnostic_radio!(
             storage,
@@ -863,7 +863,7 @@ fn outcome_name(result: &Result<()>) -> &'static str {
 struct Sources<'a> {
     tx: PhyTxTargetPowerProfile,
     pti: [MacCoexPti; 4],
-    rng: &'a mut RngOwner<'static>,
+    rng: &'a mut Rng,
 }
 impl MacCoexPtiSource for Sources<'_> {
     fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {

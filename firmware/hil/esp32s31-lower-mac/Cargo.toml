@@ -35,6 +35,7 @@ oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime
 oer-espressif-esp-hal-irq = { workspace = true }
 oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "port-slots"] }
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
+oer-espressif-esp-hal-soc.workspace = true
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }

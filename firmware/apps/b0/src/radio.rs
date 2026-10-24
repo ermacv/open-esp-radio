@@ -2,7 +2,7 @@
 use super::*;
 use core::future::{pending, poll_fn};
 use embassy_futures::select::{Either, select};
-use esp_hal::{efuse, usb::usb_serial_jtag::UsbSerialJtag};
+use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_bluetooth_le_port::TxPower;
 use oer_bluetooth_le_radio::LeBand;
 use oer_esp32s31_bluetooth_driver::{
@@ -159,12 +159,15 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_espressif_staged_runtime::idle();
     };
     let tokens = Interrupts::take().expect("one image interrupt table");
-    let mut base = [0; 6];
-    base.copy_from_slice(efuse::base_mac_address().as_bytes());
+    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(
+        oer_espressif_esp_hal_soc::handoff::take_efuse()
+        .expect("the image takes the eFuse words once"),
+    );
+    let base = factory.base_mac();
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
         base_mac_address: base,
-        mac_extension: efuse::read_field_le::<u16>(efuse::MAC_EXT),
+        mac_extension: factory.mac_extension(),
     };
     let singletons = RadioSingletons {
         i2c_ana_mst: p.I2C_ANA_MST,
@@ -227,8 +230,11 @@ pub fn boot(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     adopted.enable_interrupts();
     app.run(tokens.wake, |spawner| {
         let (_, power) = permission(profile);
-        AppTasks::serve(spawner, console, p.RNG, bridge::frontend(), power)
-            .expect("one HCI task");
+        let rng = host::Rng::new(
+            oer_espressif_esp_hal_soc::handoff::take_entropy(p.RNG, p.LP_PERI),
+            EmbassyClock,
+        );
+        AppTasks::serve(spawner, console, rng, bridge::frontend(), power).expect("one HCI task");
     })
 }
 async fn hold<T>(owner: &mut T) -> ! {

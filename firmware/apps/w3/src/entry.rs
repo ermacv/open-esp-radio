@@ -5,11 +5,9 @@ mod radio;
 mod station;
 use oer_firmware_apps_w3::report;
 
-use esp_hal::{
-    efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
-    usb::usb_serial_jtag::UsbSerialJtag,
-};
+use esp_hal::{interrupt::software::SoftwareInterrupt, usb::usb_serial_jtag::UsbSerialJtag};
 use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_hal::platform::{FactoryIdentity, Interface};
 use oer_esp32s31_board as board;
 use oer_esp32s31_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
@@ -76,6 +74,9 @@ type Actor = RadioSystem<
     EmbassyClock,
 >;
 
+/// The image's entropy owner.
+pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
+
 oer_espressif_staged_runtime::entry!(main);
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let previous = oer_espressif_staged_runtime::panic::take_previous();
@@ -95,20 +96,14 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     let Some(interrupts) = Interrupts::take() else {
         park()
     };
-    let mut base = [0; 6];
-    base.copy_from_slice(efuse::base_mac_address().as_bytes());
-    let mut station = [0; 6];
-    station.copy_from_slice(
-        efuse::interface_mac_address(efuse::InterfaceMacAddress::Station).as_bytes(),
-    );
-    let mut ap = [0; 6];
-    ap.copy_from_slice(
-        efuse::interface_mac_address(efuse::InterfaceMacAddress::AccessPoint).as_bytes(),
-    );
+    let factory = FactoryIdentity::read(oer_espressif_esp_hal_soc::handoff::take_efuse()
+        .expect("the image takes the eFuse words once"));
+    let station = factory.address(Interface::Station);
+    let ap = factory.address(Interface::AccessPoint);
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address: base,
-        mac_extension: efuse::read_field_le::<u16>(efuse::MAC_EXT),
+        base_mac_address: factory.base_mac(),
+        mac_extension: factory.mac_extension(),
     };
     let singletons = RadioSingletons {
         i2c_ana_mst: peripherals.I2C_ANA_MST,
@@ -148,7 +143,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     );
     let radio = InterruptExecutor::<2>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR2))
         .start(interrupts.radio, LEVELS);
-    let mut rng = RngOwner::new(peripherals.RNG);
+    let mut rng = Rng::new(
+        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+        EmbassyClock,
+    );
     let seed = (u64::from(rng.random()) << 32) | u64::from(rng.random());
     let entropy = rng.random();
     let (driver_channel, frontend_channel) = radio::channels();

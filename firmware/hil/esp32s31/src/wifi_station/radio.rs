@@ -2,12 +2,12 @@
 use super::irq::{B, N, Q, S, TX};
 use super::station::ImageComposition;
 use super::{RadioConfig, irq};
+use crate::Rng;
 use core::{
     future::poll_fn,
     pin::Pin,
     task::{Context, Poll},
 };
-use esp_hal::rng::TrngSource;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
@@ -71,7 +71,7 @@ static DEVICE: StaticCell<Device> = StaticCell::new();
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
-    pub rng: TrngSource<'static>,
+    pub rng: Rng,
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub routes: irq::ImageRoutes,
@@ -80,16 +80,12 @@ pub struct Boot {
     pub entropy: u32,
 }
 pub struct Platform {
-    rng: TrngSource<'static>,
+    rng: Rng,
     power: Option<PhyTxTargetPowerProfile>,
 }
 impl MacDelayEntropy for Platform {
     fn mac_delay_random(&mut self) -> u32 {
-        {
-            let mut bytes = [0; 4];
-            self.rng.read(&mut bytes).expect("radio LP TRNG read");
-            u32::from_le_bytes(bytes)
-        }
+        self.rng.random()
     }
 }
 impl MacSlowClockCalibrationSource for Platform {

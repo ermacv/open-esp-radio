@@ -1,7 +1,7 @@
 schema = 2
 
 [[peripherals]]
-name = "LP_PERICLKRST"
+name = "LP_PERICLKRST_RNG"
 description = "Low-power peripheral clock/reset registers: the clock and reset of the true random number generator."
 baseAddress = 0x20710000
 
@@ -28,7 +28,7 @@ bitOffset = 31
 bitWidth = 1
 
 [[peripheral-review]]
-entity = "LP_PERICLKRST"
+entity = "LP_PERICLKRST_RNG"
 
 [peripheral-review.peripheral]
 sources = ["ESP_IDF_4D59230D_S31_LP_PERICLKRST_RNG"]

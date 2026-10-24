@@ -214,6 +214,7 @@ mod tests {
             member: "owned".into(),
             description: "test partition".into(),
             peripherals: vec!["A".into(), "B".into()],
+            handoff: false,
         });
         pack.partition_image_reads.push(PartitionImageRead {
             name: "owned_image".into(),

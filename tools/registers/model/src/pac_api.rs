@@ -165,6 +165,11 @@ pub struct OwnershipPartition {
     pub description: String,
     /// Exact SVD peripheral names consumed by this owner.
     pub peripherals: Vec<String>,
+    /// Claimed by its own platform handoff instead of the PAC root: the
+    /// partition of typed blocks is left out of `PeripheralPartitions` and
+    /// `Claims` and has its own `<Name>Claims` and `from_claims`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub handoff: bool,
 }
 
 /// Closed writable bit-mask domain emitted into the public PAC facade.
@@ -2278,6 +2283,7 @@ pub(crate) mod tests {
             member: "radio".to_owned(),
             description: "Unique radio register owner.".to_owned(),
             peripherals: vec!["RADIO".to_owned(), "RADIO".to_owned()],
+            handoff: false,
         });
         assert!(pack.validate().is_err());
         pack.ownership_partitions.clear();
@@ -2350,6 +2356,7 @@ peripheral-ownership = true
             member: "radio".to_owned(),
             description: "Invalid generated owner.".to_owned(),
             peripherals: vec!["RADIO".to_owned()],
+            handoff: false,
         });
         assert!(pack.validate().is_err());
 

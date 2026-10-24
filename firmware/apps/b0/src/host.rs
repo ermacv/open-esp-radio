@@ -1,12 +1,12 @@
 //! H4 on USB Serial/JTAG. All FIFO waits yield; P1 owns no radio registers.
 use super::*;
 use core::{future::poll_fn, ops::ControlFlow};
-use esp_hal::{peripherals::RNG, usb::usb_serial_jtag::UsbSerialJtag};
+use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 
 /// The host's console.
 pub(crate) type Console = UsbSerialJtag<'static, esp_hal::Blocking>;
 /// The host's entropy source.
-pub(crate) type Rng = RNG<'static>;
+pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<EmbassyClock>;
 use oer_bluetooth_hci::{
     HciControllerResponse,
     bt_hci::{
@@ -67,28 +67,15 @@ impl Io {
     }
     async fn entropy(&mut self) -> Result<(), Fault> {
         self.entropy.0 = None;
-        // SOURCE: pinned esp-hal rng::ll reads CRC_SYNC_DATA on S31 and
-        // separates words by >=16 APB cycles. The RF-enabled owner is live
-        // here. One microsecond exceeds that spacing at this board's APB;
-        // unlike RngOwner::read, this owned PAC path never spins.
-        let low = self
-            .rng
-            .register_block()
-            .crc_sync_data()
-            .read()
-            .bits()
-            .to_le_bytes();
+        // Waiting out the read gap on the timer before the second read
+        // leaves the owner's settle nothing to wait for: this path never
+        // spins.
+        let low = self.rng.random().to_le_bytes();
         EmbassyClock
-            .wait_for(Duration::from_micros(1))
+            .wait_for(oer_esp32s31_hal::platform::READ_GAP)
             .await
             .map_err(|_| Fault::Hardware)?;
-        let high = self
-            .rng
-            .register_block()
-            .crc_sync_data()
-            .read()
-            .bits()
-            .to_le_bytes();
+        let high = self.rng.random().to_le_bytes();
         self.entropy.0 = Some([
             low[0], low[1], low[2], low[3], high[0], high[1], high[2], high[3],
         ]);

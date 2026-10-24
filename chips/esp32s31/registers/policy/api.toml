@@ -5,9 +5,31 @@ schema = 5
 device-access = true
 allow-clippy-empty-docs = true
 # Typed register blocks over `oer-mmio`; svd2rust renders every other
-# exposed peripheral.
-typed-peripherals = ["WIFI_MAC_INTERFACE_ADDRESS"]
+# exposed peripheral. The platform blocks (eFuse, TRNG, reset cause) are
+# claimed by their own platform handoffs.
+typed-peripherals = ["WIFI_MAC_INTERFACE_ADDRESS", "EFUSE", "TRNG", "LP_PERICLKRST_RNG", "LP_AON_RESET_CAUSE"]
 
+
+[[ownership-partitions]]
+name = "EfusePeripherals"
+member = "efuse"
+description = "The eFuse controller's read words of the factory MAC and the chip revision, read once by the factory identity."
+peripherals = ["EFUSE"]
+handoff = true
+
+[[ownership-partitions]]
+name = "EntropyPeripherals"
+member = "entropy"
+description = "The true random number generator and its clock and reset word, read by the entropy owner."
+peripherals = ["TRNG", "LP_PERICLKRST_RNG"]
+handoff = true
+
+[[ownership-partitions]]
+name = "ResetCausePeripherals"
+member = "reset_cause"
+description = "The reset-cause words of both HP cores, read by the reset-cause owner."
+peripherals = ["LP_AON_RESET_CAUSE"]
+handoff = true
 
 [[ownership-partitions]]
 name = "UnexposedPeripherals"
@@ -10969,3 +10991,21 @@ steps = [
     { register = "ENTRY_PARAMETER_B%s", index = 5, value = 0x000000ff },
 ]
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+
+[[write-trigger-fields]]
+peripheral = "TRNG"
+register = "CONF"
+field = "FIFO_RESET"
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
+
+[[write-trigger-fields]]
+peripheral = "TRNG"
+register = "DEBUG_CONF"
+field = "STARTUP_TEST_START"
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]
+
+[[write-trigger-fields]]
+peripheral = "TRNG"
+register = "DEBUG_CONF"
+field = "HEALTH_TEST_END"
+sources = ["ESP_IDF_4D59230D_S31_TRNG"]

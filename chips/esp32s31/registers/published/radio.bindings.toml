@@ -54119,6 +54119,56 @@ bit-width = 6
 access = "read-write"
 
 [[registers]]
+address = 544215088
+width = 32
+access = "read-only"
+identity = "LP_AON_RESET_CAUSE.HPCORE0_RESET_CAUSE"
+peripheral = "LP_AON_RESET_CAUSE"
+peripheral-type = "LpAonResetCause"
+peripheral-module = "lp_aon_reset_cause"
+scope = []
+register-method = "hpcore0_reset_cause"
+
+[[registers.fields]]
+svd-name = "HPCORE0_RESET_FLAG"
+method = "hpcore0_reset_flag"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "HPCORE0_RESET_CAUSE"
+method = "hpcore0_reset_cause"
+bit-offset = 1
+bit-width = 6
+access = "read-only"
+
+[[registers]]
+address = 544215092
+width = 32
+access = "read-only"
+identity = "LP_AON_RESET_CAUSE.HPCORE1_RESET_CAUSE"
+peripheral = "LP_AON_RESET_CAUSE"
+peripheral-type = "LpAonResetCause"
+peripheral-module = "lp_aon_reset_cause"
+scope = []
+register-method = "hpcore1_reset_cause"
+
+[[registers.fields]]
+svd-name = "HPCORE1_RESET_FLAG"
+method = "hpcore1_reset_flag"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "HPCORE1_RESET_CAUSE"
+method = "hpcore1_reset_cause"
+bit-offset = 1
+bit-width = 6
+access = "read-only"
+
+[[registers]]
 address = 544215144
 width = 32
 access = "read-write"
@@ -54321,6 +54371,297 @@ method = "lp_tsens_rst_en"
 bit-offset = 31
 bit-width = 1
 access = "read-write"
+
+[[registers]]
+address = 544276540
+width = 32
+access = "read-write"
+identity = "LP_PERICLKRST_RNG.RNG_CTRL"
+peripheral = "LP_PERICLKRST_RNG"
+peripheral-type = "LpPericlkrstRng"
+peripheral-module = "lp_periclkrst_rng"
+scope = []
+register-method = "rng_ctrl"
+
+[[registers.fields]]
+svd-name = "LP_RNG_CLK_EN"
+method = "lp_rng_clk_en"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LP_RNG_RST_EN"
+method = "lp_rng_rst_en"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 544297040
+width = 32
+access = "read-only"
+identity = "EFUSE.RD_MAC_SYS0"
+peripheral = "EFUSE"
+peripheral-type = "Efuse"
+peripheral-module = "efuse"
+scope = []
+register-method = "rd_mac_sys0"
+
+[[registers.fields]]
+svd-name = "MAC_0"
+method = "mac_0"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
+
+[[registers]]
+address = 544297044
+width = 32
+access = "read-only"
+identity = "EFUSE.RD_MAC_SYS1"
+peripheral = "EFUSE"
+peripheral-type = "Efuse"
+peripheral-module = "efuse"
+scope = []
+register-method = "rd_mac_sys1"
+
+[[registers.fields]]
+svd-name = "MAC_1"
+method = "mac_1"
+bit-offset = 0
+bit-width = 16
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "MAC_EXT"
+method = "mac_ext"
+bit-offset = 16
+bit-width = 16
+access = "read-only"
+
+[[registers]]
+address = 544297052
+width = 32
+access = "read-only"
+identity = "EFUSE.RD_MAC_SYS3"
+peripheral = "EFUSE"
+peripheral-type = "Efuse"
+peripheral-module = "efuse"
+scope = []
+register-method = "rd_mac_sys3"
+
+[[registers.fields]]
+svd-name = "WAFER_VERSION_MINOR"
+method = "wafer_version_minor"
+bit-offset = 18
+bit-width = 4
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "WAFER_VERSION_MAJOR"
+method = "wafer_version_major"
+bit-offset = 22
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "DISABLE_WAFER_VERSION_MAJOR"
+method = "disable_wafer_version_major"
+bit-offset = 24
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "DISABLE_BLK_VERSION_MAJOR"
+method = "disable_blk_version_major"
+bit-offset = 25
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BLK_VERSION_MINOR"
+method = "blk_version_minor"
+bit-offset = 26
+bit-width = 3
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "BLK_VERSION_MAJOR"
+method = "blk_version_major"
+bit-offset = 29
+bit-width = 2
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "PSRAM_CAP"
+method = "psram_cap"
+bit-offset = 31
+bit-width = 1
+access = "read-only"
+
+[[registers]]
+address = 545341440
+width = 32
+access = "read-write"
+identity = "TRNG.CONF"
+peripheral = "TRNG"
+peripheral-type = "Trng"
+peripheral-module = "trng"
+scope = []
+register-method = "conf"
+
+[[registers.fields]]
+svd-name = "NOISE_SOURCE_SEL"
+method = "noise_source_sel"
+bit-offset = 0
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NOISE_POS_SEL"
+method = "noise_pos_sel"
+bit-offset = 5
+bit-width = 5
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "REPETITION_VALUE_C"
+method = "repetition_value_c"
+bit-offset = 10
+bit-width = 9
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ADPATIVE_VALUE_C"
+method = "adpative_value_c"
+bit-offset = 19
+bit-width = 9
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FIFO_RESET"
+method = "fifo_reset"
+bit-offset = 28
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "RANDOM_OUTPUT_MODE"
+method = "random_output_mode"
+bit-offset = 29
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NOISE_CRC_EN"
+method = "noise_crc_en"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SAMPLE_ENABLE"
+method = "sample_enable"
+bit-offset = 31
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 545341444
+width = 32
+access = "read-write"
+identity = "TRNG.DEBUG_CONF"
+peripheral = "TRNG"
+peripheral-type = "Trng"
+peripheral-module = "trng"
+scope = []
+register-method = "debug_conf"
+
+[[registers.fields]]
+svd-name = "STARTUP_TEST_START"
+method = "startup_test_start"
+bit-offset = 0
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "STARTUP_TEST_LIMIT"
+method = "startup_test_limit"
+bit-offset = 1
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DEBUG_DATA"
+method = "debug_data"
+bit-offset = 17
+bit-width = 8
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "DEBUG_MODE"
+method = "debug_mode"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "HEALTH_TEST_ERROR_CODE"
+method = "health_test_error_code"
+bit-offset = 26
+bit-width = 3
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "HEALTH_TEST_END"
+method = "health_test_end"
+bit-offset = 29
+bit-width = 1
+access = "write-only"
+
+[[registers.fields]]
+svd-name = "HEALTH_TEST_BYPASS"
+method = "health_test_bypass"
+bit-offset = 30
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 545341484
+width = 32
+access = "read-write"
+identity = "TRNG.INT_RAW"
+peripheral = "TRNG"
+peripheral-type = "Trng"
+peripheral-module = "trng"
+scope = []
+register-method = "int_raw"
+
+[[registers.fields]]
+svd-name = "ERROR_INT_RAW"
+method = "error_int_raw"
+bit-offset = 0
+bit-width = 1
+access = "read-write"
+
+[[registers]]
+address = 545341512
+width = 32
+access = "read-only"
+identity = "TRNG.CRC_SYNC_DATA"
+peripheral = "TRNG"
+peripheral-type = "Trng"
+peripheral-module = "trng"
+scope = []
+register-method = "crc_sync_data"
+
+[[registers.fields]]
+svd-name = "SW_CRC_RANDOM_DATA_SYNC"
+method = "sw_crc_random_data_sync"
+bit-offset = 0
+bit-width = 32
+access = "read-only"
 
 [[registers]]
 address = 545357824

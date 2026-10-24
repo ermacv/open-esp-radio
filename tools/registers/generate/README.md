@@ -182,7 +182,10 @@ The policy's `[[ownership-partitions]]` of typed peripherals become
 `PeripheralPartitions`, `Claims` (every typed block, as nested tuples the
 PAC root claims with one `oer_mmio::assume_owned`) and `partition`, which
 gives each claimed block to its owner. A `const` assertion beside them
-checks that no two typed blocks list the same word. A partition mixing typed
+checks that no two typed blocks list the same word. A partition marked
+`handoff = true` is claimed by its own platform handoff instead: it is left
+out of `PeripheralPartitions` and `Claims` and has `<Name>Claims` and
+`<Name>::from_claims`. A partition mixing typed
 and untyped peripherals is refused.
 
 `[[register-sides]]` divides one typed block between its interrupt

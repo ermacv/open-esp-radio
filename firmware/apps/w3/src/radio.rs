@@ -7,7 +7,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use esp_hal::rng::RngOwner;
+use crate::Rng;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
@@ -73,7 +73,7 @@ pub static COLLISIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::Atomi
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
-    pub rng: RngOwner<'static>,
+    pub rng: Rng,
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub routes: irq::ImageRoutes,
@@ -82,7 +82,7 @@ pub struct Boot {
     pub entropy: u32,
 }
 pub struct Platform {
-    rng: RngOwner<'static>,
+    rng: Rng,
     power: Option<PhyTxTargetPowerProfile>,
 }
 impl MacDelayEntropy for Platform {

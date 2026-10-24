@@ -1,11 +1,11 @@
 #![no_std]
 use esp_hal::{
     interrupt::{InterruptRoutes, software::SoftwareInterrupt},
-    peripherals::{PSRAM, RNG, SYSTIMER},
+    peripherals::{LP_AON_CLK_RST, LP_PERI, PSRAM, RNG, SYSTIMER},
     usb::usb_serial_jtag::UsbPadControl,
 };
 use oer_espressif_esp_hal_soc::{
-    entropy::Entropy,
+    handoff::{take_entropy, take_reset_causes},
     watchdog::{DeadlineBudget, DeadlineWatchdog},
 };
 use oer_espressif_executor::{DoorbellAcknowledger, Executor};
@@ -35,12 +35,20 @@ pub fn timer(timer: SYSTIMER<'static>) {
     #[cfg(ui_reject)]
     let _second = ComparatorWriter::adopt(timer); // ui-error: E0382
 }
-pub fn entropy(rng: RNG<'static>) {
-    let mut owner = Entropy::new(rng);
-    let _health = owner.source_status();
-    let _bytes = owner.random_bytes::<8>();
+pub fn entropy(rng: RNG<'static>, lp_peri: LP_PERI<'static>) {
+    let owner = take_entropy(rng, lp_peri);
+    let _health = owner.status();
+    let _word = owner.random_word();
     #[cfg(ui_reject)]
-    let _second = Entropy::new(rng); // ui-error: E0382
+    let _second = take_entropy(
+        rng,     // ui-error: E0382
+        lp_peri, // ui-error: E0382
+    );
+}
+pub fn reset_causes(lp_aon: LP_AON_CLK_RST<'static>) {
+    let _owner = take_reset_causes(lp_aon);
+    #[cfg(ui_reject)]
+    let _second = take_reset_causes(lp_aon); // ui-error: E0382
 }
 pub fn usb(pads: UsbPadControl<'static>) {
     pads.disconnect();

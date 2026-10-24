@@ -25,6 +25,7 @@ oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
 static_cell = "2.1.1"
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
+oer-espressif-esp-hal-soc.workspace = true
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 embassy-futures = "0.1.2"
 oer-bluetooth-le-port = { path = "../../../protocols/bluetooth/le/port" }

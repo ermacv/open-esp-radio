@@ -33,12 +33,11 @@ pub(crate) fn start(
     executor: crate::Executor<0>,
     wake: crate::ExecutorWake,
     (usb, pads): (crate::transport::Usb, Pads),
-    rng: esp_hal::peripherals::RNG<'static>,
+    mut entropy: crate::Rng,
     timer: esp_hal::peripherals::TIMG1<'static>,
 ) -> ! {
     let service = DeadlineWatchdog::new(timer);
-    let mut entropy = oer_espressif_esp_hal_soc::entropy::Entropy::new(rng);
-    let boot = u64::from_le_bytes(entropy.random_bytes().expect("HIL boot entropy")).max(1);
+    let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     crate::check_entropy_source(&entropy);
     #[cfg(not(feature = "usb-jtag-off"))]
     let _pads = pads;

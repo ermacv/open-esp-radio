@@ -280,6 +280,7 @@ pub(crate) use ownership::device_fence;
 pub(crate) mod bluetooth;
 pub(crate) mod ieee802154;
 pub(crate) mod modem;
+pub mod platform;
 /// Owner acquisition and register transactions of isolated probe images.
 #[cfg(oer_probe)]
 #[doc(hidden)]

@@ -84,3 +84,24 @@ radio = "PMU_RADIO.ANA_PERI_PWR_CTRL"
 esp_hal = "PMU.ana_peri_pwr_ctrl in pmu_init (rtc_cntl/rtc/esp32s31.rs)"
 coordination = "disjoint-lifecycle"
 reason = "esp-hal 2b665dd writes rstb/xpd_perif_i2c only in rtc::init before take_radio. After handoff the HAL radio owner alone controls TSENS/SAR-I2C: last temperature release after RF close clears XPD; first acquire asserts RSTB low, settles 1 us, enables XPD and releases RSTB before TSENS clock/reset/enable. General PHY open-I2C initialization remains under the same owner. No esp-hal runtime consumer of PERIF_I2C or indirect regi2c is reachable in our S31 images after take_radio; bootstrap/PSRAM setup precedes handoff and the retained PSRAM MPLL reference cannot cross zero."
+
+[[word]]
+address = 0x2071003c
+radio = "LP_PERICLKRST_RNG.RNG_CTRL (typed block)"
+esp_hal = "LP_PERI.rng_ctrl in rng_ll_enable (soc/esp32s31/trng.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 enables the TRNG clock and pulses its reset in rng_ll_enable, called from pre_init inside esp_hal::init and from TrngSource::new, which takes the RNG singleton. The entropy handoff consumes RNG and LP_PERI after esp_hal::init, so TrngSource::new cannot run while the entropy owner exists; the owner only reads the word."
+
+[[word]]
+address = 0x20814000
+radio = "TRNG.CONF (typed block)"
+esp_hal = "RNG.conf in rng_ll_enable (soc/esp32s31/trng.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 configures the noise source, health-test cutoffs and output in rng_ll_enable, called from pre_init inside esp_hal::init and from TrngSource::new, which takes the RNG singleton. The entropy handoff consumes RNG after esp_hal::init, so TrngSource::new cannot run while the entropy owner exists; the owner only reads the word."
+
+[[word]]
+address = 0x20814004
+radio = "TRNG.DEBUG_CONF (typed block)"
+esp_hal = "RNG.debug_conf in rng_ll_enable (soc/esp32s31/trng.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal 1f646c5 sets the startup-test limit and starts the startup test in rng_ll_enable, called from pre_init inside esp_hal::init and from TrngSource::new, which takes the RNG singleton. The entropy handoff consumes RNG after esp_hal::init, so TrngSource::new cannot run while the entropy owner exists; the owner only reads the word."

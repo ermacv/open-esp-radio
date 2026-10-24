@@ -7,10 +7,10 @@ schema = 2
 address = 544215088
 width = 32
 access = "read-only"
-identity = "LP_AON_CLKRST.HPCORE0_RESET_CAUSE"
-peripheral = "LP_AON_CLKRST"
-peripheral-type = "LpAonClkrst"
-peripheral-module = "lp_aon_clkrst"
+identity = "LP_AON_RESET_CAUSE.HPCORE0_RESET_CAUSE"
+peripheral = "LP_AON_RESET_CAUSE"
+peripheral-type = "LpAonResetCause"
+peripheral-module = "lp_aon_reset_cause"
 scope = []
 register-method = "hpcore0_reset_cause"
 
@@ -24,6 +24,31 @@ access = "read-only"
 [[registers.fields]]
 svd-name = "HPCORE0_RESET_CAUSE"
 method = "hpcore0_reset_cause"
+bit-offset = 1
+bit-width = 6
+access = "read-only"
+
+[[registers]]
+address = 544215092
+width = 32
+access = "read-only"
+identity = "LP_AON_RESET_CAUSE.HPCORE1_RESET_CAUSE"
+peripheral = "LP_AON_RESET_CAUSE"
+peripheral-type = "LpAonResetCause"
+peripheral-module = "lp_aon_reset_cause"
+scope = []
+register-method = "hpcore1_reset_cause"
+
+[[registers.fields]]
+svd-name = "HPCORE1_RESET_FLAG"
+method = "hpcore1_reset_flag"
+bit-offset = 0
+bit-width = 1
+access = "read-only"
+
+[[registers.fields]]
+svd-name = "HPCORE1_RESET_CAUSE"
+method = "hpcore1_reset_cause"
 bit-offset = 1
 bit-width = 6
 access = "read-only"

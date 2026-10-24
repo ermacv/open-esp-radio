@@ -1,7 +1,7 @@
 # The platform publication: registers the host reads through the chip's JTAG,
 # published as SVD and a binding index only (no PAC).
 schema = 1
-model = "../model/platform/device.toml"
+model = "../model/platform-device.toml"
 reviewed = ["../model/platform/reviewed.toml"]
 memory = "../model/memory.toml"
 ownership = "../policy/platform-ownership.toml"

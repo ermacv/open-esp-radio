@@ -67,9 +67,13 @@ typed block is `oer-mmio` (`portable/mmio`) alone:
   the caller's alone. A block's authority is the list of its declared words,
   not the address range they span, so blocks whose ranges interleave and
   radio views of platform blocks claim only their own words. Only the chip
-  PAC's radio root makes the promise, once for every typed block, from the
-  platform handoff (clippy `disallowed-methods` refuses it elsewhere); a
-  probe image may claim a block again after dropping the block's owner.
+  PAC's root makes the promise, once for each domain's typed blocks, from
+  that domain's platform handoff: the radio root for the radio blocks, and
+  one handoff per platform domain (such as the S31's eFuse, entropy and
+  reset-cause blocks) that an esp-hal adapter makes after consuming the
+  domain's esp-hal singletons (clippy `disallowed-methods` refuses it
+  elsewhere); a probe image may claim a block again after dropping the
+  block's owner.
   The generated `const` assertion beside the claim checks that no two
   blocks list the same word. A word esp-hal also writes is claimed only
   with its reviewed coordination in the chip's

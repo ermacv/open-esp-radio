@@ -1,4 +1,5 @@
 //! P2 owns the real lower-MAC port, DMA, RX and cooperative hardware.
+use crate::Rng;
 use crate::{
     Answer, Request, irq,
     irq::{B, N, Q, S, TX},
@@ -10,7 +11,6 @@ use core::{
     task::{Context as PollContext, Poll},
 };
 use embassy_futures::select::{Either, select};
-use esp_hal::rng::RngOwner;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_hal::{
@@ -122,14 +122,14 @@ oer_trace::clock!(oer_embassy_time::now_micros);
 pub struct Boot {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
-    pub rng: RngOwner<'static>,
+    pub rng: Rng,
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub routes: irq::ImageRoutes,
     pub bell: irq::ImageDoorbell,
 }
 struct Platform {
-    rng: RngOwner<'static>,
+    rng: Rng,
     power: Option<PhyTxTargetPowerProfile>,
 }
 impl MacDelayEntropy for Platform {

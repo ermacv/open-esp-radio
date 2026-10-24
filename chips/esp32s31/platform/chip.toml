@@ -205,7 +205,7 @@ package = "oer-firmware-probes-esp32s31-register"
 # its evidence; cause 1 is the power-on reset of ESP-IDF 4d59230d's
 # `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`.
 [reset-cause]
-field = "LP_AON_CLKRST.HPCORE0_RESET_CAUSE.HPCORE0_RESET_CAUSE"
+field = "LP_AON_RESET_CAUSE.HPCORE0_RESET_CAUSE.HPCORE0_RESET_CAUSE"
 power-on = 1
 
 [hil]

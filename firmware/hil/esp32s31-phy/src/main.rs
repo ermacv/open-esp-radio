@@ -21,7 +21,7 @@ mod transport;
 mod tx_rate_checkpoint;
 
 use core::future::poll_fn;
-use esp_hal::{efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner};
+use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_esp32s31_phy::{PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version};
 use oer_espressif_esp_hal_radio::{RadioSingletons, take_radio};
 use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
@@ -59,9 +59,9 @@ oer_espressif_executor::tasks! {
     /// The application executor's tasks.
     AppTasks: Executor<0> {
         #[cfg(not(feature = "diagnostic-radio-health"))]
-        console(usb: transport::Usb, boot: u64) = console;
+        console(usb: transport::Usb, boot: u64, chip: transport::Chip) = console;
         #[cfg(feature = "diagnostic-radio-health")]
-        console(usb: transport::Usb, boot: u64) = health::startup::console;
+        console(usb: transport::Usb, boot: u64, chip: transport::Chip) = health::startup::console;
         #[cfg(not(feature = "diagnostic-radio-health"))]
         dispatch(poster: Poster<Request, Answer>) = dispatch;
         #[cfg(feature = "diagnostic-radio-health")]
@@ -115,6 +115,9 @@ static REQUESTS: embassy_sync::channel::Channel<
     1,
 > = embassy_sync::channel::Channel::new();
 
+/// The image's entropy owner.
+pub(crate) type Rng = oer_esp32s31_hal::platform::Entropy<oer_embassy_time::EmbassyClock>;
+
 oer_espressif_staged_runtime::entry!(main);
 #[cfg(not(feature = "diagnostic-radio-health"))]
 fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
@@ -125,22 +128,17 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         oer_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
     );
     let interrupts = Interrupts::take().expect("diagnostic interrupt table claimed once");
+    let factory = oer_esp32s31_hal::platform::FactoryIdentity::read(
+        oer_espressif_esp_hal_soc::handoff::take_efuse()
+            .expect("the image takes the eFuse words once"),
+    );
     let identity = PhyCalibrationIdentity {
         rf_cal_version: phy_get_rf_cal_version(),
-        base_mac_address: efuse::base_mac_address()
-            .as_bytes()
-            .try_into()
-            .expect("base MAC has six octets"),
-        mac_extension: efuse::read_field_le::<u16>(efuse::MAC_EXT),
+        base_mac_address: factory.base_mac(),
+        mac_extension: factory.mac_extension(),
     };
-    let station = efuse::interface_mac_address(efuse::InterfaceMacAddress::Station)
-        .as_bytes()
-        .try_into()
-        .expect("station MAC");
-    let access_point = efuse::interface_mac_address(efuse::InterfaceMacAddress::AccessPoint)
-        .as_bytes()
-        .try_into()
-        .expect("AP MAC");
+    let station = factory.address(oer_esp32s31_hal::platform::Interface::Station);
+    let access_point = factory.address(oer_esp32s31_hal::platform::Interface::AccessPoint);
     let (hardware, clocks) = take_radio(
         RadioSingletons {
             i2c_ana_mst: peripherals.I2C_ANA_MST,
@@ -156,7 +154,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     .expect("diagnostic radio ownership");
     let (domain, partitions) =
         hardware.split::<oer_espressif_esp_hal_radio::EspHal, _>(ConcurrentPhy::new());
-    let mut rng = RngOwner::new(peripherals.RNG);
+    let mut rng = Rng::new(
+        oer_espressif_esp_hal_soc::handoff::take_entropy(peripherals.RNG, peripherals.LP_PERI),
+        oer_embassy_time::EmbassyClock,
+    );
     let boot = (u64::from(rng.random()) << 32 | u64::from(rng.random())).max(1);
     let radio = radio::Radio::place(
         RADIO.uninit(),
@@ -181,37 +182,34 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
             .start(interrupts.radio, LEVELS);
     RadioTasks::serve_radio(&radio_spawner, radio).expect("radio diagnostic task");
     let poster = SLOT.claim().expect("one diagnostic requester");
+    let chip = transport::Chip(oer_esp32s31_hal::platform::ResetCauses::read(
+        oer_espressif_esp_hal_soc::handoff::take_reset_causes(peripherals.LP_AON_CLK_RST),
+    ));
     let usb = transport::Usb::new(peripherals.USB_DEVICE, interrupts.console_usb);
     transport::CONSOLE.start(boot);
     adopted.enable_interrupts();
     Executor::<0>::new(SoftwareInterrupt::new(peripherals.FROM_CPU_INTR0)).run(
         interrupts.wake,
         move |spawner| {
-            AppTasks::console(spawner, usb, boot).expect("diagnostic console task");
+            AppTasks::console(spawner, usb, boot, chip).expect("diagnostic console task");
             AppTasks::dispatch(spawner, poster).expect("diagnostic dispatch task");
         },
     );
 }
 #[cfg(not(feature = "diagnostic-radio-health"))]
-async fn console(usb: transport::Usb, boot: u64) {
+async fn console(usb: transport::Usb, boot: u64, chip: transport::Chip) {
     let keys = oer_hil_protocol::feature_keys::image_keys(&|feature| feature == "diagnostic-phy");
     let intake = Intake::new(boot, ImageKeySet::new(&keys), 0);
     transport::CONSOLE
-        .run(
-            usb.rx,
-            usb.tx,
-            intake,
-            &transport::Chip,
-            |id, request: WireRequest| {
-                if REQUESTS.try_send((id, Request::Wire(request))).is_err() {
-                    transport::CONSOLE.publish(
-                        id.session_id,
-                        id.request_id,
-                        &Rejected(RejectReason::Busy),
-                    );
-                }
-            },
-        )
+        .run(usb.rx, usb.tx, intake, &chip, |id, request: WireRequest| {
+            if REQUESTS.try_send((id, Request::Wire(request))).is_err() {
+                transport::CONSOLE.publish(
+                    id.session_id,
+                    id.request_id,
+                    &Rejected(RejectReason::Busy),
+                );
+            }
+        })
         .await;
 }
 #[cfg(not(feature = "diagnostic-radio-health"))]

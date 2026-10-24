@@ -20,10 +20,9 @@ pub(crate) fn start(
         crate::transport::Usb,
         esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
     ),
-    rng: esp_hal::peripherals::RNG<'static>,
+    mut entropy: crate::Rng,
 ) -> ! {
-    let mut entropy = oer_espressif_esp_hal_soc::entropy::Entropy::new(rng);
-    let boot = u64::from_le_bytes(entropy.random_bytes().expect("HIL boot entropy")).max(1);
+    let boot = u64::from_le_bytes(entropy.random_bytes()).max(1);
     CONSOLE.start(boot);
     executor.run(wake, |spawner| {
         PanicResetTasks::panic_on_request(spawner).expect("panic-reset task");

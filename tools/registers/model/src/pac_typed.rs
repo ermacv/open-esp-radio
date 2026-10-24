@@ -252,6 +252,7 @@ impl PacApiPack {
             for partition in &partitions {
                 let mut fields = String::new();
                 let mut values = String::new();
+                let mut own = Vec::new();
                 for peripheral in &partition.peripherals {
                     let (module, owner) = blocks.get(peripheral.as_str()).ok_or_else(|| {
                         Error::message(format!(
@@ -261,10 +262,31 @@ impl PacApiPack {
                     })?;
                     let _ = writeln!(fields, "pub {module}: super::{module}::{owner},");
                     let _ = writeln!(values, "{module}: super::{module}::{owner}::new({module}),");
-                    ordered.push(module.clone());
+                    own.push(module.clone());
                 }
                 push_doc(&mut output, &partition.description, "");
                 let _ = writeln!(output, "pub struct {} {{\n{fields}}}\n", partition.name);
+                if partition.handoff {
+                    let (claims, pattern) = claim_tuple(&own);
+                    let _ = writeln!(
+                        output,
+                        "/// The device registers of [`{name}`]'s blocks, which its platform\n\
+                         /// handoff claims with one `oer_mmio::assume_owned`; the PAC root\n\
+                         /// does not claim them.\n\
+                         pub type {name}Claims = {claims};\n\n\
+                         impl {name} {{\n\
+                         /// Give each claimed block to its owner.\n\
+                         #[inline]\n\
+                         pub fn from_claims(claims: {name}Claims) -> Self {{\n\
+                         let {pattern} = claims;\n\
+                         Self {{\n{values}}}\n\
+                         }}\n\
+                         }}\n",
+                        name = partition.name
+                    );
+                    continue;
+                }
+                ordered.extend(own);
                 push_doc(&mut members, &partition.description, "");
                 let _ = writeln!(members, "pub {}: {},", partition.member, partition.name);
                 let _ = writeln!(
@@ -273,10 +295,15 @@ impl PacApiPack {
                     partition.member, partition.name
                 );
             }
-            let (claims, pattern) = claim_tuple(&ordered);
-            let _ = writeln!(
-                output,
-                "/// Every typed partition.\n\
+            if ordered.is_empty() {
+                // Only platform handoffs claim the typed blocks: the PAC
+                // root claims none.
+                output.push_str("}\n");
+            } else {
+                let (claims, pattern) = claim_tuple(&ordered);
+                let _ = writeln!(
+                    output,
+                    "/// Every typed partition.\n\
                  pub struct PeripheralPartitions {{\n{members}}}\n\n\
                  /// The device registers of every typed block, which the PAC root\n\
                  /// takes with one `oer_mmio::assume_owned`.\n\
@@ -288,7 +315,8 @@ impl PacApiPack {
                  PeripheralPartitions {{\n{built}}}\n\
                  }}\n\
                  }}\n"
-            );
+                );
+            }
         }
         if !blocks.is_empty() {
             let list = blocks
