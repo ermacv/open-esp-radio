@@ -64,6 +64,13 @@ esp_hal = "MODEM_SYSCON.clk_conf_power_st in modem_clock_domain_power_state_icg_
 coordination = "disjoint-lifecycle"
 reason = "Written only by rtc::init inside esp_hal::init (esp-hal 1f646c5 rtc_cntl/rtc/esp32c5.rs), before any radio owner exists; the C5 sleep driver does not touch it. The radio PAC never writes it."
 
+
+[[word]]
+address = 0x600a9c14
+radio = "MODEM_SYSCON_RADIO.CLK_CONF1"
+esp_hal = "MODEM_SYSCON.clk_conf1 in force_sar_power (analog/adc/dig_ctrl.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "Only SarPowerGuard stores it (force_sar_power sets clk_fe_apb_en around its power-detector write and restores it), and only the one-shot ADC driver makes that guard: Adc::<ADC1>::new and AdcConfig::adc_calibrate (esp-hal 1f646c5 analog/adc/dig_ctrl.rs). No C5 image constructs an Adc or calls adc_calibrate, and the C5 does not self-calibrate at init (SUPPORTS_SELF_CALIBRATION is false for esp32c5). adc_calibrate needs no singleton, so only the missing caller keeps it away."
 [[word]]
 address = 0x600af018
 radio = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF"
@@ -92,6 +99,13 @@ esp_hal = "I2C_ANA_MST.i2c_ctrl(1) in regi2c_read and regi2c_write (soc/esp32c5/
 coordination = "disjoint-lifecycle"
 reason = "As I2C0_CTRL: esp-hal's analog-I2C transactions run inside esp_hal::init in our images, and its later regi2c callers (ADC, sleep, clock::ll) have no caller in any C5 image (esp-hal 1f646c5)."
 
+
+[[word]]
+address = 0x600af818
+radio = "I2C_ANA_MST.ANA_CONF0"
+esp_hal = "I2C_ANA_MST.ana_conf0 in enable_pll_clk_impl (soc/esp32c5/clocks.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal stores it only in the BBPLL calibration of enable_pll_clk_impl, when the PLL reference count crosses zero: clock::init takes the reference inside esp_hal::init and never releases it, so later requests (PSRAM, ADC) do not cross zero (esp-hal 1f646c5 soc/esp32c5/clocks.rs, clock/mod.rs), before any radio owner exists. The sleep path's reconfigure_pll has no caller in any C5 image."
 [[word]]
 address = 0x600af81c
 radio = "I2C_ANA_MST.ANA_CONF1"
@@ -165,6 +179,14 @@ esp_hal = "SYSTIMER.unit_op in Unit::read_count (timer/systimer.rs)"
 coordination = "whole-word-stores"
 reason = "esp-hal's Instant::now (its delays and drivers) strobes UPDATE with a whole-word write (esp-hal 1f646c5); the shared counter block strobes UPDATE alone, also a whole-word write. Neither reads back, and each reader repeats LO, HI, LO until the two LO reads agree, so a strobe between them only relatches the newer count."
 
+
+[[word]]
+address = 0x6000a01c
+words = 6
+radio = "SYSTIMER.TARGET%s_HI and TARGET%s_LO"
+esp_hal = "SYSTIMER.trgt(n).hi and .lo in Alarm::set_target (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "set_target, the only esp-hal writer of the comparator target words, is a method of Alarm, which exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
 [[word]]
 address = 0x6000a034
 words = 3
@@ -173,6 +195,14 @@ esp_hal = "SYSTIMER.target_conf in Alarm (timer/systimer.rs)"
 coordination = "unreached-esp-hal-path"
 reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
 
+
+[[word]]
+address = 0x6000a050
+words = 3
+radio = "SYSTIMER.COMP%s_LOAD"
+esp_hal = "SYSTIMER.comp_load in Alarm::set_target and set_period (timer/systimer.rs)"
+coordination = "unreached-esp-hal-path"
+reason = "set_target and set_period, the only esp-hal writers of the comparator load strobes, are methods of Alarm, which exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton."
 [[word]]
 address = 0x6000a064
 radio = "SYSTIMER.INT_ENA"
@@ -186,3 +216,11 @@ radio = "SYSTIMER_ACKNOWLEDGE.INT_CLR"
 esp_hal = "SYSTIMER.int_clr in Alarm (timer/systimer.rs)"
 coordination = "unreached-esp-hal-path"
 reason = "Alarm exists only through SystemTimer::new(SYSTIMER) (esp-hal 1f646c5); the time driver's handoff consumes the singleton. Each alarm handler strobes its own bit alone."
+
+[[word]]
+address = 0x600c5090
+words = 4
+radio = "FROM_CPU_0.LINE to FROM_CPU_3.LINE"
+esp_hal = "INTPRI.cpu_intr_from_cpu in raise and reset (interrupt/software.rs)"
+coordination = "disjoint-lifecycle"
+reason = "esp-hal raises and resets a line only through SoftwareInterrupt<N> and the sender and acknowledger split from it (esp-hal 1f646c5 interrupt/software.rs), which SoftwareInterrupt::new makes from the FROM_CPU_INTRn singleton; the executor's and doorbell's line handoff consumes that owner for good before it claims the line's block. The RTOS context-switch path (interrupt/__rtos_implementation.rs: trigger steals FROM_CPU_INTR0, install takes the clear register's address) runs only from set_context_switch_handler and request_context_switch, which no image calls."
