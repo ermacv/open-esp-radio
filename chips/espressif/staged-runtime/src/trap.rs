@@ -4,6 +4,8 @@
 
 use core::arch::asm;
 
+use oer_riscv::{clic, trigger};
+
 pub use esp_hal::trapframe::TrapFrame;
 
 /// Vectors of the CLIC vector table (MTVT).
@@ -35,7 +37,7 @@ impl TrapRegisters {
                 "csrr {mtval}, mtval",
                 "csrr {mscratch}, mscratch",
                 "csrr {mtvec}, mtvec",
-                "csrr {mtvt}, 0x307",
+                "csrr {mtvt}, {mtvt_csr}",
                 hart = out(reg) hart,
                 mcause = out(reg) mcause,
                 mepc = out(reg) mepc,
@@ -43,6 +45,7 @@ impl TrapRegisters {
                 mscratch = out(reg) mscratch,
                 mtvec = out(reg) mtvec,
                 mtvt = out(reg) mtvt,
+                mtvt_csr = const clic::MTVT,
                 options(nomem, nostack),
             )
         };
@@ -67,7 +70,9 @@ pub fn current_hart_vector_slot(vector: usize) -> Option<u32> {
     }
     let table: *const u32;
     // SAFETY: a CSR read only.
-    unsafe { asm!("csrr {table}, 0x307", table = out(reg) table, options(nomem, nostack)) };
+    unsafe {
+        asm!("csrr {table}, {mtvt}", table = out(reg) table, mtvt = const clic::MTVT, options(nomem, nostack))
+    };
     // SAFETY: MTVT addresses the hart's word-aligned table of `VECTORS`
     // entries in SRAM, which the runtime installed; reading one entry calls
     // nothing.
@@ -82,8 +87,10 @@ pub fn stack_watchpoint() -> (usize, usize) {
     // SAFETY: CSR reads only.
     unsafe {
         asm!(
-            "csrr {control}, 0x7a1",
-            "csrr {address}, 0x7a2",
+            "csrr {control}, {tdata1}",
+            "csrr {address}, {tdata2}",
+            tdata1 = const trigger::TDATA1,
+            tdata2 = const trigger::TDATA2,
             control = out(reg) control,
             address = out(reg) address,
             options(nomem, nostack),

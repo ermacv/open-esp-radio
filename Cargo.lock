@@ -2633,6 +2633,7 @@ dependencies = [
  "oer-analysis-riscv-model",
  "oer-analysis-riscv-program",
  "oer-chip-profile",
+ "oer-riscv",
  "serde",
  "tempfile",
  "toml",
@@ -3125,6 +3126,7 @@ dependencies = [
  "esp-hal",
  "oer-espressif-staged-layout",
  "oer-espressif-usb-fifo",
+ "oer-riscv",
 ]
 
 [[package]]
@@ -3141,6 +3143,7 @@ dependencies = [
  "oer-espressif-staged-layout",
  "oer-interrupt-table",
  "oer-memory",
+ "oer-riscv",
 ]
 
 [[package]]
@@ -4394,6 +4397,10 @@ dependencies = [
  "thiserror 2.0.19",
  "toml_edit",
 ]
+
+[[package]]
+name = "oer-riscv"
+version = "0.1.0"
 
 [[package]]
 name = "oer-sort"

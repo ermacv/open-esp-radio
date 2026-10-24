@@ -1,0 +1,15 @@
+[package]
+name = "oer-riscv"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Architectural RISC-V constants: CSR numbers and fields of the privileged, CLIC and Sdtrig specifications"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "contract"
+platform = "portable"

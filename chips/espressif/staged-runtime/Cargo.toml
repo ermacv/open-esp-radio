@@ -21,6 +21,7 @@ panic-hook = []
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-espressif-staged-layout.workspace = true
 oer-memory = { path = "../../../portable/memory" }
+oer-riscv = { path = "../../../portable/riscv" }
 esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"] }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-espressif-esp-hal-irq.workspace = true

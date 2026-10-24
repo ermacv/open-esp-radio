@@ -7,6 +7,7 @@ use oer_analysis_riscv_decode::{
 use oer_analysis_riscv_model::Ledger;
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_riscv::{clic, machine::float};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -349,17 +350,14 @@ fn upper(instruction: &Instruction, pc: u32) -> Option<(u8, u32)> {
 pub enum LevelDrop {
     /// `mret`, `sret` or `dret`: restores `mil` from `mcause.mpil`.
     Return,
-    /// A write of `mnxti` (0x345): takes the next pending interrupt and sets
+    /// A write of `mnxti`: takes the next pending interrupt and sets
     /// `mil` to its level.
     NextInterrupt,
-    /// A write of `mintstatus` (0xfb1).
+    /// A write of `mintstatus`.
     Status,
 }
 
 impl LevelDrop {
-    const MNXTI: u16 = 0x345;
-    const MINTSTATUS: u16 = 0xfb1;
-
     /// The drop an undecoded 32-bit word is.
     fn of_word(word: u32) -> Option<Self> {
         matches!(word, 0x3020_0073 | 0x1020_0073 | 0x7b20_0073).then_some(Self::Return)
@@ -374,8 +372,8 @@ impl LevelDrop {
             (_, Operand::Immediate(value)) => value != 0,
         };
         match csr {
-            Self::MNXTI if writes => Some(Self::NextInterrupt),
-            Self::MINTSTATUS if writes => Some(Self::Status),
+            clic::MNXTI if writes => Some(Self::NextInterrupt),
+            clic::MINTSTATUS if writes => Some(Self::Status),
             _ => None,
         }
     }
@@ -459,7 +457,7 @@ pub(crate) fn transfers(
             instruction,
             Instruction::Float(_)
                 | Instruction::Extension(Extension::Csr {
-                    csr: 0x001..=0x003,
+                    csr: float::FFLAGS..=float::FCSR,
                     ..
                 })
         ) {

@@ -29,6 +29,7 @@ protocols/  sans-IO protocols and their vocabularies (no_std)
   hil/          the HIL protocol and its trace header
 portable/   generic support no protocol or chip owns (no_std)
   time/ time-virtual/ memory/ sync/ trace/ interrupt-table/ wire/
+  riscv/        architectural RISC-V constants (CSR numbers and fields)
   embassy/      bindings to Embassy (time, net)
   hil-agent/    the agent core the HIL images run
 chips/      everything about Espressif hardware

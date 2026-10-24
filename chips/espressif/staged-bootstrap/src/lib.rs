@@ -17,6 +17,8 @@
 
 use core::{arch::asm, mem::size_of, ptr};
 
+use oer_riscv::{machine::status, trigger};
+
 use oer_espressif_staged_layout::{
     Layout,
     stage_two::{Header as RuntimeHeader, PayloadCrc},
@@ -302,8 +304,10 @@ unsafe fn release_bootstrap_stack_watchpoint() {
     // SAFETY: selects trigger 0 and reads its address; no memory is touched.
     unsafe {
         asm!(
-            "csrw 0x7a0, zero",
-            "csrr {observed}, 0x7a2",
+            "csrw {tselect}, zero",
+            "csrr {observed}, {tdata2}",
+            tselect = const trigger::TSELECT,
+            tdata2 = const trigger::TDATA2,
             observed = out(reg) observed_tdata2,
             options(nostack),
         )
@@ -312,9 +316,11 @@ unsafe fn release_bootstrap_stack_watchpoint() {
         // SAFETY: clears the trigger esp-hal armed on the bootstrap's guard.
         unsafe {
             asm!(
-                "csrw 0x7a1, zero",
-                "csrw 0x7a2, zero",
+                "csrw {tdata1}, zero",
+                "csrw {tdata2}, zero",
                 "fence rw, rw",
+                tdata1 = const trigger::TDATA1,
+                tdata2 = const trigger::TDATA2,
                 options(nostack),
             )
         };
@@ -328,13 +334,14 @@ unsafe fn jump_to_runtime<const ENTRY: usize>() -> ! {
     // SAFETY: the caller's contract; interrupts stay disabled across the jump.
     unsafe {
         asm!(
-            "csrci mstatus, 8",
+            "csrci mstatus, {mie}",
             "fence rw, rw",
             "fence.i",
             // t1, not t0: `jr t0` is a return to the analysis (the alternate link register).
             "li t1, {entry}",
             "jr t1",
             entry = const ENTRY,
+            mie = const status::MIE,
             options(noreturn),
         )
     }
