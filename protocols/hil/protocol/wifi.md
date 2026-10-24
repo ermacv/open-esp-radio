@@ -8,6 +8,26 @@ for admission, and `wifi/station/link` for `Associated`, `Authorized` and typed
 boot. `Authorized` means installed RSN keys and an open controlled port.
 `StationPowerSave` admits only `Off`.
 
+`ProbeStation` admits a 100-echo or ten-echo ICMP window. Its correlated
+`StationProbeReady` precedes traffic; `StationProbeFinished` contains distinct
+target-side request/reply counts. `StationGroupKey` reports a successful
+hardware installation's public KeyID/generation, never the GTK.
+`GetStationCounters` returns timeouts, collisions, decoded group ARPs and
+departure counts. `StopStation` is accepted before disconnect/stop; only a
+clean service stop publishes `StationStopped`. None carries a gate verdict.
+
+`Disconnected` names the portable station's reason one variant per reason,
+with its typed cause (SAE failure, TX refusal, channel refusal, the arbiter's
+leave reason); `RadioFailure` means only that the radio front end refused the
+station port. A service that ends without a stop command publishes, after
+the link's last `Disconnected`, one `StationServiceEnded`, correlated with
+the start request: how the port was left (`Failed`, `Poisoned` with the
+disable's fault, `Quarantined`) and the original `StationServiceFault` with
+its backend fault, contract violation or missing terminal. After it, and
+while a stop is pending, `StopStation` and `ProbeStation` are refused with
+`InvalidState` (`StopStation::refusal`, `ProbeStation::refusal`), so every
+command is answered.
+
 `NetworkCredentials` owns an SSID of 1..=32 bytes and a passphrase of 8..=63
 bytes. Construction and binary decoding both enforce these bounds. It has no
 `Clone` or `Copy`; drop erases its storage. `clear_passphrase` erases the entire

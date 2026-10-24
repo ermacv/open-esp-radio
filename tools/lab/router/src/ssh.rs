@@ -3,7 +3,15 @@
 //! goes over stdin, so no value of the stand file but the target itself is
 //! ever in an argument list (local or remote `ps`).
 
-use std::{fmt, io::Write as _, process::Stdio, time::Duration};
+use std::{
+    fmt,
+    io::{Read as _, Write as _},
+    process::Stdio,
+    time::Duration,
+};
+
+mod record;
+pub use record::{CommandLog, CommandObservation, CommandRecord, Stderr, read_stderr};
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -26,6 +34,7 @@ pub trait Remote {
 /// [`COMMAND_TIMEOUT`].
 pub struct Ssh {
     target: String,
+    log: Option<CommandLog>,
 }
 
 impl fmt::Debug for Ssh {
@@ -47,7 +56,25 @@ impl Ssh {
         }
         Ok(Self {
             target: target.to_owned(),
+            log: None,
         })
+    }
+
+    pub fn with_log(mut self, log: CommandLog) -> Self {
+        self.log = Some(log);
+        self
+    }
+
+    /// Another command connection to the same host, with the same run sink.
+    pub fn parallel(&self) -> Self {
+        Self {
+            target: self.target.clone(),
+            log: self.log.clone(),
+        }
+    }
+
+    pub fn observe(&self, script: &str) -> CommandObservation {
+        CommandObservation::new(self.log.clone(), script)
     }
 
     /// The command; the script is not in it.
@@ -66,30 +93,80 @@ impl Ssh {
     /// status: what a caller that reads the status or the error output
     /// itself takes.
     pub fn output(&self, script: &str, timeout: Duration) -> Result<std::process::Output> {
-        self.start(script)?
-            .wait_with_output_timeout(Some(timeout))
-            .map_err(|error| {
-                if error.to_string().contains("deadline") {
-                    format!("no answer within {} s", timeout.as_secs())
-                } else {
-                    format!("ssh failed: {error}")
-                }
-            })
+        let mut child = self.start(script)?;
+        let mut stdout = child.take_stdout().ok_or("ssh has no stdout")?;
+        let stderr = child.take_stderr().ok_or("ssh has no stderr")?;
+        let diagnostics = std::thread::spawn(move || read_stderr(stderr, |_| {}));
+        let output = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let waited = child.wait_timeout(Some(timeout)).map_err(|error| {
+            if error.to_string().contains("deadline") {
+                format!("no answer within {} s", timeout.as_secs())
+            } else {
+                format!("ssh failed: {error}")
+            }
+        });
+        // wait_timeout stops the owned process on error; both readers still
+        // drain their pipes, retaining diagnostics from a timeout/cancellation.
+        let status = child.try_wait().ok().flatten();
+        let diagnostics = diagnostics.join().unwrap_or_else(|_| Stderr {
+            text: String::new(),
+            error: Some("router stderr reader panicked".into()),
+        });
+        let output = output
+            .join()
+            .map_err(|_| "router stdout reader panicked".to_owned())
+            .and_then(|result| result.map_err(|_| "cannot read router stdout".to_owned()));
+        let error = diagnostics
+            .error
+            .as_deref()
+            .or_else(|| waited.as_ref().err().map(String::as_str))
+            .or_else(|| output.as_ref().err().map(String::as_str));
+        self.observe(script)
+            .finish(status, &diagnostics.text, error);
+        if let Some(error) = error {
+            return Err(error.to_owned());
+        }
+        Ok(std::process::Output {
+            status: waited?,
+            stdout: output?,
+            stderr: diagnostics.text.into_bytes(),
+        })
     }
 
     /// Start a script with piped output, owned by the caller until stopped.
     /// Streaming observers consume and filter both streams in memory.
     pub fn start(&self, script: &str) -> Result<oer_os_process::owned::Child> {
-        let mut child = oer_os_process::owned::Child::spawn(&mut self.command())
-            .map_err(|error| format!("cannot run ssh: {error}"))?;
+        let mut child =
+            oer_os_process::owned::Child::spawn(&mut self.command()).map_err(|error| {
+                let error = format!("cannot run ssh: {error}");
+                self.observe(script).finish(None, "", Some(&error));
+                error
+            })?;
         // A script far below the pipe's capacity: the write never waits for
         // ssh to read.
-        child
+        let written = child
             .stdin
             .take()
             .ok_or("ssh has no stdin")?
             .write_all(script.as_bytes())
-            .map_err(|error| format!("cannot hand ssh the script: {error}"))?;
+            .map_err(|error| format!("cannot hand ssh the script: {error}"));
+        if let Err(error) = written {
+            let _ = child.kill();
+            let diagnostics = child
+                .take_stderr()
+                .map(|reader| read_stderr(reader, |_| {}));
+            self.observe(script).finish(
+                child.try_wait().ok().flatten(),
+                diagnostics
+                    .as_ref()
+                    .map_or("", |diagnostics| diagnostics.text.as_str()),
+                Some(&error),
+            );
+            return Err(error);
+        }
         Ok(child)
     }
 }

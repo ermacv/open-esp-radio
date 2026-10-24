@@ -12,6 +12,7 @@ use std::{
 use oer_os_process::owned::Child;
 
 use crate::{Result, config::LabConfig, lock::FixtureLock};
+pub mod station;
 
 /// The maximum raw capture, including headers. Exhaustion fails the run.
 const MAX_PCAP: usize = 32 * 1024 * 1024;
@@ -37,8 +38,9 @@ pub struct Frame {
 pub struct AirCapture {
     child: Option<Child>,
     reader: Option<JoinHandle<Result<Vec<u8>>>>,
+    stats: Option<JoinHandle<Result<u32>>>,
     monitor: bool,
-    _lease: FixtureLock,
+    _lease: Option<FixtureLock>,
 }
 
 fn helper(mode: &str, input: &[u8]) -> Result<()> {
@@ -74,9 +76,24 @@ impl AirCapture {
                 ..Default::default()
             },
         )?;
+        Self::start_inner(channel, Some(lease))
+    }
+
+    /// Capture inside a HIL workload whose plan already holds the laptop
+    /// physical-radio, fixture-software and air leases for the whole capture.
+    /// Taking another lease here would deadlock on the enclosing run's radio.
+    pub fn start_in_run(channel: u8) -> Result<Self> {
+        if !(1..=13).contains(&channel) {
+            return Err("capture channel must be 1..=13".into());
+        }
+        Self::start_inner(channel, None)
+    }
+
+    fn start_inner(channel: u8, lease: Option<FixtureLock>) -> Result<Self> {
         let mut capture = Self {
             child: None,
             reader: None,
+            stats: None,
             monitor: true,
             _lease: lease,
         };
@@ -89,8 +106,17 @@ impl AirCapture {
         command
             .args(["-i", "mon0", "-P", "-w", "-", "-q"])
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         let mut child = Child::spawn(&mut command)?;
+        let mut stats = child.take_stderr().ok_or("dumpcap has no status stream")?;
+        capture.stats = Some(std::thread::spawn(move || {
+            let mut text = String::new();
+            stats.by_ref().take(8193).read_to_string(&mut text)?;
+            if text.len() > 8192 {
+                return Err("capture status exceeded memory bound".into());
+            }
+            capture_drops(&text)
+        }));
         let mut stream = child.take_stdout().ok_or("dumpcap has no stdout")?;
         let (ready, started) = mpsc::sync_channel(1);
         capture.child = Some(child);
@@ -127,7 +153,46 @@ impl AirCapture {
             .ok_or("capture reader is missing")?
             .join()
             .map_err(|_| "capture reader panicked")??;
+        let drops = self.finish_stats()?;
+        if drops != 0 {
+            return Err("air capture dropped packets".into());
+        }
         decode(&pcap)
+    }
+
+    /// Project station metadata in memory; raw pcap and key data never leave
+    /// the capture owner. Caller persists only the returned public metadata.
+    pub fn finish_station(
+        mut self,
+        target: [u8; 6],
+        ap: [u8; 6],
+    ) -> Result<(Vec<station::StationFrame>, u32, station::ProjectionStats)> {
+        self.stop()?;
+        let pcap = self
+            .reader
+            .take()
+            .ok_or("capture reader is missing")?
+            .join()
+            .map_err(|_| "capture reader panicked")??;
+        let drops = self.finish_stats()?;
+        let text = decode_fields(
+            &pcap,
+            "wlan.fc.type == 0 || wlan.fc.type == 2",
+            &station::FIELDS,
+        )?;
+        Ok((
+            station::parse(&text, target, ap)?,
+            drops,
+            station::projection_stats(&text, ap)?,
+        ))
+    }
+
+    fn finish_stats(&mut self) -> Result<u32> {
+        self.stats
+            .take()
+            .ok_or("capture status reader is missing")?
+            .join()
+            .map_err(|_| "capture status reader panicked")?
     }
 
     fn stop(&mut self) -> Result<()> {
@@ -150,11 +215,34 @@ impl Drop for AirCapture {
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
         }
+        if let Some(stats) = self.stats.take() {
+            let _ = stats.join();
+        }
     }
 }
 
 /// Decode a bounded in-memory pcap. tshark never receives a file path.
 pub fn decode(pcap: &[u8]) -> Result<Vec<Frame>> {
+    let text = decode_fields(
+        pcap,
+        "wlan.fc.type_subtype == 4 || wlan.fc.type_subtype == 5 || wlan.fc.type_subtype == 29",
+        &[
+            "frame.time_epoch",
+            "radiotap.channel.freq",
+            "radiotap.datarate",
+            "wlan.fc.type_subtype",
+            "wlan.sa",
+            "wlan.ra",
+            "wlan.bssid",
+            "wlan.seq",
+            "wlan.fc.retry",
+            "wlan.ssid",
+        ],
+    )?;
+    parse(&text)
+}
+
+fn decode_fields(pcap: &[u8], filter: &str, fields: &[&str]) -> Result<String> {
     if pcap.len() > MAX_PCAP {
         return Err("air capture exceeded memory bound".into());
     }
@@ -164,24 +252,13 @@ pub fn decode(pcap: &[u8]) -> Result<Vec<Frame>> {
         "-r",
         "-",
         "-Y",
-        "wlan.fc.type_subtype == 4 || wlan.fc.type_subtype == 5 || wlan.fc.type_subtype == 29",
+        filter,
         "-T",
         "fields",
         "-E",
         "occurrence=f",
     ]);
-    for field in [
-        "frame.time_epoch",
-        "radiotap.channel.freq",
-        "radiotap.datarate",
-        "wlan.fc.type_subtype",
-        "wlan.sa",
-        "wlan.ra",
-        "wlan.bssid",
-        "wlan.seq",
-        "wlan.fc.retry",
-        "wlan.ssid",
-    ] {
+    for field in fields {
         command.args(["-e", field]);
     }
     command
@@ -200,7 +277,32 @@ pub fn decode(pcap: &[u8]) -> Result<Vec<Frame>> {
     if !output.status.success() {
         return Err("tshark could not decode the air capture".into());
     }
-    parse(std::str::from_utf8(&output.stdout)?)
+    String::from_utf8(output.stdout).map_err(|_| "invalid tshark output encoding".into())
+}
+
+fn capture_drops(text: &str) -> Result<u32> {
+    let mut summaries = text
+        .lines()
+        .filter(|line| line.starts_with("Packets received/dropped on interface "));
+    let summary = summaries
+        .next()
+        .ok_or("capture has no packet-drop statistics")?;
+    if summaries.next().is_some() {
+        return Err("capture has repeated packet-drop statistics".into());
+    }
+    let counts = summary
+        .split_once("': ")
+        .and_then(|(_, tail)| tail.split_whitespace().next())
+        .and_then(|counts| counts.split_once('/'))
+        .ok_or("invalid capture statistics")?;
+    let _: u32 = counts
+        .0
+        .parse()
+        .map_err(|_| "invalid capture received count")?;
+    counts
+        .1
+        .parse()
+        .map_err(|_| "invalid capture dropped count".into())
 }
 
 fn mac(value: &str) -> Result<[u8; 6]> {

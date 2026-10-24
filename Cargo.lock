@@ -3430,6 +3430,7 @@ dependencies = [
  "oer-espressif-ieee80211-policy",
  "oer-espressif-staged-runtime",
  "oer-espressif-usb-fifo",
+ "oer-firmware-apps-w3",
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-ieee80211-arbiter",
@@ -3681,6 +3682,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-family-wifi"
+version = "0.1.0"
+dependencies = [
+ "oer-hil-family-lower-mac",
+ "oer-hil-lab",
+ "oer-hil-link",
+ "oer-hil-model",
+ "oer-hil-protocol",
+ "oer-hil-runs",
+ "oer-hil-scenario",
+ "oer-ieee80211-port",
+ "oer-lab-router",
+ "oer-os-durable",
+ "oer-os-process",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "oer-hil-fixtures-bluetooth"
 version = "0.1.0"
 dependencies = [
@@ -3812,6 +3833,7 @@ dependencies = [
  "oer-hil-analysis",
  "oer-hil-family-lower-mac",
  "oer-hil-family-system",
+ "oer-hil-family-wifi",
  "oer-hil-lab",
  "oer-hil-link",
  "oer-hil-model",

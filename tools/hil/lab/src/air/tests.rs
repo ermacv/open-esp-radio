@@ -1,5 +1,24 @@
 use super::*;
 
+#[test]
+fn capture_requires_one_explicit_drop_counter_and_never_repeats_diagnostics() {
+    let summary = "Packets received/dropped on interface 'mon0': 450/0 (pcap:0/dumpcap:0/flushed:0/ps_ifdrop:0) (100.0%)\n";
+    assert_eq!(capture_drops(summary).expect("statistics"), 0);
+    assert_eq!(
+        capture_drops(&summary.replace("450/0", "450/2")).expect("drops"),
+        2
+    );
+    assert!(capture_drops("").is_err());
+    assert!(capture_drops(&summary.repeat(2)).is_err());
+    let secret = "sensitive-passphrase";
+    assert!(
+        !capture_drops(secret)
+            .expect_err("invalid statistics")
+            .to_string()
+            .contains(secret)
+    );
+}
+
 const TARGET: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const AP: [u8; 6] = [2, 0, 0, 0, 0, 2];
 

@@ -1,0 +1,8 @@
+schema = 5
+id = "w4"
+description = "WPA2-Personal station: four-way handshake, bidirectional ICMP, GTK change, protected air traffic and reconnect"
+role = "qualification"
+tags = ["wifi", "air-exclusive"]
+
+[wifi]
+kind = "w4"

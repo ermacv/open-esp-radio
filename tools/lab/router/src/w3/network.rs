@@ -161,7 +161,7 @@ const SECTIONS: &[&str] = &[
 pub fn render() -> Result<String> {
     let mut script = String::from("set -e\n");
     for section in SECTIONS {
-        script.push_str(&format!("uci -q delete {} || :\n", quote(section)?));
+        script.push_str(&format!("uci delete {} || :\n", quote(section)?));
     }
     for value in settings() {
         script.push_str(&format!(
@@ -172,8 +172,8 @@ pub fn render() -> Result<String> {
     }
     script.push_str(
         "uci reorder firewall.oer_w3_out=0\nuci reorder firewall.oer_w3_in=0\n\
-        fw4 check >/dev/null 2>&1\n\
-        uci commit firewall\n/etc/init.d/firewall reload >/dev/null 2>&1\n\
+        fw4 check >/dev/null\n\
+        uci commit firewall\n/etc/init.d/firewall reload >/dev/null\n\
         uci commit network\nuci commit dhcp\nubus call network reload >/dev/null\n\
         ifup oer_w3\n",
     );
@@ -271,7 +271,7 @@ pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<
     // fw4 resolves the source-zone device set again now that netifd has
     // created the bridge. The initial reload precedes W3 activation.
     remote
-        .run("/etc/init.d/firewall reload >/dev/null 2>&1")
+        .run("/etc/init.d/firewall reload >/dev/null")
         .map_err(|_| "cannot reload firewall for the active W3 device")?;
     let script = verify_script(interface)?;
     let mut verified = false;
@@ -295,7 +295,7 @@ pub fn verify(remote: &mut dyn Remote, interface: &str, before: &str) -> Result<
     }
     // DHCP starts only once the AP belongs to its addressed bridge.
     remote
-        .run("/etc/init.d/dnsmasq reload >/dev/null 2>&1")
+        .run("/etc/init.d/dnsmasq reload >/dev/null")
         .map_err(|_| "cannot reload W3 DHCP service")?;
     let ready = format!(
         "set -e\ntest -r {}\ntest \"$(ubus call service list '{{\"name\":\"dnsmasq\"}}' | jsonfilter -e '@.dnsmasq.instances.oer_w3_dns.running')\" = true\nprintf 'ready\\n'",
