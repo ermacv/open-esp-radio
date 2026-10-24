@@ -162,29 +162,7 @@ pub fn fullness(
     }
 }
 
-/// The reasons a unit was dropped or refused: the runner's drops first
-/// (their unit never reaches the application, so its descriptor index is
-/// missing from the frames taken), then the application's RX-control
-/// prefix refusals (the frame was taken; its index is listed).
-pub const DISCARDS: [&str; 15] = [
-    "empty",
-    "too_long",
-    "chained",
-    "oversized",
-    "overload",
-    "rx_failure",
-    "mic_failure",
-    "quarantined",
-    "invalid",
-    "prefix_chain",
-    "bounds",
-    "output_small",
-    "metadata",
-    "ignored",
-    "unsupported",
-];
-
-/// The counts of [`DISCARDS`] in `report`.
+/// The counts of [`oer_diagnostics::note::DISCARDS`] in `report`, in its order.
 pub fn discards(report: &WifiRxReport) -> [u32; 15] {
     let prefix = &report.prefix;
     [
@@ -320,7 +298,7 @@ pub struct Cycle {
     pub first_after_release: heapless::Vec<Option<usize>, FIRST_AFTER>,
     pub order_breaks: u32,
     /// Chained and oversized drops from the first drop to the end of the
-    /// frames after the release, and every [`DISCARDS`] count over the
+    /// frames after the release, and every [`oer_diagnostics::note::DISCARDS`] count over the
     /// same window.
     pub chained: u32,
     pub oversized: u32,

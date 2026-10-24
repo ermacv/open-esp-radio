@@ -206,13 +206,19 @@ mod render {
                     Field::Wide => 2,
                     Field::Bytes8 => 3,
                     Field::Bytes16 => 5,
+                    Field::Dash | Field::HexDash | Field::SignedDash | Field::By => 2,
+                    Field::Range | Field::SignedRange => 3,
+                    Field::Over => 4,
+                    Field::Indices => 5,
+                    Field::DiscardsLow | Field::DiscardsHigh => 8,
+                    Field::Phrase => 0,
                     Field::Name | Field::Path => 0,
                     _ => 1,
                 })
                 .sum();
             let names = fields
                 .iter()
-                .filter(|(_, field)| *field == Field::Name)
+                .filter(|(_, field)| matches!(*field, Field::Name | Field::Phrase))
                 .count();
             assert_eq!(
                 (words, names),
@@ -331,12 +337,16 @@ mod parts {
     use crate::note::Part;
 
     #[test]
-    fn a_topic_with_no_text_of_its_own_continues_a_line_and_only_such_a_topic_does() {
+    fn a_topic_that_continues_a_line_never_starts_one() {
         for &topic in ALL_TOPICS {
             let (prefix, _) = topic.layout();
-            assert_eq!(
-                prefix.is_empty(),
-                matches!(topic.part(), Part::Middle | Part::Last),
+            let continues = matches!(topic.part(), Part::Middle | Part::Last);
+            // An empty prefix is a continuation, and a continuation's text
+            // joins the line before it: it begins with a separator or with
+            // a field.
+            assert!(!prefix.is_empty() || continues, "{topic:?}");
+            assert!(
+                !continues || prefix.is_empty() || prefix.starts_with([' ', ';']),
                 "{topic:?}"
             );
         }
@@ -385,6 +395,159 @@ mod reports {
         assert_eq!(
             text(&Note::w3_lease(true, [192, 0, 2, 8], [192, 0, 2, 1], 24)),
             "w3.lease acquired=1 address=192.0.2.8 router=192.0.2.1 prefix=24"
+        );
+    }
+}
+
+#[cfg(feature = "render")]
+mod w1 {
+    use super::*;
+    use std::string::String;
+
+    /// The text of the notes of one line, joined as the host joins them.
+    fn line(notes: &[Note<'_>]) -> String {
+        let mut text = String::new();
+        for note in notes {
+            crate::render::note(note, &mut text).unwrap();
+        }
+        text
+    }
+
+    #[test]
+    fn config_and_bss_read_as_the_block_the_check_parses() {
+        assert_eq!(
+            line(&[
+                Note::w1_config_a(13, 13, [0xBB, 0xD3], 1, 5000, 160_000_000, (16, 2048)),
+                Note::w1_config_b(6, 0x1234_5678),
+            ]),
+            "w1.config channel=13 applied_channel=13 stand=xx:xx:xx:xx:BB:D3 ssid_matches=1 \
+             window_ms=5000 cpu_hz=160000000 arena=16x2048 slots=6 mask=0x12345678"
+        );
+        assert_eq!(
+            line(&[
+                Note::w1_bss_a(0, "stand", [0xBB, 0xD3], 100, 13, 40, 2, 0),
+                Note::w1_bss_b(Some((-70, -42)), 3, 1, 150_000, 4),
+                Note::w1_bss_c(Some((10, 900)), 3, true, Some(4_000_000)),
+                Note::w1_bss_d(None),
+            ]),
+            "w1.bss idx=0 who=stand bssid=xx:xx:xx:xx:BB:D3 bi_tu=100 ch=13 beacons=40 dup=2 \
+             probe_rsp=0 rssi=-70..-42 no_rssi=3 gaps_late=1 max_gap_us=150000 missed=4 \
+             lag_us=10..900 ssid_len=3 ssid_ok=1 stamp_span_us=4000000 handoff_span_us=-"
+        );
+        assert_eq!(
+            line(&[
+                Note::w1_bss_a(1, "other", [1, 2], 0, 1, 0, 0, 0),
+                Note::w1_bss_b(None, 0, 0, 0, 0),
+                Note::w1_bss_c(None, 0, false, None),
+                Note::w1_bss_d(Some(7)),
+            ]),
+            "w1.bss idx=1 who=other bssid=xx:xx:xx:xx:01:02 bi_tu=0 ch=1 beacons=0 dup=0 \
+             probe_rsp=0 rssi=- no_rssi=0 gaps_late=0 max_gap_us=0 missed=0 lag_us=- \
+             ssid_len=0 ssid_ok=0 stamp_span_us=- handoff_span_us=7"
+        );
+    }
+
+    #[test]
+    fn dashes_hex_flags_and_indices_read_as_the_firmware_formatted_them() {
+        assert_eq!(
+            line(&[
+                Note::w1_hold_a(1, 40, 3, 6, true, "full", 9, 2, 5),
+                Note::w1_hold_b(1, Some(3), None, Some(0)),
+                Note::w1_hold_c(Some(1), None, Some(2), Some(0x17000)),
+                Note::w1_hold_d(None),
+            ]),
+            "w1.hold cycle=1 fill_ms=40 reached=3 slots=6 full=1 reason=full units=9 mac_irqs=2 \
+             stage_capacity_blocks=5 admission_blocks=1 end_released=3 end_detached=- end_staged=0 \
+             end_observed=1 end_recycle_start=- end_accepted_tail=2 end_next=0x17000 end_last=-"
+        );
+        let indices = [Some(2), None, Some(5)];
+        assert_eq!(
+            line(&[Note::w1_own_b(Some(None), &indices, 1, 2)]),
+            " first_mismatch=x first_after_release=2,x,5 order_breaks=1 chained=2"
+        );
+        assert_eq!(
+            line(&[Note::w1_own_b(None, &[], 0, 0)]),
+            " first_mismatch=- first_after_release=- order_breaks=0 chained=0"
+        );
+        assert_eq!(
+            line(&[Note::w1_own_b(Some(Some(4)), &indices, 0, 0)]),
+            " first_mismatch=4 first_after_release=2,x,5 order_breaks=0 chained=0"
+        );
+        assert_eq!(
+            line(&[Note::w1_exhaust_a(
+                0,
+                1,
+                Some(1_000_100),
+                Some(0x17000),
+                Some(false)
+            )])
+            .split(' ')
+            .skip(1)
+            .collect::<std::vec::Vec<_>>()
+            .join(" "),
+            "cycle=0 snapshots=1 blocked_us=1000100 next_low=0x17000 next_upper=0"
+        );
+    }
+
+    #[test]
+    fn discards_join_across_the_parts_and_dash_when_none() {
+        let mut counts = [0; 15];
+        assert_eq!(line(&[Note::w1_discards_none()]), " discards=-");
+        counts[1] = 3;
+        counts[9] = 5;
+        let low_any = true;
+        assert_eq!(
+            line(&[
+                Note::w1_discards_a(&counts),
+                Note::w1_discards_b((&counts, low_any)),
+            ]),
+            " discards=too_long:3,prefix_chain:5"
+        );
+        let mut only_high = [0; 15];
+        only_high[14] = 1;
+        assert_eq!(
+            line(&[
+                Note::w1_discards_a(&only_high),
+                Note::w1_discards_b((&only_high, false)),
+            ]),
+            " discards=unsupported:1"
+        );
+    }
+
+    #[test]
+    fn over_p2_and_the_result_read_as_the_check_parses_them() {
+        assert_eq!(
+            line(&[
+                Note::w1_p2_a("hold", 10, 9, 8, 7),
+                Note::w1_p2_b((3, 3), 6, 5),
+                Note::w1_p2_c(4, 3),
+            ]),
+            "w1.p2 phase=hold swi2_max_us=10 swi2_p99_us=9 actor_max_us=8 actor_p99_us=7 \
+             actor_over_bound=3 receive_max_us=6 receive_p99_us=5 mac_to_poll_max_us=4 \
+             ring_to_doorbell_max_us=3"
+        );
+        assert_eq!(
+            line(&[Note::w1_pass(55, 40)]),
+            "OER-RESULT: pass w1 beacons=55 required=40"
+        );
+        assert_eq!(
+            line(&[
+                Note::w1_fail_begin(),
+                Note::w1_fail_gate("walker_restart"),
+                Note::w1_fail_reason("received-while-held"),
+                Note::w1_fail_separator(),
+                Note::w1_fail_gate("ownership"),
+                Note::w1_fail_not_exercised(),
+                Note::w1_fail_end(),
+            ]),
+            "OER-RESULT: fail w1 walker-restart received-while-held; ownership not exercised"
+        );
+        assert_eq!(
+            line(&[
+                Note::w1_gate_name("walker_restart"),
+                Note::w1_gate_fail("held"),
+            ]),
+            "w1.gate name=walker_restart result=fail reason=held"
         );
     }
 }

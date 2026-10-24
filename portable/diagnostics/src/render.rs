@@ -61,6 +61,112 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
                     }
                 }
             }
+            Field::Dash => {
+                let (present, value) = (next()?, next()?);
+                if present != 0 {
+                    write!(out, "{value}")?
+                } else {
+                    out.write_str("-")?
+                }
+            }
+            Field::HexDash => {
+                let (present, value) = (next()?, next()?);
+                if present != 0 {
+                    write!(out, "{value:#x}")?
+                } else {
+                    out.write_str("-")?
+                }
+            }
+            Field::SignedDash => {
+                let (present, value) = (next()?, next()?);
+                if present != 0 {
+                    write!(out, "{}", value as i32)?
+                } else {
+                    out.write_str("-")?
+                }
+            }
+            Field::BitDash => out.write_str(match next()? {
+                0 => "-",
+                1 => "0",
+                _ => "1",
+            })?,
+            Field::Range => {
+                let (present, min, max) = (next()?, next()?, next()?);
+                if present != 0 {
+                    write!(out, "{min}..{max}")?
+                } else {
+                    out.write_str("-")?
+                }
+            }
+            Field::SignedRange => {
+                let (present, min, max) = (next()?, next()?, next()?);
+                if present != 0 {
+                    write!(out, "{}..{}", min as i32, max as i32)?
+                } else {
+                    out.write_str("-")?
+                }
+            }
+            Field::Over => {
+                let mut wide = || -> Result<u64, fmt::Error> {
+                    let low = u64::from(next()?);
+                    Ok(low | u64::from(next()?) << 32)
+                };
+                let (lower, upper) = (wide()?, wide()?);
+                if lower == upper {
+                    write!(out, "{lower}")?
+                } else {
+                    write!(out, "{lower}..{upper}")?
+                }
+            }
+            Field::By => {
+                let (a, b) = (next()?, next()?);
+                write!(out, "{a}x{b}")?
+            }
+            Field::Indices => {
+                let count = next()? as usize;
+                let mut packed = [0_u8; 16];
+                for chunk in packed.chunks_exact_mut(4) {
+                    chunk.copy_from_slice(&next()?.to_be_bytes());
+                }
+                if count == 0 {
+                    out.write_str("-")?;
+                }
+                for (position, index) in packed.iter().take(count).enumerate() {
+                    if position > 0 {
+                        out.write_char(',')?;
+                    }
+                    match index {
+                        255 => out.write_char('x')?,
+                        index => write!(out, "{index}")?,
+                    }
+                }
+            }
+            Field::IndexDash => match next()? {
+                0 => out.write_str("-")?,
+                1 => out.write_str("x")?,
+                value => write!(out, "{}", value - 2)?,
+            },
+            Field::DiscardsLow | Field::DiscardsHigh => {
+                let high = matches!(*field, Field::DiscardsHigh);
+                let mut separate = high && next()? != 0;
+                let (first, count) = if high { (8, 7) } else { (0, 8) };
+                for index in first..first + count {
+                    let value = next()?;
+                    if value != 0 {
+                        if separate {
+                            out.write_char(',')?;
+                        }
+                        separate = true;
+                        let reason = crate::note::DISCARDS.get(index).ok_or(fmt::Error)?;
+                        write!(out, "{reason}:{value}")?;
+                    }
+                }
+            }
+            Field::Phrase => {
+                for character in names.next().ok_or(fmt::Error)?.chars() {
+                    out.write_char(if character == '_' { '-' } else { character })?;
+                }
+            }
             Field::Ipv4 => {
                 let [a, b, c, d] = next()?.to_be_bytes();
                 write!(out, "{a}.{b}.{c}.{d}")?

@@ -17,6 +17,27 @@ pub enum Part {
     Last,
 }
 
+/// The reasons a unit was dropped or refused, in the order of the discard
+/// counts a note carries: the runner's drops first, then the application's
+/// RX-control prefix refusals.
+pub const DISCARDS: [&str; 15] = [
+    "empty",
+    "too_long",
+    "chained",
+    "oversized",
+    "overload",
+    "rx_failure",
+    "mic_failure",
+    "quarantined",
+    "invalid",
+    "prefix_chain",
+    "bounds",
+    "output_small",
+    "metadata",
+    "ignored",
+    "unsupported",
+];
+
 /// Most 32-bit words one note carries.
 pub const MAX_WORDS: usize = 8;
 /// Most names (static text such as a register or a variant) in one note.
@@ -53,6 +74,36 @@ pub enum Field {
     Bytes8,
     /// As [`Field::Bytes8`], for at most 16 bytes in a length word and four.
     Bytes16,
+    /// A present flag and a number: the decimal, or `-` without one.
+    Dash,
+    /// A present flag and a number: `0x` and the hexadecimal, or `-`.
+    HexDash,
+    /// A present flag and a signed number, or `-`.
+    SignedDash,
+    /// `-` for 0, `0` for 1 and `1` for 2.
+    BitDash,
+    /// A present flag, a minimum and a maximum: `min..max`, or `-`.
+    Range,
+    /// As [`Field::Range`], for signed numbers.
+    SignedRange,
+    /// A 64-bit lower and upper bound: the number when they agree,
+    /// otherwise `lower..upper`.
+    Over,
+    /// Two numbers as `AxB`.
+    By,
+    /// A count and up to sixteen descriptor indices, a byte each (255 for an
+    /// unknown one), as `1,x,3`, or `-` without one.
+    Indices,
+    /// `-` for 0, `x` for 1, and `n` for the word `n + 2`.
+    IndexDash,
+    /// The first eight of the fifteen discard counts: the nonzero ones as
+    /// `reason:count` joined by `,`.
+    DiscardsLow,
+    /// A separator flag, then the last seven discard counts, as the nonzero
+    /// `reason:count`; the flag asks for a `,` before the first one.
+    DiscardsHigh,
+    /// A name whose `_` are printed as `-`.
+    Phrase,
     /// A 64-bit decimal in two words, low word first.
     Wide,
     /// A signed decimal.
@@ -146,6 +197,34 @@ impl<'a> Note<'a> {
         note
     }
 
+    /// A count word and the first sixteen indices, a byte each, four to a
+    /// word with the first in the high byte; an unknown index is 255. An
+    /// index past 254 or an entry past sixteen would not fit and is kept as
+    /// unknown: the ring is smaller than that.
+    fn index_words(self, indices: &[Option<usize>]) -> Self {
+        let kept = indices.get(..indices.len().min(16)).unwrap_or(&[]);
+        let mut note = self.word(kept.len() as u32);
+        for chunk in 0..4 {
+            let mut word = [0xff; 4];
+            for (slot, index) in word.iter_mut().zip(kept.iter().skip(4 * chunk)) {
+                *slot = match index {
+                    Some(index) if *index < 255 => *index as u8,
+                    _ => 255,
+                };
+            }
+            note = note.word(u32::from_be_bytes(word));
+        }
+        note
+    }
+
+    /// `count` discard counts of `counts` from `first`.
+    fn discard_words(mut self, counts: &[u32; 15], first: usize, count: usize) -> Self {
+        for index in first..first + count {
+            self = self.word(counts.get(index).copied().unwrap_or(0));
+        }
+        self
+    }
+
     fn wide(self, value: u64) -> Self {
         self.word(value as u32).word((value >> 32) as u32)
     }
@@ -211,6 +290,19 @@ macro_rules! argument {
     (mactail) => { [u8; 2] };
     (ipv4) => { [u8; 4] };
     (ascii2) => { [u8; 2] };
+    (dash) => { Option<u32> };
+    (hexdash) => { Option<u32> };
+    (sdash) => { Option<i32> };
+    (bitdash) => { Option<bool> };
+    (range) => { Option<(u32, u32)> };
+    (srange) => { Option<(i32, i32)> };
+    (over) => { (u64, u64) };
+    (by) => { (u32, u32) };
+    (indices) => { &[Option<usize>] };
+    (indexdash) => { Option<Option<usize>> };
+    (discards_lo) => { &[u32; 15] };
+    (discards_hi) => { (&[u32; 15], bool) };
+    (phrase) => { &'a str };
     (i8x4) => { [i8; 4] };
     (bytes8) => { &[u8] };
     (bytes16) => { &[u8] };
@@ -261,6 +353,65 @@ macro_rules! push {
     ($note:ident, $value:ident, ipv4) => {
         $note.word(u32::from_be_bytes($value))
     };
+    ($note:ident, $value:ident, dash) => {
+        $note
+            .word($value.is_some() as u32)
+            .word($value.unwrap_or(0))
+    };
+    ($note:ident, $value:ident, hexdash) => {
+        $note
+            .word($value.is_some() as u32)
+            .word($value.unwrap_or(0))
+    };
+    ($note:ident, $value:ident, sdash) => {
+        $note
+            .word($value.is_some() as u32)
+            .word($value.unwrap_or(0) as u32)
+    };
+    ($note:ident, $value:ident, bitdash) => {
+        $note.word(match $value {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        })
+    };
+    ($note:ident, $value:ident, range) => {
+        $note
+            .word($value.is_some() as u32)
+            .word($value.map_or(0, |range| range.0))
+            .word($value.map_or(0, |range| range.1))
+    };
+    ($note:ident, $value:ident, srange) => {
+        $note
+            .word($value.is_some() as u32)
+            .word($value.map_or(0, |range| range.0) as u32)
+            .word($value.map_or(0, |range| range.1) as u32)
+    };
+    ($note:ident, $value:ident, over) => {
+        $note.wide($value.0).wide($value.1)
+    };
+    ($note:ident, $value:ident, by) => {
+        $note.word($value.0).word($value.1)
+    };
+    ($note:ident, $value:ident, indices) => {
+        $note.index_words($value)
+    };
+    ($note:ident, $value:ident, indexdash) => {
+        $note.word(match $value {
+            None => 0,
+            Some(None) => 1,
+            Some(Some(index)) => (index as u32).saturating_add(2),
+        })
+    };
+    ($note:ident, $value:ident, discards_lo) => {
+        $note.discard_words($value, 0, 8)
+    };
+    ($note:ident, $value:ident, discards_hi) => {
+        $note.word($value.1 as u32).discard_words($value.0, 8, 7)
+    };
+    ($note:ident, $value:ident, phrase) => {
+        $note.named($value)
+    };
     ($note:ident, $value:ident, ascii2) => {
         $note.word(u32::from(u16::from_be_bytes($value)))
     };
@@ -288,6 +439,39 @@ macro_rules! words_of {
     (bytes8) => {
         3
     };
+    (dash) => {
+        2
+    };
+    (hexdash) => {
+        2
+    };
+    (sdash) => {
+        2
+    };
+    (range) => {
+        3
+    };
+    (srange) => {
+        3
+    };
+    (over) => {
+        4
+    };
+    (by) => {
+        2
+    };
+    (indices) => {
+        5
+    };
+    (discards_lo) => {
+        8
+    };
+    (discards_hi) => {
+        8
+    };
+    (phrase) => {
+        0
+    };
     (bytes16) => {
         5
     };
@@ -304,6 +488,9 @@ macro_rules! words_of {
 
 macro_rules! names_of {
     (name) => {
+        1
+    };
+    (phrase) => {
         1
     };
     (path) => {
@@ -366,6 +553,45 @@ macro_rules! field_of {
     };
     (ascii2) => {
         Field::Ascii2
+    };
+    (dash) => {
+        Field::Dash
+    };
+    (hexdash) => {
+        Field::HexDash
+    };
+    (sdash) => {
+        Field::SignedDash
+    };
+    (bitdash) => {
+        Field::BitDash
+    };
+    (range) => {
+        Field::Range
+    };
+    (srange) => {
+        Field::SignedRange
+    };
+    (over) => {
+        Field::Over
+    };
+    (by) => {
+        Field::By
+    };
+    (indices) => {
+        Field::Indices
+    };
+    (indexdash) => {
+        Field::IndexDash
+    };
+    (discards_lo) => {
+        Field::DiscardsLow
+    };
+    (discards_hi) => {
+        Field::DiscardsHigh
+    };
+    (phrase) => {
+        Field::Phrase
     };
     (i8x4) => {
         Field::I8x4
@@ -602,6 +828,152 @@ topics! {
     W0Fail = 153, w0_fail, "OER-RESULT: fail w0 "
         ("" reason: name);
     W0Pass = 154, w0_pass, "OER-RESULT: pass w0" ();
+    /// W1 console block.
+    W1ConfigA = 200, w1_config_a, "w1.config"
+        ("channel" channel: dec, "applied_channel" applied_channel: dec, "stand" stand: mactail, "ssid_matches" ssid_matches: dec, "window_ms" window_ms: dec, "cpu_hz" cpu_hz: dec, "arena" arena: by);
+    W1ConfigB = 201, w1_config_b, ""
+        ("slots" slots: dec, "mask" mask: hexa10);
+    W1BssA = 202, w1_bss_a, "w1.bss"
+        ("idx" idx: dec, "who" who: name, "bssid" bssid: mactail, "bi_tu" bi_tu: dec, "ch" ch: dec, "beacons" beacons: dec, "dup" dup: dec, "probe_rsp" probe_rsp: dec);
+    W1BssB = 203, w1_bss_b, ""
+        ("rssi" rssi: srange, "no_rssi" no_rssi: dec, "gaps_late" gaps_late: dec, "max_gap_us" max_gap_us: dec, "missed" missed: dec);
+    W1BssC = 204, w1_bss_c, ""
+        ("lag_us" lag_us: range, "ssid_len" ssid_len: dec, "ssid_ok" ssid_ok: bit, "stamp_span_us" stamp_span_us: dash);
+    W1BssD = 205, w1_bss_d, ""
+        ("handoff_span_us" handoff_span_us: dash);
+    W1Gap = 206, w1_gap, "w1.gap"
+        ("stamp" stamp: dec, "gap_us" gap_us: dec, "missed" missed: dash);
+    W1Gaps = 207, w1_gaps, "w1.gaps"
+        ("dropped" dropped: dec);
+    W1Tick = 208, w1_tick, "w1.tick"
+        ("start" start: dec, "end" end: dec, "ok" ok: bit);
+    W1RxA = 209, w1_rx_a, "w1.rx"
+        ("units" units: dec, "bytes" bytes: dec, "mac_irqs" mac_irqs: dec, "power_irqs" power_irqs: dec, "unserviced_mac" unserviced_mac: dec, "unserviced_pwr" unserviced_pwr: dec, "doorbell_unmasks" doorbell_unmasks: dec, "ignored_unmasks" ignored_unmasks: dec);
+    W1RxB = 210, w1_rx_b, ""
+        ("chained" chained: dec, "oversized" oversized: dec, "empty" empty: dec, "too_long" too_long: dec, "overload" overload: dec, "admission_blocks" admission_blocks: dec, "stage_capacity_blocks" stage_capacity_blocks: dec, "service_passes" service_passes: dec);
+    W1RxC = 211, w1_rx_c, ""
+        ("service_errors" service_errors: dec, "capacity_drains" capacity_drains: dec, "frames_after_release" frames_after_release: dec);
+    W1HoldA = 212, w1_hold_a, "w1.hold"
+        ("cycle" cycle: dec, "fill_ms" fill_ms: dec, "reached" reached: dec, "slots" slots: dec, "full" full: bit, "reason" reason: name, "units" units: dec, "mac_irqs" mac_irqs: dec, "stage_capacity_blocks" stage_capacity_blocks: dec);
+    W1HoldB = 213, w1_hold_b, ""
+        ("admission_blocks" admission_blocks: dec, "end_released" end_released: dash, "end_detached" end_detached: dash, "end_staged" end_staged: dash);
+    W1HoldC = 214, w1_hold_c, ""
+        ("end_observed" end_observed: dash, "end_recycle_start" end_recycle_start: dash, "end_accepted_tail" end_accepted_tail: dash, "end_next" end_next: hexdash);
+    W1HoldD = 215, w1_hold_d, ""
+        ("end_last" end_last: hexdash);
+    W1ExhaustA = 216, w1_exhaust_a, "w1.exhaust"
+        ("cycle" cycle: dec, "snapshots" snapshots: dec, "blocked_us" blocked_us: dash, "next_low" next_low: hexdash, "next_upper" next_upper: bitdash);
+    W1ExhaustB = 217, w1_exhaust_b, ""
+        ("last_low" last_low: hexdash, "base" base: hexdash, "walker" walker: bitdash, "doorbell" doorbell: bitdash, "buffer_full" buffer_full: dash);
+    W1ExhaustC = 218, w1_exhaust_c, ""
+        ("ring_base" ring_base: hexdash, "recycle_start" recycle_start: dash, "accepted_tail" accepted_tail: dash, "observed" observed: dash);
+    W1ExhaustD = 219, w1_exhaust_d, ""
+        ("completed" completed: dash, "remaining" remaining: dash, "reload_pending" reload_pending: bitdash, "released" released: dash);
+    W1ExhaustE = 220, w1_exhaust_e, ""
+        ("detached" detached: dash, "staged" staged: dash, "next_after_doorbell" next_after_doorbell: hexdash, "last_after_doorbell" last_after_doorbell: hexdash);
+    W1ExhaustF = 221, w1_exhaust_f, ""
+        ("desc_hash_changed" desc_hash_changed: bitdash);
+    W1OwnA = 222, w1_own_a, "w1.own"
+        ("cycle" cycle: dec, "order" order: name, "held" held: dec, "owner_clear" owner_clear: dec, "first_drop" first_drop: dash, "hold_mismatch" hold_mismatch: dec, "dwell_mismatch" dwell_mismatch: dec, "release_mismatch" release_mismatch: dec);
+    W1OwnB = 223, w1_own_b, ""
+        ("first_mismatch" first_mismatch: indexdash, "first_after_release" first_after_release: indices, "order_breaks" order_breaks: dec, "chained" chained: dec);
+    W1OwnC = 224, w1_own_c, ""
+        ("oversized" oversized: dec);
+    W1PrefixA = 225, w1_prefix_a, "w1.prefix"
+        ("invalid" invalid: dec, "chain" chain: dec, "bounds" bounds: dec, "rx_failure" rx_failure: dec, "mic_failure" mic_failure: dec, "quarantined" quarantined: dec, "output_small" output_small: dec, "metadata" metadata: dec);
+    W1PrefixB = 226, w1_prefix_b, ""
+        ("ignored" ignored: dec, "unsupported" unsupported: dec, "strict_rxend_refusable" strict_rxend_refusable: dec, "strict_dump_refusable" strict_dump_refusable: dec, "admitted" admitted: dec);
+    W1ReloadA = 227, w1_reload_a, "w1.reload"
+        ("max_attempts" max_attempts: dec, "limit_us" limit_us: wide, "observations" observations: dec, "reload_rerings" reload_rerings: dec, "rering_failures" rering_failures: dec, "base_writes" base_writes: dec, "reserved_landings" reserved_landings: dec);
+    W1ReloadB = 228, w1_reload_b, ""
+        ("reserved_late_landings" reserved_late_landings: dec, "walker_on_detached" walker_on_detached: dec);
+    W1ContinuationA = 229, w1_continuation_a, "w1.continuation"
+        ("immediate" immediate: dec, "timed" timed: dec, "drained" drained: dec, "upper_layer_blocked_but_droppable" upper_layer_blocked_but_droppable: dec, "probe_pending" probe_pending: dec, "recycled_append_pending" recycled_append_pending: dec, "budget_exhausted" budget_exhausted: dec, "network_backpressured" network_backpressured: dec);
+    W1ContinuationB = 230, w1_continuation_b, ""
+        ("protocol_blocked_by_tx" protocol_blocked_by_tx: dec, "longest_streak" longest_streak: dec);
+    W1Teardown = 231, w1_teardown, "w1.teardown"
+        ("mask_confirm_us" mask_confirm_us: dec, "drain_us" drain_us: dec, "drain_polls" drain_polls: dec);
+    W1Exit = 232, w1_exit, "w1.exit"
+        ("cause" cause: name, "end" end: name);
+    W1P2A = 233, w1_p2_a, "w1.p2"
+        ("phase" phase: name, "swi2_max_us" swi2_max_us: wide, "swi2_p99_us" swi2_p99_us: wide, "actor_max_us" actor_max_us: wide, "actor_p99_us" actor_p99_us: wide);
+    W1P2B = 234, w1_p2_b, ""
+        ("actor_over_bound" actor_over_bound: over, "receive_max_us" receive_max_us: wide, "receive_p99_us" receive_p99_us: wide);
+    W1P2C = 235, w1_p2_c, ""
+        ("mac_to_poll_max_us" mac_to_poll_max_us: wide, "ring_to_doorbell_max_us" ring_to_doorbell_max_us: wide);
+    W1Clock = 236, w1_clock, "w1.clock"
+        ("op" op: name, "clock" clock: name, "phase" phase: name, "count" count: dec, "max_us" max_us: wide);
+    W1Stack = 237, w1_stack, "w1.stack"
+        ("irq_bytes" irq_bytes: dec, "irq_free" irq_free: dec);
+    W1TimerA = 238, w1_timer_a, "w1.timer"
+        ("cmp" cmp: dec, "phase" phase: name, "early" early: dec, "late_count" late_count: dec, "late_max_us" late_max_us: wide, "late_total_us" late_total_us: wide);
+    W1TimerB = 239, w1_timer_b, ""
+        ("missed" missed: dec, "unmatched" unmatched: dec, "coalesced" coalesced: dec, "overlapping" overlapping: dec, "armed_at_end" armed_at_end: bit, "waits" waits: dec, "woke_early" woke_early: dec);
+    W1Wake = 240, w1_wake, "w1.wake"
+        ("cmp" cmp: dec, "phase" phase: name, "waits" waits: dec, "woke_early" woke_early: dec);
+    W1Lag = 241, w1_lag, "w1.lag"
+        ("i" i: dec, "stamp" stamp: dec, "lag_us" lag_us: dec, "since_prev_us" since_prev_us: dash, "until_next_us" until_next_us: dash);
+    W1Lagfit = 242, w1_lagfit, "w1.lagfit"
+        ("n" n: dec, "median_us" median_us: dash, "max_us" max_us: dash, "next_arrival_matches" next_arrival_matches: dec, "tolerance_us" tolerance_us: dec);
+    W1Tsf = 243, w1_tsf, "w1.tsf"
+        ("i" i: dec, "tsf" tsf: dec, "handoff" handoff: dec);
+    W1TsffitA = 244, w1_tsffit_a, "w1.tsffit"
+        ("n" n: dec, "bss" bss: dash, "median_us" median_us: dash, "p90_us" p90_us: dash);
+    W1TsffitB = 245, w1_tsffit_b, ""
+        ("max_us" max_us: dash, "slope_ppm" slope_ppm: sdash);
+    W1Survey = 246, w1_survey, "w1.survey"
+        ("frames" frames: dec, "header_refusals" header_refusals: dec, "data" data: dec, "ignored_management" ignored_management: dec, "table_full" table_full: dec, "off_channel" off_channel: dec);
+    W1Verdict = 247, w1_verdict, "w1.verdict"
+        ("beacons" beacons: wide, "bi_us" bi_us: wide, "window_us" window_us: wide, "required" required: wide);
+    W1Begin = 248, w1_begin, "OER-W1-BEGIN v=1" ();
+    W1End = 249, w1_end, "OER-W1-END"
+        ("lines" lines: dec);
+    W1DiscardsNone = 250, w1_discards_none, " discards=-" ();
+    W1DiscardsA = 251, w1_discards_a, ""
+        ("discards" counts: discards_lo);
+    W1DiscardsB = 252, w1_discards_b, ""
+        ("" counts: discards_hi);
+    W1GateName = 253, w1_gate_name, "w1.gate"
+        ("name" name: name);
+    W1GatePass = 254, w1_gate_pass, " result=pass" ();
+    W1GateFail = 255, w1_gate_fail, " result=fail"
+        ("reason" reason: name);
+    W1GateUnexercised = 256, w1_gate_unexercised, " result=unexercised"
+        ("reason" reason: name);
+    W1Pass = 257, w1_pass, "OER-RESULT: pass w1"
+        ("beacons" beacons: wide, "required" required: wide);
+    W1FailBegin = 258, w1_fail_begin, "OER-RESULT: fail w1" ();
+    W1FailSeparator = 259, w1_fail_separator, ";" ();
+    W1FailGate = 260, w1_fail_gate, " "
+        ("" gate: phrase);
+    W1FailReason = 261, w1_fail_reason, " "
+        ("" reason: name);
+    W1FailNotExercised = 262, w1_fail_not_exercised, " not exercised" ();
+    W1FailEnd = 263, w1_fail_end, "" ();
+    W1TakeRadioFail = 264, w1_take_radio_fail, "OER-RESULT: fail w1 take_radio="
+        ("" error: name);
+    W1DoorbellFail = 265, w1_doorbell_fail, "OER-RESULT: fail w1 doorbell="
+        ("" error: name, "source" source: dec, "first" first: dec, "second" second: dec);
+    W1Fail = 266, w1_fail, "OER-RESULT: fail w1 "
+        ("" reason: name);
+    W1JoinFailed = 267, w1_join_failed, "OER w1 join failed"
+        ("cause" cause: name);
+    W1TrackFailed = 268, w1_track_failed, "OER w1 track failed"
+        ("cause" cause: name);
+    W1BindRefused = 269, w1_bind_refused, "OER w1 bind refused"
+        ("error" error: name);
+    W1BindClaimed = 270, w1_bind_claimed, "OER w1 bind refused: the arena was claimed" ();
+    W1Start = 271, w1_start, "OER w1 start"
+        ("epoch" epoch: dec, "calibration_path" calibration_path: name, "registration_us" registration_us: wide);
+    W1StartPhy = 272, w1_start_phy, "OER w1 start"
+        ("epoch" epoch: dec, "phy" phy: name);
+    W1StartTrack = 273, w1_start_track, ""
+        ("tracking_us" tracking_us: dash, "cold_mask" cold_mask: name, "expected_mask" expected_mask: hexa10);
+    W1Irq = 274, w1_irq, "OER w1 irq"
+        ("spurious_mac" spurious_mac: dec, "auxiliary_mac" auxiliary_mac: dec, "unhandled_mac" unhandled_mac: dec, "spurious_power" spurious_power: dec, "route_errors" route_errors: dec);
+    W1NoFrame = 275, w1_no_frame, "OER w1 no frame within 5 s: the window did not open" ();
+    W1ExitUnexpected = 276, w1_exit_unexpected, "OER w1 exit"
+        ("cause" cause: name, "end" end: name);
     /// The smoke image's Embassy timer rearming.
     Rearm = 7, rearm, "OPEN_RADIO_HIL rearm"
         ("step" step: dec, "delay_ms" delay_ms: wide, "elapsed_us" elapsed_us: wide);
@@ -725,6 +1097,56 @@ impl Topic {
         match self {
             Self::W2ChannelFirst => Part::First,
             Self::W2ChannelLast => Part::Last,
+            Self::W1StartTrack => Part::Last,
+            Self::W1Start | Self::W1StartPhy => Part::First,
+            Self::W1ConfigA => Part::First,
+            Self::W1ConfigB => Part::Last,
+            Self::W1BssA => Part::First,
+            Self::W1BssB => Part::Middle,
+            Self::W1BssC => Part::Middle,
+            Self::W1BssD => Part::Last,
+            Self::W1RxA => Part::First,
+            Self::W1RxB => Part::Middle,
+            Self::W1RxC => Part::Last,
+            Self::W1HoldA => Part::First,
+            Self::W1HoldB => Part::Middle,
+            Self::W1HoldC => Part::Middle,
+            Self::W1HoldD => Part::Last,
+            Self::W1ExhaustA => Part::First,
+            Self::W1ExhaustB => Part::Middle,
+            Self::W1ExhaustC => Part::Middle,
+            Self::W1ExhaustD => Part::Middle,
+            Self::W1ExhaustE => Part::Middle,
+            Self::W1ExhaustF => Part::Last,
+            Self::W1OwnA => Part::First,
+            Self::W1OwnB => Part::Middle,
+            Self::W1OwnC => Part::Middle,
+            Self::W1PrefixA => Part::First,
+            Self::W1PrefixB => Part::Last,
+            Self::W1ReloadA => Part::First,
+            Self::W1ReloadB => Part::Last,
+            Self::W1ContinuationA => Part::First,
+            Self::W1ContinuationB => Part::Last,
+            Self::W1P2A => Part::First,
+            Self::W1P2B => Part::Middle,
+            Self::W1P2C => Part::Last,
+            Self::W1TimerA => Part::First,
+            Self::W1TimerB => Part::Last,
+            Self::W1TsffitA => Part::First,
+            Self::W1TsffitB => Part::Last,
+            Self::W1DiscardsNone => Part::Last,
+            Self::W1DiscardsA => Part::Middle,
+            Self::W1DiscardsB => Part::Last,
+            Self::W1GateName => Part::First,
+            Self::W1GatePass => Part::Last,
+            Self::W1GateFail => Part::Last,
+            Self::W1GateUnexercised => Part::Last,
+            Self::W1FailBegin => Part::First,
+            Self::W1FailSeparator => Part::Middle,
+            Self::W1FailGate => Part::Middle,
+            Self::W1FailReason => Part::Middle,
+            Self::W1FailNotExercised => Part::Middle,
+            Self::W1FailEnd => Part::Last,
             _ => Part::Whole,
         }
     }
