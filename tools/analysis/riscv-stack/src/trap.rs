@@ -12,25 +12,33 @@
 //! access must address the frame below that position, which the entry may
 //! learn only from an unsigned comparison of the two values. Before an entry
 //! admits nesting (sets `mstatus.MIE`) its frame must hold `mepc`, `mcause`
-//! and `mstatus` as the trap left them, and it calls its handler with the
-//! FPU off.
+//! and `mstatus` as the trap left them; it changes `tcontrol` only once its
+//! frame holds it, and it calls its handler with the FPU off. The reported
+//! frame is the deepest `sp` of every path, exit included.
 //!
 //! An interrupt's exit is executed the same way from the handler's return
 //! to `mret`, on every path: the handler leaves the frame and the
 //! callee-saved registers as it found them and anything else unknown. At
 //! `mret` every register and `mscratch` must hold its value at the trap,
 //! `mepc`, `mcause` (whose `mpil` is the level `mret` returns to), the CLIC
-//! threshold and `mstatus` must hold theirs, restored from the frame, and
-//! interrupts must be masked: `mepc`, `mcause` and the threshold are
-//! restored only after `mstatus.MIE` is cleared, and nothing sets it again.
+//! threshold, `tcontrol` (whose MPTE is the trigger enable `mret` returns
+//! to) and `mstatus` must hold theirs, restored from the frame, and
+//! interrupts must be masked: `mepc`, `mcause`, `tcontrol` and the
+//! threshold are restored only after `mstatus.MIE` is cleared, and nothing
+//! sets it again. The exit keeps `sp` within the frame its entry reported.
+//!
+//! No trap saves the floating-point state, so neither part executes a
+//! floating-point instruction, and neither writes a CSR other than
+//! `mscratch`, `mstatus`, `mepc`, `mcause`, `tcontrol` and the threshold.
 use crate::image::Function;
 use crate::sweep::destination;
 use oer_analysis_elf::rv32::{self, Role};
-use oer_analysis_riscv_decode::{Extension, Extensions, Float, Inst, Instruction, decode};
+use oer_analysis_riscv_decode::{Extension, Extensions, Inst, Instruction, decode};
 use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_riscv::clic::MINTTHRESH;
 use oer_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
+use oer_riscv::trigger::TCONTROL;
 use std::collections::BTreeMap;
 
 /// Instructions one path of an entry may execute before its handler.
@@ -42,8 +50,9 @@ const MAX_PATHS: usize = 64;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrapEntry {
     pub entry: u32,
-    /// Bytes the entry keeps below the interrupt stack's position while its
-    /// handler runs.
+    /// Bytes the entry and exit keep below the interrupt stack's position:
+    /// the deepest `sp` of every path, which the handler's frames start
+    /// from.
     pub frame: u64,
     /// The function the entry calls.
     pub handler: u32,
@@ -179,20 +188,24 @@ fn check(
             let (instruction, length) =
                 decode(bytes, Extensions::ALL).ok_or_else(|| fail(pc, "undecodable"))?;
             let next = pc.wrapping_add(length as u32);
-            match state.step(&instruction, pc) {
+            let step = state.step(&instruction, pc);
+            state.deepen().map_err(|message| fail(pc, message))?;
+            match step {
                 Step::Next => state.pc = next,
                 Step::Jump(to) => state.pc = to,
-                Step::Branch(taken) => {
+                Step::Branch(mut taken) => {
+                    taken.deepen().map_err(|message| fail(pc, message))?;
                     pending.push(*taken);
                     state.pc = next;
                 }
                 Step::Call(handler) if state.phase == Phase::Entry => {
-                    let frame = state.frame().ok_or_else(|| {
+                    state.frame().ok_or_else(|| {
                         fail(
                             pc,
                             "calls its handler before it moves sp to the interrupt stack",
                         )
                     })?;
+                    let frame = state.deepest;
                     if !state.mstatus.fpu_off {
                         return Err(fail(pc, "calls its handler with the FPU on"));
                     }
@@ -386,6 +399,11 @@ struct State {
     mepc: Value,
     mcause: Value,
     threshold: Value,
+    tcontrol: Value,
+    /// The deepest `sp` below the interrupt stack's position so far.
+    deepest: u64,
+    /// In the exit, the frame its entry reported: the exit's `sp` limit.
+    limit: Option<u64>,
     /// The frame's words by their offset from the interrupt stack's
     /// position.
     memory: BTreeMap<i64, Value>,
@@ -424,6 +442,9 @@ impl State {
             mepc: Value::Csr(MEPC),
             mcause: Value::Csr(MCAUSE),
             threshold: Value::Csr(MINTTHRESH),
+            tcontrol: Value::Csr(TCONTROL),
+            deepest: 0,
+            limit: None,
             memory: BTreeMap::new(),
             trap_sp: Value::At(Base::Sp, 0),
             trap_scratch: Value::At(Base::Scratch, 0),
@@ -444,6 +465,22 @@ impl State {
         self.mepc = Value::Unknown;
         self.mcause = Value::Unknown;
         self.threshold = Value::Unknown;
+        self.tcontrol = Value::Unknown;
+        self.limit = Some(self.deepest);
+    }
+
+    /// Record how deep `sp` lies below the interrupt stack's position; the
+    /// exit must stay within the frame its entry reported, which the
+    /// handler's own frames lie below.
+    fn deepen(&mut self) -> std::result::Result<(), &'static str> {
+        let Some(depth) = self.frame() else {
+            return Ok(());
+        };
+        if self.limit.is_some_and(|limit| depth > limit) {
+            return Err("moves sp below its frame on its way out");
+        }
+        self.deepest = self.deepest.max(depth);
+        Ok(())
     }
 
     /// Whether `mret` here returns to what the trap interrupted.
@@ -462,6 +499,9 @@ impl State {
         }
         if self.threshold != Value::Csr(MINTTHRESH) {
             return Err("returns without the trap's interrupt threshold");
+        }
+        if self.tcontrol != Value::Csr(TCONTROL) {
+            return Err("returns without the trap's tcontrol");
         }
         if self.get(2) != self.trap_sp {
             return Err("returns on another stack than the interrupted one");
@@ -592,6 +632,7 @@ impl State {
             MEPC => self.mepc,
             MCAUSE => self.mcause,
             MINTTHRESH => self.threshold,
+            TCONTROL => self.tcontrol,
             _ => Value::Unknown,
         };
         if writes {
@@ -608,9 +649,10 @@ impl State {
                         CsrOp::Set => before.change(operand, true),
                         CsrOp::Clear => before.change(operand, false),
                     };
+                    let unmasks =
+                        before.enabled == Some(false) && self.mstatus.enabled != Some(false);
                     if self.phase == Phase::Entry
-                        && self.mstatus.enabled != Some(false)
-                        && before.enabled == Some(false)
+                        && unmasks
                         && !(self.saved(Value::Csr(MEPC))
                             && self.saved(Value::Csr(MCAUSE))
                             && self.saved(Value::Csr(MSTATUS)))
@@ -618,6 +660,11 @@ impl State {
                         return Step::Fail(
                             "admits nesting before its frame holds mepc, mcause and mstatus",
                         );
+                    }
+                    // Once the exit masks, an interrupt let in would
+                    // overwrite the trap CSRs it restores.
+                    if self.phase == Phase::Exit && unmasks {
+                        return Step::Fail("enables interrupts again on its way out");
                     }
                 }
                 MEPC | MCAUSE => {
@@ -647,7 +694,16 @@ impl State {
                     }
                     self.threshold = next;
                 }
-                _ => {}
+                TCONTROL => {
+                    if self.phase == Phase::Entry && !self.saved(Value::Csr(TCONTROL)) {
+                        return Step::Fail("changes tcontrol before its frame holds it");
+                    }
+                    if self.phase == Phase::Exit && !masked {
+                        return Step::Fail("restores tcontrol with interrupts enabled");
+                    }
+                    self.tcontrol = next;
+                }
+                _ => return Step::Fail("writes a CSR the trap check does not model"),
             }
         }
         self.set(dest, old);
@@ -819,22 +875,11 @@ impl State {
                 self.set(dest, Value::Unknown);
                 Step::Next
             }
-            Instruction::Float(Float::Load { base, offset, .. }) => {
-                match self.in_frame(base, offset.into(), 4) {
-                    Some(_) => Step::Next,
-                    None => Step::Fail("accesses memory outside its frame on the interrupt stack"),
-                }
+            // Every floating-point instruction reads or changes a register
+            // or `fcsr` of the interrupted code, which no trap saves.
+            Instruction::Float(_) => {
+                Step::Fail("a floating-point instruction, whose state no trap saves")
             }
-            Instruction::Float(Float::Store { base, offset, .. }) => {
-                self.store(base, offset.into(), 4, Value::Unknown)
-            }
-            Instruction::Float(_) => match destination(instruction) {
-                Some(dest) => {
-                    self.set(dest, Value::Unknown);
-                    Step::Next
-                }
-                None => Step::Next,
-            },
         }
     }
 

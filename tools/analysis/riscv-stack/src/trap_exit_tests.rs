@@ -29,6 +29,9 @@ core::arch::global_asm!(
     mintthresh = const 0x347,
     harts = const {harts},
     raise_threshold = const {raise},
+    tcontrol = const 0x7a5,
+    mte = const 8,
+    mpte_shift = const 4,
 );
 
 #[unsafe(no_mangle)]
@@ -163,7 +166,7 @@ fn an_exit_that_unmasks_early_or_returns_unmasked_fails() {
         "    addi sp, sp, 96\n    mret",
         "    addi sp, sp, 96\n    csrsi mstatus, {mie}\n    mret",
     );
-    assert!(failure(&unmasked, false).contains("returns with interrupts enabled"));
+    assert!(failure(&unmasked, false).contains("enables interrupts again"));
     let lost = broken("    lw t0, 68(sp)\n    csrw mstatus, t0\n", "");
     assert!(failure(&lost, false).contains("mstatus"));
 }
@@ -186,4 +189,76 @@ fn an_entry_that_nests_before_saving_or_keeps_the_fpu_on_fails() {
     assert!(failure(&unsaved, false).contains("admits nesting before its frame holds"));
     let fpu = broken("    li t1, {fs}\n    csrc mstatus, t1\n", "");
     assert!(failure(&fpu, false).contains("with the FPU on"));
+}
+
+#[test]
+fn an_exit_that_lets_interrupts_in_after_masking_fails() {
+    // A window after the threshold's restore that clears MIE again before
+    // `mret`: a higher level taken in it overwrites the restored mepc and
+    // mcause.
+    let window = broken(
+        "    lw t0, 64(sp)\n",
+        "    csrsi mstatus, {mie}\n    nop\n    nop\n    nop\n    csrci mstatus, {mie}\n    lw t0, 64(sp)\n",
+    );
+    for raise in [false, true] {
+        assert!(failure(&window, raise).contains("enables interrupts again on its way out"));
+    }
+}
+
+#[test]
+fn an_exit_that_moves_sp_below_its_frame_fails() {
+    let deep = broken(
+        "_runtime_irq_exit:\n",
+        "_runtime_irq_exit:\n    addi sp, sp, -1024\n    sw zero, 0(sp)\n    addi sp, sp, 1024\n",
+    );
+    assert!(failure(&deep, false).contains("moves sp below its frame on its way out"));
+}
+
+#[test]
+fn an_entry_deeper_before_its_call_reports_its_deepest_frame() {
+    // The entry moves sp down and back before its call: the frame counts
+    // the deepest sp, not the one at the call.
+    let deep = broken(
+        "    csrsi mstatus, {mie}\n",
+        "    addi sp, sp, -64\n    sw zero, 0(sp)\n    addi sp, sp, 64\n    csrsi mstatus, {mie}\n",
+    );
+    let (vectors, _) = checked(&runtime(&deep, 1, false)).unwrap();
+    assert_eq!(vectors[16].map(|vector| vector.frame), Some(160));
+}
+
+#[test]
+fn a_trap_that_touches_the_floating_point_state_or_another_csr_fails() {
+    // A dirty-FS task's ft0, before the entry turns the FPU off.
+    let ft0 = broken(
+        "    li t1, {fs}\n",
+        "    .option push\n    .option arch, +f\n    fmv.w.x ft0, zero\n    .option pop\n    li t1, {fs}\n",
+    );
+    assert!(failure(&ft0, false).contains("floating-point instruction"));
+    // `fcsr` after the exit restored mstatus.
+    let fcsr = broken(
+        "    lw t0, 64(sp)\n",
+        "    csrw 0x003, zero\n    lw t0, 64(sp)\n",
+    );
+    assert!(failure(&fcsr, false).contains("a CSR the trap check does not model"));
+    let mtvec = broken(
+        "    lw t0, 64(sp)\n",
+        "    csrw mtvec, zero\n    lw t0, 64(sp)\n",
+    );
+    assert!(failure(&mtvec, false).contains("a CSR the trap check does not model"));
+}
+
+#[test]
+fn a_trap_that_loses_tcontrol_or_changes_it_unsaved_fails() {
+    // Without the restore a nested return leaves MPTE as the nested trap
+    // set it.
+    let lost = broken("    lw t0, 88(sp)\n    csrw {tcontrol}, t0\n", "");
+    assert!(failure(&lost, false).contains("without the trap's tcontrol"));
+    let unsaved = broken("    csrr t1, {tcontrol}\n    sw t1, 88(sp)\n", "");
+    assert!(failure(&unsaved, false).contains("changes tcontrol before its frame holds it"));
+    // Restored before the exit masks.
+    let early = broken(
+        "    csrci mstatus, {mie}\n    lw t0, 80(sp)",
+        "    lw t0, 88(sp)\n    csrw {tcontrol}, t0\n    csrci mstatus, {mie}\n    lw t0, 80(sp)",
+    );
+    assert!(failure(&early, false).contains("tcontrol with interrupts enabled"));
 }
