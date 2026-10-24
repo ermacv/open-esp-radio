@@ -1,5 +1,5 @@
-//! Run the typed renderer's write-trigger field and FIFO port over host
-//! memory: the policy declares both kinds, the rendered block is compiled
+//! Run the typed renderer's write-trigger field, FIFO port and shared block
+//! over host memory: the policy declares the kinds, the rendered blocks are compiled
 //! against `oer-mmio` in its own directory and its tests observe the words.
 use std::fs;
 
@@ -19,12 +19,24 @@ const SVD: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <field><name>BYTE</name><bitOffset>0</bitOffset><bitWidth>8</bitWidth></field>
 </fields></register>
 </registers></peripheral>
+<peripheral><name>COUNTER</name><baseAddress>0x60001000</baseAddress><registers>
+<register><name>OP</name><addressOffset>0x0</addressOffset><size>32</size><access>read-write</access><fields>
+<field><name>VALID</name><bitOffset>29</bitOffset><bitWidth>1</bitWidth><access>read-only</access></field>
+<field><name>UPDATE</name><bitOffset>30</bitOffset><bitWidth>1</bitWidth><access>write-only</access></field>
+</fields></register>
+<register><name>VALUE</name><addressOffset>0x4</addressOffset><size>32</size><access>read-only</access><fields>
+<field><name>LOW</name><bitOffset>0</bitOffset><bitWidth>32</bitWidth></field>
+</fields></register>
+<register><name>RAISE</name><addressOffset>0x8</addressOffset><size>32</size><access>read-write</access><fields>
+<field><name>LEVEL</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field>
+</fields></register>
+</registers></peripheral>
 </peripherals></device>"#;
 
 const POLICY: &str = r#"schema = 5
 
 [options]
-typed-peripherals = ["RADIO"]
+typed-peripherals = ["RADIO", "COUNTER"]
 
 [[write-trigger-fields]]
 peripheral = "RADIO"
@@ -41,6 +53,17 @@ sources = ["FIXTURE"]
 [[fifo-ports]]
 peripheral = "RADIO"
 register = "DATA"
+sources = ["FIXTURE"]
+
+[[write-trigger-fields]]
+peripheral = "COUNTER"
+register = "OP"
+field = "UPDATE"
+sources = ["FIXTURE"]
+
+[[shared-blocks]]
+peripheral = "COUNTER"
+description = "A counter and a raise line every context reaches."
 sources = ["FIXTURE"]
 "#;
 
@@ -97,10 +120,25 @@ fn a_fifo_port_pushes_from_zero_and_pops_its_field() {
     drop(block);
     assert_eq!(memory[CONFIG], u32::MAX, "the other register is untouched");
 }
+
+#[test]
+fn a_shared_block_strobes_and_stores_whole_words_through_shared_borrows() {
+    fn sync<T: Sync>() {}
+    sync::<counter::Counter>();
+    let mut memory = vec![u32::MAX; counter::SIZE / 4];
+    let block = counter::Counter::host(&mut memory).expect("memory holds the block");
+    let (task, handler) = (&block, &block);
+    task.trigger_op_update();
+    handler.store_raise(false);
+    assert!(!task.read_op().valid(), "the strobe wrote zero beside its trigger");
+    assert_eq!(handler.read_value().low(), u32::MAX);
+    drop(block);
+    assert_eq!(memory, [1 << 30, u32::MAX, 0]);
+}
 "#;
 
 #[test]
-fn write_trigger_fields_and_fifo_ports_behave_over_host_memory() {
+fn write_trigger_fields_fifo_ports_and_shared_blocks_behave_over_host_memory() {
     let directory = tempfile::tempdir().expect("typed-kind fixture directory");
     let path = |name| directory.path().join(name);
     fs::write(path("api.toml"), POLICY).unwrap();

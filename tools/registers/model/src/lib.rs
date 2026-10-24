@@ -57,7 +57,7 @@ pub use pac_api::{
     FullRegisterWrite, InterruptSnapshot, InterruptSource, MaskedRegisterModify, OpaqueDomain,
     OwnershipPartition, PacApiExposure, PacApiOptions, PacApiPack, PartitionImageRead,
     PointerField, ReadCapability, RegisterDivision, RegisterImageRead, RegisterImageWrite,
-    RegisterPointerEncoding, RegisterSides, W1cRegisterSnapshot, WriteTriggerField,
+    RegisterPointerEncoding, RegisterSides, SharedBlock, W1cRegisterSnapshot, WriteTriggerField,
     ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};

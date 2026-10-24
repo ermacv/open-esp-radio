@@ -21,7 +21,9 @@
 //! acknowledges exactly what it sampled; a read capability gives up a
 //! block's writes for a reader; a division gives each owner its words,
 //! array elements and bits of shared write-trigger words; a field whose
-//! only permitted value is zero is zero in every write.
+//! only permitted value is zero is zero in every write. A policy-declared
+//! shared block has only `&self` methods (reads, trigger strobes and
+//! whole-word stores) and is `Sync` at its fixed address.
 
 use std::{
     borrow::Cow,
@@ -69,6 +71,7 @@ impl PacApiPack {
         pack.fifo_ports.clear();
         pack.read_capabilities.clear();
         pack.register_divisions.clear();
+        pack.shared_blocks.clear();
         macro_rules! retain {
             ($($operations:ident),* $(,)?) => {
                 $(pack.$operations.retain(|operation| !typed.contains(&operation.peripheral));)*
@@ -555,10 +558,15 @@ impl PacApiPack {
                     .iter()
                     .map(|division| division.peripheral.as_str()),
             )
+            .chain(
+                self.shared_blocks
+                    .iter()
+                    .map(|block| block.peripheral.as_str()),
+            )
             .find(|peripheral| !typed.contains(peripheral))
         {
             return Err(Error::message(format!(
-                "PAC API register sides, interrupt source, write-trigger field, FIFO port, read capability or register division of {peripheral} name a peripheral that is not typed"
+                "PAC API register sides, interrupt source, write-trigger field, FIFO port, read capability, register division or shared block of {peripheral} name a peripheral that is not typed"
             )));
         }
         Ok(())
@@ -709,6 +717,8 @@ struct TypedRegister<'a> {
     /// The clear register of a status-to-clear snapshot: written only by
     /// the snapshot's acknowledgement.
     acknowledged: bool,
+    /// A register of a shared block: read, strobed and stored through `&self`.
+    shared: bool,
     fields: Vec<TypedField<'a>>,
 }
 
@@ -729,7 +739,11 @@ impl TypedRegister<'_> {
     }
 
     fn has_setters(&self) -> bool {
-        !self.w1c && !self.fifo && !self.acknowledged && self.fields.iter().any(TypedField::writes)
+        !self.w1c
+            && !self.fifo
+            && !self.acknowledged
+            && !self.shared
+            && self.fields.iter().any(TypedField::writes)
     }
 
     /// The bits of the register's constant-zero fields.
@@ -754,6 +768,14 @@ impl TypedRegister<'_> {
             format!("{}::FIELDS", self.method)
         } else {
             format!("({0}::FIELDS & !{0}::ZERO)", self.method)
+        }
+    }
+
+    /// The one field a shared block's register is stored whole by.
+    fn stored_field(&self) -> Option<&TypedField<'_>> {
+        match self.fields.as_slice() {
+            [field] if self.shared && field.has_setter() => Some(field),
+            _ => None,
         }
     }
 
@@ -819,6 +841,8 @@ struct DeclaredKinds<'k, 'p> {
     fifo: bool,
     /// Whether the register is the clear register of a snapshot.
     acknowledged: bool,
+    /// Whether the register belongs to a shared block.
+    shared: bool,
 }
 
 /// The owner type suffix of a block's interrupt-handler side.
@@ -923,6 +947,7 @@ struct TypedBlock<'a> {
     division: Option<&'a RegisterDivision>,
     /// A partition image reads the block: its owner reads any readable word.
     imaged: bool,
+    shared: Option<&'a crate::SharedBlock>,
 }
 
 impl<'a> TypedBlock<'a> {
@@ -972,6 +997,10 @@ impl<'a> TypedBlock<'a> {
             .iter()
             .map(|snapshot| snapshot.clear_register.as_str())
             .collect::<BTreeSet<_>>();
+        let shared = policy
+            .shared_blocks
+            .iter()
+            .find(|block| block.peripheral == name);
         let mut registers = Vec::new();
         for child in peripheral.registers.as_deref().unwrap_or_default() {
             let RegisterCluster::Register(register) = child else {
@@ -1000,6 +1029,7 @@ impl<'a> TypedBlock<'a> {
                 triggers: &triggers,
                 fifo: fifos.contains(info.name.as_str()),
                 acknowledged: cleared.contains(info.name.as_str()),
+                shared: shared.is_some(),
             };
             registers.push(TypedRegister::new(name, info, access, array, &kinds)?);
         }
@@ -1094,6 +1124,18 @@ impl<'a> TypedBlock<'a> {
                 "typed peripheral {name} takes at most one of register sides, a read capability and a register division"
             )));
         }
+        if shared.is_some() {
+            if split.is_some() || capability.is_some() || division.is_some() {
+                return Err(Error::message(format!(
+                    "shared block {name} has one owner: no register sides, read capability or register division"
+                )));
+            }
+            if let Some((operation, _)) = policy.typed_register_operations(name).next() {
+                return Err(Error::message(format!(
+                    "PAC API {operation:?} is on shared block {name}, which has only reads, strobes and stores"
+                )));
+            }
+        }
         let block = Self {
             peripheral,
             module: crate::pac_api_render::member_binding_name(name),
@@ -1105,6 +1147,7 @@ impl<'a> TypedBlock<'a> {
             capability,
             division,
             imaged: false,
+            shared,
         };
         block.validate_split()?;
         block.validate_snapshots()?;
@@ -1611,6 +1654,7 @@ impl<'a> TypedBlock<'a> {
              impl oer_mmio::Registers for BlockWords {{\n\
              const WORDS: &'static [usize] = &[{words}];\n\
              }}\n\n\
+             {shared}\
              {fixed_impl}\
              /// The exclusive owner of the `{name}` registers.\n\
              #[must_use = \"dropping a register owner permanently loses its register authority\"]\n\
@@ -1625,6 +1669,19 @@ impl<'a> TypedBlock<'a> {
              }}\n",
             module = self.module,
             name = self.peripheral.name,
+            shared = self.shared.map_or_else(String::new, |shared| {
+                format!(
+                    "/// A shared block: {}\n\
+                     ///\n\
+                     /// Every method takes `&self`; at its fixed address the owner is\n\
+                     /// `Sync`, so every execution context reaches the one owner.\n\
+                     ///\n\
+                     /// SOURCE: {}.\n\
+                     impl oer_mmio::SharedRegisters for BlockWords {{}}\n\n",
+                    clean(&shared.description).replace('\n', " "),
+                    shared.sources.join(", ")
+                )
+            }),
         );
         let views = self.views();
         let mut asserts = String::new();
@@ -2734,6 +2791,21 @@ impl<'a> TypedRegister<'a> {
                 info.name
             )));
         }
+        if kinds.shared {
+            let strobes = fields.iter().all(|field| field.trigger || !field.writable);
+            let stored = matches!(fields.as_slice(), [field] if field.has_setter());
+            if clears_on_read
+                || fifo
+                || w1c
+                || fields.iter().any(|field| field.pointer)
+                || (writable && (array.is_some() || !(strobes || stored)))
+            {
+                return Err(Error::message(format!(
+                    "shared block register {peripheral}.{} must be a side-effect-free read, a write-trigger strobe or one field stored whole",
+                    info.name
+                )));
+            }
+        }
         let mut declared = 0_u32;
         for field in &fields {
             if declared & field.mask() != 0 {
@@ -2755,6 +2827,7 @@ impl<'a> TypedRegister<'a> {
             w1c,
             fifo,
             acknowledged: kinds.acknowledged,
+            shared: kinds.shared,
             fields,
         })
     }
@@ -2784,6 +2857,10 @@ impl<'a> TypedRegister<'a> {
             );
         }
         if reach != Reach::Owned || self.acknowledged {
+            return;
+        }
+        if self.shared {
+            self.render_shared_writes(body);
             return;
         }
         if self.w1c {
@@ -2890,6 +2967,46 @@ impl<'a> TypedRegister<'a> {
                 field.method.trim_start_matches("r#"),
                 self.offset,
                 field.mask()
+            );
+        }
+    }
+
+    /// A shared block register's writes through `&self`: each trigger
+    /// strobed alone, every other bit zero, or the one field stored whole
+    /// from zero. Neither reads the register back.
+    fn render_shared_writes(&self, body: &mut String) {
+        let module = &self.method;
+        let name = &self.info.name;
+        for field in self.fields.iter().filter(|field| field.trigger) {
+            let _ = writeln!(
+                body,
+                "/// Strobe the write-trigger field `{}` of `{name}` alone: one there,\n\
+                 /// zero in every other bit, nothing read back.\n\
+                 #[inline]\npub fn trigger_{module}_{}(&self) {{\n\
+                 self.0.write_shared::<0x{:x}>(0x{:08x});\n}}\n",
+                field.info.name,
+                field.method.trim_start_matches("r#"),
+                self.offset,
+                field.mask()
+            );
+        }
+        if let Some(field) = self.stored_field() {
+            let write_type = field.write_type();
+            let bits = write_type.bits();
+            let image = if field.offset == 0 {
+                bits.to_owned()
+            } else {
+                format!("({bits} << {})", field.offset)
+            };
+            let _ = writeln!(
+                body,
+                "/// Store `{name}` whole: its one field `{}`, zero in every other\n\
+                 /// bit, nothing read back.\n\
+                 #[inline]\npub fn store_{module}(&self, value: {}) {{\n\
+                 self.0.write_shared::<0x{:x}>({image});\n}}\n",
+                field.info.name,
+                qualified(&write_type, self),
+                self.offset
             );
         }
     }
